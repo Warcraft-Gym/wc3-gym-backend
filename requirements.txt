@@ -4,5 +4,7 @@ pandas
 python-dotenv
 apscheduler
 flask
+flask-jwt-extended
 pyodbc
+pymysql
 sqlalchemy
