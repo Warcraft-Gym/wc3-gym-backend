@@ -12,7 +12,7 @@ class UserAppService:
 
     def update_user(self, user_id: int, name: str = None, email: str = None):
         user_data = self.user_service.update(user_id, name=name, email=email)
-        user_dto = UserDTO.from_dict(user_data)
+        user_dto = UserDTO.from_dict(user_data.__dict__)
         return user_dto.to_dict()
 
     def delete_user(self, user_id: int):
@@ -20,5 +20,5 @@ class UserAppService:
 
     def get_user(self, user_id: int):
         user_data = self.user_service.get(user_id)
-        user_dto = UserDTO.from_dict(user_data)
+        user_dto = UserDTO.from_dict(user_data.__dict__)
         return user_dto.to_dict()

@@ -26,6 +26,7 @@ class DBModel(AbstractConcreteBase, Base):
             for key, value in kwargs.items():
                 setattr(obj, key, value)
             session.commit()
+        session.expunge(obj)
         return obj
 
     @classmethod
@@ -34,4 +35,5 @@ class DBModel(AbstractConcreteBase, Base):
         if obj:
             session.delete(obj)
             session.commit()
+        session.expunge(obj)
         return obj
