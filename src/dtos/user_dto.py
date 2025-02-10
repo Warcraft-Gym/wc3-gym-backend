@@ -1,3 +1,4 @@
+from src.database.model.DBUser import DBUser
 class UserDTO:
     def __init__(self, id: int, name: str, email: str):
         self.id = id
@@ -12,9 +13,9 @@ class UserDTO:
         }
 
     @classmethod
-    def from_dict(cls, data: dict):
+    def from_dbuser(cls, user: DBUser):
         return cls(
-            id=data.get('id'),
-            name=data.get('name'),
-            email=data.get('email')
+            id=user.id,
+            name=user.name,
+            email=user.email
         )

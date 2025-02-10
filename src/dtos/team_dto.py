@@ -1,3 +1,5 @@
+from src.database.model.DBTeam import DBTeam
+
 class TeamDTO:
     def __init__(self, id: int, name: str):
         self.id = id
@@ -10,8 +12,8 @@ class TeamDTO:
         }
 
     @classmethod
-    def from_dict(cls, data: dict):
+    def from_dbteam(cls, team: DBTeam):
         return cls(
-            id=data.get('id'),
-            name=data.get('name')
+            id=team.id,
+            name=team.name
         )

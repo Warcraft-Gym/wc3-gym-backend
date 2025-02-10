@@ -1,26 +1,65 @@
+import logging
 from src.database.abstract_database_service import AbstractDatabaseService
 from src.database.model.DBTeam import DBTeam
+from sqlalchemy.exc import SQLAlchemyError
+from custom_exceptions import DBException
+from src.dtos.team_dto import TeamDTO
+
+logger = logging.getLogger(__name__)
 
 class TeamDBService(AbstractDatabaseService):
     def add(self, name):
-        session = self.Session()
-        new_team = DBTeam.add(session, name=name)
-        session.close()
-        return new_team
+        try:
+            session = self.Session()
+            new_team = DBTeam.add(session, name=name)
+            # Example usage
+            if not new_team:
+                raise DBException("Team could not be created!")
+            return TeamDTO.from_dbteam(new_team)   
+        except SQLAlchemyError as e:
+            # Log the error and handle it
+            logger.error(f"Database error: {e}")
+            raise DBException(f"Database error: {e}")
+        finally:
+            session.close()
 
     def update(self, team_id, name=None):
-        session = self.Session()
-        updated_team = DBTeam.update(session, team_id, name=name)
-        session.close()
-        return updated_team
+        try:
+            session = self.Session()
+            team = DBTeam.update(session, team_id, name=name)
+            # Example usage
+            if not team:
+                raise DBException("Team could not be updated!")
+            return TeamDTO.from_dbteam(team)   
+        except SQLAlchemyError as e:
+            # Log the error and handle it
+            logger.error(f"Database error: {e}")
+            raise DBException(f"Database error: {e}")
+        finally:
+            session.close()
 
     def delete(self, team_id):
-        session = self.Session()
-        DBTeam.delete(session, team_id)
-        session.close()
+        try:
+            session = self.Session()
+            DBTeam.delete(session, team_id) 
+        except SQLAlchemyError as e:
+            # Log the error and handle it
+            logger.error(f"Database error: {e}")
+            raise DBException(f"Database error: {e}")
+        finally:
+            session.close()
 
     def get(self, team_id):
-        session = self.Session()
-        team = session.query(DBTeam).filter_by(id=team_id).first()
-        session.close()
-        return team
+        try:
+            session = self.Session()
+            team = session.query(DBTeam).filter_by(id=team_id).first()
+            # Example usage
+            if not team:
+                raise DBException("Team could not be found!")
+            return TeamDTO.from_dbteam(team)   
+        except SQLAlchemyError as e:
+            # Log the error and handle it
+            logger.error(f"Database error: {e}")
+            raise DBException(f"Database error: {e}")
+        finally:
+            session.close()

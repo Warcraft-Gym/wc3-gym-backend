@@ -23,7 +23,6 @@ jwt = JWTManager(app)
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
 
-
 # Initialize services with database URL from environment variables
 db_url = os.getenv('DB_URL')
 user_service = UserDBService(db_url=db_url)

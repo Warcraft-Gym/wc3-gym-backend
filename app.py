@@ -1,3 +1,6 @@
 # Import routes
 from . import app
-from . import backend
+from src.api import login_api
+from src.api import user_api
+from src.api import team_api
+from src.api import match_api
