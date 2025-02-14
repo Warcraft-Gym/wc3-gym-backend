@@ -7,14 +7,10 @@ from sqlalchemy.ext.declarative import AbstractConcreteBase
 Base = declarative_base()
 
 class DBModel(AbstractConcreteBase, Base):
-    
-    @declared_attr
-    def __tablename__(cls):
-        return cls.__name__.lower() + 's'
 
     @classmethod
-    def add(cls, session: Session, **kwargs):
-        obj = cls(**kwargs)
+    def add(cls, session: Session, data : dict):
+        obj = cls(**data)
         session.add(obj)
         session.commit()
         return obj

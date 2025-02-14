@@ -1,18 +1,31 @@
 import logging
 from app import app
-from flask import request, jsonify
+from flask import request, jsonify, Response
 from flask_jwt_extended import jwt_required
 from custom_exceptions import NotFoundException
+from src.dtos.user_dto import UserDTO
+import enum
+import json
 
 logger = logging.getLogger(__name__)
+
+class EnumEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, enum.Enum):
+            return obj.value
+        return json.JSONEncoder.default(self, obj)
+    
+# Configure Flask to use the custom JSON encoder
+app.json_encoder = EnumEncoder
 
 # User endpoints
 @app.route('/users', methods=['POST'])
 def add_user():
     try:
         data = request.json
-        user = app.user_app_service.create_user(name=data['name'], email=data['email'])
-        return jsonify(user), 201
+        user = app.user_app_service.create_user(UserDTO(data))
+        json_data = json.dumps(user, cls=EnumEncoder)
+        return Response(json_data, status=201, content_type='application/json')
     except Exception as e:
         logger.error(e)
         return jsonify({"error": str(e)}), 500
@@ -21,8 +34,11 @@ def add_user():
 def update_user(user_id):
     try:
         data = request.json
-        user = app.user_app_service.update_user(user_id, name=data.get('name'), email=data.get('email'))
-        return jsonify(user)
+        userdto = UserDTO(data)
+        userdto.id = user_id
+        user = app.user_app_service.update_user(userdto)
+        json_data = json.dumps(user, cls=EnumEncoder)
+        return Response(json_data, status=201, content_type='application/json')
     except NotFoundException as e:
         logger.error(e)
         return jsonify({"error": str(e)}), 404
@@ -44,7 +60,8 @@ def delete_user(user_id):
 def get_user(user_id):
     try:
         user = app.user_app_service.get_user(user_id)
-        return jsonify(user)
+        json_data = json.dumps(user, cls=EnumEncoder)
+        return Response(json_data, status=201, content_type='application/json')
     except NotFoundException as e:
         logger.error(e)
         return jsonify({"error": str(e)}), 404

@@ -9,14 +9,14 @@ class UserAppService:
     def __init__(self, user_service: UserDBService):
         self.user_service = user_service
 
-    def create_user(self, name: str, email: str):
-        user_data = self.user_service.add(name=name, email=email)
+    def create_user(self, user : UserDTO):
+        user_data = self.user_service.add(user)
         if(user_data):
             user_data = user_data.to_dict()
         return user_data
 
-    def update_user(self, user_id: int, name: str = None, email: str = None):
-        user_data = self.user_service.update(user_id, name=name, email=email)
+    def update_user(self, user : UserDTO):
+        user_data = self.user_service.update(user)
         if(user_data):
             user_data = user_data.to_dict()
         return user_data
