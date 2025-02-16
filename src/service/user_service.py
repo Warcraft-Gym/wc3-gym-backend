@@ -10,6 +10,8 @@ class UserAppService:
         self.user_service = user_service
 
     def create_user(self, user : UserDTO):
+        #remove id, db generates the id
+        user.id = None
         user_data = self.user_service.add(user)
         if(user_data):
             user_data = user_data.to_dict()
