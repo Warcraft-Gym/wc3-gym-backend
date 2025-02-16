@@ -30,4 +30,16 @@ class UserAppService:
             raise NotFoundException(f"User not found by Id: {user_id}")
         return user_data.to_dict()
             
-        
+    def getAll(self):
+        users_data = self.user_service.getAll()
+        user_dict_l = []
+        for ud in users_data:
+            user_dict_l.append(ud.to_dict())
+        return user_dict_l
+
+    def search(self, query):
+        users_data = self.user_service.search(query)
+        user_dict_l = []
+        for ud in users_data:
+            user_dict_l.append(ud.to_dict())
+        return user_dict_l

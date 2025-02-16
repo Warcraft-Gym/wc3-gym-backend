@@ -1,8 +1,9 @@
-from sqlalchemy import Column, Integer, String, Sequence, ForeignKey
+from sqlalchemy import Column, Integer, String, Sequence, ForeignKey, or_, and_
 from sqlalchemy.ext.declarative import declarative_base, declared_attr
 from sqlalchemy.orm import sessionmaker, relationship
 from sqlalchemy.orm.session import Session
 from sqlalchemy.ext.declarative import AbstractConcreteBase
+from custom_exceptions import DBException
 
 Base = declarative_base()
 
@@ -31,3 +32,18 @@ class DBModel(AbstractConcreteBase, Base):
             session.delete(obj)
             session.commit()
         return obj
+
+    @classmethod
+    def seach(cls, session: Session, filters):
+        if filters is None:
+            raise DBException(f"No search criteria was defined!")
+        query = session.query(cls).filter(filters)
+        return query.all()
+    
+    @classmethod
+    def getAll(cls, session: Session):
+        return session.query(cls).all()
+    
+    @classmethod
+    def getById(cls, session: Session, id):
+        return session.query(cls).filter_by(id=id).first()

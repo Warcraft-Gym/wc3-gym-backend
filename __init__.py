@@ -9,11 +9,86 @@ from src.database.match_db_service import MatchDBService
 from src.service.user_service import UserAppService
 from src.service.team_service import TeamAppService
 from src.service.match_service import MatchAppService
+from flasgger import Swagger
 
 # Load environment variables from .env file
 load_dotenv()
 
 app = Flask(__name__)
+
+swagger_config = {
+    "headers": [],
+    "specs": [
+        {
+            "endpoint": 'apispec',
+            "route": '/apispec.json',
+            "rule_filter": lambda rule: True,
+            "model_filter": lambda tag: True,
+        }
+    ],
+    "static_url_path": "/flasgger_static",
+    "swagger_ui": True,
+    "specs_route": "/apidocs/",
+}
+
+template = {
+    "swagger": "2.0",
+    "info": {
+        "title": "GNL Backend API",
+        "description": "API for Gym Newbie League Backend Data",
+        "version": "1.0.0",
+    },
+    "basePath": "/",
+    "definitions": {
+        "UserDTO" : {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "integer",
+                    "description": "User ID"
+                },
+                "name": {
+                    "type": "string",
+                    "description": "User's Name"
+                },
+                "battleTag": {
+                    "type": "string",
+                    "description": "User's BattleTag"
+                },
+                "discordTag": {
+                    "type": "string",
+                    "description": "User's DiscordTag"
+                },
+                "race": {
+                    "type": "string",
+                    "description": "User's Race"
+                },
+                "mmr": {
+                    "type": "integer",
+                    "description": "User's MMR"
+                },
+                "country": {
+                    "type": "string",
+                    "description": "User's Country"
+                }
+            },
+            "required": ["name", "battleTag", "discordTag"]
+        }
+    },
+    "schemes": [
+        "http",
+        "https"
+    ],
+    "securityDefinitions": {
+        "APIKeyHeader": {
+            "type": "apiKey",
+            "name": "Authorization",
+            "in": "header"
+        }
+    }
+}
+
+swag = Swagger(app, template=template, config=swagger_config)
 
 # Initialize JWT
 app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY')

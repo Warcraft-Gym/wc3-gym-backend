@@ -1,4 +1,3 @@
-from sqlalchemy import create_engine, Column, Integer, Enum
 import enum
 
 class Race(enum.Enum):

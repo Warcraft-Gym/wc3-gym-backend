@@ -1,12 +1,12 @@
 from app import app
-from flask import request, jsonify
+from flask import request, jsonify, redirect
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
 from custom_exceptions import NotFoundException
 
 # Login endpoint to generate JWT token
 @app.route('/', methods=['GET'])
 def index():
-    return "Hello World", 200
+    return redirect('/apidocs/')
 
 # Login endpoint to generate JWT token
 @app.route('/login', methods=['POST'])

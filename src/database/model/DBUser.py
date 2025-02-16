@@ -9,7 +9,6 @@ class DBUser(DBModel):
     name = Column(String(50), nullable=False)
     battleTag = Column(String(50), nullable=False)
     discordTag = Column(String(50), nullable=False)
-    email = Column(String(50))
     race = Column(Enum(Race))
     mmr = Column(Integer)
     country = Column(Enum(Country))

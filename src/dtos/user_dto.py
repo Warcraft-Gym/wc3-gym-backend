@@ -3,7 +3,6 @@ class UserDTO:
     def __init__(self, data : dict):
         self.id = data.get('id')
         self.name = data.get('name')
-        self.email = data.get('email')
         self.battleTag = data.get('battleTag')
         self.discordTag = data.get('discordTag')
         self.race = data.get('race')
@@ -14,7 +13,6 @@ class UserDTO:
         return {
             'id': self.id,
             'name': self.name,
-            'email': self.email,
             'battleTag': self.battleTag,
             'discordTag': self.discordTag,
             'race': self.race,
@@ -28,7 +26,6 @@ class UserDTO:
                 {
                 'id': user.id,
                 'name': user.name,
-                'email': user.email,
                 'battleTag': user.battleTag,
                 'discordTag': user.discordTag,
                 'race': user.race,
