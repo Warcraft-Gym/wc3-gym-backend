@@ -5,6 +5,7 @@ class Race(enum.Enum):
     HU = 'Human'
     OC = 'Orc'
     NE = 'Night Elf'
+    UD = 'Unead'
 
 class Country(enum.Enum):
     AF = 'AF'

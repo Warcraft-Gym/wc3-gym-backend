@@ -25,7 +25,7 @@ class UserDBService(AbstractDatabaseService):
     def update(self, user):
         with self.get_session() as session:
             try:
-                user = DBUser.update(session, user.to_dict())
+                user = DBUser.update(session, user.id, **user.to_dict())
                 if not user:
                     raise DBException("User could not be updated")
                 return UserDTO.from_dbuser(user)

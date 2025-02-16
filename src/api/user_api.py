@@ -136,7 +136,7 @@ def get_user(user_id):
         description: Internal server error
     """
     try:
-        logger.debug("users - GET: " + user_id)
+        logger.debug(f"users - GET: {user_id}")
         user = app.user_app_service.get_user(user_id)
         json_data = json.dumps(user, cls=EnumEncoder)
         return Response(json_data, status=201, content_type='application/json')
@@ -190,7 +190,7 @@ def search_users():
           and | or conditions are supported but no brackets
 
           key operator value and key operator value
-          
+
           e.g.:
           name ilike xxxx or id == 12
           Operators supported: ==, !=, >, >=, <, <=, ilike)
