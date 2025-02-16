@@ -1,11 +1,11 @@
 import enum
 
 class Race(enum.Enum):
-    RANDOM = 'Random'
-    HU = 'Human'
-    OC = 'Orc'
-    NE = 'Night Elf'
-    UD = 'Unead'
+    RANDOM = 'RANDOM'
+    HU = 'HU'
+    OC = 'OC'
+    NE = 'NE'
+    UD = 'UD'
 
 class Country(enum.Enum):
     AF = 'AF'
