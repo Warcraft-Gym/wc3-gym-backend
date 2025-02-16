@@ -75,9 +75,7 @@ def update_user(user_id):
     """
     try:
         data = request.json
-        userdto = UserDTO(data)
-        userdto.id = user_id
-        user = app.user_app_service.update_user(userdto)
+        user = app.user_app_service.update_user(user_id, UserDTO(data))
         json_data = json.dumps(user, cls=EnumEncoder)
         return Response(json_data, status=201, content_type='application/json')
     except NotFoundException as e:

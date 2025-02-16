@@ -17,7 +17,8 @@ class UserAppService:
             user_data = user_data.to_dict()
         return user_data
 
-    def update_user(self, user : UserDTO):
+    def update_user(self, user_id, user : UserDTO):
+        user.id = user_id
         user_data = self.user_service.update(user)
         if(user_data):
             user_data = user_data.to_dict()
