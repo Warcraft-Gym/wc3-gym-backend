@@ -22,7 +22,7 @@ class UserDBService(AbstractDatabaseService):
                 raise DBException(f"Database error: {e}")
 
 
-    def update(self, user):
+    def update(self, user: UserDTO):
         with self.get_session() as session:
             try:
                 user = DBUser.update(session, user.id, **user.to_dict())

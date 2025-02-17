@@ -6,6 +6,7 @@ from src.dtos.user_dto import UserDTO
 from src.util.query_util import QueryUtil
 import enum
 import json
+from flasgger import swag_from
 
 logger = logging.getLogger(__name__)
 
@@ -14,30 +15,30 @@ class EnumEncoder(json.JSONEncoder):
         if isinstance(obj, enum.Enum):
             return obj.value
         return json.JSONEncoder.default(self, obj)
-    
+
 # Configure Flask to use the custom JSON encoder
 app.json_encoder = EnumEncoder
 
 # User endpoints
 @app.route('/users', methods=['POST'])
+@swag_from({
+    'summary': 'Add a new user',
+    'description': 'Create a new user with the provided details.',
+    'tags': ['users'],
+    'parameters': [
+        {
+            'name': 'body',
+            'in': 'body',
+            'required': True,
+            'schema': UserDTO.schema()
+        }
+    ],
+    'responses': {
+        201: {'description': 'User created successfully'},
+        500: {'description': 'Internal server error'}
+    }
+})
 def add_user():
-    """
-    Add a new user
-    ---
-    tags:
-      - users
-    parameters:
-      - name: body
-        in: body
-        required: true
-        schema:
-          $ref: '#/definitions/UserDTO'
-    responses:
-      201:
-        description: User created successfully
-      500:
-        description: Internal server error
-    """
     try:
         data = request.json
         user = app.user_app_service.create_user(UserDTO(data))
@@ -48,31 +49,26 @@ def add_user():
         return jsonify({"error": str(e)}), 500
 
 @app.route('/users/<int:user_id>', methods=['PUT'])
+@swag_from({
+    'summary': 'Update an existing user',
+    'description': 'Update the details of an existing user.',
+    'tags': ['users'],
+    'parameters': [
+        {'name': 'user_id', 'in': 'path', 'type': 'integer', 'required': True, 'description': 'The ID of the user to update'},
+        {
+            'name': 'body',
+            'in': 'body',
+            'required': True,
+            'schema': UserDTO.schema()
+        }
+    ],
+    'responses': {
+        201: {'description': 'User updated successfully'},
+        404: {'description': 'User not found'},
+        500: {'description': 'Internal server error'}
+    }
+})
 def update_user(user_id):
-    """
-    Update an existing user
-    ---
-    tags:
-      - users
-    parameters:
-      - name: user_id
-        in: path
-        type: integer
-        required: true
-        description: The ID of the user to update
-      - name: body
-        in: body
-        required: true
-        schema:
-          $ref: '#/definitions/UserDTO'
-    responses:
-      201:
-        description: User updated successfully
-      404:
-        description: User not found
-      500:
-        description: Internal server error
-    """
     try:
         data = request.json
         user = app.user_app_service.update_user(user_id, UserDTO(data))
@@ -86,58 +82,42 @@ def update_user(user_id):
         return jsonify({"error": str(e)}), 500
 
 @app.route('/users/<int:user_id>', methods=['DELETE'])
+@swag_from({
+    'summary': 'Delete an existing user',
+    'description': 'Delete a user by their ID.',
+    'tags': ['users'],
+    'parameters': [{'name': 'user_id', 'in': 'path', 'type': 'integer', 'required': True, 'description': 'The ID of the user to delete'}],
+    'responses': {
+        204: {'description': 'User deleted successfully'},
+        500: {'description': 'Internal server error'}
+    }
+})
 def delete_user(user_id):
-    """
-    Delete an existing user
-    ---
-    tags:
-      - users
-    parameters:
-      - name: user_id
-        in: path
-        type: integer
-        required: true
-        description: The ID of the user to delete
-    responses:
-      204:
-        description: User deleted successfully
-      500:
-        description: Internal server error
-    """
     try:
         app.user_app_service.delete_user(user_id)
-        return f"Team Deleted: {user_id}", 204
+        return f"User Deleted: {user_id}", 204
     except Exception as e:
         logger.error(e)
         return jsonify({"error": str(e)}), 500
 
-
 @app.route('/users/<int:user_id>', methods=['GET'])
+@swag_from({
+    'summary': 'Get a user by ID',
+    'description': 'Retrieve a user by their ID.',
+    'tags': ['users'],
+    'parameters': [{'name': 'user_id', 'in': 'path', 'type': 'integer', 'required': True, 'description': 'The ID of the user to retrieve'}],
+    'responses': {
+        200: {'description': 'User retrieved successfully'},
+        404: {'description': 'User not found'},
+        500: {'description': 'Internal server error'}
+    }
+})
 def get_user(user_id):
-    """
-    Get a user by ID
-    ---
-    tags:
-      - users
-    parameters:
-      - name: user_id
-        in: path
-        type: integer
-        required: true
-        description: The ID of the user to retrieve
-    responses:
-      201:
-        description: User retrieved successfully
-      404:
-        description: User not found
-      500:
-        description: Internal server error
-    """
     try:
         logger.debug(f"users - GET: {user_id}")
         user = app.user_app_service.get_user(user_id)
         json_data = json.dumps(user, cls=EnumEncoder)
-        return Response(json_data, status=201, content_type='application/json')
+        return Response(json_data, status=200, content_type='application/json')
     except NotFoundException as e:
         logger.error(e)
         return jsonify({"error": str(e)}), 404
@@ -146,24 +126,21 @@ def get_user(user_id):
         return jsonify({"error": str(e)}), 500
 
 @app.route('/users', methods=['GET'])
+@swag_from({
+    'summary': 'Get all users',
+    'description': 'Retrieve all users.',
+    'tags': ['users'],
+    'responses': {
+        200: {'description': 'Users retrieved successfully'},
+        404: {'description': 'Users not found'},
+        500: {'description': 'Internal server error'}
+    }
+})
 def get_AllUser():
-    """
-    Get all users
-    ---
-    tags:
-      - users
-    responses:
-      201:
-        description: Users retrieved successfully
-      404:
-        description: Users not found
-      500:
-        description: Internal server error
-    """
     try:
         users = app.user_app_service.getAll()
         json_data = json.dumps(users, cls=EnumEncoder)
-        return Response(json_data, status=201, content_type='application/json')
+        return Response(json_data, status=200, content_type='application/json')
     except NotFoundException as e:
         logger.error(e)
         return jsonify({"error": str(e)}), 404
@@ -172,42 +149,43 @@ def get_AllUser():
         return jsonify({"error": str(e)}), 500
 
 @app.route('/search_users', methods=['POST'])
+@swag_from({
+    'summary': 'Search users by criteria',
+    'description': 'Search users by criteria using a custom query format.',
+    'tags': ['users'],
+    'parameters': [
+        {
+            'name': 'query',
+            'in': 'query',
+            'type': 'string',
+            'required': False,
+            'description': '''
+                Search criteria in the following format
+                and | or conditions are supported but no brackets
+
+                key operator value and key operator value
+
+                e.g.:
+                name ilike xxxx or id == 12
+                Operators supported: ==, !=, >, >=, <, <=, ilike
+            '''
+        }
+    ],
+    'responses': {
+        200: {'description': 'Users retrieved successfully'},
+        404: {'description': 'Users not found'},
+        500: {'description': 'Internal server error'}
+    }
+})
 def search_users():
-    """
-    Search users by criteria
-    ---
-    tags:
-      - users
-    parameters:
-      - name: query
-        in: query
-        type: string
-        required: false
-        description: |
-          Search criteria in the following format
-          and | or conditions are supported but no brackets
-
-          key operator value and key operator value
-
-          e.g.:
-          name ilike xxxx or id == 12
-          Operators supported: ==, !=, >, >=, <, <=, ilike)
-    responses:
-      201:
-        description: Users retrieved successfully
-      404:
-        description: Users not found
-      500:
-        description: Internal server error
-    """
     try:
         query_param = request.args.get('query', '')
         query = QueryUtil.parseQuery(query_param)
         if not query or not query.elementA:
-          raise Exception(f"No valid query found: {query_param}")
+            raise Exception(f"No valid query found: {query_param}")
         users = app.user_app_service.search(query)
         json_data = json.dumps(users, cls=EnumEncoder)
-        return Response(json_data, status=201, content_type='application/json')
+        return Response(json_data, status=200, content_type='application/json')
     except NotFoundException as e:
         logger.error(e)
         return jsonify({"error": str(e)}), 404

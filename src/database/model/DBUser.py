@@ -1,4 +1,5 @@
-from sqlalchemy import create_engine, Column, Integer, String, Sequence, Enum
+from sqlalchemy import Column, Integer, String, Sequence, Enum
+from sqlalchemy.orm import relationship
 from src.database.model.DBModel import DBModel
 from src.database.model.DBEnums import Race, Country
 
@@ -12,3 +13,4 @@ class DBUser(DBModel):
     race = Column(Enum(Race))
     mmr = Column(Integer)
     country = Column(Enum(Country))
+    teams = relationship('DBUserTeam', back_populates='user')

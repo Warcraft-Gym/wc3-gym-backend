@@ -1,4 +1,6 @@
 from src.database.model.DBUser import DBUser
+from src.database.model.DBRelationships import DBUserTeam
+from typing import List
 class UserDTO:
     def __init__(self, data : dict):
         self.id = data.get('id')
@@ -33,3 +35,43 @@ class UserDTO:
                 'country': user.country
             }
         )
+    
+    @staticmethod
+    def from_dbuser_team(user_team: List[DBUserTeam]):
+        l = []
+        for ut in user_team:
+            l.append(UserDTO.from_dbuser(ut.user))
+        return l
+
+    @staticmethod
+    def schema():
+        return {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "User's Name"
+                },
+                "battleTag": {
+                    "type": "string",
+                    "description": "User's BattleTag"
+                },
+                "discordTag": {
+                    "type": "string",
+                    "description": "User's DiscordTag"
+                },
+                "race": {
+                    "type": "string",
+                    "description": "User's Race"
+                },
+                "mmr": {
+                    "type": "integer",
+                    "description": "User's MMR"
+                },
+                "country": {
+                    "type": "string",
+                    "description": "User's Country"
+                }
+            },
+            "required": ["name", "battleTag", "discordTag"]
+        }
