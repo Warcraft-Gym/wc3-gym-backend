@@ -35,3 +35,17 @@ class TeamAppService:
             if(team_data):
                 team_data = team_data.to_dict()
             return team_data
+      
+    def getAll(self):
+        team_data = self.team_service.getAll()
+        team_dict_l = []
+        for td in team_data:
+            team_dict_l.append(td.to_dict())
+        return team_dict_l
+
+    def search(self, query):
+        team_data = self.team_service.search(query)
+        team_dict_l = []
+        for td in team_data:
+            team_dict_l.append(td.to_dict())
+        return team_dict_l

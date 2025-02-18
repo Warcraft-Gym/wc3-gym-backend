@@ -5,6 +5,7 @@ from flask_jwt_extended import jwt_required
 from custom_exceptions import NotFoundException
 from flasgger import swag_from
 from src.dtos.team_dto import TeamDTO
+from src.util.query_util import QueryUtil
 import enum
 import json
 
@@ -152,6 +153,75 @@ def addPlayer(team_id):
         data = request.json
         team = app.team_app_service.addPlayers(team_id, data.get("player_ids"))
         json_data = json.dumps(team, cls=EnumEncoder)
+        return Response(json_data, status=200, content_type='application/json')
+    except NotFoundException as e:
+        logger.error(e)
+        return jsonify({"error": str(e)}), 404
+    except Exception as e:
+        logger.error(e)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/teams', methods=['GET'])
+@swag_from({
+    'summary': 'Get all teams',
+    'description': 'Retrieve all teams.',
+    'tags': ['teams'],
+    'responses': {
+        200: {'description': 'Teams retrieved successfully'},
+        404: {'description': 'Teams not found'},
+        500: {'description': 'Internal server error'}
+    }
+})
+def get_all_teams():
+    try:
+        teams = app.team_app_service.getAll()
+        json_data = json.dumps(teams, cls=EnumEncoder)
+        return Response(json_data, status=200, content_type='application/json')
+    except NotFoundException as e:
+        logger.error(e)
+        return jsonify({"error": str(e)}), 404
+    except Exception as e:
+        logger.error(e)
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/teams/search', methods=['POST'])
+@swag_from({
+    'summary': 'Search teams by criteria',
+    'description': 'Search teams by criteria using a custom query format.',
+    'tags': ['teams'],
+    'parameters': [
+        {
+            'name': 'query',
+            'in': 'query',
+            'type': 'string',
+            'required': False,
+            'description': '''
+                Search criteria in the following format
+                and | or conditions are supported but no brackets
+
+                key operator value and key operator value
+
+                e.g.:
+                name ilike xxxx or id == 12
+                Operators supported: ==, !=, >, >=, <, <=, ilike
+            '''
+        }
+    ],
+    'responses': {
+        200: {'description': 'Teams retrieved successfully'},
+        404: {'description': 'Teams not found'},
+        500: {'description': 'Internal server error'}
+    }
+})
+def search_teams():
+    try:
+        query_param = request.args.get('query', '')
+        query = QueryUtil.parseQuery(query_param)
+        if not query or not query.elementA:
+            raise Exception(f"No valid query found: {query_param}")
+        teams = app.team_app_service.search(query)
+        json_data = json.dumps(teams, cls=EnumEncoder)
         return Response(json_data, status=200, content_type='application/json')
     except NotFoundException as e:
         logger.error(e)
