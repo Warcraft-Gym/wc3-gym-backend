@@ -23,9 +23,31 @@ class DBTeam(DBModel):
     @classmethod
     def addPlayers(cls, session: Session, obj_id, user_ids):
         team = session.query(cls).filter_by(id=obj_id).first()
-        if team:
-            users = session.query(DBUser).filter(DBUser.id.in_(user_ids)).all()
-            for user in users:
-                session.add(DBUserTeam(user=user,team=team))
-            session.commit()
+        if not team:
+            raise Exception(f"Team not found by id: {obj_id}")
+        for user_id in user_ids:
+            user = session.query(DBUser).filter_by(id=user_id).first()
+            if not user:
+                raise Exception(f"User not found by id: {user_id}")
+            already_exists = session.query(DBUserTeam).filter_by(team_id=team.id,user_id=user.id).first() is not None
+            if already_exists:
+                raise Exception(f"User already part of the team, user id: {user_id}")
+            session.add(DBUserTeam(user=user,team=team))              
+        session.commit()
+        return team
+
+    @classmethod
+    def removePlayers(cls, session: Session, obj_id, user_ids):
+        team = session.query(cls).filter_by(id=obj_id).first()
+        if not team:
+            raise Exception(f"Team not found by id: {obj_id}")
+        for user_id in user_ids:
+            user = session.query(DBUser).filter_by(id=user_id).first()
+            if not user:
+                raise Exception(f"User not found by id: {user_id}")
+            user_team = session.query(DBUserTeam).filter_by(team_id=team.id,user_id=user.id).first()
+            if not user_team:
+                raise Exception(f"User not part of the team, user id: {user_id}")
+            session.delete(user_team)                
+        session.commit()
         return team

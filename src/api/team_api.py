@@ -161,6 +161,44 @@ def addPlayer(team_id):
         logger.error(e)
         return jsonify({"error": str(e)}), 500
 
+@app.route('/teams/removePlayer/<int:team_id>', methods=['POST'])
+@swag_from({
+    'summary': 'Removes players to a team',
+    'description': 'Removes players from a team using their IDs.',
+    'tags': ['teams'],
+    'parameters': [
+        {'name': 'team_id', 'in': 'path', 'type': 'integer', 'required': True},
+        {
+            'name': 'body',
+            'in': 'body',
+            'required': True,
+            'schema': {
+                'type': 'object',
+                'properties': {
+                    'player_ids': {'type': 'array', 'items': {'type': 'integer'}}
+                },
+                'required': ['player_ids']
+            }
+        }
+    ],
+    'responses': {
+        200: {'description': 'Players removed successfully'},
+        404: {'description': 'Team not found'},
+        500: {'description': 'Internal server error'}
+    }
+})
+def removePlayer(team_id):
+    try:
+        data = request.json
+        team = app.team_app_service.removePlayers(team_id, data.get("player_ids"))
+        json_data = json.dumps(team, cls=EnumEncoder)
+        return Response(json_data, status=200, content_type='application/json')
+    except NotFoundException as e:
+        logger.error(e)
+        return jsonify({"error": str(e)}), 404
+    except Exception as e:
+        logger.error(e)
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/teams', methods=['GET'])
 @swag_from({

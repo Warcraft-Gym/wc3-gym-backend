@@ -43,6 +43,16 @@ class TeamDBService(AbstractDatabaseService):
                 logger.error(f"Database error: {e}")
                 raise DBException(f"Database error: {e}")
 
+    def removePlayers(self, team_id, player_ids):
+        with self.get_session() as session:
+            try:
+                team = DBTeam.removePlayers(session, team_id, player_ids)
+                if not team:
+                    raise DBException("Team could not be updated!")
+                return TeamDTO.from_dbteam(team)   
+            except SQLAlchemyError as e:
+                logger.error(f"Database error: {e}")
+                raise DBException(f"Database error: {e}")
 
     def delete(self, team_id):
         with self.get_session() as session:

@@ -29,13 +29,18 @@ class TeamAppService:
             raise NotFoundException(f"Team not found by Id: {team_id}")
         return team_data.to_dict()
 
-
     def addPlayers(self, team_id: int, players):
             team_data = self.team_service.addPlayers(team_id, players)
             if(team_data):
                 team_data = team_data.to_dict()
             return team_data
       
+    def removePlayers(self, team_id: int, players):
+            team_data = self.team_service.removePlayers(team_id, players)
+            if(team_data):
+                team_data = team_data.to_dict()
+            return team_data
+    
     def getAll(self):
         team_data = self.team_service.getAll()
         team_dict_l = []
