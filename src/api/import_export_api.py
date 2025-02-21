@@ -9,6 +9,7 @@ import pandas as pd
 import io
 from src.util.import_util import ImportUtil
 from src.dtos.user_dto import UserDTO
+from src.util.query_util import QueryUtil
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +67,14 @@ def import_season(season_id):
                         'mmr': None if pd.isna(row['MMR']) else row['MMR'],
                         'country':   ImportUtil.getCountryEnumString(row['Country'])
                     }
-                app.user_app_service.create_user(UserDTO(data))
+                query = QueryUtil.parseQuery("battleTag == " +  data.get('battleTag'))
+                if not query or not query.elementA:
+                    raise Exception(f"No valid query found: {"battleTag == " +  data.get('battleTag')}")
+                users = app.user_app_service.search(query)
+                if not users:
+                    app.user_app_service.create_user(UserDTO(data))
+                else:
+                    app.user_app_service.update_user(users[0].get('id'), UserDTO(data))
             
             teams = df.get('Player Team Assignment')
             matches = df.get('Matches')
