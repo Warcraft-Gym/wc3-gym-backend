@@ -26,6 +26,14 @@ class DBModel(AbstractConcreteBase, Base):
         return obj
 
     @classmethod
+    def updateObject(cls, session: Session, obj, **kwargs):
+        if obj:
+            for key, value in kwargs.items():
+                setattr(obj, key, value)
+            session.commit()
+        return obj
+
+    @classmethod
     def delete(cls, session: Session, obj_id):
         obj = session.query(cls).filter_by(id=obj_id).first()
         if obj:

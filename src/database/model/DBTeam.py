@@ -4,8 +4,6 @@ from sqlalchemy.orm.session import Session
 from src.database.model.DBModel import DBModel
 from src.database.model.DBUser import DBUser
 from src.database.model.DBRelationships import DBUserTeam
-from src.database.model.DBSeason import DBSeason
-from typing import List
 
 
 class DBTeam(DBModel):

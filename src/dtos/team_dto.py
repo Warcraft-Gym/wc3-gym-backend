@@ -1,5 +1,6 @@
 from src.database.model.DBTeam import DBTeam
 from src.dtos.user_dto import UserDTO
+from src.dtos.season_dto import SeasonDTO
 
 class TeamDTO:
     def __init__(self, data : dict):
@@ -16,7 +17,7 @@ class TeamDTO:
             'id': self.id,
             'name': self.name,
             'player': l,
-            'season': self.season
+            'season': None if not self.season else self.season.to_dict()
         }
 
     @classmethod
@@ -25,7 +26,7 @@ class TeamDTO:
                 {
                 'id' : team.id,
                 'name' : team.name,
-                'season' : team.season_id,
+                'season' : SeasonDTO.from_dbseason(team.season),
                 'player' : UserDTO.from_dbuser_team(team.users)
             }
         )
@@ -35,7 +36,6 @@ class TeamDTO:
         return {
             'type': 'object',
             'properties': {
-                'id': {'type': 'integer'},
                 'name': {'type': 'string'}
             },
             'required': ['name']

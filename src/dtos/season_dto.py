@@ -13,9 +13,21 @@ class SeasonDTO:
 
     @classmethod
     def from_dbseason(cls, season: DBSeason):
+        if not season:
+            return None
         return cls(
                 {
                 'id' : season.id,
                 'name' : season.name
             }
         )
+    
+    @staticmethod
+    def schema():
+        return {
+            'type': 'object',
+            'properties': {
+                'name': {'type': 'string'}
+            },
+            'required': ['name']
+        }

@@ -1,6 +1,7 @@
 import logging
 from src.database.abstract_database_service import AbstractDatabaseService
 from src.database.model.DBSeason import DBSeason
+from src.database.model.DBTeam import DBTeam
 from sqlalchemy.exc import SQLAlchemyError
 from custom_exceptions import DBException
 from src.dtos.season_dto import SeasonDTO
@@ -63,3 +64,37 @@ class SeasonDBService(AbstractDatabaseService):
             raise DBException(f"Database error: {e}")
         finally:
             session.close()
+
+    def addTeams(self, season_id, team_ids):
+        with self.get_session() as session:
+            try:
+                season = session.query(DBSeason).filter_by(id=season_id).first()
+                if not season:
+                    raise Exception(f"Season not found by id: {season_id}")
+                for team_id in team_ids:
+                    team = session.query(DBTeam).filter_by(id=team_id).first()
+                    if not team:
+                        raise Exception(f"Team not found by id: {team_id}")
+                    DBTeam.updateObject(session, team, **{'season':season})
+                return SeasonDTO.from_dbseason(season)   
+            except SQLAlchemyError as e:
+                logger.error(f"Database error: {e}")
+                raise DBException(f"Database error: {e}")
+
+    def removeTeams(self, season_id, team_ids):
+        with self.get_session() as session:
+            try:
+                season = session.query(DBSeason).filter_by(id=season_id).first()
+                if not season:
+                    raise Exception(f"Season not found by id: {season_id}")
+                for team_id in team_ids:
+                    team = session.query(DBTeam).filter_by(id=team_id).first()
+                    if not team:
+                        raise Exception(f"Team not found by id: {team_id}")
+                    if team.season_id != season_id:
+                        raise Exception(f"Team not part of season: {season.name}")
+                    DBTeam.updateObject(session, team, **{'season':None})
+                return SeasonDTO.from_dbseason(season)   
+            except SQLAlchemyError as e:
+                logger.error(f"Database error: {e}")
+                raise DBException(f"Database error: {e}")

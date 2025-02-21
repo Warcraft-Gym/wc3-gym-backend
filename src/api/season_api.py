@@ -19,13 +19,7 @@ logger = logging.getLogger(__name__)
             'name': 'body',
             'in': 'body',
             'required': True,
-            'schema': {
-                'type': 'object',
-                'properties': {
-                    'name': {'type': 'string'}
-                },
-                'required': ['name']
-            }
+            'schema': SeasonDTO.schema()
         }
     ],
     'responses': {
@@ -53,12 +47,7 @@ def add_season():
             'name': 'body',
             'in': 'body',
             'required': False,
-            'schema': {
-                'type': 'object',
-                'properties': {
-                    'name': {'type': 'string'}
-                }
-            }
+            'schema': SeasonDTO.schema()
         }
     ],
     'responses': {
@@ -113,6 +102,81 @@ def delete_season(season_id):
 def get_season(season_id):
     try:
         season = app.season_app_service.get_season(season_id)
+        return jsonify(season)
+    except NotFoundException as e:
+        logger.error(e)
+        return jsonify({"error": str(e)}), 404
+    except Exception as e:
+        logger.error(e)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/season/addTeams/<int:season_id>', methods=['POST'])
+@swag_from({
+    'summary': 'Add teams to season',
+    'description': 'Add teams to season by providing a list of team ids.',
+    'tags': ['seasons'],
+    'parameters': [
+        {'name': 'season_id', 'in': 'path', 'type': 'integer', 'required': True},
+        {
+            'name': 'body',
+            'in': 'body',
+            'required': True,
+            'schema': {
+                'type': 'object',
+                'properties': {
+                    'team_ids': {'type': 'array', 'items': {'type': 'integer'}}
+                },
+                'required': ['team_ids']
+            }
+        }],
+    'responses': {
+        200: {'description': 'Added teams to season successfully'},
+        404: {'description': 'Season or Teams not found'},
+        500: {'description': 'Internal server error'}
+    }
+})
+def add_teams(season_id):
+    try:
+        data = request.json
+        season = app.season_app_service.addTeams(season_id, data.get("team_ids"))
+        return jsonify(season)
+    except NotFoundException as e:
+        logger.error(e)
+        return jsonify({"error": str(e)}), 404
+    except Exception as e:
+        logger.error(e)
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/season/removeTeams/<int:season_id>', methods=['POST'])
+@swag_from({
+    'summary': 'Remove teams from season',
+    'description': 'Remove teams from season by providing a list of team ids.',
+    'tags': ['seasons'],
+    'parameters': [
+        {'name': 'season_id', 'in': 'path', 'type': 'integer', 'required': True},
+        {
+            'name': 'body',
+            'in': 'body',
+            'required': True,
+            'schema': {
+                'type': 'object',
+                'properties': {
+                    'team_ids': {'type': 'array', 'items': {'type': 'integer'}}
+                },
+                'required': ['team_ids']
+            }
+        }],
+    'responses': {
+        200: {'description': 'Removed teams from season successfully'},
+        404: {'description': 'Season or Teams not found'},
+        500: {'description': 'Internal server error'}
+    }
+})
+def remove_teams(season_id):
+    try:
+        data = request.json
+        season = app.season_app_service.removeTeams(season_id, data.get("team_ids"))
         return jsonify(season)
     except NotFoundException as e:
         logger.error(e)

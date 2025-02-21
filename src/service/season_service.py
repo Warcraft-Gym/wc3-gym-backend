@@ -28,3 +28,15 @@ class SeasonAppService:
         if not season_data:
             raise NotFoundException(f"Team not found by Id: {season_id}")
         return season_data.to_dict()
+    
+    def addTeams(self, season_id: int, team_ids):
+        season_data = self.season_service.addTeams(season_id, team_ids)
+        if(season_data):
+            season_data = season_data.to_dict()
+        return season_data
+      
+    def removeTeams(self, season_id: int, team_ids):
+        season_data = self.season_service.removeTeams(season_id, team_ids)
+        if(season_data):
+            season_data = season_data.to_dict()
+        return season_data
