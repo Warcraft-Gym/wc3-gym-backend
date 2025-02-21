@@ -6,6 +6,7 @@ from src.database.model.DBEnums import Race, Country
 
 class DBUser(DBModel):
     __tablename__ = 'users'
+    __table_args__ = {'mysql_charset': 'utf8mb4'}
     id = Column(Integer, Sequence(f'{__name__.lower()}_id_seq'), primary_key=True)
     name = Column(String(50), nullable=False)
     battleTag = Column(String(50), nullable=False)
