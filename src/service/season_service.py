@@ -29,6 +29,13 @@ class SeasonAppService:
             raise NotFoundException(f"Team not found by Id: {season_id}")
         return season_data.to_dict()
     
+    def getAll(self):
+        season_data = self.season_service.getAll()
+        season_dict_l = []
+        for sd in season_data:
+            season_dict_l.append(sd.to_dict())
+        return season_dict_l
+    
     def addTeams(self, season_id: int, team_ids):
         season_data = self.season_service.addTeams(season_id, team_ids)
         if(season_data):

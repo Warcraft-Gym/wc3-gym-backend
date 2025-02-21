@@ -65,6 +65,18 @@ class SeasonDBService(AbstractDatabaseService):
         finally:
             session.close()
 
+    def getAll(self):
+        with self.get_session() as session:
+            try:
+                result = []
+                seasons = DBSeason.getAll(session)
+                for season in seasons:
+                    result.append(SeasonDTO.from_dbseason(season))
+                return result
+            except SQLAlchemyError as e:
+                logger.error(f"Database error: {e}")
+                raise DBException(f"Database error: {e}")
+
     def addTeams(self, season_id, team_ids):
         with self.get_session() as session:
             try:

@@ -184,3 +184,21 @@ def remove_teams(season_id):
     except Exception as e:
         logger.error(e)
         return jsonify({"error": str(e)}), 500
+    
+@app.route('/season', methods=['GET'])
+@swag_from({
+    'summary': 'Get all seasons',
+    'description': 'Return all seasons',
+    'tags': ['seasons'],
+    'responses': {
+        200: {'description': 'seasons retrieved successfully'},
+        500: {'description': 'Internal server error'}
+    }
+})
+def get_all():
+    try:
+        seasons = app.season_app_service.getAll()
+        return jsonify(seasons)
+    except Exception as e:
+        logger.error(e)
+        return jsonify({"error": str(e)}), 500
