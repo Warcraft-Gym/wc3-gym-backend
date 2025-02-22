@@ -7,10 +7,12 @@ from src.database.user_db_service import UserDBService
 from src.database.team_db_service import TeamDBService
 from src.database.match_db_service import MatchDBService
 from src.database.season_db_service import SeasonDBService
+from src.database.series_db_service import SeriesDBService
 from src.service.user_service import UserAppService
 from src.service.team_service import TeamAppService
 from src.service.match_service import MatchAppService
 from src.service.season_service import SeasonAppService
+from src.service.series_service import SeriesAppService
 from flasgger import Swagger
 
 # Load environment variables from .env file
@@ -72,9 +74,11 @@ user_service = UserDBService(db_url=db_url)
 team_service = TeamDBService(db_url=db_url)
 match_service = MatchDBService(db_url=db_url)
 season_service = SeasonDBService(db_url=db_url)
+series_service = SeriesDBService(db_url=db_url)
 
 # Initialize application services
 app.user_app_service = UserAppService(user_service=user_service)
 app.team_app_service = TeamAppService(team_service=team_service)
 app.match_app_service = MatchAppService(match_service=match_service)
 app.season_app_service = SeasonAppService(season_service=season_service)
+app.series_app_service = SeriesAppService(series_service=series_service)
