@@ -28,9 +28,9 @@ class DBTeam(DBModel):
             if not user:
                 raise Exception(f"User not found by id: {user_id}")
             already_exists = session.query(DBUserTeam).filter_by(team_id=team.id,user_id=user.id).first() is not None
-            if already_exists:
-                raise Exception(f"User already part of the team, user id: {user_id}")
-            session.add(DBUserTeam(user=user,team=team))              
+            if not already_exists:
+                session.add(DBUserTeam(user=user,team=team)) 
+                         
         session.commit()
         return team
 

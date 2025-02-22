@@ -1,7 +1,17 @@
 from src.database.model.DBEnums import Race
+import pandas as pd
 class ImportUtil():
+
+    @staticmethod
+    def isNa(value):
+        if pd.isna(value):
+            return None
+        return value
+
     @staticmethod
     def getRaceEnumString(race_str):
+        if not race_str:
+            return None
         race_mapping = {
             "random": "RANDOM",
             "rd": "RD",
@@ -18,6 +28,8 @@ class ImportUtil():
         return race
     @staticmethod  
     def getCountryEnumString(country_name):
+        if not country_name:
+            return None
         country_mapping = {
             "afghanistan": "AF",
             "albania": "AL",

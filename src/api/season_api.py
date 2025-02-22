@@ -5,6 +5,7 @@ from flask_jwt_extended import jwt_required
 from custom_exceptions import NotFoundException
 from flasgger import swag_from
 from src.dtos.season_dto import SeasonDTO
+from src.util.query_util import QueryUtil
 
 logger = logging.getLogger(__name__)
 
@@ -199,6 +200,50 @@ def get_all():
     try:
         seasons = app.season_app_service.getAll()
         return jsonify(seasons)
+    except Exception as e:
+        logger.error(e)
+        return jsonify({"error": str(e)}), 500
+    
+@app.route('/season/search', methods=['POST'])
+@swag_from({
+    'summary': 'Search seasons by criteria',
+    'description': 'Search seasons by criteria using a custom query format.',
+    'tags': ['teams'],
+    'parameters': [
+        {
+            'name': 'query',
+            'in': 'query',
+            'type': 'string',
+            'required': False,
+            'description': '''
+                Search criteria in the following format
+                and | or conditions are supported but no brackets
+
+                key operator value and key operator value
+
+                e.g.:
+                name ilike xxxx or id == 12
+                Operators supported: ==, !=, >, >=, <, <=, ilike
+            '''
+        }
+    ],
+    'responses': {
+        200: {'description': 'Seasons retrieved successfully'},
+        404: {'description': 'Seasons not found'},
+        500: {'description': 'Internal server error'}
+    }
+})
+def search_seasons():
+    try:
+        query_param = request.args.get('query', '')
+        query = QueryUtil.parseQuery(query_param)
+        if not query or not query.elementA:
+            raise Exception(f"No valid query found: {query_param}")
+        seasons = app.season_app_service.search(query)
+        return jsonify(seasons)
+    except NotFoundException as e:
+        logger.error(e)
+        return jsonify({"error": str(e)}), 404
     except Exception as e:
         logger.error(e)
         return jsonify({"error": str(e)}), 500

@@ -12,7 +12,7 @@ class TeamDBService(AbstractDatabaseService):
     def add(self, team : TeamDTO):
         with self.get_session() as session:
             try:
-                new_team = DBTeam.add(session, team.to_dict())
+                new_team = DBTeam.add(session, team.to_db_dict())
                 if not new_team:
                     raise DBException("Team could not be created!")
                 return TeamDTO.from_dbteam(new_team)   
@@ -24,7 +24,7 @@ class TeamDBService(AbstractDatabaseService):
     def update(self, team : TeamDTO):
         with self.get_session() as session:
             try:
-                team = DBTeam.update(session, team.id, **team.to_dict())
+                team = DBTeam.update(session, team.id, **team.to_db_dict())
                 if not team:
                     raise DBException("Team could not be updated!")
                 return TeamDTO.from_dbteam(team)   

@@ -11,13 +11,20 @@ class TeamDTO:
 
     def to_dict(self):
         l = []
-        for p in self.player:
-            l.append(p.to_dict())
+        if self.player:
+            for p in self.player:
+                l.append(p.to_dict())
         return {
             'id': self.id,
             'name': self.name,
             'player': l,
             'season': None if not self.season else self.season.to_dict()
+        }
+    
+    def to_db_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name
         }
 
     @classmethod

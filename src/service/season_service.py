@@ -47,3 +47,10 @@ class SeasonAppService:
         if(season_data):
             season_data = season_data.to_dict()
         return season_data
+    
+    def search(self, query):
+        season_data = self.season_service.search(query)
+        season_dict_l = []
+        for sd in season_data:
+            season_dict_l.append(sd.to_dict())
+        return season_dict_l
