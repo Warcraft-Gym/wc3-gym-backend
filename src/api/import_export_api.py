@@ -87,7 +87,7 @@ def import_season():
                 if not users:
                     user = app.user_app_service.create_user(UserDTO(user_data))
                 else:
-                    user = app.user_app_service.update_user(users[0].get('id'), UserDTO(user_data))
+                    user = app.user_app_service.update_user(users[0].id, UserDTO(user_data))
                 
 
                 team_name = ImportUtil.isNa(row['Team Abbr'])
@@ -96,10 +96,10 @@ def import_season():
                         'name' : ImportUtil.isNa(row['Team Abbr'])
                     }
                     teams.append(team_data)
-                    teams_players[team_name] = [user.get('id')]
+                    teams_players[team_name] = [user.id]
                 elif team_name:
                     players = teams_players.get(team_name)
-                    players.append(user.get('id'))
+                    players.append(user.id)
 
             team_ids = []
             for team_data in teams:
@@ -111,10 +111,10 @@ def import_season():
                 if not found_teams:
                     team = app.team_app_service.create_team(TeamDTO(team_data))
                 else:
-                    team = app.team_app_service.update_team(found_teams[0].get('id'), TeamDTO(team_data))
-                team_ids.append(team.get('id'))
-                players = teams_players.get(team_data.get('name'))
-                app.team_app_service.addPlayers(team.get('id'), players)
+                    team = app.team_app_service.update_team(found_teams[0].id, TeamDTO(team_data))
+                team_ids.append(team.id)
+                players = teams_players.get(team.name)
+                app.team_app_service.addPlayers(team.id, players)
             season_data = {
                 'name' : season_name
             }
@@ -126,9 +126,9 @@ def import_season():
                     raise Exception(f"No valid query found: {"name == " +  season_name}")
                 found_seasons = app.season_app_service.search(query)
                 if not found_seasons:
-                    season_id = app.season_app_service.create_season(SeasonDTO(season_data)).get('id')
+                    season_id = app.season_app_service.create_season(SeasonDTO(season_data)).id
                 else: 
-                    season_id = found_seasons[0].get('id')
+                    season_id = found_seasons[0].id
                 
             app.season_app_service.addTeams(season_id, team_ids)
             
@@ -187,7 +187,7 @@ def exort_season():
                 raise NotFoundException(f"season not found by name: {season_name}")
             else: 
                 season = found_seasons[0]
-                season_id = season.get('id')
+                season_id = season.id
 
 
         query = QueryUtil.parseQuery(f"season_id == {season_id}")
@@ -196,8 +196,8 @@ def exort_season():
         season_teams = app.team_app_service.search(query)
         player_team_map = {}
         for team in season_teams:
-            for player in team.get('player'):
-                player_team_map[player.get('name')] = team.get('name')
+            for player in team.player:
+                player_team_map[player.name] = team.name
 
         workbook = openpyxl.Workbook()
         # Create worksheets
@@ -205,9 +205,9 @@ def exort_season():
         users = app.user_app_service.getAll()
         user_sheet.append(['Bnet', 'Bnet (no ID)', 'Bnet + Host', 'Discord', 'Race', 'Team Abbr', 'MMR', 'Country'])
         for user in users:
-            season_team = player_team_map.get(user.get('name'))
+            season_team = player_team_map.get(user.name)
             if season_team:
-                user_sheet.append([user.get('battleTag'),user.get('name'),f"{user.get('name')}*",user.get('discordTag'),ImportUtil.getRaceNameString(user.get('race')),season_team, user.get('mmr'),ImportUtil.getCountryNameString(user.get('country'))])
+                user_sheet.append([user.battleTag, user.name,f"{user.name}*",user.discordTag,ImportUtil.getRaceNameString(user.race),season_team, user.mmr,ImportUtil.getCountryNameString(user.country)])
 
         excel_stream = BytesIO()
         workbook.save(excel_stream)
@@ -217,7 +217,7 @@ def exort_season():
         return send_file(
             excel_stream,
             as_attachment=True,
-            download_name=f'{season.get('name')}.xlsx',
+            download_name=f'{season.name}.xlsx',
             mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         )
     except Exception as e:

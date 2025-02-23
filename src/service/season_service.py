@@ -9,15 +9,11 @@ class SeasonAppService:
     def create_season(self, season: SeasonDTO):
         season.id = None
         season_data = self.season_service.add(season)
-        if(season_data):
-            season_data = season_data.to_dict()
         return season_data
 
     def update_season(self, season_id: int, season: SeasonDTO):
         season.id = season_id
         season_data = self.season_service.update(season)
-        if(season_data):
-            season_data = season_data.to_dict()
         return season_data
 
     def delete_season(self, season_id: int):
@@ -27,30 +23,20 @@ class SeasonAppService:
         season_data = self.season_service.get(season_id)
         if not season_data:
             raise NotFoundException(f"Team not found by Id: {season_id}")
-        return season_data.to_dict()
+        return season_data
     
     def getAll(self):
         season_data = self.season_service.getAll()
-        season_dict_l = []
-        for sd in season_data:
-            season_dict_l.append(sd.to_dict())
-        return season_dict_l
+        return season_data
     
     def addTeams(self, season_id: int, team_ids):
         season_data = self.season_service.addTeams(season_id, team_ids)
-        if(season_data):
-            season_data = season_data.to_dict()
         return season_data
       
     def removeTeams(self, season_id: int, team_ids):
         season_data = self.season_service.removeTeams(season_id, team_ids)
-        if(season_data):
-            season_data = season_data.to_dict()
         return season_data
     
     def search(self, query):
         season_data = self.season_service.search(query)
-        season_dict_l = []
-        for sd in season_data:
-            season_dict_l.append(sd.to_dict())
-        return season_dict_l
+        return season_data

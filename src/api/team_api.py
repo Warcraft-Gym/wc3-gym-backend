@@ -40,6 +40,8 @@ def add_team():
     try:
         data = request.json
         team = app.team_app_service.create_team(TeamDTO(data))
+        if team:
+            team = team.to_dict()
         json_data = json.dumps(team, cls=EnumEncoder)
         return Response(json_data, status=201, content_type='application/json')
     except Exception as e:
@@ -70,6 +72,8 @@ def update_team(team_id):
     try:
         data = request.json
         team = app.team_app_service.update_team(team_id, name=data.get('name'))
+        if team:
+            team = team.to_dict()
         json_data = json.dumps(team, cls=EnumEncoder)
         return Response(json_data, status=200, content_type='application/json')
     except NotFoundException as e:
@@ -113,6 +117,8 @@ def delete_team(team_id):
 def get_team(team_id):
     try:
         team = app.team_app_service.get_team(team_id)
+        if team:
+            team = team.to_dict()
         json_data = json.dumps(team, cls=EnumEncoder)
         return Response(json_data, status=200, content_type='application/json')
     except NotFoundException as e:
@@ -152,6 +158,8 @@ def addPlayer(team_id):
     try:
         data = request.json
         team = app.team_app_service.addPlayers(team_id, data.get("player_ids"))
+        if team:
+            team = team.to_dict()
         json_data = json.dumps(team, cls=EnumEncoder)
         return Response(json_data, status=200, content_type='application/json')
     except NotFoundException as e:
@@ -191,6 +199,8 @@ def removePlayer(team_id):
     try:
         data = request.json
         team = app.team_app_service.removePlayers(team_id, data.get("player_ids"))
+        if team:
+            team = team.to_dict()
         json_data = json.dumps(team, cls=EnumEncoder)
         return Response(json_data, status=200, content_type='application/json')
     except NotFoundException as e:
@@ -214,7 +224,11 @@ def removePlayer(team_id):
 def get_all_teams():
     try:
         teams = app.team_app_service.getAll()
-        json_data = json.dumps(teams, cls=EnumEncoder)
+        out = []
+        if teams:
+            for team in teams:
+                out.append(team.to_dict())
+        json_data = json.dumps(out, cls=EnumEncoder)
         return Response(json_data, status=200, content_type='application/json')
     except NotFoundException as e:
         logger.error(e)
@@ -259,7 +273,11 @@ def search_teams():
         if not query or not query.elementA:
             raise Exception(f"No valid query found: {query_param}")
         teams = app.team_app_service.search(query)
-        json_data = json.dumps(teams, cls=EnumEncoder)
+        out = []
+        if teams:
+            for team in teams:
+                out.append(team.to_dict())
+        json_data = json.dumps(out, cls=EnumEncoder)
         return Response(json_data, status=200, content_type='application/json')
     except NotFoundException as e:
         logger.error(e)

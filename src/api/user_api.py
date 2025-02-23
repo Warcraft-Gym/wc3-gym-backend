@@ -42,6 +42,8 @@ def add_user():
     try:
         data = request.json
         user = app.user_app_service.create_user(UserDTO(data))
+        if(user):
+            user = user.to_dict()
         json_data = json.dumps(user, cls=EnumEncoder)
         return Response(json_data, status=201, content_type='application/json')
     except Exception as e:
@@ -72,6 +74,8 @@ def update_user(user_id):
     try:
         data = request.json
         user = app.user_app_service.update_user(user_id, UserDTO(data))
+        if(user):
+            user = user.to_dict()
         json_data = json.dumps(user, cls=EnumEncoder)
         return Response(json_data, status=201, content_type='application/json')
     except NotFoundException as e:
@@ -114,8 +118,9 @@ def delete_user(user_id):
 })
 def get_user(user_id):
     try:
-        logger.debug(f"users - GET: {user_id}")
         user = app.user_app_service.get_user(user_id)
+        if(user):
+            user = user.to_dict()
         json_data = json.dumps(user, cls=EnumEncoder)
         return Response(json_data, status=200, content_type='application/json')
     except NotFoundException as e:
@@ -139,7 +144,11 @@ def get_user(user_id):
 def get_AllUser():
     try:
         users = app.user_app_service.getAll()
-        json_data = json.dumps(users, cls=EnumEncoder)
+        out = []
+        if(users):
+            for user in users:
+                out.append(user.to_dict())
+        json_data = json.dumps(out, cls=EnumEncoder)
         return Response(json_data, status=200, content_type='application/json')
     except NotFoundException as e:
         logger.error(e)
@@ -184,7 +193,11 @@ def search_users():
         if not query or not query.elementA:
             raise Exception(f"No valid query found: {query_param}")
         users = app.user_app_service.search(query)
-        json_data = json.dumps(users, cls=EnumEncoder)
+        out = []
+        if(users):
+            for user in users:
+                out.append(user.to_dict())
+        json_data = json.dumps(out, cls=EnumEncoder)
         return Response(json_data, status=200, content_type='application/json')
     except NotFoundException as e:
         logger.error(e)

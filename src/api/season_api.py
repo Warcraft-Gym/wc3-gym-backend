@@ -32,6 +32,8 @@ def add_season():
     try:
         data = request.json
         season = app.season_app_service.create_season(SeasonDTO(data))
+        if season:
+            season = season.to_dict()
         return jsonify(season), 201
     except Exception as e:
         logger.error(e)
@@ -61,6 +63,8 @@ def update_season(season_id):
     try:
         data = request.json
         season = app.season_app_service.update_season(season_id, name=data.get('name'))
+        if season:
+            season = season.to_dict()
         return jsonify(season)
     except NotFoundException as e:
         logger.error(e)
@@ -103,6 +107,8 @@ def delete_season(season_id):
 def get_season(season_id):
     try:
         season = app.season_app_service.get_season(season_id)
+        if season:
+            season = season.to_dict()
         return jsonify(season)
     except NotFoundException as e:
         logger.error(e)
@@ -141,6 +147,8 @@ def add_teams(season_id):
     try:
         data = request.json
         season = app.season_app_service.addTeams(season_id, data.get("team_ids"))
+        if season:
+            season = season.to_dict()
         return jsonify(season)
     except NotFoundException as e:
         logger.error(e)
@@ -178,6 +186,8 @@ def remove_teams(season_id):
     try:
         data = request.json
         season = app.season_app_service.removeTeams(season_id, data.get("team_ids"))
+        if season:
+            season = season.to_dict()
         return jsonify(season)
     except NotFoundException as e:
         logger.error(e)
@@ -199,7 +209,11 @@ def remove_teams(season_id):
 def get_all():
     try:
         seasons = app.season_app_service.getAll()
-        return jsonify(seasons)
+        out = []
+        if seasons:
+            for season in seasons:
+                out.append(season.to_dict())
+        return jsonify(out)
     except Exception as e:
         logger.error(e)
         return jsonify({"error": str(e)}), 500
@@ -240,7 +254,11 @@ def search_seasons():
         if not query or not query.elementA:
             raise Exception(f"No valid query found: {query_param}")
         seasons = app.season_app_service.search(query)
-        return jsonify(seasons)
+        out = []
+        if seasons:
+            for season in seasons:
+                out.append(season.to_dict())
+        return jsonify(out)
     except NotFoundException as e:
         logger.error(e)
         return jsonify({"error": str(e)}), 404
