@@ -1,0 +1,73 @@
+import logging
+from src.database.abstract_database_service import AbstractDatabaseService
+from src.database.model.DBSeries import DBSeries
+from sqlalchemy.exc import SQLAlchemyError
+from custom_exceptions import DBException
+from src.dtos.series_dto import SeriesDTO
+
+logger = logging.getLogger(__name__)
+
+class SeriesDBService(AbstractDatabaseService):
+    def add(self, match_id, player1_id, player2_id, score):
+        try:
+            session = self.Session()
+            series = DBSeries.add(session, match_id=match_id, player1_id=player1_id, player2_id=player2_id, score=score)
+            if not series:
+                logger.error("Series could not be created!")
+                raise DBException("Series could not be created!")
+            return SeriesDTO.from_dbseries(series)
+        except SQLAlchemyError as e:
+            logger.error(f"Database error: {e}")
+            raise DBException(f"Database error: {e}")
+        finally:
+            session.close()
+    
+    def update(self, series_id, player1_id=None, player2_id=None, score=None):
+        try:
+            session = self.Session()
+            series = DBSeries.update(session, series_id, player1_id=player1_id, player2_id=player2_id, score=score)
+            if not series:
+                logger.error("Series could not be updated!")
+                raise DBException("Series could not be updated!")
+            return SeriesDTO.from_dbseries(series)
+        except SQLAlchemyError as e:
+            logger.error(f"Database error: {e}")
+            raise DBException(f"Database error: {e}")
+        finally:
+            session.close()
+
+    def delete(self, series_id):
+        try:
+            session = self.Session()
+            DBSeries.delete(session, series_id)
+        except SQLAlchemyError as e:
+            logger.error(f"Database error: {e}")
+            raise DBException(f"Database error: {e}")
+        finally:
+            session.close()
+
+    def get(self, series_id):
+        try:
+            session = self.Session()
+            series = session.query(DBSeries).filter_by(id=series_id).first()
+            if not series:
+                logger.error("Series could not be found!")
+                raise DBException("Series could not be found")
+            return SeriesDTO.from_dbseries(series)
+        except SQLAlchemyError as e:
+            logger.error(f"Database error: {e}")
+            raise DBException(f"Database error: {e}")
+        finally:
+            session.close()
+
+    def getAll(self):
+        try:
+            result = []
+            session = self.Session()
+            series = DBSeries.getAll(session)
+            for single_series in series:
+                result.append(SeriesDTO.from_dbseries(single_series))
+            return result
+        except SQLAlchemyError as e:
+                logger.error(f"Database error: {e}")
+                raise DBException(f"Database error: {e}")
