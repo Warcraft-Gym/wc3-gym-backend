@@ -101,20 +101,6 @@ def import_season():
                     players = teams_players.get(team_name)
                     players.append(user.id)
 
-            team_ids = []
-            for team_data in teams:
-                query = QueryUtil.parseQuery("name == " +  team_data.get('name'))
-                if not query or not query.elementA:
-                    raise Exception(f"No valid query found: {"name == " +  team_data.get('name')}")
-                found_teams = app.team_app_service.search(query)
-                team = None
-                if not found_teams:
-                    team = app.team_app_service.create_team(TeamDTO(team_data))
-                else:
-                    team = app.team_app_service.update_team(found_teams[0].id, TeamDTO(team_data))
-                team_ids.append(team.id)
-                players = teams_players.get(team.name)
-                app.team_app_service.addPlayers(team.id, players)
             season_data = {
                 'name' : season_name
             }
@@ -129,7 +115,22 @@ def import_season():
                     season_id = app.season_app_service.create_season(SeasonDTO(season_data)).id
                 else: 
                     season_id = found_seasons[0].id
-                
+            
+            team_ids = []
+            for team_data in teams:
+                query = QueryUtil.parseQuery("name == " +  team_data.get('name'))
+                if not query or not query.elementA:
+                    raise Exception(f"No valid query found: {"name == " +  team_data.get('name')}")
+                found_teams = app.team_app_service.search(query)
+                team = None
+                if not found_teams:
+                    team = app.team_app_service.create_team(TeamDTO(team_data))
+                else:
+                    team = app.team_app_service.update_team(found_teams[0].id, TeamDTO(team_data))
+                team_ids.append(team.id)
+                players = teams_players.get(team.name)
+                app.team_app_service.addPlayers(team.id, season_id, players)
+
             app.season_app_service.addTeams(season_id, team_ids)
             
             
@@ -170,7 +171,7 @@ def import_season():
 })
 def exort_season():
     try:
-        season_id = request.args.get('season_id')
+        season_id = int(request.args.get('season_id'))
         season_name = request.args.get('season_name')
         season_teams = []
         season = None
@@ -190,25 +191,42 @@ def exort_season():
                 season_id = season.id
 
 
-        query = QueryUtil.parseQuery(f"season_id == {season_id}")
-        if not query or not query.elementA:
-            raise Exception(f"No valid query found: season_id == {season_id}")
-        season_teams = app.team_app_service.search(query)
-        player_team_map = {}
-        for team in season_teams:
-            for player in team.player:
-                player_team_map[player.name] = team.name
-
         workbook = openpyxl.Workbook()
         # Create worksheets
         user_sheet = workbook.create_sheet(title='Players')
-        users = app.user_app_service.getAll()
         user_sheet.append(['Bnet', 'Bnet (no ID)', 'Bnet + Host', 'Discord', 'Race', 'Team Abbr', 'MMR', 'Country'])
-        for user in users:
-            season_team = player_team_map.get(user.name)
-            if season_team:
-                user_sheet.append([user.battleTag, user.name,f"{user.name}*",user.discordTag,ImportUtil.getRaceNameString(user.race),season_team, user.mmr,ImportUtil.getCountryNameString(user.country)])
+        ranking_sheet = workbook.create_sheet(title='Ranking')
+        ranking_sheet.append([f"{season.name} Rankings"])
+        ranking_sheet.append([""])
+        ranking_header = []
+        ranking_header.append('Rank')
+        ranking_header.append('Team')
+        for number in range(season.number_weeks):
+            ranking_header.append(f"Week {number}")
+        ranking_header.append('Points')
+        ranking_header.append('Points Against (PA)')
+        ranking_header.append('Points Available')
+        ranking_sheet.append(ranking_header)
+        rank = 1
 
+        season_teams = app.team_app_service.get_teams_season(season_id)
+        for team in season_teams:
+            # ranking sheet
+            team_rank = []
+            team_rank.append(rank)
+            team_rank.append(team.name)
+            for number in range(season.number_weeks):
+                team_rank.append(0)
+            team_rank.append(team.seasons_info[0].final_score)
+            team_rank.append(team.seasons_info[0].points_available)
+            team_rank.append(team.seasons_info[0].points_against)
+            ranking_sheet.append(team_rank)
+            rank += 1
+            # Player sheet
+            players = team.player_by_season[season_id]
+            for user in players:
+                user_sheet.append([user.battleTag, user.name,f"{user.name}*",user.discordTag,ImportUtil.getRaceNameString(user.race),team.name, user.mmr,ImportUtil.getCountryNameString(user.country)])
+                
         excel_stream = BytesIO()
         workbook.save(excel_stream)
         excel_stream.seek(0)
