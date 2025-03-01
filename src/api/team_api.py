@@ -154,6 +154,35 @@ def get_team_season(team_id, season_id):
     except Exception as e:
         logger.error(e)
         return jsonify({"error": str(e)}), 500
+    
+
+@app.route('/teams/season/<int:season_id>', methods=['GET'])
+@swag_from({
+    'summary': 'Get all teams for a specific season',
+    'description': 'Retrieve all teams with all information related to a specific season',
+    'tags': ['teams'],
+    'parameters': [{'name': 'season_id', 'in': 'path', 'type': 'integer', 'required': True}],
+    'responses': {
+        200: {'description': 'Team retrieved successfully'},
+        404: {'description': 'Team not found'},
+        500: {'description': 'Internal server error'}
+    }
+})
+def getAll_season(season_id):
+    try:
+        teams = app.team_app_service.get_teams_season(season_id)
+        out = []
+        if teams:
+            for team in teams:
+                out.append(team.to_dict())
+        json_data = json.dumps(out, cls=EnumEncoder)
+        return Response(json_data, status=200, content_type='application/json')
+    except NotFoundException as e:
+        logger.error(e)
+        return jsonify({"error": str(e)}), 404
+    except Exception as e:
+        logger.error(e)
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/teams/addPlayer/<int:team_id>/<int:season_id>', methods=['POST'])
 @swag_from({
