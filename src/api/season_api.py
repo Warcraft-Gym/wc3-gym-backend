@@ -62,7 +62,7 @@ def add_season():
 def update_season(season_id):
     try:
         data = request.json
-        season = app.season_app_service.update_season(season_id, name=data.get('name'))
+        season = app.season_app_service.update_season(season_id, SeasonDTO(data))
         if season:
             season = season.to_dict()
         return jsonify(season)
