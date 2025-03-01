@@ -192,10 +192,16 @@ def exort_season():
 
 
         workbook = openpyxl.Workbook()
+        default_sheet = workbook.active
+        workbook.remove(default_sheet)
         # Create worksheets
+        ranking_sheet = workbook.create_sheet(title='Ranking')
         user_sheet = workbook.create_sheet(title='Players')
         user_sheet.append(['Bnet', 'Bnet (no ID)', 'Bnet + Host', 'Discord', 'Race', 'Team Abbr', 'MMR', 'Country'])
-        ranking_sheet = workbook.create_sheet(title='Ranking')
+        player_team_sheet = workbook.create_sheet(title='Player Team Assignment')
+        player_team_sheet.append(['battle net name', 'team'])
+        player_website_sheet = workbook.create_sheet(title='Player Website')
+        player_website_sheet.append(['player', 'race_image', 'w3_champions_profile', 'mmr', 'country', 'team', 'captain'])
         ranking_sheet.append([f"{season.name} Rankings"])
         ranking_sheet.append([""])
         ranking_header = []
@@ -225,6 +231,8 @@ def exort_season():
             # Player sheet
             players = team.player_by_season[season_id]
             for user in players:
+                player_team_sheet.append([user.battleTag,team.name])
+                player_website_sheet.append([user.name, ImportUtil.getRaceImage(user.race),ImportUtil.getW3ChampionURL(user.battleTag),user.mmr,ImportUtil.getCountryNameString(user.country),team.name])
                 user_sheet.append([user.battleTag, user.name,f"{user.name}*",user.discordTag,ImportUtil.getRaceNameString(user.race),team.name, user.mmr,ImportUtil.getCountryNameString(user.country)])
                 
         excel_stream = BytesIO()

@@ -1,5 +1,6 @@
 from src.database.model.DBEnums import Race
 import pandas as pd
+import urllib.parse
 class ImportUtil():
 
     @staticmethod
@@ -27,6 +28,26 @@ class ImportUtil():
         race = race_mapping.get(race_str.lower())
         return race
     
+    @staticmethod
+    def getRaceImage(race_enum):
+        if not race_enum:
+            return None
+        race_mapping = {
+            "RANDOM": "race-random.png",
+            "UD": "race-undead.png",
+            "HU": "race-human.png",
+            "NE": "race-night-elf.png",
+            "OC": "race-orc.png"
+            }
+        race = race_mapping.get(race_enum.value)
+        return race
+
+    @staticmethod
+    def getW3ChampionURL(bnet_name):
+        if not bnet_name:
+            return None
+        return f"https://www.w3champions.com/player/{urllib.parse.quote(bnet_name)}"
+
     @staticmethod
     def getRaceNameString(race_enum):
         if not race_enum:
