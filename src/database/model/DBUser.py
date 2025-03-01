@@ -2,6 +2,7 @@ from sqlalchemy import Column, Integer, String, Sequence, Enum
 from sqlalchemy.orm import relationship
 from src.database.model.DBModel import DBModel
 from src.database.model.DBEnums import Race, Country
+from src.database.model.DBRelationships import DBUserTeamSeason
 
 
 class DBUser(DBModel):
@@ -14,4 +15,4 @@ class DBUser(DBModel):
     race = Column(Enum(Race))
     mmr = Column(Integer)
     country = Column(Enum(Country))
-    teams = relationship('DBUserTeam', back_populates='user')
+    team_seasons = relationship('DBUserTeamSeason', back_populates='user')

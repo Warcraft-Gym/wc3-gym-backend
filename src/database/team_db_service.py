@@ -32,10 +32,10 @@ class TeamDBService(AbstractDatabaseService):
                 logger.error(f"Database error: {e}")
                 raise DBException(f"Database error: {e}")
 
-    def addPlayers(self, team_id, player_ids):
+    def addPlayers(self, team_id, season_id, player_ids):
         with self.get_session() as session:
             try:
-                team = DBTeam.addPlayers(session, team_id, player_ids)
+                team = DBTeam.addPlayers(session, team_id, season_id, player_ids)
                 if not team:
                     raise DBException("Team could not be updated!")
                 return TeamDTO.from_dbteam(team)   
@@ -43,10 +43,10 @@ class TeamDBService(AbstractDatabaseService):
                 logger.error(f"Database error: {e}")
                 raise DBException(f"Database error: {e}")
 
-    def removePlayers(self, team_id, player_ids):
+    def removePlayers(self, team_id, season_id, player_ids):
         with self.get_session() as session:
             try:
-                team = DBTeam.removePlayers(session, team_id, player_ids)
+                team = DBTeam.removePlayers(session, team_id, season_id, player_ids)
                 if not team:
                     raise DBException("Team could not be updated!")
                 return TeamDTO.from_dbteam(team)   

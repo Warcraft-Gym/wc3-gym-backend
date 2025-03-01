@@ -222,7 +222,7 @@ def get_all():
 @swag_from({
     'summary': 'Search seasons by criteria',
     'description': 'Search seasons by criteria using a custom query format.',
-    'tags': ['teams'],
+    'tags': ['seasons'],
     'parameters': [
         {
             'name': 'query',

@@ -24,13 +24,24 @@ class TeamAppService:
         if not team_data:
             raise NotFoundException(f"Team not found by Id: {team_id}")
         return team_data
+    
+    def get_team_season(self, team_id: int, season_id):
+        team_data = self.team_service.get(team_id)
+        if not team_data:
+            raise NotFoundException(f"Team not found by Id: {team_id}")
+        # filter users and season info based on season id
+        season_player = team_data.player_by_season.get(season_id)
+        team_data.player_by_season = {season_id : season_player}
+        team_data.seasons_info = [seasons_info for seasons_info in team_data.seasons_info if seasons_info.season_id == season_id]
 
-    def addPlayers(self, team_id: int, players):
-            team_data = self.team_service.addPlayers(team_id, players)
+        return team_data
+
+    def addPlayers(self, team_id: int, season_id: int, players):
+            team_data = self.team_service.addPlayers(team_id, season_id, players)
             return team_data
       
-    def removePlayers(self, team_id: int, players):
-            team_data = self.team_service.removePlayers(team_id, players)
+    def removePlayers(self, team_id: int, season_id: int, players):
+            team_data = self.team_service.removePlayers(team_id, season_id, players)
             return team_data
     
     def getAll(self):
