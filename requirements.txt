@@ -1,6 +1,7 @@
 requests
 gspread
 pandas
+openpyxl
 python-dotenv
 apscheduler
 flask

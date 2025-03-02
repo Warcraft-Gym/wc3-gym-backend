@@ -40,6 +40,8 @@ def add_team():
     try:
         data = request.json
         team = app.team_app_service.create_team(TeamDTO(data))
+        if team:
+            team = team.to_dict()
         json_data = json.dumps(team, cls=EnumEncoder)
         return Response(json_data, status=201, content_type='application/json')
     except Exception as e:
@@ -70,6 +72,8 @@ def update_team(team_id):
     try:
         data = request.json
         team = app.team_app_service.update_team(team_id, name=data.get('name'))
+        if team:
+            team = team.to_dict()
         json_data = json.dumps(team, cls=EnumEncoder)
         return Response(json_data, status=200, content_type='application/json')
     except NotFoundException as e:
@@ -113,6 +117,8 @@ def delete_team(team_id):
 def get_team(team_id):
     try:
         team = app.team_app_service.get_team(team_id)
+        if team:
+            team = team.to_dict()
         json_data = json.dumps(team, cls=EnumEncoder)
         return Response(json_data, status=200, content_type='application/json')
     except NotFoundException as e:
@@ -122,13 +128,70 @@ def get_team(team_id):
         logger.error(e)
         return jsonify({"error": str(e)}), 500
 
-@app.route('/teams/addPlayer/<int:team_id>', methods=['POST'])
+@app.route('/teams/<int:team_id>/<int:season_id>', methods=['GET'])
 @swag_from({
-    'summary': 'Add players to a team',
-    'description': 'Add players to a team using their IDs.',
+    'summary': 'Get a team for a specific season',
+    'description': 'Retrieve a team by its ID with all information related to a specific season',
+    'tags': ['teams'],
+    'parameters': [{'name': 'team_id', 'in': 'path', 'type': 'integer', 'required': True},
+                   {'name': 'season_id', 'in': 'path', 'type': 'integer', 'required': True}],
+    'responses': {
+        200: {'description': 'Team retrieved successfully'},
+        404: {'description': 'Team not found'},
+        500: {'description': 'Internal server error'}
+    }
+})
+def get_team_season(team_id, season_id):
+    try:
+        team = app.team_app_service.get_team_season(team_id, season_id)
+        if team:
+            team = team.to_dict()
+        json_data = json.dumps(team, cls=EnumEncoder)
+        return Response(json_data, status=200, content_type='application/json')
+    except NotFoundException as e:
+        logger.error(e)
+        return jsonify({"error": str(e)}), 404
+    except Exception as e:
+        logger.error(e)
+        return jsonify({"error": str(e)}), 500
+    
+
+@app.route('/teams/season/<int:season_id>', methods=['GET'])
+@swag_from({
+    'summary': 'Get all teams for a specific season',
+    'description': 'Retrieve all teams with all information related to a specific season',
+    'tags': ['teams'],
+    'parameters': [{'name': 'season_id', 'in': 'path', 'type': 'integer', 'required': True}],
+    'responses': {
+        200: {'description': 'Team retrieved successfully'},
+        404: {'description': 'Team not found'},
+        500: {'description': 'Internal server error'}
+    }
+})
+def getAll_season(season_id):
+    try:
+        teams = app.team_app_service.get_teams_season(season_id)
+        out = []
+        if teams:
+            for team in teams:
+                out.append(team.to_dict())
+        json_data = json.dumps(out, cls=EnumEncoder)
+        return Response(json_data, status=200, content_type='application/json')
+    except NotFoundException as e:
+        logger.error(e)
+        return jsonify({"error": str(e)}), 404
+    except Exception as e:
+        logger.error(e)
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/teams/addPlayer/<int:team_id>/<int:season_id>', methods=['POST'])
+@swag_from({
+    'summary': 'Add players to a team for a season',
+    'description': 'Add players to a team for a season using their IDs.',
     'tags': ['teams'],
     'parameters': [
         {'name': 'team_id', 'in': 'path', 'type': 'integer', 'required': True},
+        {'name': 'season_id', 'in': 'path', 'type': 'integer', 'required': True},
         {
             'name': 'body',
             'in': 'body',
@@ -148,10 +211,12 @@ def get_team(team_id):
         500: {'description': 'Internal server error'}
     }
 })
-def addPlayer(team_id):
+def addPlayer(team_id, season_id):
     try:
         data = request.json
-        team = app.team_app_service.addPlayers(team_id, data.get("player_ids"))
+        team = app.team_app_service.addPlayers(team_id, season_id, data.get("player_ids"))
+        if team:
+            team = team.to_dict()
         json_data = json.dumps(team, cls=EnumEncoder)
         return Response(json_data, status=200, content_type='application/json')
     except NotFoundException as e:
@@ -161,13 +226,14 @@ def addPlayer(team_id):
         logger.error(e)
         return jsonify({"error": str(e)}), 500
 
-@app.route('/teams/removePlayer/<int:team_id>', methods=['POST'])
+@app.route('/teams/removePlayer/<int:team_id>/<int:season_id>', methods=['POST'])
 @swag_from({
-    'summary': 'Removes players to a team',
-    'description': 'Removes players from a team using their IDs.',
+    'summary': 'Removes players from a team for a season',
+    'description': 'Removes players from a team for a season using their IDs.',
     'tags': ['teams'],
     'parameters': [
         {'name': 'team_id', 'in': 'path', 'type': 'integer', 'required': True},
+        {'name': 'season_id', 'in': 'path', 'type': 'integer', 'required': True},
         {
             'name': 'body',
             'in': 'body',
@@ -187,10 +253,12 @@ def addPlayer(team_id):
         500: {'description': 'Internal server error'}
     }
 })
-def removePlayer(team_id):
+def removePlayer(team_id, season_id):
     try:
         data = request.json
-        team = app.team_app_service.removePlayers(team_id, data.get("player_ids"))
+        team = app.team_app_service.removePlayers(team_id, season_id, data.get("player_ids"))
+        if team:
+            team = team.to_dict()
         json_data = json.dumps(team, cls=EnumEncoder)
         return Response(json_data, status=200, content_type='application/json')
     except NotFoundException as e:
@@ -214,7 +282,11 @@ def removePlayer(team_id):
 def get_all_teams():
     try:
         teams = app.team_app_service.getAll()
-        json_data = json.dumps(teams, cls=EnumEncoder)
+        out = []
+        if teams:
+            for team in teams:
+                out.append(team.to_dict())
+        json_data = json.dumps(out, cls=EnumEncoder)
         return Response(json_data, status=200, content_type='application/json')
     except NotFoundException as e:
         logger.error(e)
@@ -259,7 +331,11 @@ def search_teams():
         if not query or not query.elementA:
             raise Exception(f"No valid query found: {query_param}")
         teams = app.team_app_service.search(query)
-        json_data = json.dumps(teams, cls=EnumEncoder)
+        out = []
+        if teams:
+            for team in teams:
+                out.append(team.to_dict())
+        json_data = json.dumps(out, cls=EnumEncoder)
         return Response(json_data, status=200, content_type='application/json')
     except NotFoundException as e:
         logger.error(e)

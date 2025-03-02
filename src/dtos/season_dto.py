@@ -4,11 +4,13 @@ class SeasonDTO:
     def __init__(self, data : dict):
         self.id = data.get('id')
         self.name = data.get('name')
+        self.number_weeks = data.get('number_weeks')
 
     def to_dict(self):
         return {
             'id': self.id,
-            'name': self.name
+            'name': self.name,
+            'number_weeks' : self.number_weeks
         }
 
     @classmethod
@@ -18,7 +20,8 @@ class SeasonDTO:
         return cls(
                 {
                 'id' : season.id,
-                'name' : season.name
+                'name' : season.name,
+                'number_weeks' : season.number_weeks
             }
         )
     
@@ -27,7 +30,8 @@ class SeasonDTO:
         return {
             'type': 'object',
             'properties': {
-                'name': {'type': 'string'}
+                'name': {'type': 'string'},
+                'number_weeks' : {'type': 'integer'}
             },
-            'required': ['name']
+            'required': ['name','number_weeks']
         }

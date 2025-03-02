@@ -5,6 +5,7 @@ from src.database.model.DBTeam import DBTeam
 from sqlalchemy.exc import SQLAlchemyError
 from custom_exceptions import DBException
 from src.dtos.season_dto import SeasonDTO
+from src.util.query_util import QueryUtil
 
 logger = logging.getLogger(__name__)
 
@@ -80,15 +81,26 @@ class SeasonDBService(AbstractDatabaseService):
     def addTeams(self, season_id, team_ids):
         with self.get_session() as session:
             try:
-                season = session.query(DBSeason).filter_by(id=season_id).first()
+                season =  DBSeason.addTeams(session, season_id, team_ids)
                 if not season:
-                    raise Exception(f"Season not found by id: {season_id}")
-                for team_id in team_ids:
-                    team = session.query(DBTeam).filter_by(id=team_id).first()
-                    if not team:
-                        raise Exception(f"Team not found by id: {team_id}")
-                    DBTeam.updateObject(session, team, **{'season':season})
+                    raise DBException("Season could not be updated!")
                 return SeasonDTO.from_dbseason(season)   
+            except SQLAlchemyError as e:
+                logger.error(f"Database error: {e}")
+                raise DBException(f"Database error: {e}")
+
+    def search(self, query):
+        with self.get_session() as session:
+            try:
+                result = []
+                filter = QueryUtil.convertQueryToDBFilter(DBSeason, query)
+                seasons = DBSeason.seach(session, filter)
+                if not seasons:
+                    logger.debug(f"No seasons found by searchcriteria: {query}")
+                    return result
+                for season in seasons:
+                    result.append(SeasonDTO.from_dbseason(season))
+                return result
             except SQLAlchemyError as e:
                 logger.error(f"Database error: {e}")
                 raise DBException(f"Database error: {e}")
@@ -96,16 +108,9 @@ class SeasonDBService(AbstractDatabaseService):
     def removeTeams(self, season_id, team_ids):
         with self.get_session() as session:
             try:
-                season = session.query(DBSeason).filter_by(id=season_id).first()
+                season =  DBSeason.removeTeams(session, season_id, team_ids)
                 if not season:
-                    raise Exception(f"Season not found by id: {season_id}")
-                for team_id in team_ids:
-                    team = session.query(DBTeam).filter_by(id=team_id).first()
-                    if not team:
-                        raise Exception(f"Team not found by id: {team_id}")
-                    if team.season_id != season_id:
-                        raise Exception(f"Team not part of season: {season.name}")
-                    DBTeam.updateObject(session, team, **{'season':None})
+                    raise DBException("Season could not be updated!")
                 return SeasonDTO.from_dbseason(season)   
             except SQLAlchemyError as e:
                 logger.error(f"Database error: {e}")

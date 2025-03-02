@@ -1,10 +1,51 @@
 from sqlalchemy import create_engine, Column, Integer, String, Sequence
+from sqlalchemy.orm import relationship
+from sqlalchemy.orm.session import Session
 from src.database.model.DBModel import DBModel
+from src.database.model.DBRelationships import DBTeamSeason
+from src.database.model.DBTeam import DBTeam
+
 
 class DBSeason(DBModel):
     __tablename__ = 'seasons'
     id = Column(Integer, Sequence(f'{__name__.lower()}_id_seq'), primary_key=True)
     name = Column(String(50))
+    number_weeks =  Column(Integer)
+    user_teams = relationship('DBUserTeamSeason', back_populates='season')
+    teams = relationship('DBTeamSeason', back_populates='season')
 
     def to_dict(self):
         return {column.name: getattr(self, column.name) for column in self.__table__.columns}
+    
+
+    @classmethod
+    def addTeams(cls, session: Session, obj_id, team_ids):
+        season = session.query(cls).filter_by(id=obj_id).first()
+        if not season:
+            raise Exception(f"Season not found by id: {obj_id}")
+        for team_id in team_ids:
+            team = session.query(DBTeam).filter_by(id=team_id).first()
+            if not team:
+                raise Exception(f"Team not found by id: {team_id}")
+            already_exists = session.query(DBTeamSeason).filter_by(season_id=obj_id,team_id=team.id).first() is not None
+            if not already_exists:
+                session.add(DBTeamSeason(season=season,team=team))
+
+        session.commit()
+        return season
+    
+    @classmethod
+    def removeTeams(cls, session: Session, obj_id, team_ids):
+        season = session.query(cls).filter_by(id=obj_id).first()
+        if not season:
+            raise Exception(f"Season not found by id: {obj_id}")
+        for team_id in team_ids:
+            team = session.query(DBTeam).filter_by(id=team_id).first()
+            if not team:
+                raise Exception(f"Team not found by id: {team_id}")
+            team_season = session.query(DBTeamSeason).filter_by(season_id=obj_id,team_id=team_id).first()
+            if not team_season:
+                raise Exception(f"Team not part of the season, team id: {team_id}, season id {obj_id}")
+            session.delete(team_season)
+        session.commit()
+        return season
