@@ -1,25 +1,21 @@
 from src.database.model.DBSeries import DBSeries
+from src.dtos.match_dto import MatchDTO
+from src.dtos.user_dto import UserDTO
 
 class SeriesDTO:
-    def __init__(self, id: int, match_id: int, match: str, player1_id: int, player1:str, player2_id: int, player2:str, score: str):
+    def __init__(self, data: dict):
         self.id = id
-        self.match_id = match_id
         self.match = match
-        self.player1_id = player1_id
         self.player1 = player1
-        self.player2_id = player2_id
         self.player2 = player2
         self.score = score
 
     def to_dict(self):
         return {
             'id': self.id,
-            'match_id': self.match_id,
-            'match': self.match,
-            'player1_id': self.player1_id,
-            'player1': self.player1,
-            'player2_id': self.player2_id,
-            'player2': self.player2,
+            'match': None if not self.match else self.match.to_dict(),
+            'player1': None if not self.player1 else self.player1.to_dict(),
+            'player2': None if not self.player2 else self.player2.to_dict(),
             'score': self.score
         }
     
@@ -27,12 +23,9 @@ class SeriesDTO:
     def from_dbseries(cls, series: DBSeries):
         return cls(
             id=series.id,
-            match_id=series.match_id,
-            match=series.match,
-            player1_id=series.player1_id,
-            player1=series.player1,
-            player2_id=series.player2_id,
-            player2=series.player2,
+            match=MatchDTO.from_dbmatch(series.match),
+            player1=UserDTO.from_dbuser(series.player1),
+            player2=UserDTO.from_dbuser(series.player2),
             score=series.score
         )
     
