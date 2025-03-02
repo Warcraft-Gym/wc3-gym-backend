@@ -1,5 +1,4 @@
 import logging
-import traceback
 from app import app
 from flask import request, jsonify
 from flask_jwt_extended import jwt_required
@@ -35,7 +34,6 @@ def add_match():
         return jsonify(match), 201
     except Exception as e:
         logger.error(e)
-        print(traceback.format_exc())
         return jsonify({"error": str(e)}), 500
 
 @app.route('/matches/<int:match_id>', methods=['PUT'])

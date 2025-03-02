@@ -8,30 +8,26 @@ from src.dtos.series_dto import SeriesDTO
 logger = logging.getLogger(__name__)
 
 class SeriesDBService(AbstractDatabaseService):
-    def add(self, match_id, player1_id, player2_id, score):
+    def add(self, series: SeriesDTO):
         try:
             session = self.Session()
-            series = DBSeries.add(session, match_id=match_id, player1_id=player1_id, player2_id=player2_id, score=score)
+            series = DBSeries.add(session, series.to_db_dict())
             if not series:
-                logger.error("Series could not be created!")
                 raise DBException("Series could not be created!")
             return SeriesDTO.from_dbseries(series)
         except SQLAlchemyError as e:
-            logger.error(f"Database error: {e}")
             raise DBException(f"Database error: {e}")
         finally:
             session.close()
     
-    def update(self, series_id, player1_id=None, player2_id=None, score=None):
+    def update(self, series: SeriesDTO):
         try:
             session = self.Session()
-            series = DBSeries.update(session, series_id, player1_id=player1_id, player2_id=player2_id, score=score)
+            series = DBSeries.update(session, series.id, **series.to_db_dict())
             if not series:
-                logger.error("Series could not be updated!")
                 raise DBException("Series could not be updated!")
             return SeriesDTO.from_dbseries(series)
         except SQLAlchemyError as e:
-            logger.error(f"Database error: {e}")
             raise DBException(f"Database error: {e}")
         finally:
             session.close()
@@ -41,7 +37,6 @@ class SeriesDBService(AbstractDatabaseService):
             session = self.Session()
             DBSeries.delete(session, series_id)
         except SQLAlchemyError as e:
-            logger.error(f"Database error: {e}")
             raise DBException(f"Database error: {e}")
         finally:
             session.close()
@@ -51,11 +46,9 @@ class SeriesDBService(AbstractDatabaseService):
             session = self.Session()
             series = session.query(DBSeries).filter_by(id=series_id).first()
             if not series:
-                logger.error("Series could not be found!")
                 raise DBException("Series could not be found")
             return SeriesDTO.from_dbseries(series)
         except SQLAlchemyError as e:
-            logger.error(f"Database error: {e}")
             raise DBException(f"Database error: {e}")
         finally:
             session.close()
@@ -69,5 +62,4 @@ class SeriesDBService(AbstractDatabaseService):
                 result.append(SeriesDTO.from_dbseries(single_series))
             return result
         except SQLAlchemyError as e:
-                logger.error(f"Database error: {e}")
                 raise DBException(f"Database error: {e}")

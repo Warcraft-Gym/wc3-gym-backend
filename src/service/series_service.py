@@ -6,20 +6,21 @@ class SeriesAppService:
     def __init__(self, series_service: SeriesDBService):
         self.series_service = series_service
     
-    def create_series(self, match_id: int, player1_id: int, player2_id: int, score:str):
-        series_data = self.series_service.add(match_id=match_id, player1_id=player1_id, player2_id=player2_id, score=score)
+    def create_series(self, series: SeriesDTO):
+        series_data = self.series_service.add(series)
         if(series_data):
             series_data = series_data.to_dict()
         return series_data
     
-    def update_series(self, series_id: int, player1_id: None, player2_id: None, score: None):
-        series_data = self.series_service.update(series_id, player1_id=player1_id, player2_id=player2_id, score=score)
+    def update_series(self, series_id: int, series: SeriesDTO):
+        series.id = series_id
+        series_data = self.series_service.update(series)
         if(series_data):
             series_data = series_data.to_dict()
         return series_data
     
     def delete_series(self, series_id: int):
-        self.series_serivce.delete(series_id)
+        self.series_service.delete(series_id)
 
     def get_series(self, series_id: int):
         series_data = self.series_service.get(series_id)

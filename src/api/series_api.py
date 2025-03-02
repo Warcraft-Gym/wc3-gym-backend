@@ -1,4 +1,5 @@
 import logging
+import traceback
 from app import app
 from flask import request, jsonify
 from flask_jwt_extended import jwt_required
@@ -59,13 +60,14 @@ def add_series():
 def update_series(series_id):
     try:
         data = request.json
-        series = app.series_app_service.update_series(series_id, match_id=data.get('match_id'), player1_id=data.get('player1_id'), player2_id=data.get('player2_id'), score=data.get('score'))
+        series = app.series_app_service.update_series(series_id, SeriesDTO(data))
         return jsonify(series)
     except NotFoundException as e:
         logger.error(e)
         return jsonify({"error": str(e)}), 404
     except Exception as e:
         logger.error(e)
+        print(traceback.format_exc())
         return jsonify({"error": str(e)}), 500
     
 @app.route('/series/<int:series_id>', methods=['DELETE'])
