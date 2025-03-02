@@ -1,4 +1,5 @@
 import logging
+import traceback
 from app import app
 from flask import request, jsonify
 from flask_jwt_extended import jwt_required
@@ -30,10 +31,11 @@ logger = logging.getLogger(__name__)
 def add_match():
     try:
         data = request.json
-        match = app.match_app_service.create_match(team1_id=data['team1_id'], team2_id=data['team2_id'], score=data['score'])
+        match = app.match_app_service.create_match(MatchDTO(data))
         return jsonify(match), 201
     except Exception as e:
         logger.error(e)
+        print(traceback.format_exc())
         return jsonify({"error": str(e)}), 500
 
 @app.route('/matches/<int:match_id>', methods=['PUT'])

@@ -1,13 +1,13 @@
 from src.database.model.DBMatch import DBMatch
 
 class MatchDTO:
-    def __init__(self, id: int, team1_id: int, team1:str, team2_id: int,team2:str, score: str):
-        self.id = id
-        self.team1_id = team1_id
-        self.team1 = team1
-        self.team2_id = team2_id
-        self.team2 = team2
-        self.score = score
+    def __init__(self, data : dict):
+        self.id = data.get('id')
+        self.team1_id = data.get('team1_id')
+        self.team1 = data.get('team1')
+        self.team2_id = data.get('team2_id')
+        self.team2 = data.get('team2')
+        self.score = data.get('score')
 
     def to_dict(self):
         return {
@@ -18,16 +18,25 @@ class MatchDTO:
             'team2':self.team2,
             'score': self.score
         }
+    
+    def to_db_dict(self):
+        return {
+            'team1_id': self.team1_id,
+            'team2_id': self.team2_id,
+            'score': self.score
+        }
 
     @classmethod
     def from_dbmatch(cls, match: DBMatch):
         return cls(
-            id=match.id,
-            team1_id=match.team1_id,
-            team1=match.team1.name,
-            team2_id=match.team2_id,
-            team2=match.team2.name,
-            score=match.score
+            {
+                'id': match.id,
+                'team1_id': match.team1_id,
+                'team1': match.team1.name if match.team1 else None,
+                'team2_id': match.team2_id,
+                'team2': match.team2.name if match.team2 else None,
+                'score': match.score
+            }
         )
     
     @staticmethod

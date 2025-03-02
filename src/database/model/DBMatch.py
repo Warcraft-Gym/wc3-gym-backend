@@ -3,6 +3,7 @@ from sqlalchemy.orm import relationship
 from src.database.model.DBModel import DBModel
 
 
+
 class DBMatch(DBModel):
     __tablename__ = 'matches'
     id = Column(Integer, Sequence(f'{__name__.lower()}_id_seq'), primary_key=True)
