@@ -157,7 +157,7 @@ def get_AllUser():
         logger.error(e)
         return jsonify({"error": str(e)}), 500
 
-@app.route('/search_users', methods=['POST'])
+@app.route('/users/search', methods=['POST'])
 @swag_from({
     'summary': 'Search users by criteria',
     'description': 'Search users by criteria using a custom query format.',

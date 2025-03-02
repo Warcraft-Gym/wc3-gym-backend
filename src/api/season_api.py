@@ -10,7 +10,7 @@ from src.util.query_util import QueryUtil
 logger = logging.getLogger(__name__)
 
 # season endpoints
-@app.route('/season', methods=['POST'])
+@app.route('/seasons', methods=['POST'])
 @swag_from({
     'summary': 'Add a new season',
     'description': 'Create a new season with the provided name.',
@@ -118,7 +118,7 @@ def get_season(season_id):
         return jsonify({"error": str(e)}), 500
 
 
-@app.route('/season/addTeams/<int:season_id>', methods=['POST'])
+@app.route('/seasons/addTeams/<int:season_id>', methods=['POST'])
 @swag_from({
     'summary': 'Add teams to season',
     'description': 'Add teams to season by providing a list of team ids.',
@@ -157,7 +157,7 @@ def add_teams(season_id):
         logger.error(e)
         return jsonify({"error": str(e)}), 500
 
-@app.route('/season/removeTeams/<int:season_id>', methods=['POST'])
+@app.route('/seasons/removeTeams/<int:season_id>', methods=['POST'])
 @swag_from({
     'summary': 'Remove teams from season',
     'description': 'Remove teams from season by providing a list of team ids.',
@@ -196,7 +196,7 @@ def remove_teams(season_id):
         logger.error(e)
         return jsonify({"error": str(e)}), 500
     
-@app.route('/season', methods=['GET'])
+@app.route('/seasons', methods=['GET'])
 @swag_from({
     'summary': 'Get all seasons',
     'description': 'Return all seasons',
@@ -218,7 +218,7 @@ def get_all():
         logger.error(e)
         return jsonify({"error": str(e)}), 500
     
-@app.route('/season/search', methods=['POST'])
+@app.route('/seasons/search', methods=['POST'])
 @swag_from({
     'summary': 'Search seasons by criteria',
     'description': 'Search seasons by criteria using a custom query format.',
