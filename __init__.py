@@ -50,7 +50,7 @@ template = {
         "https"
     ],
     "securityDefinitions": {
-        "APIKeyHeader": {
+        "BearerAuth": {
             "type": "apiKey",
             "name": "Authorization",
             "in": "header"
@@ -62,7 +62,7 @@ swag = Swagger(app, template=template, config=swagger_config)
 
 # Initialize JWT
 app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY')
-app.config['JWT_ALGORITHM'] = os.getenv('JWT_ALGORITHM', 'HS512')  
+app.config['JWT_ALGORITHM'] = os.getenv('JWT_ALGORITHM', 'HS256')  
 jwt = JWTManager(app)
 
 # Configure logging
