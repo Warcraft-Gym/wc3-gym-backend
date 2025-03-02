@@ -29,3 +29,15 @@ class MatchDTO:
             team2=match.team2.name,
             score=match.score
         )
+    
+    @staticmethod
+    def schema():
+        return {
+            'type': 'object',
+            'properties': {
+                'team1_id': {'type': 'integer'},
+                'team2_id': {'type': 'integer'},
+                'score' : {'type': 'string'}
+            },
+            'required': ['team1_id','team2_id', 'score']
+        }
