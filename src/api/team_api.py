@@ -71,7 +71,7 @@ def add_team():
 def update_team(team_id):
     try:
         data = request.json
-        team = app.team_app_service.update_team(team_id, name=data.get('name'))
+        team = app.team_app_service.update_team(team_id, TeamDTO(data))
         if team:
             team = team.to_dict()
         json_data = json.dumps(team, cls=EnumEncoder)
