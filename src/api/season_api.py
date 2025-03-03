@@ -11,10 +11,12 @@ logger = logging.getLogger(__name__)
 
 # season endpoints
 @app.route('/seasons', methods=['POST'])
+@jwt_required()
 @swag_from({
     'summary': 'Add a new season',
     'description': 'Create a new season with the provided name.',
     'tags': ['seasons'],
+    'security': [{'BearerAuth': []}],
     'parameters': [
         {
             'name': 'body',
@@ -40,10 +42,12 @@ def add_season():
         return jsonify({"error": str(e)}), 500
 
 @app.route('/seasons/<int:season_id>', methods=['PUT'])
+@jwt_required()
 @swag_from({
     'summary': 'Update a season',
     'description': 'Update the name of an existing season.',
     'tags': ['seasons'],
+    'security': [{'BearerAuth': []}],
     'parameters': [
         {'name': 'season_id', 'in': 'path', 'type': 'integer', 'required': True},
         {
@@ -74,10 +78,12 @@ def update_season(season_id):
         return jsonify({"error": str(e)}), 500
 
 @app.route('/seasons/<int:season_id>', methods=['DELETE'])
+@jwt_required()
 @swag_from({
     'summary': 'Delete a season',
     'description': 'Delete a season by its ID.',
     'tags': ['seasons'],
+    'security': [{'BearerAuth': []}],
     'parameters': [{'name': 'season_id', 'in': 'path', 'type': 'integer', 'required': True}],
     'responses': {
         204: {'description': 'season deleted successfully'},
@@ -119,10 +125,12 @@ def get_season(season_id):
 
 
 @app.route('/seasons/addTeams/<int:season_id>', methods=['POST'])
+@jwt_required()
 @swag_from({
     'summary': 'Add teams to season',
     'description': 'Add teams to season by providing a list of team ids.',
     'tags': ['seasons'],
+    'security': [{'BearerAuth': []}],
     'parameters': [
         {'name': 'season_id', 'in': 'path', 'type': 'integer', 'required': True},
         {
@@ -158,10 +166,12 @@ def add_teams(season_id):
         return jsonify({"error": str(e)}), 500
 
 @app.route('/seasons/removeTeams/<int:season_id>', methods=['POST'])
+@jwt_required()
 @swag_from({
     'summary': 'Remove teams from season',
     'description': 'Remove teams from season by providing a list of team ids.',
     'tags': ['seasons'],
+    'security': [{'BearerAuth': []}],
     'parameters': [
         {'name': 'season_id', 'in': 'path', 'type': 'integer', 'required': True},
         {

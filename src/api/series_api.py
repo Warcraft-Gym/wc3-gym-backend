@@ -11,10 +11,12 @@ logger = logging.getLogger(__name__)
 
 #series endpoints
 @app.route('/series', methods=['POST'])
+@jwt_required()
 @swag_from({
     'summary': 'Add a new series',
     'description': 'Create a new series with the provided data',
     'tags': ['series'],
+    'security': [{'BearerAuth': []}],
     'parameters': [
         {
             'name': 'body',
@@ -38,10 +40,12 @@ def add_series():
         return jsonify({"error": str(e)}), 500
 
 @app.route('/series/<int:series_id>', methods=['PUT'])
+@jwt_required()
 @swag_from({
     'summary': 'Updates a series',
     'description': 'Update the series data of an existing series',
     'tags': ['series'],
+    'security': [{'BearerAuth': []}],
     'parameters': [
         {'name': 'series_id', 'in': 'path', 'type': 'integer', 'required': True},
         {
@@ -71,10 +75,12 @@ def update_series(series_id):
         return jsonify({"error": str(e)}), 500
     
 @app.route('/series/<int:series_id>', methods=['DELETE'])
+@jwt_required()
 @swag_from({
     'summary': 'Delete a series',
     'description': 'Delete a series by its ID.',
     'tags': ['series'],
+    'security': [{'BearerAuth': []}],
     'parameters': [{'name': 'series_id', 'in': 'path', 'type': 'integer', 'required': True}],
     'responses': {
         204: {'description': 'season deleted successfully'},

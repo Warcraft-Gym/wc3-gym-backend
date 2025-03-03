@@ -1,6 +1,7 @@
 import logging
 from app import app
 from flask import request, jsonify, Response
+from flask_jwt_extended import jwt_required, get_jwt_identity
 from custom_exceptions import NotFoundException
 from src.dtos.user_dto import UserDTO
 from src.util.query_util import QueryUtil
@@ -21,10 +22,12 @@ app.json_encoder = EnumEncoder
 
 # User endpoints
 @app.route('/users', methods=['POST'])
+@jwt_required()
 @swag_from({
     'summary': 'Add a new user',
     'description': 'Create a new user with the provided details.',
     'tags': ['users'],
+    'security': [{'BearerAuth': []}],
     'parameters': [
         {
             'name': 'body',
@@ -51,10 +54,12 @@ def add_user():
         return jsonify({"error": str(e)}), 500
 
 @app.route('/users/<int:user_id>', methods=['PUT'])
+@jwt_required()
 @swag_from({
     'summary': 'Update an existing user',
     'description': 'Update the details of an existing user.',
     'tags': ['users'],
+    'security': [{'BearerAuth': []}],
     'parameters': [
         {'name': 'user_id', 'in': 'path', 'type': 'integer', 'required': True, 'description': 'The ID of the user to update'},
         {
@@ -86,10 +91,12 @@ def update_user(user_id):
         return jsonify({"error": str(e)}), 500
 
 @app.route('/users/<int:user_id>', methods=['DELETE'])
+@jwt_required()
 @swag_from({
     'summary': 'Delete an existing user',
     'description': 'Delete a user by their ID.',
     'tags': ['users'],
+    'security': [{'BearerAuth': []}],
     'parameters': [{'name': 'user_id', 'in': 'path', 'type': 'integer', 'required': True, 'description': 'The ID of the user to delete'}],
     'responses': {
         204: {'description': 'User deleted successfully'},

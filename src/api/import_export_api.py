@@ -18,10 +18,12 @@ logger = logging.getLogger(__name__)
 
 # import export endpoints
 @app.route('/import', methods=['POST'])
+@jwt_required()
 @swag_from({
     'summary': 'Import a google spreadsheet with the information for a GNL season',
     'description': 'Updates the database based on the import sheet',
     'tags': ['import export'],
+    'security': [{'BearerAuth': []}],
     'parameters': [
         {'name': 'season_id', 'in': 'query', 'type': 'integer', 'required': False},
         {'name': 'season_name', 'in': 'query', 'type': 'string', 'required': False},
@@ -146,10 +148,12 @@ def import_season():
 
 
 @app.route('/export', methods=['POST'])
+@jwt_required()
 @swag_from({
     'summary': 'Export a google spreadsheet with the information for a GNL season',
     'description': 'Export an exel sheet with the data of one season',
     'tags': ['import export'],
+    'security': [{'BearerAuth': []}],
     'parameters': [
         {'name': 'season_id', 'in': 'query', 'type': 'integer', 'required': False},
         {'name': 'season_name', 'in': 'query', 'type': 'string', 'required': False}
