@@ -6,8 +6,8 @@ class MatchAppService:
     def __init__(self, match_service: MatchDBService):
         self.match_service = match_service
 
-    def create_match(self, team1_id: int, team2_id: int, score: str):
-        match_data = self.match_service.add(team1_id=team1_id, team2_id=team2_id, score=score)
+    def create_match(self, match: MatchDTO):
+        match_data = self.match_service.add(match)
         if(match_data):
             match_data = match_data.to_dict()
         return match_data

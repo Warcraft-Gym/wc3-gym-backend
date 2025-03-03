@@ -8,10 +8,10 @@ from src.dtos.match_dto import MatchDTO
 logger = logging.getLogger(__name__)
 
 class MatchDBService(AbstractDatabaseService):
-    def add(self, team1_id, team2_id, score):
+    def add(self, match: MatchDTO):
         try:
             session = self.Session()
-            match = DBMatch.add(session, team1_id=team1_id, team2_id=team2_id, score=score)
+            match = DBMatch.add(session, match.to_db_dict())
             # Example usage
             if not match:
                 logger.error("Match could not be created!")

@@ -128,7 +128,7 @@ def get_team(team_id):
         logger.error(e)
         return jsonify({"error": str(e)}), 500
 
-@app.route('/teams/<int:team_id>/<int:season_id>', methods=['GET'])
+@app.route('/teams/<int:team_id>/seasons/<int:season_id>', methods=['GET'])
 @swag_from({
     'summary': 'Get a team for a specific season',
     'description': 'Retrieve a team by its ID with all information related to a specific season',
@@ -184,7 +184,7 @@ def getAll_season(season_id):
         logger.error(e)
         return jsonify({"error": str(e)}), 500
 
-@app.route('/teams/addPlayer/<int:team_id>/<int:season_id>', methods=['POST'])
+@app.route('/teams/addPlayer/<int:team_id>/seasons/<int:season_id>', methods=['POST'])
 @swag_from({
     'summary': 'Add players to a team for a season',
     'description': 'Add players to a team for a season using their IDs.',
@@ -226,7 +226,7 @@ def addPlayer(team_id, season_id):
         logger.error(e)
         return jsonify({"error": str(e)}), 500
 
-@app.route('/teams/removePlayer/<int:team_id>/<int:season_id>', methods=['POST'])
+@app.route('/teams/removePlayer/<int:team_id>/seasons/<int:season_id>', methods=['POST'])
 @swag_from({
     'summary': 'Removes players from a team for a season',
     'description': 'Removes players from a team for a season using their IDs.',
