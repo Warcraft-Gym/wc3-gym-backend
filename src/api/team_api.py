@@ -19,10 +19,12 @@ class EnumEncoder(json.JSONEncoder):
 
 # Team endpoints
 @app.route('/teams', methods=['POST'])
+@jwt_required()
 @swag_from({
     'summary': 'Add a new team',
     'description': 'Create a new team with the provided name.',
     'tags': ['teams'],
+    'security': [{'BearerAuth': []}],
     'parameters': [
         {
             'name': 'body',
@@ -49,10 +51,12 @@ def add_team():
         return jsonify({"error": str(e)}), 500
 
 @app.route('/teams/<int:team_id>', methods=['PUT'])
+@jwt_required()
 @swag_from({
     'summary': 'Update a team',
     'description': 'Update the name of an existing team.',
     'tags': ['teams'],
+    'security': [{'BearerAuth': []}],
     'parameters': [
         {'name': 'team_id', 'in': 'path', 'type': 'integer', 'required': True},
         {
@@ -84,10 +88,12 @@ def update_team(team_id):
         return jsonify({"error": str(e)}), 500
 
 @app.route('/teams/<int:team_id>', methods=['DELETE'])
+@jwt_required()
 @swag_from({
     'summary': 'Delete a team',
     'description': 'Delete a team by its ID.',
     'tags': ['teams'],
+    'security': [{'BearerAuth': []}],
     'parameters': [{'name': 'team_id', 'in': 'path', 'type': 'integer', 'required': True}],
     'responses': {
         204: {'description': 'Team deleted successfully'},
@@ -185,10 +191,12 @@ def getAll_season(season_id):
         return jsonify({"error": str(e)}), 500
 
 @app.route('/teams/addPlayer/<int:team_id>/seasons/<int:season_id>', methods=['POST'])
+@jwt_required()
 @swag_from({
     'summary': 'Add players to a team for a season',
     'description': 'Add players to a team for a season using their IDs.',
     'tags': ['teams'],
+    'security': [{'BearerAuth': []}],
     'parameters': [
         {'name': 'team_id', 'in': 'path', 'type': 'integer', 'required': True},
         {'name': 'season_id', 'in': 'path', 'type': 'integer', 'required': True},
@@ -227,10 +235,12 @@ def addPlayer(team_id, season_id):
         return jsonify({"error": str(e)}), 500
 
 @app.route('/teams/removePlayer/<int:team_id>/seasons/<int:season_id>', methods=['POST'])
+@jwt_required()
 @swag_from({
     'summary': 'Removes players from a team for a season',
     'description': 'Removes players from a team for a season using their IDs.',
     'tags': ['teams'],
+    'security': [{'BearerAuth': []}],
     'parameters': [
         {'name': 'team_id', 'in': 'path', 'type': 'integer', 'required': True},
         {'name': 'season_id', 'in': 'path', 'type': 'integer', 'required': True},

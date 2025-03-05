@@ -10,10 +10,12 @@ logger = logging.getLogger(__name__)
 
 # Match endpoints
 @app.route('/matches', methods=['POST'])
+@jwt_required()
 @swag_from({
     'summary': ' Add a new match',
     'description': 'Creates a new match between two teams with the given teams and score.',
     'tags': ['matches'],
+    'security': [{'BearerAuth': []}],
     'parameters': [
         {
             'name': 'body',
@@ -37,10 +39,12 @@ def add_match():
         return jsonify({"error": str(e)}), 500
 
 @app.route('/matches/<int:match_id>', methods=['PUT'])
+@jwt_required()
 @swag_from({
     'summary': 'Update a match',
     'description': 'Update the data of an existing matcht.',
     'tags': ['matches'],
+    'security': [{'BearerAuth': []}],
     'parameters': [
         {'name': 'match_id', 'in': 'path', 'type': 'integer', 'required': True},
         {
@@ -69,10 +73,12 @@ def update_match(match_id):
         return jsonify({"error": str(e)}), 500
 
 @app.route('/matches/<int:match_id>', methods=['DELETE'])
+@jwt_required()
 @swag_from({
     'summary': 'Delete a match',
     'description': 'Delete a match by its ID.',
     'tags': ['matches'],
+    'security': [{'BearerAuth': []}],
     'parameters': [{'name': 'match_id', 'in': 'path', 'type': 'integer', 'required': True}],
     'responses': {
         204: {'description': 'Match deleted successfully'},
