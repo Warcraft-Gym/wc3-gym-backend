@@ -3,6 +3,7 @@ from src.database.abstract_database_service import AbstractDatabaseService
 from src.database.model.DBSeries import DBSeries
 from sqlalchemy.exc import SQLAlchemyError
 from custom_exceptions import DBException
+from src.util.query_util import QueryUtil
 from src.dtos.series_dto import SeriesDTO
 
 logger = logging.getLogger(__name__)
@@ -62,4 +63,20 @@ class SeriesDBService(AbstractDatabaseService):
                 result.append(SeriesDTO.from_dbseries(single_series))
             return result
         except SQLAlchemyError as e:
+                raise DBException(f"Database error: {e}")
+
+    def search(self, query):
+        with self.get_session() as session:
+            try:
+                result = []
+                filter = QueryUtil.convertQueryToDBFilter(DBSeries, query)
+                series_list = DBSeries.seach(session, filter)
+                if not series_list:
+                    logger.debug(f"No series found by searchcriteria: {query}")
+                    return result
+                for series in series_list:
+                    result.append(SeriesDTO.from_dbseries(series))
+                return result
+            except SQLAlchemyError as e:
+                logger.error(f"Database error: {e}")
                 raise DBException(f"Database error: {e}")

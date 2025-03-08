@@ -4,6 +4,7 @@ from flask import request, jsonify
 from flask_jwt_extended import jwt_required
 from custom_exceptions import NotFoundException
 from flasgger import swag_from
+from src.util.query_util import QueryUtil
 from src.dtos.match_dto import MatchDTO
 
 logger = logging.getLogger(__name__)
@@ -33,6 +34,8 @@ def add_match():
     try:
         data = request.json
         match = app.match_app_service.create_match(MatchDTO(data))
+        if match:
+            match = match.to_dict()
         return jsonify(match), 201
     except Exception as e:
         logger.error(e)
@@ -64,6 +67,8 @@ def update_match(match_id):
     try:
         data = request.json
         match = app.match_app_service.update_match(match_id, score=data.get('score'))
+        if match:
+            match = match.to_dict()
         return jsonify(match)
     except NotFoundException as e:
         logger.error(e)
@@ -108,7 +113,58 @@ def delete_match(match_id):
 def get_match(match_id):
     try:
         match = app.match_app_service.get_match(match_id)
+        if match:
+            match = match.to_dict()
         return jsonify(match)
+    except NotFoundException as e:
+        logger.error(e)
+        return jsonify({"error": str(e)}), 404
+    except Exception as e:
+        logger.error(e)
+        return jsonify({"error": str(e)}), 500
+    
+
+@app.route('/match/search', methods=['POST'])
+@swag_from({
+    'summary': 'Search matches by criteria',
+    'description': 'Search matches by criteria using a custom query format.',
+    'tags': ['matches'],
+    'parameters': [
+        {
+            'name': 'query',
+            'in': 'query',
+            'type': 'string',
+            'required': False,
+            'description': '''
+                Search criteria in the following format
+                and | or conditions are supported but no brackets
+
+                key operator value and key operator value
+
+                e.g.:
+                name ilike xxxx or id == 12
+                Operators supported: ==, !=, >, >=, <, <=, ilike
+            '''
+        }
+    ],
+    'responses': {
+        200: {'description': 'Matches retrieved successfully'},
+        404: {'description': 'Matches not found'},
+        500: {'description': 'Internal server error'}
+    }
+})
+def search_match():
+    try:
+        query_param = request.args.get('query', '')
+        query = QueryUtil.parseQuery(query_param)
+        if not query or not query.elementA:
+            raise Exception(f"No valid query found: {query_param}")
+        matches = app.match_app_service.search(query)
+        out = []
+        if matches:
+            for match in matches:
+                out.append(match.to_dict())
+        return jsonify(out)
     except NotFoundException as e:
         logger.error(e)
         return jsonify({"error": str(e)}), 404

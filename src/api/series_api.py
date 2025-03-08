@@ -6,6 +6,7 @@ from flask_jwt_extended import jwt_required
 from custom_exceptions import NotFoundException
 from flasgger import swag_from
 from src.dtos.series_dto import SeriesDTO
+from src.util.query_util import QueryUtil
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +35,8 @@ def add_series():
     try:
         data = request.json
         series = app.series_app_service.create_series(SeriesDTO(data))
+        if series:
+            series = series.to_dict()
         return jsonify(series), 201
     except Exception as e:
         logger.error(e)
@@ -65,6 +68,8 @@ def update_series(series_id):
     try:
         data = request.json
         series = app.series_app_service.update_series(series_id, SeriesDTO(data))
+        if series:
+            series = series.to_dict()
         return jsonify(series)
     except NotFoundException as e:
         logger.error(e)
@@ -112,6 +117,8 @@ def delete_series(series_id):
 def get_series(series_id):
     try:
         series = app.series_app_service.get_series(series_id)
+        if series:
+            series = series.to_dict()
         return jsonify(series)
     except NotFoundException as e:
         logger.error(e)
@@ -132,8 +139,61 @@ def get_series(series_id):
 })
 def get_all_series():
     try:
-        series = app.series_app_service.getAll()
-        return jsonify(series)
+        series_l = app.series_app_service.getAll()
+        out = []
+        if series_l:
+            for series in series_l:
+                out.append(series.to_dict())
+        return jsonify(out)
+    except Exception as e:
+        logger.error(e)
+        return jsonify({"error": str(e)}), 500
+    
+    
+@app.route('/series/search', methods=['POST'])
+@swag_from({
+    'summary': 'Search series by criteria',
+    'description': 'Search series by criteria using a custom query format.',
+    'tags': ['series'],
+    'parameters': [
+        {
+            'name': 'query',
+            'in': 'query',
+            'type': 'string',
+            'required': False,
+            'description': '''
+                Search criteria in the following format
+                and | or conditions are supported but no brackets
+
+                key operator value and key operator value
+
+                e.g.:
+                name ilike xxxx or id == 12
+                Operators supported: ==, !=, >, >=, <, <=, ilike
+            '''
+        }
+    ],
+    'responses': {
+        200: {'description': 'Series retrieved successfully'},
+        404: {'description': 'Series not found'},
+        500: {'description': 'Internal server error'}
+    }
+})
+def search_series():
+    try:
+        query_param = request.args.get('query', '')
+        query = QueryUtil.parseQuery(query_param)
+        if not query or not query.elementA:
+            raise Exception(f"No valid query found: {query_param}")
+        series_l = app.series_app_service.search(query)
+        out = []
+        if series_l:
+            for series in series_l:
+                out.append(series.to_dict())
+        return jsonify(out)
+    except NotFoundException as e:
+        logger.error(e)
+        return jsonify({"error": str(e)}), 404
     except Exception as e:
         logger.error(e)
         return jsonify({"error": str(e)}), 500

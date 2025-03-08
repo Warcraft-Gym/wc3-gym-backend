@@ -3,6 +3,7 @@ from src.database.abstract_database_service import AbstractDatabaseService
 from src.database.model.DBMatch import DBMatch
 from sqlalchemy.exc import SQLAlchemyError
 from custom_exceptions import DBException
+from src.util.query_util import QueryUtil
 from src.dtos.match_dto import MatchDTO
 
 logger = logging.getLogger(__name__)
@@ -66,3 +67,19 @@ class MatchDBService(AbstractDatabaseService):
             raise DBException(f"Database error: {e}")
         finally:
             session.close()
+
+    def search(self, query):
+        with self.get_session() as session:
+            try:
+                result = []
+                filter = QueryUtil.convertQueryToDBFilter(DBMatch, query)
+                matches = DBMatch.seach(session, filter)
+                if not matches:
+                    logger.debug(f"No matches found by searchcriteria: {query}")
+                    return result
+                for match in matches:
+                    result.append(MatchDTO.from_dbmatch(match))
+                return result
+            except SQLAlchemyError as e:
+                logger.error(f"Database error: {e}")
+                raise DBException(f"Database error: {e}")
