@@ -190,7 +190,7 @@ def getAll_season(season_id):
         logger.error(e)
         return jsonify({"error": str(e)}), 500
 
-@app.route('/teams/addPlayer/<int:team_id>/seasons/<int:season_id>', methods=['POST'])
+@app.route('/teams/addPlayers/<int:team_id>/seasons/<int:season_id>', methods=['POST'])
 @jwt_required()
 @swag_from({
     'summary': 'Add players to a team for a season',
@@ -219,7 +219,7 @@ def getAll_season(season_id):
         500: {'description': 'Internal server error'}
     }
 })
-def addPlayer(team_id, season_id):
+def addPlayers(team_id, season_id):
     try:
         data = request.json
         team = app.team_app_service.addPlayers(team_id, season_id, data.get("player_ids"))
@@ -234,7 +234,7 @@ def addPlayer(team_id, season_id):
         logger.error(e)
         return jsonify({"error": str(e)}), 500
 
-@app.route('/teams/removePlayer/<int:team_id>/seasons/<int:season_id>', methods=['POST'])
+@app.route('/teams/removePlayers/<int:team_id>/seasons/<int:season_id>', methods=['POST'])
 @jwt_required()
 @swag_from({
     'summary': 'Removes players from a team for a season',
@@ -263,7 +263,7 @@ def addPlayer(team_id, season_id):
         500: {'description': 'Internal server error'}
     }
 })
-def removePlayer(team_id, season_id):
+def removePlayers(team_id, season_id):
     try:
         data = request.json
         team = app.team_app_service.removePlayers(team_id, season_id, data.get("player_ids"))
