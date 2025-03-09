@@ -25,7 +25,6 @@ class TeamDTO:
     
     def to_db_dict(self):
         return {
-            'id': self.id,
             'name': self.name
         }
 
