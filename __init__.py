@@ -54,6 +54,11 @@ template = {
             "type": "apiKey",
             "name": "Authorization",
             "in": "header"
+        },
+        "RefreshAuth": {
+            "type": "apiKey",
+            "name": "Authorization",
+            "in": "header"
         }
     }
 }
