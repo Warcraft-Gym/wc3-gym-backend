@@ -1,7 +1,6 @@
 import logging
-from app import app
 from datetime import datetime
-from flask import request, jsonify, send_file
+from flask import Blueprint, request, jsonify, send_file
 from flask_jwt_extended import jwt_required
 from custom_exceptions import NotFoundException
 from flasgger import swag_from
@@ -21,8 +20,11 @@ from src.util.query_util import QueryUtil
 
 logger = logging.getLogger(__name__)
 
+
+import_blueprint = Blueprint('import_api', __name__)
+
 # import export endpoints
-@app.route('/import', methods=['POST'])
+@import_blueprint.route('/import', methods=['POST'])
 @jwt_required()
 @swag_from({
     'summary': 'Import a google spreadsheet with the information for a GNL season',
@@ -88,12 +90,12 @@ def import_season():
                 query = QueryUtil.parseQuery("battleTag == " +  user_data.get('battleTag'))
                 if not query or not query.elementA:
                     raise Exception(f"No valid query found: {"battleTag == " +  user_data.get('battleTag')}")
-                users = app.user_app_service.search(query)
+                users = import_blueprint.user_app_service.search(query)
                 user = None
                 if not users:
-                    user = app.user_app_service.create_user(UserDTO(user_data))
+                    user = import_blueprint.user_app_service.create_user(UserDTO(user_data))
                 else:
-                    user = app.user_app_service.update_user(users[0].id, UserDTO(user_data))
+                    user = import_blueprint.user_app_service.update_user(users[0].id, UserDTO(user_data))
                 player_name_id[user.name] = user.id
 
                 team_name = ImportUtil.isNa(row['Team Abbr'])
@@ -111,14 +113,14 @@ def import_season():
                 'name' : season_name
             }
             if season_id and season_name:
-                app.season_app_service.update_season(season_id, SeasonDTO(season_data))
+                import_blueprint.season_app_service.update_season(season_id, SeasonDTO(season_data))
             elif season_name:
                 query = QueryUtil.parseQuery("name == " +  season_name)
                 if not query or not query.elementA:
                     raise Exception(f"No valid query found: {"name == " +  season_name}")
-                found_seasons = app.season_app_service.search(query)
+                found_seasons = import_blueprint.season_app_service.search(query)
                 if not found_seasons:
-                    season_id = app.season_app_service.create_season(SeasonDTO(season_data)).id
+                    season_id = import_blueprint.season_app_service.create_season(SeasonDTO(season_data)).id
                 else: 
                     season_id = found_seasons[0].id
             
@@ -128,18 +130,18 @@ def import_season():
                 query = QueryUtil.parseQuery("name == " +  team_data.get('name'))
                 if not query or not query.elementA:
                     raise Exception(f"No valid query found: {"name == " +  team_data.get('name')}")
-                found_teams = app.team_app_service.search(query)
+                found_teams = import_blueprint.team_app_service.search(query)
                 team = None
                 if not found_teams:
-                    team = app.team_app_service.create_team(TeamDTO(team_data))
+                    team = import_blueprint.team_app_service.create_team(TeamDTO(team_data))
                 else:
-                    team = app.team_app_service.update_team(found_teams[0].id, TeamDTO(team_data))
+                    team = import_blueprint.team_app_service.update_team(found_teams[0].id, TeamDTO(team_data))
                 team_name_id[team.name] = team.id
                 team_ids.append(team.id)
                 players = teams_players.get(team.name)
-                app.team_app_service.addPlayers(team.id, season_id, players)
+                import_blueprint.team_app_service.addPlayers(team.id, season_id, players)
 
-            app.season_app_service.addTeams(season_id, team_ids)
+            import_blueprint.season_app_service.addTeams(season_id, team_ids)
             
             excel_file = pd.ExcelFile(file_stream)
             sheet_names = excel_file.sheet_names
@@ -171,7 +173,7 @@ def import_season():
                             query = QueryUtil.parseQuery(q_string)
                             if not query or not query.elementA:
                                 raise Exception(f"No valid query found: {q_string}")
-                            found_matches = app.match_app_service.search(query)
+                            found_matches = import_blueprint.match_app_service.search(query)
                             if not found_matches:
                                 match_data = {
                                     'team1_id': team1_id,
@@ -179,7 +181,7 @@ def import_season():
                                     'season_id': season_id,
                                     'playday': i
                                 }
-                                match = app.match_app_service.create_match(MatchDTO(match_data))
+                                match = import_blueprint.match_app_service.create_match(MatchDTO(match_data))
                             else:
                                 match = found_matches[0]
                             continue
@@ -208,12 +210,12 @@ def import_season():
                         series_query = QueryUtil.parseQuery(series_q_string)
                         if not query or not query.elementA:
                             raise Exception(f"No valid query found: {series_q_string}")
-                        found_series = app.series_app_service.search(series_query)
+                        found_series = import_blueprint.series_app_service.search(series_query)
                         if not found_series:
-                            series = app.series_app_service.create_series(SeriesDTO(series_data))
+                            series = import_blueprint.series_app_service.create_series(SeriesDTO(series_data))
                         else:
                             series = found_series[0]
-                            series = app.series_app_service.update_series(series.id, SeriesDTO(series_data))                       
+                            series = import_blueprint.series_app_service.update_series(series.id, SeriesDTO(series_data))                       
 
             
             return jsonify({"message": "File uploaded successfully and data inserted into database"}), 200
@@ -224,7 +226,7 @@ def import_season():
         return jsonify({"error": str(e)}), 500
 
 
-@app.route('/export', methods=['POST'])
+@import_blueprint.route('/export', methods=['POST'])
 @jwt_required()
 @swag_from({
     'summary': 'Export a google spreadsheet with the information for a GNL season',
@@ -257,14 +259,14 @@ def exort_season():
         season_teams = []
         season = None
         if season_id:
-            season = app.season_app_service.get_season(season_id)
+            season = import_blueprint.season_app_service.get_season(season_id)
             if not season:
                 raise NotFoundException(f"season not found by id: {season_id}")
         elif not season_id and season_name:
             query = QueryUtil.parseQuery(f"name == {season_name}")
             if not query or not query.elementA:
                 raise Exception(f"No valid query found: name == {season_name}")
-            found_seasons = app.season_app_service.search(query)
+            found_seasons = import_blueprint.season_app_service.search(query)
             if not found_seasons:
                 raise NotFoundException(f"season not found by name: {season_name}")
             else: 
@@ -296,7 +298,7 @@ def exort_season():
         ranking_sheet.append(ranking_header)
         rank = 1
 
-        season_teams = app.team_app_service.get_teams_season(season_id)
+        season_teams = import_blueprint.team_app_service.get_teams_season(season_id)
         for team in season_teams:
             # ranking sheet
             team_rank = []

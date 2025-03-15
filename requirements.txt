@@ -10,3 +10,4 @@ pyodbc
 pymysql
 sqlalchemy
 flasgger
+gunicorn

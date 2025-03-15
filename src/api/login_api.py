@@ -1,18 +1,19 @@
-from app import app
 import os
-from flask import request, jsonify, redirect
+from flask import Blueprint, request, jsonify, redirect
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity, create_refresh_token
 from flasgger import swag_from
 from datetime import timedelta
 from custom_exceptions import NotFoundException
 
+login_blueprint = Blueprint('login_api', __name__)
+
 # Index endpoint
-@app.route('/', methods=['GET'])
+@login_blueprint.route('/', methods=['GET'])
 def index():
     return redirect('/apidocs/')
 
 # Login endpoint to generate JWT token
-@app.route('/login', methods=['POST'])
+@login_blueprint.route('/login', methods=['POST'])
 @swag_from({
     'tags': ['Authentication'],
     'parameters': [
@@ -86,7 +87,7 @@ def login():
         }
     }
 })
-@app.route("/refresh", methods=["POST"])
+@login_blueprint.route("/refresh", methods=["POST"])
 @jwt_required(refresh=True)
 def refresh():
     current_user = get_jwt_identity()
