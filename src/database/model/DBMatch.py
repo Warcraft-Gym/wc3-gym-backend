@@ -7,9 +7,9 @@ from src.database.model.DBModel import DBModel
 class DBMatch(DBModel):
     __tablename__ = 'matches'
     id = Column(Integer, Sequence(f'{__name__.lower()}_id_seq'), primary_key=True)
-    team1_id = Column(Integer, ForeignKey('teams.id'))
-    team2_id = Column(Integer, ForeignKey('teams.id'))
-    season_id = Column(Integer, ForeignKey('seasons.id'))
+    team1_id = Column(Integer, ForeignKey('teams.id', ondelete='CASCADE'))
+    team2_id = Column(Integer, ForeignKey('teams.id', ondelete='CASCADE'))
+    season_id = Column(Integer, ForeignKey('seasons.id', ondelete='CASCADE'))
     playday = Column(Integer)
     score = Column(String(20))
 

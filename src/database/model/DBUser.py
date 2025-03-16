@@ -15,4 +15,4 @@ class DBUser(DBModel):
     race = Column(Enum(Race))
     mmr = Column(Integer)
     country = Column(Enum(Country))
-    team_seasons = relationship('DBUserTeamSeason', back_populates='user')
+    team_seasons = relationship('DBUserTeamSeason', back_populates='user', cascade="all, delete")
