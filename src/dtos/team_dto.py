@@ -23,6 +23,12 @@ class TeamDTO:
             'seasons_info': seasons_info
         }
     
+    def to_dict_reduced(self):
+        return {
+            'id': self.id,
+            'name': self.name
+        }
+    
     def to_db_dict(self):
         return {
             'name': self.name

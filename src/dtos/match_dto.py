@@ -18,9 +18,9 @@ class MatchDTO:
         return {
             'id': self.id,
             'team1_id': self.team1_id,
-            'team1': None if not self.team1 else self.team1.to_dict(),
+            'team1': None if not self.team1 else self.team1.to_dict_reduced(),
             'team2_id': self.team2_id,
-            'team2': None if not self.team2 else self.team2.to_dict(),
+            'team2': None if not self.team2 else self.team2.to_dict_reduced(),
             'season_id': self.season_id,
             'season':  None if not self.season else self.season.to_dict(),
             'playday': self.playday,
