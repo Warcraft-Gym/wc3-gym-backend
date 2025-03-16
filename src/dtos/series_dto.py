@@ -25,7 +25,7 @@ class SeriesDTO:
             'id': self.id,
             'match_id': self.match_id,
             'match': None if not self.match else self.match.to_dict(),
-            'date_time': self.date_time,
+            'date_time': self.date_time.isoformat() if isinstance(self.date_time, datetime) else self.date_time,
             'caster': self.caster,
             'player1_id': self.player1_id,
             'player1': None if not self.player1 else self.player1.to_dict(),
