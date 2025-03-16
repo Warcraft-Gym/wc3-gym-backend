@@ -1,4 +1,6 @@
 from src.database.model.DBMatch import DBMatch
+from src.dtos.season_dto import SeasonDTO
+from src.dtos.team_dto import TeamDTO
 
 class MatchDTO:
     def __init__(self, data : dict):
@@ -16,11 +18,11 @@ class MatchDTO:
         return {
             'id': self.id,
             'team1_id': self.team1_id,
-            'team1':self.team1,
+            'team1': None if not self.team1 else self.team1.to_dict(),
             'team2_id': self.team2_id,
-            'team2':self.team2,
+            'team2': None if not self.team2 else self.team2.to_dict(),
             'season_id': self.season_id,
-            'season': self.season,
+            'season':  None if not self.season else self.season.to_dict(),
             'playday': self.playday,
             'score': self.score
         }
@@ -40,11 +42,11 @@ class MatchDTO:
             {
                 'id': match.id,
                 'team1_id': match.team1_id,
-                'team1': match.team1.name if match.team1 else None,
+                'team1': TeamDTO.from_dbteam(match.team1) if match.team1 else None,
                 'team2_id': match.team2_id,
-                'team2': match.team2.name if match.team2 else None,
+                'team2': TeamDTO.from_dbteam(match.team2) if match.team2 else None,
                 'season_id': match.season_id,
-                'season': match.season.name if match.season else None,
+                'season': SeasonDTO.from_dbseason(match.season) if match.season else None,
                 'playday': match.playday,
                 'score': match.score
             }
