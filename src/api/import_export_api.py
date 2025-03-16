@@ -77,6 +77,8 @@ def import_season():
             teams = []
             teams_players = {}
             for index, row in df_players.iterrows():
+                if not ImportUtil.isNa(row['Bnet (no ID)']):
+                    continue
                 user_data = {
                         'name': ImportUtil.isNa(row['Bnet (no ID)']),
                         'battleTag': ImportUtil.isNa(row['Bnet']),
@@ -86,7 +88,8 @@ def import_season():
                         'country':   ImportUtil.getCountryEnumString(ImportUtil.isNa(row['Country']))
                     }
 
-
+                if not user_data.get('battleTag'):
+                    raise Exception(f"User without BattleTag found: {user_data.get('name')}")
                 query = QueryUtil.parseQuery("battleTag == " +  user_data.get('battleTag'))
                 if not query or not query.elementA:
                     raise Exception(f"No valid query found: {"battleTag == " +  user_data.get('battleTag')}")
