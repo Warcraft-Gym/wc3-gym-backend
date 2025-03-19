@@ -12,7 +12,8 @@ class MatchDTO:
         self.season_id = data.get('season_id')
         self.season = data.get('season')
         self.playday = data.get('playday')
-        self.score = data.get('score')
+        self.team1_score = data.get('team1_score')
+        self.team2_score = data.get('team2_score')
 
     def to_dict(self):
         return {
@@ -24,7 +25,8 @@ class MatchDTO:
             'season_id': self.season_id,
             'season':  None if not self.season else self.season.to_dict(),
             'playday': self.playday,
-            'score': self.score
+            'team1_score': self.team1_score,
+            'team2_score': self.team2_score
         }
     
     def to_db_dict(self):
@@ -33,7 +35,8 @@ class MatchDTO:
             'team2_id': self.team2_id,
             'season_id': self.season_id,
             'playday': self.playday,
-            'score': self.score
+            'team1_score': self.team1_score,
+            'team2_score': self.team2_score
         }
 
     @classmethod
@@ -48,7 +51,8 @@ class MatchDTO:
                 'season_id': match.season_id,
                 'season': SeasonDTO.from_dbseason(match.season) if match.season else None,
                 'playday': match.playday,
-                'score': match.score
+                'team1_score': match.team1_score,
+                'team2_score': match.team2_score
             }
         )
     
@@ -61,7 +65,8 @@ class MatchDTO:
                 'team2_id': {'type': 'integer'},
                 'season_id': {'type': 'integer'},
                 'playday': {'type': 'integer'},
-                'score' : {'type': 'string'}
+                'team1_score' : {'type': 'integer'},
+                'team2_score' : {'type': 'integer'}
             },
-            'required': ['team1_id','team2_id', 'score']
+            'required': ['team1_id','team2_id']
         }

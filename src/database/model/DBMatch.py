@@ -11,7 +11,8 @@ class DBMatch(DBModel):
     team2_id = Column(Integer, ForeignKey('teams.id', ondelete='CASCADE'))
     season_id = Column(Integer, ForeignKey('seasons.id', ondelete='CASCADE'))
     playday = Column(Integer)
-    score = Column(String(20))
+    team1_score = Column(Integer)
+    team2_score = Column(Integer)
 
     team1 = relationship("DBTeam", foreign_keys=[team1_id])
     team2 = relationship("DBTeam", foreign_keys=[team2_id])
