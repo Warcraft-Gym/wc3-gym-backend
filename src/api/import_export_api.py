@@ -13,6 +13,7 @@ import pandas as pd
 import io
 from io import BytesIO
 import openpyxl
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from src.util.import_util import ImportUtil
 
 
@@ -60,7 +61,7 @@ import_blueprint = Blueprint('import_api', __name__)
 })
 def import_season():
     try:
-        season_id = request.args.get('season_id')
+        season_id = int(request.args.get('season_id')) if request.args.get('season_id') else None
         season_name = request.args.get('season_name')
         if 'file' not in request.files:
             return jsonify({"error": "No file part"}), 400
@@ -139,7 +140,7 @@ def import_season():
             team_ids = []
             team_name_id = {}
             for team_data in teams:
-                query = QueryUtil.parseQuery("name == " +  team_data.get('name'))
+                query = QueryUtil.parseQuery("name==" +  team_data.get('name'))
                 if not query or not query.elementA:
                     raise Exception(f"No valid query found: {"name == " +  team_data.get('name')}")
                 found_teams = import_blueprint.team_app_service.search(query)
@@ -196,7 +197,9 @@ def import_season():
                             continue
                         if not team1 or not team2:
                             raise Exception(f"Teams could not be identified for Week {i} and row range {start}/{end}")
-                        
+                        series_id = None
+                        if ImportUtil.isNa(row[0]):
+                            series_id = row[0]
                         player1_id = player_name_id[row[5].rstrip("*")]
                         player2_id = player_name_id[row[8].rstrip("*")]
                         date_time = None
@@ -211,15 +214,21 @@ def import_season():
                             'player2_score': ImportUtil.isNa(row[7]),
                             'player2_id': player2_id
                         }
-                        series_q_string = f"match_id=={match.id} and player1_id=={player1_id} and player2_id=={player2_id}"
-                        series_query = QueryUtil.parseQuery(series_q_string)
-                        if not query or not query.elementA:
-                            raise Exception(f"No valid query found: {series_q_string}")
-                        found_series = import_blueprint.series_app_service.search(series_query)
-                        if not found_series:
+
+                        series=None
+                        if series_id:
+                            series = import_blueprint.series_app_service.get_series(series_id)
+                        else:
+                            series_q_string = f"match_id=={match.id} and player1_id=={player1_id} and player2_id=={player2_id}"
+                            series_query = QueryUtil.parseQuery(series_q_string)
+                            if not query or not query.elementA:
+                                raise Exception(f"No valid query found: {series_q_string}")
+                            found_series = import_blueprint.series_app_service.search(series_query)
+                            if found_series:
+                                series = found_series[0]
+                        if not series:
                             series = import_blueprint.series_app_service.create_series(SeriesDTO(series_data))
                         else:
-                            series = found_series[0]
                             series = import_blueprint.series_app_service.update_series(series.id, SeriesDTO(series_data))                       
 
             
@@ -257,9 +266,9 @@ def import_season():
         500: {'description': 'Internal server error'}
     }
 })
-def exort_season():
+def export_season():
     try:
-        season_id = int(request.args.get('season_id'))
+        season_id = int(request.args.get('season_id')) if request.args.get('season_id') else None
         season_name = request.args.get('season_name')
         season_teams = []
         season = None
@@ -282,6 +291,47 @@ def exort_season():
         workbook = openpyxl.Workbook()
         default_sheet = workbook.active
         workbook.remove(default_sheet)
+
+        for week in range(1,season.number_weeks+1):
+
+            # Create week worksheets
+            week_sheet = workbook.create_sheet(title=f"Week {week}")
+            for i in range(1,5):
+                empty_cell = week_sheet.cell(row=1, column=i, value="")
+                empty_cell.fill = PatternFill(start_color="000000", end_color="000000", fill_type="solid")
+            cell = week_sheet.cell(row=1, column=5, value=f"WEEK {week}")
+            cell.fill = PatternFill(start_color="000000", end_color="000000", fill_type="solid")  # Apply black background
+            cell.font = Font(color="FFFFFF", bold=True, size=12)
+            cell.alignment = Alignment(horizontal="center")
+            for i in range(6,9):
+                empty_cell = week_sheet.cell(row=1, column=i, value="")
+                empty_cell.fill = PatternFill(start_color="000000", end_color="000000", fill_type="solid")
+            week_sheet.append([""])
+            week_sheet.append([""])
+            q_string = f"playday=={week} and season_id=={season.id}"
+            query = QueryUtil.parseQuery(q_string)
+            if not query or not query.elementA:
+                raise Exception(f"No valid query found: {q_string}")
+            matches = import_blueprint.match_app_service.search(query)
+            if matches:
+                for match in matches:
+                    week_sheet.append([match.team1.name,"VS",match.team2.name])
+                    q_string = f"match_id=={match.id}"
+                    query = QueryUtil.parseQuery(q_string)
+                    if not query or not query.elementA:
+                        raise Exception(f"No valid query found: {q_string}")
+                    series_list = import_blueprint.series_app_service.search(query)
+                    week_sheet.append(["","Caster Twitch Handle","","Time EDT (US East)","Date", match.team1.name,"Score 1","Score 2",match.team2.name,"TeamScore 1","TeamScore 2"])
+                    for series in series_list:
+                        date = None
+                        time = None
+                        if series.date_time:
+                            date = series.date_time.date()
+                            time = series.date_time.time()
+                        week_sheet.append([series.id,series.caster,"",time,date,series.player1.name,series.player1_score,series.player2_score,series.player2.name])
+                    week_sheet.append([""])
+                    week_sheet.append([""])
+
         # Create worksheets
         ranking_sheet = workbook.create_sheet(title='Ranking')
         user_sheet = workbook.create_sheet(title='Players')
