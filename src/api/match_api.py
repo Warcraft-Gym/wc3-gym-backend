@@ -125,7 +125,7 @@ def get_match(match_id):
         return jsonify({"error": str(e)}), 500
     
 
-@match_blueprint.route('/match/search', methods=['POST'])
+@match_blueprint.route('/matches/search', methods=['POST'])
 @swag_from({
     'summary': 'Search matches by criteria',
     'description': 'Search matches by criteria using a custom query format.',
