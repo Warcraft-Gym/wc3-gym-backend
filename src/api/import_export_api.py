@@ -112,8 +112,16 @@ def import_season():
                     players = teams_players.get(team_name)
                     players.append(user.id)
                     
+            excel_file = pd.ExcelFile(file_stream)
+            sheet_names = excel_file.sheet_names
+            week_sheets = [name for name in sheet_names if name.lower().startswith("week")]
+
+            # Count the number of "Week" sheets
+            number_of_week_sheets = len(week_sheets)
+
             season_data = {
-                'name' : season_name
+                'name' : season_name,
+                'number_weeks' : number_of_week_sheets
             }
             if season_id and season_name:
                 import_blueprint.season_app_service.update_season(season_id, SeasonDTO(season_data))
@@ -126,6 +134,7 @@ def import_season():
                     season_id = import_blueprint.season_app_service.create_season(SeasonDTO(season_data)).id
                 else: 
                     season_id = found_seasons[0].id
+                    import_blueprint.season_app_service.update_season(season_id, SeasonDTO(season_data))
             
             team_ids = []
             team_name_id = {}
@@ -145,13 +154,6 @@ def import_season():
                 import_blueprint.team_app_service.addPlayers(team.id, season_id, players)
 
             import_blueprint.season_app_service.addTeams(season_id, team_ids)
-            
-            excel_file = pd.ExcelFile(file_stream)
-            sheet_names = excel_file.sheet_names
-            week_sheets = [name for name in sheet_names if name.lower().startswith("week")]
-
-            # Count the number of "Week" sheets
-            number_of_week_sheets = len(week_sheets)
 
             for i in range(1,number_of_week_sheets+1):
                 week = pd.read_excel(file_stream, sheet_name=f"Week {i}", header=None)
