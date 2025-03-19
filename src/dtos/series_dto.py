@@ -18,7 +18,7 @@ class SeriesDTO:
         self.player2_id = data.get('player2_id')
         self.player2 = data.get('player2')
         self.player1_score = data.get('player1_score')
-        self.player2_score = data.get('player1_score')
+        self.player2_score = data.get('player2_score')
 
     def to_dict(self):
         return {
