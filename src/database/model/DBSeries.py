@@ -1,14 +1,17 @@
-from sqlalchemy import Column, Integer, String, Sequence, ForeignKey
+from sqlalchemy import Column, Integer, String, Sequence, ForeignKey, DateTime
 from sqlalchemy.orm import relationship
 from src.database.model.DBModel import DBModel
 
 class DBSeries(DBModel):
     __tablename__ = 'series'
     id = Column(Integer, Sequence(f'{__name__.lower()}_id_seq'), primary_key=True)
-    match_id = Column(Integer, ForeignKey('matches.id'))
-    player1_id = Column(Integer, ForeignKey('users.id'))
-    player2_id = Column(Integer, ForeignKey('users.id'))
-    score = Column(String(20))
+    match_id = Column(Integer, ForeignKey('matches.id', ondelete='CASCADE'))
+    date_time = Column(DateTime)
+    caster = Column(String(50))
+    player1_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'))
+    player2_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'))
+    player1_score = Column(Integer)
+    player2_score = Column(Integer)
 
     match = relationship("DBMatch", foreign_keys=[match_id])
     player1 = relationship("DBUser", foreign_keys=[player1_id])

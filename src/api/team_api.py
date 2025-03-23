@@ -1,24 +1,17 @@
 import logging
-from app import app
-from flask import request, jsonify, Response
+from flask import Blueprint, request, jsonify, Response
 from flask_jwt_extended import jwt_required
 from custom_exceptions import NotFoundException
 from flasgger import swag_from
 from src.dtos.team_dto import TeamDTO
 from src.util.query_util import QueryUtil
-import enum
-import json
 
 logger = logging.getLogger(__name__)
 
-class EnumEncoder(json.JSONEncoder):
-    def default(self, obj):
-        if isinstance(obj, enum.Enum):
-            return obj.value
-        return json.JSONEncoder.default(self, obj)
+team_blueprint = Blueprint('team_api', __name__)
 
 # Team endpoints
-@app.route('/teams', methods=['POST'])
+@team_blueprint.route('/teams', methods=['POST'])
 @jwt_required()
 @swag_from({
     'summary': 'Add a new team',
@@ -41,16 +34,15 @@ class EnumEncoder(json.JSONEncoder):
 def add_team():
     try:
         data = request.json
-        team = app.team_app_service.create_team(TeamDTO(data))
+        team = team_blueprint.team_app_service.create_team(TeamDTO(data))
         if team:
             team = team.to_dict()
-        json_data = json.dumps(team, cls=EnumEncoder)
-        return Response(json_data, status=201, content_type='application/json')
+        return jsonify(team), 201
     except Exception as e:
         logger.error(e)
         return jsonify({"error": str(e)}), 500
 
-@app.route('/teams/<int:team_id>', methods=['PUT'])
+@team_blueprint.route('/teams/<int:team_id>', methods=['PUT'])
 @jwt_required()
 @swag_from({
     'summary': 'Update a team',
@@ -75,11 +67,10 @@ def add_team():
 def update_team(team_id):
     try:
         data = request.json
-        team = app.team_app_service.update_team(team_id, TeamDTO(data))
+        team = team_blueprint.team_app_service.update_team(team_id, TeamDTO(data))
         if team:
             team = team.to_dict()
-        json_data = json.dumps(team, cls=EnumEncoder)
-        return Response(json_data, status=200, content_type='application/json')
+        return jsonify(team)
     except NotFoundException as e:
         logger.error(e)
         return jsonify({"error": str(e)}), 404
@@ -87,7 +78,7 @@ def update_team(team_id):
         logger.error(e)
         return jsonify({"error": str(e)}), 500
 
-@app.route('/teams/<int:team_id>', methods=['DELETE'])
+@team_blueprint.route('/teams/<int:team_id>', methods=['DELETE'])
 @jwt_required()
 @swag_from({
     'summary': 'Delete a team',
@@ -102,13 +93,13 @@ def update_team(team_id):
 })
 def delete_team(team_id):
     try:
-        app.team_app_service.delete_team(team_id)
+        team_blueprint.team_app_service.delete_team(team_id)
         return f"Team Deleted: {team_id}", 204
     except Exception as e:
         logger.error(e)
         return jsonify({"error": str(e)}), 500
 
-@app.route('/teams/<int:team_id>', methods=['GET'])
+@team_blueprint.route('/teams/<int:team_id>', methods=['GET'])
 @swag_from({
     'summary': 'Get a team',
     'description': 'Retrieve a team by its ID.',
@@ -122,11 +113,10 @@ def delete_team(team_id):
 })
 def get_team(team_id):
     try:
-        team = app.team_app_service.get_team(team_id)
+        team = team_blueprint.team_app_service.get_team(team_id)
         if team:
             team = team.to_dict()
-        json_data = json.dumps(team, cls=EnumEncoder)
-        return Response(json_data, status=200, content_type='application/json')
+        return jsonify(team)
     except NotFoundException as e:
         logger.error(e)
         return jsonify({"error": str(e)}), 404
@@ -134,7 +124,7 @@ def get_team(team_id):
         logger.error(e)
         return jsonify({"error": str(e)}), 500
 
-@app.route('/teams/<int:team_id>/seasons/<int:season_id>', methods=['GET'])
+@team_blueprint.route('/teams/<int:team_id>/seasons/<int:season_id>', methods=['GET'])
 @swag_from({
     'summary': 'Get a team for a specific season',
     'description': 'Retrieve a team by its ID with all information related to a specific season',
@@ -149,11 +139,10 @@ def get_team(team_id):
 })
 def get_team_season(team_id, season_id):
     try:
-        team = app.team_app_service.get_team_season(team_id, season_id)
+        team = team_blueprint.team_app_service.get_team_season(team_id, season_id)
         if team:
             team = team.to_dict()
-        json_data = json.dumps(team, cls=EnumEncoder)
-        return Response(json_data, status=200, content_type='application/json')
+        return jsonify(team)
     except NotFoundException as e:
         logger.error(e)
         return jsonify({"error": str(e)}), 404
@@ -162,7 +151,7 @@ def get_team_season(team_id, season_id):
         return jsonify({"error": str(e)}), 500
     
 
-@app.route('/teams/season/<int:season_id>', methods=['GET'])
+@team_blueprint.route('/teams/season/<int:season_id>', methods=['GET'])
 @swag_from({
     'summary': 'Get all teams for a specific season',
     'description': 'Retrieve all teams with all information related to a specific season',
@@ -176,13 +165,12 @@ def get_team_season(team_id, season_id):
 })
 def getAll_season(season_id):
     try:
-        teams = app.team_app_service.get_teams_season(season_id)
+        teams = team_blueprint.team_app_service.get_teams_season(season_id)
         out = []
         if teams:
             for team in teams:
                 out.append(team.to_dict())
-        json_data = json.dumps(out, cls=EnumEncoder)
-        return Response(json_data, status=200, content_type='application/json')
+        return jsonify(out)
     except NotFoundException as e:
         logger.error(e)
         return jsonify({"error": str(e)}), 404
@@ -190,7 +178,7 @@ def getAll_season(season_id):
         logger.error(e)
         return jsonify({"error": str(e)}), 500
 
-@app.route('/teams/addPlayer/<int:team_id>/seasons/<int:season_id>', methods=['POST'])
+@team_blueprint.route('/teams/addPlayers/<int:team_id>/seasons/<int:season_id>', methods=['POST'])
 @jwt_required()
 @swag_from({
     'summary': 'Add players to a team for a season',
@@ -219,14 +207,13 @@ def getAll_season(season_id):
         500: {'description': 'Internal server error'}
     }
 })
-def addPlayer(team_id, season_id):
+def addPlayers(team_id, season_id):
     try:
         data = request.json
-        team = app.team_app_service.addPlayers(team_id, season_id, data.get("player_ids"))
+        team = team_blueprint.team_app_service.addPlayers(team_id, season_id, data.get("player_ids"))
         if team:
             team = team.to_dict()
-        json_data = json.dumps(team, cls=EnumEncoder)
-        return Response(json_data, status=200, content_type='application/json')
+        return jsonify(team)
     except NotFoundException as e:
         logger.error(e)
         return jsonify({"error": str(e)}), 404
@@ -234,7 +221,7 @@ def addPlayer(team_id, season_id):
         logger.error(e)
         return jsonify({"error": str(e)}), 500
 
-@app.route('/teams/removePlayer/<int:team_id>/seasons/<int:season_id>', methods=['POST'])
+@team_blueprint.route('/teams/removePlayers/<int:team_id>/seasons/<int:season_id>', methods=['POST'])
 @jwt_required()
 @swag_from({
     'summary': 'Removes players from a team for a season',
@@ -263,14 +250,13 @@ def addPlayer(team_id, season_id):
         500: {'description': 'Internal server error'}
     }
 })
-def removePlayer(team_id, season_id):
+def removePlayers(team_id, season_id):
     try:
         data = request.json
-        team = app.team_app_service.removePlayers(team_id, season_id, data.get("player_ids"))
+        team = team_blueprint.team_app_service.removePlayers(team_id, season_id, data.get("player_ids"))
         if team:
             team = team.to_dict()
-        json_data = json.dumps(team, cls=EnumEncoder)
-        return Response(json_data, status=200, content_type='application/json')
+        return jsonify(team)
     except NotFoundException as e:
         logger.error(e)
         return jsonify({"error": str(e)}), 404
@@ -278,7 +264,7 @@ def removePlayer(team_id, season_id):
         logger.error(e)
         return jsonify({"error": str(e)}), 500
 
-@app.route('/teams', methods=['GET'])
+@team_blueprint.route('/teams', methods=['GET'])
 @swag_from({
     'summary': 'Get all teams',
     'description': 'Retrieve all teams.',
@@ -291,13 +277,12 @@ def removePlayer(team_id, season_id):
 })
 def get_all_teams():
     try:
-        teams = app.team_app_service.getAll()
+        teams = team_blueprint.team_app_service.getAll()
         out = []
         if teams:
             for team in teams:
                 out.append(team.to_dict())
-        json_data = json.dumps(out, cls=EnumEncoder)
-        return Response(json_data, status=200, content_type='application/json')
+        return jsonify(out)
     except NotFoundException as e:
         logger.error(e)
         return jsonify({"error": str(e)}), 404
@@ -305,7 +290,7 @@ def get_all_teams():
         logger.error(e)
         return jsonify({"error": str(e)}), 500
 
-@app.route('/teams/search', methods=['POST'])
+@team_blueprint.route('/teams/search', methods=['POST'])
 @swag_from({
     'summary': 'Search teams by criteria',
     'description': 'Search teams by criteria using a custom query format.',
@@ -340,13 +325,12 @@ def search_teams():
         query = QueryUtil.parseQuery(query_param)
         if not query or not query.elementA:
             raise Exception(f"No valid query found: {query_param}")
-        teams = app.team_app_service.search(query)
+        teams = team_blueprint.team_app_service.search(query)
         out = []
         if teams:
             for team in teams:
                 out.append(team.to_dict())
-        json_data = json.dumps(out, cls=EnumEncoder)
-        return Response(json_data, status=200, content_type='application/json')
+        return jsonify(out)
     except NotFoundException as e:
         logger.error(e)
         return jsonify({"error": str(e)}), 404

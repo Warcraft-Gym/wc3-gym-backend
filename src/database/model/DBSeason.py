@@ -11,8 +11,8 @@ class DBSeason(DBModel):
     id = Column(Integer, Sequence(f'{__name__.lower()}_id_seq'), primary_key=True)
     name = Column(String(50))
     number_weeks =  Column(Integer)
-    user_teams = relationship('DBUserTeamSeason', back_populates='season')
-    teams = relationship('DBTeamSeason', back_populates='season')
+    user_teams = relationship('DBUserTeamSeason', back_populates='season', cascade="all, delete")
+    teams = relationship('DBTeamSeason', back_populates='season', cascade="all, delete")
 
     def to_dict(self):
         return {column.name: getattr(self, column.name) for column in self.__table__.columns}

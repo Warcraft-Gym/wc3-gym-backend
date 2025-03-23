@@ -1,16 +1,18 @@
 import logging
 import traceback
-from app import app
-from flask import request, jsonify
+from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required
 from custom_exceptions import NotFoundException
 from flasgger import swag_from
 from src.dtos.series_dto import SeriesDTO
+from src.util.query_util import QueryUtil
 
 logger = logging.getLogger(__name__)
 
+series_blueprint = Blueprint('series_api', __name__)
+
 #series endpoints
-@app.route('/series', methods=['POST'])
+@series_blueprint.route('/series', methods=['POST'])
 @jwt_required()
 @swag_from({
     'summary': 'Add a new series',
@@ -33,13 +35,15 @@ logger = logging.getLogger(__name__)
 def add_series():
     try:
         data = request.json
-        series = app.series_app_service.create_series(SeriesDTO(data))
+        series = series_blueprint.series_app_service.create_series(SeriesDTO(data))
+        if series:
+            series = series.to_dict()
         return jsonify(series), 201
     except Exception as e:
         logger.error(e)
         return jsonify({"error": str(e)}), 500
 
-@app.route('/series/<int:series_id>', methods=['PUT'])
+@series_blueprint.route('/series/<int:series_id>', methods=['PUT'])
 @jwt_required()
 @swag_from({
     'summary': 'Updates a series',
@@ -64,7 +68,9 @@ def add_series():
 def update_series(series_id):
     try:
         data = request.json
-        series = app.series_app_service.update_series(series_id, SeriesDTO(data))
+        series = series_blueprint.series_app_service.update_series(series_id, SeriesDTO(data))
+        if series:
+            series = series.to_dict()
         return jsonify(series)
     except NotFoundException as e:
         logger.error(e)
@@ -74,7 +80,7 @@ def update_series(series_id):
         print(traceback.format_exc())
         return jsonify({"error": str(e)}), 500
     
-@app.route('/series/<int:series_id>', methods=['DELETE'])
+@series_blueprint.route('/series/<int:series_id>', methods=['DELETE'])
 @jwt_required()
 @swag_from({
     'summary': 'Delete a series',
@@ -90,13 +96,13 @@ def update_series(series_id):
 
 def delete_series(series_id):
     try:
-        app.series_app_service.delete_series(series_id)
+        series_blueprint.series_app_service.delete_series(series_id)
         return f"series Deleted: {series_id}", 204
     except Exception as e:
         logger.error(e)
         return jsonify({"error": str(e)}), 500
 
-@app.route('/series/<int:series_id>', methods=['GET'])
+@series_blueprint.route('/series/<int:series_id>', methods=['GET'])
 @swag_from({
     'summary': 'Get a series',
     'description': 'Retrieve a series by its ID.',
@@ -111,7 +117,9 @@ def delete_series(series_id):
 
 def get_series(series_id):
     try:
-        series = app.series_app_service.get_series(series_id)
+        series = series_blueprint.series_app_service.get_series(series_id)
+        if series:
+            series = series.to_dict()
         return jsonify(series)
     except NotFoundException as e:
         logger.error(e)
@@ -120,7 +128,7 @@ def get_series(series_id):
         logger.error(e)
         return jsonify({"error": str(e)}), 500
     
-@app.route('/series', methods=['GET'])
+@series_blueprint.route('/series', methods=['GET'])
 @swag_from({
     'summary': 'Get all series',
     'description': 'Return all series',
@@ -132,8 +140,61 @@ def get_series(series_id):
 })
 def get_all_series():
     try:
-        series = app.series_app_service.getAll()
-        return jsonify(series)
+        series_l = series_blueprint.series_app_service.getAll()
+        out = []
+        if series_l:
+            for series in series_l:
+                out.append(series.to_dict())
+        return jsonify(out)
+    except Exception as e:
+        logger.error(e)
+        return jsonify({"error": str(e)}), 500
+    
+    
+@series_blueprint.route('/series/search', methods=['POST'])
+@swag_from({
+    'summary': 'Search series by criteria',
+    'description': 'Search series by criteria using a custom query format.',
+    'tags': ['series'],
+    'parameters': [
+        {
+            'name': 'query',
+            'in': 'query',
+            'type': 'string',
+            'required': False,
+            'description': '''
+                Search criteria in the following format
+                and | or conditions are supported but no brackets
+
+                key operator value and key operator value
+
+                e.g.:
+                name ilike xxxx or id == 12
+                Operators supported: ==, !=, >, >=, <, <=, ilike
+            '''
+        }
+    ],
+    'responses': {
+        200: {'description': 'Series retrieved successfully'},
+        404: {'description': 'Series not found'},
+        500: {'description': 'Internal server error'}
+    }
+})
+def search_series():
+    try:
+        query_param = request.args.get('query', '')
+        query = QueryUtil.parseQuery(query_param)
+        if not query or not query.elementA:
+            raise Exception(f"No valid query found: {query_param}")
+        series_l = series_blueprint.series_app_service.search(query)
+        out = []
+        if series_l:
+            for series in series_l:
+                out.append(series.to_dict())
+        return jsonify(out)
+    except NotFoundException as e:
+        logger.error(e)
+        return jsonify({"error": str(e)}), 404
     except Exception as e:
         logger.error(e)
         return jsonify({"error": str(e)}), 500

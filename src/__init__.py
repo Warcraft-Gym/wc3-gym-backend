@@ -14,11 +14,35 @@ from src.service.match_service import MatchAppService
 from src.service.season_service import SeasonAppService
 from src.service.series_service import SeriesAppService
 from flasgger import Swagger
+import enum
+from flask.json.provider import DefaultJSONProvider
+
+# Register Blueprints
+from src.api.login_api import login_blueprint
+from src.api.user_api import user_blueprint
+from src.api.team_api import team_blueprint
+from src.api.match_api import match_blueprint
+from src.api.season_api import season_blueprint
+from src.api.series_api import series_blueprint
+from src.api.import_export_api import import_blueprint
 
 # Load environment variables from .env file
 load_dotenv()
 
 app = Flask(__name__)
+
+class CustomJSONProvider(DefaultJSONProvider):
+    def __init__(self, app):
+        super().__init__(app)
+
+    def default(self, obj):
+        if isinstance(obj, enum.Enum):
+            return obj.value
+        return super().default(obj)
+    
+app.json  = CustomJSONProvider(app)
+
+
 
 swagger_config = {
     "headers": [],
@@ -54,6 +78,11 @@ template = {
             "type": "apiKey",
             "name": "Authorization",
             "in": "header"
+        },
+        "RefreshAuth": {
+            "type": "apiKey",
+            "name": "Authorization",
+            "in": "header"
         }
     }
 }
@@ -77,8 +106,28 @@ season_service = SeasonDBService(db_url=db_url)
 series_service = SeriesDBService(db_url=db_url)
 
 # Initialize application services
-app.user_app_service = UserAppService(user_service=user_service)
-app.team_app_service = TeamAppService(team_service=team_service)
-app.match_app_service = MatchAppService(match_service=match_service)
-app.season_app_service = SeasonAppService(season_service=season_service)
-app.series_app_service = SeriesAppService(series_service=series_service)
+user_app_service = UserAppService(user_service=user_service)
+team_app_service = TeamAppService(team_service=team_service)
+match_app_service = MatchAppService(match_service=match_service)
+season_app_service = SeasonAppService(season_service=season_service)
+series_app_service = SeriesAppService(series_service=series_service)
+
+import_blueprint.user_app_service = user_app_service
+import_blueprint.season_app_service = season_app_service
+import_blueprint.team_app_service = team_app_service
+import_blueprint.match_app_service = match_app_service
+import_blueprint.series_app_service = series_app_service
+
+user_blueprint.user_app_service = user_app_service
+season_blueprint.season_app_service = season_app_service
+team_blueprint.team_app_service = team_app_service
+match_blueprint.match_app_service = match_app_service
+series_blueprint.series_app_service = series_app_service
+
+app.register_blueprint(login_blueprint)
+app.register_blueprint(user_blueprint)
+app.register_blueprint(team_blueprint)
+app.register_blueprint(match_blueprint)
+app.register_blueprint(season_blueprint)
+app.register_blueprint(import_blueprint)
+app.register_blueprint(series_blueprint)

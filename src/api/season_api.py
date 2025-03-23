@@ -1,6 +1,5 @@
 import logging
-from app import app
-from flask import request, jsonify
+from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required
 from custom_exceptions import NotFoundException
 from flasgger import swag_from
@@ -9,8 +8,10 @@ from src.util.query_util import QueryUtil
 
 logger = logging.getLogger(__name__)
 
+season_blueprint = Blueprint('season_api', __name__)
+
 # season endpoints
-@app.route('/seasons', methods=['POST'])
+@season_blueprint.route('/seasons', methods=['POST'])
 @jwt_required()
 @swag_from({
     'summary': 'Add a new season',
@@ -33,7 +34,7 @@ logger = logging.getLogger(__name__)
 def add_season():
     try:
         data = request.json
-        season = app.season_app_service.create_season(SeasonDTO(data))
+        season = season_blueprint.season_app_service.create_season(SeasonDTO(data))
         if season:
             season = season.to_dict()
         return jsonify(season), 201
@@ -41,7 +42,7 @@ def add_season():
         logger.error(e)
         return jsonify({"error": str(e)}), 500
 
-@app.route('/seasons/<int:season_id>', methods=['PUT'])
+@season_blueprint.route('/seasons/<int:season_id>', methods=['PUT'])
 @jwt_required()
 @swag_from({
     'summary': 'Update a season',
@@ -66,7 +67,7 @@ def add_season():
 def update_season(season_id):
     try:
         data = request.json
-        season = app.season_app_service.update_season(season_id, SeasonDTO(data))
+        season = season_blueprint.season_app_service.update_season(season_id, SeasonDTO(data))
         if season:
             season = season.to_dict()
         return jsonify(season)
@@ -77,7 +78,7 @@ def update_season(season_id):
         logger.error(e)
         return jsonify({"error": str(e)}), 500
 
-@app.route('/seasons/<int:season_id>', methods=['DELETE'])
+@season_blueprint.route('/seasons/<int:season_id>', methods=['DELETE'])
 @jwt_required()
 @swag_from({
     'summary': 'Delete a season',
@@ -92,13 +93,13 @@ def update_season(season_id):
 })
 def delete_season(season_id):
     try:
-        app.season_app_service.delete_season(season_id)
+        season_blueprint.season_app_service.delete_season(season_id)
         return f"season Deleted: {season_id}", 204
     except Exception as e:
         logger.error(e)
         return jsonify({"error": str(e)}), 500
 
-@app.route('/seasons/<int:season_id>', methods=['GET'])
+@season_blueprint.route('/seasons/<int:season_id>', methods=['GET'])
 @swag_from({
     'summary': 'Get a season',
     'description': 'Retrieve a season by its ID.',
@@ -112,7 +113,7 @@ def delete_season(season_id):
 })
 def get_season(season_id):
     try:
-        season = app.season_app_service.get_season(season_id)
+        season = season_blueprint.season_app_service.get_season(season_id)
         if season:
             season = season.to_dict()
         return jsonify(season)
@@ -124,7 +125,7 @@ def get_season(season_id):
         return jsonify({"error": str(e)}), 500
 
 
-@app.route('/seasons/addTeams/<int:season_id>', methods=['POST'])
+@season_blueprint.route('/seasons/addTeams/<int:season_id>', methods=['POST'])
 @jwt_required()
 @swag_from({
     'summary': 'Add teams to season',
@@ -154,7 +155,7 @@ def get_season(season_id):
 def add_teams(season_id):
     try:
         data = request.json
-        season = app.season_app_service.addTeams(season_id, data.get("team_ids"))
+        season = season_blueprint.season_app_service.addTeams(season_id, data.get("team_ids"))
         if season:
             season = season.to_dict()
         return jsonify(season)
@@ -165,7 +166,7 @@ def add_teams(season_id):
         logger.error(e)
         return jsonify({"error": str(e)}), 500
 
-@app.route('/seasons/removeTeams/<int:season_id>', methods=['POST'])
+@season_blueprint.route('/seasons/removeTeams/<int:season_id>', methods=['POST'])
 @jwt_required()
 @swag_from({
     'summary': 'Remove teams from season',
@@ -195,7 +196,7 @@ def add_teams(season_id):
 def remove_teams(season_id):
     try:
         data = request.json
-        season = app.season_app_service.removeTeams(season_id, data.get("team_ids"))
+        season = season_blueprint.season_app_service.removeTeams(season_id, data.get("team_ids"))
         if season:
             season = season.to_dict()
         return jsonify(season)
@@ -206,7 +207,7 @@ def remove_teams(season_id):
         logger.error(e)
         return jsonify({"error": str(e)}), 500
     
-@app.route('/seasons', methods=['GET'])
+@season_blueprint.route('/seasons', methods=['GET'])
 @swag_from({
     'summary': 'Get all seasons',
     'description': 'Return all seasons',
@@ -218,7 +219,7 @@ def remove_teams(season_id):
 })
 def get_all():
     try:
-        seasons = app.season_app_service.getAll()
+        seasons = season_blueprint.season_app_service.getAll()
         out = []
         if seasons:
             for season in seasons:
@@ -228,7 +229,7 @@ def get_all():
         logger.error(e)
         return jsonify({"error": str(e)}), 500
     
-@app.route('/seasons/search', methods=['POST'])
+@season_blueprint.route('/seasons/search', methods=['POST'])
 @swag_from({
     'summary': 'Search seasons by criteria',
     'description': 'Search seasons by criteria using a custom query format.',
@@ -263,7 +264,7 @@ def search_seasons():
         query = QueryUtil.parseQuery(query_param)
         if not query or not query.elementA:
             raise Exception(f"No valid query found: {query_param}")
-        seasons = app.season_app_service.search(query)
+        seasons = season_blueprint.season_app_service.search(query)
         out = []
         if seasons:
             for season in seasons:

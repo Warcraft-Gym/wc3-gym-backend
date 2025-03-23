@@ -110,8 +110,8 @@ class QueryUtil():
     @staticmethod
     def find_and_split(concatCondition, query):
         # Define the regex pattern to match " or " or " and "
-        pattern_and = r'\s+(and)\s+'
-        pattern_or = r'\s+(or)\s+'
+        pattern_and = r'\s+((?i:and))\s+'
+        pattern_or = r'\s+((?i:or))\s+'
         
         # Find the first occurrence of the pattern
         match = re.search(pattern_or, query)
@@ -130,7 +130,7 @@ class QueryUtil():
         left = query[:match.start()]
         right = query[match.end():]
         
-        operator = match.group(1)
+        operator = match.group(1).lower()
         if operator == "and":
             concatCondition.type = ConcatenationType.AND
         else:

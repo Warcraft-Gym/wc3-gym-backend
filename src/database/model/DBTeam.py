@@ -11,8 +11,8 @@ class DBTeam(DBModel):
     id = Column(Integer, Sequence(f'{__name__.lower()}_id_seq'), primary_key=True)
     name = Column(String(50))
     icon = Column(String(50))
-    user_seasons = relationship('DBUserTeamSeason', back_populates='team')
-    season_info = relationship('DBTeamSeason', back_populates='team')
+    user_seasons = relationship('DBUserTeamSeason', back_populates='team', cascade="all, delete")
+    season_info = relationship('DBTeamSeason', back_populates='team', cascade="all, delete")
 
     def to_dict(self):
         return {column.name: getattr(self, column.name) for column in self.__table__.columns}

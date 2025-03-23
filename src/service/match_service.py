@@ -8,14 +8,10 @@ class MatchAppService:
 
     def create_match(self, match: MatchDTO):
         match_data = self.match_service.add(match)
-        if(match_data):
-            match_data = match_data.to_dict()
         return match_data
 
     def update_match(self, match_id: int, score: str = None):
         match_data = self.match_service.update(match_id, score=score)
-        if(match_data):
-            match_data = match_data.to_dict()
         return match_data
 
     def delete_match(self, match_id: int):
@@ -25,4 +21,8 @@ class MatchAppService:
         match_data = self.match_service.get(match_id)
         if not match_data:
             raise NotFoundException(f"Match not found by Id: {match_id}")
-        return match_data.to_dict()
+        return match_data
+
+    def search(self, query):
+        match_data = self.match_service.search(query)
+        return match_data

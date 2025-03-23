@@ -1,27 +1,17 @@
 import logging
-from app import app
-from flask import request, jsonify, Response
+from flask import Blueprint, request, jsonify, Response
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from custom_exceptions import NotFoundException
 from src.dtos.user_dto import UserDTO
 from src.util.query_util import QueryUtil
-import enum
-import json
 from flasgger import swag_from
 
 logger = logging.getLogger(__name__)
 
-class EnumEncoder(json.JSONEncoder):
-    def default(self, obj):
-        if isinstance(obj, enum.Enum):
-            return obj.value
-        return json.JSONEncoder.default(self, obj)
-
-# Configure Flask to use the custom JSON encoder
-app.json_encoder = EnumEncoder
+user_blueprint = Blueprint('user_api', __name__)
 
 # User endpoints
-@app.route('/users', methods=['POST'])
+@user_blueprint.route('/users', methods=['POST'])
 @jwt_required()
 @swag_from({
     'summary': 'Add a new user',
@@ -44,16 +34,15 @@ app.json_encoder = EnumEncoder
 def add_user():
     try:
         data = request.json
-        user = app.user_app_service.create_user(UserDTO(data))
+        user = user_blueprint.user_app_service.create_user(UserDTO(data))
         if(user):
             user = user.to_dict()
-        json_data = json.dumps(user, cls=EnumEncoder)
-        return Response(json_data, status=201, content_type='application/json')
+        return jsonify(user), 201
     except Exception as e:
         logger.error(e)
         return jsonify({"error": str(e)}), 500
 
-@app.route('/users/<int:user_id>', methods=['PUT'])
+@user_blueprint.route('/users/<int:user_id>', methods=['PUT'])
 @jwt_required()
 @swag_from({
     'summary': 'Update an existing user',
@@ -78,11 +67,10 @@ def add_user():
 def update_user(user_id):
     try:
         data = request.json
-        user = app.user_app_service.update_user(user_id, UserDTO(data))
+        user = user_blueprint.user_app_service.update_user(user_id, UserDTO(data))
         if(user):
             user = user.to_dict()
-        json_data = json.dumps(user, cls=EnumEncoder)
-        return Response(json_data, status=201, content_type='application/json')
+        return jsonify(user)
     except NotFoundException as e:
         logger.error(e)
         return jsonify({"error": str(e)}), 404
@@ -90,7 +78,7 @@ def update_user(user_id):
         logger.error(e)
         return jsonify({"error": str(e)}), 500
 
-@app.route('/users/<int:user_id>', methods=['DELETE'])
+@user_blueprint.route('/users/<int:user_id>', methods=['DELETE'])
 @jwt_required()
 @swag_from({
     'summary': 'Delete an existing user',
@@ -105,13 +93,13 @@ def update_user(user_id):
 })
 def delete_user(user_id):
     try:
-        app.user_app_service.delete_user(user_id)
+        user_blueprint.user_app_service.delete_user(user_id)
         return f"User Deleted: {user_id}", 204
     except Exception as e:
         logger.error(e)
         return jsonify({"error": str(e)}), 500
 
-@app.route('/users/<int:user_id>', methods=['GET'])
+@user_blueprint.route('/users/<int:user_id>', methods=['GET'])
 @swag_from({
     'summary': 'Get a user by ID',
     'description': 'Retrieve a user by their ID.',
@@ -125,11 +113,10 @@ def delete_user(user_id):
 })
 def get_user(user_id):
     try:
-        user = app.user_app_service.get_user(user_id)
+        user = user_blueprint.user_app_service.get_user(user_id)
         if(user):
             user = user.to_dict()
-        json_data = json.dumps(user, cls=EnumEncoder)
-        return Response(json_data, status=200, content_type='application/json')
+        return jsonify(user)
     except NotFoundException as e:
         logger.error(e)
         return jsonify({"error": str(e)}), 404
@@ -137,7 +124,7 @@ def get_user(user_id):
         logger.error(e)
         return jsonify({"error": str(e)}), 500
 
-@app.route('/users', methods=['GET'])
+@user_blueprint.route('/users', methods=['GET'])
 @swag_from({
     'summary': 'Get all users',
     'description': 'Retrieve all users.',
@@ -150,13 +137,12 @@ def get_user(user_id):
 })
 def get_AllUser():
     try:
-        users = app.user_app_service.getAll()
+        users = user_blueprint.user_app_service.getAll()
         out = []
         if(users):
             for user in users:
                 out.append(user.to_dict())
-        json_data = json.dumps(out, cls=EnumEncoder)
-        return Response(json_data, status=200, content_type='application/json')
+        return jsonify(out)
     except NotFoundException as e:
         logger.error(e)
         return jsonify({"error": str(e)}), 404
@@ -164,7 +150,7 @@ def get_AllUser():
         logger.error(e)
         return jsonify({"error": str(e)}), 500
 
-@app.route('/users/search', methods=['POST'])
+@user_blueprint.route('/users/search', methods=['POST'])
 @swag_from({
     'summary': 'Search users by criteria',
     'description': 'Search users by criteria using a custom query format.',
@@ -199,13 +185,12 @@ def search_users():
         query = QueryUtil.parseQuery(query_param)
         if not query or not query.elementA:
             raise Exception(f"No valid query found: {query_param}")
-        users = app.user_app_service.search(query)
+        users = user_blueprint.user_app_service.search(query)
         out = []
         if(users):
             for user in users:
                 out.append(user.to_dict())
-        json_data = json.dumps(out, cls=EnumEncoder)
-        return Response(json_data, status=200, content_type='application/json')
+        return jsonify(out)
     except NotFoundException as e:
         logger.error(e)
         return jsonify({"error": str(e)}), 404
