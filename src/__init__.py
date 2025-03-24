@@ -13,6 +13,7 @@ from src.service.team_service import TeamAppService
 from src.service.match_service import MatchAppService
 from src.service.season_service import SeasonAppService
 from src.service.series_service import SeriesAppService
+from src.service.score_service import ScoreAPPService
 from flasgger import Swagger
 import enum
 from flask.json.provider import DefaultJSONProvider
@@ -111,6 +112,7 @@ team_app_service = TeamAppService(team_service=team_service)
 match_app_service = MatchAppService(match_service=match_service)
 season_app_service = SeasonAppService(season_service=season_service)
 series_app_service = SeriesAppService(series_service=series_service)
+score_app_service = ScoreAPPService(match_service=match_service, serires_service=series_service)
 
 import_blueprint.user_app_service = user_app_service
 import_blueprint.season_app_service = season_app_service
