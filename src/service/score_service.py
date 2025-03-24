@@ -24,5 +24,5 @@ class ScoreAppService:
         match.team1_score = team1_score
         match.team2_score = team2_score
 
-        self.match_service.update(matchId, match)        
+        return self.match_service.update(matchId, match)        
         
