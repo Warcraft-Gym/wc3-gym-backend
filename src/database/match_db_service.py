@@ -25,10 +25,10 @@ class MatchDBService(AbstractDatabaseService):
         finally:
             session.close()
 
-    def update(self, match_id, score=None):
+    def update(self, match_id, match: MatchDTO):
         try:
             session = self.Session()
-            match = DBMatch.update(session, match_id, score=score)
+            match = DBMatch.update(session, match_id, **match.to_db_dict())
             # Example usage
             if not match:
                 logger.error("Match could not be updated!")

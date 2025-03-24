@@ -67,7 +67,7 @@ def add_match():
 def update_match(match_id):
     try:
         data = request.json
-        match = match_blueprint.match_app_service.update_match(match_id, score=data.get('score'))
+        match = match_blueprint.match_app_service.update_match(match_id, MatchDTO(data))
         if match:
             match = match.to_dict()
         return jsonify(match)

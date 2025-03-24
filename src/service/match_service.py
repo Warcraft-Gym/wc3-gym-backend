@@ -10,8 +10,8 @@ class MatchAppService:
         match_data = self.match_service.add(match)
         return match_data
 
-    def update_match(self, match_id: int, score: str = None):
-        match_data = self.match_service.update(match_id, score=score)
+    def update_match(self, match_id: int, match: MatchDTO):
+        match_data = self.match_service.update(match_id, match)
         return match_data
 
     def delete_match(self, match_id: int):
