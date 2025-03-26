@@ -40,3 +40,11 @@ class SeasonAppService:
     def search(self, query):
         season_data = self.season_service.search(query)
         return season_data
+    
+    def addMaps(self, season_id: int, map_ids):
+        season_data = self.season_service.addMaps(season_id, map_ids)
+        return season_data
+      
+    def removeMaps(self, season_id: int, map_ids):
+        season_data = self.season_service.removeMaps(season_id, map_ids)
+        return season_data
