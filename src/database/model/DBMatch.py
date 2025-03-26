@@ -13,10 +13,12 @@ class DBMatch(DBModel):
     playday = Column(Integer)
     team1_score = Column(Integer)
     team2_score = Column(Integer)
+    fixed_map_id = Column(Integer, ForeignKey('maps.id'))
 
     team1 = relationship("DBTeam", foreign_keys=[team1_id])
     team2 = relationship("DBTeam", foreign_keys=[team2_id])
     season = relationship("DBSeason", foreign_keys=[season_id])
+    fixed_map = relationship("DBMap", foreign_keys=[fixed_map_id])
 
     def to_dict(self):
         return {column.name: getattr(self, column.name) for column in self.__table__.columns}
