@@ -276,3 +276,86 @@ def search_seasons():
     except Exception as e:
         logger.error(e)
         return jsonify({"error": str(e)}), 500
+    
+
+@season_blueprint.route('/seasons/addMaps/<int:season_id>', methods=['POST'])
+@jwt_required()
+@swag_from({
+    'summary': 'Add maps to season',
+    'description': 'Add maps to season by providing a list of map ids.',
+    'tags': ['seasons'],
+    'security': [{'BearerAuth': []}],
+    'parameters': [
+        {'name': 'season_id', 'in': 'path', 'type': 'integer', 'required': True},
+        {
+            'name': 'body',
+            'in': 'body',
+            'required': True,
+            'schema': {
+                'type': 'object',
+                'properties': {
+                    'map_ids': {'type': 'array', 'items': {'type': 'integer'}}
+                },
+                'required': ['map_ids']
+            }
+        }],
+    'responses': {
+        200: {'description': 'Added maps to season successfully'},
+        404: {'description': 'Season or Maps not found'},
+        500: {'description': 'Internal server error'}
+    }
+})
+def add_maps(season_id):
+    try:
+        data = request.json
+        season = season_blueprint.season_app_service.addMaps(season_id, data.get("map_ids"))
+        if season:
+            season = season.to_dict()
+        return jsonify(season)
+    except NotFoundException as e:
+        logger.error(e)
+        return jsonify({"error": str(e)}), 404
+    except Exception as e:
+        logger.error(e)
+        return jsonify({"error": str(e)}), 500
+
+@season_blueprint.route('/seasons/removeMaps/<int:season_id>', methods=['POST'])
+@jwt_required()
+@swag_from({
+    'summary': 'Remove maps from season',
+    'description': 'Remove maps from season by providing a list of map ids.',
+    'tags': ['seasons'],
+    'security': [{'BearerAuth': []}],
+    'parameters': [
+        {'name': 'season_id', 'in': 'path', 'type': 'integer', 'required': True},
+        {
+            'name': 'body',
+            'in': 'body',
+            'required': True,
+            'schema': {
+                'type': 'object',
+                'properties': {
+                    'map_ids': {'type': 'array', 'items': {'type': 'integer'}}
+                },
+                'required': ['map_ids']
+            }
+        }],
+    'responses': {
+        200: {'description': 'Removed maps from season successfully'},
+        404: {'description': 'Season or Maps not found'},
+        500: {'description': 'Internal server error'}
+    }
+})
+def remove_maps(season_id):
+    try:
+        data = request.json
+        season = season_blueprint.season_app_service.removeMaps(season_id, data.get("map_ids"))
+        if season:
+            season = season.to_dict()
+        return jsonify(season)
+    except NotFoundException as e:
+        logger.error(e)
+        return jsonify({"error": str(e)}), 404
+    except Exception as e:
+        logger.error(e)
+        return jsonify({"error": str(e)}), 500

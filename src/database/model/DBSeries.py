@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Sequence, ForeignKey, DateTime
+from sqlalchemy import Column, Integer, String, Sequence, ForeignKey, DateTime, Boolean
 from sqlalchemy.orm import relationship
 from src.database.model.DBModel import DBModel
 
@@ -12,6 +12,7 @@ class DBSeries(DBModel):
     player2_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'))
     player1_score = Column(Integer)
     player2_score = Column(Integer)
+    host_player_id = Column(Integer)
 
     match = relationship("DBMatch", foreign_keys=[match_id])
     player1 = relationship("DBUser", foreign_keys=[player1_id])

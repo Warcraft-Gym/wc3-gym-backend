@@ -3,7 +3,9 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.orm.session import Session
 from src.database.model.DBModel import DBModel
 from src.database.model.DBRelationships import DBTeamSeason
+from src.database.model.DBRelationships import DBMapSeason
 from src.database.model.DBTeam import DBTeam
+from src.database.model.DBMap import DBMap
 
 
 class DBSeason(DBModel):
@@ -11,8 +13,10 @@ class DBSeason(DBModel):
     id = Column(Integer, Sequence(f'{__name__.lower()}_id_seq'), primary_key=True)
     name = Column(String(50))
     number_weeks =  Column(Integer)
+    pick_ban = Column(String(100))
     user_teams = relationship('DBUserTeamSeason', back_populates='season', cascade="all, delete")
     teams = relationship('DBTeamSeason', back_populates='season', cascade="all, delete")
+    maps = relationship('DBMapSeason', back_populates='season', cascade="all, delete")
 
     def to_dict(self):
         return {column.name: getattr(self, column.name) for column in self.__table__.columns}
@@ -47,5 +51,39 @@ class DBSeason(DBModel):
             if not team_season:
                 raise Exception(f"Team not part of the season, team id: {team_id}, season id {obj_id}")
             session.delete(team_season)
+        session.commit()
+        return season
+    
+
+    @classmethod
+    def addMaps(cls, session: Session, obj_id, map_ids):
+        season = session.query(cls).filter_by(id=obj_id).first()
+        if not season:
+            raise Exception(f"Season not found by id: {obj_id}")
+        for map_id in map_ids:
+            map = session.query(DBMap).filter_by(id=map_id).first()
+            if not map:
+                raise Exception(f"Map not found by id: {map_id}")
+            already_exists = session.query(DBMapSeason).filter_by(season_id=obj_id,map_id=map.id).first() is not None
+            if not already_exists:
+                session.add(DBMapSeason(season=season,map=map)) 
+
+        session.commit()
+        return season
+    
+    @classmethod
+    def removeMaps(cls, session: Session, obj_id, map_ids):
+        season = session.query(cls).filter_by(id=obj_id).first()
+        if not season:
+            raise Exception(f"Season not found by id: {obj_id}")
+        for map_id in map_ids:
+            map = session.query(DBMap).filter_by(id=map_id).first()
+            if not map:
+                raise Exception(f"Map not found by id: {map_id}")
+            map_season = session.query(DBMapSeason).filter_by(season_id=obj_id,map_id=map.id).first()
+            if not map_season:
+                raise Exception(f"Map not part of the season, map id: {map_id}, season id {obj_id}")
+            session.delete(map_season)
+
         session.commit()
         return season

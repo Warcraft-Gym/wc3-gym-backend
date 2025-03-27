@@ -19,6 +19,7 @@ class SeriesDTO:
         self.player2 = data.get('player2')
         self.player1_score = data.get('player1_score')
         self.player2_score = data.get('player2_score')
+        self.host_player_id = data.get('host_player_id')
 
     def to_dict(self):
         return {
@@ -32,7 +33,8 @@ class SeriesDTO:
             'player2_id': self.player2_id,
             'player2': None if not self.player2 else self.player2.to_dict(),
             'player1_score': self.player1_score,
-            'player2_score': self.player2_score
+            'player2_score': self.player2_score,
+            'host_player_id': self.host_player_id
         }
     
     def to_db_dict(self):
@@ -43,7 +45,8 @@ class SeriesDTO:
             'player1_id': self.player1_id,
             'player2_id': self.player2_id,
             'player1_score': self.player1_score,
-            'player2_score': self.player2_score
+            'player2_score': self.player2_score,
+            'host_player_id': self.host_player_id
         }
     
     @classmethod
@@ -60,7 +63,8 @@ class SeriesDTO:
                 'player2_id': series.player2_id,
                 'player2': UserDTO.from_dbuser(series.player2),
                 'player1_score': series.player1_score,
-                'player2_score': series.player2_score
+                'player2_score': series.player2_score,
+                'host_player_id': series.host_player_id
             }
         )
     
@@ -75,7 +79,8 @@ class SeriesDTO:
                 'player1_id': {'type': 'integer'},
                 'player2_id': {'type': 'integer'},
                 'player1_score': {'type': 'integer'},
-                'player2_score': {'type': 'integer'}
+                'player2_score': {'type': 'integer'},
+                'host_player_id': {'type': 'integer'}
             },
             'required': ['match_id', 'player1_id', 'player2_id']
         }

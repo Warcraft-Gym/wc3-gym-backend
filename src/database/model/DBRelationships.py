@@ -22,3 +22,10 @@ class DBTeamSeason(DBModel):
     final_score = Column(Integer)
     points_available = Column(Integer)
     points_against = Column(Integer)
+
+class DBMapSeason(DBModel):
+    __tablename__ = 'map_season'
+    map_id = Column(Integer, ForeignKey('maps.id'), primary_key=True)
+    season_id = Column(Integer, ForeignKey('seasons.id'), primary_key=True)
+    season = relationship('DBSeason', back_populates='maps')
+    map = relationship('DBMap', back_populates='seasons')
