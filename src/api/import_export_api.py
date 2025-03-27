@@ -222,8 +222,18 @@ def import_season():
                         series_id = None
                         if ImportUtil.isNa(row[0]):
                             series_id = row[0]
-                        player1_id = player_name_id[row[5].rstrip("*")]
-                        player2_id = player_name_id[row[8].rstrip("*")]
+
+                        player1_name=row[5]
+                        player2_name=row[8]
+                        
+
+                        player1_id = player_name_id[player1_name.rstrip("*")]
+                        player2_id = player_name_id[player2_name.rstrip("*")]
+                        host_player_id = None
+                        if player1_name.endswith("*"):
+                            host_player_id = player1_id
+                        elif player2_name.endswith("*"):
+                            host_player_id = player2_id
                         date_time = None
                         if ImportUtil.isNa(row[4]) and ImportUtil.isNa(row[3]):
                             date_time = datetime.combine(row[4], row[3])
@@ -234,7 +244,8 @@ def import_season():
                             'player1_id': player1_id,
                             'player1_score': ImportUtil.isNa(row[6]),
                             'player2_score': ImportUtil.isNa(row[7]),
-                            'player2_id': player2_id
+                            'player2_id': player2_id,
+                            'host_player_id': host_player_id
                         }
 
                         series=None
