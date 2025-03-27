@@ -124,6 +124,7 @@ import_blueprint.season_app_service = season_app_service
 import_blueprint.team_app_service = team_app_service
 import_blueprint.match_app_service = match_app_service
 import_blueprint.series_app_service = series_app_service
+import_blueprint.map_app_service = map_app_service
 
 user_blueprint.user_app_service = user_app_service
 season_blueprint.season_app_service = season_app_service

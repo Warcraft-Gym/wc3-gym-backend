@@ -13,6 +13,7 @@ class MatchDTO:
         self.season_id = data.get('season_id')
         self.season = data.get('season')
         self.playday = data.get('playday')
+        self.date_frame = data.get('date_frame')
         self.fixed_map_id = data.get('fixed_map_id')
         self.fixed_map = data.get('fixed_map')
         self.team1_score = data.get('team1_score')
@@ -28,6 +29,7 @@ class MatchDTO:
             'season_id': self.season_id,
             'season':  None if not self.season else self.season.to_dict(),
             'playday': self.playday,
+            'date_frame': self.date_frame,
             'fixed_map_id': self.fixed_map_id,
             'fixed_map': None if not self.fixed_map else self.fixed_map.to_dict(),
             'team1_score': self.team1_score,
@@ -40,6 +42,7 @@ class MatchDTO:
             'team2_id': self.team2_id,
             'season_id': self.season_id,
             'playday': self.playday,
+            'date_frame': self.date_frame,
             'fixed_map_id': self.fixed_map_id,
             'team1_score': self.team1_score,
             'team2_score': self.team2_score
@@ -57,6 +60,7 @@ class MatchDTO:
                 'season_id': match.season_id,
                 'season': SeasonDTO.from_dbseason(match.season) if match.season else None,
                 'playday': match.playday,
+                'date_frame': match.date_frame,
                 'fixed_map_id': match.fixed_map_id,
                 'fixed_map': MapDTO.from_dbmap(match.fixed_map) if match.fixed_map else None,
                 'team1_score': match.team1_score,
@@ -73,6 +77,7 @@ class MatchDTO:
                 'team2_id': {'type': 'integer'},
                 'season_id': {'type': 'integer'},
                 'playday': {'type': 'integer'},
+                'date_frame': {'type': 'string'},
                 'fixed_map_id': {'type': 'integer'},
                 'team1_score' : {'type': 'integer'},
                 'team2_score' : {'type': 'integer'}

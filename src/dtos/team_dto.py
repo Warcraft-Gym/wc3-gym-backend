@@ -6,6 +6,8 @@ class TeamDTO:
     def __init__(self, data : dict):
         self.id = data.get('id')
         self.name = data.get('name')
+        self.discord_role = data.get('discord_role')
+        self.icon = data.get('icon')
         self.player_by_season = data.get('player_by_season')
         self.seasons_info = data.get('seasons_info')
 
@@ -19,6 +21,8 @@ class TeamDTO:
         return {
             'id': self.id,
             'name': self.name,
+            'icon': self.icon,
+            'discord_role': self.discord_role,
             'player_by_season': l,
             'seasons_info': seasons_info
         }
@@ -26,12 +30,16 @@ class TeamDTO:
     def to_dict_reduced(self):
         return {
             'id': self.id,
-            'name': self.name
+            'name': self.name,
+            'icon': self.icon,
+            'discord_role': self.discord_role
         }
     
     def to_db_dict(self):
         return {
-            'name': self.name
+            'name': self.name,
+            'icon': self.icon,
+            'discord_role': self.discord_role
         }
 
     @classmethod
@@ -48,6 +56,8 @@ class TeamDTO:
                 {
                 'id' : team.id,
                 'name' : team.name,
+                'icon' : team.icon,
+                'discord_role': team.discord_role,
                 'player_by_season' : u,
                 'seasons_info' : seasons_info
             }
@@ -58,7 +68,9 @@ class TeamDTO:
         return {
             'type': 'object',
             'properties': {
-                'name': {'type': 'string'}
+                'name': {'type': 'string'},
+                'icon': {'type': 'string', 'format': 'binary'},
+                'discord_role': {'type': 'string'}
             },
             'required': ['name']
         }

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Sequence, ForeignKey
+from sqlalchemy import Column, Integer, String, Sequence, ForeignKey, LargeBinary
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm.session import Session
 from src.database.model.DBModel import DBModel
@@ -10,7 +10,8 @@ class DBTeam(DBModel):
     __tablename__ = 'teams'
     id = Column(Integer, Sequence(f'{__name__.lower()}_id_seq'), primary_key=True)
     name = Column(String(50))
-    icon = Column(String(50))
+    icon = Column(LargeBinary)
+    discord_role = Column(String(50))
     user_seasons = relationship('DBUserTeamSeason', back_populates='team', cascade="all, delete")
     season_info = relationship('DBTeamSeason', back_populates='team', cascade="all, delete")
 

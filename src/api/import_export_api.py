@@ -9,6 +9,7 @@ from src.dtos.user_dto import UserDTO
 from src.dtos.team_dto import TeamDTO
 from src.dtos.series_dto import SeriesDTO
 from src.dtos.match_dto import MatchDTO
+from src.dtos.map_dto import MapDTO
 import pandas as pd
 import io
 from io import BytesIO
@@ -159,9 +160,28 @@ def import_season():
             for i in range(1,number_of_week_sheets+1):
                 week = pd.read_excel(file_stream, sheet_name=f"Week {i}", header=None)
                 matchups_rows = []
+                date_frame = None
+                fixed_map_short = None
                 for index, row in week.iterrows():
+                    if index==1:
+                        date_frame = row[1]
+                        fixed_map_short = row[3].split(":")[1].strip()
                     if "VS" in row.values:
                         matchups_rows.append(index)
+                fixed_map = None
+                if fixed_map_short:
+                    q_string = f"shortname == {fixed_map_short}"
+                    query = QueryUtil.parseQuery(q_string)
+                    maps = import_blueprint.map_app_service.search(query)
+                    if not maps:
+                        map_data = {
+                            "name": fixed_map_short,
+                            "shortname": fixed_map_short
+                        }
+                        fixed_map = import_blueprint.map_app_service.create_map(MapDTO(map_data))
+                    elif maps and len(maps) == 1:
+                        fixed_map = maps[0]
+
                 matchups_rows.append(len(week))
                 for start, end in zip(matchups_rows, matchups_rows[1:]): 
                     team1 = None
@@ -185,7 +205,9 @@ def import_season():
                                     'team1_id': team1_id,
                                     'team2_id': team2_id,
                                     'season_id': season_id,
-                                    'playday': i
+                                    'playday': i,
+                                    'fixed_map_id': fixed_map.id,
+                                    'date_frame': date_frame
                                 }
                                 match = import_blueprint.match_app_service.create_match(MatchDTO(match_data))
                             else:

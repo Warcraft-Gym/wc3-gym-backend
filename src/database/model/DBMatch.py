@@ -14,6 +14,7 @@ class DBMatch(DBModel):
     team1_score = Column(Integer)
     team2_score = Column(Integer)
     fixed_map_id = Column(Integer, ForeignKey('maps.id'))
+    date_frame = Column(String(50))
 
     team1 = relationship("DBTeam", foreign_keys=[team1_id])
     team2 = relationship("DBTeam", foreign_keys=[team2_id])
