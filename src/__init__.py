@@ -2,6 +2,7 @@ import logging
 import os
 from dotenv import load_dotenv
 from flask import Flask
+from flask_cors import CORS
 from flask_jwt_extended import JWTManager
 from src.database.user_db_service import UserDBService
 from src.database.team_db_service import TeamDBService
@@ -34,6 +35,7 @@ from src.api.map_api import map_blueprint
 load_dotenv()
 
 app = Flask(__name__)
+CORS(app)
 
 class CustomJSONProvider(DefaultJSONProvider):
     def __init__(self, app):
