@@ -5,6 +5,7 @@ openpyxl
 python-dotenv
 apscheduler
 flask
+flask-cors
 flask-jwt-extended
 pyodbc
 pymysql
