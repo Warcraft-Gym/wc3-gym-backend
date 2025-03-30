@@ -17,7 +17,7 @@ class TeamSeasonDBService(AbstractDatabaseService):
                 season_info = DBTeamSeason.updateSeasonInfo(session, season_info.season_id, team_id, **season_info.to_db_dict())
                 if not season_info:
                     raise DBException("Season could not be updated!")
-                return season_info.to_db_dict()
+                return SeasonInfoDTO.from_dbseasoninfo(season_info)
 
             except SQLAlchemyError as e:
                 # Log the error and handle it

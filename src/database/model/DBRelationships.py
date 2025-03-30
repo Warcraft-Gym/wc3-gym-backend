@@ -27,8 +27,8 @@ class DBTeamSeason(DBModel):
     maps_lost = Column(Integer)
 
     @classmethod
-    def updateSeasonInfo(cls, session: Session, season_id, team_id, **kwargs):
-        obj = session.query(cls).filter_by(team_id=team_id, season_id=season_id).first()
+    def updateSeasonInfo(cls, session: Session, obj_id, team_id, **kwargs):
+        obj = session.query(cls).filter_by(team_id=team_id, season_id=obj_id).first()
         if obj:
             for key, value in kwargs.items():
                 setattr(obj, key, value)
