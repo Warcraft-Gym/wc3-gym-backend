@@ -1,11 +1,30 @@
+import os
+
 from src.database.match_db_service import MatchDBService
 from src.database.series_db_service import SeriesDBService
+from src.database.team_db_service import TeamDBService
+from src.database.team_season_db_service import TeamSeasonDBService
 from src.util.query_util import QueryUtil
+from src.dtos.series_dto import SeriesDTO
+from src.dtos.team_dto import TeamDTO
 
 class ScoreAppService:
-    def __init__(self, match_service: MatchDBService, serires_service:  SeriesDBService):
+    STANDARD_MAX_SCORE = 3
+    HELPSTONE_MAX_SCORE = 4
+    def __init__(self, match_service: MatchDBService, serires_service:  SeriesDBService, team_service: TeamDBService, team_season_service: TeamSeasonDBService):
         self.match_service = match_service
         self.series_service = serires_service
+        self.team_service = team_service
+        self.team_season_service = team_season_service
+
+    def calculateSeriesScore(self, series: SeriesDTO):
+        try:
+            series.player1_points = self.getScoreByMapScore(series.player1_score, series.player2_score)
+            series.player2_points = self.getScoreByMapScore(series.player2_score, series.player1_score)
+        except Exception as e:
+            raise e
+
+        return series
 
     def updateMatchScore(self, matchId: int):
         match = self.match_service.get(matchId)
@@ -18,11 +37,74 @@ class ScoreAppService:
         team2_score = 0
 
         for single_series in series:
-            team1_score += single_series.to_db_dict()['player1_score']
-            team2_score += single_series.to_db_dict()['player2_score']
+            team1_score += single_series.to_db_dict()['player1_points']
+            team2_score += single_series.to_db_dict()['player2_points']
 
         match.team1_score = team1_score
         match.team2_score = team2_score
 
-        return self.match_service.update(matchId, match)        
+        return self.match_service.update(matchId, match)
+
+    def updateTeamScore(self, team: TeamDTO, seasonId: int):
+        team_points = 0
+        team_against = 0
+
+        query = QueryUtil.parseQuery("season_id == " + str(seasonId) + " and team1_id == " + str(team.id))
+        matches = self.match_service.search(query)
+
+        for match in matches:
+            team_points += match.team1_score
+            team_against += match.team2_score
+        
+        query = QueryUtil.parseQuery("season_id == " + str(seasonId) + " and team2_id == " + str(team.id))
+        matches = self.match_service.search(query)
+
+        for match in matches:
+            team_points += match.team2_score
+            team_against += match.team1_score
+
+        season_key = 0
+
+        for i in range(len(team.seasons_info)):
+            if team.seasons_info[i].season_id == seasonId:
+               season_key = i
+
+
+        team.seasons_info[season_key].final_score = team_points
+        team.seasons_info[season_key].points_against = team_against
+        team.seasons_info[season_key].points_available = 0
+
+        return self.team_season_service.update(team.id, team.seasons_info[season_key])
+    
+    def getScoreByMapScore(self, playerScore: int, opponentScore: int):
+        if playerScore == None or playerScore < 0 or playerScore > 2:
+            raise Exception("Score is not valid please check it.")
+        if opponentScore == None or opponentScore < 0 or opponentScore > 2:
+            raise Exception("Score is not valid please check it.")
+
+        if playerScore == 0 or playerScore == 1:
+            return playerScore
+        
+        if os.getenv('SCORE_SYSTEM') == 'helpstone':
+            return self.getHelpstoneScoreByMapScore(playerScore, opponentScore)
+        
+        return self.getStandardScoreByMapScore(playerScore, opponentScore)
+
+    def getHelpstoneScoreByMapScore(self, playerScore: int, opponentScore: int):
+        if opponentScore == 0:
+            return self.HELPSTONE_MAX_SCORE
+        elif opponentScore == 1:
+            return (self.HELPSTONE_MAX_SCORE - 1)
+        
+    
+    def getStandardScoreByMapScore(self, playerScore: int, opponentScore: int):
+        if opponentScore == 0:
+            return self.STANDARD_MAX_SCORE
+        elif opponentScore == 1:
+            return (self.STANDARD_MAX_SCORE - 1)
+    
+    def getMaxPointsPerSeries(self):
+        if os.getenv('SCORE_SYSTEM') == 'helpstone':
+            return self.HELPSTONE_MAX_SCORE
+        return self.STANDARD_MAX_SCORE
         

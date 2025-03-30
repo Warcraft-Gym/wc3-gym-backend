@@ -18,6 +18,14 @@ class SeasonInfoDTO:
             'points_against' : self.points_against,
             'season' : self.season.to_dict() if self.season else None
         }
+    
+    def to_db_dict(self):
+        return {
+            'season_id' : self.season_id,
+            'final_score': self.final_score,
+            'points_available': self.points_available,
+            'points_against' : self.points_against,
+        }
 
     @classmethod
     def from_dbseasoninfo(cls, season_info: DBTeamSeason):

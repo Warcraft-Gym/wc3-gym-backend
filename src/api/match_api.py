@@ -161,6 +161,7 @@ def search_match():
         if not query or not query.elementA:
             raise Exception(f"No valid query found: {query_param}")
         matches = match_blueprint.match_app_service.search(query)
+        
         out = []
         if matches:
             for match in matches:

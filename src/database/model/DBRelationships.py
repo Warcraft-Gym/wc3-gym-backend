@@ -1,5 +1,6 @@
 from sqlalchemy import Column, Integer, String, Sequence, Enum, ForeignKey
 from sqlalchemy.orm import relationship
+from sqlalchemy.orm.session import Session
 from src.database.model.DBModel import DBModel
 
 class DBUserTeamSeason(DBModel):
@@ -22,6 +23,17 @@ class DBTeamSeason(DBModel):
     final_score = Column(Integer)
     points_available = Column(Integer)
     points_against = Column(Integer)
+    maps_won = Column(Integer)
+    maps_lost = Column(Integer)
+
+    @classmethod
+    def updateSeasonInfo(cls, session: Session, season_id, team_id, **kwargs):
+        obj = session.query(cls).filter_by(team_id=team_id, season_id=season_id).first()
+        if obj:
+            for key, value in kwargs.items():
+                setattr(obj, key, value)
+            session.commit()
+        return obj
 
 class DBMapSeason(DBModel):
     __tablename__ = 'map_season'

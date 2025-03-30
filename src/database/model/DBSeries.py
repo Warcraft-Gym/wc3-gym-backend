@@ -12,6 +12,8 @@ class DBSeries(DBModel):
     player2_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'))
     player1_score = Column(Integer)
     player2_score = Column(Integer)
+    player1_points = Column(Integer)
+    player2_points = Column(Integer)
     host_player_id = Column(Integer)
 
     match = relationship("DBMatch", foreign_keys=[match_id])

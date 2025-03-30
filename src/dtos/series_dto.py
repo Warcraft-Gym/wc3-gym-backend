@@ -19,6 +19,8 @@ class SeriesDTO:
         self.player2 = data.get('player2')
         self.player1_score = data.get('player1_score')
         self.player2_score = data.get('player2_score')
+        self.player1_points = data.get('player2_points')
+        self.player2_points = data.get('plaer2_points')
         self.host_player_id = data.get('host_player_id')
 
     def to_dict(self):
@@ -34,6 +36,8 @@ class SeriesDTO:
             'player2': None if not self.player2 else self.player2.to_dict(),
             'player1_score': self.player1_score,
             'player2_score': self.player2_score,
+            'player1_points': self.player1_points,
+            'player2_points': self.player2_points,
             'host_player_id': self.host_player_id
         }
     
@@ -46,6 +50,8 @@ class SeriesDTO:
             'player2_id': self.player2_id,
             'player1_score': self.player1_score,
             'player2_score': self.player2_score,
+            'player1_points': self.player1_points,
+            'player2_points': self.player2_points,
             'host_player_id': self.host_player_id
         }
     

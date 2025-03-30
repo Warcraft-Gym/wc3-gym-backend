@@ -16,8 +16,6 @@ class SeriesAppService:
     def update_series(self, series_id: int, series: SeriesDTO):
         series.id = series_id
         series_data = self.series_service.update(series)
-        match_data = self.score_app_service.updateMatchScore(series_data.match_id)
-        series_data.match = match_data
         return series_data
     
     def delete_series(self, series_id: int):
