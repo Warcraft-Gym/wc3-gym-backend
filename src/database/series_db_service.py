@@ -70,7 +70,7 @@ class SeriesDBService(AbstractDatabaseService):
             try:
                 result = []
                 filter = QueryUtil.convertQueryToDBFilter(DBSeries, query)
-                series_list = DBSeries.seach(session, filter)
+                series_list = DBSeries.search(session, filter)
                 if not series_list:
                     logger.debug(f"No series found by searchcriteria: {query}")
                     return result

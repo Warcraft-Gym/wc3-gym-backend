@@ -61,7 +61,7 @@ class MapDBService(AbstractDatabaseService):
             try:
                 result = []
                 filter = QueryUtil.convertQueryToDBFilter(DBMap, query)
-                maps = DBMap.seach(session, filter)
+                maps = DBMap.search(session, filter)
                 if not maps:
                     logger.debug(f"No maps found by searchcriteria: {query}")
                     return result

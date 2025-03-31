@@ -3,6 +3,7 @@ import traceback
 from src.database.user_db_service import UserDBService
 from src.dtos.user_dto import UserDTO
 from custom_exceptions import NotFoundException
+from src.service.w3champions.w3c_service import W3CService
 
 
 class UserAppService:
@@ -36,3 +37,32 @@ class UserAppService:
     def search(self, query):
         users_data = self.user_service.search(query)
         return users_data
+
+    def syncW3CStats(self):
+        users = self.getAll()
+        for u in users:
+            self.updateW3CStats(u)
+
+    def updateW3CStats(self, user: UserDTO):
+        w3c_service = W3CService()
+        stats = w3c_service.getPlayerStats(user.battleTag)
+        if stats:
+            for s in stats:
+                exists = False
+                for u_s in user.w3c_stats:
+                    if u_s.race == s.race:
+                        exists = True
+                        s.id = u_s.id
+                        self.user_service.updateW3CStats(s)
+                if not exists:
+                    self.user_service.createW3CStats(user.id, s)
+
+    def updateW3CStats_ById(self, user_id):
+        user = self.user_service.get(user_id==user_id)
+        if not user:
+            raise Exception(f"User could not be found by id: {user_id}")
+        self.updateW3CStats(user)
+        return self.get_user(user_id)
+        
+            
+        

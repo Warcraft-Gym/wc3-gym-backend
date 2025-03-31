@@ -89,7 +89,7 @@ class SeasonDBService(AbstractDatabaseService):
             try:
                 result = []
                 filter = QueryUtil.convertQueryToDBFilter(DBSeason, query)
-                seasons = DBSeason.seach(session, filter)
+                seasons = DBSeason.search(session, filter)
                 if not seasons:
                     logger.debug(f"No seasons found by searchcriteria: {query}")
                     return result

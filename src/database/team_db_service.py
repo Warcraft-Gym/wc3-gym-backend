@@ -79,7 +79,7 @@ class TeamDBService(AbstractDatabaseService):
             try:
                 result = []
                 filter = QueryUtil.convertQueryToDBFilter(DBTeam, query)
-                teams = DBTeam.seach(session, filter)
+                teams = DBTeam.search(session, filter)
                 if not teams:
                     logger.debug(f"No teams found by searchcriteria: {query}")
                     return result
