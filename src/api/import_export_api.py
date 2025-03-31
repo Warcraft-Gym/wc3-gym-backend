@@ -62,6 +62,7 @@ import_blueprint = Blueprint('import_api', __name__)
 })
 def import_season():
     try:
+        print(request.args)
         season_id = int(request.args.get('season_id')) if request.args.get('season_id') else None
         season_name = request.args.get('season_name')
         if 'file' not in request.files:

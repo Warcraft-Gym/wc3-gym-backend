@@ -10,6 +10,7 @@ from src.database.match_db_service import MatchDBService
 from src.database.season_db_service import SeasonDBService
 from src.database.series_db_service import SeriesDBService
 from src.database.map_db_service import MapDBService
+from src.database.team_season_db_service import TeamSeasonDBService
 from src.service.user_service import UserAppService
 from src.service.team_service import TeamAppService
 from src.service.match_service import MatchAppService
@@ -30,6 +31,7 @@ from src.api.season_api import season_blueprint
 from src.api.series_api import series_blueprint
 from src.api.import_export_api import import_blueprint
 from src.api.map_api import map_blueprint
+from src.api.score_api import score_blueprint
 
 # Load environment variables from .env file
 load_dotenv()
@@ -111,15 +113,17 @@ match_service = MatchDBService(db_url=db_url)
 season_service = SeasonDBService(db_url=db_url)
 series_service = SeriesDBService(db_url=db_url)
 map_service = MapDBService(db_url=db_url)
+team_season_service = TeamSeasonDBService(db_url=db_url)
 
 # Initialize application services
 user_app_service = UserAppService(user_service=user_service)
 team_app_service = TeamAppService(team_service=team_service)
 match_app_service = MatchAppService(match_service=match_service)
 season_app_service = SeasonAppService(season_service=season_service)
-score_app_service = ScoreAppService(match_service=match_service, serires_service=series_service)
+score_app_service = ScoreAppService(match_service=match_service, serires_service=series_service, team_service=team_service, team_season_service=team_season_service)
 series_app_service = SeriesAppService(series_service=series_service, score_app_service=score_app_service)
 map_app_service = MapAppService(map_service=map_service)
+
 
 import_blueprint.user_app_service = user_app_service
 import_blueprint.season_app_service = season_app_service
@@ -127,6 +131,7 @@ import_blueprint.team_app_service = team_app_service
 import_blueprint.match_app_service = match_app_service
 import_blueprint.series_app_service = series_app_service
 import_blueprint.map_app_service = map_app_service
+import_blueprint.score_app_service = score_app_service
 
 user_blueprint.user_app_service = user_app_service
 season_blueprint.season_app_service = season_app_service
@@ -134,6 +139,12 @@ team_blueprint.team_app_service = team_app_service
 match_blueprint.match_app_service = match_app_service
 series_blueprint.series_app_service = series_app_service
 map_blueprint.map_app_service = map_app_service
+
+score_blueprint.season_app_service = season_app_service
+score_blueprint.match_app_service = match_app_service
+score_blueprint.series_app_service = series_app_service
+score_blueprint.score_app_service = score_app_service
+score_blueprint.team_app_service = team_app_service
 
 app.register_blueprint(login_blueprint)
 app.register_blueprint(user_blueprint)
@@ -143,3 +154,4 @@ app.register_blueprint(season_blueprint)
 app.register_blueprint(import_blueprint)
 app.register_blueprint(series_blueprint)
 app.register_blueprint(map_blueprint)
+app.register_blueprint(score_blueprint)
