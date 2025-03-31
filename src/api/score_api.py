@@ -52,7 +52,7 @@ def calc_score(season_id: int):
                 score_blueprint.series_app_service.update_series(calculatedSeries.id, calculatedSeries)
                 team1_points += calculatedSeries.player1_points
                 team2_points += calculatedSeries.player2_points
-                        
+
             match.team1_score = team1_points
             match.team2_score = team2_points
 

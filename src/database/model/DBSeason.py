@@ -13,6 +13,7 @@ class DBSeason(DBModel):
     id = Column(Integer, Sequence(f'{__name__.lower()}_id_seq'), primary_key=True)
     name = Column(String(50))
     number_weeks =  Column(Integer)
+    series_per_week = Column(Integer)
     pick_ban = Column(String(100))
     user_teams = relationship('DBUserTeamSeason', back_populates='season', cascade="all, delete")
     teams = relationship('DBTeamSeason', back_populates='season', cascade="all, delete")

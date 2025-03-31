@@ -11,6 +11,7 @@ from src.dtos.team_dto import TeamDTO
 class ScoreAppService:
     STANDARD_MAX_SCORE = 3
     HELPSTONE_MAX_SCORE = 4
+
     def __init__(self, match_service: MatchDBService, serires_service:  SeriesDBService, team_service: TeamDBService, team_season_service: TeamSeasonDBService):
         self.match_service = match_service
         self.series_service = serires_service
@@ -27,6 +28,7 @@ class ScoreAppService:
         return series
 
     def updateMatchScore(self, matchId: int):
+        print(matchId)
         match = self.match_service.get(matchId)
 
         query = QueryUtil.parseQuery('match_id == ' + str(matchId))
@@ -36,14 +38,24 @@ class ScoreAppService:
         team1_score = 0
         team2_score = 0
 
+        season_id = 0
+
         for single_series in series:
+            season_id = single_series.to_db_dict()['season_id']
             team1_score += single_series.to_db_dict()['player1_points']
             team2_score += single_series.to_db_dict()['player2_points']
 
         match.team1_score = team1_score
         match.team2_score = team2_score
 
-        return self.match_service.update(matchId, match)
+        print(season_id)
+
+        match_data = self.match_service.update(matchId)
+
+        match_data.team1 =  self.updateTeamScore(match.team1, season_id)
+        match_data.team2 =  self.updateTeamScore(match.team2, season_id)
+    
+        return match_data
 
     def updateTeamScore(self, team: TeamDTO, seasonId: int):
         team_points = 0
@@ -72,7 +84,11 @@ class ScoreAppService:
 
         team.seasons_info[season_key].final_score = team_points
         team.seasons_info[season_key].points_against = team_against
-        team.seasons_info[season_key].points_available = 0
+
+        #TODO: This seems to be broken as there can be weeks where a team has less series in a match => double check with shibby for a good aproach
+        team.seasons_info[season_key].points_available = (team.seasons_info[season_key].season.series_per_week * team.seasons_info[season_key].season.number_weeks * self.getMaxPointsPerSeries()) - team_points - team_against
+
+        print(team.seasons_info[season_key].season.series_per_week)
 
         return self.team_season_service.update(team.id, team.seasons_info[season_key])
     
