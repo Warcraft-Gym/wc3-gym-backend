@@ -9,6 +9,8 @@ from src.database.team_db_service import TeamDBService
 from src.database.match_db_service import MatchDBService
 from src.database.season_db_service import SeasonDBService
 from src.database.series_db_service import SeriesDBService
+from src.database.fantasy_bet_db_service import FantasyBetDBService
+from src.database.fantasy_team_db_service import FantasyTeamDBService
 from src.database.map_db_service import MapDBService
 from src.database.team_season_db_service import TeamSeasonDBService
 from src.service.user_service import UserAppService
@@ -18,6 +20,8 @@ from src.service.season_service import SeasonAppService
 from src.service.series_service import SeriesAppService
 from src.service.score_service import ScoreAppService
 from src.service.map_service import MapAppService
+from src.service.fantasy_bet_service import FantasyBetAppService
+from src.service.fantasy_team_service import FantasyTeamAppService
 from flasgger import Swagger
 import enum
 from flask.json.provider import DefaultJSONProvider
@@ -32,6 +36,7 @@ from src.api.series_api import series_blueprint
 from src.api.import_export_api import import_blueprint
 from src.api.map_api import map_blueprint
 from src.api.score_api import score_blueprint
+from src.api.fantasy_api import fantasy_blueprint
 
 # Load environment variables from .env file
 load_dotenv()
@@ -114,6 +119,8 @@ season_service = SeasonDBService(db_url=db_url)
 series_service = SeriesDBService(db_url=db_url)
 map_service = MapDBService(db_url=db_url)
 team_season_service = TeamSeasonDBService(db_url=db_url)
+fantasy_bet_service = FantasyBetDBService(db_url=db_url)
+fantasy_team_service = FantasyTeamDBService(db_url=db_url)
 
 # Initialize application services
 user_app_service = UserAppService(user_service=user_service)
@@ -123,6 +130,9 @@ season_app_service = SeasonAppService(season_service=season_service)
 score_app_service = ScoreAppService(match_service=match_service, serires_service=series_service, team_service=team_service, team_season_service=team_season_service)
 series_app_service = SeriesAppService(series_service=series_service, score_app_service=score_app_service)
 map_app_service = MapAppService(map_service=map_service)
+fantasy_bet_app_service = FantasyBetAppService(fantasy_bet_service=fantasy_bet_service)
+fantasy_team_app_service = FantasyTeamAppService(fantasy_team_service=fantasy_team_service)
+
 
 
 import_blueprint.user_app_service = user_app_service
@@ -139,6 +149,8 @@ team_blueprint.team_app_service = team_app_service
 match_blueprint.match_app_service = match_app_service
 series_blueprint.series_app_service = series_app_service
 map_blueprint.map_app_service = map_app_service
+fantasy_blueprint.fantasy_bet_app_service = fantasy_bet_app_service
+fantasy_blueprint.fantasy_team_app_service = fantasy_team_app_service
 
 score_blueprint.season_app_service = season_app_service
 score_blueprint.match_app_service = match_app_service
@@ -155,3 +167,4 @@ app.register_blueprint(import_blueprint)
 app.register_blueprint(series_blueprint)
 app.register_blueprint(map_blueprint)
 app.register_blueprint(score_blueprint)
+app.register_blueprint(fantasy_blueprint)

@@ -15,6 +15,7 @@ class DBSeries(DBModel):
     player1_points = Column(Integer)
     player2_points = Column(Integer)
     host_player_id = Column(Integer)
+    is_fantasy_match = Column(Boolean)
 
     match = relationship("DBMatch", foreign_keys=[match_id])
     player1 = relationship("DBUser", foreign_keys=[player1_id])

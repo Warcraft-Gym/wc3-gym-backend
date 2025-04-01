@@ -1,6 +1,10 @@
 DROP table if exists GYM_BACKEND.user_team_season;
+DROP table if exists GYM_BACKEND.fantasy_bets;
+DROP table if exists GYM_BACKEND.fantasy_team_player;
+DROP table if exists GYM_BACKEND.fantasy_teams;
 DROP table if exists GYM_BACKEND.team_season;
 DROP table if exists GYM_BACKEND.series;
+DROP table if exists GYM_BACKEND.w3cstats;
 DROP table if exists GYM_BACKEND.users;
 DROP table if exists GYM_BACKEND.matches;
 DROP table if exists GYM_BACKEND.teams;
