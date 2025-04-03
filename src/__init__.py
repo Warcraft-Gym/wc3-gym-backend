@@ -142,6 +142,8 @@ import_blueprint.match_app_service = match_app_service
 import_blueprint.series_app_service = series_app_service
 import_blueprint.map_app_service = map_app_service
 import_blueprint.score_app_service = score_app_service
+import_blueprint.fantasy_bet_app_service = fantasy_bet_app_service
+import_blueprint.fantasy_team_app_service = fantasy_team_app_service
 
 user_blueprint.user_app_service = user_app_service
 season_blueprint.season_app_service = season_app_service

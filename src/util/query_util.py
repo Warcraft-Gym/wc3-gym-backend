@@ -60,6 +60,10 @@ class QueryUtil():
             key = match.group(1)
             operator = match.group(2)
             value = match.group(3)
+            if value and value == "True":
+                value = True
+            elif value and value == "False":
+                value = False
         else:
             raise Exception(f"Query or subquery could not be parsed into <key operator value> only following operators are allowed (==|!=|>=|<=|>|<|ilike): {query}")
         return QueryCondition(operator, key, value)

@@ -26,10 +26,10 @@ class FantasyBetAppService:
             raise NotFoundException(f"Fantasy Bet not found by Id: {bet_id}")
         return bet_data
     
-    def getAll(self):
+    def getAll_fantasy_bets(self):
         bet_data = self.fantasy_bet_service.getAll()
         return bet_data
 
-    def search(self, query):
+    def search_fantasy_bets(self, query):
         bet_data = self.fantasy_bet_service.search(query)
         return bet_data

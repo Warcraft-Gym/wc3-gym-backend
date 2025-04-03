@@ -1,5 +1,5 @@
 from src.database.model.DBFantasyBet import DBFantasyBet
-from src.dtos.match_dto import MatchDTO
+from src.dtos.series_dto import SeriesDTO
 from src.dtos.user_dto import UserDTO
 
 class FantasyBetDTO:
@@ -42,9 +42,9 @@ class FantasyBetDTO:
             {
                 'id': fbet.id,
                 'series_id': fbet.series_id,
-                'series': MatchDTO.from_dbmatch(fbet.series),
+                'series': SeriesDTO.from_dbseries(fbet.series),
                 'user_id': fbet.user_id,
-                'user_id': UserDTO.from_dbuser(fbet.user_id),
+                'user': UserDTO.from_dbuser(fbet.user),
                 'winner_id': fbet.winner_id,
                 'winner': UserDTO.from_dbuser(fbet.winner),
                 'bet_points': fbet.bet_points,

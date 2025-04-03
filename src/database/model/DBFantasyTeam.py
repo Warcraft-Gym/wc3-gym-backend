@@ -21,7 +21,7 @@ class DBFantasyTeam(DBModel):
     bet_points = Column(Integer)
     total_points = Column(Integer)
 
-    drafted_team = relationship("DBSeries", foreign_keys=[drafted_team_id])
+    drafted_team = relationship("DBTeam", foreign_keys=[drafted_team_id])
     captain = relationship("DBUser", foreign_keys=[captain_id])
     season = relationship("DBSeason", foreign_keys=[season_id])
     drafted_players = relationship("DBFantasyTeamPlayer", back_populates='fantasy_team', cascade="all, delete")
@@ -39,9 +39,9 @@ class DBFantasyTeam(DBModel):
             user = session.query(DBUser).filter_by(id=user_id).first()
             if not user:
                 raise Exception(f"User not found by id: {user_id}")
-            already_exists = session.query(DBFantasyTeamPlayer).filter_by(team_id=team.id,user_id=user.id).first() is not None
+            already_exists = session.query(DBFantasyTeamPlayer).filter_by(fantasy_team_id=team.id,user_id=user.id).first() is not None
             if not already_exists:
-                session.add(DBFantasyTeamPlayer(user=user,team=team)) 
+                session.add(DBFantasyTeamPlayer(users=user,fantasy_team=team)) 
                          
         session.commit()
         return team
