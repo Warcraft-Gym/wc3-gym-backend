@@ -20,7 +20,7 @@ class SeriesDTO:
         self.player1_score = data.get('player1_score')
         self.player2_score = data.get('player2_score')
         self.player1_points = data.get('player2_points')
-        self.player2_points = data.get('plaer2_points')
+        self.player2_points = data.get('player2_points')
         self.host_player_id = data.get('host_player_id')
 
     def to_dict(self):
@@ -70,6 +70,8 @@ class SeriesDTO:
                 'player2': UserDTO.from_dbuser(series.player2),
                 'player1_score': series.player1_score,
                 'player2_score': series.player2_score,
+                'player1_points': series.player1_points,
+                'player2_points': series.player2_points,
                 'host_player_id': series.host_player_id
             }
         )
@@ -86,6 +88,8 @@ class SeriesDTO:
                 'player2_id': {'type': 'integer'},
                 'player1_score': {'type': 'integer'},
                 'player2_score': {'type': 'integer'},
+                'player1_points': {'type': 'integer'},
+                'player2_points': {'type': 'integer'},
                 'host_player_id': {'type': 'integer'}
             },
             'required': ['match_id', 'player1_id', 'player2_id']

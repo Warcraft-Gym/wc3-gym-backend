@@ -28,8 +28,8 @@ class ScoreAppService:
         return series
 
     def updateMatchScore(self, matchId: int):
-        print(matchId)
         match = self.match_service.get(matchId)
+        seasonId = match.season_id
 
         query = QueryUtil.parseQuery('match_id == ' + str(matchId))
 
@@ -41,16 +41,17 @@ class ScoreAppService:
         season_id = 0
 
         for single_series in series:
-            season_id = single_series.to_db_dict()['season_id']
+            if single_series.to_db_dict()['player1_points'] is None or single_series.to_db_dict()['player2_points'] is None:
+                single_series = self.calculateSeriesScore(single_series)
+                self.series_service.update(single_series)
+
             team1_score += single_series.to_db_dict()['player1_points']
             team2_score += single_series.to_db_dict()['player2_points']
 
         match.team1_score = team1_score
         match.team2_score = team2_score
 
-        print(season_id)
-
-        match_data = self.match_service.update(matchId)
+        match_data = self.match_service.update(matchId, match)
 
         match_data.team1 =  self.updateTeamScore(match.team1, season_id)
         match_data.team2 =  self.updateTeamScore(match.team2, season_id)
@@ -87,8 +88,6 @@ class ScoreAppService:
 
         #TODO: This seems to be broken as there can be weeks where a team has less series in a match => double check with shibby for a good aproach
         team.seasons_info[season_key].points_available = (team.seasons_info[season_key].season.series_per_week * team.seasons_info[season_key].season.number_weeks * self.getMaxPointsPerSeries()) - team_points - team_against
-
-        print(team.seasons_info[season_key].season.series_per_week)
 
         return self.team_season_service.update(team.id, team.seasons_info[season_key])
     
