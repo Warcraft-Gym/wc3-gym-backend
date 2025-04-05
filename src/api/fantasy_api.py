@@ -471,3 +471,32 @@ def search_bets():
     except Exception as e:
         logger.error(e)
         return jsonify({"error": str(e)}), 500
+    
+
+@fantasy_blueprint.route('/fantasy/season/<int:season_id>/calculate/', methods=['POST'])
+#@jwt_required()
+@swag_from({
+    'summary': 'Calculate the fantasy scores of a given season',
+    'description': 'Calculates all fantasy team scores for the given season.',
+    'tags': ['fantasy'],
+    'security': [{'BearerAuth': []}],
+    'parameters': [
+        {'name': 'season_id', 'in': 'path', 'type': 'integer', 'required': True, 'description': 'The ID of the season to calculate'},
+    ],
+    'responses': {
+        201: {'description': 'Score calculated successfully'},
+        500: {'description': 'Internal server error'}
+    }
+})
+def calc_fantasy_score(season_id: int):
+    try:
+        season = fantasy_blueprint.season_app_service.get_season(season_id)
+        fantasy_blueprint.fantasy_score_app_service.calculateTeamScores(season)
+
+        return f"Fantasy Scores Calcuated Successfully", 204
+    except NotFoundException as e:
+        logger.error(e)
+        return jsonify({"error": str(e)}), 404
+    except Exception as e:
+        logger.error(e)
+        return jsonify({"error": str(e)}), 500

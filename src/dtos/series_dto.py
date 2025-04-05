@@ -1,6 +1,7 @@
 from src.database.model.DBSeries import DBSeries
 from datetime import datetime
 from src.dtos.match_dto import MatchDTO
+from src.dtos.season_dto import SeasonDTO
 from src.dtos.user_dto import UserDTO
 
 class SeriesDTO:
@@ -84,6 +85,7 @@ class SeriesDTO:
             'type': 'object',
             'properties': {
                 'match_id': {'type': 'integer'},
+                'season_id': {'type': 'integer'},
                 'date_time': {'type': 'string', 'format':'date-time', 'description': 'ISO 8601 date-time (e.g., "2025-03-08T18:57:00Z")'},
                 'caster': {'type': 'string'},
                 'player1_id': {'type': 'integer'},

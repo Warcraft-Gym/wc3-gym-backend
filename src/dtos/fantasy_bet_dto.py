@@ -1,5 +1,6 @@
 from src.database.model.DBFantasyBet import DBFantasyBet
 from src.dtos.series_dto import SeriesDTO
+from src.dtos.season_dto import SeasonDTO
 from src.dtos.user_dto import UserDTO
 
 class FantasyBetDTO:
@@ -7,6 +8,8 @@ class FantasyBetDTO:
         self.id = data.get('id')
         self.series_id = data.get('series_id')
         self.series = data.get('series')
+        self.season_id = data.get('season_id')
+        self.season = data.get('season')
         self.user_id = data.get('user_id')
         self.user = data.get('user')
         self.winner_id = data.get('winner_id')
@@ -19,6 +22,8 @@ class FantasyBetDTO:
             'id': self.id,
             'series_id': self.series_id,
             'series': None if not self.series else self.series.to_dict(),
+            'season_id': self.season_id,
+            'season': self.season,
             'user_id': self.user_id,
             'user': None if not self.user else self.user.to_dict(),
             'winner_id': self.winner_id,
@@ -30,6 +35,7 @@ class FantasyBetDTO:
     def to_db_dict(self):
         return {
             'series_id': self.series_id,
+            'season_id': self.season_id,
             'user_id': self.user_id,
             'winner_id': self.winner_id,
             'bet_points': self.bet_points,
@@ -42,6 +48,8 @@ class FantasyBetDTO:
             {
                 'id': fbet.id,
                 'series_id': fbet.series_id,
+                'season_id': fbet.season_id,
+                'season': SeasonDTO.from_dbseason(fbet.season),
                 'series': SeriesDTO.from_dbseries(fbet.series),
                 'user_id': fbet.user_id,
                 'user': UserDTO.from_dbuser(fbet.user),

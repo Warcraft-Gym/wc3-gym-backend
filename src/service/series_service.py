@@ -34,3 +34,11 @@ class SeriesAppService:
     def search(self, query):
         series_data = self.series_service.search(query)
         return series_data
+    
+    def searchForSeason(self, season_id, query):
+        series_data = self.series_service.searchForSeason(season_id, query)
+        return series_data
+
+    def searchForSeasonAndPlayday(self, season_id, playday, query):
+        series_data = self.series_service.searchForSeasonAndPlayday(season_id, playday, query)
+        return series_data

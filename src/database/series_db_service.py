@@ -80,3 +80,35 @@ class SeriesDBService(AbstractDatabaseService):
             except SQLAlchemyError as e:
                 logger.error(f"Database error: {e}")
                 raise DBException(f"Database error: {e}")
+            
+    def searchForSeasonAndPlayday(self, season_id, playday, query):
+        with self.get_session() as session:
+            try:
+                result = []
+                filter = QueryUtil.convertQueryToDBFilter(DBSeries, query)
+                series_list = DBSeries.searchForSeasonAndPlayday(session, season_id, playday, filter)
+                if not series_list:
+                    logger.debug(f"No series found by searchcriteria: {query}")
+                    return result
+                for series in series_list:
+                    result.append(SeriesDTO.from_dbseries(series))
+                return result
+            except SQLAlchemyError as e:
+                logger.error(f"Database error: {e}")
+                raise DBException(f"Database error: {e}")
+            
+    def searchForSeason(self, season_id, query):
+        with self.get_session() as session:
+            try:
+                result = []
+                filter = QueryUtil.convertQueryToDBFilter(DBSeries, query)
+                series_list = DBSeries.searchForSeason(session, season_id, filter)
+                if not series_list:
+                    logger.debug(f"No series found by searchcriteria: {query}")
+                    return result
+                for series in series_list:
+                    result.append(SeriesDTO.from_dbseries(series))
+                return result
+            except SQLAlchemyError as e:
+                logger.error(f"Database error: {e}")
+                raise DBException(f"Database error: {e}")

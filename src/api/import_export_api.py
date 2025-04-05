@@ -531,7 +531,7 @@ def import_fantasy_teams():
                         'captain_id': captain.id,
                         'season_id': season_id,
                         'drafted_team_id': team.id,
-                        'race': ImportUtil.getRaceEnumString(row.iloc[11])
+                        'drafted_race': ImportUtil.getRaceEnumString(row.iloc[11])
                     }
                 
                 fantasy_team = None
@@ -550,7 +550,7 @@ def import_fantasy_teams():
                         
                 players = []
                 found_players = {}
-                for player in row[2:9]:
+                for player in row[2:10]:
                     if not player:
                         raise Exception(f"Player missing for team: {row.iloc[0]}")
                     found_player_id = found_players.get(player)

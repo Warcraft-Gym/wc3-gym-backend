@@ -58,9 +58,9 @@ class FantasyTeamDTO:
     @classmethod
     def from_dbfantasyteam(cls, fteam: DBFantasyTeam):
         drafted_players = []
-        if not fteam.drafted_players:
+        if fteam.drafted_players:
             for dp in fteam.drafted_players:
-                drafted_players.append(UserDTO.from_dbuser(dp))
+                drafted_players.append(UserDTO.from_dbuser(dp.users))
                 
         return cls(
             {
