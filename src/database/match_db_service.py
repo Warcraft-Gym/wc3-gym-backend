@@ -73,7 +73,7 @@ class MatchDBService(AbstractDatabaseService):
             try:
                 result = []
                 filter = QueryUtil.convertQueryToDBFilter(DBMatch, query)
-                matches = DBMatch.seach(session, filter)
+                matches = DBMatch.search(session, filter)
                 if not matches:
                     logger.debug(f"No matches found by searchcriteria: {query}")
                     return result

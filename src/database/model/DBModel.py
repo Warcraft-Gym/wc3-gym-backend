@@ -42,7 +42,7 @@ class DBModel(AbstractConcreteBase, Base):
         return obj
 
     @classmethod
-    def seach(cls, session: Session, filters):
+    def search(cls, session: Session, filters):
         if filters is None:
             raise DBException(f"No search criteria was defined!")
         query = session.query(cls).filter(filters)

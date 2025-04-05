@@ -1,4 +1,5 @@
 from src.database.model.DBUser import DBUser
+from src.dtos.w3c_stats_dto import W3CStatsDTO
 
 class UserDTO:
     def __init__(self, data : dict):
@@ -9,6 +10,7 @@ class UserDTO:
         self.race = data.get('race')
         self.mmr = data.get('mmr')
         self.country = data.get('country')
+        self.w3c_stats = data.get('w3c_stats')
 
     def to_dict(self):
         return {
@@ -18,7 +20,8 @@ class UserDTO:
             'discordTag': self.discordTag,
             'race': self.race,
             'mmr': self.mmr,
-            'country': self.country
+            'country': self.country,
+            'w3c_stats': [s.to_dict() for s in self.w3c_stats] if self.w3c_stats else []
         }
 
     @classmethod
@@ -31,7 +34,8 @@ class UserDTO:
                 'discordTag': user.discordTag,
                 'race': user.race,
                 'mmr': user.mmr,
-                'country': user.country
+                'country': user.country,
+                'w3c_stats': [W3CStatsDTO.from_dbw3cstats(s) for s in user.w3c_stats] if user.w3c_stats else []
             }
         )
 

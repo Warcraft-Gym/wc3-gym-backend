@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Sequence, Enum
+from sqlalchemy import Column, Integer, String, Sequence, Enum, ForeignKey 
 from sqlalchemy.orm import relationship
 from src.database.model.DBModel import DBModel
 from src.database.model.DBEnums import Race, Country
@@ -16,3 +16,4 @@ class DBUser(DBModel):
     mmr = Column(Integer)
     country = Column(Enum(Country))
     team_seasons = relationship('DBUserTeamSeason', back_populates='user', cascade="all, delete")
+    w3c_stats = relationship("DBW3CStats", back_populates='user', cascade='all, delete-orphan')

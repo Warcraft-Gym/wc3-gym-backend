@@ -2,6 +2,8 @@ import logging
 from src.database.abstract_database_service import AbstractDatabaseService
 from src.database.model.DBUser import DBUser
 from src.dtos.user_dto import UserDTO
+from src.dtos.w3c_stats_dto import W3CStatsDTO
+from src.database.model.DBW3CStats import DBW3CStats
 from sqlalchemy.exc import SQLAlchemyError
 from custom_exceptions import DBException
 from src.util.query_util import QueryUtil
@@ -61,7 +63,7 @@ class UserDBService(AbstractDatabaseService):
             try:
                 result = []
                 filter = QueryUtil.convertQueryToDBFilter(DBUser, query)
-                users = DBUser.seach(session, filter)
+                users = DBUser.search(session, filter)
                 if not users:
                     logger.debug(f"No users found by searchcriteria: {query}")
                     return result
@@ -83,6 +85,31 @@ class UserDBService(AbstractDatabaseService):
                 for user in users:
                     result.append(UserDTO.from_dbuser(user))
                 return result
+            except SQLAlchemyError as e:
+                # Log the error and handle it
+                logger.error(f"Database error: {e}")
+                raise DBException(f"Database error: {e}")
+
+    def updateW3CStats(self, w3c_stats : W3CStatsDTO):
+        with self.get_session() as session:
+            try:
+                stats = DBW3CStats.update(session, w3c_stats.id, **w3c_stats.to_dict())
+                if not stats:
+                    raise DBException("W3CStats could not be updated")
+                return W3CStatsDTO.from_dbw3cstats(stats)
+            except SQLAlchemyError as e:
+                # Log the error and handle it
+                logger.error(f"Database error: {e}")
+                raise DBException(f"Database error: {e}")
+
+    def createW3CStats(self, user_id, w3c_stats : W3CStatsDTO):
+        with self.get_session() as session:
+            try:
+                w3c_stats.user_id = user_id
+                stats = DBW3CStats.add(session, w3c_stats.to_db_dict())
+                if not stats:
+                    raise DBException("W3CStats could not be created")
+                return W3CStatsDTO.from_dbw3cstats(stats)
             except SQLAlchemyError as e:
                 # Log the error and handle it
                 logger.error(f"Database error: {e}")
