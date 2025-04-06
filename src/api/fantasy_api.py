@@ -484,7 +484,7 @@ def search_bets():
         {'name': 'season_id', 'in': 'path', 'type': 'integer', 'required': True, 'description': 'The ID of the season to calculate'},
     ],
     'responses': {
-        201: {'description': 'Score calculated successfully'},
+        204: {'description': 'Score calculated successfully'},
         500: {'description': 'Internal server error'}
     }
 })
