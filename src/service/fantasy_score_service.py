@@ -47,7 +47,12 @@ class FantasyScoreAppService:
             week_result = {}
             for race, wins in week_race_wins.items():
                     losses = week_race_looses.get(race)
-                    week_percentage = wins/losses
+                    if not wins:
+                       week_percentage = 0
+                    elif not losses:
+                        week_percentage = 100
+                    else:
+                        week_percentage = wins/losses
                     week_result[race] = week_percentage
 
             # Define points for first, second, and third place
@@ -93,10 +98,11 @@ class FantasyScoreAppService:
                             team_bench_points+=week_player_bench_points
                 
                 drafted_team = fteam.drafted_team
-                for season_info in drafted_team.seasons_info:
-                    if season_info.season_id == season.id:
-                        if season_info.final_score:
-                            team_team_points = season_info.final_score
+                if drafted_team.seasons_info:
+                    for season_info in drafted_team.seasons_info:
+                        if season_info.season_id == season.id:
+                            if season_info.final_score:
+                                team_team_points = season_info.final_score
                 
                 team_race_points = race_points.get(fteam.drafted_race)
 
@@ -115,7 +121,7 @@ class FantasyScoreAppService:
                         else:
                             continue
                         bet_result = 0
-                        if bet.winner.ie == series_winner.id:
+                        if bet.winner.id == series_winner.id:
                             bet_result = bet.bet_points
                             team_bet_points += bet.bet_points
                         else:
@@ -123,7 +129,7 @@ class FantasyScoreAppService:
                             team_bet_points -= bet.bet_points
                         bet.bet_result = bet_result
 
-                        self.fantasy_bet_service.update_fantasy_bets(bet.id, bet)
+                        self.fantasy_bet_service.update_fantasy_bet(bet.id, bet)
 
                 total_points = team_player_points + team_bench_points + team_team_points + team_race_points + team_bet_points
 
