@@ -78,12 +78,15 @@ class ScoreAppService:
             team_points += match.team2_score
             team_against += match.team1_score
 
-        season_key = 0
+        season_key = None
 
         for i in range(len(team.seasons_info)):
             if team.seasons_info[i].season_id == seasonId:
                season_key = i
 
+
+        if season_key is None:
+            return
 
         team.seasons_info[season_key].final_score = team_points
         team.seasons_info[season_key].points_against = team_against
