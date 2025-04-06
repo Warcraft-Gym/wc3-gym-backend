@@ -4,6 +4,8 @@ from flask import Blueprint, request, jsonify, send_file
 from flask_jwt_extended import jwt_required
 from custom_exceptions import NotFoundException
 from flasgger import swag_from
+from src.dtos.fantasy_team_dto import FantasyTeamDTO
+from src.dtos.fantasy_bet_dto import FantasyBetDTO
 from src.dtos.season_dto import SeasonDTO
 from src.dtos.user_dto import UserDTO
 from src.dtos.team_dto import TeamDTO
@@ -165,8 +167,8 @@ def import_season():
                 fixed_map_short = None
                 for index, row in week.iterrows():
                     if index==1:
-                        date_frame = row[1]
-                        fixed_map_short = row[3].split(":")[1].strip()
+                        date_frame = row.iloc[1]
+                        fixed_map_short = row.iloc[3].split(":")[1].strip()
                     if "VS" in row.values:
                         matchups_rows.append(index)
                 fixed_map = None
@@ -190,8 +192,8 @@ def import_season():
                     match = None
                     for index, row in week.iloc[start:end].iterrows():
                         if index == start:
-                            team1 = ImportUtil.isNa(row[0])
-                            team2 = ImportUtil.isNa(row[2])
+                            team1 = ImportUtil.isNa(row.iloc[0])
+                            team2 = ImportUtil.isNa(row.iloc[2])
                             if not team1 or not team2:
                                 raise Exception('Team 1 or Team 2 not properly identified in row:]')
                             team1_id = team_name_id[team1]
@@ -216,16 +218,16 @@ def import_season():
                             continue
                         if "Date" in row.values:
                             continue
-                        if pd.isnull(row[5]) or pd.isnull(row[8]):
+                        if pd.isnull(row.iloc[5]) or pd.isnull(row.iloc[8]):
                             continue
                         if not team1 or not team2:
                             raise Exception(f"Teams could not be identified for Week {i} and row range {start}/{end}")
                         series_id = None
-                        if ImportUtil.isNa(row[0]):
-                            series_id = row[0]
+                        if ImportUtil.isNa(row.iloc[0]):
+                            series_id = row.iloc[0]
 
-                        player1_name=row[5]
-                        player2_name=row[8]
+                        player1_name=row.iloc[5]
+                        player2_name=row.iloc[8]
                         
 
                         player1_id = player_name_id[player1_name.rstrip("*")]
@@ -236,15 +238,15 @@ def import_season():
                         elif player2_name.endswith("*"):
                             host_player_id = player2_id
                         date_time = None
-                        if ImportUtil.isNa(row[4]) and ImportUtil.isNa(row[3]):
-                            date_time = datetime.combine(row[4], row[3])
+                        if ImportUtil.isNa(row.iloc[4]) and ImportUtil.isNa(row.iloc[3]):
+                            date_time = datetime.combine(row.iloc[4], row.iloc[3])
                         series_data = {
-                            'caster': ImportUtil.isNa(row[1]),
+                            'caster': ImportUtil.isNa(row.iloc[1]),
                             'date_time': date_time,
                             'match_id' : match.id,
                             'player1_id': player1_id,
-                            'player1_score': ImportUtil.isNa(row[6]),
-                            'player2_score': ImportUtil.isNa(row[7]),
+                            'player1_score': ImportUtil.isNa(row.iloc[6]),
+                            'player2_score': ImportUtil.isNa(row.iloc[7]),
                             'player2_id': player2_id,
                             'host_player_id': host_player_id
                         }
@@ -418,6 +420,348 @@ def export_season():
             download_name=f'{season.name}.xlsx',
             mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         )
+    except Exception as e:
+        logger.error(e)
+        return jsonify({"error": str(e)}), 500
+    
+
+# import export endpoints
+@import_blueprint.route('/fantasy/import/teams', methods=['POST'])
+#@jwt_required()
+@swag_from({
+    'summary': 'Import a xlsx with the information for a GNL fantasy season',
+    'description': 'Updates the database based on the import sheet',
+    'tags': ['import export'],
+    #'security': [{'BearerAuth': []}],
+    'parameters': [
+        {'name': 'season_id', 'in': 'query', 'type': 'integer', 'required': False},
+        {'name': 'season_name', 'in': 'query', 'type': 'string', 'required': False},
+        {
+            'name': 'file',
+            'in': 'formData',
+            'type': 'file',
+            'required': True,
+            'description': 'File to be uploaded (Google Sheet)'
+        }
+    ],
+    'consumes': [
+        'multipart/form-data'
+    ],
+    'responses': {
+        200: {'description': 'Season updated successfully'},
+        400: {
+            'description': 'Bad Request',
+            'examples': {
+                'application/json': {
+                    'error': 'No file part'
+                }
+            }
+        },
+        500: {'description': 'Internal server error'}
+    }
+})
+def import_fantasy_teams():
+    try:
+        print(request.args)
+        season_id = int(request.args.get('season_id')) if request.args.get('season_id') else None
+        season_name = request.args.get('season_name')
+
+        if not season_id:
+            if season_name:
+                query = QueryUtil.parseQuery("name == " +  season_name)
+                if not query or not query.elementA:
+                    raise Exception(f"No valid query found: {"name == " +  season_name}")
+                found_seasons = import_blueprint.season_app_service.search(query)
+                if not found_seasons:
+                    raise Exception(f"Season could not be found by name: {season_name}")
+                else: 
+                    season_id = found_seasons[0].id
+            else:
+                raise Exception("Missing Season parameter, either season_id or season name is required")
+
+        if 'file' not in request.files:
+            return jsonify({"error": "No file part"}), 400
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({"error": "No selected file"}), 400
+        if file and file.filename.endswith(('.xlsx', '.xls')):
+            file_stream = io.BytesIO(file.read())
+            
+            # Load the Google Sheet into a DataFrame
+            df_teams = pd.read_excel(file_stream, sheet_name='Formatted Responses')
+
+            for index, row in df_teams.iterrows():
+                if not ImportUtil.isNa(row.iloc[0]):
+                    continue
+                if not ImportUtil.isNa(row.iloc[1]):
+                    raise Exception(f"Team without captain: {row.iloc[0]}")
+                query = QueryUtil.parseQuery("discordTag == " +  row.iloc[1])
+                if not query or not query.elementA:
+                    raise Exception(f"No valid query found: {"discordTag == " +  row.iloc[1]}")
+                users = import_blueprint.user_app_service.search(query)
+                captain = None
+                if not users:
+                    logger.debug(f"No user found for discordTag {row.iloc[1]}: create dummy user for fantasy league")
+                    user_data = {
+                        'name': row.iloc[1],
+                        'battleTag': "Fantasy_User",
+                        'discordTag': row.iloc[1]
+                    }
+                    captain = import_blueprint.user_app_service.create_user(UserDTO(user_data))
+                elif len(users) != 1:
+                    raise Exception(f"No or multiple users found for captain[{row.iloc[1]}]: {users}")
+                else:
+                    captain = users[0]
+
+                if not ImportUtil.isNa(row.iloc[10]):
+                    raise Exception(f"No GNL team defined for team: {row.iloc[0]}")
+                query = QueryUtil.parseQuery("name==" +  row.iloc[10])
+                if not query or not query.elementA:
+                    raise Exception(f"No valid query found: {"name == " +  row.iloc[10]}")
+                found_teams = import_blueprint.team_app_service.search(query)
+                if not found_teams or len(found_teams) != 1:
+                    raise Exception(f"No or multiple teams found for gnl team name[{row.iloc[10]} ]: {found_teams}")
+                team = found_teams[0]
+
+                if not ImportUtil.isNa(row.iloc[11]):
+                    raise Exception(f"No Race defined for team: {row.iloc[11]}")
+                
+                team_data = {
+                        'name': ImportUtil.isNa(row.iloc[0]),
+                        'captain_id': captain.id,
+                        'season_id': season_id,
+                        'drafted_team_id': team.id,
+                        'drafted_race': ImportUtil.getRaceEnumString(row.iloc[11])
+                    }
+                
+                fantasy_team = None
+                fteam_q_string = f"season_id=={season_id} and captain_id=={captain.id}"
+                fteam_query = QueryUtil.parseQuery(fteam_q_string)
+                if not query or not query.elementA:
+                    raise Exception(f"No valid query found: {fteam_q_string}")
+                found_teams = import_blueprint.fantasy_team_app_service.search_fantasy_teams(fteam_query)
+                if found_teams and len(found_teams)==1:
+                    team = found_teams[0]
+                    fantasy_team = import_blueprint.fantasy_team_app_service.update_fantasy_team(team.id, FantasyTeamDTO(team_data))     
+                elif len(found_teams)>1:
+                    raise Exception(f"More than one bet found by search: {fteam_q_string}")
+                else:
+                    fantasy_team = import_blueprint.fantasy_team_app_service.create_fantasy_team(FantasyTeamDTO(team_data))
+                        
+                players = []
+                found_players = {}
+                for player in row[2:10]:
+                    if not player:
+                        raise Exception(f"Player missing for team: {row.iloc[0]}")
+                    found_player_id = found_players.get(player)
+                    if found_player_id:
+                        players.append(found_player_id)
+                    else:
+                        query = QueryUtil.parseQuery("name == " +  player)
+                        if not query or not query.elementA:
+                            raise Exception(f"No valid query found: {"name == " +  player}")
+                        users = import_blueprint.user_app_service.search(query)
+                        if not users or len(users)!=1:
+                            raise Exception(f"Could not find player by name: {player}")
+                        found_player = users[0]
+                        found_players[found_player.name] = found_player.id
+                        players.append(found_player.id)
+                removePlayers = []
+                for existingPlayer in fantasy_team.drafted_players:
+                    if not existingPlayer.id in players:
+                        removePlayers.append(existingPlayer.id)
+
+                import_blueprint.fantasy_team_app_service.removeFantasyPlayers(fantasy_team.id, removePlayers)
+                import_blueprint.fantasy_team_app_service.addFantasyPlayers(fantasy_team.id, players)
+            
+            return jsonify({"message": "File uploaded successfully and data inserted into database"}), 200
+        else:
+            return jsonify({"error": "File type not allowed"}), 400
+    except Exception as e:
+        logger.error(e)
+        return jsonify({"error": str(e)}), 500
+    
+
+@import_blueprint.route('/fantasy/import/bets', methods=['POST'])
+#@jwt_required()
+@swag_from({
+    'summary': 'Import a xlsx with the information for a GNL fantasy season',
+    'description': 'Updates the database based on the import sheet',
+    'tags': ['import export'],
+    #'security': [{'BearerAuth': []}],
+    'parameters': [
+        {'name': 'season_id', 'in': 'query', 'type': 'integer', 'required': False},
+        {'name': 'season_name', 'in': 'query', 'type': 'string', 'required': False},
+        {
+            'name': 'file',
+            'in': 'formData',
+            'type': 'file',
+            'required': True,
+            'description': 'File to be uploaded (Google Sheet)'
+        }
+    ],
+    'consumes': [
+        'multipart/form-data'
+    ],
+    'responses': {
+        200: {'description': 'Season updated successfully'},
+        400: {
+            'description': 'Bad Request',
+            'examples': {
+                'application/json': {
+                    'error': 'No file part'
+                }
+            }
+        },
+        500: {'description': 'Internal server error'}
+    }
+})
+def import_fantasy_bets():
+    try:
+        print(request.args)
+        season_id = int(request.args.get('season_id')) if request.args.get('season_id') else None
+        season_name = request.args.get('season_name')
+
+        if not season_id:
+            if season_name:
+                query = QueryUtil.parseQuery("name == " +  season_name)
+                if not query or not query.elementA:
+                    raise Exception(f"No valid query found: {"name == " +  season_name}")
+                found_seasons = import_blueprint.season_app_service.search(query)
+                if not found_seasons:
+                    raise Exception(f"Season could not be found by name: {season_name}")
+                else: 
+                    season_id = found_seasons[0].id
+            else:
+                raise Exception("Missing Season parameter, either season_id or season name is required")
+
+        if 'file' not in request.files:
+            return jsonify({"error": "No file part"}), 400
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({"error": "No selected file"}), 400
+        if file and file.filename.endswith(('.xlsx', '.xls')):
+            file_stream = io.BytesIO(file.read())
+            
+            df_bet_match = pd.read_excel(file_stream, sheet_name='Betting Matches')
+            for index, row in df_bet_match.iterrows():
+                if not ImportUtil.isNa(row.iloc[0]):
+                    continue
+                week = row.iloc[0]
+                q_string = f"playday=={week} and season_id=={season_id}"
+                query = QueryUtil.parseQuery(q_string)
+                if not query or not query.elementA:
+                    raise Exception(f"No valid query found: {q_string}")
+                matches = import_blueprint.match_app_service.search(query)
+                query = QueryUtil.parseQuery("name == " +  row.iloc[1])
+                if not query or not query.elementA:
+                    raise Exception(f"No valid query found: {"name == " +  row.iloc[1]}")
+                users = import_blueprint.user_app_service.search(query)
+                if not users or len(users) != 1:
+                    raise Exception(f"No or multiple users found for bet player[{row.iloc[1]}]: {users}")
+                player1 = users[0]
+                query = QueryUtil.parseQuery("name == " +  row.iloc[2])
+                if not query or not query.elementA:
+                    raise Exception(f"No valid query found: {"name == " +  row.iloc[2]}")
+                users = import_blueprint.user_app_service.search(query)
+                if not users or len(users) != 1:
+                    raise Exception(f"No or multiple users found for bet player[{row.iloc[1]}]: {users}")
+                player2 = users[0]
+                series = None
+                if matches:
+                    for match in matches:
+                        series_q_string = f"player1_id == {player1.id} and player2_id == {player2.id} and match_id == {match.id} or player1_id == {player2.id} and player2_id == {player1.id} and match_id == {match.id}"
+                        series_query = QueryUtil.parseQuery(series_q_string)
+                        if not query or not query.elementA:
+                            raise Exception(f"No valid query found: {series_q_string}")
+                        found_series = import_blueprint.series_app_service.search(series_query)
+                        if not found_series or len(found_series) != 1:
+                            continue
+                        series = found_series[0]
+                        break
+                    if not series:
+                        raise Exception(f"Could not identfy series for player: {bet_player}!")
+                series.is_fantasy_match = True
+                import_blueprint.series_app_service.update_series(series.id, series)
+
+
+            # Load the Google Sheet into a DataFrame
+            df_bets = pd.read_excel(file_stream, sheet_name='Bets')
+            for index, row in df_bets.iterrows():
+
+                if not ImportUtil.isNa(row.iloc[0]):
+                    continue
+                if not ImportUtil.isNa(row.iloc[0]):
+                    raise Exception(f"Week not defined: {row.iloc[0]}")
+                playday = row.iloc[0]
+                
+                if not ImportUtil.isNa(row.iloc[1]):
+                    raise Exception(f"Captain not defined: {row.iloc[1]}")
+                query = QueryUtil.parseQuery("discordTag == " +  row.iloc[1])
+                if not query or not query.elementA:
+                    raise Exception(f"No valid query found: {"discordTag == " +  row.iloc[1]}")
+                users = import_blueprint.user_app_service.search(query)
+                if not users or len(users) != 1:
+                    raise Exception(f"No or multiple users found for captain[{row.iloc[1]}]: {users}")
+                captain = users[0]
+
+                if not ImportUtil.isNa(row.iloc[2]):
+                    raise Exception(f"Bet Player not defined: {row.iloc[2]}")
+                
+                query = QueryUtil.parseQuery("name == " +  row.iloc[2])
+                if not query or not query.elementA:
+                    raise Exception(f"No valid query found: {"name == " +  row.iloc[2]}")
+                users = import_blueprint.user_app_service.search(query)
+                if not users or len(users) != 1:
+                    raise Exception(f"No or multiple users found for bet player[{row.iloc[2]}]: {users}")
+                bet_player = users[0]
+
+                q_string = f"playday=={playday} and season_id=={season_id}"
+                query = QueryUtil.parseQuery(q_string)
+                if not query or not query.elementA:
+                    raise Exception(f"No valid query found: {q_string}")
+                matches = import_blueprint.match_app_service.search(query)
+                series = None
+                if matches:
+                    for match in matches:
+                        series_q_string = f"player1_id == {bet_player.id} and is_fantasy_match == True and match_id == {match.id} or player2_id == {bet_player.id} and is_fantasy_match == True and match_id == {match.id}"
+                        series_query = QueryUtil.parseQuery(series_q_string)
+                        if not query or not query.elementA:
+                            raise Exception(f"No valid query found: {series_q_string}")
+                        found_series = import_blueprint.series_app_service.search(series_query)
+                        if not found_series or len(found_series) != 1:
+                            continue
+                        series = found_series[0]
+                        break
+                if not series:
+                    raise Exception(f"Could not identfy series for player: {bet_player.name}!")
+                
+                if not ImportUtil.isNa(row.iloc[3]):
+                    raise Exception(f"Bet Points not defined: {row.iloc[3]}")
+
+                bet_data = {
+                    'series_id' : series.id,
+                    'user_id' : captain.id,
+                    'winner_id': bet_player.id,
+                    'bet_points': row.iloc[3]
+                }
+
+                bet_q_string = f"series_id=={series.id} and user_id=={captain.id} and winner_id=={bet_player.id}"
+                bet_query = QueryUtil.parseQuery(bet_q_string)
+                if not query or not query.elementA:
+                    raise Exception(f"No valid query found: {bet_q_string}")
+                found_bets = import_blueprint.fantasy_bet_app_service.search_fantasy_bets(bet_query)
+                if found_bets and len(found_bets)==1:
+                    bet = found_bets[0]
+                    import_blueprint.fantasy_bet_app_service.update_fantasy_bet(bet.id, FantasyBetDTO(bet_data))     
+                elif len(found_bets)>1:
+                    raise Exception(f"More than one bet found by search: {bet_q_string}")
+                else:
+                    import_blueprint.fantasy_bet_app_service.create_fantasy_bet(FantasyBetDTO(bet_data))
+            
+            return jsonify({"message": "File uploaded successfully and data inserted into database"}), 200
+        else:
+            return jsonify({"error": "File type not allowed"}), 400
     except Exception as e:
         logger.error(e)
         return jsonify({"error": str(e)}), 500

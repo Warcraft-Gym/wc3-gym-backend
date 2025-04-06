@@ -15,5 +15,7 @@ class DBUser(DBModel):
     race = Column(Enum(Race))
     mmr = Column(Integer)
     country = Column(Enum(Country))
+    fantasy_tier = Column(Integer)
     team_seasons = relationship('DBUserTeamSeason', back_populates='user', cascade="all, delete")
     w3c_stats = relationship("DBW3CStats", back_populates='user', cascade='all, delete-orphan')
+    fantasy_teams = relationship("DBFantasyTeamPlayer", back_populates='users', cascade='all, delete-orphan')
