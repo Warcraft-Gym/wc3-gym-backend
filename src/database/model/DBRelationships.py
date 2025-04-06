@@ -41,3 +41,11 @@ class DBMapSeason(DBModel):
     season_id = Column(Integer, ForeignKey('seasons.id'), primary_key=True)
     season = relationship('DBSeason', back_populates='maps')
     map = relationship('DBMap', back_populates='seasons')
+
+class DBFantasyTeamPlayer(DBModel):
+    __tablename__ = 'fantasy_team_player'
+    fantasy_team_id = Column(Integer, ForeignKey('fantasy_teams.id'), primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id'), primary_key=True)
+    # Additional columns can be added here if needed
+    fantasy_team = relationship('DBFantasyTeam', back_populates='drafted_players')
+    users = relationship('DBUser', back_populates='fantasy_teams')

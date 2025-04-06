@@ -11,6 +11,7 @@ class UserDTO:
         self.mmr = data.get('mmr')
         self.country = data.get('country')
         self.w3c_stats = data.get('w3c_stats')
+        self.fantasy_tier = data.get('fantasy_tier')
 
     def to_dict(self):
         return {
@@ -21,7 +22,8 @@ class UserDTO:
             'race': self.race,
             'mmr': self.mmr,
             'country': self.country,
-            'w3c_stats': [s.to_dict() for s in self.w3c_stats] if self.w3c_stats else []
+            'w3c_stats': [s.to_dict() for s in self.w3c_stats] if self.w3c_stats else [],
+            'fantasy_tier': self.fantasy_tier
         }
 
     @classmethod
@@ -35,7 +37,8 @@ class UserDTO:
                 'race': user.race,
                 'mmr': user.mmr,
                 'country': user.country,
-                'w3c_stats': [W3CStatsDTO.from_dbw3cstats(s) for s in user.w3c_stats] if user.w3c_stats else []
+                'w3c_stats': [W3CStatsDTO.from_dbw3cstats(s) for s in user.w3c_stats] if user.w3c_stats else [],
+                'fantasy_tier': user.fantasy_tier
             }
         )
 
@@ -67,6 +70,10 @@ class UserDTO:
                 "country": {
                     "type": "string",
                     "description": "User's Country"
+                },
+                "fantasy_tier": {
+                    "type": "integer",
+                    "description": "fantasy tier"
                 }
             },
             "required": ["name", "battleTag", "discordTag"]

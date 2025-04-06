@@ -1,6 +1,7 @@
 from src.database.model.DBSeries import DBSeries
 from datetime import datetime
 from src.dtos.match_dto import MatchDTO
+from src.dtos.season_dto import SeasonDTO
 from src.dtos.user_dto import UserDTO
 
 class SeriesDTO:
@@ -22,6 +23,7 @@ class SeriesDTO:
         self.player1_points = data.get('player2_points')
         self.player2_points = data.get('player2_points')
         self.host_player_id = data.get('host_player_id')
+        self.is_fantasy_match = data.get('is_fantasy_match')
 
     def to_dict(self):
         return {
@@ -38,7 +40,8 @@ class SeriesDTO:
             'player2_score': self.player2_score,
             'player1_points': self.player1_points,
             'player2_points': self.player2_points,
-            'host_player_id': self.host_player_id
+            'host_player_id': self.host_player_id,
+            'is_fantasy_match': self.is_fantasy_match
         }
     
     def to_db_dict(self):
@@ -52,7 +55,8 @@ class SeriesDTO:
             'player2_score': self.player2_score,
             'player1_points': self.player1_points,
             'player2_points': self.player2_points,
-            'host_player_id': self.host_player_id
+            'host_player_id': self.host_player_id,
+            'is_fantasy_match': self.is_fantasy_match
         }
     
     @classmethod
@@ -72,7 +76,8 @@ class SeriesDTO:
                 'player2_score': series.player2_score,
                 'player1_points': series.player1_points,
                 'player2_points': series.player2_points,
-                'host_player_id': series.host_player_id
+                'host_player_id': series.host_player_id,
+                'is_fantasy_match': series.is_fantasy_match
             }
         )
     
@@ -82,6 +87,7 @@ class SeriesDTO:
             'type': 'object',
             'properties': {
                 'match_id': {'type': 'integer'},
+                'season_id': {'type': 'integer'},
                 'date_time': {'type': 'string', 'format':'date-time', 'description': 'ISO 8601 date-time (e.g., "2025-03-08T18:57:00Z")'},
                 'caster': {'type': 'string'},
                 'player1_id': {'type': 'integer'},
@@ -90,7 +96,8 @@ class SeriesDTO:
                 'player2_score': {'type': 'integer'},
                 'player1_points': {'type': 'integer'},
                 'player2_points': {'type': 'integer'},
-                'host_player_id': {'type': 'integer'}
+                'host_player_id': {'type': 'integer'},
+                'is_fantasy_match': {'type': 'boolean'}
             },
             'required': ['match_id', 'player1_id', 'player2_id']
         }
