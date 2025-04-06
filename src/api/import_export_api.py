@@ -126,7 +126,8 @@ def import_season():
 
             season_data = {
                 'name' : season_name,
-                'number_weeks' : number_of_week_sheets
+                'number_weeks' : number_of_week_sheets,
+                'series_per_week': 19
             }
             if season_id and season_name:
                 import_blueprint.season_app_service.update_season(season_id, SeasonDTO(season_data))
