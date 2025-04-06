@@ -89,7 +89,10 @@ class ScoreAppService:
         team.seasons_info[season_key].points_against = team_against
 
         #TODO: This seems to be broken as there can be weeks where a team has less series in a match => double check with shibby for a good aproach
-        team.seasons_info[season_key].points_available = (team.seasons_info[season_key].season.series_per_week * team.seasons_info[season_key].season.number_weeks * self.getMaxPointsPerSeries()) - team_points - team_against
+        series_per_week = team.seasons_info[season_key].season.series_per_week
+        number_weeks = team.seasons_info[season_key].season.number_weeks
+        if series_per_week is not None and number_weeks is not None:
+            team.seasons_info[season_key].points_available = (series_per_week * number_weeks * self.getMaxPointsPerSeries()) - team_points - team_against
 
         return self.team_season_service.update(team.id, team.seasons_info[season_key])
     
