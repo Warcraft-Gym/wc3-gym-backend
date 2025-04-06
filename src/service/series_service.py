@@ -13,7 +13,7 @@ class SeriesAppService:
         series = self.score_app_service.calculateSeriesScore(series)
         series = self.series_service.add(series)
 
-        series.match = self.score_app_service.updateMatchScore(series)
+        series.match = self.score_app_service.updateMatchScore(series.match_id)
 
         return series
     
