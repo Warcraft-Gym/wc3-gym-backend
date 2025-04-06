@@ -25,7 +25,6 @@ class SeriesDBService(AbstractDatabaseService):
         try:
             session = self.Session()
             series = DBSeries.update(session, series.id, **series.to_db_dict())
-            print(series.to_dict())
             if not series:
                 raise DBException("Series could not be updated!")
             return SeriesDTO.from_dbseries(series)

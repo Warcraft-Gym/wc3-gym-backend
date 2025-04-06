@@ -29,24 +29,26 @@ class ScoreAppService:
 
     def updateMatchScore(self, matchId: int):
         match = self.match_service.get(matchId)
-        seasonId = match.season_id
 
         query = QueryUtil.parseQuery('match_id == ' + str(matchId))
 
-        series = self.series_service.search(query)
+        series_list = self.series_service.search(query)
 
         team1_score = 0
         team2_score = 0
 
         season_id = 0
 
-        for single_series in series:
-            if single_series.to_db_dict()['player1_points'] is None or single_series.to_db_dict()['player2_points'] is None:
-                single_series = self.calculateSeriesScore(single_series)
-                self.series_service.update(single_series)
+        for single_series in series_list:
+            if single_series.player1_score is not None and single_series.player2_score is not None: 
+                if single_series.player1_points is None or single_series.player2_points is None:
+                    single_series = self.calculateSeriesScore(single_series)
+                    self.series_service.update(single_series)
 
-            team1_score += single_series.to_db_dict()['player1_points']
-            team2_score += single_series.to_db_dict()['player2_points']
+            if single_series.player1_points is not None:
+                team1_score += single_series.player1_points
+            if single_series.player2_points is not None:
+                team2_score += single_series.player2_points
 
         match.team1_score = team1_score
         match.team2_score = team2_score
@@ -92,6 +94,8 @@ class ScoreAppService:
         return self.team_season_service.update(team.id, team.seasons_info[season_key])
     
     def getScoreByMapScore(self, playerScore: int, opponentScore: int):
+        if playerScore == None and opponentScore == None:
+            return None
         if playerScore == None or playerScore < 0 or playerScore > 2:
             raise Exception("Score is not valid please check it.")
         if opponentScore == None or opponentScore < 0 or opponentScore > 2:
@@ -101,18 +105,18 @@ class ScoreAppService:
             return playerScore
         
         if os.getenv('SCORE_SYSTEM') == 'helpstone':
-            return self.getHelpstoneScoreByMapScore(playerScore, opponentScore)
+            return self.getHelpstoneScoreByMapScore(opponentScore)
         
-        return self.getStandardScoreByMapScore(playerScore, opponentScore)
+        return self.getStandardScoreByMapScore(opponentScore)
 
-    def getHelpstoneScoreByMapScore(self, playerScore: int, opponentScore: int):
+    def getHelpstoneScoreByMapScore(self, opponentScore: int):
         if opponentScore == 0:
             return self.HELPSTONE_MAX_SCORE
         elif opponentScore == 1:
             return (self.HELPSTONE_MAX_SCORE - 1)
         
     
-    def getStandardScoreByMapScore(self, playerScore: int, opponentScore: int):
+    def getStandardScoreByMapScore(self, opponentScore: int):
         if opponentScore == 0:
             return self.STANDARD_MAX_SCORE
         elif opponentScore == 1:

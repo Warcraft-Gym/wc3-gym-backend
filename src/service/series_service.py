@@ -10,16 +10,21 @@ class SeriesAppService:
     
     def create_series(self, series: SeriesDTO):
         series.id = None
-        series_data = self.series_service.add(series)
-        return series_data
+        series = self.score_app_service.calculateSeriesScore(series)
+        series = self.series_service.add(series)
+
+        series.match = self.score_app_service.updateMatchScore(series)
+
+        return series
     
     def update_series(self, series_id: int, series: SeriesDTO):
         series.id = series_id
         series = self.score_app_service.calculateSeriesScore(series)
+        series = self.series_service.update(series)
+
         series.match = self.score_app_service.updateMatchScore(series.match_id)
 
-        series_data = self.series_service.update(series)
-        return series_data
+        return series
     
     def delete_series(self, series_id: int):
         self.series_service.delete(series_id)

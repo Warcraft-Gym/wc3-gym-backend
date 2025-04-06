@@ -20,7 +20,7 @@ class SeriesDTO:
         self.player2 = data.get('player2')
         self.player1_score = data.get('player1_score')
         self.player2_score = data.get('player2_score')
-        self.player1_points = data.get('player2_points')
+        self.player1_points = data.get('player1_points')
         self.player2_points = data.get('player2_points')
         self.host_player_id = data.get('host_player_id')
         self.is_fantasy_match = data.get('is_fantasy_match')
