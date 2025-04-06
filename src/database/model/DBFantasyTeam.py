@@ -56,7 +56,7 @@ class DBFantasyTeam(DBModel):
             user = session.query(DBUser).filter_by(id=user_id).first()
             if not user:
                 raise Exception(f"User not found by id: {user_id}")
-            user_team = session.query(DBFantasyTeamPlayer).filter_by(team_id=obj_id,user_id=user.id).first()
+            user_team = session.query(DBFantasyTeamPlayer).filter_by(fantasy_team_id=obj_id,user_id=user.id).first()
             if not user_team:
                 raise Exception(f"User not part of the fantasy team, user id: {user_id}")
             session.delete(user_team)                
