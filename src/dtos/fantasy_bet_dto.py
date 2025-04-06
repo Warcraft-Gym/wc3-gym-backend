@@ -23,7 +23,7 @@ class FantasyBetDTO:
             'series_id': self.series_id,
             'series': None if not self.series else self.series.to_dict(),
             'season_id': self.season_id,
-            'season': self.season,
+            'season': self.season.to_dict(),
             'user_id': self.user_id,
             'user': None if not self.user else self.user.to_dict(),
             'winner_id': self.winner_id,
