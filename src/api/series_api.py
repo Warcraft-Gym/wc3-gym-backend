@@ -198,3 +198,91 @@ def search_series():
     except Exception as e:
         logger.error(e)
         return jsonify({"error": str(e)}), 500
+    
+
+@series_blueprint.route('/series/season/<int:season_id>/playday/<int:playday>', methods=['POST'])
+@swag_from({
+    'summary': 'Search series of a season of a playday',
+    'description': 'Return series matching the search query for a specific season and a specific playday',
+    'tags': ['series'],
+    'parameters': [
+        {'name': 'season_id', 'in': 'path', 'type': 'integer', 'required': True},
+        {'name': 'playday', 'in': 'path', 'type': 'integer', 'required': True},
+        {
+            'name': 'query',
+            'in': 'query',
+            'type': 'string',
+            'required': False,
+            'description': '''
+                Search criteria in the following format
+                and | or conditions are supported but no brackets
+
+                key operator value and key operator value
+
+                e.g.:
+                name ilike xxxx or id == 12
+                Operators supported: ==, !=, >, >=, <, <=, ilike
+            '''
+        }
+        ],
+    'responses': {
+        200: {'description': 'series retrieved successfully'},
+        500: {'description': 'Internal server error'}
+    }
+})
+def search_series_by_season_and_playday(season_id: int, playday: int):
+    try:
+        query_param = request.args.get('query', '')
+        query = QueryUtil.parseQuery(query_param)
+        series_l = series_blueprint.series_app_service.searchForSeasonAndPlayday(season_id, playday, query)
+        out = []
+        if series_l:
+            for series in series_l:
+                out.append(series.to_dict())
+        return jsonify(out)
+    except Exception as e:
+        logger.error(e)
+        return jsonify({"error": str(e)}), 500
+    
+@series_blueprint.route('/series/season/<int:season_id>', methods=['POST'])
+@swag_from({
+    'summary': 'Search series of a season',
+    'description': 'Return series matching the search query for a specific season',
+    'tags': ['series'],
+    'parameters': [
+        {'name': 'season_id', 'in': 'path', 'type': 'integer', 'required': True},
+        {
+            'name': 'query',
+            'in': 'query',
+            'type': 'string',
+            'required': False,
+            'description': '''
+                Search criteria in the following format
+                and | or conditions are supported but no brackets
+
+                key operator value and key operator value
+
+                e.g.:
+                name ilike xxxx or id == 12
+                Operators supported: ==, !=, >, >=, <, <=, ilike
+            '''
+        }
+    ],
+    'responses': {
+        200: {'description': 'series retrieved successfully'},
+        500: {'description': 'Internal server error'}
+    }
+})
+def search_series_by_season(season_id: int):
+    try:
+        query_param = request.args.get('query', '')
+        query = QueryUtil.parseQuery(query_param)
+        series_l = series_blueprint.series_app_service.searchForSeason(season_id, query)
+        out = []
+        if series_l:
+            for series in series_l:
+                out.append(series.to_dict())
+        return jsonify(out)
+    except Exception as e:
+        logger.error(e)
+        return jsonify({"error": str(e)}), 500
