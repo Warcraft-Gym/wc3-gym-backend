@@ -200,7 +200,7 @@ def search_series():
         return jsonify({"error": str(e)}), 500
     
 
-@series_blueprint.route('/series/season/<int:season_id>/playday/<int:playday>', methods=['POST'])
+@series_blueprint.route('/series/season/<int:season_id>/playday/<int:playday>/search', methods=['POST'])
 @swag_from({
     'summary': 'Search series of a season of a playday',
     'description': 'Return series matching the search query for a specific season and a specific playday',
@@ -244,7 +244,7 @@ def search_series_by_season_and_playday(season_id: int, playday: int):
         logger.error(e)
         return jsonify({"error": str(e)}), 500
     
-@series_blueprint.route('/series/season/<int:season_id>', methods=['POST'])
+@series_blueprint.route('/series/season/<int:season_id>/search', methods=['POST'])
 @swag_from({
     'summary': 'Search series of a season',
     'description': 'Return series matching the search query for a specific season',
