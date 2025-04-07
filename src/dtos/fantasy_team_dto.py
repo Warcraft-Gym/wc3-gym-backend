@@ -87,11 +87,16 @@ class FantasyTeamDTO:
         return {
             'type': 'object',
             'properties': {
-                'series_id': {'type': 'integer'},
-                'user_id': {'type': 'integer'},
-                'winner_id': {'type': 'integer'},
-                'bet_score': {'type': 'integer'},
-                'bet_result': {'type': 'integer'}
+                'season_id': {'type': 'integer'},
+                'captain_id': {'type': 'integer'},
+                'drafted_team_id': {'type': 'integer'},
+                'drafted_race': {'type': 'integer'},
+                'player_points': {'type': 'integer'},
+                'bench_points': {'type': 'integer'},
+                'team_points': {'type': 'integer'},
+                'race_points': {'type': 'integer'},
+                'bet_points': {'type': 'integer'},
+                'total_points': {'type': 'integer'}
             },
-            'required': ['series_id', 'user_id', 'winner_id', 'bet_score']
+            'required': ['season_id', 'captain_id', 'drafted_team_id', 'drafted_race']
         }
