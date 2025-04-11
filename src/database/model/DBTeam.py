@@ -9,7 +9,8 @@ from src.database.model.DBRelationships import DBUserTeamSeason
 class DBTeam(DBModel):
     __tablename__ = 'teams'
     id = Column(Integer, Sequence(f'{__name__.lower()}_id_seq'), primary_key=True)
-    name = Column(String(50))
+    name = Column(String(50), nullable=False)
+    long_name = Column(String(100))
     icon = Column(LargeBinary)
     discord_role = Column(String(50))
     user_seasons = relationship('DBUserTeamSeason', back_populates='team', cascade="all, delete")

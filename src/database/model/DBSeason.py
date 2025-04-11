@@ -11,9 +11,9 @@ from src.database.model.DBMap import DBMap
 class DBSeason(DBModel):
     __tablename__ = 'seasons'
     id = Column(Integer, Sequence(f'{__name__.lower()}_id_seq'), primary_key=True)
-    name = Column(String(50))
-    number_weeks =  Column(Integer)
-    series_per_week = Column(Integer)
+    name = Column(String(50), nullable=False)
+    number_weeks =  Column(Integer, nullable=False)
+    series_per_week = Column(Integer, nullable=False)
     pick_ban = Column(String(100))
     user_teams = relationship('DBUserTeamSeason', back_populates='season', cascade="all, delete")
     teams = relationship('DBTeamSeason', back_populates='season', cascade="all, delete")

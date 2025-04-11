@@ -5,11 +5,11 @@ from src.database.model.DBModel import DBModel
 class DBFantasyBet(DBModel):
     __tablename__ = 'fantasy_bets'
     id = Column(Integer, Sequence(f'{__name__.lower()}_id_seq'), primary_key=True)
-    season_id = Column(Integer, ForeignKey('seasons.id', ondelete='CASCADE'))
-    series_id = Column(Integer, ForeignKey('series.id', ondelete='CASCADE'))
-    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'))
-    winner_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'))
-    bet_points = Column(Integer)
+    season_id = Column(Integer, ForeignKey('seasons.id', ondelete='CASCADE'),  nullable=False)
+    series_id = Column(Integer, ForeignKey('series.id', ondelete='CASCADE'), nullable=False)
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    winner_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    bet_points = Column(Integer, nullable=False)
     bet_result = Column(Integer)
 
     season = relationship("DBSeason", foreign_keys=[season_id])

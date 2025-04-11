@@ -9,9 +9,9 @@ from sqlalchemy.orm.session import Session
 class DBFantasyTeam(DBModel):
     __tablename__ = 'fantasy_teams'
     id = Column(Integer, Sequence(f'{__name__.lower()}_id_seq'), primary_key=True)
-    name = Column(String(100))
-    season_id = Column(Integer, ForeignKey('seasons.id', ondelete='CASCADE'))
-    captain_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'))
+    name = Column(String(100), nullable=False)
+    season_id = Column(Integer, ForeignKey('seasons.id', ondelete='CASCADE'), nullable=False)
+    captain_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
     drafted_team_id = Column(Integer, ForeignKey('teams.id', ondelete='CASCADE'))
     drafted_race = Column(Enum(Race))
     player_points = Column(Integer)

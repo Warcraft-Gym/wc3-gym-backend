@@ -7,10 +7,10 @@ from src.database.model.DBModel import DBModel
 class DBMatch(DBModel):
     __tablename__ = 'matches'
     id = Column(Integer, Sequence(f'{__name__.lower()}_id_seq'), primary_key=True)
-    team1_id = Column(Integer, ForeignKey('teams.id', ondelete='CASCADE'))
-    team2_id = Column(Integer, ForeignKey('teams.id', ondelete='CASCADE'))
-    season_id = Column(Integer, ForeignKey('seasons.id', ondelete='CASCADE'))
-    playday = Column(Integer)
+    team1_id = Column(Integer, ForeignKey('teams.id', ondelete='CASCADE'), nullable=False)
+    team2_id = Column(Integer, ForeignKey('teams.id', ondelete='CASCADE'), nullable=False)
+    season_id = Column(Integer, ForeignKey('seasons.id', ondelete='CASCADE'), nullable=False)
+    playday = Column(Integer, nullable=False)
     team1_score = Column(Integer)
     team2_score = Column(Integer)
     fixed_map_id = Column(Integer, ForeignKey('maps.id'))

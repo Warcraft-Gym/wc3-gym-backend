@@ -8,16 +8,16 @@ from custom_exceptions import DBException
 class DBSeries(DBModel):
     __tablename__ = 'series'
     id = Column(Integer, Sequence(f'{__name__.lower()}_id_seq'), primary_key=True)
-    match_id = Column(Integer, ForeignKey('matches.id', ondelete='CASCADE'))
+    match_id = Column(Integer, ForeignKey('matches.id', ondelete='CASCADE'), nullable=False)
     date_time = Column(DateTime)
     caster = Column(String(50))
-    player1_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'))
-    player2_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'))
+    player1_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    player2_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
     player1_score = Column(Integer)
     player2_score = Column(Integer)
     player1_points = Column(Integer)
     player2_points = Column(Integer)
-    host_player_id = Column(Integer)
+    host_player_id = Column(Integer, nullable=False)
     is_fantasy_match = Column(Boolean)
 
     match = relationship("DBMatch", foreign_keys=[match_id])

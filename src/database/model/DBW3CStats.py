@@ -7,7 +7,7 @@ from src.database.model.DBEnums import Race
 class DBW3CStats(DBModel):
     __tablename__ = 'w3cstats'
     id = Column(Integer, Sequence(f'{__name__.lower()}_id_seq'), primary_key=True)
-    wc3_season = Column(Integer)
+    wc3_season = Column(Integer, nullable=False)
     wins = Column(Integer)
     losses = Column(Integer)
     games = Column(Integer)
@@ -15,5 +15,5 @@ class DBW3CStats(DBModel):
     winrate = Column(Float)
     race = Column(Enum(Race))
     league = Column(Integer)
-    user_id = Column(Integer, ForeignKey('users.id'))
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
     user = relationship('DBUser', back_populates='w3c_stats')
