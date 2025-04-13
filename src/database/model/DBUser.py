@@ -19,3 +19,30 @@ class DBUser(DBModel):
     team_seasons = relationship('DBUserTeamSeason', back_populates='user', cascade="all, delete")
     w3c_stats = relationship("DBW3CStats", back_populates='user', cascade='all, delete-orphan')
     fantasy_teams = relationship("DBFantasyTeamPlayer", back_populates='users', cascade='all, delete-orphan')
+
+    @classmethod
+    def updateUserTeamSeasonStats(cls, session, season_stats):
+        from src.database.model.DBSeason import DBSeason
+        from src.database.model.DBTeam import DBTeam
+        team = session.query(DBTeam).filter_by(id=season_stats.team_id).first()
+        if not team:
+            raise Exception(f"Team not found by id: {season_stats.team_id}")
+        season = session.query(DBSeason).filter_by(id=season_stats.season_id).first()
+        if not season:
+            raise Exception(f"Season not found by id: {season_stats.season_id}")
+        user = session.query(cls).filter_by(id=season_stats.user_id).first()
+        if not user:
+            raise Exception(f"User not found by id: {season_stats.user_id}")
+        uts_obj = session.query(DBUserTeamSeason).filter_by(team_id=team.id,season_id=season.id,user_id=user.id).first()
+        if uts_obj is not None:
+            uts_obj.games = season_stats.games
+            uts_obj.wins = season_stats.wins
+            uts_obj.losses = season_stats.losses
+        else:
+            uts_obj = DBUserTeamSeason(user=user,season=season,team=team)
+            uts_obj.games = season_stats.games
+            uts_obj.wins = season_stats.wins
+            uts_obj.losses = season_stats.losses
+            session.add(uts_obj)
+        session.commit()
+        return uts_obj

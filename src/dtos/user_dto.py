@@ -1,5 +1,6 @@
 from src.database.model.DBUser import DBUser
 from src.dtos.w3c_stats_dto import W3CStatsDTO
+from src.dtos.user_team_season_stats_dto import UserTeamSeasonStatsDTO
 
 class UserDTO:
     def __init__(self, data : dict):
@@ -11,6 +12,7 @@ class UserDTO:
         self.mmr = data.get('mmr')
         self.country = data.get('country')
         self.w3c_stats = data.get('w3c_stats')
+        self.gnl_stats = data.get('gnl_stats')
         self.fantasy_tier = data.get('fantasy_tier')
 
     def to_dict(self):
@@ -23,6 +25,19 @@ class UserDTO:
             'mmr': self.mmr,
             'country': self.country,
             'w3c_stats': [s.to_dict() for s in self.w3c_stats] if self.w3c_stats else [],
+            'gnl_stats': [s.to_dict() for s in self.gnl_stats] if self.gnl_stats else [],
+            'fantasy_tier': self.fantasy_tier
+        }
+    
+    def to_db_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'battleTag': self.battleTag,
+            'discordTag': self.discordTag,
+            'race': self.race,
+            'mmr': self.mmr,
+            'country': self.country,
             'fantasy_tier': self.fantasy_tier
         }
 
@@ -38,6 +53,7 @@ class UserDTO:
                 'mmr': user.mmr,
                 'country': user.country,
                 'w3c_stats': [W3CStatsDTO.from_dbw3cstats(s) for s in user.w3c_stats] if user.w3c_stats else [],
+                'gnl_stats': [UserTeamSeasonStatsDTO.from_db_user_team_season(s) for s in user.team_seasons] if user.team_seasons else [],
                 'fantasy_tier': user.fantasy_tier
             }
         )

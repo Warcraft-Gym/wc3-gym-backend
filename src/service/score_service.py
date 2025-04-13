@@ -37,8 +37,6 @@ class ScoreAppService:
         team1_score = 0
         team2_score = 0
 
-        season_id = 0
-
         for single_series in series_list:
             if single_series.player1_score is not None and single_series.player2_score is not None: 
                 if single_series.player1_points is None or single_series.player2_points is None:
@@ -55,8 +53,8 @@ class ScoreAppService:
 
         match_data = self.match_service.update(matchId, match)
 
-        match_data.team1 =  self.updateTeamScore(match.team1, season_id)
-        match_data.team2 =  self.updateTeamScore(match.team2, season_id)
+        match_data.team1 =  self.updateTeamScore(match.team1, match.season_id)
+        match_data.team2 =  self.updateTeamScore(match.team2, match.season_id)
     
         return match_data
 
@@ -64,20 +62,19 @@ class ScoreAppService:
         team_points = 0
         team_against = 0
 
-        query = QueryUtil.parseQuery("season_id == " + str(seasonId) + " and team1_id == " + str(team.id))
+        query = QueryUtil.parseQuery(f"season_id == {seasonId} and team1_id == {team.id} or season_id == {seasonId} and team2_id == {team.id}")
         matches = self.match_service.search(query)
 
         for match in matches:
-            team_points += match.team1_score
-            team_against += match.team2_score
+            if match.team1_id == team.id:
+                team_points += match.team1_score
+                team_against += match.team2_score
+            elif match.team2_id == team.id:
+                team_points += match.team2_score
+                team_against += match.team1_score
+            else:
+                raise Exception("Cannot calculate Teamscore invalid match!")
         
-        query = QueryUtil.parseQuery("season_id == " + str(seasonId) + " and team2_id == " + str(team.id))
-        matches = self.match_service.search(query)
-
-        for match in matches:
-            team_points += match.team2_score
-            team_against += match.team1_score
-
         season_key = None
 
         for i in range(len(team.seasons_info)):

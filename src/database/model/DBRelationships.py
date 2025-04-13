@@ -8,6 +8,9 @@ class DBUserTeamSeason(DBModel):
     user_id = Column(Integer, ForeignKey('users.id'), primary_key=True)
     team_id = Column(Integer, ForeignKey('teams.id'), primary_key=True)
     season_id = Column(Integer, ForeignKey('seasons.id'), primary_key=True)
+    games = Column(Integer)
+    wins = Column(Integer)
+    losses = Column(Integer)
     # Additional columns can be added here if needed
     user = relationship('DBUser', back_populates='team_seasons')
     team = relationship('DBTeam', back_populates='user_seasons')

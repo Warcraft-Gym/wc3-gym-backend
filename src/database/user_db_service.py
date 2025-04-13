@@ -4,6 +4,7 @@ from src.database.model.DBUser import DBUser
 from src.dtos.user_dto import UserDTO
 from src.dtos.w3c_stats_dto import W3CStatsDTO
 from src.database.model.DBW3CStats import DBW3CStats
+from src.dtos.user_team_season_stats_dto import UserTeamSeasonStatsDTO
 from sqlalchemy.exc import SQLAlchemyError
 from custom_exceptions import DBException
 from src.util.query_util import QueryUtil
@@ -14,7 +15,7 @@ class UserDBService(AbstractDatabaseService):
     def add(self, user : UserDTO):
         with self.get_session() as session:
             try:
-                user = DBUser.add(session, user.to_dict())
+                user = DBUser.add(session, user.to_db_dict())
                 if not user:
                     raise DBException("User could not be created!")
                 return UserDTO.from_dbuser(user)              
@@ -27,7 +28,7 @@ class UserDBService(AbstractDatabaseService):
     def update(self, user: UserDTO):
         with self.get_session() as session:
             try:
-                user = DBUser.update(session, user.id, **user.to_dict())
+                user = DBUser.update(session, user.id, **user.to_db_dict())
                 if not user:
                     raise DBException("User could not be updated")
                 return UserDTO.from_dbuser(user)
@@ -110,6 +111,19 @@ class UserDBService(AbstractDatabaseService):
                 if not stats:
                     raise DBException("W3CStats could not be created")
                 return W3CStatsDTO.from_dbw3cstats(stats)
+            except SQLAlchemyError as e:
+                # Log the error and handle it
+                logger.error(f"Database error: {e}")
+                raise DBException(f"Database error: {e}")
+            
+
+    def updateUserTeamSeasonStats(self, season_stats):
+        with self.get_session() as session:
+            try:
+                stats = DBUser.updateUserTeamSeasonStats(session, season_stats)
+                if not stats:
+                    raise DBException("User Team Season Stats could not be updated")
+                return UserTeamSeasonStatsDTO.from_db_user_team_season(stats)
             except SQLAlchemyError as e:
                 # Log the error and handle it
                 logger.error(f"Database error: {e}")

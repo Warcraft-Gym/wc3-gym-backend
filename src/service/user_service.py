@@ -63,6 +63,9 @@ class UserAppService:
             raise Exception(f"User could not be found by id: {user_id}")
         self.updateW3CStats(user)
         return self.get_user(user_id)
-        
-            
-        
+
+    def updateUserTeamSeasonStats(self, season_stats):
+        if not season_stats:
+            raise Exception("Seasonstats not defined")
+        self.user_service.updateUserTeamSeasonStats(season_stats)
+        return self.get_user(season_stats.user_id)

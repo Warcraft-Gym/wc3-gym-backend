@@ -1,6 +1,8 @@
 from src.database.model.DBTeam import DBTeam
 from src.dtos.user_dto import UserDTO
 from src.dtos.season_info_dto import SeasonInfoDTO
+from src.dtos.user_team_season_stats_dto import UserTeamSeasonStatsDTO
+from src.dtos.season_dto import SeasonDTO
 
 class TeamDTO:
     def __init__(self, data : dict):
@@ -18,7 +20,7 @@ class TeamDTO:
             for season, players in self.player_by_season.items():
                 if players:
                     l[season] = [player.to_dict() for player in players]
-        seasons_info = [seasons_info.to_dict() for seasons_info in self.seasons_info]
+        seasons_info = [seasons_info.to_dict() for seasons_info in self.seasons_info] if self.seasons_info else []
         return {
             'id': self.id,
             'name': self.name,
@@ -54,7 +56,12 @@ class TeamDTO:
         for ut in team.user_seasons:
             if not u.get(ut.season_id):
                 u[ut.season_id]=[]
-            u.get(ut.season_id).append(UserDTO.from_dbuser(ut.user))
+            user = UserDTO.from_dbuser(ut.user)
+            for gnl_stat in user.gnl_stats:
+                if (gnl_stat.season_id==ut.season_id):
+                    user.gnl_stats = [gnl_stat]
+                    break
+            u.get(ut.season_id).append(user)
 
         return cls(
                 {
@@ -67,6 +74,19 @@ class TeamDTO:
                 'seasons_info' : seasons_info
             }
         )
+
+    @classmethod
+    def from_dbteam_reduced(cls, team: DBTeam):
+        return cls(
+                {
+                'id' : team.id,
+                'name' : team.name,
+                'long_name': team.long_name,
+                'icon' : team.icon,
+                'discord_role': team.discord_role
+            }
+        )
+    
 
     @staticmethod
     def schema():

@@ -238,6 +238,8 @@ def import_season():
                             host_player_id = player1_id
                         elif player2_name.endswith("*"):
                             host_player_id = player2_id
+                        else:
+                            host_player_id = player1_id
                         date_time = None
                         if ImportUtil.isNa(row.iloc[4]) and ImportUtil.isNa(row.iloc[3]):
                             date_time = datetime.combine(row.iloc[4], row.iloc[3])
