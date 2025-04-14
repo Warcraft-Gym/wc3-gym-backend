@@ -43,6 +43,7 @@ class FantasyTeamDTO:
     
     def to_db_dict(self):
         return {
+            'name': self.name,
             'season_id': self.season_id,
             'captain_id': self.captain_id,
             'drafted_team_id': self.drafted_team_id,

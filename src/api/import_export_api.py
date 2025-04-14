@@ -508,7 +508,8 @@ def import_fantasy_teams():
                     user_data = {
                         'name': row.iloc[1],
                         'battleTag': "Fantasy_User",
-                        'discordTag': row.iloc[1]
+                        'discordTag': row.iloc[1],
+                        'race': "Random"
                     }
                     captain = import_blueprint.user_app_service.create_user(UserDTO(user_data))
                 elif len(users) != 1:
@@ -743,6 +744,7 @@ def import_fantasy_bets():
                     raise Exception(f"Bet Points not defined: {row.iloc[3]}")
 
                 bet_data = {
+                    'season_id' : season_id,
                     'series_id' : series.id,
                     'user_id' : captain.id,
                     'winner_id': bet_player.id,
