@@ -125,7 +125,7 @@ fantasy_team_service = FantasyTeamDBService(db_url=db_url)
 
 # Initialize application services
 user_app_service = UserAppService(user_service=user_service)
-team_app_service = TeamAppService(team_service=team_service)
+team_app_service = TeamAppService(team_service=team_service, user_app_service=user_app_service)
 match_app_service = MatchAppService(match_service=match_service)
 season_app_service = SeasonAppService(season_service=season_service)
 score_app_service = ScoreAppService(match_service=match_service, serires_service=series_service, team_service=team_service, team_season_service=team_season_service)

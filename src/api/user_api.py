@@ -199,6 +199,7 @@ def search_users():
         return jsonify({"error": str(e)}), 500
     
 @user_blueprint.route('/users/w3c_sync/<int:user_id>', methods=['POST'])
+@jwt_required()
 @swag_from({
     'summary': 'Sync w3c information for a user_id',
     'description': 'Sync w3c information for a user_id',
@@ -216,28 +217,6 @@ def sync_w3c_user(user_id):
         if(user):
             user = user.to_dict()
         return jsonify(user)
-    except NotFoundException as e:
-        logger.error(e)
-        return jsonify({"error": str(e)}), 404
-    except Exception as e:
-        logger.error(e)
-        return jsonify({"error": str(e)}), 500
-
-@user_blueprint.route('/users/w3c_sync', methods=['POST'])
-@swag_from({
-    'summary': 'Sync w3c information for each user',
-    'description': 'Sync w3c information for each user',
-    'tags': ['users'],
-    'responses': {
-        200: {'description': 'Users synced successfully'},
-        404: {'description': 'Users not found'},
-        500: {'description': 'Internal server error'}
-    }
-})
-def sync_w3c_users():
-    try:
-        user_blueprint.user_app_service.syncW3CStats()
-        return f"Users synced!", 200
     except NotFoundException as e:
         logger.error(e)
         return jsonify({"error": str(e)}), 404

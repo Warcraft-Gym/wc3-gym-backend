@@ -38,11 +38,6 @@ class UserAppService:
         users_data = self.user_service.search(query)
         return users_data
 
-    def syncW3CStats(self):
-        users = self.getAll()
-        for u in users:
-            self.updateW3CStats(u)
-
     def updateW3CStats(self, user: UserDTO):
         w3c_service = W3CService()
         stats = w3c_service.getPlayerStats(user.battleTag)
@@ -53,9 +48,11 @@ class UserAppService:
                     if u_s.race == s.race:
                         exists = True
                         s.id = u_s.id
+                        s.user_id = u_s.user_id
                         self.user_service.updateW3CStats(s)
                 if not exists:
-                    self.user_service.createW3CStats(user.id, s)
+                    s.user_id = user.id
+                    self.user_service.createW3CStats(s)
 
     def updateW3CStats_ById(self, user_id):
         user = self.user_service.get(user_id==user_id)

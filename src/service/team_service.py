@@ -1,10 +1,12 @@
 from src.database.team_db_service import TeamDBService
 from src.dtos.team_dto import TeamDTO
 from custom_exceptions import NotFoundException
+from src.service.user_service import UserAppService
 
 class TeamAppService:
-    def __init__(self, team_service: TeamDBService):
+    def __init__(self, team_service: TeamDBService, user_app_service: UserAppService):
         self.team_service = team_service
+        self.user_app_service = user_app_service
 
     def create_team(self, team: TeamDTO):
         team.id = None
@@ -68,3 +70,11 @@ class TeamAppService:
                 team_data.seasons_info = [seasons_info for seasons_info in team_data.seasons_info if seasons_info.season_id == season_id]
                 result.append(team_data)
         return result
+    
+    def syncW3CStatsTeam(self, team_id, season_id):
+        team = self.get_team_season(team_id, season_id)
+        users = team.player_by_season.get(season_id)
+        if users:
+            for u in users:
+                self.user_app_service.updateW3CStats(u)
+        return self.get_team_season(team_id, season_id)

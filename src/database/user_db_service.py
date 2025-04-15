@@ -103,10 +103,9 @@ class UserDBService(AbstractDatabaseService):
                 logger.error(f"Database error: {e}")
                 raise DBException(f"Database error: {e}")
 
-    def createW3CStats(self, user_id, w3c_stats : W3CStatsDTO):
+    def createW3CStats(self, w3c_stats : W3CStatsDTO):
         with self.get_session() as session:
             try:
-                w3c_stats.user_id = user_id
                 stats = DBW3CStats.add(session, w3c_stats.to_db_dict())
                 if not stats:
                     raise DBException("W3CStats could not be created")

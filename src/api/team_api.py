@@ -337,3 +337,33 @@ def search_teams():
     except Exception as e:
         logger.error(e)
         return jsonify({"error": str(e)}), 500
+    
+@jwt_required()
+@team_blueprint.route('/teams/w3c_sync/<int:team_id>/seasons/<int:season_id>', methods=['POST'])
+@swag_from({
+    'summary': 'Sync w3c information for each user of the team',
+    'description': 'Sync w3c information for each user of the team',
+    'tags': ['teams'],
+    'parameters': [
+        {'name': 'team_id', 'in': 'path', 'type': 'integer', 'required': True, 'description': 'The ID of the team to sync'},
+        {'name': 'season_id', 'in': 'path', 'type': 'integer', 'required': True}
+        ],
+    'responses': {
+        204: {'description': 'Team users synced successfully'},
+        404: {'description': 'Team not found'},
+        500: {'description': 'Internal server error'}
+    }
+})
+def sync_w3c_users_season(team_id, season_id):
+    try:
+        team = team_blueprint.team_app_service.syncW3CStatsTeam(team_id, season_id)
+        if(team):
+            team = team.to_dict()
+        return jsonify(team)
+        return f"Users synced!", 204
+    except NotFoundException as e:
+        logger.error(e)
+        return jsonify({"error": str(e)}), 404
+    except Exception as e:
+        logger.error(e)
+        return jsonify({"error": str(e)}), 500
