@@ -94,8 +94,11 @@ class ScoreAppService:
         if series_per_week is not None and number_weeks is not None:
             team.seasons_info[season_key].points_available = (series_per_week * number_weeks * self.getMaxPointsPerSeries()) - team_points - team_against
 
-        return self.team_season_service.update(team.id, team.seasons_info[season_key])
-    
+        updated_season_info = self.team_season_service.update(team.id, team.seasons_info[season_key])
+        
+        team.seasons_info[season_key] = updated_season_info
+        return team
+
     def getScoreByMapScore(self, playerScore: int, opponentScore: int):
         if playerScore == None and opponentScore == None:
             return None

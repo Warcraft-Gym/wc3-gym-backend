@@ -57,7 +57,7 @@ def index():
 })
 def login():
     data = request.json
-    if data['token'] == os.getenv('admin_token'):
+    if data['token'] == os.getenv('ADMIN_TOKEN'):
         access_token = create_access_token(identity='admin',expires_delta=timedelta(minutes=15))
         refresh_token = create_refresh_token(identity='admin')
         return jsonify(access_token=access_token, refresh_token=refresh_token), 200
