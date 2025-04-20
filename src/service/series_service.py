@@ -16,9 +16,9 @@ class SeriesAppService:
         series.id = None
         series = self.score_app_service.calculateSeriesScore(series)
         series = self.series_service.add(series)
+        self.updateGNLSeasonStats(series)
         if not series.player1_points and not series.player2_points:
             return series
-        self.updateGNLSeasonStats(series)
         series.match = self.score_app_service.updateMatchScore(series.match_id)
 
         return series
@@ -27,10 +27,10 @@ class SeriesAppService:
         series.id = series_id
         series = self.score_app_service.calculateSeriesScore(series)
         series = self.series_service.update(series)
+        self.updateGNLSeasonStats(series)
         if not series.player1_points and not series.player2_points:
             return series
-        self.updateGNLSeasonStats(series)
-
+        
         series.match = self.score_app_service.updateMatchScore(series.match_id)
 
         return series
@@ -75,6 +75,9 @@ class SeriesAppService:
     def calculateUserSeasonStats(self, user_id, season_id, team_id):
         query = QueryUtil.parseQuery(f'player1_id == {user_id} or player2_id == {user_id}')
         series = self.searchForSeason(season_id, query)
+        games = 0
+        wins = 0
+        losses = 0
         if series:
             games = len(series)
             wins = 0
@@ -97,6 +100,8 @@ class SeriesAppService:
 
     def isSeriesWon(self, user_id, series):
         if series.player1_score is not None and series.player2_score is not None:
+            if series.player1_score == 0 and series.player2_score == 0:
+                return None
             if series.player1_id == user_id and series.player1_score == 2:
                 return True
             if  series.player2_id == user_id and series.player2_score == 2:
