@@ -67,11 +67,15 @@ class ScoreAppService:
 
         for match in matches:
             if match.team1_id == team.id:
-                team_points += match.team1_score
-                team_against += match.team2_score
+                if match.team1_score is not None:
+                    team_points += match.team1_score
+                if match.team2_score is not None:
+                    team_against += match.team2_score
             elif match.team2_id == team.id:
-                team_points += match.team2_score
-                team_against += match.team1_score
+                if match.team2_score is not None:
+                    team_points += match.team2_score
+                if match.team1_score is not None:
+                    team_against += match.team1_score
             else:
                 raise Exception("Cannot calculate Teamscore invalid match!")
         

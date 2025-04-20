@@ -3,6 +3,7 @@ import os
 import urllib.parse
 import logging
 from src.dtos.w3c_stats_dto import W3CStatsDTO
+from src.database.model.DBEnums import Race
 
 
 logger = logging.getLogger(__name__)
@@ -43,20 +44,20 @@ class W3CService:
                 w3cstats.games = gmode_stats.get('games')
                 w3cstats.mmr = gmode_stats.get('mmr')
                 w3cstats.winrate = gmode_stats.get('winrate')
-                w3cstats.race = self.getRaceEnumString(gmode_stats.get('race'))
+                w3cstats.race = self.getRaceEnum(gmode_stats.get('race'))
                 w3cstats.league = gmode_stats.get('leagueOrder')
                 stats.append(w3cstats)
         return stats
 
-    def getRaceEnumString(self, race_int):
+    def getRaceEnum(self, race_int):
         if not race_int:
             return None
         race_mapping = {
-            0: "RANDOM",
-            8: "UD",
-            1: "HU",
-            4: "NE",
-            2: "OC"
+            0: Race.RANDOM,
+            8: Race.UD,
+            1: Race.HU,
+            4: Race.NE,
+            2: Race.OC
             }
         race = race_mapping.get(race_int)
         return race

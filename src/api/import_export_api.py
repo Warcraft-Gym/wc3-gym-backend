@@ -210,7 +210,7 @@ def import_season():
                                     'team2_id': team2_id,
                                     'season_id': season_id,
                                     'playday': i,
-                                    'fixed_map_id': fixed_map.id,
+                                    'fixed_map_id': fixed_map.id if fixed_map else None,
                                     'date_frame': date_frame
                                 }
                                 match = import_blueprint.match_app_service.create_match(MatchDTO(match_data))

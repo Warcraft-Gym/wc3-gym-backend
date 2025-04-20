@@ -16,6 +16,8 @@ class SeriesAppService:
         series.id = None
         series = self.score_app_service.calculateSeriesScore(series)
         series = self.series_service.add(series)
+        if not series.player1_points and not series.player2_points:
+            return series
         self.updateGNLSeasonStats(series)
         series.match = self.score_app_service.updateMatchScore(series.match_id)
 
@@ -25,7 +27,8 @@ class SeriesAppService:
         series.id = series_id
         series = self.score_app_service.calculateSeriesScore(series)
         series = self.series_service.update(series)
-
+        if not series.player1_points and not series.player2_points:
+            return series
         self.updateGNLSeasonStats(series)
 
         series.match = self.score_app_service.updateMatchScore(series.match_id)
@@ -33,7 +36,12 @@ class SeriesAppService:
         return series
     
     def delete_series(self, series_id: int):
+        series = self.get_series(series_id=series_id)
         self.series_service.delete(series_id)
+        self.updateGNLSeasonStats(series)
+        if not series.player1_points and not series.player2_points:
+            return
+        self.score_app_service.updateMatchScore(series.match_id)
 
     def get_series(self, series_id: int):
         series_data = self.series_service.get(series_id)
