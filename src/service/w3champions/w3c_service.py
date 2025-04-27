@@ -50,7 +50,7 @@ class W3CService:
         return stats
 
     def getRaceEnum(self, race_int):
-        if not race_int:
+        if race_int is None:
             return None
         race_mapping = {
             0: Race.RANDOM,
