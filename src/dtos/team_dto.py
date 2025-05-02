@@ -25,7 +25,6 @@ class TeamDTO:
             'id': self.id,
             'name': self.name,
             'long_name': self.long_name,
-            'icon': self.icon,
             'discord_role': self.discord_role,
             'player_by_season': l,
             'seasons_info': seasons_info
@@ -36,7 +35,6 @@ class TeamDTO:
             'id': self.id,
             'name': self.name,
             'long_name': self.long_name,
-            'icon': self.icon,
             'discord_role': self.discord_role
         }
     

@@ -367,3 +367,69 @@ def sync_w3c_users_season(team_id, season_id):
     except Exception as e:
         logger.error(e)
         return jsonify({"error": str(e)}), 500
+
+@jwt_required()
+@team_blueprint.route('/teams/<int:team_id>/image', methods=['POST'])
+@swag_from({
+    'summary': 'Upload or update a team\'s image',
+    'description': 'Allows a user to upload or modify a team\'s image stored in binary format',
+    'tags': ['teams'],
+    'consumes': ['multipart/form-data'],
+    'parameters': [
+        {'name': 'team_id', 'in': 'path', 'type': 'integer', 'required': True, 'description': 'The ID of the team'},
+        {'name': 'image', 'in': 'formData', 'type': 'file', 'required': True, 'description': 'Binary image file'}
+    ],
+    'responses': {
+        200: {'description': 'Image successfully uploaded'},
+        400: {'description': 'Invalid image format'},
+        404: {'description': 'Team not found'},
+        500: {'description': 'Internal server error'}
+    }
+})
+def upload_team_image(team_id):
+    try:
+        if "image" not in request.files:
+            return jsonify({"error": "No image provided"}), 400
+        
+        file = request.files["image"]  # Get binary image
+        file_data = file.read()  # Read binary data
+        
+        # Store binary data in database
+        team = team_blueprint.team_app_service.get_team(team_id)
+        if not team:
+            return jsonify({"error": "Team not found"}), 404
+        
+        team.icon = file_data  # Save binary
+        team_blueprint.team_app_service.update_team(team_id, team)
+        
+        return jsonify({"message": "Image uploaded successfully"}), 200
+    except Exception as e:
+        logger.error(e)
+        return jsonify({"error": str(e)}), 500
+
+@team_blueprint.route('/teams/<int:team_id>/image', methods=['GET'])
+@swag_from({
+    'summary': 'Retrieve a team\'s image',
+    'description': 'Fetches and returns the stored binary image for a team',
+    'tags': ['teams'],
+    'produces': ['image/png', 'image/jpeg'],
+    'parameters': [
+        {'name': 'team_id', 'in': 'path', 'type': 'integer', 'required': True, 'description': 'The ID of the team'}
+    ],
+    'responses': {
+        200: {'description': 'Image successfully retrieved', 'content': {'image/png': {}, 'image/jpeg': {}}},
+        404: {'description': 'Team not found or no image available'},
+        500: {'description': 'Internal server error'}
+    }
+})
+def get_team_image(team_id):
+    """Returns the stored image of a team"""
+    try:
+        team = team_blueprint.team_app_service.get_team(team_id)
+        if not team or not team.icon:
+            return jsonify({"error": "Image not found"}), 404
+
+        return team.icon, 200, {"Content-Type": "image/png"}
+    except Exception as e:
+        logger.error(e)
+        return jsonify({"error": str(e)}), 500
