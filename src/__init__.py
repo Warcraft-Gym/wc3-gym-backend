@@ -56,8 +56,6 @@ class CustomJSONProvider(DefaultJSONProvider):
     
 app.json  = CustomJSONProvider(app)
 
-
-
 swagger_config = {
     "headers": [],
     "specs": [
