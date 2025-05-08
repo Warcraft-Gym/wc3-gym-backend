@@ -43,14 +43,25 @@ from src.api.fantasy_api import fantasy_blueprint
 # Load environment variables from .env file
 load_dotenv()
 
+# Configure logging
+logging.basicConfig(level=logging.DEBUG)
+
+logger = logging.getLogger(__name__)
+
 app = Flask(__name__)
+
+logger.debug("Flask App Created!")
 CORS(app)
+
+logger.debug("Cors enabled!")
 
 app.config['CACHE_TYPE'] = 'SimpleCache'  # In-memory caching
 
 
 cache = Cache(app)
 cache.init_app(app)
+
+logger.debug("Cache initialized!")
 
 
 class CustomJSONProvider(DefaultJSONProvider):
@@ -63,6 +74,8 @@ class CustomJSONProvider(DefaultJSONProvider):
         return super().default(obj)
     
 app.json  = CustomJSONProvider(app)
+
+logger.debug("Custom JSON Provider registered!")
 
 swagger_config = {
     "headers": [],
@@ -109,13 +122,15 @@ template = {
 
 swag = Swagger(app, template=template, config=swagger_config)
 
+logger.debug("Swagger initialized!")
+
 # Initialize JWT
 app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY')
 app.config['JWT_ALGORITHM'] = os.getenv('JWT_ALGORITHM', 'HS256')  
 jwt = JWTManager(app)
 
-# Configure logging
-logging.basicConfig(level=logging.DEBUG)
+logger.debug("JWT initialized!")
+
 
 # Initialize services with database URL from environment variables
 db_url = os.getenv('DB_URL')
@@ -128,6 +143,8 @@ map_service = MapDBService(db_url=db_url)
 team_season_service = TeamSeasonDBService(db_url=db_url)
 fantasy_bet_service = FantasyBetDBService(db_url=db_url)
 fantasy_team_service = FantasyTeamDBService(db_url=db_url)
+
+logger.debug("DB Services initialized!")
 
 # Initialize application services
 user_app_service = UserAppService(user_service=user_service)
@@ -145,6 +162,7 @@ fantasy_score_app_service = FantasyScoreAppService(fantasy_team_service=fantasy_
                                                     team_app_service=team_app_service)
 
 
+logger.debug("App services initialized!")
 
 import_blueprint.user_app_service = user_app_service
 import_blueprint.season_app_service = season_app_service
@@ -184,3 +202,8 @@ app.register_blueprint(series_blueprint)
 app.register_blueprint(map_blueprint)
 app.register_blueprint(score_blueprint)
 app.register_blueprint(fantasy_blueprint)
+
+logger.debug("API blueprints registered!")
+
+
+logger.debug("App succesfully initialized!")
