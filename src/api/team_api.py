@@ -356,11 +356,22 @@ def search_teams():
 })
 def sync_w3c_users_season(team_id, season_id):
     try:
+        cache_key = f"w3c_sync:{team_id}:{season_id}"
+        last_sync_time = team_blueprint.cache.get(cache_key)
+
+        if last_sync_time:
+            return "Sync already performed today", 429
+
+        team = team_blueprint.team_app_service.syncW3CStatsTeam(team_id, season_id)
+        if team:
+            team = team.to_dict()
+
+        team_blueprint.cache.set(cache_key, True, timeout=86400)  # Store in cache for 24 hours
+
         team = team_blueprint.team_app_service.syncW3CStatsTeam(team_id, season_id)
         if(team):
             team = team.to_dict()
         return jsonify(team)
-        return f"Users synced!", 204
     except NotFoundException as e:
         logger.error(e)
         return jsonify({"error": str(e)}), 404

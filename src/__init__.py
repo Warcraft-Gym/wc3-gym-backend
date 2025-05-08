@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 from flask import Flask
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
+from flask_caching import Cache
 from src.database.user_db_service import UserDBService
 from src.database.team_db_service import TeamDBService
 from src.database.match_db_service import MatchDBService
@@ -44,6 +45,13 @@ load_dotenv()
 
 app = Flask(__name__)
 CORS(app)
+
+app.config['CACHE_TYPE'] = 'SimpleCache'  # In-memory caching
+
+
+cache = Cache(app)
+cache.init_app(app)
+
 
 class CustomJSONProvider(DefaultJSONProvider):
     def __init__(self, app):
@@ -151,6 +159,7 @@ import_blueprint.fantasy_team_app_service = fantasy_team_app_service
 user_blueprint.user_app_service = user_app_service
 season_blueprint.season_app_service = season_app_service
 team_blueprint.team_app_service = team_app_service
+team_blueprint.cache = cache
 match_blueprint.match_app_service = match_app_service
 series_blueprint.series_app_service = series_app_service
 map_blueprint.map_app_service = map_app_service
