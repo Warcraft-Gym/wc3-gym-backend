@@ -55,7 +55,7 @@ class UserAppService:
                     self.user_service.createW3CStats(s)
 
     def updateW3CStats_ById(self, user_id):
-        user = self.user_service.get(user_id==user_id)
+        user = self.user_service.get(user_id)
         if not user:
             raise Exception(f"User could not be found by id: {user_id}")
         self.updateW3CStats(user)
