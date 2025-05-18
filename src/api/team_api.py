@@ -404,14 +404,8 @@ def upload_team_image(team_id):
         
         file = request.files["image"]  # Get binary image
         file_data = file.read()  # Read binary data
-        
-        # Store binary data in database
-        team = team_blueprint.team_app_service.get_team(team_id)
-        if not team:
-            return jsonify({"error": "Team not found"}), 404
-        
-        team.icon = file_data  # Save binary
-        team_blueprint.team_app_service.update_team(team_id, team)
+
+        team_blueprint.team_app_service.update_team_icon(team_id, file_data)
         
         return jsonify({"message": "Image uploaded successfully"}), 200
     except Exception as e:
@@ -436,11 +430,11 @@ def upload_team_image(team_id):
 def get_team_image(team_id):
     """Returns the stored image of a team"""
     try:
-        team = team_blueprint.team_app_service.get_team(team_id)
-        if not team or not team.icon:
+        team_icon = team_blueprint.team_app_service.get_team_icon(team_id)
+        if not team_icon:
             return jsonify({"error": "Image not found"}), 404
 
-        return team.icon, 200, {"Content-Type": "image/png"}
+        return team_icon, 200, {"Content-Type": "image/png"}
     except Exception as e:
         logger.error(e)
         return jsonify({"error": str(e)}), 500

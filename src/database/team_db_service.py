@@ -31,6 +31,17 @@ class TeamDBService(AbstractDatabaseService):
             except SQLAlchemyError as e:
                 logger.error(f"Database error: {e}")
                 raise DBException(f"Database error: {e}")
+    
+    def update_icon(self, team_id, file):
+        with self.get_session() as session:
+            try:
+                team = DBTeam.update_icon(session, team_id, file)
+                if not team:
+                    raise DBException("Team icon could not be updated!")
+                return TeamDTO.from_dbteam(team)   
+            except SQLAlchemyError as e:
+                logger.error(f"Database error: {e}")
+                raise DBException(f"Database error: {e}")
 
     def addPlayers(self, team_id, season_id, player_ids):
         with self.get_session() as session:
@@ -70,6 +81,17 @@ class TeamDBService(AbstractDatabaseService):
                 if not team:
                     raise DBException("Team could not be found!")
                 return TeamDTO.from_dbteam(team)   
+            except SQLAlchemyError as e:
+                logger.error(f"Database error: {e}")
+                raise DBException(f"Database error: {e}")
+
+    def get_icon(self, team_id):
+        with self.get_session() as session:
+            try:
+                team = session.query(DBTeam).filter_by(id=team_id).first()
+                if not team:
+                    raise DBException("Team could not be found!")
+                return team.icon
             except SQLAlchemyError as e:
                 logger.error(f"Database error: {e}")
                 raise DBException(f"Database error: {e}")

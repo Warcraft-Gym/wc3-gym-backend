@@ -10,7 +10,6 @@ class TeamDTO:
         self.name = data.get('name')
         self.long_name = data.get('long_name')
         self.discord_role = data.get('discord_role')
-        self.icon = data.get('icon')
         self.player_by_season = data.get('player_by_season')
         self.seasons_info = data.get('seasons_info')
 
@@ -42,7 +41,6 @@ class TeamDTO:
         return {
             'name': self.name,
             'long_name': self.long_name,
-            'icon': self.icon,
             'discord_role': self.discord_role
         }
 
@@ -66,7 +64,6 @@ class TeamDTO:
                 'id' : team.id,
                 'name' : team.name,
                 'long_name': team.long_name,
-                'icon' : team.icon,
                 'discord_role': team.discord_role,
                 'player_by_season' : u,
                 'seasons_info' : seasons_info
@@ -80,7 +77,6 @@ class TeamDTO:
                 'id' : team.id,
                 'name' : team.name,
                 'long_name': team.long_name,
-                'icon' : team.icon,
                 'discord_role': team.discord_role
             }
         )
@@ -93,7 +89,6 @@ class TeamDTO:
             'properties': {
                 'name': {'type': 'string'},
                 'long_name': {'type': 'string'},
-                'icon': {'type': 'string', 'format': 'binary'},
                 'discord_role': {'type': 'string'}
             },
             'required': ['name']

@@ -17,6 +17,10 @@ class TeamAppService:
         team.id = team_id
         team_data = self.team_service.update(team)
         return team_data
+    
+    def update_team_icon(self, team_id: int, file):
+        team_data = self.team_service.update_icon(team_id, file)
+        return team_data
 
     def delete_team(self, team_id: int):
         self.team_service.delete(team_id)
@@ -26,6 +30,9 @@ class TeamAppService:
         if not team_data:
             raise NotFoundException(f"Team not found by Id: {team_id}")
         return team_data
+    
+    def get_team_icon(self, team_id: int):
+        return self.team_service.get_icon(team_id)
     
     def get_team_season(self, team_id: int, season_id):
         team_data = self.team_service.get(team_id)

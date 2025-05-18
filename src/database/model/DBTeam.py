@@ -58,3 +58,11 @@ class DBTeam(DBModel):
             session.delete(user_team)                
         session.commit()
         return team
+    
+    @classmethod
+    def update_icon(cls, session: Session, obj_id, file):
+        obj = session.query(cls).filter_by(id=obj_id).first()
+        if obj:
+            setattr(obj, DBTeam.icon.name, file)
+            session.commit()
+        return obj
