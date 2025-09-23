@@ -8,6 +8,7 @@ class UserDTO:
         self.name = data.get('name')
         self.battleTag = data.get('battleTag')
         self.discordTag = data.get('discordTag')
+        self.discordId = data.get('discordId')
         self.race = data.get('race')
         self.mmr = data.get('mmr')
         self.country = data.get('country')
@@ -21,6 +22,7 @@ class UserDTO:
             'name': self.name,
             'battleTag': self.battleTag,
             'discordTag': self.discordTag,
+            'discordId': self.discordId,
             'race': self.race,
             'mmr': self.mmr,
             'country': self.country,
@@ -35,6 +37,7 @@ class UserDTO:
             'name': self.name,
             'battleTag': self.battleTag,
             'discordTag': self.discordTag,
+            'discordId': self.discordId,
             'race': self.race,
             'mmr': self.mmr,
             'country': self.country,
@@ -49,6 +52,7 @@ class UserDTO:
                 'name': user.name,
                 'battleTag': user.battleTag,
                 'discordTag': user.discordTag,
+                'discordId': user.discordId,
                 'race': user.race,
                 'mmr': user.mmr,
                 'country': user.country,
@@ -71,6 +75,10 @@ class UserDTO:
                     "type": "string",
                     "description": "User's BattleTag"
                 },
+                "discordId":{
+                    "type": "string",
+                    "description": "User's DiscordId"
+                },
                 "discordTag": {
                     "type": "string",
                     "description": "User's DiscordTag"
@@ -92,5 +100,5 @@ class UserDTO:
                     "description": "fantasy tier"
                 }
             },
-            "required": ["name", "battleTag", "discordTag"]
+            "required": ["name", "battleTag", "discordId", "discordTag"]
         }

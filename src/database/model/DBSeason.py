@@ -18,6 +18,7 @@ class DBSeason(DBModel):
     user_teams = relationship('DBUserTeamSeason', back_populates='season', cascade="all, delete")
     teams = relationship('DBTeamSeason', back_populates='season', cascade="all, delete")
     maps = relationship('DBMapSeason', back_populates='season', cascade="all, delete")
+    discordRole = Column(String(50))
 
     def to_dict(self):
         return {column.name: getattr(self, column.name) for column in self.__table__.columns}

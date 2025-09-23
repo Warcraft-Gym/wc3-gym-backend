@@ -10,6 +10,7 @@ class SeasonDTO:
         self.series_per_week = data.get('series_per_week')
         self.pick_ban = data.get('pick_ban')
         self.maps = data.get('maps')
+        self.discordRole = data.get('discordRole')
 
     def to_dict(self):
 
@@ -19,7 +20,8 @@ class SeasonDTO:
             'number_weeks' : self.number_weeks,
             'series_per_week': self.series_per_week,
             'pick_ban' : self.pick_ban,
-            'maps' : [map.to_dict() for map in self.maps] if self.maps else None
+            'maps' : [map.to_dict() for map in self.maps] if self.maps else None,
+            'discordRole' : self.discordRole
         }
     
     def to_db_dict(self):
@@ -28,7 +30,8 @@ class SeasonDTO:
             'name': self.name,
             'number_weeks' : self.number_weeks,
             'series_per_week': self.series_per_week,
-            'pick_ban' : self.pick_ban
+            'pick_ban' : self.pick_ban,
+            'discordRole' : self.discordRole
         }
 
     @classmethod
@@ -43,7 +46,8 @@ class SeasonDTO:
                 'number_weeks' : season.number_weeks,
                 'series_per_week': season.series_per_week,
                 'pick_ban' : season.pick_ban,
-                'maps' : [MapDTO.from_dbmap(map_season.map) for map_season in season.maps ]
+                'maps' : [MapDTO.from_dbmap(map_season.map) for map_season in season.maps ],
+                'discordRole' : season.discordRole
             }
         )
     
@@ -55,7 +59,8 @@ class SeasonDTO:
                 'name': {'type': 'string'},
                 'number_weeks' : {'type': 'integer'},
                 'series_per_week': {'type': 'integer'},
-                'pick_ban' : {'type' : 'string', 'description': 'e.g. Ban_A|Ban_B|Ban_B|Ban_A|Pick_A|Pick_B'}
+                'pick_ban' : {'type' : 'string', 'description': 'e.g. Ban_A|Ban_B|Ban_B|Ban_A|Pick_A|Pick_B'},
+                'discordRole' : {'type': 'string'}
             },
             'required': ['name','number_weeks']
         }
