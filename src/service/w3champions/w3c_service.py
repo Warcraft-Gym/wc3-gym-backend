@@ -33,7 +33,7 @@ class W3CService:
         result =  self.send_request(method=self.GET, url=f"{w3c_url}/{urllib.parse.quote(bnet_name)}/game-mode-stats", params=param)
         if not result:
             logger.debug(f"no stats found for player {bnet_name} on w3c")
-            return None
+            raise Exception(f"No stats found for player {bnet_name} on W3C")
         stats = []
         for gmode_stats  in result:
             if gmode_stats.get('gameMode') and gmode_stats.get('gameMode') == 1:
