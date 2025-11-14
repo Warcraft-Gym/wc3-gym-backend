@@ -176,3 +176,5 @@ cython_debug/
 # Docker
 .dockerignore
 docker-compose*
+
+.github

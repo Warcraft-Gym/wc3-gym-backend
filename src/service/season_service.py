@@ -48,3 +48,11 @@ class SeasonAppService:
     def removeMaps(self, season_id: int, map_ids):
         season_data = self.season_service.removeMaps(season_id, map_ids)
         return season_data
+
+    def addUserSignup(self, season_id: int, user_ids):
+        season_data = self.season_service.addUserSignup(season_id, user_ids)
+        return season_data
+      
+    def removeUserSignup(self, season_id: int, user_ids):
+        season_data = self.season_service.removeUserSignup(season_id, user_ids)
+        return season_data

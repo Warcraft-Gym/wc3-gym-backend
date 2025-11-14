@@ -1,12 +1,9 @@
 import logging
 from src.database.abstract_database_service import AbstractDatabaseService
 from src.database.model.DBSeason import DBSeason
-from src.database.model.DBTeam import DBTeam
-from src.database.model.DBMap import DBMap
 from sqlalchemy.exc import SQLAlchemyError
 from custom_exceptions import DBException
 from src.dtos.season_dto import SeasonDTO
-from src.dtos.map_dto import MapDTO
 from src.util.query_util import QueryUtil
 
 logger = logging.getLogger(__name__)
@@ -128,5 +125,27 @@ class SeasonDBService(AbstractDatabaseService):
                 return SeasonDTO.from_dbseason(season)   
             except SQLAlchemyError as e:
                 # Log the error and handle it
+                logger.error(f"Database error: {e}")
+                raise DBException(f"Database error: {e}")
+
+    def addUserSignup(self, season_id, user_ids):
+        with self.get_session() as session:
+            try:
+                season = DBSeason.addUserSignup(session, season_id, user_ids)
+                if not season:
+                    raise DBException("Season could not be updated!")
+                return SeasonDTO.from_dbseason(season)
+            except SQLAlchemyError as e:
+                logger.error(f"Database error: {e}")
+                raise DBException(f"Database error: {e}")
+
+    def removeUserSignup(self, season_id, user_ids):
+        with self.get_session() as session:
+            try:
+                season = DBSeason.removeUserSignup(session, season_id, user_ids)
+                if not season:
+                    raise DBException("Season could not be updated!")
+                return SeasonDTO.from_dbseason(season)
+            except SQLAlchemyError as e:
                 logger.error(f"Database error: {e}")
                 raise DBException(f"Database error: {e}")

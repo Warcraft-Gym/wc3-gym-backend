@@ -15,6 +15,7 @@ class UserDTO:
         self.w3c_stats = data.get('w3c_stats')
         self.gnl_stats = data.get('gnl_stats')
         self.fantasy_tier = data.get('fantasy_tier')
+        self.signup_seasons = data.get('signup_seasons')
 
     def to_dict(self):
         return {
@@ -28,7 +29,8 @@ class UserDTO:
             'country': self.country,
             'w3c_stats': [s.to_dict() for s in self.w3c_stats] if self.w3c_stats else [],
             'gnl_stats': [s.to_dict() for s in self.gnl_stats] if self.gnl_stats else [],
-            'fantasy_tier': self.fantasy_tier
+            'fantasy_tier': self.fantasy_tier,
+            'signup_seasons': [s.to_dict() for s in self.signup_seasons] if self.signup_seasons else []
         }
     
     def to_db_dict(self):
@@ -46,8 +48,11 @@ class UserDTO:
 
     @classmethod
     def from_dbuser(cls, user: DBUser):
+        # import SeasonDTO lazily to avoid circular imports
+        from src.dtos.season_dto import SeasonDTO
+
         return cls(
-                {
+            {
                 'id': user.id,
                 'name': user.name,
                 'battleTag': user.battleTag,
@@ -58,7 +63,8 @@ class UserDTO:
                 'country': user.country,
                 'w3c_stats': [W3CStatsDTO.from_dbw3cstats(s) for s in user.w3c_stats] if user.w3c_stats else [],
                 'gnl_stats': [UserTeamSeasonStatsDTO.from_db_user_team_season(s) for s in user.team_seasons] if user.team_seasons else [],
-                'fantasy_tier': user.fantasy_tier
+                'fantasy_tier': user.fantasy_tier,
+                'signup_seasons': [SeasonDTO.from_dbseason_reduced(s.season) for s in user.signup_seasons] if user.signup_seasons else []
             }
         )
 

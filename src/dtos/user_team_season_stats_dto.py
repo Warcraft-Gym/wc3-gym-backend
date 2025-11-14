@@ -35,7 +35,7 @@ class UserTeamSeasonStatsDTO:
             'wins' : uts.wins,
             'losses' : uts.losses,
             'season_id' : uts.season_id,
-            'season' : SeasonDTO.from_dbseason(uts.season) if uts.season else None
+            'season' : SeasonDTO.from_dbseason_reduced(uts.season) if uts.season else None
         })
     
     @staticmethod

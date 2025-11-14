@@ -1,5 +1,4 @@
 from src.database.model.DBSeason import DBSeason
-from src.database.model.DBMap import DBMap
 from src.dtos.map_dto import MapDTO
 
 class SeasonDTO:
@@ -11,6 +10,7 @@ class SeasonDTO:
         self.pick_ban = data.get('pick_ban')
         self.maps = data.get('maps')
         self.discordRole = data.get('discordRole')
+        self.user_signup = data.get('user_signup')
 
     def to_dict(self):
 
@@ -21,7 +21,8 @@ class SeasonDTO:
             'series_per_week': self.series_per_week,
             'pick_ban' : self.pick_ban,
             'maps' : [map.to_dict() for map in self.maps] if self.maps else None,
-            'discordRole' : self.discordRole
+            'discordRole' : self.discordRole,
+            'user_signup' : [user.to_dict() for user in self.user_signup] if self.user_signup else None
         }
     
     def to_db_dict(self):
@@ -38,16 +39,32 @@ class SeasonDTO:
     def from_dbseason(cls, season: DBSeason):
         if not season:
             return None
+        # import UserDTO lazily to avoid circular import with user_dto
+        from src.dtos.user_dto import UserDTO
 
         return cls(
-                {
-                'id' : season.id,
-                'name' : season.name,
-                'number_weeks' : season.number_weeks,
+            {
+                'id': season.id,
+                'name': season.name,
+                'number_weeks': season.number_weeks,
                 'series_per_week': season.series_per_week,
-                'pick_ban' : season.pick_ban,
-                'maps' : [MapDTO.from_dbmap(map_season.map) for map_season in season.maps ],
-                'discordRole' : season.discordRole
+                'pick_ban': season.pick_ban,
+                'maps': [MapDTO.from_dbmap(map_season.map) for map_season in season.maps],
+                'discordRole': season.discordRole,
+                # signup_users contains DBUserSeasonSignup objects; map to their related DBUser
+                'user_signup': [UserDTO.from_dbuser(u.user) for u in season.signup_users] if season.signup_users else []
+            }
+        )
+    
+    @classmethod
+    def from_dbseason_reduced(cls, season: DBSeason):
+        if not season:
+            return None
+
+        return cls(
+            {
+                'id': season.id,
+                'name': season.name
             }
         )
     

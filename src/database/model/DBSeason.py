@@ -6,6 +6,8 @@ from src.database.model.DBRelationships import DBTeamSeason
 from src.database.model.DBRelationships import DBMapSeason
 from src.database.model.DBTeam import DBTeam
 from src.database.model.DBMap import DBMap
+from src.database.model.DBRelationships import DBUserSeasonSignup
+from src.database.model.DBUser import DBUser
 
 
 class DBSeason(DBModel):
@@ -18,6 +20,7 @@ class DBSeason(DBModel):
     user_teams = relationship('DBUserTeamSeason', back_populates='season', cascade="all, delete")
     teams = relationship('DBTeamSeason', back_populates='season', cascade="all, delete")
     maps = relationship('DBMapSeason', back_populates='season', cascade="all, delete")
+    signup_users = relationship('DBUserSeasonSignup', back_populates='season', cascade="all, delete")
     discordRole = Column(String(50))
 
     def to_dict(self):
@@ -86,6 +89,39 @@ class DBSeason(DBModel):
             if not map_season:
                 raise Exception(f"Map not part of the season, map id: {map_id}, season id {obj_id}")
             session.delete(map_season)
+
+        session.commit()
+        return season
+    
+    @classmethod
+    def addUserSignup(cls, session: Session, obj_id, user_ids):
+        season = session.query(cls).filter_by(id=obj_id).first()
+        if not season:
+            raise Exception(f"Season not found by id: {obj_id}")
+        for user_id in user_ids:
+            user = session.query(DBUser).filter_by(id=user_id).first()
+            if not user:
+                raise Exception(f"User not found by id: {user_id}")
+            already_exists = session.query(DBUserSeasonSignup).filter_by(season_id=obj_id,user_id=user.id).first() is not None
+            if not already_exists:
+                session.add(DBUserSeasonSignup(season=season,user=user)) 
+
+        session.commit()
+        return season
+    
+    @classmethod
+    def removeUserSignup(cls, session: Session, obj_id, user_ids):
+        season = session.query(cls).filter_by(id=obj_id).first()
+        if not season:
+            raise Exception(f"Season not found by id: {obj_id}")
+        for user_id in user_ids:
+            user = session.query(DBUser).filter_by(id=user_id).first()
+            if not user:
+                raise Exception(f"User not found by id: {user_id}")
+            user_season = session.query(DBUserSeasonSignup).filter_by(season_id=obj_id,user_id=user.id).first()
+            if not user_season:
+                raise Exception(f"Map not part of the season, user id: {user_id}, season id {obj_id}")
+            session.delete(user_season)
 
         session.commit()
         return season
