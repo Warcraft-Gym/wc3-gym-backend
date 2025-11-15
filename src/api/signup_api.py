@@ -3,7 +3,9 @@ import os
 from flask import Blueprint, request, jsonify
 from flasgger import swag_from
 from datetime import datetime, timedelta, timezone
+from src.util.query_util import QueryUtil
 import secrets
+
 
 logger = logging.getLogger(__name__)
 
@@ -196,7 +198,31 @@ def public_create_user():
 
         # Create DTO directly using existing DTO class to keep shape
         from src.dtos.user_dto import UserDTO
-        user = signup_blueprint.user_app_service.create_user(UserDTO(user_payload))
+
+        # If a user already exists with this discord id, update that user instead of creating a new one
+        existing_users = []
+        try:
+            # search expects a query string like 'discordId==<value>'
+            query = QueryUtil.parseQuery(f"discordId == {entry.get('discord_id')} or discordTag == {entry.get('discord_tag')}")    
+            existing_users = signup_blueprint.user_app_service.search(query)
+        except Exception:
+            logger.exception('Error searching for existing user by discord id')
+            return jsonify({'error': 'Error searching for existing user by discord id'}), 500
+
+        if existing_users and len(existing_users) > 0:
+            # update first matched user
+            existing = existing_users[0]
+            try:
+                user_dto = UserDTO(user_payload)
+                user = signup_blueprint.user_app_service.update_user(existing.id, user_dto)
+            except Exception as ue:
+                # If updating an existing user fails, do NOT create a new user.
+                # Return an error so the client/bot can surface the failure and retry/investigate.
+                logger.exception('Failed to update existing user: %s', ue)
+                return jsonify({'error': 'Failed to update existing user'}), 500
+        else:
+            # create new user
+            user = signup_blueprint.user_app_service.create_user(UserDTO(user_payload))
 
         # Determine season to register the user for:
         # prefer the season_id encoded in the token, otherwise accept season_id from the request body
@@ -205,8 +231,11 @@ def public_create_user():
             try:
                 signup_blueprint.season_app_service.addUserSignup(int(season_id), [user.id])
             except Exception as se:
-                # log and continue; user was created even if season signup failed
+                # If adding the user to the season fails, return an error so the client
+                # can surface that signup failed. Do NOT consume the token so an admin
+                # or retry flow can inspect/resolve the issue.
                 logger.exception('Failed to add user to season: %s', se)
+                return jsonify({'error': 'Failed to add user to season'}), 500
 
         # consume the token
         try:
