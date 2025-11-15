@@ -36,6 +36,7 @@ from src.api.match_api import match_blueprint
 from src.api.season_api import season_blueprint
 from src.api.series_api import series_blueprint
 from src.api.import_export_api import import_blueprint
+from src.api.signup_api import signup_blueprint
 from src.api.map_api import map_blueprint
 from src.api.score_api import score_blueprint
 from src.api.fantasy_api import fantasy_blueprint
@@ -175,6 +176,8 @@ import_blueprint.fantasy_bet_app_service = fantasy_bet_app_service
 import_blueprint.fantasy_team_app_service = fantasy_team_app_service
 
 user_blueprint.user_app_service = user_app_service
+signup_blueprint.user_app_service = user_app_service
+signup_blueprint.season_app_service = season_app_service
 season_blueprint.season_app_service = season_app_service
 team_blueprint.team_app_service = team_app_service
 team_blueprint.cache = cache
@@ -198,6 +201,7 @@ app.register_blueprint(team_blueprint)
 app.register_blueprint(match_blueprint)
 app.register_blueprint(season_blueprint)
 app.register_blueprint(import_blueprint)
+app.register_blueprint(signup_blueprint)
 app.register_blueprint(series_blueprint)
 app.register_blueprint(map_blueprint)
 app.register_blueprint(score_blueprint)

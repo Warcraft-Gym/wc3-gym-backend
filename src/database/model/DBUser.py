@@ -1,7 +1,7 @@
 from sqlalchemy import Column, Integer, String, Sequence, Enum, ForeignKey 
 from sqlalchemy.orm import relationship
 from src.database.model.DBModel import DBModel
-from src.database.model.DBEnums import Race, Country
+from src.database.model.DBEnums import Race
 from src.database.model.DBRelationships import DBUserTeamSeason
 
 class DBUser(DBModel):
@@ -14,7 +14,7 @@ class DBUser(DBModel):
     discordId = Column(String(50), nullable=False)
     race = Column(Enum(Race), nullable=False)
     mmr = Column(Integer)
-    country = Column(Enum(Country))
+    country = Column(String(2))
     fantasy_tier = Column(Integer)
     team_seasons = relationship('DBUserTeamSeason', back_populates='user', cascade="all, delete")
     w3c_stats = relationship("DBW3CStats", back_populates='user', cascade='all, delete-orphan')
