@@ -36,7 +36,7 @@ from src.api.match_api import match_blueprint
 from src.api.season_api import season_blueprint
 from src.api.series_api import series_blueprint
 from src.api.import_export_api import import_blueprint
-from src.api.signup_api import signup_blueprint
+from src.api.public_api import public_api_blueprint
 from src.api.map_api import map_blueprint
 from src.api.score_api import score_blueprint
 from src.api.fantasy_api import fantasy_blueprint
@@ -75,6 +75,9 @@ class CustomJSONProvider(DefaultJSONProvider):
         return super().default(obj)
     
 app.json  = CustomJSONProvider(app)
+# Export the JSON provider instance so other modules can reuse it without importing the Flask
+# application context (avoids using `current_app` in services).
+json_provider = app.json
 
 logger.debug("Custom JSON Provider registered!")
 
@@ -176,8 +179,9 @@ import_blueprint.fantasy_bet_app_service = fantasy_bet_app_service
 import_blueprint.fantasy_team_app_service = fantasy_team_app_service
 
 user_blueprint.user_app_service = user_app_service
-signup_blueprint.user_app_service = user_app_service
-signup_blueprint.season_app_service = season_app_service
+public_api_blueprint.user_app_service = user_app_service
+public_api_blueprint.season_app_service = season_app_service
+public_api_blueprint.series_app_service = series_app_service
 season_blueprint.season_app_service = season_app_service
 team_blueprint.team_app_service = team_app_service
 team_blueprint.cache = cache
@@ -195,13 +199,17 @@ score_blueprint.series_app_service = series_app_service
 score_blueprint.score_app_service = score_app_service
 score_blueprint.team_app_service = team_app_service
 
+# Provide the custom JSON provider to blueprints so services can serialize
+# using the same provider without importing the Flask app/context.
+public_api_blueprint.json_provider = app.json
+
 app.register_blueprint(login_blueprint)
 app.register_blueprint(user_blueprint)
 app.register_blueprint(team_blueprint)
 app.register_blueprint(match_blueprint)
 app.register_blueprint(season_blueprint)
 app.register_blueprint(import_blueprint)
-app.register_blueprint(signup_blueprint)
+app.register_blueprint(public_api_blueprint)
 app.register_blueprint(series_blueprint)
 app.register_blueprint(map_blueprint)
 app.register_blueprint(score_blueprint)
