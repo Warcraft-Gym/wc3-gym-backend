@@ -2,6 +2,7 @@ import logging
 from src.database.abstract_database_service import AbstractDatabaseService
 from src.database.model.DBSeason import DBSeason
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import joinedload, noload
 from custom_exceptions import DBException
 from src.dtos.season_dto import SeasonDTO
 from src.util.query_util import QueryUtil
@@ -47,7 +48,15 @@ class SeasonDBService(AbstractDatabaseService):
     def get(self, season_id):
         with self.get_session() as session:
             try:
-                season = session.query(DBSeason).filter_by(id=season_id).first()
+                # Eager load related entities, disable nested loading
+                season = session.query(DBSeason)\
+                    .options(
+                        joinedload(DBSeason.user_teams).noload('*'),
+                        joinedload(DBSeason.teams).noload('*'),
+                        joinedload(DBSeason.maps).noload('*'),
+                        noload(DBSeason.signup_users)
+                    )\
+                    .filter_by(id=season_id).first()
                 # Example usage
                 if not season:
                     raise DBException("Season could not be found!")
@@ -62,7 +71,14 @@ class SeasonDBService(AbstractDatabaseService):
         with self.get_session() as session:
             try:
                 result = []
-                seasons = DBSeason.getAll(session)
+                # Eager load related entities, disable nested loading
+                seasons = session.query(DBSeason)\
+                    .options(
+                        joinedload(DBSeason.user_teams).noload('*'),
+                        joinedload(DBSeason.teams).noload('*'),
+                        joinedload(DBSeason.maps).noload('*'),
+                        noload(DBSeason.signup_users)
+                    ).all()
                 for season in seasons:
                     result.append(SeasonDTO.from_dbseason(season))
                 return result
@@ -86,7 +102,15 @@ class SeasonDBService(AbstractDatabaseService):
             try:
                 result = []
                 filter = QueryUtil.convertQueryToDBFilter(DBSeason, query)
-                seasons = DBSeason.search(session, filter)
+                # Eager load related entities, disable nested loading
+                seasons = session.query(DBSeason)\
+                    .options(
+                        joinedload(DBSeason.user_teams).noload('*'),
+                        joinedload(DBSeason.teams).noload('*'),
+                        joinedload(DBSeason.maps).noload('*'),
+                        noload(DBSeason.signup_users)
+                    )\
+                    .filter(filter).all() if filter is not None else []
                 if not seasons:
                     logger.debug(f"No seasons found by searchcriteria: {query}")
                     return result
@@ -146,6 +170,36 @@ class SeasonDBService(AbstractDatabaseService):
                 if not season:
                     raise DBException("Season could not be updated!")
                 return SeasonDTO.from_dbseason(season)
+            except SQLAlchemyError as e:
+                logger.error(f"Database error: {e}")
+                raise DBException(f"Database error: {e}")
+
+    def getSignedUpUsers(self, season_id):
+        with self.get_session() as session:
+            try:
+                from src.database.model.DBRelationships import DBUserSeasonSignup
+                from src.database.model.DBUser import DBUser
+                from src.dtos.user_dto import UserDTO
+                
+                # Eager load signup users with their user data, prevent further nesting
+                season = session.query(DBSeason)\
+                    .options(
+                        joinedload(DBSeason.signup_users).joinedload(DBUserSeasonSignup.user).noload('*')
+                    )\
+                    .filter_by(id=season_id).first()
+                
+                if not season:
+                    raise DBException("Season could not be found!")
+                
+                result = []
+                if season.signup_users:
+                    for signup in season.signup_users:
+                        if signup.user:
+                            user_dto = UserDTO.from_dbuser(signup.user)
+                            if user_dto:
+                                result.append(user_dto)
+                
+                return result
             except SQLAlchemyError as e:
                 logger.error(f"Database error: {e}")
                 raise DBException(f"Database error: {e}")

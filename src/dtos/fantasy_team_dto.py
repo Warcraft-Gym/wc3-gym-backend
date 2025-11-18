@@ -32,7 +32,7 @@ class FantasyTeamDTO:
             'drafted_team_id': self.drafted_team_id,
             'drafted_team': None if not self.drafted_team else self.drafted_team.to_dict(),
             'drafted_race': self.drafted_race,
-            'drafted_players': None if not self.drafted_players else [dp.to_dict() for dp in self.drafted_players],
+            'drafted_players': [dp.to_dict() for dp in self.drafted_players if dp] if self.drafted_players else None,
             'player_points': self.player_points,
             'bench_points': self.bench_points,
             'team_points': self.team_points,
@@ -58,20 +58,25 @@ class FantasyTeamDTO:
     
     @classmethod
     def from_dbfantasyteam(cls, fteam: DBFantasyTeam):
+        if not fteam:
+            return None
+
         drafted_players = []
         if fteam.drafted_players:
             for dp in fteam.drafted_players:
-                drafted_players.append(UserDTO.from_dbuser(dp.users))
+                user = UserDTO.from_dbuser(dp.users)
+                if user:
+                    drafted_players.append(user)
                 
         return cls(
             {
             'id': fteam.id,
             'season_id': fteam.season_id,
-            'season': None if not fteam.season else SeasonDTO.from_dbseason(fteam.season),
+            'season': SeasonDTO.from_dbseason(fteam.season) if fteam.season else None,
             'captain_id': fteam.captain_id,
-            'captain': None if not fteam.captain else UserDTO.from_dbuser(fteam.captain),
+            'captain': UserDTO.from_dbuser(fteam.captain) if fteam.captain else None,
             'drafted_team_id': fteam.drafted_team_id,
-            'drafted_team': None if not fteam.drafted_team else TeamDTO.from_dbteam(fteam.drafted_team),
+            'drafted_team': TeamDTO.from_dbteam(fteam.drafted_team) if fteam.drafted_team else None,
             'drafted_race': fteam.drafted_race,
             'drafted_players': drafted_players,
             'player_points': fteam.player_points,

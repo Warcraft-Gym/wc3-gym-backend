@@ -27,10 +27,10 @@ class UserDTO:
             'race': self.race,
             'mmr': self.mmr,
             'country': self.country,
-            'w3c_stats': [s.to_dict() for s in self.w3c_stats] if self.w3c_stats else [],
-            'gnl_stats': [s.to_dict() for s in self.gnl_stats] if self.gnl_stats else [],
+            'w3c_stats': [s.to_dict() for s in self.w3c_stats if s] if self.w3c_stats else [],
+            'gnl_stats': [s.to_dict() for s in self.gnl_stats if s] if self.gnl_stats else [],
             'fantasy_tier': self.fantasy_tier,
-            'signup_seasons': [s.to_dict() for s in self.signup_seasons] if self.signup_seasons else []
+            'signup_seasons': [s.to_dict() for s in self.signup_seasons if s] if self.signup_seasons else []
         }
     
     def to_db_dict(self):
@@ -48,6 +48,9 @@ class UserDTO:
 
     @classmethod
     def from_dbuser(cls, user: DBUser):
+        if not user:
+            return None
+
         # import SeasonDTO lazily to avoid circular imports
         from src.dtos.season_dto import SeasonDTO
 
@@ -61,10 +64,10 @@ class UserDTO:
                 'race': user.race,
                 'mmr': user.mmr,
                 'country': user.country,
-                'w3c_stats': [W3CStatsDTO.from_dbw3cstats(s) for s in user.w3c_stats] if user.w3c_stats else [],
-                'gnl_stats': [UserTeamSeasonStatsDTO.from_db_user_team_season(s) for s in user.team_seasons] if user.team_seasons else [],
+                'w3c_stats': [s for s in (W3CStatsDTO.from_dbw3cstats(stat) for stat in user.w3c_stats) if s] if user.w3c_stats else [],
+                'gnl_stats': [s for s in (UserTeamSeasonStatsDTO.from_db_user_team_season(stat) for stat in user.team_seasons) if s] if user.team_seasons else [],
                 'fantasy_tier': user.fantasy_tier,
-                'signup_seasons': [SeasonDTO.from_dbseason_reduced(s.season) for s in user.signup_seasons] if user.signup_seasons else []
+                'signup_seasons': [s for s in (SeasonDTO.from_dbseason_reduced(signup.season) for signup in user.signup_seasons) if s] if user.signup_seasons else []
             }
         )
 

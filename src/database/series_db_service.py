@@ -2,6 +2,7 @@ import logging
 from src.database.abstract_database_service import AbstractDatabaseService
 from src.database.model.DBSeries import DBSeries
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import joinedload
 from custom_exceptions import DBException
 from src.util.query_util import QueryUtil
 from src.dtos.series_dto import SeriesDTO
@@ -45,7 +46,14 @@ class SeriesDBService(AbstractDatabaseService):
     def get(self, series_id):
         try:
             session = self.Session()
-            series = session.query(DBSeries).filter_by(id=series_id).first()
+            # Eager load relationships to avoid N+1 queries, disable nested loading
+            series = session.query(DBSeries)\
+                .options(
+                    joinedload(DBSeries.match).noload('*'),
+                    joinedload(DBSeries.player1).noload('*'),
+                    joinedload(DBSeries.player2).noload('*')
+                )\
+                .filter_by(id=series_id).first()
             if not series:
                 raise DBException("Series could not be found")
             return SeriesDTO.from_dbseries(series)
@@ -58,7 +66,13 @@ class SeriesDBService(AbstractDatabaseService):
         try:
             result = []
             session = self.Session()
-            series = DBSeries.getAll(session)
+            # Eager load relationships, disable nested loading
+            series = session.query(DBSeries)\
+                .options(
+                    joinedload(DBSeries.match).noload('*'),
+                    joinedload(DBSeries.player1).noload('*'),
+                    joinedload(DBSeries.player2).noload('*')
+                ).all()
             for single_series in series:
                 result.append(SeriesDTO.from_dbseries(single_series))
             return result
@@ -70,7 +84,14 @@ class SeriesDBService(AbstractDatabaseService):
             try:
                 result = []
                 filter = QueryUtil.convertQueryToDBFilter(DBSeries, query)
-                series_list = DBSeries.search(session, filter)
+                # Eager load related entities, disable nested loading
+                series_list = session.query(DBSeries)\
+                    .options(
+                        joinedload(DBSeries.match).noload('*'),
+                        joinedload(DBSeries.player1).noload('*'),
+                        joinedload(DBSeries.player2).noload('*')
+                    )\
+                    .filter(filter).all() if filter is not None else []
                 if not series_list:
                     logger.debug(f"No series found by searchcriteria: {query}")
                     return result

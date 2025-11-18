@@ -31,13 +31,14 @@ class SeasonInfoDTO:
     def from_dbseasoninfo(cls, season_info: DBTeamSeason):
         if not season_info:
             return None
+
         return cls(
             {
             'season_id' : season_info.season_id,
             'final_score': season_info.final_score,
             'points_available': season_info.points_available,
             'points_against' : season_info.points_against,
-            'season' : SeasonDTO.from_dbseason(season_info.season)
+            'season' : SeasonDTO.from_dbseason(season_info.season) if season_info.season else None
         }
         )
     

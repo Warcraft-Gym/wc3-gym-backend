@@ -443,3 +443,31 @@ def remove_user_signup(season_id):
     except Exception as e:
         logger.error(e)
         return jsonify({"error": str(e)}), 500
+
+
+@season_blueprint.route('/seasons/<int:season_id>/signups', methods=['GET'])
+@swag_from({
+    'summary': 'Get signed up users for a season',
+    'description': 'Retrieve all users signed up for a specific season.',
+    'tags': ['seasons'],
+    'parameters': [{'name': 'season_id', 'in': 'path', 'type': 'integer', 'required': True}],
+    'responses': {
+        200: {'description': 'Signed up users retrieved successfully'},
+        404: {'description': 'Season not found'},
+        500: {'description': 'Internal server error'}
+    }
+})
+def get_season_signups(season_id):
+    try:
+        users = season_blueprint.season_app_service.getSignedUpUsers(season_id)
+        out = []
+        if users:
+            for user in users:
+                out.append(user.to_dict())
+        return jsonify(out)
+    except NotFoundException as e:
+        logger.error(e)
+        return jsonify({"error": str(e)}), 404
+    except Exception as e:
+        logger.error(e)
+        return jsonify({"error": str(e)}), 500

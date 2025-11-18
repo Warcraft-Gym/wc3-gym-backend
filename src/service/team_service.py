@@ -35,7 +35,7 @@ class TeamAppService:
         return self.team_service.get_icon(team_id)
     
     def get_team_season(self, team_id: int, season_id):
-        team_data = self.team_service.get(team_id)
+        team_data = self.team_service.get_with_nested_users(team_id)
         if not team_data:
             raise NotFoundException(f"Team not found by Id: {team_id}")
         # filter users and season info based on season id
@@ -62,7 +62,7 @@ class TeamAppService:
         return team_data
     
     def get_teams_season(self, season_id: int):
-        teams_data = self.team_service.getAll()
+        teams_data = self.team_service.getAll_with_nested_users()
         result = []
         if teams_data:
             for team_data in teams_data:

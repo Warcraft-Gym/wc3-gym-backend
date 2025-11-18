@@ -61,17 +61,20 @@ class SeriesDTO:
     
     @classmethod
     def from_dbseries(cls, series: DBSeries):
+        if not series:
+            return None
+
         return cls(
             {
                 'id': series.id,
                 'match_id': series.match_id,
-                'match': MatchDTO.from_dbmatch(series.match),
+                'match': MatchDTO.from_dbmatch(series.match) if series.match else None,
                 'date_time': series.date_time,
                 'caster': series.caster,
                 'player1_id': series.player1_id,
-                'player1': UserDTO.from_dbuser(series.player1),
+                'player1': UserDTO.from_dbuser(series.player1) if series.player1 else None,
                 'player2_id': series.player2_id,
-                'player2': UserDTO.from_dbuser(series.player2),
+                'player2': UserDTO.from_dbuser(series.player2) if series.player2 else None,
                 'player1_score': series.player1_score,
                 'player2_score': series.player2_score,
                 'player1_points': series.player1_points,

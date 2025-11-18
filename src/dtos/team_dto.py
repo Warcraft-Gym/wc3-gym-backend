@@ -18,8 +18,8 @@ class TeamDTO:
         if self.player_by_season:
             for season, players in self.player_by_season.items():
                 if players:
-                    l[season] = [player.to_dict() for player in players]
-        seasons_info = [seasons_info.to_dict() for seasons_info in self.seasons_info] if self.seasons_info else []
+                    l[season] = [player.to_dict() for player in players if player]
+        seasons_info = [seasons_info.to_dict() for seasons_info in self.seasons_info if seasons_info] if self.seasons_info else []
         return {
             'id': self.id,
             'name': self.name,
@@ -46,18 +46,23 @@ class TeamDTO:
 
     @classmethod
     def from_dbteam(cls, team: DBTeam):
-        u = {}
-        seasons_info = [SeasonInfoDTO.from_dbseasoninfo(season_info) for season_info in team.season_info ]
+        if not team:
+            return None
 
-        for ut in team.user_seasons:
-            if not u.get(ut.season_id):
-                u[ut.season_id]=[]
-            user = UserDTO.from_dbuser(ut.user)
-            for gnl_stat in user.gnl_stats:
-                if (gnl_stat.season_id==ut.season_id):
-                    user.gnl_stats = [gnl_stat]
-                    break
-            u.get(ut.season_id).append(user)
+        u = {}
+        seasons_info = [s for s in (SeasonInfoDTO.from_dbseasoninfo(info) for info in team.season_info) if s] if team.season_info else []
+
+        if team.user_seasons:
+            for ut in team.user_seasons:
+                if not u.get(ut.season_id):
+                    u[ut.season_id]=[]
+                user = UserDTO.from_dbuser(ut.user)
+                if user:
+                    for gnl_stat in user.gnl_stats:
+                        if (gnl_stat.season_id==ut.season_id):
+                            user.gnl_stats = [gnl_stat]
+                            break
+                    u.get(ut.season_id).append(user)
 
         return cls(
                 {

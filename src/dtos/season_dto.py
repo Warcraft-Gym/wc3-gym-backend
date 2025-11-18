@@ -20,9 +20,9 @@ class SeasonDTO:
             'number_weeks' : self.number_weeks,
             'series_per_week': self.series_per_week,
             'pick_ban' : self.pick_ban,
-            'maps' : [map.to_dict() for map in self.maps] if self.maps else None,
+            'maps' : [map.to_dict() for map in self.maps if map] if self.maps else None,
             'discordRole' : self.discordRole,
-            'user_signup' : [user.to_dict() for user in self.user_signup] if self.user_signup else None
+            'user_signup' : [user.to_dict() for user in self.user_signup if user] if self.user_signup else None
         }
     
     def to_db_dict(self):
@@ -39,8 +39,6 @@ class SeasonDTO:
     def from_dbseason(cls, season: DBSeason):
         if not season:
             return None
-        # import UserDTO lazily to avoid circular import with user_dto
-        from src.dtos.user_dto import UserDTO
 
         return cls(
             {
@@ -49,10 +47,9 @@ class SeasonDTO:
                 'number_weeks': season.number_weeks,
                 'series_per_week': season.series_per_week,
                 'pick_ban': season.pick_ban,
-                'maps': [MapDTO.from_dbmap(map_season.map) for map_season in season.maps],
+                'maps': [MapDTO.from_dbmap(map_season.map) for map_season in season.maps] if season.maps else [],
                 'discordRole': season.discordRole,
-                # signup_users contains DBUserSeasonSignup objects; map to their related DBUser
-                'user_signup': [UserDTO.from_dbuser(u.user) for u in season.signup_users] if season.signup_users else []
+                'user_signup': []
             }
         )
     

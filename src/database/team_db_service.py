@@ -2,6 +2,7 @@ import logging
 from src.database.abstract_database_service import AbstractDatabaseService
 from src.database.model.DBTeam import DBTeam
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import joinedload
 from custom_exceptions import DBException
 from src.dtos.team_dto import TeamDTO
 from src.util.query_util import QueryUtil
@@ -77,7 +78,34 @@ class TeamDBService(AbstractDatabaseService):
     def get(self, team_id):
         with self.get_session() as session:
             try:
-                team = session.query(DBTeam).filter_by(id=team_id).first()
+                # Eager load related entities, disable nested loading
+                team = session.query(DBTeam)\
+                    .options(
+                        joinedload(DBTeam.user_seasons).noload('*'),
+                        joinedload(DBTeam.season_info).noload('*')
+                    )\
+                    .filter_by(id=team_id).first()
+                if not team:
+                    raise DBException("Team could not be found!")
+                return TeamDTO.from_dbteam(team)   
+            except SQLAlchemyError as e:
+                logger.error(f"Database error: {e}")
+                raise DBException(f"Database error: {e}")
+
+    def get_with_nested_users(self, team_id):
+        with self.get_session() as session:
+            try:
+                from src.database.model.DBRelationships import DBUserTeamSeason
+                from src.database.model.DBUser import DBUser
+                # Eager load user_seasons and their users, but disable further nesting
+                team = session.query(DBTeam)\
+                    .options(
+                        joinedload(DBTeam.user_seasons).joinedload(DBUserTeamSeason.user).noload('*'),
+                        joinedload(DBTeam.user_seasons).noload(DBUserTeamSeason.team),
+                        joinedload(DBTeam.user_seasons).noload(DBUserTeamSeason.season),
+                        joinedload(DBTeam.season_info).noload('*')
+                    )\
+                    .filter_by(id=team_id).first()
                 if not team:
                     raise DBException("Team could not be found!")
                 return TeamDTO.from_dbteam(team)   
@@ -101,7 +129,13 @@ class TeamDBService(AbstractDatabaseService):
             try:
                 result = []
                 filter = QueryUtil.convertQueryToDBFilter(DBTeam, query)
-                teams = DBTeam.search(session, filter)
+                # Eager load related entities, disable nested loading
+                teams = session.query(DBTeam)\
+                    .options(
+                        joinedload(DBTeam.user_seasons).noload('*'),
+                        joinedload(DBTeam.season_info).noload('*')
+                    )\
+                    .filter(filter).all() if filter is not None else []
                 if not teams:
                     logger.debug(f"No teams found by searchcriteria: {query}")
                     return result
@@ -116,7 +150,33 @@ class TeamDBService(AbstractDatabaseService):
         with self.get_session() as session:
             try:
                 result = []
-                teams = DBTeam.getAll(session)
+                # Eager load related entities, disable nested loading
+                teams = session.query(DBTeam)\
+                    .options(
+                        joinedload(DBTeam.user_seasons).noload('*'),
+                        joinedload(DBTeam.season_info).noload('*')
+                    ).all()
+                for team in teams:
+                    result.append(TeamDTO.from_dbteam(team))
+                return result
+            except SQLAlchemyError as e:
+                logger.error(f"Database error: {e}")
+                raise DBException(f"Database error: {e}")
+
+    def getAll_with_nested_users(self):
+        with self.get_session() as session:
+            try:
+                from src.database.model.DBRelationships import DBUserTeamSeason
+                from src.database.model.DBUser import DBUser
+                result = []
+                # Eager load user_seasons and their users, but disable further nesting
+                teams = session.query(DBTeam)\
+                    .options(
+                        joinedload(DBTeam.user_seasons).joinedload(DBUserTeamSeason.user).noload('*'),
+                        joinedload(DBTeam.user_seasons).noload(DBUserTeamSeason.team),
+                        joinedload(DBTeam.user_seasons).noload(DBUserTeamSeason.season),
+                        joinedload(DBTeam.season_info).noload('*')
+                    ).all()
                 for team in teams:
                     result.append(TeamDTO.from_dbteam(team))
                 return result

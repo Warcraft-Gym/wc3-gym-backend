@@ -56,3 +56,7 @@ class SeasonAppService:
     def removeUserSignup(self, season_id: int, user_ids):
         season_data = self.season_service.removeUserSignup(season_id, user_ids)
         return season_data
+    
+    def getSignedUpUsers(self, season_id: int):
+        users = self.season_service.getSignedUpUsers(season_id)
+        return users

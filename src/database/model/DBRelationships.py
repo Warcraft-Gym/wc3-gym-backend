@@ -39,7 +39,14 @@ class DBTeamSeason(DBModel):
 
     @classmethod
     def updateSeasonInfo(cls, session: Session, obj_id, team_id, **kwargs):
-        obj = session.query(cls).filter_by(team_id=team_id, season_id=obj_id).first()
+        from sqlalchemy.orm import joinedload
+        # Eager load related entities to prevent N+1 queries
+        obj = session.query(cls)\
+            .options(
+                joinedload(cls.team),
+                joinedload(cls.season)
+            )\
+            .filter_by(team_id=team_id, season_id=obj_id).first()
         if obj:
             for key, value in kwargs.items():
                 setattr(obj, key, value)
