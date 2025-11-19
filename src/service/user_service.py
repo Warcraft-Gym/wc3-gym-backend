@@ -39,6 +39,18 @@ class UserAppService:
         users_data = self.user_service.search(query)
         return users_data
 
+    def validateBattleTag(self, battle_tag: str):
+        """
+        Validate that a BattleTag exists on W3Champions without persisting anything.
+        Returns True if player exists, False otherwise.
+        """
+        w3c_service = W3CService(settings_app_service=self.settings_app_service)
+        try:
+            return w3c_service.validatePlayer(battle_tag)
+        except Exception as e:
+            logging.getLogger(__name__).debug(f"BattleTag validation failed for {battle_tag}: {str(e)}")
+            return False
+
     def updateW3CStats(self, user: UserDTO):
         w3c_service = W3CService(settings_app_service=self.settings_app_service)
         stats = w3c_service.getPlayerStats(user.battleTag)

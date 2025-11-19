@@ -285,6 +285,10 @@ def public_create_user():
 
         from src.dtos.user_dto import UserDTO
 
+        # Validate BattleTag with W3Champions BEFORE creating/updating user
+        if not public_api_blueprint.user_app_service.validateBattleTag(user_payload['battleTag']):
+            return jsonify({'error': f"BattleNet name '{user_payload['battleTag']}' is not valid - no W3Champions stats found"}), 400
+
         # Check for existing user by discord id or tag
         existing_users = []
         try:

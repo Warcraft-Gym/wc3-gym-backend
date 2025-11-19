@@ -178,6 +178,33 @@ def getAll_season(season_id):
         logger.error(e)
         return jsonify({"error": str(e)}), 500
 
+@team_blueprint.route('/teams/season/<int:season_id>/basic', methods=['GET'])
+@swag_from({
+    'summary': 'Get all teams for a specific season (basic info)',
+    'description': 'Retrieve all teams with season info but without user data for a specific season',
+    'tags': ['teams'],
+    'parameters': [{'name': 'season_id', 'in': 'path', 'type': 'integer', 'required': True}],
+    'responses': {
+        200: {'description': 'Teams retrieved successfully'},
+        404: {'description': 'Teams not found'},
+        500: {'description': 'Internal server error'}
+    }
+})
+def getAll_season_basic(season_id):
+    try:
+        teams = team_blueprint.team_app_service.get_teams_season_basic(season_id)
+        out = []
+        if teams:
+            for team in teams:
+                out.append(team.to_dict())
+        return jsonify(out)
+    except NotFoundException as e:
+        logger.error(e)
+        return jsonify({"error": str(e)}), 404
+    except Exception as e:
+        logger.error(e)
+        return jsonify({"error": str(e)}), 500
+
 @team_blueprint.route('/teams/addPlayers/<int:team_id>/seasons/<int:season_id>', methods=['POST'])
 @jwt_required()
 @swag_from({
@@ -278,6 +305,32 @@ def removePlayers(team_id, season_id):
 def get_all_teams():
     try:
         teams = team_blueprint.team_app_service.getAll()
+        out = []
+        if teams:
+            for team in teams:
+                out.append(team.to_dict())
+        return jsonify(out)
+    except NotFoundException as e:
+        logger.error(e)
+        return jsonify({"error": str(e)}), 404
+    except Exception as e:
+        logger.error(e)
+        return jsonify({"error": str(e)}), 500
+
+@team_blueprint.route('/teams/basic', methods=['GET'])
+@swag_from({
+    'summary': 'Get all teams (basic info only)',
+    'description': 'Retrieve all teams with basic information only (id, name, long_name, discord_role). No user or season data included.',
+    'tags': ['teams'],
+    'responses': {
+        200: {'description': 'Teams retrieved successfully'},
+        404: {'description': 'Teams not found'},
+        500: {'description': 'Internal server error'}
+    }
+})
+def get_all_teams_basic():
+    try:
+        teams = team_blueprint.team_app_service.getAll_basic()
         out = []
         if teams:
             for team in teams:
@@ -434,7 +487,12 @@ def get_team_image(team_id):
         if not team_icon:
             return jsonify({"error": "Image not found"}), 404
 
-        return team_icon, 200, {"Content-Type": "image/png"}
+        # Add cache headers for browser caching (cache for 1 hour)
+        return team_icon, 200, {
+            "Content-Type": "image/png",
+            "Cache-Control": "public, max-age=3600",
+            "ETag": f"team-{team_id}"
+        }
     except Exception as e:
         logger.error(e)
         return jsonify({"error": str(e)}), 500

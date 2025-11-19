@@ -35,14 +35,10 @@ class TeamAppService:
         return self.team_service.get_icon(team_id)
     
     def get_team_season(self, team_id: int, season_id):
-        team_data = self.team_service.get_with_nested_users(team_id)
+        team_data = self.team_service.get_with_nested_users_by_season(team_id, season_id)
         if not team_data:
             raise NotFoundException(f"Team not found by Id: {team_id}")
-        # filter users and season info based on season id
-        season_player = team_data.player_by_season.get(season_id)
-        team_data.player_by_season = {season_id : season_player}
-        team_data.seasons_info = [seasons_info for seasons_info in team_data.seasons_info if seasons_info.season_id == season_id]
-
+        # Data is already filtered by season at database level
         return team_data
 
     def addPlayers(self, team_id: int, season_id: int, players):
@@ -55,6 +51,11 @@ class TeamAppService:
     
     def getAll(self):
         team_data = self.team_service.getAll()
+        return team_data
+
+    def getAll_basic(self):
+        """Get all teams with basic info only (no users, no seasons)"""
+        team_data = self.team_service.getAll_basic()
         return team_data
 
     def search(self, query):
@@ -75,6 +76,17 @@ class TeamAppService:
                 season_player = team_data.player_by_season.get(season_id)
                 team_data.player_by_season = {season_id : season_player}
                 team_data.seasons_info = [seasons_info for seasons_info in team_data.seasons_info if seasons_info.season_id == season_id]
+                result.append(team_data)
+        return result
+    
+    def get_teams_season_basic(self, season_id: int):
+        """Get teams for a season with season_info but without users (for list views)"""
+        teams_data = self.team_service.getAll_by_season(season_id)
+        result = []
+        if teams_data:
+            for team_data in teams_data:
+                # Filter season_info to only include the requested season
+                team_data.seasons_info = [s_inf for s_inf in team_data.seasons_info if s_inf.season_id == season_id]
                 result.append(team_data)
         return result
     

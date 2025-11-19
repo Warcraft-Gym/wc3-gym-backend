@@ -21,6 +21,36 @@ class W3CService:
     HEAD = "HEAD"
     OPTIONS = "OPTIONS"
 
+    def validatePlayer(self, bnet_name):
+        """
+        Validate that a player exists on W3Champions.
+        Uses the /api/players endpoint which is simpler and doesn't require season info.
+        Returns True if player exists, False otherwise.
+        """
+        if not isinstance(bnet_name, str):
+            raise ValueError("bnet_name must be a string")
+        
+        # Get W3C URL from database or environment
+        w3c_url = None
+        if self.settings_app_service:
+            w3c_url_setting = self.settings_app_service.get_setting('w3c_url')
+            w3c_url = w3c_url_setting.get('value') if w3c_url_setting else None
+        
+        # Fallback to environment variable if setting not available
+        if not w3c_url:
+            w3c_url = os.getenv("W3C_URL")
+        
+        if not w3c_url:
+            raise ValueError("w3c_url is required (not found in database or environment)")
+        
+        try:
+            result = self.send_request(method=self.GET, url=f"{w3c_url}/{urllib.parse.quote(bnet_name)}")
+            # If we get a successful response, the player exists
+            return result is not None
+        except Exception as e:
+            logger.debug(f"Player validation failed for {bnet_name}: {str(e)}")
+            return False
+
     def getPlayerStats(self, bnet_name):
         if not isinstance(bnet_name, str):
             raise ValueError("bnet_name must be a string")
