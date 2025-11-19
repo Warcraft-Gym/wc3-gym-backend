@@ -7,8 +7,9 @@ from src.service.w3champions.w3c_service import W3CService
 
 
 class UserAppService:
-    def __init__(self, user_service: UserDBService):
+    def __init__(self, user_service: UserDBService, settings_app_service=None):
         self.user_service = user_service
+        self.settings_app_service = settings_app_service
 
     def create_user(self, user : UserDTO):
         #remove id, db generates the id
@@ -39,7 +40,7 @@ class UserAppService:
         return users_data
 
     def updateW3CStats(self, user: UserDTO):
-        w3c_service = W3CService()
+        w3c_service = W3CService(settings_app_service=self.settings_app_service)
         stats = w3c_service.getPlayerStats(user.battleTag)
         if stats:
             for s in stats:

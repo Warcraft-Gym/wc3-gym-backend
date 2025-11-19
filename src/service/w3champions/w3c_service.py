@@ -10,8 +10,8 @@ logger = logging.getLogger(__name__)
 
 class W3CService:
 
-    def __init__(self):
-        pass
+    def __init__(self, settings_app_service=None):
+        self.settings_app_service = settings_app_service
 
     GET = "GET"
     POST = "POST"
@@ -24,12 +24,31 @@ class W3CService:
     def getPlayerStats(self, bnet_name):
         if not isinstance(bnet_name, str):
             raise ValueError("bnet_name must be a string")
-        w3c_season = os.getenv("CURRENT_WC3_SEASON")
+        
+        # Get W3C configuration from database
+        w3c_season = None
+        w3c_url = None
+        if self.settings_app_service:
+            w3c_season_setting = self.settings_app_service.get_setting('current_wc3_season')
+            w3c_url_setting = self.settings_app_service.get_setting('w3c_url')
+            w3c_season = w3c_season_setting.get('value') if w3c_season_setting else None
+            w3c_url = w3c_url_setting.get('value') if w3c_url_setting else None
+        
+        # Fallback to environment variables if settings not available
+        if not w3c_season:
+            w3c_season = os.getenv("CURRENT_WC3_SEASON")
+        if not w3c_url:
+            w3c_url = os.getenv("W3C_URL")
+        
+        if not w3c_season:
+            raise ValueError("w3c_season is required (not found in database or environment)")
+        if not w3c_url:
+            raise ValueError("w3c_url is required (not found in database or environment)")
+        
         param = {
             'gateWay': 20,
             'season': w3c_season
         }
-        w3c_url = os.getenv("W3C_URL")
         result =  self.send_request(method=self.GET, url=f"{w3c_url}/{urllib.parse.quote(bnet_name)}/game-mode-stats", params=param)
         if not result:
             logger.debug(f"no stats found for player {bnet_name} on w3c")
