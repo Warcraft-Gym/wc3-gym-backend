@@ -181,10 +181,11 @@ class SeasonDBService(AbstractDatabaseService):
                 from src.database.model.DBUser import DBUser
                 from src.dtos.user_dto import UserDTO
                 
-                # Eager load signup users with their user data, prevent further nesting
+                # Eager load signup users with their user data and w3c_stats
                 season = session.query(DBSeason)\
                     .options(
-                        joinedload(DBSeason.signup_users).joinedload(DBUserSeasonSignup.user).noload('*')
+                        joinedload(DBSeason.signup_users).joinedload(DBUserSeasonSignup.user).joinedload(DBUser.w3c_stats).noload('*'),
+                        joinedload(DBSeason.signup_users).joinedload(DBUserSeasonSignup.user).joinedload(DBUser.team_seasons).noload('*')
                     )\
                     .filter_by(id=season_id).first()
                 

@@ -97,10 +97,10 @@ class TeamDBService(AbstractDatabaseService):
             try:
                 from src.database.model.DBRelationships import DBUserTeamSeason
                 from src.database.model.DBUser import DBUser
-                # Eager load user_seasons and their users, but disable further nesting
+                # Eager load user_seasons and their users with w3c_stats (GNL stats are in user_seasons)
                 team = session.query(DBTeam)\
                     .options(
-                        joinedload(DBTeam.user_seasons).joinedload(DBUserTeamSeason.user).noload('*'),
+                        joinedload(DBTeam.user_seasons).joinedload(DBUserTeamSeason.user).joinedload(DBUser.w3c_stats).noload('*'),
                         joinedload(DBTeam.user_seasons).noload(DBUserTeamSeason.team),
                         joinedload(DBTeam.user_seasons).noload(DBUserTeamSeason.season),
                         joinedload(DBTeam.season_info).noload('*')
@@ -169,10 +169,10 @@ class TeamDBService(AbstractDatabaseService):
                 from src.database.model.DBRelationships import DBUserTeamSeason
                 from src.database.model.DBUser import DBUser
                 result = []
-                # Eager load user_seasons and their users, but disable further nesting
+                # Eager load user_seasons and their users with w3c_stats (GNL stats are in user_seasons)
                 teams = session.query(DBTeam)\
                     .options(
-                        joinedload(DBTeam.user_seasons).joinedload(DBUserTeamSeason.user).noload('*'),
+                        joinedload(DBTeam.user_seasons).joinedload(DBUserTeamSeason.user).joinedload(DBUser.w3c_stats).noload('*'),
                         joinedload(DBTeam.user_seasons).noload(DBUserTeamSeason.team),
                         joinedload(DBTeam.user_seasons).noload(DBUserTeamSeason.season),
                         joinedload(DBTeam.season_info).noload('*')
