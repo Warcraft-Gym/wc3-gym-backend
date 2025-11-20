@@ -29,18 +29,40 @@ class DBSeries(DBModel):
     
     @classmethod
     def searchForSeasonAndPlayday(cls, session: Session, season_id, playday, filters):
-        query = None
+        from sqlalchemy.orm import joinedload
+        from src.database.model.DBUser import DBUser
+        from src.database.model.DBRelationships import DBUserTeamSeason
+        
+        query = session.query(cls).options(
+            joinedload(cls.match).noload('*'),
+            joinedload(cls.player1).joinedload(DBUser.w3c_stats),
+            joinedload(cls.player1).joinedload(DBUser.team_seasons).joinedload(DBUserTeamSeason.season),
+            joinedload(cls.player2).joinedload(DBUser.w3c_stats),
+            joinedload(cls.player2).joinedload(DBUser.team_seasons).joinedload(DBUserTeamSeason.season)
+        )
+        
         if filters is None:
-            query = session.query(cls).filter(cls.match.has(and_(DBMatch.season_id == season_id, DBMatch.playday == playday)))
+            query = query.filter(cls.match.has(and_(DBMatch.season_id == season_id, DBMatch.playday == playday)))
         else:
-            query = session.query(cls).filter(cls.match.has(and_(DBMatch.season_id == season_id, DBMatch.playday == playday))).filter(filters)
+            query = query.filter(cls.match.has(and_(DBMatch.season_id == season_id, DBMatch.playday == playday))).filter(filters)
         return query.all()
     
     @classmethod
     def searchForSeason(cls, session: Session, season_id, filters):
-        query = None
+        from sqlalchemy.orm import joinedload
+        from src.database.model.DBUser import DBUser
+        from src.database.model.DBRelationships import DBUserTeamSeason
+        
+        query = session.query(cls).options(
+            joinedload(cls.match).noload('*'),
+            joinedload(cls.player1).joinedload(DBUser.w3c_stats),
+            joinedload(cls.player1).joinedload(DBUser.team_seasons).joinedload(DBUserTeamSeason.season),
+            joinedload(cls.player2).joinedload(DBUser.w3c_stats),
+            joinedload(cls.player2).joinedload(DBUser.team_seasons).joinedload(DBUserTeamSeason.season)
+        )
+        
         if filters is None:
-            query = session.query(cls).filter(cls.match.has(DBMatch.season_id == season_id))
+            query = query.filter(cls.match.has(DBMatch.season_id == season_id))
         else:
-            query = session.query(cls).filter(cls.match.has(DBMatch.season_id == season_id)).filter(filters)
+            query = query.filter(cls.match.has(DBMatch.season_id == season_id)).filter(filters)
         return query.all()

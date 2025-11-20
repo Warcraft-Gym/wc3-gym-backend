@@ -48,12 +48,14 @@ class SeasonDBService(AbstractDatabaseService):
     def get(self, season_id):
         with self.get_session() as session:
             try:
-                # Eager load related entities, disable nested loading
+                from src.database.model.DBRelationships import DBMapSeason
+                from src.database.model.DBMap import DBMap
+                # Eager load related entities, disable nested loading except for maps
                 season = session.query(DBSeason)\
                     .options(
                         joinedload(DBSeason.user_teams).noload('*'),
                         joinedload(DBSeason.teams).noload('*'),
-                        joinedload(DBSeason.maps).noload('*'),
+                        joinedload(DBSeason.maps).joinedload(DBMapSeason.map),
                         noload(DBSeason.signup_users)
                     )\
                     .filter_by(id=season_id).first()
@@ -71,12 +73,14 @@ class SeasonDBService(AbstractDatabaseService):
         with self.get_session() as session:
             try:
                 result = []
-                # Eager load related entities, disable nested loading
+                from src.database.model.DBRelationships import DBMapSeason
+                from src.database.model.DBMap import DBMap
+                # Eager load related entities, disable nested loading except for maps
                 seasons = session.query(DBSeason)\
                     .options(
                         joinedload(DBSeason.user_teams).noload('*'),
                         joinedload(DBSeason.teams).noload('*'),
-                        joinedload(DBSeason.maps).noload('*'),
+                        joinedload(DBSeason.maps).joinedload(DBMapSeason.map),
                         noload(DBSeason.signup_users)
                     ).all()
                 for season in seasons:
@@ -101,13 +105,15 @@ class SeasonDBService(AbstractDatabaseService):
         with self.get_session() as session:
             try:
                 result = []
+                from src.database.model.DBRelationships import DBMapSeason
+                from src.database.model.DBMap import DBMap
                 filter = QueryUtil.convertQueryToDBFilter(DBSeason, query)
-                # Eager load related entities, disable nested loading
+                # Eager load related entities, disable nested loading except for maps
                 seasons = session.query(DBSeason)\
                     .options(
                         joinedload(DBSeason.user_teams).noload('*'),
                         joinedload(DBSeason.teams).noload('*'),
-                        joinedload(DBSeason.maps).noload('*'),
+                        joinedload(DBSeason.maps).joinedload(DBMapSeason.map),
                         noload(DBSeason.signup_users)
                     )\
                     .filter(filter).all() if filter is not None else []

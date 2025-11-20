@@ -47,7 +47,7 @@ class SeasonDTO:
                 'number_weeks': season.number_weeks,
                 'series_per_week': season.series_per_week,
                 'pick_ban': season.pick_ban,
-                'maps': [MapDTO.from_dbmap(map_season.map) for map_season in season.maps] if season.maps else [],
+                'maps': [MapDTO.from_dbmap(map_season.map) for map_season in season.maps if map_season and map_season.map] if season.maps else [],
                 'discordRole': season.discordRole,
                 'user_signup': []
             }

@@ -97,12 +97,12 @@ class TeamDBService(AbstractDatabaseService):
             try:
                 from src.database.model.DBRelationships import DBUserTeamSeason
                 from src.database.model.DBUser import DBUser
-                # Eager load user_seasons and their users with w3c_stats (GNL stats are in user_seasons)
+                # Eager load user_seasons and their users with w3c_stats and team_seasons (gnl_stats) with season info
                 team = session.query(DBTeam)\
                     .options(
-                        joinedload(DBTeam.user_seasons).joinedload(DBUserTeamSeason.user).joinedload(DBUser.w3c_stats).noload('*'),
+                        joinedload(DBTeam.user_seasons).joinedload(DBUserTeamSeason.user).joinedload(DBUser.w3c_stats),
+                        joinedload(DBTeam.user_seasons).joinedload(DBUserTeamSeason.user).joinedload(DBUser.team_seasons).joinedload(DBUserTeamSeason.season),
                         joinedload(DBTeam.user_seasons).noload(DBUserTeamSeason.team),
-                        joinedload(DBTeam.user_seasons).noload(DBUserTeamSeason.season),
                         joinedload(DBTeam.season_info).noload('*')
                     )\
                     .filter_by(id=team_id).first()
@@ -119,14 +119,17 @@ class TeamDBService(AbstractDatabaseService):
             try:
                 from src.database.model.DBRelationships import DBUserTeamSeason
                 from src.database.model.DBUser import DBUser
-                # Eager load only user_seasons for the specified season
+                # Eager load only user_seasons for the specified season, including w3c_stats and team_seasons (gnl_stats) with season info
                 team = session.query(DBTeam)\
                     .options(
                         joinedload(DBTeam.user_seasons.and_(DBUserTeamSeason.season_id == season_id))
                             .joinedload(DBUserTeamSeason.user)
-                            .joinedload(DBUser.w3c_stats).noload('*'),
+                            .joinedload(DBUser.w3c_stats),
+                        joinedload(DBTeam.user_seasons.and_(DBUserTeamSeason.season_id == season_id))
+                            .joinedload(DBUserTeamSeason.user)
+                            .joinedload(DBUser.team_seasons)
+                            .joinedload(DBUserTeamSeason.season),
                         joinedload(DBTeam.user_seasons).noload(DBUserTeamSeason.team),
-                        joinedload(DBTeam.user_seasons).noload(DBUserTeamSeason.season),
                         joinedload(DBTeam.season_info.and_(DBTeam.season_info.any(season_id=season_id))).noload('*')
                     )\
                     .filter_by(id=team_id).first()
@@ -230,12 +233,12 @@ class TeamDBService(AbstractDatabaseService):
                 from src.database.model.DBRelationships import DBUserTeamSeason
                 from src.database.model.DBUser import DBUser
                 result = []
-                # Eager load user_seasons and their users with w3c_stats (GNL stats are in user_seasons)
+                # Eager load user_seasons and their users with w3c_stats and team_seasons (gnl_stats) with season info
                 teams = session.query(DBTeam)\
                     .options(
-                        joinedload(DBTeam.user_seasons).joinedload(DBUserTeamSeason.user).joinedload(DBUser.w3c_stats).noload('*'),
+                        joinedload(DBTeam.user_seasons).joinedload(DBUserTeamSeason.user).joinedload(DBUser.w3c_stats),
+                        joinedload(DBTeam.user_seasons).joinedload(DBUserTeamSeason.user).joinedload(DBUser.team_seasons).joinedload(DBUserTeamSeason.season),
                         joinedload(DBTeam.user_seasons).noload(DBUserTeamSeason.team),
-                        joinedload(DBTeam.user_seasons).noload(DBUserTeamSeason.season),
                         joinedload(DBTeam.season_info).noload('*')
                     ).all()
                 for team in teams:

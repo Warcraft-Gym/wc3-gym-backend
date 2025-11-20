@@ -45,13 +45,17 @@ class SeriesDBService(AbstractDatabaseService):
 
     def get(self, series_id):
         try:
+            from src.database.model.DBUser import DBUser
+            from src.database.model.DBRelationships import DBUserTeamSeason
             session = self.Session()
-            # Eager load relationships to avoid N+1 queries, disable nested loading
+            # Eager load relationships to avoid N+1 queries, load w3c_stats and team_seasons with season for players
             series = session.query(DBSeries)\
                 .options(
                     joinedload(DBSeries.match).noload('*'),
-                    joinedload(DBSeries.player1).noload('*'),
-                    joinedload(DBSeries.player2).noload('*')
+                    joinedload(DBSeries.player1).joinedload(DBUser.w3c_stats),
+                    joinedload(DBSeries.player1).joinedload(DBUser.team_seasons).joinedload(DBUserTeamSeason.season),
+                    joinedload(DBSeries.player2).joinedload(DBUser.w3c_stats),
+                    joinedload(DBSeries.player2).joinedload(DBUser.team_seasons).joinedload(DBUserTeamSeason.season)
                 )\
                 .filter_by(id=series_id).first()
             if not series:
@@ -64,14 +68,18 @@ class SeriesDBService(AbstractDatabaseService):
 
     def getAll(self):
         try:
+            from src.database.model.DBUser import DBUser
+            from src.database.model.DBRelationships import DBUserTeamSeason
             result = []
             session = self.Session()
-            # Eager load relationships, disable nested loading
+            # Eager load relationships, load w3c_stats and team_seasons with season for players
             series = session.query(DBSeries)\
                 .options(
                     joinedload(DBSeries.match).noload('*'),
-                    joinedload(DBSeries.player1).noload('*'),
-                    joinedload(DBSeries.player2).noload('*')
+                    joinedload(DBSeries.player1).joinedload(DBUser.w3c_stats),
+                    joinedload(DBSeries.player1).joinedload(DBUser.team_seasons).joinedload(DBUserTeamSeason.season),
+                    joinedload(DBSeries.player2).joinedload(DBUser.w3c_stats),
+                    joinedload(DBSeries.player2).joinedload(DBUser.team_seasons).joinedload(DBUserTeamSeason.season)
                 ).all()
             for single_series in series:
                 result.append(SeriesDTO.from_dbseries(single_series))
@@ -82,14 +90,18 @@ class SeriesDBService(AbstractDatabaseService):
     def search(self, query):
         with self.get_session() as session:
             try:
+                from src.database.model.DBUser import DBUser
+                from src.database.model.DBRelationships import DBUserTeamSeason
                 result = []
                 filter = QueryUtil.convertQueryToDBFilter(DBSeries, query)
-                # Eager load related entities, disable nested loading
+                # Eager load related entities, load w3c_stats and team_seasons with season for players
                 series_list = session.query(DBSeries)\
                     .options(
                         joinedload(DBSeries.match).noload('*'),
-                        joinedload(DBSeries.player1).noload('*'),
-                        joinedload(DBSeries.player2).noload('*')
+                        joinedload(DBSeries.player1).joinedload(DBUser.w3c_stats),
+                        joinedload(DBSeries.player1).joinedload(DBUser.team_seasons).joinedload(DBUserTeamSeason.season),
+                        joinedload(DBSeries.player2).joinedload(DBUser.w3c_stats),
+                        joinedload(DBSeries.player2).joinedload(DBUser.team_seasons).joinedload(DBUserTeamSeason.season)
                     )\
                     .filter(filter).all() if filter is not None else []
                 if not series_list:
