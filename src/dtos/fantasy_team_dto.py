@@ -25,6 +25,7 @@ class FantasyTeamDTO:
     def to_dict(self):
         return {
             'id': self.id,
+            'name': self.name,
             'season_id': self.season_id,
             'season': None if not self.season else self.season.to_dict(),
             'captain_id': self.captain_id,
@@ -71,6 +72,7 @@ class FantasyTeamDTO:
         return cls(
             {
             'id': fteam.id,
+            'name': fteam.name,
             'season_id': fteam.season_id,
             'season': SeasonDTO.from_dbseason(fteam.season) if fteam.season else None,
             'captain_id': fteam.captain_id,

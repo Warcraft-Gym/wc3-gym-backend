@@ -117,7 +117,7 @@ def _notify_discord_series_update(series, player_name, action, uploaded_files=No
                     'discord_id': {'type': 'string', 'description': 'Discord user id to prefill'},
                     'discord_tag': {'type': 'string', 'description': 'Discord user tag (name#discriminator)'},
                     'season_id': {'type': 'string', 'description': 'Optional season id'},
-                    'access_type': {'type': 'string', 'description': 'Type of access: signup or dashboard', 'enum': ['signup', 'dashboard']},
+                    'access_type': {'type': 'string', 'description': 'Type of access: signup, dashboard, or fantasy', 'enum': ['signup', 'dashboard', 'fantasy']},
                     'ttl_minutes': {'type': 'integer', 'description': 'Token TTL in minutes (optional, default 30)'}
                 },
                 'required': ['client_token','discord_id','discord_tag','access_type']
@@ -148,7 +148,7 @@ def create_public_access_helper():
         if not discord_id or not discord_tag or not access_type:
             return jsonify({'error': 'missing parameters'}), 400
 
-        if access_type not in ['signup', 'dashboard']:
+        if access_type not in ['signup', 'dashboard', 'fantasy']:
             return jsonify({'error': 'invalid access_type'}), 400
 
         # cleanup store
@@ -171,6 +171,8 @@ def create_public_access_helper():
             access_url = f"{frontend}#/signup?token={token}"
         elif access_type == 'dashboard':
             access_url = f"{frontend}#/player-dashboard?token={token}"
+        elif access_type == 'fantasy':
+            access_url = f"{frontend}#/fantasy-registration?token={token}"
 
         return jsonify({'access_url': access_url, 'token': token})
     except Exception as e:
@@ -250,6 +252,16 @@ def delete_public_token(token):
 def public_create_user():
     """Create user and optionally assign to season using a one-time token."""
     try:
+        # Check if signups are enabled
+        if hasattr(public_api_blueprint, 'settings_app_service'):
+            try:
+                signup_enabled = public_api_blueprint.settings_app_service.get_setting('signups_enabled')
+                if signup_enabled and signup_enabled.get('value', 'true').lower() == 'false':
+                    return jsonify({'error': 'signups_closed', 'message': 'Signups are currently closed'}), 403
+            except Exception as e:
+                logger.warning(f"Could not check signups_enabled setting: {e}")
+                # Continue if setting doesn't exist
+        
         data = request.json or {}
         token = data.get('token')
         if not token:
@@ -689,4 +701,227 @@ def update_player_series(series_id):
 
     except Exception as e:
         logger.exception('Error in update_player_series')
+        return jsonify({'error': str(e)}), 500
+
+
+@public_api_blueprint.route('/user-info', methods=['GET'])
+@swag_from({
+    'summary': 'Get user info by token',
+    'description': 'Get user information using a dashboard token (for non-players who want to manage fantasy teams)',
+    'tags': ['public'],
+    'parameters': [
+        {
+            'name': 'token',
+            'in': 'query',
+            'required': True,
+            'type': 'string',
+            'description': 'Access token'
+        }
+    ],
+    'responses': {
+        200: {'description': 'Returns user data'},
+        400: {'description': 'Missing token'},
+        404: {'description': 'Token not found/expired or user not found'},
+        500: {'description': 'Internal server error'}
+    }
+})
+def get_user_info():
+    """Get user information by token (for fantasy team captains who may not be players)."""
+    try:
+        token = request.args.get('token')
+        if not token:
+            return jsonify({'error': 'missing token'}), 400
+
+        _cleanup_expired()
+        entry = _token_store.get(token)
+        if not entry:
+            return jsonify({'error': 'token_not_found_or_expired'}), 404
+
+        # Find the user by discord_id
+        if not hasattr(public_api_blueprint, 'user_app_service'):
+            logger.error('user_app_service not available on public_api_blueprint')
+            return jsonify({'error': 'server_misconfigured'}), 500
+
+        try:
+            query = QueryUtil.parseQuery(f"discordId == {entry.get('discord_id')}")
+            users = public_api_blueprint.user_app_service.search(query)
+            
+            if not users or len(users) == 0:
+                # User doesn't exist yet
+                return jsonify({
+                    'user': None,
+                    'discord_id': entry.get('discord_id'),
+                    'discord_tag': entry.get('discord_tag'),
+                    'season_id': entry.get('season_id')
+                }), 200
+            
+            user = users[0]
+            return jsonify({
+                'user': user.to_dict() if hasattr(user, 'to_dict') else user,
+                'discord_id': entry.get('discord_id'),
+                'discord_tag': entry.get('discord_tag'),
+                'season_id': entry.get('season_id')
+            })
+
+        except Exception:
+            logger.exception('Error finding user by discord id')
+            return jsonify({'error': 'Error finding user'}), 500
+
+    except Exception as e:
+        logger.exception('Error in get_user_info')
+        return jsonify({'error': str(e)}), 500
+
+
+@public_api_blueprint.route('/fantasy-team', methods=['POST'])
+@swag_from({
+    'summary': 'Create or update fantasy team',
+    'description': 'Create a fantasy team (and user if needed) using a token',
+    'tags': ['public'],
+    'parameters': [
+        {
+            'name': 'body',
+            'in': 'body',
+            'required': True,
+            'schema': {
+                'type': 'object',
+                'properties': {
+                    'token': {'type': 'string'},
+                    'name': {'type': 'string', 'description': 'Fantasy team name'},
+                    'season_id': {'type': 'integer'},
+                    'drafted_team_id': {'type': 'integer'},
+                    'drafted_race': {'type': 'string'},
+                    'player_ids': {'type': 'array', 'items': {'type': 'integer'}},
+                    'user_name': {'type': 'string', 'description': 'Name for new user creation if needed'},
+                    'battle_tag': {'type': 'string', 'description': 'BattleTag for new user creation if needed'}
+                },
+                'required': ['token', 'season_id', 'drafted_team_id', 'drafted_race']
+            }
+        }
+    ],
+    'responses': {
+        201: {'description': 'Fantasy team created/updated successfully'},
+        400: {'description': 'Missing parameters or invalid token'},
+        403: {'description': 'Fantasy team creation is closed'},
+        404: {'description': 'Token not found/expired'},
+        500: {'description': 'Internal server error'}
+    }
+})
+def create_fantasy_team():
+    """Create or update fantasy team, creating user if needed."""
+    try:
+        # Check if fantasy team creation is enabled
+        if hasattr(public_api_blueprint, 'settings_app_service'):
+            try:
+                fantasy_enabled = public_api_blueprint.settings_app_service.get_setting('fantasy_team_creation_enabled')
+                if fantasy_enabled and fantasy_enabled.get('value', 'true').lower() == 'false':
+                    return jsonify({'error': 'fantasy_team_creation_closed', 'message': 'Fantasy team creation is currently closed'}), 403
+            except Exception as e:
+                logger.warning(f"Could not check fantasy_team_creation_enabled setting: {e}")
+                # Continue if setting doesn't exist
+
+        data = request.json or {}
+        token = data.get('token')
+        if not token:
+            return jsonify({'error': 'missing token'}), 400
+
+        _cleanup_expired()
+        entry = _token_store.get(token)
+        if not entry:
+            return jsonify({'error': 'token_not_found_or_expired'}), 404
+
+        # Validate required fields
+        season_id = data.get('season_id')
+        drafted_team_id = data.get('drafted_team_id')
+        drafted_race = data.get('drafted_race')
+        player_ids = data.get('player_ids', [])
+
+        if not season_id or not drafted_team_id or not drafted_race:
+            return jsonify({'error': 'missing required fields'}), 400
+
+        # Check if services are available
+        if not hasattr(public_api_blueprint, 'user_app_service') or \
+           not hasattr(public_api_blueprint, 'fantasy_team_app_service'):
+            logger.error('Required services not available on public_api_blueprint')
+            return jsonify({'error': 'server_misconfigured'}), 500
+
+        # Find or create user
+        from src.dtos.user_dto import UserDTO
+        from src.dtos.fantasy_team_dto import FantasyTeamDTO
+        
+        try:
+            query = QueryUtil.parseQuery(f"discordId == {entry.get('discord_id')}")
+            users = public_api_blueprint.user_app_service.search(query)
+            
+            if not users or len(users) == 0:
+                # Create minimal user without battle tag validation (not a player)
+                user_name = data.get('user_name') or entry.get('discord_tag')
+                battle_tag = data.get('battle_tag') or entry.get('discord_tag')
+                
+                user_payload = {
+                    'name': user_name,
+                    'battleTag': battle_tag,
+                    'discordId': entry.get('discord_id'),
+                    'discordTag': entry.get('discord_tag')
+                }
+                
+                user = public_api_blueprint.user_app_service.create_user(UserDTO(user_payload))
+                logger.info(f"Created new user for fantasy team captain: {user.id}")
+            else:
+                user = users[0]
+        
+        except Exception:
+            logger.exception('Error finding/creating user')
+            return jsonify({'error': 'Error finding or creating user'}), 500
+
+        # Check if team already exists
+        try:
+            team_query = QueryUtil.parseQuery(f"captain_id == {user.id} and season_id == {season_id}")
+            existing_teams = public_api_blueprint.fantasy_team_app_service.search_fantasy_teams(team_query)
+            
+            team_data = {
+                'name': data.get('name', user.name),  # Use provided name or default to user name
+                'season_id': season_id,
+                'captain_id': user.id,
+                'drafted_team_id': drafted_team_id,
+                'drafted_race': drafted_race
+            }
+            
+            if existing_teams and len(existing_teams) > 0:
+                # Update existing team
+                team = public_api_blueprint.fantasy_team_app_service.update_fantasy_team(
+                    existing_teams[0].id, 
+                    FantasyTeamDTO(team_data)
+                )
+                team_id = existing_teams[0].id
+            else:
+                # Create new team
+                team = public_api_blueprint.fantasy_team_app_service.create_fantasy_team(
+                    FantasyTeamDTO(team_data)
+                )
+                team_id = team.id
+
+            # Update players if provided
+            if player_ids and len(player_ids) > 0:
+                # Get existing players
+                existing_player_ids = [p.id for p in (existing_teams[0].drafted_players if existing_teams and existing_teams[0].drafted_players else [])]
+                
+                # Find players to add and remove
+                players_to_add = [pid for pid in player_ids if pid not in existing_player_ids]
+                players_to_remove = [pid for pid in existing_player_ids if pid not in player_ids]
+                
+                if players_to_add:
+                    public_api_blueprint.fantasy_team_app_service.addFantasyPlayers(team_id, players_to_add)
+                if players_to_remove:
+                    public_api_blueprint.fantasy_team_app_service.removeFantasyPlayers(team_id, players_to_remove)
+
+            # Return created/updated team
+            final_team = public_api_blueprint.fantasy_team_app_service.get_fantasy_team(team_id)
+            return jsonify(final_team.to_dict() if hasattr(final_team, 'to_dict') else final_team), 201
+
+        except Exception:
+            logger.exception('Error creating/updating fantasy team')
+            return jsonify({'error': 'Error creating or updating fantasy team'}), 500
+
+    except Exception as e:
+        logger.exception('Error in create_fantasy_team')
         return jsonify({'error': str(e)}), 500

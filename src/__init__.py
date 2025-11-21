@@ -163,7 +163,7 @@ season_app_service = SeasonAppService(season_service=season_service)
 score_app_service = ScoreAppService(match_service=match_service, serires_service=series_service, team_service=team_service, team_season_service=team_season_service)
 series_app_service = SeriesAppService(series_service=series_service, score_app_service=score_app_service, user_app_service=user_app_service)
 map_app_service = MapAppService(map_service=map_service)
-fantasy_bet_app_service = FantasyBetAppService(fantasy_bet_service=fantasy_bet_service)
+fantasy_bet_app_service = FantasyBetAppService(fantasy_bet_service=fantasy_bet_service, settings_app_service=settings_app_service)
 fantasy_team_app_service = FantasyTeamAppService(fantasy_team_service=fantasy_team_service)
 fantasy_score_app_service = FantasyScoreAppService(fantasy_team_service=fantasy_team_app_service,
                                                     fantasy_bet_service=fantasy_bet_app_service,
@@ -187,6 +187,8 @@ user_blueprint.user_app_service = user_app_service
 public_api_blueprint.user_app_service = user_app_service
 public_api_blueprint.season_app_service = season_app_service
 public_api_blueprint.series_app_service = series_app_service
+public_api_blueprint.fantasy_team_app_service = fantasy_team_app_service
+public_api_blueprint.settings_app_service = settings_app_service
 season_blueprint.season_app_service = season_app_service
 team_blueprint.team_app_service = team_app_service
 team_blueprint.cache = cache
@@ -197,6 +199,7 @@ fantasy_blueprint.fantasy_bet_app_service = fantasy_bet_app_service
 fantasy_blueprint.fantasy_team_app_service = fantasy_team_app_service
 fantasy_blueprint.fantasy_score_app_service = fantasy_score_app_service
 fantasy_blueprint.season_app_service = season_app_service
+fantasy_blueprint.settings_app_service = settings_app_service
 
 score_blueprint.season_app_service = season_app_service
 score_blueprint.match_app_service = match_app_service

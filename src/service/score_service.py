@@ -59,6 +59,14 @@ class ScoreAppService:
         return match_data
 
     def updateTeamScore(self, team: TeamDTO, seasonId: int):
+        # If team doesn't have seasons_info, we need to fetch the full team data
+        if team.seasons_info is None or len(team.seasons_info) == 0:
+            team = self.team_service.get(team.id)
+        
+        # If still no seasons_info, we can't update the team score
+        if team.seasons_info is None or len(team.seasons_info) == 0:
+            return team
+        
         team_points = 0
         team_against = 0
 
@@ -87,16 +95,18 @@ class ScoreAppService:
 
 
         if season_key is None:
-            return
+            return team
 
         team.seasons_info[season_key].final_score = team_points
         team.seasons_info[season_key].points_against = team_against
 
         #TODO: This seems to be broken as there can be weeks where a team has less series in a match => double check with shibby for a good aproach
-        series_per_week = team.seasons_info[season_key].season.series_per_week
-        number_weeks = team.seasons_info[season_key].season.number_weeks
-        if series_per_week is not None and number_weeks is not None:
-            team.seasons_info[season_key].points_available = (series_per_week * number_weeks * self.getMaxPointsPerSeries()) - team_points - team_against
+        # Check if season exists before accessing its properties
+        if team.seasons_info[season_key].season is not None:
+            series_per_week = team.seasons_info[season_key].season.series_per_week
+            number_weeks = team.seasons_info[season_key].season.number_weeks
+            if series_per_week is not None and number_weeks is not None:
+                team.seasons_info[season_key].points_available = (series_per_week * number_weeks * self.getMaxPointsPerSeries()) - team_points - team_against
 
         updated_season_info = self.team_season_service.update(team.id, team.seasons_info[season_key])
         

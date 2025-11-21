@@ -312,8 +312,11 @@ def add_fantasy_bet():
         if bet:
             bet = bet.to_dict()
         return jsonify(bet), 201
+    except ValueError as e:
+        logger.error(f"Validation error: {e}")
+        return jsonify({"error": str(e)}), 400
     except Exception as e:
-        logger.error(e)
+        logger.error(f"Error creating fantasy bet: {e}")
         return jsonify({"error": str(e)}), 500
 
 @fantasy_blueprint.route('/fantasy/bets/<int:bet_id>', methods=['PUT'])
@@ -345,6 +348,9 @@ def update_bet(bet_id):
         if bet:
             bet = bet.to_dict()
         return jsonify(bet)
+    except ValueError as e:
+        logger.error(f"Validation error: {e}")
+        return jsonify({"error": str(e)}), 400
     except NotFoundException as e:
         logger.error(e)
         return jsonify({"error": str(e)}), 404
