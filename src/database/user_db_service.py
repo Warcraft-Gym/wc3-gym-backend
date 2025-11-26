@@ -1,5 +1,6 @@
 import logging
 from src.database.abstract_database_service import AbstractDatabaseService
+
 from src.database.model.DBUser import DBUser
 from src.dtos.user_dto import UserDTO
 from src.dtos.w3c_stats_dto import W3CStatsDTO
@@ -93,11 +94,12 @@ class UserDBService(AbstractDatabaseService):
     def getAll(self):
         with self.get_session() as session:
             try:
+                from src.database.model.DBRelationships import DBUserTeamSeason
                 result = []
                 # Eager load related entities, disable nested loading
                 users = session.query(DBUser)\
                     .options(
-                        joinedload(DBUser.team_seasons).noload('*'),
+                        joinedload(DBUser.team_seasons).joinedload(DBUserTeamSeason.season),
                         joinedload(DBUser.w3c_stats)
                     ).all()
                 
