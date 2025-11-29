@@ -47,11 +47,13 @@ class SeriesDBService(AbstractDatabaseService):
         try:
             from src.database.model.DBUser import DBUser
             from src.database.model.DBRelationships import DBUserTeamSeason
+            from src.database.model.DBMatch import DBMatch
             session = self.Session()
             # Eager load relationships to avoid N+1 queries, load w3c_stats and team_seasons with season for players
             series = session.query(DBSeries)\
                 .options(
-                    joinedload(DBSeries.match).noload('*'),
+                    joinedload(DBSeries.match).joinedload(DBMatch.team1),
+                    joinedload(DBSeries.match).joinedload(DBMatch.team2),
                     joinedload(DBSeries.player1).joinedload(DBUser.w3c_stats),
                     joinedload(DBSeries.player1).joinedload(DBUser.team_seasons).joinedload(DBUserTeamSeason.season),
                     joinedload(DBSeries.player2).joinedload(DBUser.w3c_stats),
@@ -70,12 +72,14 @@ class SeriesDBService(AbstractDatabaseService):
         try:
             from src.database.model.DBUser import DBUser
             from src.database.model.DBRelationships import DBUserTeamSeason
+            from src.database.model.DBMatch import DBMatch
             result = []
             session = self.Session()
             # Eager load relationships, load w3c_stats and team_seasons with season for players
             series = session.query(DBSeries)\
                 .options(
-                    joinedload(DBSeries.match).noload('*'),
+                    joinedload(DBSeries.match).joinedload(DBMatch.team1),
+                    joinedload(DBSeries.match).joinedload(DBMatch.team2),
                     joinedload(DBSeries.player1).joinedload(DBUser.w3c_stats),
                     joinedload(DBSeries.player1).joinedload(DBUser.team_seasons).joinedload(DBUserTeamSeason.season),
                     joinedload(DBSeries.player2).joinedload(DBUser.w3c_stats),
@@ -92,12 +96,14 @@ class SeriesDBService(AbstractDatabaseService):
             try:
                 from src.database.model.DBUser import DBUser
                 from src.database.model.DBRelationships import DBUserTeamSeason
+                from src.database.model.DBMatch import DBMatch
                 result = []
                 filter = QueryUtil.convertQueryToDBFilter(DBSeries, query)
                 # Eager load related entities, load w3c_stats and team_seasons with season for players
                 series_list = session.query(DBSeries)\
                     .options(
-                        joinedload(DBSeries.match).noload('*'),
+                        joinedload(DBSeries.match).joinedload(DBMatch.team1),
+                        joinedload(DBSeries.match).joinedload(DBMatch.team2),
                         joinedload(DBSeries.player1).joinedload(DBUser.w3c_stats),
                         joinedload(DBSeries.player1).joinedload(DBUser.team_seasons).joinedload(DBUserTeamSeason.season),
                         joinedload(DBSeries.player2).joinedload(DBUser.w3c_stats),

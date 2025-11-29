@@ -34,7 +34,8 @@ class DBSeries(DBModel):
         from src.database.model.DBRelationships import DBUserTeamSeason
         
         query = session.query(cls).options(
-            joinedload(cls.match).noload('*'),
+            joinedload(cls.match).joinedload(DBMatch.team1),
+            joinedload(cls.match).joinedload(DBMatch.team2),
             joinedload(cls.player1).joinedload(DBUser.w3c_stats),
             joinedload(cls.player1).joinedload(DBUser.team_seasons).joinedload(DBUserTeamSeason.season),
             joinedload(cls.player2).joinedload(DBUser.w3c_stats),
@@ -54,7 +55,8 @@ class DBSeries(DBModel):
         from src.database.model.DBRelationships import DBUserTeamSeason
         
         query = session.query(cls).options(
-            joinedload(cls.match).noload('*'),
+            joinedload(cls.match).joinedload(DBMatch.team1),
+            joinedload(cls.match).joinedload(DBMatch.team2),
             joinedload(cls.player1).joinedload(DBUser.w3c_stats),
             joinedload(cls.player1).joinedload(DBUser.team_seasons).joinedload(DBUserTeamSeason.season),
             joinedload(cls.player2).joinedload(DBUser.w3c_stats),
