@@ -188,6 +188,7 @@ public_api_blueprint.user_app_service = user_app_service
 public_api_blueprint.season_app_service = season_app_service
 public_api_blueprint.series_app_service = series_app_service
 public_api_blueprint.fantasy_team_app_service = fantasy_team_app_service
+public_api_blueprint.fantasy_bet_app_service = fantasy_bet_app_service
 public_api_blueprint.settings_app_service = settings_app_service
 season_blueprint.season_app_service = season_app_service
 team_blueprint.team_app_service = team_app_service

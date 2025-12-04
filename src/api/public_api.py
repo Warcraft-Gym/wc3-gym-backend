@@ -676,7 +676,7 @@ def update_player_series(series_id):
             # Check if date/time was updated
             datetime_updated = original_datetime != series.date_time
             
-            # Prepare notification data including file data
+            # Prepare notification data - convert to dict for Discord serialization
             notification_data = updated_series.to_dict() if hasattr(updated_series, 'to_dict') else updated_series
             
             # Attempt Discord notifications (non-blocking - app continues regardless of success/failure)
@@ -686,6 +686,7 @@ def update_player_series(series_id):
             elif datetime_updated:
                 discord_notified = _notify_discord_series_update(notification_data, player_name, 'scheduled', uploaded_files)
             
+            # Convert to dict only for JSON response
             result = updated_series.to_dict() if hasattr(updated_series, 'to_dict') else updated_series
             if uploaded_files:
                 result['uploaded_files'] = {k: v['filename'] for k, v in uploaded_files.items()}
@@ -924,4 +925,263 @@ def create_fantasy_team():
 
     except Exception as e:
         logger.exception('Error in create_fantasy_team')
+        return jsonify({'error': str(e)}), 500
+
+
+@public_api_blueprint.route('/fantasy-bet', methods=['POST'])
+@swag_from({
+    'summary': 'Create a fantasy bet',
+    'description': 'Create a fantasy bet using a token (public endpoint for non-authenticated users)',
+    'tags': ['public'],
+    'parameters': [
+        {
+            'name': 'body',
+            'in': 'body',
+            'required': True,
+            'schema': {
+                'type': 'object',
+                'properties': {
+                    'token': {'type': 'string', 'description': 'Access token'},
+                    'series_id': {'type': 'integer', 'description': 'ID of the series to bet on'},
+                    'season_id': {'type': 'integer', 'description': 'ID of the season'},
+                    'winner_id': {'type': 'integer', 'description': 'ID of the predicted winner'},
+                    'bet_points': {'type': 'integer', 'description': 'Points to bet (required if not using fixed points)'}
+                },
+                'required': ['token', 'series_id', 'season_id', 'winner_id']
+            }
+        }
+    ],
+    'responses': {
+        201: {'description': 'Bet created successfully'},
+        400: {'description': 'Missing parameters or invalid token'},
+        403: {'description': 'Betting is closed or invalid'},
+        404: {'description': 'Token not found/expired or user not found'},
+        500: {'description': 'Internal server error'}
+    }
+})
+def create_fantasy_bet():
+    """Create a fantasy bet using a token."""
+    try:
+        data = request.json or {}
+        token = data.get('token')
+        
+        if not token:
+            return jsonify({'error': 'missing token'}), 400
+
+        _cleanup_expired()
+        entry = _token_store.get(token)
+        if not entry:
+            return jsonify({'error': 'token_not_found_or_expired'}), 404
+
+        # Get or create user based on discord info
+        from src.dtos.user_dto import UserDTO
+        
+        user = None
+        try:
+            query = QueryUtil.parseQuery(f"discordId == {entry.get('discord_id')}")
+            existing_users = public_api_blueprint.user_app_service.search(query)
+            if existing_users and len(existing_users) > 0:
+                user = existing_users[0]
+        except Exception as e:
+            logger.error(f"Error searching for user: {e}")
+            return jsonify({'error': 'user_lookup_failed'}), 500
+
+        if not user:
+            return jsonify({'error': 'user_not_found', 'message': 'You must register first before placing bets'}), 404
+
+        # Create the bet
+        from src.dtos.fantasy_bet_dto import FantasyBetDTO
+        
+        bet_payload = {
+            'series_id': data.get('series_id'),
+            'season_id': data.get('season_id'),
+            'user_id': user.id,
+            'winner_id': data.get('winner_id'),
+            'bet_points': data.get('bet_points')
+        }
+
+        bet = public_api_blueprint.fantasy_bet_app_service.create_fantasy_bet(FantasyBetDTO(bet_payload))
+        
+        return jsonify(bet.to_dict() if hasattr(bet, 'to_dict') else bet), 201
+
+    except ValueError as e:
+        logger.error(f"Validation error creating bet: {e}")
+        return jsonify({'error': 'validation_error', 'message': str(e)}), 400
+    except Exception as e:
+        logger.exception('Error in create_fantasy_bet')
+        return jsonify({'error': str(e)}), 500
+
+
+@public_api_blueprint.route('/fantasy-bet/<int:bet_id>', methods=['PUT'])
+@swag_from({
+    'summary': 'Update a fantasy bet',
+    'description': 'Update a fantasy bet using a token (public endpoint for non-authenticated users)',
+    'tags': ['public'],
+    'parameters': [
+        {
+            'name': 'bet_id',
+            'in': 'path',
+            'required': True,
+            'type': 'integer',
+            'description': 'Bet ID to update'
+        },
+        {
+            'name': 'body',
+            'in': 'body',
+            'required': True,
+            'schema': {
+                'type': 'object',
+                'properties': {
+                    'token': {'type': 'string', 'description': 'Access token'},
+                    'winner_id': {'type': 'integer', 'description': 'ID of the predicted winner'},
+                    'bet_points': {'type': 'integer', 'description': 'Points to bet (required if not using fixed points)'}
+                },
+                'required': ['token']
+            }
+        }
+    ],
+    'responses': {
+        200: {'description': 'Bet updated successfully'},
+        400: {'description': 'Missing token or invalid data'},
+        403: {'description': 'Not authorized to update this bet'},
+        404: {'description': 'Token or bet not found'},
+        500: {'description': 'Internal server error'}
+    }
+})
+def update_fantasy_bet(bet_id):
+    """Update a fantasy bet using a token."""
+    try:
+        data = request.json or {}
+        token = data.get('token')
+        
+        if not token:
+            return jsonify({'error': 'missing token'}), 400
+
+        _cleanup_expired()
+        entry = _token_store.get(token)
+        if not entry:
+            return jsonify({'error': 'token_not_found_or_expired'}), 404
+
+        # Get user based on discord info
+        from src.dtos.user_dto import UserDTO
+        
+        user = None
+        try:
+            query = QueryUtil.parseQuery(f"discordId == {entry.get('discord_id')}")
+            existing_users = public_api_blueprint.user_app_service.search(query)
+            if existing_users and len(existing_users) > 0:
+                user = existing_users[0]
+        except Exception as e:
+            logger.error(f"Error searching for user: {e}")
+            return jsonify({'error': 'user_lookup_failed'}), 500
+
+        if not user:
+            return jsonify({'error': 'user_not_found'}), 404
+
+        # Get the existing bet to verify ownership
+        existing_bet = public_api_blueprint.fantasy_bet_app_service.get_fantasy_bet(bet_id)
+        if not existing_bet:
+            return jsonify({'error': 'bet_not_found'}), 404
+
+        # Verify that the bet belongs to this user
+        if existing_bet.user_id != user.id:
+            return jsonify({'error': 'unauthorized', 'message': 'You can only update your own bets'}), 403
+
+        # Update the bet
+        from src.dtos.fantasy_bet_dto import FantasyBetDTO
+        
+        bet_payload = {
+            'series_id': existing_bet.series_id,
+            'season_id': existing_bet.season_id,
+            'user_id': user.id,
+            'winner_id': data.get('winner_id', existing_bet.winner_id),
+            'bet_points': data.get('bet_points', existing_bet.bet_points)
+        }
+
+        bet = public_api_blueprint.fantasy_bet_app_service.update_fantasy_bet(bet_id, FantasyBetDTO(bet_payload))
+        
+        return jsonify(bet.to_dict() if hasattr(bet, 'to_dict') else bet), 200
+
+    except ValueError as e:
+        logger.error(f"Validation error updating bet: {e}")
+        return jsonify({'error': 'validation_error', 'message': str(e)}), 400
+    except Exception as e:
+        logger.exception('Error in update_fantasy_bet')
+        return jsonify({'error': str(e)}), 500
+
+
+@public_api_blueprint.route('/fantasy-bet/<int:bet_id>', methods=['DELETE'])
+@swag_from({
+    'summary': 'Delete a fantasy bet',
+    'description': 'Delete a fantasy bet using a token (public endpoint for non-authenticated users)',
+    'tags': ['public'],
+    'parameters': [
+        {
+            'name': 'bet_id',
+            'in': 'path',
+            'required': True,
+            'type': 'integer',
+            'description': 'Bet ID to delete'
+        },
+        {
+            'name': 'token',
+            'in': 'query',
+            'required': True,
+            'type': 'string',
+            'description': 'Access token'
+        }
+    ],
+    'responses': {
+        204: {'description': 'Bet deleted successfully'},
+        400: {'description': 'Missing token'},
+        403: {'description': 'Not authorized to delete this bet'},
+        404: {'description': 'Token or bet not found'},
+        500: {'description': 'Internal server error'}
+    }
+})
+def delete_fantasy_bet(bet_id):
+    """Delete a fantasy bet using a token."""
+    try:
+        token = request.args.get('token')
+        
+        if not token:
+            return jsonify({'error': 'missing token'}), 400
+
+        _cleanup_expired()
+        entry = _token_store.get(token)
+        if not entry:
+            return jsonify({'error': 'token_not_found_or_expired'}), 404
+
+        # Get user based on discord info
+        from src.dtos.user_dto import UserDTO
+        
+        user = None
+        try:
+            query = QueryUtil.parseQuery(f"discordId == {entry.get('discord_id')}")
+            existing_users = public_api_blueprint.user_app_service.search(query)
+            if existing_users and len(existing_users) > 0:
+                user = existing_users[0]
+        except Exception as e:
+            logger.error(f"Error searching for user: {e}")
+            return jsonify({'error': 'user_lookup_failed'}), 500
+
+        if not user:
+            return jsonify({'error': 'user_not_found'}), 404
+
+        # Get the existing bet to verify ownership
+        existing_bet = public_api_blueprint.fantasy_bet_app_service.get_fantasy_bet(bet_id)
+        if not existing_bet:
+            return jsonify({'error': 'bet_not_found'}), 404
+
+        # Verify that the bet belongs to this user
+        if existing_bet.user_id != user.id:
+            return jsonify({'error': 'unauthorized', 'message': 'You can only delete your own bets'}), 403
+
+        # Delete the bet
+        public_api_blueprint.fantasy_bet_app_service.delete_fantasy_bet(bet_id)
+        
+        return '', 204
+
+    except Exception as e:
+        logger.exception('Error in delete_fantasy_bet')
         return jsonify({'error': str(e)}), 500
