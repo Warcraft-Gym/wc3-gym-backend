@@ -4,6 +4,8 @@ from src.database.match_db_service import MatchDBService
 from src.database.series_db_service import SeriesDBService
 from src.database.team_db_service import TeamDBService
 from src.database.team_season_db_service import TeamSeasonDBService
+from src.database.season_db_service import SeasonDBService
+from src.database.settings_db_service import SettingsDBService
 from src.util.query_util import QueryUtil
 from src.dtos.series_dto import SeriesDTO
 from src.dtos.team_dto import TeamDTO
@@ -12,11 +14,13 @@ class ScoreAppService:
     STANDARD_MAX_SCORE = 3
     HELPSTONE_MAX_SCORE = 4
 
-    def __init__(self, match_service: MatchDBService, serires_service:  SeriesDBService, team_service: TeamDBService, team_season_service: TeamSeasonDBService):
+    def __init__(self, match_service: MatchDBService, serires_service:  SeriesDBService, team_service: TeamDBService, team_season_service: TeamSeasonDBService, season_service: SeasonDBService, settings_service: SettingsDBService):
         self.match_service = match_service
         self.series_service = serires_service
         self.team_service = team_service
         self.team_season_service = team_season_service
+        self.season_service = season_service
+        self.settings_service = settings_service
 
     def calculateSeriesScore(self, series: SeriesDTO):
         try:
@@ -100,18 +104,28 @@ class ScoreAppService:
         team.seasons_info[season_key].final_score = team_points
         team.seasons_info[season_key].points_against = team_against
 
-        #TODO: This seems to be broken as there can be weeks where a team has less series in a match => double check with shibby for a good aproach
-        # Check if season exists before accessing its properties
-        if team.seasons_info[season_key].season is not None:
-            series_per_week = team.seasons_info[season_key].season.series_per_week
-            number_weeks = team.seasons_info[season_key].season.number_weeks
-            if series_per_week is not None and number_weeks is not None:
-                team.seasons_info[season_key].points_available = (series_per_week * number_weeks * self.getMaxPointsPerSeries()) - team_points - team_against
+        # Fetch season directly to get series_per_week and number_weeks
+        season = self.season_service.get(seasonId)
+        if season is not None and season.series_per_week is not None and season.number_weeks is not None:
+            max_available = season.series_per_week * season.number_weeks * self.getMaxPointsPerSeries()
+            team.seasons_info[season_key].points_available = max_available - team_points - team_against
 
         updated_season_info = self.team_season_service.update(team.id, team.seasons_info[season_key])
         
         team.seasons_info[season_key] = updated_season_info
         return team
+    
+    def _get_score_system(self):
+        """Get the score system from settings, fallback to environment variable, default to 'standard'"""
+        try:
+            score_system_setting = self.settings_service.get_by_key('score_system')
+            if score_system_setting and score_system_setting.value:
+                return score_system_setting.value
+        except:
+            pass
+        
+        # Fallback to environment variable for backward compatibility
+        return os.getenv('SCORE_SYSTEM', 'standard')
 
     def getScoreByMapScore(self, playerScore: int, opponentScore: int):
         if playerScore == None and opponentScore == None:
@@ -124,7 +138,7 @@ class ScoreAppService:
         if playerScore == 0 or playerScore == 1:
             return playerScore
         
-        if os.getenv('SCORE_SYSTEM') == 'helpstone':
+        if self._get_score_system() == 'helpstone':
             return self.getHelpstoneScoreByMapScore(opponentScore)
         
         return self.getStandardScoreByMapScore(opponentScore)
@@ -143,7 +157,7 @@ class ScoreAppService:
             return (self.STANDARD_MAX_SCORE - 1)
     
     def getMaxPointsPerSeries(self):
-        if os.getenv('SCORE_SYSTEM') == 'helpstone':
+        if self._get_score_system() == 'helpstone':
             return self.HELPSTONE_MAX_SCORE
         return self.STANDARD_MAX_SCORE
         

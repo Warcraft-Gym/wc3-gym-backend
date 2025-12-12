@@ -479,8 +479,56 @@ def search_bets():
         return jsonify({"error": str(e)}), 500
     
 
+@fantasy_blueprint.route('/fantasy/teams/<int:team_id>/season/<int:season_id>/breakdown', methods=['GET'])
+@swag_from({
+    'summary': 'Get detailed score breakdown for a fantasy team',
+    'description': 'Returns a detailed breakdown showing how each component of the fantasy team score was calculated.',
+    'tags': ['fantasy'],
+    'security': [{'BearerAuth': []}],
+    'parameters': [
+        {'name': 'team_id', 'in': 'path', 'type': 'integer', 'required': True, 'description': 'The ID of the fantasy team'},
+        {'name': 'season_id', 'in': 'path', 'type': 'integer', 'required': True, 'description': 'The ID of the season'},
+    ],
+    'responses': {
+        200: {
+            'description': 'Score breakdown retrieved successfully',
+            'schema': {
+                'type': 'object',
+                'properties': {
+                    'team_id': {'type': 'integer'},
+                    'team_name': {'type': 'string'},
+                    'season_id': {'type': 'integer'},
+                    'season_name': {'type': 'string'},
+                    'player_breakdown': {'type': 'array'},
+                    'bench_breakdown': {'type': 'array'},
+                    'team_breakdown': {'type': 'object'},
+                    'race_breakdown': {'type': 'object'},
+                    'bet_breakdown': {'type': 'array'},
+                    'totals': {'type': 'object'}
+                }
+            }
+        },
+        404: {'description': 'Fantasy team or season not found'},
+        500: {'description': 'Internal server error'}
+    }
+})
+def get_fantasy_team_breakdown(team_id: int, season_id: int):
+    try:
+        season = fantasy_blueprint.season_app_service.get_season(season_id)
+        if not season:
+            return jsonify({"error": f"Season with id {season_id} not found"}), 404
+        
+        breakdown = fantasy_blueprint.fantasy_score_app_service.getTeamScoreBreakdown(team_id, season)
+        return jsonify(breakdown), 200
+    except NotFoundException as e:
+        logger.error(e)
+        return jsonify({"error": str(e)}), 404
+    except Exception as e:
+        logger.error(e)
+        return jsonify({"error": str(e)}), 500
+
 @fantasy_blueprint.route('/fantasy/season/<int:season_id>/calculate/', methods=['POST'])
-#@jwt_required()
+@jwt_required()
 @swag_from({
     'summary': 'Calculate the fantasy scores of a given season',
     'description': 'Calculates all fantasy team scores for the given season.',

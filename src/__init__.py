@@ -160,7 +160,7 @@ user_app_service = UserAppService(user_service=user_service, settings_app_servic
 team_app_service = TeamAppService(team_service=team_service, user_app_service=user_app_service)
 match_app_service = MatchAppService(match_service=match_service)
 season_app_service = SeasonAppService(season_service=season_service)
-score_app_service = ScoreAppService(match_service=match_service, serires_service=series_service, team_service=team_service, team_season_service=team_season_service)
+score_app_service = ScoreAppService(match_service=match_service, serires_service=series_service, team_service=team_service, team_season_service=team_season_service, season_service=season_service, settings_service=settings_service)
 series_app_service = SeriesAppService(series_service=series_service, score_app_service=score_app_service, user_app_service=user_app_service)
 map_app_service = MapAppService(map_service=map_service)
 fantasy_bet_app_service = FantasyBetAppService(fantasy_bet_service=fantasy_bet_service, settings_app_service=settings_app_service)
