@@ -21,6 +21,7 @@ class DBUser(DBModel):
     fantasy_teams = relationship("DBFantasyTeamPlayer", back_populates='users', cascade='all, delete-orphan')
     signup_seasons = relationship('DBUserSeasonSignup', back_populates='user', cascade="all, delete")
 
+
     @classmethod
     def updateUserTeamSeasonStats(cls, session, season_stats):
         from src.database.model.DBSeason import DBSeason

@@ -291,6 +291,60 @@ def removePlayers(team_id, season_id):
         logger.error(e)
         return jsonify({"error": str(e)}), 500
 
+@team_blueprint.route('/teams/<int:team_id>/seasons/<int:season_id>/coaches', methods=['PUT'])
+@jwt_required()
+@swag_from({
+    'summary': 'Set team coaches for a season',
+    'description': 'Set up to 3 coaches for a team in a specific season. Replaces existing coaches.',
+    'tags': ['teams'],
+    'security': [{'BearerAuth': []}],
+    'parameters': [
+        {'name': 'team_id', 'in': 'path', 'type': 'integer', 'required': True},
+        {'name': 'season_id', 'in': 'path', 'type': 'integer', 'required': True},
+        {
+            'name': 'body',
+            'in': 'body',
+            'required': True,
+            'schema': {
+                'type': 'object',
+                'properties': {
+                    'coach_ids': {
+                        'type': 'array', 
+                        'items': {'type': 'integer'},
+                        'maxItems': 3,
+                        'description': 'Array of user IDs to set as coaches (max 3)'
+                    }
+                },
+                'required': ['coach_ids']
+            }
+        }
+    ],
+    'responses': {
+        200: {'description': 'Coaches set successfully'},
+        400: {'description': 'Invalid request (e.g., more than 3 coaches)'},
+        404: {'description': 'Team or season not found'},
+        500: {'description': 'Internal server error'}
+    }
+})
+def set_coaches(team_id, season_id):
+    try:
+        data = request.json
+        coach_ids = data.get('coach_ids', [])
+        
+        if len(coach_ids) > 3:
+            return jsonify({"error": "Cannot assign more than 3 coaches per team per season"}), 400
+        
+        team = team_blueprint.team_app_service.setCoaches(team_id, season_id, coach_ids)
+        if team:
+            team = team.to_dict()
+        return jsonify(team), 200
+    except NotFoundException as e:
+        logger.error(e)
+        return jsonify({"error": str(e)}), 404
+    except Exception as e:
+        logger.error(e)
+        return jsonify({"error": str(e)}), 500
+
 @team_blueprint.route('/teams', methods=['GET'])
 @swag_from({
     'summary': 'Get all teams',

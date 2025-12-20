@@ -65,6 +65,17 @@ class TeamDBService(AbstractDatabaseService):
             except SQLAlchemyError as e:
                 logger.error(f"Database error: {e}")
                 raise DBException(f"Database error: {e}")
+    
+    def setCoaches(self, team_id, season_id, coach_ids):
+        with self.get_session() as session:
+            try:
+                team = DBTeam.setCoaches(session, team_id, season_id, coach_ids)
+                if not team:
+                    raise DBException("Team could not be updated!")
+                return TeamDTO.from_dbteam(team)   
+            except SQLAlchemyError as e:
+                logger.error(f"Database error: {e}")
+                raise DBException(f"Database error: {e}")
 
     def delete(self, team_id):
         with self.get_session() as session:
@@ -78,11 +89,14 @@ class TeamDBService(AbstractDatabaseService):
     def get(self, team_id):
         with self.get_session() as session:
             try:
+                from src.database.model.DBRelationships import DBTeamSeason
                 # Eager load related entities, disable nested loading
                 team = session.query(DBTeam)\
                     .options(
                         joinedload(DBTeam.user_seasons).noload('*'),
-                        joinedload(DBTeam.season_info).noload('*')
+                        joinedload(DBTeam.season_info).joinedload(DBTeamSeason.coach_1),
+                        joinedload(DBTeam.season_info).joinedload(DBTeamSeason.coach_2),
+                        joinedload(DBTeam.season_info).joinedload(DBTeamSeason.coach_3)
                     )\
                     .filter_by(id=team_id).first()
                 if not team:
@@ -117,7 +131,7 @@ class TeamDBService(AbstractDatabaseService):
         """Get team with users filtered by specific season at database level"""
         with self.get_session() as session:
             try:
-                from src.database.model.DBRelationships import DBUserTeamSeason
+                from src.database.model.DBRelationships import DBUserTeamSeason, DBTeamSeason
                 from src.database.model.DBUser import DBUser
                 # Eager load only user_seasons for the specified season, including w3c_stats and team_seasons (gnl_stats) with season info
                 team = session.query(DBTeam)\
@@ -130,7 +144,9 @@ class TeamDBService(AbstractDatabaseService):
                             .joinedload(DBUser.team_seasons)
                             .joinedload(DBUserTeamSeason.season),
                         joinedload(DBTeam.user_seasons).noload(DBUserTeamSeason.team),
-                        joinedload(DBTeam.season_info.and_(DBTeam.season_info.any(season_id=season_id))).noload('*')
+                        joinedload(DBTeam.season_info.and_(DBTeam.season_info.any(season_id=season_id))).joinedload(DBTeamSeason.coach_1),
+                        joinedload(DBTeam.season_info.and_(DBTeam.season_info.any(season_id=season_id))).joinedload(DBTeamSeason.coach_2),
+                        joinedload(DBTeam.season_info.and_(DBTeam.season_info.any(season_id=season_id))).joinedload(DBTeamSeason.coach_3)
                     )\
                     .filter_by(id=team_id).first()
                 if not team:
@@ -230,16 +246,19 @@ class TeamDBService(AbstractDatabaseService):
     def getAll_with_nested_users(self):
         with self.get_session() as session:
             try:
-                from src.database.model.DBRelationships import DBUserTeamSeason
+                from src.database.model.DBRelationships import DBUserTeamSeason, DBTeamSeason
                 from src.database.model.DBUser import DBUser
                 result = []
                 # Eager load user_seasons and their users with w3c_stats and team_seasons (gnl_stats) with season info
+                # Also eager load coaches from season_info
                 teams = session.query(DBTeam)\
                     .options(
                         joinedload(DBTeam.user_seasons).joinedload(DBUserTeamSeason.user).joinedload(DBUser.w3c_stats),
                         joinedload(DBTeam.user_seasons).joinedload(DBUserTeamSeason.user).joinedload(DBUser.team_seasons).joinedload(DBUserTeamSeason.season),
                         joinedload(DBTeam.user_seasons).noload(DBUserTeamSeason.team),
-                        joinedload(DBTeam.season_info).noload('*')
+                        joinedload(DBTeam.season_info).joinedload(DBTeamSeason.coach_1),
+                        joinedload(DBTeam.season_info).joinedload(DBTeamSeason.coach_2),
+                        joinedload(DBTeam.season_info).joinedload(DBTeamSeason.coach_3)
                     ).all()
                 for team in teams:
                     result.append(TeamDTO.from_dbteam(team))

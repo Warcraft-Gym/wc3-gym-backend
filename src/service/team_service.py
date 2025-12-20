@@ -49,6 +49,11 @@ class TeamAppService:
         team_data = self.team_service.removePlayers(team_id, season_id, players)
         return team_data
     
+    def setCoaches(self, team_id: int, season_id: int, coach_ids):
+        """Set coaches for a team in a season (up to 3)"""
+        team_data = self.team_service.setCoaches(team_id, season_id, coach_ids)
+        return team_data
+    
     def getAll(self):
         team_data = self.team_service.getAll()
         return team_data
