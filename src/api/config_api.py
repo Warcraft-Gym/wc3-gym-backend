@@ -1,4 +1,5 @@
 import logging
+import secrets
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required
 from flasgger import swag_from
@@ -217,4 +218,90 @@ def delete_setting(key):
         
     except Exception as e:
         logger.error(f"Error deleting setting {key}: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@config_blueprint.route('/config/koth/nightbot-token', methods=['POST'])
+@jwt_required()
+@swag_from({
+    'summary': 'Generate new KOTH Nightbot token',
+    'description': 'Generate a new secure token for KOTH Nightbot integration',
+    'tags': ['config'],
+    'security': [{'BearerAuth': []}],
+    'responses': {
+        200: {
+            'description': 'Token generated successfully',
+            'schema': {
+                'type': 'object',
+                'properties': {
+                    'token': {'type': 'string'},
+                    'message': {'type': 'string'}
+                }
+            }
+        },
+        500: {'description': 'Internal server error'}
+    }
+})
+def generate_nightbot_token():
+    """Generate a new secure token for KOTH Nightbot integration"""
+    try:
+        # Generate a secure random token (64 characters hex)
+        new_token = secrets.token_hex(32)
+        
+        # Store in settings
+        config_blueprint.settings_app_service.update_setting(
+            'KOTH_NIGHTBOT_TOKEN',
+            new_token,
+            'Secure token for KOTH Nightbot command integration'
+        )
+        
+        return jsonify({
+            'token': new_token,
+            'message': 'KOTH Nightbot token generated successfully'
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error generating Nightbot token: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@config_blueprint.route('/config/koth/nightbot-token', methods=['GET'])
+@jwt_required()
+@swag_from({
+    'summary': 'Get current KOTH Nightbot token',
+    'description': 'Retrieve the current KOTH Nightbot integration token',
+    'tags': ['config'],
+    'security': [{'BearerAuth': []}],
+    'responses': {
+        200: {
+            'description': 'Token retrieved successfully',
+            'schema': {
+                'type': 'object',
+                'properties': {
+                    'token': {'type': 'string'},
+                    'exists': {'type': 'boolean'}
+                }
+            }
+        },
+        500: {'description': 'Internal server error'}
+    }
+})
+def get_nightbot_token():
+    """Get the current KOTH Nightbot token"""
+    try:
+        setting = config_blueprint.settings_app_service.get_setting('KOTH_NIGHTBOT_TOKEN')
+        
+        if setting:
+            return jsonify({
+                'token': setting.get('value'),
+                'exists': True
+            }), 200
+        else:
+            return jsonify({
+                'token': None,
+                'exists': False
+            }), 200
+        
+    except Exception as e:
+        logger.error(f"Error retrieving Nightbot token: {e}")
         return jsonify({"error": str(e)}), 500

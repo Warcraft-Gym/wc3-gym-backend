@@ -15,8 +15,10 @@ from src.database.fantasy_team_db_service import FantasyTeamDBService
 from src.database.map_db_service import MapDBService
 from src.database.team_season_db_service import TeamSeasonDBService
 from src.database.settings_db_service import SettingsDBService
+from src.database.koth_db_service import KothDBService
 from src.service.user_service import UserAppService
 from src.service.team_service import TeamAppService
+from src.service.koth_service import KothAppService
 from src.service.match_service import MatchAppService
 from src.service.season_service import SeasonAppService
 from src.service.series_service import SeriesAppService
@@ -43,6 +45,7 @@ from src.api.map_api import map_blueprint
 from src.api.score_api import score_blueprint
 from src.api.fantasy_api import fantasy_blueprint
 from src.api.config_api import config_blueprint
+from src.api.koth_api import koth_blueprint
 
 # Load environment variables from .env file
 load_dotenv()
@@ -151,6 +154,7 @@ team_season_service = TeamSeasonDBService(db_url=db_url)
 fantasy_bet_service = FantasyBetDBService(db_url=db_url)
 fantasy_team_service = FantasyTeamDBService(db_url=db_url)
 settings_service = SettingsDBService(db_url=db_url)
+koth_service = KothDBService(db_url=db_url)
 
 logger.debug("DB Services initialized!")
 
@@ -169,6 +173,7 @@ fantasy_score_app_service = FantasyScoreAppService(fantasy_team_service=fantasy_
                                                     fantasy_bet_service=fantasy_bet_app_service,
                                                     series_app_service=series_app_service,
                                                     team_app_service=team_app_service)
+koth_app_service = KothAppService(koth_service=koth_service, settings_app_service=settings_app_service)
 
 
 logger.debug("App services initialized!")
@@ -210,6 +215,8 @@ score_blueprint.team_app_service = team_app_service
 
 config_blueprint.settings_app_service = settings_app_service
 
+koth_blueprint.koth_app_service = koth_app_service
+
 # Provide the custom JSON provider to blueprints so services can serialize
 # using the same provider without importing the Flask app/context.
 public_api_blueprint.json_provider = app.json
@@ -226,6 +233,7 @@ app.register_blueprint(map_blueprint)
 app.register_blueprint(score_blueprint)
 app.register_blueprint(fantasy_blueprint)
 app.register_blueprint(config_blueprint)
+app.register_blueprint(koth_blueprint)
 
 logger.debug("API blueprints registered!")
 
