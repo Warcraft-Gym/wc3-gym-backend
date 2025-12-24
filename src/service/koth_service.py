@@ -68,8 +68,8 @@ class KothAppService:
             'ud': 'UD',
             'nightelf': 'NE',
             'ne': 'NE',
-            'random': 'RD',
-            'rd': 'RD'
+            'random': 'RANDOM',
+            'rd': 'RANDOM'
         }
         
         signup_race = None
@@ -82,11 +82,16 @@ class KothAppService:
         # Get active event
         event = self.get_active_event()
 
-        # Check if player already has an active signup
+        # Check if player already has an active signup with the same race
         existing_signups = self.koth_service.get_signups_by_event(event.id)
         for signup in existing_signups:
             if signup.is_active == 1 and signup.twitch_username == twitch_username:
-                raise Exception(f"Player {twitch_username} already has an active signup")
+                # If a race is specified, only prevent duplicate if it's the same race
+                if signup_race and signup.race == signup_race:
+                    raise Exception(f"Player {twitch_username} already has an active signup with race {signup_race}")
+                # If no race specified, check if they have any active signup (to prevent auto-picking duplicate)
+                elif not signup_race:
+                    raise Exception(f"Player {twitch_username} already has an active signup. Specify a race to signup with a different race.")
 
         # Validate and get W3C stats
         w3c_service = W3CService(settings_app_service=self.settings_app_service)
@@ -97,7 +102,7 @@ class KothAppService:
         
         try:
             current_season = self._get_current_w3c_season()
-            for season_offset in range(3):
+            for season_offset in range(2):
                 season = current_season - season_offset
                 try:
                     stats = self._get_w3c_stats_for_season(w3c_service, battle_tag, season)
@@ -107,10 +112,17 @@ class KothAppService:
                                 # Race is an object, get the value string
                                 race_mmr_data[stat.race.value] = stat.mmr
                         
-                        # If we found any stats in this season, stop checking older seasons
-                        if race_mmr_data:
-                            logger.debug(f"Found W3C stats for {battle_tag} in season {season}")
-                            break
+                        # Stop checking older seasons if we found the required stats
+                        if signup_race:
+                            # If a specific race was requested, only stop if we found that race
+                            if signup_race in race_mmr_data:
+                                logger.debug(f"Found W3C stats for {battle_tag} with race {signup_race} in season {season}")
+                                break
+                        else:
+                            # If no race specified, stop as soon as we find any stats
+                            if race_mmr_data:
+                                logger.debug(f"Found W3C stats for {battle_tag} in season {season}")
+                                break
                 except Exception as e:
                     logger.debug(f"No stats for {battle_tag} in season {season}: {e}")
                     continue

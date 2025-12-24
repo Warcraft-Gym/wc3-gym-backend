@@ -349,7 +349,8 @@ def create_signup_nightbot():
                 'type': 'object',
                 'properties': {
                     'twitch_username': {'type': 'string', 'description': 'Twitch username (optional)'},
-                    'battle_tag': {'type': 'string', 'description': 'W3Champions BattleTag'}
+                    'battle_tag': {'type': 'string', 'description': 'W3Champions BattleTag'},
+                    'race': {'type': 'string', 'description': 'Preferred race (optional): orc, human, undead, nightelf, random'}
                 },
                 'required': ['battle_tag']
             }
@@ -368,13 +369,15 @@ def create_signup_admin():
         
         twitch_username = data.get('twitch_username', '')
         battle_tag = data.get('battle_tag')
+        race = data.get('race')
         
         if not battle_tag:
             return jsonify({'error': 'BattleTag is required'}), 400
         
         signup = koth_blueprint.koth_app_service.create_signup_from_twitch(
             twitch_username=twitch_username,
-            battle_tag=battle_tag
+            battle_tag=battle_tag,
+            preferred_race=race
         )
         return jsonify(signup.to_dict()), 201
     except NotFoundException as e:
