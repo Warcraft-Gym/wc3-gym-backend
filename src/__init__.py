@@ -28,6 +28,8 @@ from src.service.fantasy_bet_service import FantasyBetAppService
 from src.service.fantasy_team_service import FantasyTeamAppService
 from src.service.fantasy_score_service import FantasyScoreAppService
 from src.service.settings_service import SettingsAppService
+from src.service.player_career_stats_service import PlayerCareerStatsAppService
+from src.database.player_career_stats_db_service import PlayerCareerStatsDBService
 from flasgger import Swagger
 import enum
 from flask.json.provider import DefaultJSONProvider
@@ -46,6 +48,7 @@ from src.api.score_api import score_blueprint
 from src.api.fantasy_api import fantasy_blueprint
 from src.api.config_api import config_blueprint
 from src.api.koth_api import koth_blueprint
+from src.api.stats_api import stats_blueprint
 
 # Load environment variables from .env file
 load_dotenv()
@@ -155,6 +158,7 @@ fantasy_bet_service = FantasyBetDBService(db_url=db_url)
 fantasy_team_service = FantasyTeamDBService(db_url=db_url)
 settings_service = SettingsDBService(db_url=db_url)
 koth_service = KothDBService(db_url=db_url)
+stats_db_service = PlayerCareerStatsDBService(db_url=db_url)
 
 logger.debug("DB Services initialized!")
 
@@ -174,7 +178,10 @@ fantasy_score_app_service = FantasyScoreAppService(fantasy_team_service=fantasy_
                                                     series_app_service=series_app_service,
                                                     team_app_service=team_app_service)
 koth_app_service = KothAppService(koth_service=koth_service, settings_app_service=settings_app_service)
-
+stats_app_service = PlayerCareerStatsAppService(
+    stats_db_service=stats_db_service,
+    series_service=series_service
+)
 
 logger.debug("App services initialized!")
 
@@ -217,6 +224,8 @@ config_blueprint.settings_app_service = settings_app_service
 
 koth_blueprint.koth_app_service = koth_app_service
 
+stats_blueprint.stats_service = stats_app_service
+
 # Provide the custom JSON provider to blueprints so services can serialize
 # using the same provider without importing the Flask app/context.
 public_api_blueprint.json_provider = app.json
@@ -234,6 +243,7 @@ app.register_blueprint(score_blueprint)
 app.register_blueprint(fantasy_blueprint)
 app.register_blueprint(config_blueprint)
 app.register_blueprint(koth_blueprint)
+app.register_blueprint(stats_blueprint)
 
 logger.debug("API blueprints registered!")
 
