@@ -359,3 +359,115 @@ def remove_maps(season_id):
     except Exception as e:
         logger.error(e)
         return jsonify({"error": str(e)}), 500
+
+
+@season_blueprint.route('/seasons/addUserSignup/<int:season_id>', methods=['POST'])
+@jwt_required()
+@swag_from({
+    'summary': 'Add user signups to season',
+    'description': 'Add signup users to season by providing a list of user ids.',
+    'tags': ['seasons'],
+    'security': [{'BearerAuth': []}],
+    'parameters': [
+        {'name': 'season_id', 'in': 'path', 'type': 'integer', 'required': True},
+        {
+            'name': 'body',
+            'in': 'body',
+            'required': True,
+            'schema': {
+                'type': 'object',
+                'properties': {
+                    'user_ids': {'type': 'array', 'items': {'type': 'integer'}}
+                },
+                'required': ['user_ids']
+            }
+        }],
+    'responses': {
+        200: {'description': 'Added user signups to season successfully'},
+        404: {'description': 'Season or Users not found'},
+        500: {'description': 'Internal server error'}
+    }
+})
+def add_user_signup(season_id):
+    try:
+        data = request.json
+        season = season_blueprint.season_app_service.addUserSignup(season_id, data.get("user_ids"))
+        if season:
+            season = season.to_dict()
+        return jsonify(season)
+    except NotFoundException as e:
+        logger.error(e)
+        return jsonify({"error": str(e)}), 404
+    except Exception as e:
+        logger.error(e)
+        return jsonify({"error": str(e)}), 500
+
+
+@season_blueprint.route('/seasons/removeUserSignup/<int:season_id>', methods=['POST'])
+@jwt_required()
+@swag_from({
+    'summary': 'Remove user signups from season',
+    'description': 'Remove signup users from season by providing a list of user ids.',
+    'tags': ['seasons'],
+    'security': [{'BearerAuth': []}],
+    'parameters': [
+        {'name': 'season_id', 'in': 'path', 'type': 'integer', 'required': True},
+        {
+            'name': 'body',
+            'in': 'body',
+            'required': True,
+            'schema': {
+                'type': 'object',
+                'properties': {
+                    'user_ids': {'type': 'array', 'items': {'type': 'integer'}}
+                },
+                'required': ['user_ids']
+            }
+        }],
+    'responses': {
+        200: {'description': 'Removed user signups from season successfully'},
+        404: {'description': 'Season or Users not found'},
+        500: {'description': 'Internal server error'}
+    }
+})
+def remove_user_signup(season_id):
+    try:
+        data = request.json
+        season = season_blueprint.season_app_service.removeUserSignup(season_id, data.get("user_ids"))
+        if season:
+            season = season.to_dict()
+        return jsonify(season)
+    except NotFoundException as e:
+        logger.error(e)
+        return jsonify({"error": str(e)}), 404
+    except Exception as e:
+        logger.error(e)
+        return jsonify({"error": str(e)}), 500
+
+
+@season_blueprint.route('/seasons/<int:season_id>/signups', methods=['GET'])
+@swag_from({
+    'summary': 'Get signed up users for a season',
+    'description': 'Retrieve all users signed up for a specific season.',
+    'tags': ['seasons'],
+    'parameters': [{'name': 'season_id', 'in': 'path', 'type': 'integer', 'required': True}],
+    'responses': {
+        200: {'description': 'Signed up users retrieved successfully'},
+        404: {'description': 'Season not found'},
+        500: {'description': 'Internal server error'}
+    }
+})
+def get_season_signups(season_id):
+    try:
+        users = season_blueprint.season_app_service.getSignedUpUsers(season_id)
+        out = []
+        if users:
+            for user in users:
+                out.append(user.to_dict())
+        return jsonify(out)
+    except NotFoundException as e:
+        logger.error(e)
+        return jsonify({"error": str(e)}), 404
+    except Exception as e:
+        logger.error(e)
+        return jsonify({"error": str(e)}), 500

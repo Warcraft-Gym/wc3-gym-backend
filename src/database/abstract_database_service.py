@@ -11,7 +11,15 @@ logger = logging.getLogger(__name__)
 
 class AbstractDatabaseService(ABC):
     def __init__(self, db_url):
-        self.engine = create_engine(db_url, pool_pre_ping=True, pool_recycle=300)
+        # Optimize connection pooling for better performance
+        self.engine = create_engine(
+            db_url,
+            pool_size=10,              # Maintain 10 persistent connections
+            max_overflow=20,           # Allow up to 20 extra connections during peak
+            pool_pre_ping=True,        # Verify connections before using
+            pool_recycle=3600,         # Recycle connections every hour
+            echo=False                  # Disable SQL logging for performance
+        )
         
         Base.metadata.create_all(self.engine)
         self.Session = scoped_session(sessionmaker(bind=self.engine))

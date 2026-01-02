@@ -7,8 +7,9 @@ from src.service.w3champions.w3c_service import W3CService
 
 
 class UserAppService:
-    def __init__(self, user_service: UserDBService):
+    def __init__(self, user_service: UserDBService, settings_app_service=None):
         self.user_service = user_service
+        self.settings_app_service = settings_app_service
 
     def create_user(self, user : UserDTO):
         #remove id, db generates the id
@@ -38,8 +39,20 @@ class UserAppService:
         users_data = self.user_service.search(query)
         return users_data
 
+    def validateBattleTag(self, battle_tag: str):
+        """
+        Validate that a BattleTag exists on W3Champions without persisting anything.
+        Returns True if player exists, False otherwise.
+        """
+        w3c_service = W3CService(settings_app_service=self.settings_app_service)
+        try:
+            return w3c_service.validatePlayer(battle_tag)
+        except Exception as e:
+            logging.getLogger(__name__).debug(f"BattleTag validation failed for {battle_tag}: {str(e)}")
+            return False
+
     def updateW3CStats(self, user: UserDTO):
-        w3c_service = W3CService()
+        w3c_service = W3CService(settings_app_service=self.settings_app_service)
         stats = w3c_service.getPlayerStats(user.battleTag)
         if stats:
             for s in stats:
@@ -55,7 +68,7 @@ class UserAppService:
                     self.user_service.createW3CStats(s)
 
     def updateW3CStats_ById(self, user_id):
-        user = self.user_service.get(user_id==user_id)
+        user = self.user_service.get(user_id)
         if not user:
             raise Exception(f"User could not be found by id: {user_id}")
         self.updateW3CStats(user)

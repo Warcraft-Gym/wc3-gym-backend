@@ -1,11 +1,13 @@
 import logging
 from src.database.abstract_database_service import AbstractDatabaseService
+
 from src.database.model.DBUser import DBUser
 from src.dtos.user_dto import UserDTO
 from src.dtos.w3c_stats_dto import W3CStatsDTO
 from src.database.model.DBW3CStats import DBW3CStats
 from src.dtos.user_team_season_stats_dto import UserTeamSeasonStatsDTO
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import joinedload
 from custom_exceptions import DBException
 from src.util.query_util import QueryUtil
 
@@ -49,7 +51,13 @@ class UserDBService(AbstractDatabaseService):
     def get(self, user_id):
         with self.get_session() as session:
             try:
-                user = DBUser.getById(session, user_id)
+                # Eager load related entities, disable nested loading
+                user = session.query(DBUser)\
+                    .options(
+                        joinedload(DBUser.team_seasons).noload('*'),
+                        joinedload(DBUser.w3c_stats)
+                    )\
+                    .filter_by(id=user_id).first()
                 if not user:
                     return None
                 return UserDTO.from_dbuser(user)
@@ -64,7 +72,13 @@ class UserDBService(AbstractDatabaseService):
             try:
                 result = []
                 filter = QueryUtil.convertQueryToDBFilter(DBUser, query)
-                users = DBUser.search(session, filter)
+                # Eager load related entities, disable nested loading
+                users = session.query(DBUser)\
+                    .options(
+                        joinedload(DBUser.team_seasons).noload('*'),
+                        joinedload(DBUser.w3c_stats)
+                    )\
+                    .filter(filter).all() if filter is not None else []
                 if not users:
                     logger.debug(f"No users found by searchcriteria: {query}")
                     return result
@@ -80,8 +94,14 @@ class UserDBService(AbstractDatabaseService):
     def getAll(self):
         with self.get_session() as session:
             try:
+                from src.database.model.DBRelationships import DBUserTeamSeason
                 result = []
-                users = DBUser.getAll(session)
+                # Eager load related entities, disable nested loading
+                users = session.query(DBUser)\
+                    .options(
+                        joinedload(DBUser.team_seasons).joinedload(DBUserTeamSeason.season),
+                        joinedload(DBUser.w3c_stats)
+                    ).all()
                 
                 for user in users:
                     result.append(UserDTO.from_dbuser(user))

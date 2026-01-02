@@ -1,9 +1,8 @@
 from sqlalchemy import Column, Integer, String, Sequence, Enum, ForeignKey 
 from sqlalchemy.orm import relationship
 from src.database.model.DBModel import DBModel
-from src.database.model.DBEnums import Race, Country
+from src.database.model.DBEnums import Race
 from src.database.model.DBRelationships import DBUserTeamSeason
-
 
 class DBUser(DBModel):
     __tablename__ = 'users'
@@ -12,13 +11,16 @@ class DBUser(DBModel):
     name = Column(String(50), nullable=False)
     battleTag = Column(String(50), nullable=False)
     discordTag = Column(String(50), nullable=False)
+    discordId = Column(String(50), nullable=False)
     race = Column(Enum(Race), nullable=False)
     mmr = Column(Integer)
-    country = Column(Enum(Country))
+    country = Column(String(2))
     fantasy_tier = Column(Integer)
     team_seasons = relationship('DBUserTeamSeason', back_populates='user', cascade="all, delete")
     w3c_stats = relationship("DBW3CStats", back_populates='user', cascade='all, delete-orphan')
     fantasy_teams = relationship("DBFantasyTeamPlayer", back_populates='users', cascade='all, delete-orphan')
+    signup_seasons = relationship('DBUserSeasonSignup', back_populates='user', cascade="all, delete")
+
 
     @classmethod
     def updateUserTeamSeasonStats(cls, session, season_stats):
@@ -46,3 +48,6 @@ class DBUser(DBModel):
             session.add(uts_obj)
         session.commit()
         return uts_obj
+    
+
+

@@ -44,17 +44,20 @@ class FantasyBetDTO:
     
     @classmethod
     def from_dbfantasybet(cls, fbet: DBFantasyBet):
+        if not fbet:
+            return None
+
         return cls(
             {
                 'id': fbet.id,
                 'series_id': fbet.series_id,
                 'season_id': fbet.season_id,
-                'season': SeasonDTO.from_dbseason(fbet.season),
-                'series': SeriesDTO.from_dbseries(fbet.series),
+                'season': SeasonDTO.from_dbseason(fbet.season) if fbet.season else None,
+                'series': SeriesDTO.from_dbseries(fbet.series) if fbet.series else None,
                 'user_id': fbet.user_id,
-                'user': UserDTO.from_dbuser(fbet.user),
+                'user': UserDTO.from_dbuser(fbet.user) if fbet.user else None,
                 'winner_id': fbet.winner_id,
-                'winner': UserDTO.from_dbuser(fbet.winner),
+                'winner': UserDTO.from_dbuser(fbet.winner) if fbet.winner else None,
                 'bet_points': fbet.bet_points,
                 'bet_result': fbet.bet_result
             }

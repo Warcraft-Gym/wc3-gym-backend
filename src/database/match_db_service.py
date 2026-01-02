@@ -2,6 +2,7 @@ import logging
 from src.database.abstract_database_service import AbstractDatabaseService
 from src.database.model.DBMatch import DBMatch
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import joinedload
 from custom_exceptions import DBException
 from src.util.query_util import QueryUtil
 from src.dtos.match_dto import MatchDTO
@@ -55,7 +56,15 @@ class MatchDBService(AbstractDatabaseService):
     def get(self, match_id):
         try:
             session = self.Session()
-            match = session.query(DBMatch).filter_by(id=match_id).first()
+            # Eager load related entities, disable nested loading
+            match = session.query(DBMatch)\
+                .options(
+                    joinedload(DBMatch.team1).noload('*'),
+                    joinedload(DBMatch.team2).noload('*'),
+                    joinedload(DBMatch.season).noload('*'),
+                    joinedload(DBMatch.fixed_map)
+                )\
+                .filter_by(id=match_id).first()
             # Example usage
             if not match:
                 logger.error("Match could not be found!")
@@ -73,7 +82,15 @@ class MatchDBService(AbstractDatabaseService):
             try:
                 result = []
                 filter = QueryUtil.convertQueryToDBFilter(DBMatch, query)
-                matches = DBMatch.search(session, filter)
+                # Eager load only what we need, explicitly disable other relationships
+                matches = session.query(DBMatch)\
+                    .options(
+                        joinedload(DBMatch.team1).noload('*'),
+                        joinedload(DBMatch.team2).noload('*'),
+                        joinedload(DBMatch.season).noload('*'),
+                        joinedload(DBMatch.fixed_map)
+                    )\
+                    .filter(filter).all() if filter is not None else []
                 if not matches:
                     logger.debug(f"No matches found by searchcriteria: {query}")
                     return result

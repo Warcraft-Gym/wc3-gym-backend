@@ -244,6 +244,31 @@ def search_series_by_season_and_playday(season_id: int, playday: int):
         logger.error(e)
         return jsonify({"error": str(e)}), 500
     
+@series_blueprint.route('/series/season/<int:season_id>', methods=['GET'])
+@swag_from({
+    'summary': 'Get all series for a season',
+    'description': 'Return all series for a specific season',
+    'tags': ['series'],
+    'parameters': [
+        {'name': 'season_id', 'in': 'path', 'type': 'integer', 'required': True}
+    ],
+    'responses': {
+        200: {'description': 'series retrieved successfully'},
+        500: {'description': 'Internal server error'}
+    }
+})
+def get_series_by_season(season_id: int):
+    try:
+        series_l = series_blueprint.series_app_service.searchForSeason(season_id, None)
+        out = []
+        if series_l:
+            for series in series_l:
+                out.append(series.to_dict())
+        return jsonify(out)
+    except Exception as e:
+        logger.error(e)
+        return jsonify({"error": str(e)}), 500
+    
 @series_blueprint.route('/series/season/<int:season_id>/search', methods=['POST'])
 @swag_from({
     'summary': 'Search series of a season',

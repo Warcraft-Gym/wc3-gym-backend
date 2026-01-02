@@ -25,8 +25,12 @@ class UserTeamSeasonStatsDTO:
     
     @classmethod
     def from_db_user_team_season(cls, uts: DBUserTeamSeason):
+        if not uts:
+            return None
+
         from src.dtos.season_dto import SeasonDTO
         from src.dtos.team_dto import TeamDTO
+
         return cls({
             'user_id' : uts.user_id,
             'team_id' : uts.team_id,
@@ -35,7 +39,7 @@ class UserTeamSeasonStatsDTO:
             'wins' : uts.wins,
             'losses' : uts.losses,
             'season_id' : uts.season_id,
-            'season' : SeasonDTO.from_dbseason(uts.season) if uts.season else None
+            'season' : SeasonDTO.from_dbseason_reduced(uts.season) if uts.season else None
         })
     
     @staticmethod
