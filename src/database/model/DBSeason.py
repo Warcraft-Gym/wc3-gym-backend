@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, Integer, String, Sequence
+from sqlalchemy import create_engine, Column, Integer, String, Sequence, Date
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm.session import Session
 from src.database.model.DBModel import DBModel
@@ -17,6 +17,8 @@ class DBSeason(DBModel):
     number_weeks =  Column(Integer, nullable=False)
     series_per_week = Column(Integer, nullable=False)
     pick_ban = Column(String(100))
+    start_date = Column(Date, nullable=True)
+    end_date = Column(Date, nullable=True)
     user_teams = relationship('DBUserTeamSeason', back_populates='season', cascade="all, delete")
     teams = relationship('DBTeamSeason', back_populates='season', cascade="all, delete")
     maps = relationship('DBMapSeason', back_populates='season', cascade="all, delete")
