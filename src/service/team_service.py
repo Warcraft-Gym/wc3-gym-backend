@@ -98,7 +98,23 @@ class TeamAppService:
     def syncW3CStatsTeam(self, team_id, season_id):
         team = self.get_team_season(team_id, season_id)
         users = team.player_by_season.get(season_id)
+        sync_errors = []
+        
         if users:
             for u in users:
-                self.user_app_service.updateW3CStats(u)
-        return self.get_team_season(team_id, season_id)
+                try:
+                    self.user_app_service.updateW3CStats(u)
+                except Exception as e:
+                    # Log the error but continue syncing other players
+                    error_msg = f"Failed to sync W3C stats for user {u.name} (BattleTag: {u.battleTag}): {str(e)}"
+                    sync_errors.append(error_msg)
+                    print(error_msg)  # Log to console
+        
+        # Return the updated team data even if some players failed
+        result = self.get_team_season(team_id, season_id)
+        
+        # If there were errors, log them but don't fail the whole operation
+        if sync_errors:
+            print(f"W3C sync completed with {len(sync_errors)} error(s) for team {team_id}")
+            
+        return result

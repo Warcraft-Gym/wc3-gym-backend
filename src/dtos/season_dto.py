@@ -8,6 +8,8 @@ class SeasonDTO:
         self.number_weeks = data.get('number_weeks')
         self.series_per_week = data.get('series_per_week')
         self.pick_ban = data.get('pick_ban')
+        self.start_date = data.get('start_date')
+        self.end_date = data.get('end_date')
         self.maps = data.get('maps')
         self.discordRole = data.get('discordRole')
         self.user_signup = data.get('user_signup')
@@ -20,6 +22,8 @@ class SeasonDTO:
             'number_weeks' : self.number_weeks,
             'series_per_week': self.series_per_week,
             'pick_ban' : self.pick_ban,
+            'start_date': self.start_date.isoformat() if self.start_date else None,
+            'end_date': self.end_date.isoformat() if self.end_date else None,
             'maps' : [map.to_dict() for map in self.maps if map] if self.maps else None,
             'discordRole' : self.discordRole,
             'user_signup' : [user.to_dict() for user in self.user_signup if user] if self.user_signup else None
@@ -32,6 +36,8 @@ class SeasonDTO:
             'number_weeks' : self.number_weeks,
             'series_per_week': self.series_per_week,
             'pick_ban' : self.pick_ban,
+            'start_date': self.start_date,
+            'end_date': self.end_date,
             'discordRole' : self.discordRole
         }
 
@@ -47,6 +53,8 @@ class SeasonDTO:
                 'number_weeks': season.number_weeks,
                 'series_per_week': season.series_per_week,
                 'pick_ban': season.pick_ban,
+                'start_date': season.start_date,
+                'end_date': season.end_date,
                 'maps': [MapDTO.from_dbmap(map_season.map) for map_season in season.maps if map_season and map_season.map] if season.maps else [],
                 'discordRole': season.discordRole,
                 'user_signup': []

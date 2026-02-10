@@ -109,18 +109,6 @@ The project uses VS Code tasks for Docker builds and runs. The configuration is 
 - If MySQL is in another Docker container on the same network, use the container name instead
 - Generate secure tokens using: `openssl rand -hex 32` or `python -c "import secrets; print(secrets.token_hex(32))"`
 
-### 5. Initialize Database
-
-Run database initialization scripts:
-
-```bash
-# Option 1: From MySQL client
-mysql -u gym_user -p GYM_BACKEND < db_scripts/create_tables.sql
-
-# Option 2: From Docker container
-docker exec -i gnl-mysql mysql -u gym_user -pgym_user GYM_BACKEND < db_scripts/create_tables.sql
-```
-
 ## Running the Application
 
 ### Using VS Code Docker Tasks
