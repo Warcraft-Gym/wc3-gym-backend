@@ -10,6 +10,7 @@ class UserTeamSeasonStatsDTO:
         self.losses = data.get('losses')
         self.season_id = data.get('season_id')
         self.season = data.get('season')
+        self.matchup_history = data.get('matchup_history', [])
 
     def to_dict(self):
         return {
@@ -20,7 +21,8 @@ class UserTeamSeasonStatsDTO:
             'wins' : self.wins,
             'losses' : self.losses,
             'season_id' : self.season_id,
-            'season' : self.season.to_dict() if self.season else None
+            'season' : self.season.to_dict() if self.season else None,
+            'matchup_history' : self.matchup_history if self.matchup_history else []
         }
     
     @classmethod
@@ -39,7 +41,8 @@ class UserTeamSeasonStatsDTO:
             'wins' : uts.wins,
             'losses' : uts.losses,
             'season_id' : uts.season_id,
-            'season' : SeasonDTO.from_dbseason_reduced(uts.season) if uts.season else None
+            'season' : SeasonDTO.from_dbseason_reduced(uts.season) if uts.season else None,
+            'matchup_history' : uts.matchup_history if uts.matchup_history else []
         })
     
     @staticmethod

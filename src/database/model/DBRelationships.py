@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Sequence, Enum, ForeignKey, Boolean
+from sqlalchemy import Column, Integer, String, Sequence, Enum, ForeignKey, Boolean, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm.session import Session
 from src.database.model.DBModel import DBModel
@@ -11,6 +11,7 @@ class DBUserTeamSeason(DBModel):
     games = Column(Integer)
     wins = Column(Integer)
     losses = Column(Integer)
+    matchup_history = Column(JSON, nullable=True)  # Array of opponent races: ['HU', 'OC', 'UD', etc.]
     # Additional columns can be added here if needed
     user = relationship('DBUser', back_populates='team_seasons')
     team = relationship('DBTeam', back_populates='user_seasons')
