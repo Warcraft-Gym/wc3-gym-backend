@@ -10,6 +10,7 @@ from src.database.team_db_service import TeamDBService
 from src.database.match_db_service import MatchDBService
 from src.database.season_db_service import SeasonDBService
 from src.database.series_db_service import SeriesDBService
+from src.database.draft_series_db_service import DraftSeriesDBService
 from src.database.fantasy_bet_db_service import FantasyBetDBService
 from src.database.fantasy_team_db_service import FantasyTeamDBService
 from src.database.map_db_service import MapDBService
@@ -22,6 +23,7 @@ from src.service.koth_service import KothAppService
 from src.service.match_service import MatchAppService
 from src.service.season_service import SeasonAppService
 from src.service.series_service import SeriesAppService
+from src.service.draft_series_service import DraftSeriesAppService
 from src.service.score_service import ScoreAppService
 from src.service.map_service import MapAppService
 from src.service.fantasy_bet_service import FantasyBetAppService
@@ -41,6 +43,7 @@ from src.api.team_api import team_blueprint
 from src.api.match_api import match_blueprint
 from src.api.season_api import season_blueprint
 from src.api.series_api import series_blueprint
+from src.api.draft_series_api import draft_series_blueprint
 from src.api.import_export_api import import_blueprint
 from src.api.public_api import public_api_blueprint
 from src.api.map_api import map_blueprint
@@ -152,6 +155,7 @@ team_service = TeamDBService(db_url=db_url)
 match_service = MatchDBService(db_url=db_url)
 season_service = SeasonDBService(db_url=db_url)
 series_service = SeriesDBService(db_url=db_url)
+draft_series_service = DraftSeriesDBService(db_url=db_url)
 map_service = MapDBService(db_url=db_url)
 team_season_service = TeamSeasonDBService(db_url=db_url)
 fantasy_bet_service = FantasyBetDBService(db_url=db_url)
@@ -170,6 +174,7 @@ match_app_service = MatchAppService(match_service=match_service)
 season_app_service = SeasonAppService(season_service=season_service)
 score_app_service = ScoreAppService(match_service=match_service, serires_service=series_service, team_service=team_service, team_season_service=team_season_service, season_service=season_service, settings_service=settings_service)
 series_app_service = SeriesAppService(series_service=series_service, score_app_service=score_app_service, user_app_service=user_app_service)
+draft_series_app_service = DraftSeriesAppService(draft_series_service=draft_series_service)
 map_app_service = MapAppService(map_service=map_service)
 fantasy_bet_app_service = FantasyBetAppService(fantasy_bet_service=fantasy_bet_service, settings_app_service=settings_app_service)
 fantasy_team_app_service = FantasyTeamAppService(fantasy_team_service=fantasy_team_service)
@@ -207,6 +212,7 @@ team_blueprint.team_app_service = team_app_service
 team_blueprint.cache = cache
 match_blueprint.match_app_service = match_app_service
 series_blueprint.series_app_service = series_app_service
+draft_series_blueprint.draft_series_app_service = draft_series_app_service
 map_blueprint.map_app_service = map_app_service
 fantasy_blueprint.fantasy_bet_app_service = fantasy_bet_app_service
 fantasy_blueprint.fantasy_team_app_service = fantasy_team_app_service
@@ -238,6 +244,7 @@ app.register_blueprint(season_blueprint)
 app.register_blueprint(import_blueprint)
 app.register_blueprint(public_api_blueprint)
 app.register_blueprint(series_blueprint)
+app.register_blueprint(draft_series_blueprint)
 app.register_blueprint(map_blueprint)
 app.register_blueprint(score_blueprint)
 app.register_blueprint(fantasy_blueprint)
