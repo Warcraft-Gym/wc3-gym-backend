@@ -22,7 +22,7 @@ class SeasonAppService:
     def get_season(self, season_id: int):
         season_data = self.season_service.get(season_id)
         if not season_data:
-            raise NotFoundException(f"Team not found by Id: {season_id}")
+            raise NotFoundException(f"Season not found by Id: {season_id}")
         return season_data
     
     def getAll(self):

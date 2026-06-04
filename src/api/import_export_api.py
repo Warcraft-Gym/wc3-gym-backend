@@ -75,14 +75,15 @@ def _process_import(file_bytes, create_new):
                 logger.info(f"Created new season with ID: {season_id}")
             else:
                 original_season_id = int(season_row['ID'])
-                # Check if season exists
-                existing_season = import_blueprint.season_app_service.get_season(original_season_id)
-                if existing_season:
+                # Check if season exists - handle NotFoundException properly
+                try:
+                    existing_season = import_blueprint.season_app_service.get_season(original_season_id)
+                    # Season exists, update it
                     import_blueprint.season_app_service.update_season(original_season_id, SeasonDTO(season_data))
                     season_id = original_season_id
                     logger.info(f"Updated existing season with ID: {season_id}")
-                else:
-                    # Season doesn't exist, create it
+                except NotFoundException:
+                    # Season doesn't exist, create it 
                     season = import_blueprint.season_app_service.create_season(SeasonDTO(season_data))
                     season_id = season.id
                     logger.info(f"Created new season with ID: {season_id} (original ID {original_season_id} not found)")
