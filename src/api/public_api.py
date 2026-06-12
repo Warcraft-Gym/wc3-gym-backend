@@ -332,6 +332,13 @@ def public_create_user():
                 logger.exception('Failed to add user to season: %s', se)
                 return jsonify({'error': 'Failed to add user to season'}), 500
 
+        # trigger W3C stats sync for the newly created/updated user (non-blocking)
+        try:
+            public_api_blueprint.user_app_service.updateW3CStats_ById(user.id)
+            logger.info(f'W3C sync triggered for user {user.id} after signup')
+        except Exception as we:
+            logger.warning(f'W3C sync failed after signup for user {user.id}: {we}')
+
         # consume the token
         try:
             if token in _token_store:
