@@ -53,12 +53,43 @@ class UserAppService:
 
     def updateW3CStats(self, user: UserDTO):
         w3c_service = W3CService(settings_app_service=self.settings_app_service)
-        stats = w3c_service.getPlayerStats(user.battleTag)
-        if stats:
-            for s in stats:
+
+        # Resolve the current W3C season so we can also fetch the previous season
+        current_season = None
+        if self.settings_app_service:
+            season_setting = self.settings_app_service.get_setting('current_wc3_season')
+            current_season = season_setting.get('value') if season_setting else None
+
+        all_stats = []
+
+        # Fetch current season stats
+        try:
+            stats = w3c_service.getPlayerStats(user.battleTag)
+            if stats:
+                all_stats.extend(stats)
+        except Exception as e:
+            logging.getLogger(__name__).warning(
+                f"Failed to fetch current season W3C stats for {user.battleTag}: {e}"
+            )
+
+        # Fetch previous season stats
+        if current_season:
+            try:
+                prev_season = int(current_season) - 1
+                prev_stats = w3c_service.getPlayerStats(user.battleTag, season_override=prev_season)
+                if prev_stats:
+                    all_stats.extend(prev_stats)
+            except Exception as e:
+                logging.getLogger(__name__).warning(
+                    f"Failed to fetch previous season W3C stats for {user.battleTag}: {e}"
+                )
+
+        if all_stats:
+            for s in all_stats:
                 exists = False
                 for u_s in user.w3c_stats:
-                    if u_s.race == s.race:
+                    # Match by both race AND season to correctly distinguish per-season records
+                    if u_s.race == s.race and u_s.wc3_season == s.wc3_season:
                         exists = True
                         s.id = u_s.id
                         s.user_id = u_s.user_id
