@@ -869,7 +869,8 @@ def create_fantasy_team():
                     'name': user_name,
                     'battleTag': battle_tag,
                     'discordId': entry.get('discord_id'),
-                    'discordTag': entry.get('discord_tag')
+                    'discordTag': entry.get('discord_tag'),
+                    'race': 'RANDOM'
                 }
                 
                 user = public_api_blueprint.user_app_service.create_user(UserDTO(user_payload))
