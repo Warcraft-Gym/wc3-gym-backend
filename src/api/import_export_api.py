@@ -18,6 +18,7 @@ from io import BytesIO
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from src.util.import_util import ImportUtil
+import threading
 
 
 from src.util.query_util import QueryUtil
@@ -27,272 +28,507 @@ logger = logging.getLogger(__name__)
 
 import_blueprint = Blueprint('import_api', __name__)
 
+
+def _process_import(file_bytes, create_new):
+    """
+    Helper function to process import. Can be called synchronously or in a thread.
+    
+    Args:
+        file_bytes: Raw bytes of the Excel file
+        create_new: Boolean flag to create new season vs update existing
+    """
+    try:
+        file_stream = io.BytesIO(file_bytes)
+        
+        # ===== Step 1: Read Season Metadata =====
+        df_season = pd.read_excel(file_stream, sheet_name='Season')
+        season_row = df_season.iloc[0]
+        
+        season_data = {
+            'name': season_row['Name'],
+            'number_weeks': int(season_row['Number of Weeks']) if not pd.isna(season_row['Number of Weeks']) else 0,
+            'series_per_week': int(season_row['Series Per Week']) if not pd.isna(season_row['Series Per Week']) else 0,
+            'pick_ban': ImportUtil.isNa(season_row['Pick Ban']),
+            'discordRole': ImportUtil.isNa(season_row['Discord Role'])
+        }
+        
+        if not pd.isna(season_row['Start Date']):
+            from datetime import datetime
+            season_data['start_date'] = pd.to_datetime(season_row['Start Date']).date()
+        if not pd.isna(season_row['End Date']):
+            from datetime import datetime
+            season_data['end_date'] = pd.to_datetime(season_row['End Date']).date()
+        
+        # Create or update season
+        season_id = None
+        if create_new:
+            # Force create new season
+            season = import_blueprint.season_app_service.create_season(SeasonDTO(season_data))
+            season_id = season.id
+            logger.info(f"Created new season with ID: {season_id}")
+        else:
+            # If Season ID is missing, auto-create new season instead of error
+            if pd.isna(season_row['ID']):
+                logger.info("Season ID not found in Excel, creating new season")
+                season = import_blueprint.season_app_service.create_season(SeasonDTO(season_data))
+                season_id = season.id
+                logger.info(f"Created new season with ID: {season_id}")
+            else:
+                original_season_id = int(season_row['ID'])
+                # Check if season exists - handle NotFoundException properly
+                try:
+                    existing_season = import_blueprint.season_app_service.get_season(original_season_id)
+                    # Season exists, update it
+                    import_blueprint.season_app_service.update_season(original_season_id, SeasonDTO(season_data))
+                    season_id = original_season_id
+                    logger.info(f"Updated existing season with ID: {season_id}")
+                except NotFoundException:
+                    # Season doesn't exist, create it 
+                    season = import_blueprint.season_app_service.create_season(SeasonDTO(season_data))
+                    season_id = season.id
+                    logger.info(f"Created new season with ID: {season_id} (original ID {original_season_id} not found)")
+
+        # ID mappings for relationships
+        map_id_mapping = {}  # old_id -> new_id
+        team_id_mapping = {}
+        user_id_mapping = {}
+        match_id_mapping = {}
+        
+        # ===== Step 2: Import Maps =====
+        try:
+            df_maps = pd.read_excel(file_stream, sheet_name='Maps')
+            for _, row in df_maps.iterrows():
+                if pd.isna(row['Name']):
+                    continue
+                old_map_id = int(row['ID']) if not pd.isna(row['ID']) else None
+                map_data = {
+                    'name': row['Name'],
+                    'shortname': row['Shortname'],
+                    'image': ImportUtil.isNa(row['Image URL'])
+                }
+                
+                # Check if map exists by shortname
+                query = QueryUtil.parseQuery(f"shortname == {map_data['shortname']}")
+                if query and query.elementA:
+                    existing_maps = import_blueprint.map_app_service.search(query)
+                    if existing_maps:
+                        map_obj = existing_maps[0]
+                        import_blueprint.map_app_service.update_map(map_obj.id, MapDTO(map_data))
+                    else:
+                        map_obj = import_blueprint.map_app_service.create_map(MapDTO(map_data))
+                    
+                    if old_map_id:
+                        map_id_mapping[old_map_id] = map_obj.id
+                    import_blueprint.season_app_service.addMaps(season_id, [map_obj.id])
+        except Exception as e:
+            logger.warning(f"Maps sheet not found or error: {e}")
+
+        # ===== Step 3: Import Teams =====
+        df_teams = pd.read_excel(file_stream, sheet_name='Teams')
+        for _, row in df_teams.iterrows():
+            if pd.isna(row['Name']):
+                continue
+            old_team_id = int(row['ID']) if not pd.isna(row['ID']) else None
+            team_data = {
+                'name': row['Name'],
+                'long_name': ImportUtil.isNa(row['Long Name']),
+                'discord_role': ImportUtil.isNa(row['Discord Role'])
+            }
+            
+            # Check if team exists by name
+            query = QueryUtil.parseQuery(f"name == {team_data['name']}")
+            if query and query.elementA:
+                existing_teams = import_blueprint.team_app_service.search(query)
+                if existing_teams:
+                    team = existing_teams[0]
+                    import_blueprint.team_app_service.update_team(team.id, TeamDTO(team_data))
+                else:
+                    team = import_blueprint.team_app_service.create_team(TeamDTO(team_data))
+                
+                if old_team_id:
+                    team_id_mapping[old_team_id] = team.id
+
+        # Add teams to season
+        import_blueprint.season_app_service.addTeams(season_id, list(team_id_mapping.values()))
+
+        # ===== Step 4: Import Players =====
+        df_players = pd.read_excel(file_stream, sheet_name='Players')
+        for _, row in df_players.iterrows():
+            if pd.isna(row['Battle Tag']):
+                continue
+            old_user_id = int(row['ID']) if not pd.isna(row['ID']) else None
+            old_team_id = int(row['Team ID']) if not pd.isna(row['Team ID']) else None
+            
+            # Build user_data, only including non-null values to avoid overwriting with None
+            user_data = {'battleTag': row['Battle Tag']}
+            
+            if not pd.isna(row['Name']):
+                user_data['name'] = row['Name']
+            if not pd.isna(row['Discord Tag']):
+                user_data['discordTag'] = row['Discord Tag']
+            if not pd.isna(row['Discord ID']):
+                user_data['discordId'] = str(row['Discord ID'])
+            if not pd.isna(row['Race']):
+                user_data['race'] = row['Race']
+            if not pd.isna(row['MMR']):
+                user_data['mmr'] = int(row['MMR'])
+            if not pd.isna(row['Country']):
+                user_data['country'] = row['Country']
+            if not pd.isna(row['Fantasy Tier']):
+                user_data['fantasy_tier'] = int(row['Fantasy Tier'])
+            
+            # Check if user exists by battleTag
+            query = QueryUtil.parseQuery(f"battleTag == {user_data['battleTag']}")
+            if query and query.elementA:
+                existing_users = import_blueprint.user_app_service.search(query)
+                if existing_users:
+                    # User already exists - reuse existing user without updating
+                    user = existing_users[0]
+                    logger.info(f"Reusing existing user: {user.battleTag} (ID: {user.id})")
+                else:
+                    # User doesn't exist - create new user
+                    user = import_blueprint.user_app_service.create_user(UserDTO(user_data))
+                    logger.info(f"Created new user: {user.battleTag} (ID: {user.id})")
+                
+                if old_user_id:
+                    user_id_mapping[old_user_id] = user.id
+                
+                # Add player to team for this season
+                if old_team_id and old_team_id in team_id_mapping:
+                    new_team_id = team_id_mapping[old_team_id]
+                    import_blueprint.team_app_service.addPlayers(new_team_id, season_id, [user.id])
+
+        # ===== Step 5: Import Matches =====
+        df_matches = pd.read_excel(file_stream, sheet_name='Matches')
+        for _, row in df_matches.iterrows():
+            if pd.isna(row['Team1 ID']) or pd.isna(row['Team2 ID']) or pd.isna(row['Playday']):
+                continue
+            old_match_id = int(row['ID']) if not pd.isna(row['ID']) else None
+            old_team1_id = int(row['Team1 ID'])
+            old_team2_id = int(row['Team2 ID'])
+            old_fixed_map_id = int(row['Fixed Map ID']) if not pd.isna(row['Fixed Map ID']) else None
+            
+            # Map old IDs to new IDs
+            new_team1_id = team_id_mapping.get(old_team1_id)
+            new_team2_id = team_id_mapping.get(old_team2_id)
+            if not new_team1_id or not new_team2_id:
+                logger.warning(f"Skipping match - team IDs not found: {old_team1_id}, {old_team2_id}")
+                continue
+            
+            match_data = {
+                'team1_id': new_team1_id,
+                'team2_id': new_team2_id,
+                'season_id': season_id,
+                'playday': int(row['Playday']),
+                'team1_score': int(row['Team1 Score']) if not pd.isna(row['Team1 Score']) else None,
+                'team2_score': int(row['Team2 Score']) if not pd.isna(row['Team2 Score']) else None,
+                'fixed_map_id': map_id_mapping.get(old_fixed_map_id) if old_fixed_map_id else None,
+                'date_frame': ImportUtil.isNa(row['Date Frame'])
+            }
+            
+            # Check if match already exists
+            q_string = f"team1_id=={new_team1_id} and team2_id=={new_team2_id} and season_id=={season_id} and playday=={match_data['playday']}"
+            query = QueryUtil.parseQuery(q_string)
+            if query and query.elementA:
+                existing_matches = import_blueprint.match_app_service.search(query)
+                if existing_matches:
+                    match = existing_matches[0]
+                    import_blueprint.match_app_service.update_match(match.id, MatchDTO(match_data))
+                else:
+                    match = import_blueprint.match_app_service.create_match(MatchDTO(match_data))
+                
+                if old_match_id:
+                    match_id_mapping[old_match_id] = match.id
+
+        # ===== Step 6: Import Series =====
+        df_series = pd.read_excel(file_stream, sheet_name='Series')
+        series_id_mapping = {}  # old_id -> new_id
+        for _, row in df_series.iterrows():
+            if pd.isna(row['Match ID']) or pd.isna(row['Player1 ID']) or pd.isna(row['Player2 ID']):
+                continue
+            
+            old_series_id = int(row['ID']) if not pd.isna(row['ID']) else None
+            old_match_id = int(row['Match ID']) if not pd.isna(row['Match ID']) else None
+            old_player1_id = int(row['Player1 ID']) if not pd.isna(row['Player1 ID']) else None
+            old_player2_id = int(row['Player2 ID']) if not pd.isna(row['Player2 ID']) else None
+            old_host_player_id = int(row['Host Player ID']) if not pd.isna(row['Host Player ID']) else old_player1_id
+            
+            # Map old IDs to new IDs
+            new_match_id = match_id_mapping.get(old_match_id)
+            new_player1_id = user_id_mapping.get(old_player1_id)
+            new_player2_id = user_id_mapping.get(old_player2_id)
+            new_host_player_id = user_id_mapping.get(old_host_player_id)
+            
+            if not new_match_id or not new_player1_id or not new_player2_id:
+                logger.warning(f"Skipping series - IDs not found: match={old_match_id}, p1={old_player1_id}, p2={old_player2_id}")
+                continue
+            
+            series_data = {
+                'match_id': new_match_id,
+                'player1_id': new_player1_id,
+                'player2_id': new_player2_id,
+                'player1_score': int(row['Player1 Score']) if not pd.isna(row['Player1 Score']) else None,
+                'player2_score': int(row['Player2 Score']) if not pd.isna(row['Player2 Score']) else None,
+                'player1_points': int(row['Player1 Points']) if not pd.isna(row['Player1 Points']) else None,
+                'player2_points': int(row['Player2 Points']) if not pd.isna(row['Player2 Points']) else None,
+                'host_player_id': new_host_player_id if new_host_player_id else new_player1_id,
+                'caster': ImportUtil.isNa(row['Caster']),
+                'is_fantasy_match': bool(row['Is Fantasy Match']) if not pd.isna(row['Is Fantasy Match']) else False
+            }
+            
+            # Parse date_time if present
+            if not pd.isna(row['Date Time']):
+                try:
+                    series_data['date_time'] = pd.to_datetime(row['Date Time'])
+                except:
+                    pass
+            
+            # Check if series already exists
+            q_string = f"match_id=={new_match_id} and player1_id=={new_player1_id} and player2_id=={new_player2_id}"
+            query = QueryUtil.parseQuery(q_string)
+            if query and query.elementA:
+                existing_series = import_blueprint.series_app_service.search(query)
+                if existing_series:
+                    import_blueprint.series_app_service.update_series(existing_series[0].id, SeriesDTO(series_data))
+                    if old_series_id:
+                        series_id_mapping[old_series_id] = existing_series[0].id
+                else:
+                    series = import_blueprint.series_app_service.create_series(SeriesDTO(series_data))
+                    if old_series_id:
+                        series_id_mapping[old_series_id] = series.id
+
+        # ===== Step 7: Import Fantasy Teams =====
+        fantasy_team_id_mapping = {}  # old_id -> new_id
+        try:
+            df_fantasy_teams = pd.read_excel(file_stream, sheet_name='Fantasy Teams')
+            for _, row in df_fantasy_teams.iterrows():
+                if pd.isna(row['Name']) or pd.isna(row['Captain ID']):
+                    continue
+                
+                old_fteam_id = int(row['ID']) if not pd.isna(row['ID']) else None
+                old_captain_id = int(row['Captain ID']) if not pd.isna(row['Captain ID']) else None
+                old_drafted_team_id = int(row['Drafted Team ID']) if not pd.isna(row['Drafted Team ID']) else None
+                
+                new_captain_id = user_id_mapping.get(old_captain_id)
+                new_drafted_team_id = team_id_mapping.get(old_drafted_team_id) if old_drafted_team_id else None
+                
+                if not new_captain_id:
+                    logger.warning(f"Skipping fantasy team - captain ID not found: {old_captain_id}")
+                    continue
+                
+                fteam_data = {
+                    'name': row['Name'],
+                    'season_id': season_id,
+                    'captain_id': new_captain_id,
+                    'drafted_team_id': new_drafted_team_id,
+                    'drafted_race': ImportUtil.isNa(row['Drafted Race']),
+                    'player_points': int(row['Player Points']) if not pd.isna(row['Player Points']) else 0,
+                    'bench_points': int(row['Bench Points']) if not pd.isna(row['Bench Points']) else 0,
+                    'team_points': int(row['Team Points']) if not pd.isna(row['Team Points']) else 0,
+                    'race_points': int(row['Race Points']) if not pd.isna(row['Race Points']) else 0,
+                    'bet_points': int(row['Bet Points']) if not pd.isna(row['Bet Points']) else 0,
+                    'total_points': int(row['Total Points']) if not pd.isna(row['Total Points']) else 0
+                }
+                
+                # Check if fantasy team exists
+                q_string = f"season_id=={season_id} and captain_id=={new_captain_id}"
+                query = QueryUtil.parseQuery(q_string)
+                if query and query.elementA:
+                    existing_fteams = import_blueprint.fantasy_team_app_service.search_fantasy_teams(query)
+                    if existing_fteams:
+                        fteam = existing_fteams[0]
+                        import_blueprint.fantasy_team_app_service.update_fantasy_team(fteam.id, FantasyTeamDTO(fteam_data))
+                    else:
+                        fteam = import_blueprint.fantasy_team_app_service.create_fantasy_team(FantasyTeamDTO(fteam_data))
+                    
+                    if old_fteam_id:
+                        fantasy_team_id_mapping[old_fteam_id] = fteam.id
+        except Exception as e:
+            logger.warning(f"Fantasy Teams sheet not found or error: {e}")
+
+        # ===== Step 8: Import Fantasy Team Players =====
+        try:
+            df_fantasy_players = pd.read_excel(file_stream, sheet_name='Fantasy Team Players')
+            # Group players by fantasy team
+            fantasy_team_players = {}
+            for _, row in df_fantasy_players.iterrows():
+                if pd.isna(row['Fantasy Team ID']) or pd.isna(row['Player ID']):
+                    continue
+                
+                old_fteam_id = int(row['Fantasy Team ID'])
+                old_player_id = int(row['Player ID'])
+                
+                new_fteam_id = fantasy_team_id_mapping.get(old_fteam_id)
+                new_player_id = user_id_mapping.get(old_player_id)
+                
+                if new_fteam_id and new_player_id:
+                    if new_fteam_id not in fantasy_team_players:
+                        fantasy_team_players[new_fteam_id] = []
+                    fantasy_team_players[new_fteam_id].append(new_player_id)
+            
+            # Add players to fantasy teams
+            for fteam_id, player_ids in fantasy_team_players.items():
+                import_blueprint.fantasy_team_app_service.addFantasyPlayers(fteam_id, player_ids)
+        except Exception as e:
+            logger.warning(f"Fantasy Team Players sheet not found or error: {e}")
+
+        # ===== Step 9: Import Fantasy Bets =====
+        try:
+            df_fantasy_bets = pd.read_excel(file_stream, sheet_name='Fantasy Bets')
+            for _, row in df_fantasy_bets.iterrows():
+                if pd.isna(row['Series ID']) or pd.isna(row['User ID']) or pd.isna(row['Winner ID']):
+                    continue
+                
+                old_series_id = int(row['Series ID'])
+                old_user_id = int(row['User ID'])
+                old_winner_id = int(row['Winner ID'])
+                
+                new_series_id = series_id_mapping.get(old_series_id)
+                new_user_id = user_id_mapping.get(old_user_id)
+                new_winner_id = user_id_mapping.get(old_winner_id)
+                
+                if not new_series_id or not new_user_id or not new_winner_id:
+                    logger.warning(f"Skipping fantasy bet - IDs not found: series={old_series_id}, user={old_user_id}, winner={old_winner_id}")
+                    continue
+                
+                fbet_data = {
+                    'season_id': season_id,
+                    'series_id': new_series_id,
+                    'user_id': new_user_id,
+                    'winner_id': new_winner_id,
+                    'bet_points': int(row['Bet Points']) if not pd.isna(row['Bet Points']) else 0,
+                    'bet_result': int(row['Bet Result']) if not pd.isna(row['Bet Result']) else None
+                }
+                
+                # Check if bet exists
+                q_string = f"series_id=={new_series_id} and user_id=={new_user_id} and winner_id=={new_winner_id}"
+                query = QueryUtil.parseQuery(q_string)
+                if query and query.elementA:
+                    existing_bets = import_blueprint.fantasy_bet_app_service.search_fantasy_bets(query)
+                    if existing_bets:
+                        import_blueprint.fantasy_bet_app_service.update_fantasy_bet(existing_bets[0].id, FantasyBetDTO(fbet_data))
+                    else:
+                        import_blueprint.fantasy_bet_app_service.create_fantasy_bet(FantasyBetDTO(fbet_data))
+        except Exception as e:
+            logger.warning(f"Fantasy Bets sheet not found or error: {e}")
+        
+        logger.info(f"Background import completed for season: {season_data['name']}")
+        
+    except Exception as e:
+        logger.error(f"Background import error: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
+
+
 # import export endpoints
 @import_blueprint.route('/import', methods=['POST'])
 @jwt_required()
 @swag_from({
-    'summary': 'Import a google spreadsheet with the information for a GNL season',
-    'description': 'Updates the database based on the import sheet',
+    'summary': 'Import complete season data from Excel',
+    'description': 'Imports ALL season data (season, maps, teams, players, matches, series) from Excel file',
     'tags': ['import export'],
     'security': [{'BearerAuth': []}],
     'parameters': [
-        {'name': 'season_id', 'in': 'query', 'type': 'integer', 'required': False},
-        {'name': 'season_name', 'in': 'query', 'type': 'string', 'required': False},
         {
             'name': 'file',
             'in': 'formData',
             'type': 'file',
             'required': True,
-            'description': 'File to be uploaded (Google Sheet)'
+            'description': 'Excel file exported from another environment'
+        },
+        {
+            'name': 'create_new',
+            'in': 'query',
+            'type': 'boolean',
+            'required': False,
+            'description': 'If true, creates a new season. If false, updates existing season by ID'
+        },
+        {
+            'name': 'background',
+            'in': 'query',
+            'type': 'boolean',
+            'required': False,
+            'description': 'If true, runs import in background and returns immediately. If false (default), waits for completion.'
         }
     ],
     'consumes': [
         'multipart/form-data'
     ],
     'responses': {
-        200: {'description': 'Season updated successfully'},
-        400: {
-            'description': 'Bad Request',
-            'examples': {
-                'application/json': {
-                    'error': 'No file part'
-                }
-            }
-        },
+        200: {'description': 'Season imported successfully (synchronous)'},
+        202: {'description': 'Import started in background (asynchronous)'},
+        400: {'description': 'Bad Request - no file or invalid format'},
         500: {'description': 'Internal server error'}
     }
 })
 def import_season():
     try:
-        print(request.args)
-        season_id = int(request.args.get('season_id')) if request.args.get('season_id') else None
-        season_name = request.args.get('season_name')
+        create_new = request.args.get('create_new', 'false').lower() == 'true'
+        background = request.args.get('background', 'false').lower() == 'true'
+        
         if 'file' not in request.files:
             return jsonify({"error": "No file part"}), 400
         file = request.files['file']
-        if file.filename == '':
-            return jsonify({"error": "No selected file"}), 400
-        player_name_id = {}
-        if file and file.filename.endswith(('.xlsx', '.xls')):
-            file_stream = io.BytesIO(file.read())
-            
-            # Load the Google Sheet into a DataFrame
-            df_players = pd.read_excel(file_stream, sheet_name='Players')
+        if file.filename == '' or not file.filename.endswith(('.xlsx', '.xls')):
+            return jsonify({"error": "No selected file or invalid file type"}), 400
 
-            teams = []
-            teams_players = {}
-            for index, row in df_players.iterrows():
-                if not ImportUtil.isNa(row['Bnet (no ID)']):
-                    continue
-                user_data = {
-                        'name': ImportUtil.isNa(row['Bnet (no ID)']),
-                        'battleTag': ImportUtil.isNa(row['Bnet']),
-                        'discordTag': ImportUtil.isNa(row['Discord']),
-                        'race': ImportUtil.getRaceEnumString(ImportUtil.isNa(row['Race'])),
-                        'mmr': ImportUtil.isNa(row['MMR']),
-                        'country':   ImportUtil.getCountryEnumString(ImportUtil.isNa(row['Country']))
-                    }
-
-                if not user_data.get('battleTag'):
-                    raise Exception(f"User without BattleTag found: {user_data.get('name')}")
-                query = QueryUtil.parseQuery("battleTag == " +  user_data.get('battleTag'))
-                if not query or not query.elementA:
-                    raise Exception(f"No valid query found: {"battleTag == " +  user_data.get('battleTag')}")
-                users = import_blueprint.user_app_service.search(query)
-                user = None
-                if not users:
-                    user = import_blueprint.user_app_service.create_user(UserDTO(user_data))
-                else:
-                    user = import_blueprint.user_app_service.update_user(users[0].id, UserDTO(user_data))
-                player_name_id[user.name] = user.id
-
-                team_name = ImportUtil.isNa(row['Team Abbr'])
-                if team_name and not teams_players.get(team_name):
-                    team_data = {
-                        'name' : ImportUtil.isNa(row['Team Abbr'])
-                    }
-                    teams.append(team_data)
-                    teams_players[team_name] = [user.id]
-                elif team_name:
-                    players = teams_players.get(team_name)
-                    players.append(user.id)
-                    
-            excel_file = pd.ExcelFile(file_stream)
-            sheet_names = excel_file.sheet_names
-            week_sheets = [name for name in sheet_names if name.lower().startswith("week")]
-
-            # Count the number of "Week" sheets
-            number_of_week_sheets = len(week_sheets)
-
-            season_data = {
-                'name' : season_name,
-                'number_weeks' : number_of_week_sheets,
-                'series_per_week': 19
-            }
-            if season_id and season_name:
-                import_blueprint.season_app_service.update_season(season_id, SeasonDTO(season_data))
-            elif season_name:
-                query = QueryUtil.parseQuery("name == " +  season_name)
-                if not query or not query.elementA:
-                    raise Exception(f"No valid query found: {"name == " +  season_name}")
-                found_seasons = import_blueprint.season_app_service.search(query)
-                if not found_seasons:
-                    season_id = import_blueprint.season_app_service.create_season(SeasonDTO(season_data)).id
-                else: 
-                    season_id = found_seasons[0].id
-                    import_blueprint.season_app_service.update_season(season_id, SeasonDTO(season_data))
-            
-            team_ids = []
-            team_name_id = {}
-            for team_data in teams:
-                query = QueryUtil.parseQuery("name==" +  team_data.get('name'))
-                if not query or not query.elementA:
-                    raise Exception(f"No valid query found: {"name == " +  team_data.get('name')}")
-                found_teams = import_blueprint.team_app_service.search(query)
-                team = None
-                if not found_teams:
-                    team = import_blueprint.team_app_service.create_team(TeamDTO(team_data))
-                else:
-                    team = import_blueprint.team_app_service.update_team(found_teams[0].id, TeamDTO(team_data))
-                team_name_id[team.name] = team.id
-                team_ids.append(team.id)
-                players = teams_players.get(team.name)
-                import_blueprint.team_app_service.addPlayers(team.id, season_id, players)
-
-            import_blueprint.season_app_service.addTeams(season_id, team_ids)
-
-            for i in range(1,number_of_week_sheets+1):
-                week = pd.read_excel(file_stream, sheet_name=f"Week {i}", header=None)
-                matchups_rows = []
-                date_frame = None
-                fixed_map_short = None
-                for index, row in week.iterrows():
-                    if index==1:
-                        date_frame = row.iloc[1]
-                        fixed_map_short = row.iloc[3].split(":")[1].strip()
-                    if "VS" in row.values:
-                        matchups_rows.append(index)
-                fixed_map = None
-                if fixed_map_short:
-                    q_string = f"shortname == {fixed_map_short}"
-                    query = QueryUtil.parseQuery(q_string)
-                    maps = import_blueprint.map_app_service.search(query)
-                    if not maps:
-                        map_data = {
-                            "name": fixed_map_short,
-                            "shortname": fixed_map_short
-                        }
-                        fixed_map = import_blueprint.map_app_service.create_map(MapDTO(map_data))
-                    elif maps and len(maps) == 1:
-                        fixed_map = maps[0]
-
-                matchups_rows.append(len(week))
-                for start, end in zip(matchups_rows, matchups_rows[1:]): 
-                    team1 = None
-                    team2 = None
-                    match = None
-                    for index, row in week.iloc[start:end].iterrows():
-                        if index == start:
-                            team1 = ImportUtil.isNa(row.iloc[0])
-                            team2 = ImportUtil.isNa(row.iloc[2])
-                            if not team1 or not team2:
-                                raise Exception('Team 1 or Team 2 not properly identified in row:]')
-                            team1_id = team_name_id[team1]
-                            team2_id = team_name_id[team2]
-                            q_string = f"team1_id=={team1_id} and team2_id=={team2_id} and season_id=={season_id}"
-                            query = QueryUtil.parseQuery(q_string)
-                            if not query or not query.elementA:
-                                raise Exception(f"No valid query found: {q_string}")
-                            found_matches = import_blueprint.match_app_service.search(query)
-                            if not found_matches:
-                                match_data = {
-                                    'team1_id': team1_id,
-                                    'team2_id': team2_id,
-                                    'season_id': season_id,
-                                    'playday': i,
-                                    'fixed_map_id': fixed_map.id if fixed_map else None,
-                                    'date_frame': date_frame
-                                }
-                                match = import_blueprint.match_app_service.create_match(MatchDTO(match_data))
-                            else:
-                                match = found_matches[0]
-                            continue
-                        if "Date" in row.values:
-                            continue
-                        if pd.isnull(row.iloc[5]) or pd.isnull(row.iloc[8]):
-                            continue
-                        if not team1 or not team2:
-                            raise Exception(f"Teams could not be identified for Week {i} and row range {start}/{end}")
-                        series_id = None
-                        if ImportUtil.isNa(row.iloc[0]):
-                            series_id = row.iloc[0]
-
-                        player1_name=row.iloc[5]
-                        player2_name=row.iloc[8]
-                        
-
-                        player1_id = player_name_id[player1_name.rstrip("*")]
-                        player2_id = player_name_id[player2_name.rstrip("*")]
-                        host_player_id = None
-                        if player1_name.endswith("*"):
-                            host_player_id = player1_id
-                        elif player2_name.endswith("*"):
-                            host_player_id = player2_id
-                        else:
-                            host_player_id = player1_id
-                        date_time = None
-                        if ImportUtil.isNa(row.iloc[4]) and ImportUtil.isNa(row.iloc[3]):
-                            date_time = datetime.combine(row.iloc[4], row.iloc[3])
-                        series_data = {
-                            'caster': ImportUtil.isNa(row.iloc[1]),
-                            'date_time': date_time,
-                            'match_id' : match.id,
-                            'player1_id': player1_id,
-                            'player1_score': ImportUtil.isNa(row.iloc[6]),
-                            'player2_score': ImportUtil.isNa(row.iloc[7]),
-                            'player2_id': player2_id,
-                            'host_player_id': host_player_id
-                        }
-
-                        series=None
-                        if series_id:
-                            series = import_blueprint.series_app_service.get_series(series_id)
-                        else:
-                            series_q_string = f"match_id=={match.id} and player1_id=={player1_id} and player2_id=={player2_id}"
-                            series_query = QueryUtil.parseQuery(series_q_string)
-                            if not query or not query.elementA:
-                                raise Exception(f"No valid query found: {series_q_string}")
-                            found_series = import_blueprint.series_app_service.search(series_query)
-                            if found_series:
-                                series = found_series[0]
-                        if not series:
-                            series = import_blueprint.series_app_service.create_series(SeriesDTO(series_data))
-                        else:
-                            series = import_blueprint.series_app_service.update_series(series.id, SeriesDTO(series_data))                       
-
-            
-            return jsonify({"message": "File uploaded successfully and data inserted into database"}), 200
+        # Read file into memory
+        file_bytes = file.read()
+        
+        # If background mode, spawn thread and return immediately
+        if background:
+            thread = threading.Thread(
+                target=_process_import,
+                args=(file_bytes, create_new),
+                daemon=True
+            )
+            thread.start()
+            logger.info("Import started in background thread")
+            return jsonify({"message": "Import started in background"}), 202
+        
+        # Otherwise, process synchronously
+        _process_import(file_bytes, create_new)
+        
+        # Read season name for response
+        temp_stream = io.BytesIO(file_bytes)
+        df_season = pd.read_excel(temp_stream, sheet_name='Season')
+        season_row = df_season.iloc[0]
+        season_name = season_row['Name']
+        
+        # Get season ID (either from Excel or newly created)
+        if pd.isna(season_row['ID']):
+            # New season was created, get it by name
+            query = QueryUtil.parseQuery(f"name == {season_name}")
+            if query and query.elementA:
+                seasons = import_blueprint.season_app_service.search(query)
+                season_id = seasons[0].id if seasons else None
         else:
-            return jsonify({"error": "File type not allowed"}), 400
+            season_id = int(season_row['ID'])
+        
+        return jsonify({
+            "message": "Season imported successfully",
+            "season_id": season_id,
+            "season_name": season_name
+        }), 200
+        
     except Exception as e:
-        logger.error(e)
+        logger.error(f"Import error: {e}")
         return jsonify({"error": str(e)}), 500
 
 
 @import_blueprint.route('/export', methods=['POST'])
 @jwt_required()
 @swag_from({
-    'summary': 'Export a google spreadsheet with the information for a GNL season',
-    'description': 'Export an exel sheet with the data of one season',
+    'summary': 'Export complete season data for migration',
+    'description': 'Export an Excel file with ALL season data (season, maps, teams, players, matches, series)',
     'tags': ['import export'],
     'security': [{'BearerAuth': []}],
     'parameters': [
-        {'name': 'season_id', 'in': 'query', 'type': 'integer', 'required': False},
-        {'name': 'season_name', 'in': 'query', 'type': 'string', 'required': False}
+        {'name': 'season_id', 'in': 'query', 'type': 'integer', 'required': True}
     ],
     'responses': {
         200: {
-            'description': 'A downloadable Excel file with user and team information',
+            'description': 'A downloadable Excel file with complete season data',
             'content': {
                 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': {
                     'schema': {
@@ -302,127 +538,191 @@ def import_season():
                 }
             }
         },
+        404: {'description': 'Season not found'},
         500: {'description': 'Internal server error'}
     }
 })
 def export_season():
     try:
-        season_id = int(request.args.get('season_id')) if request.args.get('season_id') else None
-        season_name = request.args.get('season_name')
-        season_teams = []
-        season = None
-        if season_id:
-            season = import_blueprint.season_app_service.get_season(season_id)
-            if not season:
-                raise NotFoundException(f"season not found by id: {season_id}")
-        elif not season_id and season_name:
-            query = QueryUtil.parseQuery(f"name == {season_name}")
-            if not query or not query.elementA:
-                raise Exception(f"No valid query found: name == {season_name}")
-            found_seasons = import_blueprint.season_app_service.search(query)
-            if not found_seasons:
-                raise NotFoundException(f"season not found by name: {season_name}")
-            else: 
-                season = found_seasons[0]
-                season_id = season.id
-
+        season_id = int(request.args.get('season_id'))
+        season = import_blueprint.season_app_service.get_season(season_id)
+        if not season:
+            raise NotFoundException(f"Season not found by id: {season_id}")
 
         workbook = openpyxl.Workbook()
-        default_sheet = workbook.active
-        workbook.remove(default_sheet)
+        workbook.remove(workbook.active)
 
-        for week in range(1,season.number_weeks+1):
+        # ===== Sheet 1: Season Metadata =====
+        season_sheet = workbook.create_sheet(title='Season')
+        season_sheet.append(['ID', 'Name', 'Number of Weeks', 'Series Per Week', 'Pick Ban', 'Start Date', 'End Date', 'Discord Role'])
+        season_sheet.append([
+            season.id,
+            season.name,
+            season.number_weeks,
+            season.series_per_week,
+            season.pick_ban if season.pick_ban else '',
+            season.start_date.strftime('%Y-%m-%d') if season.start_date else '',
+            season.end_date.strftime('%Y-%m-%d') if season.end_date else '',
+            season.discordRole if season.discordRole else ''
+        ])
 
-            # Create week worksheets
-            week_sheet = workbook.create_sheet(title=f"Week {week}")
-            for i in range(1,5):
-                empty_cell = week_sheet.cell(row=1, column=i, value="")
-                empty_cell.fill = PatternFill(start_color="000000", end_color="000000", fill_type="solid")
-            cell = week_sheet.cell(row=1, column=5, value=f"WEEK {week}")
-            cell.fill = PatternFill(start_color="000000", end_color="000000", fill_type="solid")  # Apply black background
-            cell.font = Font(color="FFFFFF", bold=True, size=12)
-            cell.alignment = Alignment(horizontal="center")
-            for i in range(6,9):
-                empty_cell = week_sheet.cell(row=1, column=i, value="")
-                empty_cell.fill = PatternFill(start_color="000000", end_color="000000", fill_type="solid")
-            week_sheet.append([""])
-            week_sheet.append([""])
-            q_string = f"playday=={week} and season_id=={season.id}"
-            query = QueryUtil.parseQuery(q_string)
-            if not query or not query.elementA:
-                raise Exception(f"No valid query found: {q_string}")
-            matches = import_blueprint.match_app_service.search(query)
-            if matches:
-                for match in matches:
-                    week_sheet.append([match.team1.name,"VS",match.team2.name])
-                    q_string = f"match_id=={match.id}"
-                    query = QueryUtil.parseQuery(q_string)
-                    if not query or not query.elementA:
-                        raise Exception(f"No valid query found: {q_string}")
-                    series_list = import_blueprint.series_app_service.search(query)
-                    week_sheet.append(["","Caster Twitch Handle","","Time EDT (US East)","Date", match.team1.name,"Score 1","Score 2",match.team2.name,"TeamScore 1","TeamScore 2"])
-                    for series in series_list:
-                        date = None
-                        time = None
-                        if series.date_time:
-                            date = series.date_time.date()
-                            time = series.date_time.time()
-                        week_sheet.append([series.id,series.caster,"",time,date,series.player1.name,series.player1_score,series.player2_score,series.player2.name])
-                    week_sheet.append([""])
-                    week_sheet.append([""])
+        # ===== Sheet 2: Maps =====
+        maps_sheet = workbook.create_sheet(title='Maps')
+        maps_sheet.append(['ID', 'Name', 'Shortname', 'Image URL'])
+        if season.maps:
+            for map_obj in season.maps:
+                maps_sheet.append([
+                    map_obj.id,
+                    map_obj.name,
+                    map_obj.shortname,
+                    map_obj.image if map_obj.image else ''
+                ])
 
-        # Create worksheets
-        ranking_sheet = workbook.create_sheet(title='Ranking')
-        user_sheet = workbook.create_sheet(title='Players')
-        user_sheet.append(['Bnet', 'Bnet (no ID)', 'Bnet + Host', 'Discord', 'Race', 'Team Abbr', 'MMR', 'Country'])
-        player_team_sheet = workbook.create_sheet(title='Player Team Assignment')
-        player_team_sheet.append(['battle net name', 'team'])
-        player_website_sheet = workbook.create_sheet(title='Player Website')
-        player_website_sheet.append(['player', 'race_image', 'w3_champions_profile', 'mmr', 'country', 'team', 'captain'])
-        ranking_sheet.append([f"{season.name} Rankings"])
-        ranking_sheet.append([""])
-        ranking_header = []
-        ranking_header.append('Rank')
-        ranking_header.append('Team')
-        for number in range(season.number_weeks):
-            ranking_header.append(f"Week {number}")
-        ranking_header.append('Points')
-        ranking_header.append('Points Against (PA)')
-        ranking_header.append('Points Available')
-        ranking_sheet.append(ranking_header)
-        rank = 1
-
+        # ===== Sheet 3: Teams =====
+        teams_sheet = workbook.create_sheet(title='Teams')
+        teams_sheet.append(['ID', 'Name', 'Long Name', 'Discord Role', 'Icon URL'])
         season_teams = import_blueprint.team_app_service.get_teams_season(season_id)
         for team in season_teams:
-            # ranking sheet
-            team_rank = []
-            team_rank.append(rank)
-            team_rank.append(team.name)
-            for number in range(season.number_weeks):
-                team_rank.append(0)
-            team_rank.append(team.seasons_info[0].final_score)
-            team_rank.append(team.seasons_info[0].points_available)
-            team_rank.append(team.seasons_info[0].points_against)
-            ranking_sheet.append(team_rank)
-            rank += 1
-            # Player sheet
-            players = team.player_by_season[season_id]
+            teams_sheet.append([
+                team.id,
+                team.name,
+                team.long_name if team.long_name else '',
+                team.discord_role if team.discord_role else '',
+                team.icon_url if hasattr(team, 'icon_url') and team.icon_url else ''
+            ])
+
+        # ===== Sheet 4: Players =====
+        players_sheet = workbook.create_sheet(title='Players')
+        players_sheet.append(['ID', 'Name', 'Battle Tag', 'Discord Tag', 'Discord ID', 'Race', 'MMR', 'Country', 'Fantasy Tier', 'Team ID'])
+        for team in season_teams:
+            players = team.player_by_season.get(season_id, [])
             for user in players:
-                player_team_sheet.append([user.battleTag,team.name])
-                player_website_sheet.append([user.name, ImportUtil.getRaceImage(user.race),ImportUtil.getW3ChampionURL(user.battleTag),user.mmr,ImportUtil.getCountryNameString(user.country),team.name])
-                user_sheet.append([user.battleTag, user.name,f"{user.name}*",user.discordTag,ImportUtil.getRaceNameString(user.race),team.name, user.mmr,ImportUtil.getCountryNameString(user.country)])
-                
+                race_value = user.race.value if hasattr(user.race, 'value') else user.race
+                country_value = user.country.value if hasattr(user.country, 'value') else user.country
+                players_sheet.append([
+                    user.id,
+                    user.name,
+                    user.battleTag,
+                    user.discordTag,
+                    user.discordId if user.discordId else '',
+                    race_value,
+                    user.mmr if user.mmr else '',
+                    country_value if country_value else '',
+                    user.fantasy_tier if user.fantasy_tier else '',
+                    team.id
+                ])
+
+        # ===== Sheet 5: Matches =====
+        matches_sheet = workbook.create_sheet(title='Matches')
+        matches_sheet.append(['ID', 'Team1 ID', 'Team2 ID', 'Season ID', 'Playday', 'Team1 Score', 'Team2 Score', 'Fixed Map ID', 'Date Frame'])
+        q_string = f"season_id=={season_id}"
+        query = QueryUtil.parseQuery(q_string)
+        if query and query.elementA:
+            all_matches = import_blueprint.match_app_service.search(query)
+            for match in all_matches:
+                matches_sheet.append([
+                    match.id,
+                    match.team1.id,
+                    match.team2.id,
+                    match.season.id,
+                    match.playday,
+                    match.team1_score if match.team1_score else '',
+                    match.team2_score if match.team2_score else '',
+                    match.fixed_map.id if match.fixed_map else '',
+                    match.date_frame if match.date_frame else ''
+                ])
+
+        # ===== Sheet 6: Series =====
+        series_sheet = workbook.create_sheet(title='Series')
+        series_sheet.append(['ID', 'Match ID', 'Player1 ID', 'Player2 ID', 'Player1 Score', 'Player2 Score', 
+                             'Player1 Points', 'Player2 Points', 'Host Player ID', 'Date Time', 'Caster', 'Is Fantasy Match'])
+        for match in all_matches if 'all_matches' in locals() else []:
+            q_string = f"match_id=={match.id}"
+            query = QueryUtil.parseQuery(q_string)
+            if query and query.elementA:
+                series_list = import_blueprint.series_app_service.search(query)
+                for series in series_list:
+                    date_time_str = series.date_time.strftime('%Y-%m-%d %H:%M:%S') if series.date_time else ''
+                    series_sheet.append([
+                        series.id,
+                        series.match.id,
+                        series.player1.id,
+                        series.player2.id,
+                        series.player1_score if series.player1_score is not None else '',
+                        series.player2_score if series.player2_score is not None else '',
+                        series.player1_points if series.player1_points else '',
+                        series.player2_points if series.player2_points else '',
+                        series.host_player_id,
+                        date_time_str,
+                        series.caster if series.caster else '',
+                        series.is_fantasy_match if series.is_fantasy_match else False
+                    ])
+
+        # ===== Sheet 7: Fantasy Teams =====
+        fantasy_teams_sheet = workbook.create_sheet(title='Fantasy Teams')
+        fantasy_teams_sheet.append(['ID', 'Name', 'Season ID', 'Captain ID', 'Drafted Team ID', 'Drafted Race', 
+                                     'Player Points', 'Bench Points', 'Team Points', 'Race Points', 'Bet Points', 'Total Points'])
+        q_string = f"season_id=={season_id}"
+        query = QueryUtil.parseQuery(q_string)
+        if query and query.elementA:
+            fantasy_teams = import_blueprint.fantasy_team_app_service.search_fantasy_teams(query)
+            for fteam in fantasy_teams:
+                drafted_race_value = fteam.drafted_race.value if hasattr(fteam.drafted_race, 'value') else fteam.drafted_race
+                fantasy_teams_sheet.append([
+                    fteam.id,
+                    fteam.name,
+                    fteam.season_id,
+                    fteam.captain_id,
+                    fteam.drafted_team_id if fteam.drafted_team_id else '',
+                    drafted_race_value if drafted_race_value else '',
+                    fteam.player_points if fteam.player_points else 0,
+                    fteam.bench_points if fteam.bench_points else 0,
+                    fteam.team_points if fteam.team_points else 0,
+                    fteam.race_points if fteam.race_points else 0,
+                    fteam.bet_points if fteam.bet_points else 0,
+                    fteam.total_points if fteam.total_points else 0
+                ])
+
+        # ===== Sheet 8: Fantasy Team Players (many-to-many) =====
+        fantasy_players_sheet = workbook.create_sheet(title='Fantasy Team Players')
+        fantasy_players_sheet.append(['Fantasy Team ID', 'Player ID'])
+        for fteam in fantasy_teams if 'fantasy_teams' in locals() else []:
+            if fteam.drafted_players:
+                for player in fteam.drafted_players:
+                    fantasy_players_sheet.append([
+                        fteam.id,
+                        player.id
+                    ])
+
+        # ===== Sheet 9: Fantasy Bets =====
+        fantasy_bets_sheet = workbook.create_sheet(title='Fantasy Bets')
+        fantasy_bets_sheet.append(['ID', 'Season ID', 'Series ID', 'User ID', 'Winner ID', 'Bet Points', 'Bet Result'])
+        if query and query.elementA:
+            fantasy_bets = import_blueprint.fantasy_bet_app_service.search_fantasy_bets(query)
+            for fbet in fantasy_bets:
+                fantasy_bets_sheet.append([
+                    fbet.id,
+                    fbet.season_id,
+                    fbet.series_id,
+                    fbet.user_id,
+                    fbet.winner_id,
+                    fbet.bet_points,
+                    fbet.bet_result if fbet.bet_result else ''
+                ])
+
         excel_stream = BytesIO()
         workbook.save(excel_stream)
         excel_stream.seek(0)
 
-        # Return the Excel file for download
         return send_file(
             excel_stream,
             as_attachment=True,
-            download_name=f'{season.name}.xlsx',
+            download_name=f'{season.name.replace(" ", "_")}_export.xlsx',
             mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
         )
+    except NotFoundException as e:
+        logger.error(e)
+        return jsonify({"error": str(e)}), 404
     except Exception as e:
         logger.error(e)
         return jsonify({"error": str(e)}), 500

@@ -51,7 +51,7 @@ class W3CService:
             logger.debug(f"Player validation failed for {bnet_name}: {str(e)}")
             return False
 
-    def getPlayerStats(self, bnet_name):
+    def getPlayerStats(self, bnet_name, season_override=None):
         if not isinstance(bnet_name, str):
             raise ValueError("bnet_name must be a string")
         
@@ -75,9 +75,12 @@ class W3CService:
         if not w3c_url:
             raise ValueError("w3c_url is required (not found in database or environment)")
         
+        # Use the override season if provided, otherwise use the configured current season
+        season_to_fetch = season_override if season_override is not None else w3c_season
+
         param = {
             'gateWay': 20,
-            'season': w3c_season
+            'season': season_to_fetch
         }
         result =  self.send_request(method=self.GET, url=f"{w3c_url}/{urllib.parse.quote(bnet_name)}/game-mode-stats", params=param)
         if not result:

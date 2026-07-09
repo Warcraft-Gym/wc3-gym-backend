@@ -78,6 +78,7 @@ class SeriesAppService:
         games = 0
         wins = 0
         losses = 0
+        matchup_history = []
         if series:
             games = len(series)
             wins = 0
@@ -89,13 +90,23 @@ class SeriesAppService:
                         wins += 1
                     else:
                         losses += 1
+                # Collect opponent race for matchup history
+                if s.player1_id == user_id and s.player2 and s.player2.race:
+                    # Convert Race enum to string value if needed
+                    race_value = s.player2.race.value if hasattr(s.player2.race, 'value') else s.player2.race
+                    matchup_history.append(race_value)
+                elif s.player2_id == user_id and s.player1 and s.player1.race:
+                    # Convert Race enum to string value if needed
+                    race_value = s.player1.race.value if hasattr(s.player1.race, 'value') else s.player1.race
+                    matchup_history.append(race_value)
         return UserTeamSeasonStatsDTO({
             'user_id': user_id,
             'games': games,
             'wins':  wins,
             'losses': losses,
             'season_id': season_id,
-            'team_id': team_id
+            'team_id': team_id,
+            'matchup_history': matchup_history
         })
 
     def isSeriesWon(self, user_id, series):

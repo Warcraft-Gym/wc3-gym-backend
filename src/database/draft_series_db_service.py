@@ -1,0 +1,106 @@
+import logging
+from src.database.abstract_database_service import AbstractDatabaseService
+from src.database.model.DBDraftSeries import DBDraftSeries
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import joinedload
+from custom_exceptions import DBException
+from src.dtos.draft_series_dto import DraftSeriesDTO
+
+logger = logging.getLogger(__name__)
+
+class DraftSeriesDBService(AbstractDatabaseService):
+    def add(self, draft_series: DraftSeriesDTO):
+        try:
+            session = self.Session()
+            draft_series = DBDraftSeries.add(session, draft_series.to_db_dict())
+            if not draft_series:
+                raise DBException("Draft series could not be created!")
+            return DraftSeriesDTO.from_db_draft_series(draft_series)
+        except SQLAlchemyError as e:
+            raise DBException(f"Database error: {e}")
+        finally:
+            session.close()
+    
+    def update(self, draft_series: DraftSeriesDTO):
+        try:
+            session = self.Session()
+            draft_series = DBDraftSeries.update(session, draft_series.id, **draft_series.to_db_dict())
+            if not draft_series:
+                raise DBException("Draft series could not be updated!")
+            return DraftSeriesDTO.from_db_draft_series(draft_series)
+        except SQLAlchemyError as e:
+            raise DBException(f"Database error: {e}")
+        finally:
+            session.close()
+
+    def delete(self, draft_series_id):
+        try:
+            session = self.Session()
+            DBDraftSeries.delete(session, draft_series_id)
+        except SQLAlchemyError as e:
+            raise DBException(f"Database error: {e}")
+        finally:
+            session.close()
+
+    def get(self, draft_series_id):
+        try:
+            from src.database.model.DBUser import DBUser
+            from src.database.model.DBRelationships import DBUserTeamSeason
+            from src.database.model.DBMatch import DBMatch
+            session = self.Session()
+            # Eager load relationships to avoid N+1 queries
+            draft_series = session.query(DBDraftSeries)\
+                .options(
+                    joinedload(DBDraftSeries.match).joinedload(DBMatch.team1),
+                    joinedload(DBDraftSeries.match).joinedload(DBMatch.team2),
+                    joinedload(DBDraftSeries.player1).joinedload(DBUser.w3c_stats),
+                    joinedload(DBDraftSeries.player1).joinedload(DBUser.team_seasons).joinedload(DBUserTeamSeason.season),
+                    joinedload(DBDraftSeries.player2).joinedload(DBUser.w3c_stats),
+                    joinedload(DBDraftSeries.player2).joinedload(DBUser.team_seasons).joinedload(DBUserTeamSeason.season)
+                )\
+                .filter_by(id=draft_series_id).first()
+            if not draft_series:
+                raise DBException("Draft series could not be found")
+            return DraftSeriesDTO.from_db_draft_series(draft_series)
+        except SQLAlchemyError as e:
+            raise DBException(f"Database error: {e}")
+        finally:
+            session.close()
+
+    def getByMatchId(self, match_id):
+        try:
+            from src.database.model.DBUser import DBUser
+            from src.database.model.DBRelationships import DBUserTeamSeason
+            from src.database.model.DBMatch import DBMatch
+            result = []
+            session = self.Session()
+            # Eager load relationships
+            draft_series_list = session.query(DBDraftSeries)\
+                .options(
+                    joinedload(DBDraftSeries.match).joinedload(DBMatch.team1),
+                    joinedload(DBDraftSeries.match).joinedload(DBMatch.team2),
+                    joinedload(DBDraftSeries.player1).joinedload(DBUser.w3c_stats),
+                    joinedload(DBDraftSeries.player1).joinedload(DBUser.team_seasons).joinedload(DBUserTeamSeason.season),
+                    joinedload(DBDraftSeries.player2).joinedload(DBUser.w3c_stats),
+                    joinedload(DBDraftSeries.player2).joinedload(DBUser.team_seasons).joinedload(DBUserTeamSeason.season)
+                )\
+                .filter_by(match_id=match_id).all()
+            for single_draft_series in draft_series_list:
+                result.append(DraftSeriesDTO.from_db_draft_series(single_draft_series))
+            return result
+        except SQLAlchemyError as e:
+            raise DBException(f"Database error: {e}")
+        finally:
+            session.close()
+
+    def deleteByMatchId(self, match_id):
+        """Delete all draft series for a given match"""
+        try:
+            session = self.Session()
+            session.query(DBDraftSeries).filter_by(match_id=match_id).delete()
+            session.commit()
+        except SQLAlchemyError as e:
+            session.rollback()
+            raise DBException(f"Database error: {e}")
+        finally:
+            session.close()

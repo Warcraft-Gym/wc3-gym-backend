@@ -40,11 +40,13 @@ class DBUser(DBModel):
             uts_obj.games = season_stats.games
             uts_obj.wins = season_stats.wins
             uts_obj.losses = season_stats.losses
+            uts_obj.matchup_history = season_stats.matchup_history
         else:
             uts_obj = DBUserTeamSeason(user=user,season=season,team=team)
             uts_obj.games = season_stats.games
             uts_obj.wins = season_stats.wins
             uts_obj.losses = season_stats.losses
+            uts_obj.matchup_history = season_stats.matchup_history
             session.add(uts_obj)
         session.commit()
         return uts_obj
