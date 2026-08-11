@@ -89,7 +89,9 @@ class SeriesDBService(AbstractDatabaseService):
                 result.append(SeriesDTO.from_dbseries(single_series))
             return result
         except SQLAlchemyError as e:
-                raise DBException(f"Database error: {e}")
+            raise DBException(f"Database error: {e}")
+        finally:
+            self.Session.remove()
 
     def search(self, query):
         with self.get_session() as session:

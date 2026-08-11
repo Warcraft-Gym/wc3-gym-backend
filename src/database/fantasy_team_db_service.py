@@ -66,14 +66,29 @@ class FantasyTeamDBService(AbstractDatabaseService):
                 result.append(FantasyTeamDTO.from_dbfantasyteam(fteam))
             return result
         except SQLAlchemyError as e:
-                raise DBException(f"Database error: {e}")
+            raise DBException(f"Database error: {e}")
+        finally:
+            self.Session.remove()
 
     def search(self, query):
         with self.get_session() as session:
             try:
+                from sqlalchemy.orm import joinedload
+                from src.database.model.DBUser import DBUser
+                from src.database.model.DBRelationships import DBFantasyTeamPlayer
                 result = []
                 filter = QueryUtil.convertQueryToDBFilter(DBFantasyTeam, query)
-                fteams = DBFantasyTeam.search(session, filter)
+                if filter is None:
+                    logger.debug(f"No fantasy team found by searchcriteria: {query}")
+                    return result
+                fteams = session.query(DBFantasyTeam)\
+                    .options(
+                        joinedload(DBFantasyTeam.season).noload('*'),
+                        joinedload(DBFantasyTeam.drafted_team).noload('*'),
+                        joinedload(DBFantasyTeam.captain).noload('*'),
+                        joinedload(DBFantasyTeam.drafted_players).joinedload(DBFantasyTeamPlayer.users).noload('*'),
+                    )\
+                    .filter(filter).all()
                 if not fteams:
                     logger.debug(f"No fantasy team found by searchcriteria: {query}")
                     return result

@@ -1,5 +1,7 @@
 import logging
 import os
+import gc
+import ctypes
 from dotenv import load_dotenv
 from flask import Flask
 from flask_cors import CORS
@@ -57,7 +59,8 @@ from src.api.stats_api import stats_blueprint
 load_dotenv()
 
 # Configure logging
-logging.basicConfig(level=logging.DEBUG)
+_log_level = getattr(logging, os.getenv('LOG_LEVEL', 'INFO').upper(), logging.INFO)
+logging.basicConfig(level=_log_level)
 
 logger = logging.getLogger(__name__)
 
@@ -235,6 +238,19 @@ stats_blueprint.stats_service = stats_app_service
 # Provide the custom JSON provider to blueprints so services can serialize
 # using the same provider without importing the Flask app/context.
 public_api_blueprint.json_provider = app.json
+
+# Return freed memory pages to the OS after each request (Python's allocator otherwise holds them)
+_libc = None
+try:
+    _libc = ctypes.CDLL("libc.so.6")
+except OSError:
+    pass
+
+@app.teardown_request
+def trim_memory(exc=None):
+    gc.collect()
+    if _libc:
+        _libc.malloc_trim(0)
 
 app.register_blueprint(login_blueprint)
 app.register_blueprint(user_blueprint)
