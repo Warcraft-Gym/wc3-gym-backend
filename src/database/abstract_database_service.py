@@ -34,7 +34,7 @@ class AbstractDatabaseService(ABC):
             session.rollback()
             raise
         finally:
-            session.close()
+            self.Session.remove()  # remove() closes + purges from thread-local registry
 
     @abstractmethod
     def add(self, **kwargs):

@@ -66,14 +66,32 @@ class FantasyBetDBService(AbstractDatabaseService):
                 result.append(FantasyBetDTO.from_dbfantasybet(single_fbet))
             return result
         except SQLAlchemyError as e:
-                raise DBException(f"Database error: {e}")
+            raise DBException(f"Database error: {e}")
+        finally:
+            self.Session.remove()
 
     def search(self, query):
         with self.get_session() as session:
             try:
+                from sqlalchemy.orm import joinedload
+                from src.database.model.DBSeries import DBSeries
+                from src.database.model.DBUser import DBUser
+                from src.database.model.DBRelationships import DBUserTeamSeason
                 result = []
                 filter = QueryUtil.convertQueryToDBFilter(DBFantasyBet, query)
-                fbets = DBFantasyBet.search(session, filter)
+                if filter is None:
+                    logger.debug(f"No fantasy bets found by searchcriteria: {query}")
+                    return result
+                fbets = session.query(DBFantasyBet)\
+                    .options(
+                        joinedload(DBFantasyBet.season).noload('*'),
+                        joinedload(DBFantasyBet.user).noload('*'),
+                        joinedload(DBFantasyBet.winner).noload('*'),
+                        joinedload(DBFantasyBet.series).noload('*'),
+                        joinedload(DBFantasyBet.series).joinedload(DBSeries.player1).noload('*'),
+                        joinedload(DBFantasyBet.series).joinedload(DBSeries.player2).noload('*'),
+                    )\
+                    .filter(filter).all()
                 if not fbets:
                     logger.debug(f"No fantasy bets found by searchcriteria: {query}")
                     return result

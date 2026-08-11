@@ -128,29 +128,6 @@ def get_series(series_id):
         logger.error(e)
         return jsonify({"error": str(e)}), 500
     
-@series_blueprint.route('/series', methods=['GET'])
-@swag_from({
-    'summary': 'Get all series',
-    'description': 'Return all series',
-    'tags': ['series'],
-    'responses': {
-        200: {'description': 'series retrieved successfully'},
-        500: {'description': 'Internal server error'}
-    }
-})
-def get_all_series():
-    try:
-        series_l = series_blueprint.series_app_service.getAll()
-        out = []
-        if series_l:
-            for series in series_l:
-                out.append(series.to_dict())
-        return jsonify(out)
-    except Exception as e:
-        logger.error(e)
-        return jsonify({"error": str(e)}), 500
-    
-    
 @series_blueprint.route('/series/search', methods=['POST'])
 @swag_from({
     'summary': 'Search series by criteria',
