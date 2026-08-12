@@ -51,7 +51,10 @@ class FantasyBetDBService(AbstractDatabaseService):
             if filter is None:
                 logger.debug(f"No fantasy bets found by searchcriteria: {query}")
                 return result
-            # Eager load only the relations the DTO reads
+            # Eager load the relations that the DTO and the score service read.
+            # noload('*') stops all other relations from loading, so every
+            # relation that a caller reads must be listed here. The score
+            # breakdown reads series.match.playday.
             fbets = session.query(DBFantasyBet)\
                 .options(
                     joinedload(DBFantasyBet.season).noload('*'),
@@ -60,6 +63,7 @@ class FantasyBetDBService(AbstractDatabaseService):
                     joinedload(DBFantasyBet.series).noload('*'),
                     joinedload(DBFantasyBet.series).joinedload(DBSeries.player1).noload('*'),
                     joinedload(DBFantasyBet.series).joinedload(DBSeries.player2).noload('*'),
+                    joinedload(DBFantasyBet.series).joinedload(DBSeries.match).noload('*'),
                 )\
                 .filter(filter).all()
             if not fbets:
