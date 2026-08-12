@@ -36,7 +36,7 @@ class DBTeam(DBModel):
             if not already_exists:
                 session.add(DBUserTeamSeason(user=user,season=season,team=team)) 
                          
-        session.commit()
+        session.flush()
         return team
 
     @classmethod
@@ -56,7 +56,7 @@ class DBTeam(DBModel):
             if not user_team:
                 raise Exception(f"User not part of the team, user id: {user_id}")
             session.delete(user_team)                
-        session.commit()
+        session.flush()
         return team
     
     @classmethod
@@ -64,7 +64,7 @@ class DBTeam(DBModel):
         obj = session.query(cls).filter_by(id=obj_id).first()
         if obj:
             setattr(obj, DBTeam.icon.name, file)
-            session.commit()
+            session.flush()
         return obj
     
     @classmethod
@@ -105,5 +105,5 @@ class DBTeam(DBModel):
         team_season.coach_2_id = user_ids[1] if len(user_ids) > 1 else None
         team_season.coach_3_id = user_ids[2] if len(user_ids) > 2 else None
         
-        session.commit()
+        session.flush()
         return team

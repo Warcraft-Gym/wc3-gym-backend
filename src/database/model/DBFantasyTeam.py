@@ -43,7 +43,7 @@ class DBFantasyTeam(DBModel):
             if not already_exists:
                 session.add(DBFantasyTeamPlayer(users=user,fantasy_team=team)) 
                          
-        session.commit()
+        session.flush()
         return team
     
 
@@ -60,5 +60,5 @@ class DBFantasyTeam(DBModel):
             if not user_team:
                 raise Exception(f"User not part of the fantasy team, user id: {user_id}")
             session.delete(user_team)                
-        session.commit()
+        session.flush()
         return team

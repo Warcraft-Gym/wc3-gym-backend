@@ -48,7 +48,7 @@ class DBUser(DBModel):
             uts_obj.losses = season_stats.losses
             uts_obj.matchup_history = season_stats.matchup_history
             session.add(uts_obj)
-        session.commit()
+        session.flush()
         return uts_obj
     
 

@@ -59,7 +59,7 @@ class DBTeamSeason(DBModel):
         if obj:
             for key, value in kwargs.items():
                 setattr(obj, key, value)
-            session.commit()
+            session.flush()
         return obj
 
 class DBMapSeason(DBModel):

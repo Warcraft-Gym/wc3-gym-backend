@@ -42,7 +42,7 @@ class DBSeason(DBModel):
             if not already_exists:
                 session.add(DBTeamSeason(season=season,team=team))
 
-        session.commit()
+        session.flush()
         return season
     
     @classmethod
@@ -58,7 +58,7 @@ class DBSeason(DBModel):
             if not team_season:
                 raise Exception(f"Team not part of the season, team id: {team_id}, season id {obj_id}")
             session.delete(team_season)
-        session.commit()
+        session.flush()
         return season
     
 
@@ -75,7 +75,7 @@ class DBSeason(DBModel):
             if not already_exists:
                 session.add(DBMapSeason(season=season,map=map)) 
 
-        session.commit()
+        session.flush()
         return season
     
     @classmethod
@@ -92,7 +92,7 @@ class DBSeason(DBModel):
                 raise Exception(f"Map not part of the season, map id: {map_id}, season id {obj_id}")
             session.delete(map_season)
 
-        session.commit()
+        session.flush()
         return season
     
     @classmethod
@@ -108,7 +108,7 @@ class DBSeason(DBModel):
             if not already_exists:
                 session.add(DBUserSeasonSignup(season=season,user=user)) 
 
-        session.commit()
+        session.flush()
         return season
     
     @classmethod
@@ -122,8 +122,8 @@ class DBSeason(DBModel):
                 raise Exception(f"User not found by id: {user_id}")
             user_season = session.query(DBUserSeasonSignup).filter_by(season_id=obj_id,user_id=user.id).first()
             if not user_season:
-                raise Exception(f"Map not part of the season, user id: {user_id}, season id {obj_id}")
+                raise Exception(f"User not signed up for the season, user id: {user_id}, season id {obj_id}")
             session.delete(user_season)
 
-        session.commit()
+        session.flush()
         return season

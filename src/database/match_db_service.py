@@ -1,7 +1,6 @@
 import logging
 from src.database.abstract_database_service import AbstractDatabaseService
 from src.database.model.DBMatch import DBMatch
-from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import joinedload
 from custom_exceptions import DBException
 from src.util.query_util import QueryUtil
@@ -11,51 +10,27 @@ logger = logging.getLogger(__name__)
 
 class MatchDBService(AbstractDatabaseService):
     def add(self, match: MatchDTO):
-        try:
-            session = self.Session()
+        with self.get_session() as session:
             match = DBMatch.add(session, match.to_db_dict())
-            # Example usage
             if not match:
                 logger.error("Match could not be created!")
                 raise DBException("Match could not be created!")
-            return MatchDTO.from_dbmatch(match)   
-        except SQLAlchemyError as e:
-            # Log the error and handle it
-            logger.error(f"Database error: {e}")
-            raise DBException(f"Database error: {e}")
-        finally:
-            session.close()
+            return MatchDTO.from_dbmatch(match)
 
     def update(self, match_id, match: MatchDTO):
-        try:
-            session = self.Session()
+        with self.get_session() as session:
             match = DBMatch.update(session, match_id, **match.to_db_dict())
-            # Example usage
             if not match:
                 logger.error("Match could not be updated!")
                 raise DBException("Match could not be updated!")
-            return MatchDTO.from_dbmatch(match)   
-        except SQLAlchemyError as e:
-            # Log the error and handle it
-            logger.error(f"Database error: {e}")
-            raise DBException(f"Database error: {e}")
-        finally:
-            session.close()
+            return MatchDTO.from_dbmatch(match)
 
     def delete(self, match_id):
-        try:
-            session = self.Session()
+        with self.get_session() as session:
             DBMatch.delete(session, match_id)
-        except SQLAlchemyError as e:
-            # Log the error and handle it
-            logger.error(f"Database error: {e}")
-            raise DBException(f"Database error: {e}")
-        finally:
-            session.close()
 
     def get(self, match_id):
-        try:
-            session = self.Session()
+        with self.get_session() as session:
             # Eager load related entities, disable nested loading
             match = session.query(DBMatch)\
                 .options(
@@ -65,38 +40,27 @@ class MatchDBService(AbstractDatabaseService):
                     joinedload(DBMatch.fixed_map)
                 )\
                 .filter_by(id=match_id).first()
-            # Example usage
             if not match:
                 logger.error("Match could not be found!")
                 raise DBException("Match could not be found!")
-            return MatchDTO.from_dbmatch(match)   
-        except SQLAlchemyError as e:
-            # Log the error and handle it
-            logger.error(f"Database error: {e}")
-            raise DBException(f"Database error: {e}")
-        finally:
-            session.close()
+            return MatchDTO.from_dbmatch(match)
 
     def search(self, query):
         with self.get_session() as session:
-            try:
-                result = []
-                filter = QueryUtil.convertQueryToDBFilter(DBMatch, query)
-                # Eager load only what we need, explicitly disable other relationships
-                matches = session.query(DBMatch)\
-                    .options(
-                        joinedload(DBMatch.team1).noload('*'),
-                        joinedload(DBMatch.team2).noload('*'),
-                        joinedload(DBMatch.season).noload('*'),
-                        joinedload(DBMatch.fixed_map)
-                    )\
-                    .filter(filter).all() if filter is not None else []
-                if not matches:
-                    logger.debug(f"No matches found by searchcriteria: {query}")
-                    return result
-                for match in matches:
-                    result.append(MatchDTO.from_dbmatch(match))
+            result = []
+            filter = QueryUtil.convertQueryToDBFilter(DBMatch, query)
+            # Eager load only what we need, explicitly disable other relationships
+            matches = session.query(DBMatch)\
+                .options(
+                    joinedload(DBMatch.team1).noload('*'),
+                    joinedload(DBMatch.team2).noload('*'),
+                    joinedload(DBMatch.season).noload('*'),
+                    joinedload(DBMatch.fixed_map)
+                )\
+                .filter(filter).all() if filter is not None else []
+            if not matches:
+                logger.debug(f"No matches found by searchcriteria: {query}")
                 return result
-            except SQLAlchemyError as e:
-                logger.error(f"Database error: {e}")
-                raise DBException(f"Database error: {e}")
+            for match in matches:
+                result.append(MatchDTO.from_dbmatch(match))
+            return result

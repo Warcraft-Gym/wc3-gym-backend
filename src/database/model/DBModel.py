@@ -13,7 +13,7 @@ class DBModel(AbstractConcreteBase, Base):
     def add(cls, session: Session, data : dict):
         obj = cls(**data)
         session.add(obj)
-        session.commit()
+        session.flush()
         return obj
 
     @classmethod
@@ -22,7 +22,7 @@ class DBModel(AbstractConcreteBase, Base):
         if obj:
             for key, value in kwargs.items():
                 setattr(obj, key, value)
-            session.commit()
+            session.flush()
         return obj
 
     @classmethod
@@ -30,7 +30,7 @@ class DBModel(AbstractConcreteBase, Base):
         if obj:
             for key, value in kwargs.items():
                 setattr(obj, key, value)
-            session.commit()
+            session.flush()
         return obj
 
     @classmethod
@@ -38,7 +38,7 @@ class DBModel(AbstractConcreteBase, Base):
         obj = session.query(cls).filter_by(id=obj_id).first()
         if obj:
             session.delete(obj)
-            session.commit()
+            session.flush()
         return obj
 
     @classmethod

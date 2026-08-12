@@ -1,7 +1,6 @@
 from src.database.player_career_stats_db_service import PlayerCareerStatsDBService
 from src.database.series_db_service import SeriesDBService
 from src.database.model.DBSeries import DBSeries
-from src.database.model.DBUser import DBUser
 from src.database.model.DBPlayerCareerStats import DBPlayerCareerStats
 import logging
 
@@ -32,59 +31,51 @@ class PlayerCareerStatsAppService:
         imported = 0
         skipped = 0
         errors = []
-        
-        with self.stats_db_service.get_session() as session:
-            for row in csv_reader:
-                try:
-                    player_name = row['NAME'].strip()
-                    
-                    # Find user by name (optional - can be null)
-                    user = session.query(DBUser).filter_by(name=player_name).first()
-                    user_id = user.id if user else None
-                    
-                    if not user:
-                        logger.info(f"User not found for {player_name}, importing anyway with null user_id")
-                    
-                    # Parse stats
-                    rating = int(row['RATING']) if row['RATING'] else 0
-                    series_won = int(row['WON Series']) if row['WON Series'] else 0
-                    series_lost = int(row['LOST Series']) if row['LOST Series'] else 0
-                    
-                    # Parse winrates (handle duplicate columns)
-                    values = list(row.values())
-                    keys = list(row.keys())
-                    winrate_indices = [i for i, k in enumerate(keys) if k == 'WINRATE']
-                    
-                    series_winrate = self._parse_percentage(values[winrate_indices[0]]) if len(winrate_indices) > 0 else 0.0
-                    games_winrate = self._parse_percentage(values[winrate_indices[1]]) if len(winrate_indices) > 1 else 0.0
-                    
-                    games_won = int(row['WON Games']) if row['WON Games'] else 0
-                    games_lost = int(row['LOST Games']) if row['LOST Games'] else 0
-                    seasons_played = int(row['Seasons PLAYED']) if row['Seasons PLAYED'] else 0
-                    avg_series = self._parse_avg_series(row.get('AVG NUM Series', '0'))
-                    
-                    # Update via DB service (user_id can be null)
-                    self.stats_db_service.update_historical_baseline(
-                        player_name=player_name,
-                        user_id=user_id,
-                        rating=rating,
-                        series_won=series_won,
-                        series_lost=series_lost,
-                        games_won=games_won,
-                        games_lost=games_lost,
-                        seasons_played=seasons_played,
-                        series_winrate=series_winrate,
-                        games_winrate=games_winrate,
-                        avg_series=avg_series
-                    )
-                    
-                    imported += 1
-                    logger.info(f"Imported: {player_name} (Rating: {rating})")
-                    
-                except Exception as e:
-                    logger.error(f"Error importing {row.get('NAME', 'Unknown')}: {e}")
-                    skipped += 1
-                    errors.append(f"Error importing {row.get('NAME', 'Unknown')}: {str(e)}")
+
+        for row in csv_reader:
+            try:
+                player_name = row['NAME'].strip()
+
+                # Parse stats
+                rating = int(row['RATING']) if row['RATING'] else 0
+                series_won = int(row['WON Series']) if row['WON Series'] else 0
+                series_lost = int(row['LOST Series']) if row['LOST Series'] else 0
+
+                # Parse winrates (handle duplicate columns)
+                values = list(row.values())
+                keys = list(row.keys())
+                winrate_indices = [i for i, k in enumerate(keys) if k == 'WINRATE']
+
+                series_winrate = self._parse_percentage(values[winrate_indices[0]]) if len(winrate_indices) > 0 else 0.0
+                games_winrate = self._parse_percentage(values[winrate_indices[1]]) if len(winrate_indices) > 1 else 0.0
+
+                games_won = int(row['WON Games']) if row['WON Games'] else 0
+                games_lost = int(row['LOST Games']) if row['LOST Games'] else 0
+                seasons_played = int(row['Seasons PLAYED']) if row['Seasons PLAYED'] else 0
+                avg_series = self._parse_avg_series(row.get('AVG NUM Series', '0'))
+
+                # Update via DB service. It resolves the user by player
+                # name and runs each row as one short transaction.
+                self.stats_db_service.update_historical_baseline(
+                    player_name=player_name,
+                    rating=rating,
+                    series_won=series_won,
+                    series_lost=series_lost,
+                    games_won=games_won,
+                    games_lost=games_lost,
+                    seasons_played=seasons_played,
+                    series_winrate=series_winrate,
+                    games_winrate=games_winrate,
+                    avg_series=avg_series
+                )
+
+                imported += 1
+                logger.info(f"Imported: {player_name} (Rating: {rating})")
+
+            except Exception as e:
+                logger.error(f"Error importing {row.get('NAME', 'Unknown')}: {e}")
+                skipped += 1
+                errors.append(f"Error importing {row.get('NAME', 'Unknown')}: {str(e)}")
         
         return {
             'imported': imported,

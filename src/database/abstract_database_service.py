@@ -1,11 +1,13 @@
 from abc import ABC, abstractmethod
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from src.database.model.DBModel import Base
-import logging
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, scoped_session
 from contextlib import contextmanager
+import logging
+
+from sqlalchemy import create_engine
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import sessionmaker
+
+from src.database.model.DBModel import Base
+from custom_exceptions import DBException
 
 logger = logging.getLogger(__name__)
 
@@ -22,19 +24,20 @@ class AbstractDatabaseService(ABC):
         )
         
         Base.metadata.create_all(self.engine)
-        self.Session = scoped_session(sessionmaker(bind=self.engine))
+        self.Session = sessionmaker(bind=self.engine)
 
     @contextmanager
     def get_session(self):
-        session = self.Session()
+        """One transaction per call: commit on success, roll back on error,
+        always close. Callers must not commit; to share a transaction, pass
+        the session instead of opening a new one. Database errors become
+        DBException here and nowhere else."""
         try:
-            yield session
-            session.commit()
-        except Exception:
-            session.rollback()
-            raise
-        finally:
-            self.Session.remove()  # remove() closes + purges from thread-local registry
+            with self.Session.begin() as session:
+                yield session
+        except SQLAlchemyError as e:
+            logger.exception("Database error")
+            raise DBException(f"Database error: {e}") from e
 
     @abstractmethod
     def add(self, **kwargs):
