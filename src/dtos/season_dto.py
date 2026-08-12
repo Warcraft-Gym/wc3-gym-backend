@@ -1,5 +1,24 @@
+from datetime import date, datetime
+
 from src.database.model.DBSeason import DBSeason
 from src.dtos.map_dto import MapDTO
+
+
+def _to_date(value):
+    """Convert an incoming date value to a date object.
+
+    A request body carries a date as a string, but to_dict() calls isoformat()
+    and the database column stores a date, so the string must be converted
+    here. SeriesDTO converts its date_time field the same way.
+    """
+    if value is None or value == '':
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    return datetime.fromisoformat(value).date()
+
 
 class SeasonDTO:
     def __init__(self, data : dict):
@@ -8,8 +27,8 @@ class SeasonDTO:
         self.number_weeks = data.get('number_weeks')
         self.series_per_week = data.get('series_per_week')
         self.pick_ban = data.get('pick_ban')
-        self.start_date = data.get('start_date')
-        self.end_date = data.get('end_date')
+        self.start_date = _to_date(data.get('start_date'))
+        self.end_date = _to_date(data.get('end_date'))
         self.maps = data.get('maps')
         self.discordRole = data.get('discordRole')
         self.user_signup = data.get('user_signup')
