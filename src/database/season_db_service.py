@@ -3,27 +3,27 @@ from src.database.abstract_database_service import AbstractDatabaseService
 from src.database.model.DBSeason import DBSeason
 from sqlalchemy.orm import joinedload, noload
 from custom_exceptions import DBException
-from src.dtos.season_dto import SeasonDTO
+from src.schemas.season import Season
 from src.util.query_util import QueryUtil
 
 logger = logging.getLogger(__name__)
 
 class SeasonDBService(AbstractDatabaseService):
-    def add(self, season : SeasonDTO):
+    def add(self, season : Season):
         with self.get_session() as session:
             new_season = DBSeason.add(session, season.to_db_dict())
             # Example usage
             if not new_season:
                 raise DBException("Season could not be created!")
-            return SeasonDTO.from_dbseason(new_season)   
+            return Season.from_dbseason(new_season)   
 
-    def update(self, season : SeasonDTO):
+    def update(self, season : Season):
         with self.get_session() as session:
             season = DBSeason.update(session, season.id, **season.to_db_dict())
             # Example usage
             if not season:
                 raise DBException("Season could not be updated!")
-            return SeasonDTO.from_dbseason(season)   
+            return Season.from_dbseason(season)   
 
     def delete(self, season_id):
         with self.get_session() as session:
@@ -45,7 +45,7 @@ class SeasonDBService(AbstractDatabaseService):
             # Example usage
             if not season:
                 raise DBException("Season could not be found!")
-            return SeasonDTO.from_dbseason(season)   
+            return Season.from_dbseason(season)   
 
 
     def getAll(self):
@@ -62,7 +62,7 @@ class SeasonDBService(AbstractDatabaseService):
                     noload(DBSeason.signup_users)
                 ).all()
             for season in seasons:
-                result.append(SeasonDTO.from_dbseason(season))
+                result.append(Season.from_dbseason(season))
             return result
 
     def addTeams(self, season_id, team_ids):
@@ -70,7 +70,7 @@ class SeasonDBService(AbstractDatabaseService):
             season =  DBSeason.addTeams(session, season_id, team_ids)
             if not season:
                 raise DBException("Season could not be updated!")
-            return SeasonDTO.from_dbseason(season)   
+            return Season.from_dbseason(season)   
 
     def search(self, query):
         with self.get_session() as session:
@@ -91,7 +91,7 @@ class SeasonDBService(AbstractDatabaseService):
                 logger.debug(f"No seasons found by searchcriteria: {query}")
                 return result
             for season in seasons:
-                result.append(SeasonDTO.from_dbseason(season))
+                result.append(Season.from_dbseason(season))
             return result
 
     def removeTeams(self, season_id, team_ids):
@@ -99,37 +99,37 @@ class SeasonDBService(AbstractDatabaseService):
             season =  DBSeason.removeTeams(session, season_id, team_ids)
             if not season:
                 raise DBException("Season could not be updated!")
-            return SeasonDTO.from_dbseason(season)   
+            return Season.from_dbseason(season)   
             
     def addMaps(self, season_id, map_ids):
         with self.get_session() as session:
             season = DBSeason.addMaps(session, season_id, map_ids)
-            return SeasonDTO.from_dbseason(season)   
+            return Season.from_dbseason(season)   
 
     def removeMaps(self, season_id, map_ids):
         with self.get_session() as session:
             season = DBSeason.removeMaps(session, season_id, map_ids)
-            return SeasonDTO.from_dbseason(season)   
+            return Season.from_dbseason(season)   
 
     def addUserSignup(self, season_id, user_ids):
         with self.get_session() as session:
             season = DBSeason.addUserSignup(session, season_id, user_ids)
             if not season:
                 raise DBException("Season could not be updated!")
-            return SeasonDTO.from_dbseason(season)
+            return Season.from_dbseason(season)
 
     def removeUserSignup(self, season_id, user_ids):
         with self.get_session() as session:
             season = DBSeason.removeUserSignup(session, season_id, user_ids)
             if not season:
                 raise DBException("Season could not be updated!")
-            return SeasonDTO.from_dbseason(season)
+            return Season.from_dbseason(season)
 
     def getSignedUpUsers(self, season_id):
         with self.get_session() as session:
             from src.database.model.DBRelationships import DBUserSeasonSignup
             from src.database.model.DBUser import DBUser
-            from src.dtos.user_dto import UserDTO
+            from src.schemas.user import User
                 
             # Eager load signup users with their user data and w3c_stats
             season = session.query(DBSeason)\
@@ -146,7 +146,7 @@ class SeasonDBService(AbstractDatabaseService):
             if season.signup_users:
                 for signup in season.signup_users:
                     if signup.user:
-                        user_dto = UserDTO.from_dbuser(signup.user)
+                        user_dto = User.from_dbuser(signup.user)
                         if user_dto:
                             result.append(user_dto)
                 

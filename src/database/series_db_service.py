@@ -7,24 +7,24 @@ from src.database.model.DBMatch import DBMatch
 from sqlalchemy.orm import joinedload
 from custom_exceptions import DBException
 from src.util.query_util import QueryUtil
-from src.dtos.series_dto import SeriesDTO
+from src.schemas.series import Series
 
 logger = logging.getLogger(__name__)
 
 class SeriesDBService(AbstractDatabaseService):
-    def add(self, series: SeriesDTO):
+    def add(self, series: Series):
         with self.get_session() as session:
             series = DBSeries.add(session, series.to_db_dict())
             if not series:
                 raise DBException("Series could not be created!")
-            return SeriesDTO.from_dbseries(series)
+            return Series.from_dbseries(series)
 
-    def update(self, series: SeriesDTO):
+    def update(self, series: Series):
         with self.get_session() as session:
             series = DBSeries.update(session, series.id, **series.to_db_dict())
             if not series:
                 raise DBException("Series could not be updated!")
-            return SeriesDTO.from_dbseries(series)
+            return Series.from_dbseries(series)
 
     def delete(self, series_id):
         with self.get_session() as session:
@@ -45,7 +45,7 @@ class SeriesDBService(AbstractDatabaseService):
                 .filter_by(id=series_id).first()
             if not series:
                 raise DBException("Series could not be found")
-            return SeriesDTO.from_dbseries(series)
+            return Series.from_dbseries(series)
 
     def getAll(self):
         with self.get_session() as session:
@@ -61,7 +61,7 @@ class SeriesDBService(AbstractDatabaseService):
                     joinedload(DBSeries.player2).joinedload(DBUser.team_seasons).joinedload(DBUserTeamSeason.season)
                 ).all()
             for single_series in series:
-                result.append(SeriesDTO.from_dbseries(single_series))
+                result.append(Series.from_dbseries(single_series))
             return result
 
     def search(self, query):
@@ -83,7 +83,7 @@ class SeriesDBService(AbstractDatabaseService):
                 logger.debug(f"No series found by searchcriteria: {query}")
                 return result
             for series in series_list:
-                result.append(SeriesDTO.from_dbseries(series))
+                result.append(Series.from_dbseries(series))
             return result
 
     def searchForSeasonAndPlayday(self, season_id, playday, query):
@@ -95,7 +95,7 @@ class SeriesDBService(AbstractDatabaseService):
                 logger.debug(f"No series found by searchcriteria: {query}")
                 return result
             for series in series_list:
-                result.append(SeriesDTO.from_dbseries(series))
+                result.append(Series.from_dbseries(series))
             return result
 
     def searchForSeason(self, season_id, query):
@@ -107,5 +107,5 @@ class SeriesDBService(AbstractDatabaseService):
                 logger.debug(f"No series found by searchcriteria: {query}")
                 return result
             for series in series_list:
-                result.append(SeriesDTO.from_dbseries(series))
+                result.append(Series.from_dbseries(series))
             return result

@@ -197,7 +197,7 @@ def public_create_user():
             return jsonify({'error': 'server_misconfigured'}), 500
 
         # Create DTO directly using existing DTO class to keep shape
-        from src.dtos.user_dto import UserDTO
+        from src.schemas.user import User
 
         # If a user already exists with this discord id, update that user instead of creating a new one
         existing_users = []
@@ -213,7 +213,7 @@ def public_create_user():
             # update first matched user
             existing = existing_users[0]
             try:
-                user_dto = UserDTO(user_payload)
+                user_dto = User(user_payload)
                 user = signup_blueprint.user_app_service.update_user(existing.id, user_dto)
             except Exception as ue:
                 # If updating an existing user fails, do NOT create a new user.
@@ -222,7 +222,7 @@ def public_create_user():
                 return jsonify({'error': 'Failed to update existing user'}), 500
         else:
             # create new user
-            user = signup_blueprint.user_app_service.create_user(UserDTO(user_payload))
+            user = signup_blueprint.user_app_service.create_user(User(user_payload))
 
         # Determine season to register the user for:
         # prefer the season_id encoded in the token, otherwise accept season_id from the request body

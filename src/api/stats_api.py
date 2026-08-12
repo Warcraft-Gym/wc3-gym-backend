@@ -89,8 +89,8 @@ def get_career_stats_by_user(stat_id):
 def update_career_stats(stat_id):
     try:
         data = request.get_json()
-        from src.dtos.player_career_stats_dto import PlayerCareerStatsDTO
-        stat_dto = PlayerCareerStatsDTO(data)
+        from src.schemas.player_career_stats import PlayerCareerStats
+        stat_dto = PlayerCareerStats(data)
         stat = stats_blueprint.stats_service.update_career_stats(stat_id, stat_dto)
         if stat:
             return jsonify(stat.to_dict()), 200

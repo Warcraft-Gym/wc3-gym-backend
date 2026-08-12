@@ -1,7 +1,7 @@
 import logging
 import traceback
 from src.database.map_db_service import MapDBService
-from src.dtos.map_dto import MapDTO
+from src.schemas.map import Map
 from custom_exceptions import NotFoundException
 
 
@@ -9,13 +9,13 @@ class MapAppService:
     def __init__(self, map_service: MapDBService):
         self.map_service = map_service
 
-    def create_map(self, map : MapDTO):
+    def create_map(self, map : Map):
         #remove id, db generates the id
         map.id = None
         map_data = self.map_service.add(map)
         return map_data
 
-    def update_map(self, map_id, map : MapDTO):
+    def update_map(self, map_id, map : Map):
         map.id = map_id
         map_data = self.map_service.update(map)
         return map_data

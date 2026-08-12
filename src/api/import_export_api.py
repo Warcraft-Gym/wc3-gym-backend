@@ -4,14 +4,14 @@ from flask import Blueprint, request, jsonify, send_file
 from flask_jwt_extended import jwt_required
 from custom_exceptions import NotFoundException
 from flasgger import swag_from
-from src.dtos.fantasy_team_dto import FantasyTeamDTO
-from src.dtos.fantasy_bet_dto import FantasyBetDTO
-from src.dtos.season_dto import SeasonDTO
-from src.dtos.user_dto import UserDTO
-from src.dtos.team_dto import TeamDTO
-from src.dtos.series_dto import SeriesDTO
-from src.dtos.match_dto import MatchDTO
-from src.dtos.map_dto import MapDTO
+from src.schemas.fantasy_team import FantasyTeam
+from src.schemas.fantasy_bet import FantasyBet
+from src.schemas.season import Season
+from src.schemas.user import User
+from src.schemas.team import Team
+from src.schemas.series import Series
+from src.schemas.match import Match
+from src.schemas.map import Map
 import pandas as pd
 import io
 from io import BytesIO
@@ -63,14 +63,14 @@ def _process_import(file_bytes, create_new):
         season_id = None
         if create_new:
             # Force create new season
-            season = import_blueprint.season_app_service.create_season(SeasonDTO(season_data))
+            season = import_blueprint.season_app_service.create_season(Season(season_data))
             season_id = season.id
             logger.info(f"Created new season with ID: {season_id}")
         else:
             # If Season ID is missing, auto-create new season instead of error
             if pd.isna(season_row['ID']):
                 logger.info("Season ID not found in Excel, creating new season")
-                season = import_blueprint.season_app_service.create_season(SeasonDTO(season_data))
+                season = import_blueprint.season_app_service.create_season(Season(season_data))
                 season_id = season.id
                 logger.info(f"Created new season with ID: {season_id}")
             else:
@@ -79,12 +79,12 @@ def _process_import(file_bytes, create_new):
                 try:
                     existing_season = import_blueprint.season_app_service.get_season(original_season_id)
                     # Season exists, update it
-                    import_blueprint.season_app_service.update_season(original_season_id, SeasonDTO(season_data))
+                    import_blueprint.season_app_service.update_season(original_season_id, Season(season_data))
                     season_id = original_season_id
                     logger.info(f"Updated existing season with ID: {season_id}")
                 except NotFoundException:
                     # Season doesn't exist, create it 
-                    season = import_blueprint.season_app_service.create_season(SeasonDTO(season_data))
+                    season = import_blueprint.season_app_service.create_season(Season(season_data))
                     season_id = season.id
                     logger.info(f"Created new season with ID: {season_id} (original ID {original_season_id} not found)")
 
@@ -113,9 +113,9 @@ def _process_import(file_bytes, create_new):
                     existing_maps = import_blueprint.map_app_service.search(query)
                     if existing_maps:
                         map_obj = existing_maps[0]
-                        import_blueprint.map_app_service.update_map(map_obj.id, MapDTO(map_data))
+                        import_blueprint.map_app_service.update_map(map_obj.id, Map(map_data))
                     else:
-                        map_obj = import_blueprint.map_app_service.create_map(MapDTO(map_data))
+                        map_obj = import_blueprint.map_app_service.create_map(Map(map_data))
                     
                     if old_map_id:
                         map_id_mapping[old_map_id] = map_obj.id
@@ -141,9 +141,9 @@ def _process_import(file_bytes, create_new):
                 existing_teams = import_blueprint.team_app_service.search(query)
                 if existing_teams:
                     team = existing_teams[0]
-                    import_blueprint.team_app_service.update_team(team.id, TeamDTO(team_data))
+                    import_blueprint.team_app_service.update_team(team.id, Team(team_data))
                 else:
-                    team = import_blueprint.team_app_service.create_team(TeamDTO(team_data))
+                    team = import_blueprint.team_app_service.create_team(Team(team_data))
                 
                 if old_team_id:
                     team_id_mapping[old_team_id] = team.id
@@ -187,7 +187,7 @@ def _process_import(file_bytes, create_new):
                     logger.info(f"Reusing existing user: {user.battleTag} (ID: {user.id})")
                 else:
                     # User doesn't exist - create new user
-                    user = import_blueprint.user_app_service.create_user(UserDTO(user_data))
+                    user = import_blueprint.user_app_service.create_user(User(user_data))
                     logger.info(f"Created new user: {user.battleTag} (ID: {user.id})")
                 
                 if old_user_id:
@@ -233,9 +233,9 @@ def _process_import(file_bytes, create_new):
                 existing_matches = import_blueprint.match_app_service.search(query)
                 if existing_matches:
                     match = existing_matches[0]
-                    import_blueprint.match_app_service.update_match(match.id, MatchDTO(match_data))
+                    import_blueprint.match_app_service.update_match(match.id, Match(match_data))
                 else:
-                    match = import_blueprint.match_app_service.create_match(MatchDTO(match_data))
+                    match = import_blueprint.match_app_service.create_match(Match(match_data))
                 
                 if old_match_id:
                     match_id_mapping[old_match_id] = match.id
@@ -289,11 +289,11 @@ def _process_import(file_bytes, create_new):
             if query and query.elementA:
                 existing_series = import_blueprint.series_app_service.search(query)
                 if existing_series:
-                    import_blueprint.series_app_service.update_series(existing_series[0].id, SeriesDTO(series_data))
+                    import_blueprint.series_app_service.update_series(existing_series[0].id, Series(series_data))
                     if old_series_id:
                         series_id_mapping[old_series_id] = existing_series[0].id
                 else:
-                    series = import_blueprint.series_app_service.create_series(SeriesDTO(series_data))
+                    series = import_blueprint.series_app_service.create_series(Series(series_data))
                     if old_series_id:
                         series_id_mapping[old_series_id] = series.id
 
@@ -337,9 +337,9 @@ def _process_import(file_bytes, create_new):
                     existing_fteams = import_blueprint.fantasy_team_app_service.search_fantasy_teams(query)
                     if existing_fteams:
                         fteam = existing_fteams[0]
-                        import_blueprint.fantasy_team_app_service.update_fantasy_team(fteam.id, FantasyTeamDTO(fteam_data))
+                        import_blueprint.fantasy_team_app_service.update_fantasy_team(fteam.id, FantasyTeam(fteam_data))
                     else:
-                        fteam = import_blueprint.fantasy_team_app_service.create_fantasy_team(FantasyTeamDTO(fteam_data))
+                        fteam = import_blueprint.fantasy_team_app_service.create_fantasy_team(FantasyTeam(fteam_data))
                     
                     if old_fteam_id:
                         fantasy_team_id_mapping[old_fteam_id] = fteam.id
@@ -406,9 +406,9 @@ def _process_import(file_bytes, create_new):
                 if query and query.elementA:
                     existing_bets = import_blueprint.fantasy_bet_app_service.search_fantasy_bets(query)
                     if existing_bets:
-                        import_blueprint.fantasy_bet_app_service.update_fantasy_bet(existing_bets[0].id, FantasyBetDTO(fbet_data))
+                        import_blueprint.fantasy_bet_app_service.update_fantasy_bet(existing_bets[0].id, FantasyBet(fbet_data))
                     else:
-                        import_blueprint.fantasy_bet_app_service.create_fantasy_bet(FantasyBetDTO(fbet_data))
+                        import_blueprint.fantasy_bet_app_service.create_fantasy_bet(FantasyBet(fbet_data))
         except Exception as e:
             logger.warning(f"Fantasy Bets sheet not found or error: {e}")
         
@@ -811,7 +811,7 @@ def import_fantasy_teams():
                         'discordTag': row.iloc[1],
                         'race': "Random"
                     }
-                    captain = import_blueprint.user_app_service.create_user(UserDTO(user_data))
+                    captain = import_blueprint.user_app_service.create_user(User(user_data))
                 elif len(users) != 1:
                     raise Exception(f"No or multiple users found for captain[{row.iloc[1]}]: {users}")
                 else:
@@ -846,11 +846,11 @@ def import_fantasy_teams():
                 found_teams = import_blueprint.fantasy_team_app_service.search_fantasy_teams(fteam_query)
                 if found_teams and len(found_teams)==1:
                     team = found_teams[0]
-                    fantasy_team = import_blueprint.fantasy_team_app_service.update_fantasy_team(team.id, FantasyTeamDTO(team_data))     
+                    fantasy_team = import_blueprint.fantasy_team_app_service.update_fantasy_team(team.id, FantasyTeam(team_data))     
                 elif len(found_teams)>1:
                     raise Exception(f"More than one bet found by search: {fteam_q_string}")
                 else:
-                    fantasy_team = import_blueprint.fantasy_team_app_service.create_fantasy_team(FantasyTeamDTO(team_data))
+                    fantasy_team = import_blueprint.fantasy_team_app_service.create_fantasy_team(FantasyTeam(team_data))
                         
                 players = []
                 found_players = {}
@@ -1058,11 +1058,11 @@ def import_fantasy_bets():
                 found_bets = import_blueprint.fantasy_bet_app_service.search_fantasy_bets(bet_query)
                 if found_bets and len(found_bets)==1:
                     bet = found_bets[0]
-                    import_blueprint.fantasy_bet_app_service.update_fantasy_bet(bet.id, FantasyBetDTO(bet_data))     
+                    import_blueprint.fantasy_bet_app_service.update_fantasy_bet(bet.id, FantasyBet(bet_data))     
                 elif len(found_bets)>1:
                     raise Exception(f"More than one bet found by search: {bet_q_string}")
                 else:
-                    import_blueprint.fantasy_bet_app_service.create_fantasy_bet(FantasyBetDTO(bet_data))
+                    import_blueprint.fantasy_bet_app_service.create_fantasy_bet(FantasyBet(bet_data))
             
             return jsonify({"message": "File uploaded successfully and data inserted into database"}), 200
         else:

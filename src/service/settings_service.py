@@ -1,6 +1,6 @@
 import logging
 from src.database.settings_db_service import SettingsDBService
-from src.dtos.settings_dto import SettingsDTO
+from src.schemas.settings import Settings
 
 logger = logging.getLogger(__name__)
 
@@ -28,12 +28,12 @@ class SettingsAppService:
             # Try to get existing setting by key
             existing_dto = self.settings_service.get_by_key(key)
             # Update it
-            settings_dto = SettingsDTO(id=existing_dto.id, key=key, value=value, description=description)
+            settings_dto = Settings(id=existing_dto.id, key=key, value=value, description=description)
             updated = self.settings_service.update(settings_dto)
             return updated.to_dict()
         except Exception:
             # If not found, create new setting
-            settings_dto = SettingsDTO(key=key, value=value, description=description)
+            settings_dto = Settings(key=key, value=value, description=description)
             created = self.settings_service.add(settings_dto)
             return created.to_dict()
     

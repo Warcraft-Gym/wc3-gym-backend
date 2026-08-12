@@ -3,7 +3,7 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required
 from custom_exceptions import NotFoundException
 from flasgger import swag_from
-from src.dtos.season_dto import SeasonDTO
+from src.schemas.season import Season
 from src.util.query_util import QueryUtil
 
 logger = logging.getLogger(__name__)
@@ -23,7 +23,7 @@ season_blueprint = Blueprint('season_api', __name__)
             'name': 'body',
             'in': 'body',
             'required': True,
-            'schema': SeasonDTO.schema()
+            'schema': Season.schema()
         }
     ],
     'responses': {
@@ -34,7 +34,7 @@ season_blueprint = Blueprint('season_api', __name__)
 def add_season():
     try:
         data = request.json
-        season = season_blueprint.season_app_service.create_season(SeasonDTO(data))
+        season = season_blueprint.season_app_service.create_season(Season(data))
         if season:
             season = season.to_dict()
         return jsonify(season), 201
@@ -55,7 +55,7 @@ def add_season():
             'name': 'body',
             'in': 'body',
             'required': False,
-            'schema': SeasonDTO.schema()
+            'schema': Season.schema()
         }
     ],
     'responses': {
@@ -67,7 +67,7 @@ def add_season():
 def update_season(season_id):
     try:
         data = request.json
-        season = season_blueprint.season_app_service.update_season(season_id, SeasonDTO(data))
+        season = season_blueprint.season_app_service.update_season(season_id, Season(data))
         if season:
             season = season.to_dict()
         return jsonify(season)

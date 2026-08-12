@@ -2,7 +2,7 @@ import logging
 from flask import Blueprint, request, jsonify, Response
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from custom_exceptions import NotFoundException
-from src.dtos.user_dto import UserDTO
+from src.schemas.user import User
 from src.util.query_util import QueryUtil
 from flasgger import swag_from
 
@@ -23,7 +23,7 @@ user_blueprint = Blueprint('user_api', __name__)
             'name': 'body',
             'in': 'body',
             'required': True,
-            'schema': UserDTO.schema()
+            'schema': User.schema()
         }
     ],
     'responses': {
@@ -34,7 +34,7 @@ user_blueprint = Blueprint('user_api', __name__)
 def add_user():
     try:
         data = request.json
-        user = user_blueprint.user_app_service.create_user(UserDTO(data))
+        user = user_blueprint.user_app_service.create_user(User(data))
         if(user):
             user = user.to_dict()
         return jsonify(user), 201
@@ -55,7 +55,7 @@ def add_user():
             'name': 'body',
             'in': 'body',
             'required': True,
-            'schema': UserDTO.schema()
+            'schema': User.schema()
         }
     ],
     'responses': {
@@ -67,7 +67,7 @@ def add_user():
 def update_user(user_id):
     try:
         data = request.json
-        user = user_blueprint.user_app_service.update_user(user_id, UserDTO(data))
+        user = user_blueprint.user_app_service.update_user(user_id, User(data))
         if(user):
             user = user.to_dict()
         return jsonify(user)

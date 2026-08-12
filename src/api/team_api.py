@@ -3,7 +3,7 @@ from flask import Blueprint, request, jsonify, Response
 from flask_jwt_extended import jwt_required
 from custom_exceptions import NotFoundException
 from flasgger import swag_from
-from src.dtos.team_dto import TeamDTO
+from src.schemas.team import Team
 from src.util.query_util import QueryUtil
 
 logger = logging.getLogger(__name__)
@@ -23,7 +23,7 @@ team_blueprint = Blueprint('team_api', __name__)
             'name': 'body',
             'in': 'body',
             'required': True,
-            'schema': TeamDTO.schema()
+            'schema': Team.schema()
         }
     ],
     'responses': {
@@ -34,7 +34,7 @@ team_blueprint = Blueprint('team_api', __name__)
 def add_team():
     try:
         data = request.json
-        team = team_blueprint.team_app_service.create_team(TeamDTO(data))
+        team = team_blueprint.team_app_service.create_team(Team(data))
         if team:
             team = team.to_dict()
         return jsonify(team), 201
@@ -55,7 +55,7 @@ def add_team():
             'name': 'body',
             'in': 'body',
             'required': False,
-            'schema': TeamDTO.schema()
+            'schema': Team.schema()
         }
     ],
     'responses': {
@@ -67,7 +67,7 @@ def add_team():
 def update_team(team_id):
     try:
         data = request.json
-        team = team_blueprint.team_app_service.update_team(team_id, TeamDTO(data))
+        team = team_blueprint.team_app_service.update_team(team_id, Team(data))
         if team:
             team = team.to_dict()
         return jsonify(team)

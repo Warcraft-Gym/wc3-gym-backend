@@ -1,16 +1,16 @@
 from src.database.match_db_service import MatchDBService
-from src.dtos.match_dto import MatchDTO
+from src.schemas.match import Match
 from custom_exceptions import NotFoundException
 
 class MatchAppService:
     def __init__(self, match_service: MatchDBService):
         self.match_service = match_service
 
-    def create_match(self, match: MatchDTO):
+    def create_match(self, match: Match):
         match_data = self.match_service.add(match)
         return match_data
 
-    def update_match(self, match_id: int, match: MatchDTO):
+    def update_match(self, match_id: int, match: Match):
         match_data = self.match_service.update(match_id, match)
         return match_data
 

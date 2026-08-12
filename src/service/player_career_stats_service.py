@@ -106,7 +106,7 @@ class PlayerCareerStatsAppService:
         Always uses all stored series to ensure accurate career totals.
         Returns summary of updated players.
         """
-        # Get all series from series service (returns list of SeriesDTO objects)
+        # Get all series from series service (returns list of Series objects)
         all_series = self.series_service.getAll()
         
         # Get all unique seasons in the system (for proper decay calculation)
@@ -304,7 +304,7 @@ class PlayerCareerStatsAppService:
         return result
     
     def _calculate_player_stats_from_series(self, user_id, series_list):
-        """Calculate stats for a player from their series records (SeriesDTO objects)"""
+        """Calculate stats for a player from their series records (Series objects)"""
         series_won = 0
         series_lost = 0
         games_won = 0
@@ -348,7 +348,7 @@ class PlayerCareerStatsAppService:
         
         Args:
             user_id: Player's user ID
-            series_list: List of SeriesDTO objects for this player
+            series_list: List of Series objects for this player
             historical_rating: Historical baseline rating (already multiplied by 100)
             all_system_seasons: List of all season IDs in the system (sorted)
         
@@ -476,7 +476,7 @@ class PlayerCareerStatsAppService:
     
     def update_career_stats(self, stat_id: int, stat_dto):
         """Update career stats (historical values and user link)"""
-        from src.dtos.player_career_stats_dto import PlayerCareerStatsDTO
+        from src.schemas.player_career_stats import PlayerCareerStats
         
         # Use DBModel.update pattern with DTO's to_db_dict()
         with self.stats_db_service.get_session() as session:
@@ -484,7 +484,7 @@ class PlayerCareerStatsAppService:
             if not updated_stat:
                 return None
             
-            return PlayerCareerStatsDTO.from_db(updated_stat)
+            return PlayerCareerStats.from_db(updated_stat)
     
     def delete_career_stats(self, stat_id: int):
         """Delete career stats record"""

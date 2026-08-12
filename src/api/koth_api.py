@@ -2,9 +2,9 @@ import logging
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required
 from custom_exceptions import NotFoundException
-from src.dtos.koth_event_dto import KothEventDTO
-from src.dtos.koth_signup_dto import KothSignupDTO
-from src.dtos.koth_match_dto import KothMatchDTO
+from src.schemas.koth_event import KothEvent
+from src.schemas.koth_signup import KothSignup
+from src.schemas.koth_match import KothMatch
 from flasgger import swag_from
 
 logger = logging.getLogger(__name__)
@@ -110,7 +110,7 @@ def get_event(event_id):
 def create_event():
     try:
         data = request.json
-        event = koth_blueprint.koth_app_service.create_event(KothEventDTO(data))
+        event = koth_blueprint.koth_app_service.create_event(KothEvent(data))
         return jsonify(event.to_dict()), 201
     except Exception as e:
         logger.error(e)
@@ -136,7 +136,7 @@ def create_event():
 def update_event(event_id):
     try:
         data = request.json
-        event = koth_blueprint.koth_app_service.update_event(event_id, KothEventDTO(data))
+        event = koth_blueprint.koth_app_service.update_event(event_id, KothEvent(data))
         return jsonify(event.to_dict()), 200
     except NotFoundException as e:
         return jsonify({"error": str(e)}), 404
@@ -600,7 +600,7 @@ def create_match():
         data = request.json
         participants = data.pop('participants', [])
         match = koth_blueprint.koth_app_service.create_match(
-            KothMatchDTO(data),
+            KothMatch(data),
             participants
         )
         return jsonify(match.to_dict()), 201
@@ -632,7 +632,7 @@ def create_match():
 def update_match(match_id):
     try:
         data = request.json
-        match = koth_blueprint.koth_app_service.update_match(match_id, KothMatchDTO(data))
+        match = koth_blueprint.koth_app_service.update_match(match_id, KothMatch(data))
         return jsonify(match.to_dict()), 200
     except NotFoundException as e:
         return jsonify({"error": str(e)}), 404

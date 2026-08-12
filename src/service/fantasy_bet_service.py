@@ -1,6 +1,6 @@
 from src.database.fantasy_bet_db_service import FantasyBetDBService
-from src.dtos.fantasy_team_dto import FantasyTeamDTO
-from src.dtos.fantasy_bet_dto import FantasyBetDTO
+from src.schemas.fantasy_team import FantasyTeam
+from src.schemas.fantasy_bet import FantasyBet
 from custom_exceptions import NotFoundException
 
 class FantasyBetAppService:
@@ -8,7 +8,7 @@ class FantasyBetAppService:
         self.fantasy_bet_service = fantasy_bet_service
         self.settings_app_service = settings_app_service
 
-    def _apply_bet_points_logic(self, bet: FantasyBetDTO):
+    def _apply_bet_points_logic(self, bet: FantasyBet):
         """Apply bet points based on settings: use fixed points or validate user input."""
         if not self.settings_app_service:
             # If no settings service, require bet_points from input
@@ -67,13 +67,13 @@ class FantasyBetAppService:
             if bet.bet_points is None or bet.bet_points <= 0:
                 raise ValueError("bet_points is required and must be greater than 0")
 
-    def create_fantasy_bet(self, bet: FantasyBetDTO):
+    def create_fantasy_bet(self, bet: FantasyBet):
         self._apply_bet_points_logic(bet)
         bet.id = None
         bet_data = self.fantasy_bet_service.add(bet)
         return bet_data
 
-    def update_fantasy_bet(self, bet_id: int, bet: FantasyBetDTO):
+    def update_fantasy_bet(self, bet_id: int, bet: FantasyBet):
         self._apply_bet_points_logic(bet)
         bet.id = bet_id
         bet_data = self.fantasy_bet_service.update(bet)

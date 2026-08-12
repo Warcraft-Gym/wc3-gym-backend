@@ -1,9 +1,9 @@
 import logging
 from src.database.koth_db_service import KothDBService
-from src.dtos.koth_event_dto import KothEventDTO
-from src.dtos.koth_signup_dto import KothSignupDTO
-from src.dtos.koth_match_dto import KothMatchDTO
-from src.dtos.koth_match_participant_dto import KothMatchParticipantDTO
+from src.schemas.koth_event import KothEvent
+from src.schemas.koth_signup import KothSignup
+from src.schemas.koth_match import KothMatch
+from src.schemas.koth_match_participant import KothMatchParticipant
 from src.service.w3champions.w3c_service import W3CService
 from custom_exceptions import NotFoundException
 from datetime import datetime
@@ -16,11 +16,11 @@ class KothAppService:
         self.settings_app_service = settings_app_service
 
     # ============ Event Methods ============
-    def create_event(self, event: KothEventDTO):
+    def create_event(self, event: KothEvent):
         event.id = None
         return self.koth_service.add_event(event)
 
-    def update_event(self, event_id, event: KothEventDTO):
+    def update_event(self, event_id, event: KothEvent):
         event.id = event_id
         return self.koth_service.update_event(event)
 
@@ -149,7 +149,7 @@ class KothAppService:
         bracket = self._determine_bracket(avg_mmr, event)
 
         # Create signup
-        signup = KothSignupDTO({
+        signup = KothSignup({
             'event_id': event.id,
             'twitch_username': twitch_username,
             'battle_tag': battle_tag,
@@ -216,7 +216,7 @@ class KothAppService:
         return self.koth_service.get_signups_by_event(event_id)
 
     # ============ Match Methods ============
-    def create_match(self, match: KothMatchDTO, participant_signup_ids: list):
+    def create_match(self, match: KothMatch, participant_signup_ids: list):
         """
         Create a team-based match with participants.
         participant_signup_ids: list of dicts with {'signup_id': int, 'team_number': int}
@@ -254,7 +254,7 @@ class KothAppService:
         
         # Add participants
         for participant in participant_signup_ids:
-            participant_dto = KothMatchParticipantDTO({
+            participant_dto = KothMatchParticipant({
                 'match_id': created_match.id,
                 'signup_id': participant['signup_id'],
                 'team_number': participant['team_number']
@@ -264,7 +264,7 @@ class KothAppService:
         # Return match with participants loaded
         return self.koth_service.get_match(created_match.id)
 
-    def update_match(self, match_id: int, match: KothMatchDTO):
+    def update_match(self, match_id: int, match: KothMatch):
         match.id = match_id
         return self.koth_service.update_match(match)
 
@@ -322,7 +322,7 @@ class KothAppService:
         return kings
 
     # ============ Helper Methods ============
-    def _determine_bracket(self, mmr: int, event: KothEventDTO) -> int:
+    def _determine_bracket(self, mmr: int, event: KothEvent) -> int:
         """Determine bracket based on MMR thresholds"""
         if mmr < event.bracket_1_threshold:
             return 1
@@ -376,18 +376,18 @@ class KothAppService:
             return []
         
         stats = []
-        from src.dtos.w3c_stats_dto import W3CStatsDTO
+        from src.schemas.w3c_stats import W3CStats
         for gmode_stats in result:
             if gmode_stats.get('gameMode') and gmode_stats.get('gameMode') == 1:
-                w3cstats = W3CStatsDTO(data={})
-                w3cstats.wc3_season = gmode_stats.get('season')
-                w3cstats.wins = gmode_stats.get('wins')
-                w3cstats.losses = gmode_stats.get('losses')
-                w3cstats.games = gmode_stats.get('games')
-                w3cstats.mmr = gmode_stats.get('mmr')
-                w3cstats.winrate = gmode_stats.get('winrate')
-                w3cstats.race = w3c_service.getRaceEnum(gmode_stats.get('race'))
-                w3cstats.league = gmode_stats.get('leagueOrder')
-                stats.append(w3cstats)
+                stats.append(W3CStats(
+                    wc3_season=gmode_stats.get('season'),
+                    wins=gmode_stats.get('wins'),
+                    losses=gmode_stats.get('losses'),
+                    games=gmode_stats.get('games'),
+                    mmr=gmode_stats.get('mmr'),
+                    winrate=gmode_stats.get('winrate'),
+                    race=w3c_service.getRaceEnum(gmode_stats.get('race')),
+                    league=gmode_stats.get('leagueOrder'),
+                ))
         
         return stats

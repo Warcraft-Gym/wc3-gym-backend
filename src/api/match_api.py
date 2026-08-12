@@ -4,7 +4,7 @@ from flask_jwt_extended import jwt_required
 from custom_exceptions import NotFoundException
 from flasgger import swag_from
 from src.util.query_util import QueryUtil
-from src.dtos.match_dto import MatchDTO
+from src.schemas.match import Match
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +23,7 @@ match_blueprint = Blueprint('match_api', __name__)
             'name': 'body',
             'in': 'body',
             'required': True,
-            'schema': MatchDTO.schema()
+            'schema': Match.schema()
         }
     ],
     'responses': {
@@ -34,7 +34,7 @@ match_blueprint = Blueprint('match_api', __name__)
 def add_match():
     try:
         data = request.json
-        match = match_blueprint.match_app_service.create_match(MatchDTO(data))
+        match = match_blueprint.match_app_service.create_match(Match(data))
         if match:
             match = match.to_dict()
         return jsonify(match), 201
@@ -55,7 +55,7 @@ def add_match():
             'name': 'body',
             'in': 'body',
             'required': False,
-            'schema': MatchDTO.schema()
+            'schema': Match.schema()
         }
     ],
     'responses': {
@@ -67,7 +67,7 @@ def add_match():
 def update_match(match_id):
     try:
         data = request.json
-        match = match_blueprint.match_app_service.update_match(match_id, MatchDTO(data))
+        match = match_blueprint.match_app_service.update_match(match_id, Match(data))
         if match:
             match = match.to_dict()
         return jsonify(match)

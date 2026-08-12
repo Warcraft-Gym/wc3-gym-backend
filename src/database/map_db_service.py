@@ -1,27 +1,27 @@
 import logging
 from src.database.abstract_database_service import AbstractDatabaseService
 from src.database.model.DBMap import DBMap
-from src.dtos.map_dto import MapDTO
+from src.schemas.map import Map
 from custom_exceptions import DBException
 from src.util.query_util import QueryUtil
 
 logger = logging.getLogger(__name__)
 
 class MapDBService(AbstractDatabaseService):
-    def add(self, map : MapDTO):
+    def add(self, map : Map):
         with self.get_session() as session:
             map = DBMap.add(session, map.to_dict())
             if not map:
                 raise DBException("Map could not be created!")
-            return MapDTO.from_dbmap(map)              
+            return Map.from_dbmap(map)              
 
 
-    def update(self, map: MapDTO):
+    def update(self, map: Map):
         with self.get_session() as session:
             map = DBMap.update(session, map.id, **map.to_dict())
             if not map:
                 raise DBException("Map could not be updated")
-            return MapDTO.from_dbmap(map)
+            return Map.from_dbmap(map)
 
     def delete(self, map_id):
         with self.get_session() as session:
@@ -32,7 +32,7 @@ class MapDBService(AbstractDatabaseService):
             map = DBMap.getById(session, map_id)
             if not map:
                 return None
-            return MapDTO.from_dbmap(map)
+            return Map.from_dbmap(map)
 
 
     def search(self, query):
@@ -45,7 +45,7 @@ class MapDBService(AbstractDatabaseService):
                 return result
                 
             for map in maps:
-                result.append(MapDTO.from_dbmap(map))
+                result.append(Map.from_dbmap(map))
             return result
 
     def getAll(self):
@@ -54,5 +54,5 @@ class MapDBService(AbstractDatabaseService):
             maps = DBMap.getAll(session)
                 
             for map in maps:
-                result.append(MapDTO.from_dbmap(map))
+                result.append(Map.from_dbmap(map))
             return result

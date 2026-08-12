@@ -2,7 +2,7 @@ import logging
 from flask import Blueprint, request, jsonify, Response
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from custom_exceptions import NotFoundException
-from src.dtos.map_dto import MapDTO
+from src.schemas.map import Map
 from src.util.query_util import QueryUtil
 from flasgger import swag_from
 

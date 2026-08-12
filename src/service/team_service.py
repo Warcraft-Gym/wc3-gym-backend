@@ -1,5 +1,5 @@
 from src.database.team_db_service import TeamDBService
-from src.dtos.team_dto import TeamDTO
+from src.schemas.team import Team
 from custom_exceptions import NotFoundException
 from src.service.user_service import UserAppService
 
@@ -8,12 +8,12 @@ class TeamAppService:
         self.team_service = team_service
         self.user_app_service = user_app_service
 
-    def create_team(self, team: TeamDTO):
+    def create_team(self, team: Team):
         team.id = None
         team_data = self.team_service.add(team)
         return team_data
 
-    def update_team(self, team_id: int, team: TeamDTO):
+    def update_team(self, team_id: int, team: Team):
         team.id = team_id
         team_data = self.team_service.update(team)
         return team_data

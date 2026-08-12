@@ -4,10 +4,10 @@ from src.database.model.DBKothEvent import DBKothEvent
 from src.database.model.DBKothSignup import DBKothSignup
 from src.database.model.DBKothMatch import DBKothMatch
 from src.database.model.DBKothMatchParticipant import DBKothMatchParticipant
-from src.dtos.koth_event_dto import KothEventDTO
-from src.dtos.koth_signup_dto import KothSignupDTO
-from src.dtos.koth_match_dto import KothMatchDTO
-from src.dtos.koth_match_participant_dto import KothMatchParticipantDTO
+from src.schemas.koth_event import KothEvent
+from src.schemas.koth_signup import KothSignup
+from src.schemas.koth_match import KothMatch
+from src.schemas.koth_match_participant import KothMatchParticipant
 from sqlalchemy.orm import joinedload
 from custom_exceptions import DBException
 
@@ -15,19 +15,19 @@ logger = logging.getLogger(__name__)
 
 class KothDBService(AbstractDatabaseService):
     # ============ Event Methods ============
-    def add_event(self, event: KothEventDTO):
+    def add_event(self, event: KothEvent):
         with self.get_session() as session:
             db_event = DBKothEvent.add(session, event.to_db_dict())
             if not db_event:
                 raise DBException("KOTH Event could not be created!")
-            return KothEventDTO.from_db_event(db_event)
+            return KothEvent.from_db_event(db_event)
 
-    def update_event(self, event: KothEventDTO):
+    def update_event(self, event: KothEvent):
         with self.get_session() as session:
             db_event = DBKothEvent.update(session, event.id, **event.to_db_dict())
             if not db_event:
                 raise DBException("KOTH Event could not be updated")
-            return KothEventDTO.from_db_event(db_event)
+            return KothEvent.from_db_event(db_event)
 
     def delete_event(self, event_id):
         with self.get_session() as session:
@@ -43,12 +43,12 @@ class KothDBService(AbstractDatabaseService):
                 .filter_by(id=event_id).first()
             if not event:
                 return None
-            return KothEventDTO.from_db_event(event)
+            return KothEvent.from_db_event(event)
 
     def get_all_events(self):
         with self.get_session() as session:
             events = session.query(DBKothEvent).all()
-            return [KothEventDTO.from_db_event(e) for e in events]
+            return [KothEvent.from_db_event(e) for e in events]
 
     def get_active_event(self):
         with self.get_session() as session:
@@ -61,22 +61,22 @@ class KothDBService(AbstractDatabaseService):
                 .first()
             if not event:
                 return None
-            return KothEventDTO.from_db_event(event)
+            return KothEvent.from_db_event(event)
 
     # ============ Signup Methods ============
-    def add_signup(self, signup: KothSignupDTO):
+    def add_signup(self, signup: KothSignup):
         with self.get_session() as session:
             db_signup = DBKothSignup.add(session, signup.to_db_dict())
             if not db_signup:
                 raise DBException("KOTH Signup could not be created!")
-            return KothSignupDTO.from_db_signup(db_signup)
+            return KothSignup.from_db_signup(db_signup)
 
-    def update_signup(self, signup: KothSignupDTO):
+    def update_signup(self, signup: KothSignup):
         with self.get_session() as session:
             db_signup = DBKothSignup.update(session, signup.id, **signup.to_db_dict())
             if not db_signup:
                 raise DBException("KOTH Signup could not be updated")
-            return KothSignupDTO.from_db_signup(db_signup)
+            return KothSignup.from_db_signup(db_signup)
 
     def delete_signup(self, signup_id):
         with self.get_session() as session:
@@ -87,7 +87,7 @@ class KothDBService(AbstractDatabaseService):
             signup = session.query(DBKothSignup).filter_by(id=signup_id).first()
             if not signup:
                 return None
-            return KothSignupDTO.from_db_signup(signup)
+            return KothSignup.from_db_signup(signup)
 
     def get_signups_by_event(self, event_id):
         with self.get_session() as session:
@@ -95,22 +95,22 @@ class KothDBService(AbstractDatabaseService):
                 .filter_by(event_id=event_id)\
                 .order_by(DBKothSignup.bracket, DBKothSignup.mmr.desc())\
                 .all()
-            return [KothSignupDTO.from_db_signup(s) for s in signups]
+            return [KothSignup.from_db_signup(s) for s in signups]
 
     # ============ Match Methods ============
-    def add_match(self, match: KothMatchDTO):
+    def add_match(self, match: KothMatch):
         with self.get_session() as session:
             db_match = DBKothMatch.add(session, match.to_db_dict())
             if not db_match:
                 raise DBException("KOTH Match could not be created!")
-            return KothMatchDTO.from_db_match(db_match)
+            return KothMatch.from_db_match(db_match)
 
-    def update_match(self, match: KothMatchDTO):
+    def update_match(self, match: KothMatch):
         with self.get_session() as session:
             db_match = DBKothMatch.update(session, match.id, **match.to_db_dict())
             if not db_match:
                 raise DBException("KOTH Match could not be updated")
-            return KothMatchDTO.from_db_match(db_match)
+            return KothMatch.from_db_match(db_match)
 
     def delete_match(self, match_id):
         with self.get_session() as session:
@@ -125,7 +125,7 @@ class KothDBService(AbstractDatabaseService):
                 .filter_by(id=match_id).first()
             if not match:
                 return None
-            return KothMatchDTO.from_db_match(match)
+            return KothMatch.from_db_match(match)
 
     def get_matches_by_event(self, event_id):
         with self.get_session() as session:
@@ -136,15 +136,15 @@ class KothDBService(AbstractDatabaseService):
                 .filter_by(event_id=event_id)\
                 .order_by(DBKothMatch.bracket, DBKothMatch.id)\
                 .all()
-            return [KothMatchDTO.from_db_match(m) for m in matches]
+            return [KothMatch.from_db_match(m) for m in matches]
 
     # ============ Match Participant Methods ============
-    def add_participant(self, participant: KothMatchParticipantDTO):
+    def add_participant(self, participant: KothMatchParticipant):
         with self.get_session() as session:
             db_participant = DBKothMatchParticipant.add(session, participant.to_db_dict())
             if not db_participant:
                 raise DBException("KOTH Match Participant could not be created!")
-            return KothMatchParticipantDTO.from_db_participant(db_participant)
+            return KothMatchParticipant.from_db_participant(db_participant)
 
     def delete_participants_by_match(self, match_id):
         """Delete all participants for a given match"""
@@ -160,7 +160,7 @@ class KothDBService(AbstractDatabaseService):
                 .filter_by(match_id=match_id)\
                 .order_by(DBKothMatchParticipant.team_number)\
                 .all()
-            return [KothMatchParticipantDTO.from_db_participant(p) for p in participants]
+            return [KothMatchParticipant.from_db_participant(p) for p in participants]
 
     # Required abstract methods
     def get(self, obj_id):

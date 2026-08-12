@@ -295,7 +295,7 @@ def public_create_user():
             logger.error('user_app_service not available on public_api_blueprint')
             return jsonify({'error': 'server_misconfigured'}), 500
 
-        from src.dtos.user_dto import UserDTO
+        from src.schemas.user import User
 
         # Validate BattleTag with W3Champions BEFORE creating/updating user
         if not public_api_blueprint.user_app_service.validateBattleTag(user_payload['battleTag']):
@@ -314,14 +314,14 @@ def public_create_user():
             # update first matched user
             existing = existing_users[0]
             try:
-                user_dto = UserDTO(user_payload)
+                user_dto = User(user_payload)
                 user = public_api_blueprint.user_app_service.update_user(existing.id, user_dto)
             except Exception as ue:
                 logger.exception('Failed to update existing user: %s', ue)
                 return jsonify({'error': 'Failed to update existing user'}), 500
         else:
             # create new user
-            user = public_api_blueprint.user_app_service.create_user(UserDTO(user_payload))
+            user = public_api_blueprint.user_app_service.create_user(User(user_payload))
 
         # Add to season if specified
         season_id = entry.get('season_id') or data.get('season_id') or data.get('seasonId')
@@ -853,8 +853,8 @@ def create_fantasy_team():
             return jsonify({'error': 'server_misconfigured'}), 500
 
         # Find or create user
-        from src.dtos.user_dto import UserDTO
-        from src.dtos.fantasy_team_dto import FantasyTeamDTO
+        from src.schemas.user import User
+        from src.schemas.fantasy_team import FantasyTeam
         
         try:
             query = QueryUtil.parseQuery(f"discordId == {entry.get('discord_id')}")
@@ -873,7 +873,7 @@ def create_fantasy_team():
                     'race': 'RANDOM'
                 }
                 
-                user = public_api_blueprint.user_app_service.create_user(UserDTO(user_payload))
+                user = public_api_blueprint.user_app_service.create_user(User(user_payload))
                 logger.info(f"Created new user for fantasy team captain: {user.id}")
             else:
                 user = users[0]
@@ -899,13 +899,13 @@ def create_fantasy_team():
                 # Update existing team
                 team = public_api_blueprint.fantasy_team_app_service.update_fantasy_team(
                     existing_teams[0].id, 
-                    FantasyTeamDTO(team_data)
+                    FantasyTeam(team_data)
                 )
                 team_id = existing_teams[0].id
             else:
                 # Create new team
                 team = public_api_blueprint.fantasy_team_app_service.create_fantasy_team(
-                    FantasyTeamDTO(team_data)
+                    FantasyTeam(team_data)
                 )
                 team_id = team.id
 
@@ -982,7 +982,7 @@ def create_fantasy_bet():
             return jsonify({'error': 'token_not_found_or_expired'}), 404
 
         # Get or create user based on discord info
-        from src.dtos.user_dto import UserDTO
+        from src.schemas.user import User
         
         user = None
         try:
@@ -998,7 +998,7 @@ def create_fantasy_bet():
             return jsonify({'error': 'user_not_found', 'message': 'You must register first before placing bets'}), 404
 
         # Create the bet
-        from src.dtos.fantasy_bet_dto import FantasyBetDTO
+        from src.schemas.fantasy_bet import FantasyBet
         
         bet_payload = {
             'series_id': data.get('series_id'),
@@ -1008,7 +1008,7 @@ def create_fantasy_bet():
             'bet_points': data.get('bet_points')
         }
 
-        bet = public_api_blueprint.fantasy_bet_app_service.create_fantasy_bet(FantasyBetDTO(bet_payload))
+        bet = public_api_blueprint.fantasy_bet_app_service.create_fantasy_bet(FantasyBet(bet_payload))
         
         return jsonify(bet.to_dict() if hasattr(bet, 'to_dict') else bet), 201
 
@@ -1071,7 +1071,7 @@ def update_fantasy_bet(bet_id):
             return jsonify({'error': 'token_not_found_or_expired'}), 404
 
         # Get user based on discord info
-        from src.dtos.user_dto import UserDTO
+        from src.schemas.user import User
         
         user = None
         try:
@@ -1096,7 +1096,7 @@ def update_fantasy_bet(bet_id):
             return jsonify({'error': 'unauthorized', 'message': 'You can only update your own bets'}), 403
 
         # Update the bet
-        from src.dtos.fantasy_bet_dto import FantasyBetDTO
+        from src.schemas.fantasy_bet import FantasyBet
         
         bet_payload = {
             'series_id': existing_bet.series_id,
@@ -1106,7 +1106,7 @@ def update_fantasy_bet(bet_id):
             'bet_points': data.get('bet_points', existing_bet.bet_points)
         }
 
-        bet = public_api_blueprint.fantasy_bet_app_service.update_fantasy_bet(bet_id, FantasyBetDTO(bet_payload))
+        bet = public_api_blueprint.fantasy_bet_app_service.update_fantasy_bet(bet_id, FantasyBet(bet_payload))
         
         return jsonify(bet.to_dict() if hasattr(bet, 'to_dict') else bet), 200
 
@@ -1161,7 +1161,7 @@ def delete_fantasy_bet(bet_id):
             return jsonify({'error': 'token_not_found_or_expired'}), 404
 
         # Get user based on discord info
-        from src.dtos.user_dto import UserDTO
+        from src.schemas.user import User
         
         user = None
         try:

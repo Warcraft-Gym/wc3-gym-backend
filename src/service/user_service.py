@@ -1,7 +1,7 @@
 import logging
 import traceback
 from src.database.user_db_service import UserDBService
-from src.dtos.user_dto import UserDTO
+from src.schemas.user import User
 from custom_exceptions import NotFoundException
 from src.service.w3champions.w3c_service import W3CService
 
@@ -11,13 +11,13 @@ class UserAppService:
         self.user_service = user_service
         self.settings_app_service = settings_app_service
 
-    def create_user(self, user : UserDTO):
+    def create_user(self, user : User):
         #remove id, db generates the id
         user.id = None
         user_data = self.user_service.add(user)
         return user_data
 
-    def update_user(self, user_id, user : UserDTO):
+    def update_user(self, user_id, user : User):
         user.id = user_id
         user_data = self.user_service.update(user)
         return user_data
@@ -51,7 +51,7 @@ class UserAppService:
             logging.getLogger(__name__).debug(f"BattleTag validation failed for {battle_tag}: {str(e)}")
             return False
 
-    def updateW3CStats(self, user: UserDTO):
+    def updateW3CStats(self, user: User):
         w3c_service = W3CService(settings_app_service=self.settings_app_service)
 
         # Resolve the current W3C season so we can also fetch the previous season

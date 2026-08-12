@@ -4,7 +4,7 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required
 from custom_exceptions import NotFoundException
 from flasgger import swag_from
-from src.dtos.series_dto import SeriesDTO
+from src.schemas.series import Series
 from src.util.query_util import QueryUtil
 
 logger = logging.getLogger(__name__)
@@ -24,7 +24,7 @@ series_blueprint = Blueprint('series_api', __name__)
             'name': 'body',
             'in': 'body',
             'required': True,
-            'schema': SeriesDTO.schema()
+            'schema': Series.schema()
         }
     ],
     'responses': {
@@ -35,7 +35,7 @@ series_blueprint = Blueprint('series_api', __name__)
 def add_series():
     try:
         data = request.json
-        series = series_blueprint.series_app_service.create_series(SeriesDTO(data))
+        series = series_blueprint.series_app_service.create_series(Series(data))
         if series:
             series = series.to_dict()
         return jsonify(series), 201
@@ -56,7 +56,7 @@ def add_series():
             'name': 'body',
             'in': 'body',
             'required': False,
-            'schema': SeriesDTO.schema()
+            'schema': Series.schema()
         }
     ],
     'responses': {
@@ -68,7 +68,7 @@ def add_series():
 def update_series(series_id):
     try:
         data = request.json
-        series = series_blueprint.series_app_service.update_series(series_id, SeriesDTO(data))
+        series = series_blueprint.series_app_service.update_series(series_id, Series(data))
         if series:
             series = series.to_dict()
         return jsonify(series)

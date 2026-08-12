@@ -7,8 +7,8 @@ from src.database.team_season_db_service import TeamSeasonDBService
 from src.database.season_db_service import SeasonDBService
 from src.database.settings_db_service import SettingsDBService
 from src.util.query_util import QueryUtil
-from src.dtos.series_dto import SeriesDTO
-from src.dtos.team_dto import TeamDTO
+from src.schemas.series import Series
+from src.schemas.team import Team, TeamReduced
 
 class ScoreAppService:
     STANDARD_MAX_SCORE = 3
@@ -22,7 +22,7 @@ class ScoreAppService:
         self.season_service = season_service
         self.settings_service = settings_service
 
-    def calculateSeriesScore(self, series: SeriesDTO):
+    def calculateSeriesScore(self, series: Series):
         try:
             series.player1_points = self.getScoreByMapScore(series.player1_score, series.player2_score)
             series.player2_points = self.getScoreByMapScore(series.player2_score, series.player1_score)
@@ -62,9 +62,10 @@ class ScoreAppService:
     
         return match_data
 
-    def updateTeamScore(self, team: TeamDTO, seasonId: int):
-        # If team doesn't have seasons_info, we need to fetch the full team data
-        if team.seasons_info is None or len(team.seasons_info) == 0:
+    def updateTeamScore(self, team: Team | TeamReduced, seasonId: int):
+        # A match carries reduced team objects without seasons_info;
+        # fetch the full team data in that case
+        if not getattr(team, 'seasons_info', None):
             team = self.team_service.get(team.id)
         
         # If still no seasons_info, we can't update the team score

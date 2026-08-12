@@ -2,10 +2,10 @@ import logging
 from src.database.abstract_database_service import AbstractDatabaseService
 
 from src.database.model.DBUser import DBUser
-from src.dtos.user_dto import UserDTO
-from src.dtos.w3c_stats_dto import W3CStatsDTO
+from src.schemas.user import User
+from src.schemas.w3c_stats import W3CStats
 from src.database.model.DBW3CStats import DBW3CStats
-from src.dtos.user_team_season_stats_dto import UserTeamSeasonStatsDTO
+from src.schemas.user_team_season_stats import UserTeamSeasonStats
 from sqlalchemy.orm import joinedload
 from custom_exceptions import DBException
 from src.util.query_util import QueryUtil
@@ -13,20 +13,20 @@ from src.util.query_util import QueryUtil
 logger = logging.getLogger(__name__)
 
 class UserDBService(AbstractDatabaseService):
-    def add(self, user : UserDTO):
+    def add(self, user : User):
         with self.get_session() as session:
             user = DBUser.add(session, user.to_db_dict())
             if not user:
                 raise DBException("User could not be created!")
-            return UserDTO.from_dbuser(user)              
+            return User.from_dbuser(user)              
 
 
-    def update(self, user: UserDTO):
+    def update(self, user: User):
         with self.get_session() as session:
             user = DBUser.update(session, user.id, **user.to_db_dict())
             if not user:
                 raise DBException("User could not be updated")
-            return UserDTO.from_dbuser(user)
+            return User.from_dbuser(user)
 
     def delete(self, user_id):
         with self.get_session() as session:
@@ -43,7 +43,7 @@ class UserDBService(AbstractDatabaseService):
                 .filter_by(id=user_id).first()
             if not user:
                 return None
-            return UserDTO.from_dbuser(user)
+            return User.from_dbuser(user)
 
 
     def search(self, query):
@@ -62,7 +62,7 @@ class UserDBService(AbstractDatabaseService):
                 return result
                 
             for user in users:
-                result.append(UserDTO.from_dbuser(user))
+                result.append(User.from_dbuser(user))
             return result
 
     def getAll(self):
@@ -77,22 +77,22 @@ class UserDBService(AbstractDatabaseService):
                 ).all()
                 
             for user in users:
-                result.append(UserDTO.from_dbuser(user))
+                result.append(User.from_dbuser(user))
             return result
 
-    def updateW3CStats(self, w3c_stats : W3CStatsDTO):
+    def updateW3CStats(self, w3c_stats : W3CStats):
         with self.get_session() as session:
-            stats = DBW3CStats.update(session, w3c_stats.id, **w3c_stats.to_dict())
+            stats = DBW3CStats.update(session, w3c_stats.id, **w3c_stats.to_db_dict())
             if not stats:
                 raise DBException("W3CStats could not be updated")
-            return W3CStatsDTO.from_dbw3cstats(stats)
+            return W3CStats.from_dbw3cstats(stats)
 
-    def createW3CStats(self, w3c_stats : W3CStatsDTO):
+    def createW3CStats(self, w3c_stats : W3CStats):
         with self.get_session() as session:
             stats = DBW3CStats.add(session, w3c_stats.to_db_dict())
             if not stats:
                 raise DBException("W3CStats could not be created")
-            return W3CStatsDTO.from_dbw3cstats(stats)
+            return W3CStats.from_dbw3cstats(stats)
             
 
     def updateUserTeamSeasonStats(self, season_stats):
@@ -100,4 +100,4 @@ class UserDBService(AbstractDatabaseService):
             stats = DBUser.updateUserTeamSeasonStats(session, season_stats)
             if not stats:
                 raise DBException("User Team Season Stats could not be updated")
-            return UserTeamSeasonStatsDTO.from_db_user_team_season(stats)
+            return UserTeamSeasonStats.from_db_user_team_season(stats)

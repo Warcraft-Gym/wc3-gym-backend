@@ -3,7 +3,7 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required
 from custom_exceptions import NotFoundException
 from flasgger import swag_from
-from src.dtos.draft_series_dto import DraftSeriesDTO
+from src.schemas.draft_series import DraftSeries
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +21,7 @@ draft_series_blueprint = Blueprint('draft_series_api', __name__)
             'name': 'body',
             'in': 'body',
             'required': True,
-            'schema': DraftSeriesDTO.schema()
+            'schema': DraftSeries.schema()
         }
     ],
     'responses': {
@@ -32,7 +32,7 @@ draft_series_blueprint = Blueprint('draft_series_api', __name__)
 def add_draft_series():
     try:
         data = request.json
-        draft_series = draft_series_blueprint.draft_series_app_service.create_draft_series(DraftSeriesDTO(data))
+        draft_series = draft_series_blueprint.draft_series_app_service.create_draft_series(DraftSeries(data))
         if draft_series:
             draft_series = draft_series.to_dict()
         return jsonify(draft_series), 201
@@ -53,7 +53,7 @@ def add_draft_series():
             'name': 'body',
             'in': 'body',
             'required': False,
-            'schema': DraftSeriesDTO.schema()
+            'schema': DraftSeries.schema()
         }
     ],
     'responses': {
@@ -65,7 +65,7 @@ def add_draft_series():
 def update_draft_series(draft_series_id):
     try:
         data = request.json
-        draft_series = draft_series_blueprint.draft_series_app_service.update_draft_series(draft_series_id, DraftSeriesDTO(data))
+        draft_series = draft_series_blueprint.draft_series_app_service.update_draft_series(draft_series_id, DraftSeries(data))
         if draft_series:
             draft_series = draft_series.to_dict()
         return jsonify(draft_series)

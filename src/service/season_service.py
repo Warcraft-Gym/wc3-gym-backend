@@ -1,17 +1,17 @@
 from src.database.season_db_service import SeasonDBService
-from src.dtos.season_dto import SeasonDTO
+from src.schemas.season import Season
 from custom_exceptions import NotFoundException
 
 class SeasonAppService:
     def __init__(self, season_service: SeasonDBService):
         self.season_service = season_service
 
-    def create_season(self, season: SeasonDTO):
+    def create_season(self, season: Season):
         season.id = None
         season_data = self.season_service.add(season)
         return season_data
 
-    def update_season(self, season_id: int, season: SeasonDTO):
+    def update_season(self, season_id: int, season: Season):
         season.id = season_id
         season_data = self.season_service.update(season)
         return season_data

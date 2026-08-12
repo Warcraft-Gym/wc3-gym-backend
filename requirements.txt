@@ -13,3 +13,4 @@ sqlalchemy
 flasgger
 gunicorn
 flask-caching
+pydantic>=2,<3

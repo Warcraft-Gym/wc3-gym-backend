@@ -1,18 +1,18 @@
 from src.database.draft_series_db_service import DraftSeriesDBService
-from src.dtos.draft_series_dto import DraftSeriesDTO
-from src.dtos.series_dto import SeriesDTO
+from src.schemas.draft_series import DraftSeries
+from src.schemas.series import Series
 from custom_exceptions import NotFoundException
 
 class DraftSeriesAppService:
     def __init__(self, draft_series_service: DraftSeriesDBService):
         self.draft_series_service = draft_series_service
     
-    def create_draft_series(self, draft_series: DraftSeriesDTO):
+    def create_draft_series(self, draft_series: DraftSeries):
         """Create a new draft series"""
         draft_series.id = None
         return self.draft_series_service.add(draft_series)
     
-    def update_draft_series(self, draft_series_id: int, draft_series: DraftSeriesDTO):
+    def update_draft_series(self, draft_series_id: int, draft_series: DraftSeries):
         """Update an existing draft series"""
         draft_series.id = draft_series_id
         return self.draft_series_service.update(draft_series)
@@ -36,10 +36,10 @@ class DraftSeriesAppService:
         """Delete all draft series for a match"""
         self.draft_series_service.deleteByMatchId(match_id)
     
-    def convert_to_series(self, draft_series: DraftSeriesDTO):
+    def convert_to_series(self, draft_series: DraftSeries):
         """Convert a draft series to a real series (DTO only, actual creation handled by SeriesAppService)"""
-        # Create a SeriesDTO from the draft data
-        series_dto = SeriesDTO({
+        # Create a Series from the draft data
+        series_dto = Series({
             'match_id': draft_series.match_id,
             'date_time': draft_series.date_time,
             'caster': draft_series.caster,

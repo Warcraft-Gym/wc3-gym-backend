@@ -2,7 +2,7 @@ import logging
 from flask import Blueprint, request, jsonify, Response
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from custom_exceptions import NotFoundException
-from src.dtos.map_dto import MapDTO
+from src.schemas.map import Map
 from src.util.query_util import QueryUtil
 from flasgger import swag_from
 
@@ -23,7 +23,7 @@ map_blueprint = Blueprint('map_api', __name__)
             'name': 'body',
             'in': 'body',
             'required': True,
-            'schema': MapDTO.schema()
+            'schema': Map.schema()
         }
     ],
     'responses': {
@@ -34,7 +34,7 @@ map_blueprint = Blueprint('map_api', __name__)
 def add_map():
     try:
         data = request.json
-        map = map_blueprint.map_app_service.create_map(MapDTO(data))
+        map = map_blueprint.map_app_service.create_map(Map(data))
         if(map):
             map = map.to_dict()
         return jsonify(map), 201
@@ -55,7 +55,7 @@ def add_map():
             'name': 'body',
             'in': 'body',
             'required': True,
-            'schema': MapDTO.schema()
+            'schema': Map.schema()
         }
     ],
     'responses': {
@@ -67,7 +67,7 @@ def add_map():
 def update_map(map_id):
     try:
         data = request.json
-        map = map_blueprint.map_app_service.update_map(map_id, MapDTO(data))
+        map = map_blueprint.map_app_service.update_map(map_id, Map(data))
         if(map):
             map = map.to_dict()
         return jsonify(map)

@@ -3,8 +3,8 @@ from flask import Blueprint, request, jsonify, Response
 from flask_jwt_extended import jwt_required
 from custom_exceptions import NotFoundException
 from flasgger import swag_from
-from src.dtos.fantasy_team_dto import FantasyTeamDTO
-from src.dtos.fantasy_bet_dto import FantasyBetDTO
+from src.schemas.fantasy_team import FantasyTeam
+from src.schemas.fantasy_bet import FantasyBet
 from src.util.query_util import QueryUtil
 
 logger = logging.getLogger(__name__)
@@ -24,7 +24,7 @@ fantasy_blueprint = Blueprint('fantasy_api', __name__)
             'name': 'body',
             'in': 'body',
             'required': True,
-            'schema': FantasyTeamDTO.schema()
+            'schema': FantasyTeam.schema()
         }
     ],
     'responses': {
@@ -35,7 +35,7 @@ fantasy_blueprint = Blueprint('fantasy_api', __name__)
 def add_fantasy_team():
     try:
         data = request.json
-        team = fantasy_blueprint.fantasy_team_app_service.create_fantasy_team(FantasyTeamDTO(data))
+        team = fantasy_blueprint.fantasy_team_app_service.create_fantasy_team(FantasyTeam(data))
         if team:
             team = team.to_dict()
         return jsonify(team), 201
@@ -56,7 +56,7 @@ def add_fantasy_team():
             'name': 'body',
             'in': 'body',
             'required': False,
-            'schema': FantasyTeamDTO.schema()
+            'schema': FantasyTeam.schema()
         }
     ],
     'responses': {
@@ -68,7 +68,7 @@ def add_fantasy_team():
 def update_team(team_id):
     try:
         data = request.json
-        team = fantasy_blueprint.fantasy_team_app_service.update_fantasy_team(team_id, FantasyTeamDTO(data))
+        team = fantasy_blueprint.fantasy_team_app_service.update_fantasy_team(team_id, FantasyTeam(data))
         if team:
             team = team.to_dict()
         return jsonify(team)
@@ -297,7 +297,7 @@ def search_teams():
             'name': 'body',
             'in': 'body',
             'required': True,
-            'schema': FantasyBetDTO.schema()
+            'schema': FantasyBet.schema()
         }
     ],
     'responses': {
@@ -308,7 +308,7 @@ def search_teams():
 def add_fantasy_bet():
     try:
         data = request.json
-        bet = fantasy_blueprint.fantasy_bet_app_service.create_fantasy_bet(FantasyBetDTO(data))
+        bet = fantasy_blueprint.fantasy_bet_app_service.create_fantasy_bet(FantasyBet(data))
         if bet:
             bet = bet.to_dict()
         return jsonify(bet), 201
@@ -332,7 +332,7 @@ def add_fantasy_bet():
             'name': 'body',
             'in': 'body',
             'required': False,
-            'schema': FantasyBetDTO.schema()
+            'schema': FantasyBet.schema()
         }
     ],
     'responses': {
@@ -344,7 +344,7 @@ def add_fantasy_bet():
 def update_bet(bet_id):
     try:
         data = request.json
-        bet = fantasy_blueprint.fantasy_bet_app_service.update_fantasy_bet(bet_id, FantasyBetDTO(data))
+        bet = fantasy_blueprint.fantasy_bet_app_service.update_fantasy_bet(bet_id, FantasyBet(data))
         if bet:
             bet = bet.to_dict()
         return jsonify(bet)

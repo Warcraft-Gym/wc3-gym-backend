@@ -2,7 +2,7 @@ import requests
 import os
 import urllib.parse
 import logging
-from src.dtos.w3c_stats_dto import W3CStatsDTO
+from src.schemas.w3c_stats import W3CStats
 from src.database.model.DBEnums import Race
 
 
@@ -89,16 +89,16 @@ class W3CService:
         stats = []
         for gmode_stats  in result:
             if gmode_stats.get('gameMode') and gmode_stats.get('gameMode') == 1:
-                w3cstats = W3CStatsDTO(data={})
-                w3cstats.wc3_season = gmode_stats.get('season')
-                w3cstats.wins = gmode_stats.get('wins')
-                w3cstats.losses = gmode_stats.get('losses')
-                w3cstats.games = gmode_stats.get('games')
-                w3cstats.mmr = gmode_stats.get('mmr')
-                w3cstats.winrate = gmode_stats.get('winrate')
-                w3cstats.race = self.getRaceEnum(gmode_stats.get('race'))
-                w3cstats.league = gmode_stats.get('leagueOrder')
-                stats.append(w3cstats)
+                stats.append(W3CStats(
+                    wc3_season=gmode_stats.get('season'),
+                    wins=gmode_stats.get('wins'),
+                    losses=gmode_stats.get('losses'),
+                    games=gmode_stats.get('games'),
+                    mmr=gmode_stats.get('mmr'),
+                    winrate=gmode_stats.get('winrate'),
+                    race=self.getRaceEnum(gmode_stats.get('race')),
+                    league=gmode_stats.get('leagueOrder'),
+                ))
         return stats
 
     def getRaceEnum(self, race_int):

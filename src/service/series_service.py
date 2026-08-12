@@ -1,6 +1,6 @@
 from src.database.series_db_service import SeriesDBService
-from src.dtos.series_dto import SeriesDTO
-from src.dtos.user_team_season_stats_dto import UserTeamSeasonStatsDTO
+from src.schemas.series import Series
+from src.schemas.user_team_season_stats import UserTeamSeasonStats
 from src.service.score_service import ScoreAppService
 from src.util.query_util import QueryUtil
 from src.service.user_service import UserAppService
@@ -12,7 +12,7 @@ class SeriesAppService:
         self.score_app_service = score_app_service
         self.user_app_service = user_app_service
     
-    def create_series(self, series: SeriesDTO):
+    def create_series(self, series: Series):
         series.id = None
         series = self.score_app_service.calculateSeriesScore(series)
         series = self.series_service.add(series)
@@ -23,7 +23,7 @@ class SeriesAppService:
 
         return series
     
-    def update_series(self, series_id: int, series: SeriesDTO):
+    def update_series(self, series_id: int, series: Series):
         series.id = series_id
         series = self.score_app_service.calculateSeriesScore(series)
         series = self.series_service.update(series)
@@ -99,7 +99,7 @@ class SeriesAppService:
                     # Convert Race enum to string value if needed
                     race_value = s.player1.race.value if hasattr(s.player1.race, 'value') else s.player1.race
                     matchup_history.append(race_value)
-        return UserTeamSeasonStatsDTO({
+        return UserTeamSeasonStats({
             'user_id': user_id,
             'games': games,
             'wins':  wins,

@@ -1,18 +1,18 @@
 from src.database.fantasy_team_db_service import FantasyTeamDBService
-from src.dtos.fantasy_team_dto import FantasyTeamDTO
-from src.dtos.fantasy_bet_dto import FantasyBetDTO
+from src.schemas.fantasy_team import FantasyTeam
+from src.schemas.fantasy_bet import FantasyBet
 from custom_exceptions import NotFoundException
 
 class FantasyTeamAppService:
     def __init__(self, fantasy_team_service: FantasyTeamDBService):
         self.fantasy_team_service = fantasy_team_service
 
-    def create_fantasy_team(self, team: FantasyTeamDTO):
+    def create_fantasy_team(self, team: FantasyTeam):
         team.id = None
         team_data = self.fantasy_team_service.add(team)
         return team_data
 
-    def update_fantasy_team(self, team_id: int, team: FantasyTeamDTO):
+    def update_fantasy_team(self, team_id: int, team: FantasyTeam):
         team.id = team_id
         team_data = self.fantasy_team_service.update(team)
         return team_data
