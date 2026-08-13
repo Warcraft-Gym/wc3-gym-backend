@@ -1,4 +1,36 @@
-[tool.pytest.ini_options]
+[project]
+name = "gnl-backend"
+version = "1.0.0"
+description = "Flask REST API for the GNL (Gym Newbie League) esports platform"
+requires-python = ">=3.12"
+dependencies = [
+    "requests",
+    "gspread",
+    "pandas",
+    "openpyxl",
+    "python-dotenv",
+    "apscheduler",
+    "flask",
+    "flask-cors",
+    "flask-jwt-extended",
+    "pyodbc",
+    "pymysql",
+    "sqlalchemy>=2,<3",
+    "flasgger",
+    "gunicorn",
+    "flask-caching",
+    "pydantic>=2,<3",
+]
+
+[dependency-groups]
+dev = ["pytest"]
+
+[tool.uv]
+# An application, not an installable package: uv manages the environment
+# and never builds or installs the project itself.
+package = false
+
+[tool.pytest]
 # Not a default: the pytest console script does not put the repo root on
 # sys.path, and the tests import src. python -m pytest works without this.
 pythonpath = ["."]
