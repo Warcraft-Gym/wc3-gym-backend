@@ -2,7 +2,7 @@ from typing import Annotated
 
 from pydantic import field_serializer
 
-from src.database.model.DBEnums import Race
+from src.models.enums import Race
 from src.schemas.base import APISchema, DropNoneItems, NumToStr
 from src.schemas.season import Season
 from src.schemas.team import Team

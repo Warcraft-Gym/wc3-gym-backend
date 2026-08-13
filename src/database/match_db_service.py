@@ -1,6 +1,7 @@
 import logging
 from src.database.abstract_database_service import AbstractDatabaseService
-from src.database.model.DBMatch import DBMatch
+from src.models.match import DBMatch
+from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 from custom_exceptions import DBException
 from src.util.query_util import QueryUtil
@@ -32,14 +33,17 @@ class MatchDBService(AbstractDatabaseService):
     def get(self, match_id):
         with self.get_session() as session:
             # Eager load related entities, disable nested loading
-            match = session.query(DBMatch)\
+            match = session.scalars(
+                select(DBMatch)
                 .options(
                     joinedload(DBMatch.team1).noload('*'),
                     joinedload(DBMatch.team2).noload('*'),
                     joinedload(DBMatch.season).noload('*'),
                     joinedload(DBMatch.fixed_map)
-                )\
-                .filter_by(id=match_id).first()
+                )
+                .where(DBMatch.id == match_id)
+                .limit(1)
+            ).unique().first()
             if not match:
                 logger.error("Match could not be found!")
                 raise DBException("Match could not be found!")
@@ -50,14 +54,16 @@ class MatchDBService(AbstractDatabaseService):
             result = []
             filter = QueryUtil.convertQueryToDBFilter(DBMatch, query)
             # Eager load only what we need, explicitly disable other relationships
-            matches = session.query(DBMatch)\
+            matches = session.scalars(
+                select(DBMatch)
                 .options(
                     joinedload(DBMatch.team1).noload('*'),
                     joinedload(DBMatch.team2).noload('*'),
                     joinedload(DBMatch.season).noload('*'),
                     joinedload(DBMatch.fixed_map)
-                )\
-                .filter(filter).all() if filter is not None else []
+                )
+                .where(filter)
+            ).unique().all() if filter is not None else []
             if not matches:
                 logger.debug(f"No matches found by searchcriteria: {query}")
                 return result

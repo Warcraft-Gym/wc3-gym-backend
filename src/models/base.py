@@ -1,12 +1,16 @@
-from sqlalchemy import Column, Integer, String, Sequence, ForeignKey, or_, and_
-from sqlalchemy.ext.declarative import declarative_base, declared_attr
-from sqlalchemy.orm.session import Session
-from sqlalchemy.ext.declarative import AbstractConcreteBase
+from sqlalchemy import select
+from sqlalchemy.orm import DeclarativeBase, Session
 from custom_exceptions import DBException
 
-Base = declarative_base()
 
-class DBModel(AbstractConcreteBase, Base):
+class Base(DeclarativeBase):
+    pass
+
+
+class DBModel(Base):
+    """Shared query helpers for the mapped classes. It has no table of its own."""
+
+    __abstract__ = True
 
     @classmethod
     def add(cls, session: Session, data : dict):
@@ -17,7 +21,7 @@ class DBModel(AbstractConcreteBase, Base):
 
     @classmethod
     def update(cls, session: Session, obj_id, **kwargs):
-        obj = session.query(cls).filter_by(id=obj_id).first()
+        obj = cls.getById(session, obj_id)
         if obj:
             for key, value in kwargs.items():
                 setattr(obj, key, value)
@@ -34,7 +38,7 @@ class DBModel(AbstractConcreteBase, Base):
 
     @classmethod
     def delete(cls, session: Session, obj_id):
-        obj = session.query(cls).filter_by(id=obj_id).first()
+        obj = cls.getById(session, obj_id)
         if obj:
             session.delete(obj)
             session.flush()
@@ -43,14 +47,18 @@ class DBModel(AbstractConcreteBase, Base):
     @classmethod
     def search(cls, session: Session, filters):
         if filters is None:
-            raise DBException(f"No search criteria was defined!")
-        query = session.query(cls).filter(filters)
-        return query.all()
-    
+            raise DBException("No search criteria was defined!")
+        return session.scalars(select(cls).where(filters)).unique().all()
+
     @classmethod
     def getAll(cls, session: Session):
-        return session.query(cls).all()
-    
+        return session.scalars(select(cls)).unique().all()
+
     @classmethod
     def getById(cls, session: Session, id):
-        return session.query(cls).filter_by(id=id).first()
+        # A request can leave the id out of the body. No row has a null
+        # primary key, so answer with no object instead of asking the
+        # database, which warns about a fully null primary key.
+        if id is None:
+            return None
+        return session.get(cls, id)

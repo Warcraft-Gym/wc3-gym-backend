@@ -1,9 +1,10 @@
 import logging
 from src.database.abstract_database_service import AbstractDatabaseService
-from src.database.model.DBDraftSeries import DBDraftSeries
-from src.database.model.DBUser import DBUser
-from src.database.model.DBRelationships import DBUserTeamSeason
-from src.database.model.DBMatch import DBMatch
+from src.models.draft_series import DBDraftSeries
+from src.models.user import DBUser
+from src.models.relationships import DBUserTeamSeason
+from src.models.match import DBMatch
+from sqlalchemy import delete, select
 from sqlalchemy.orm import joinedload
 from custom_exceptions import DBException
 from src.schemas.draft_series import DraftSeries
@@ -32,7 +33,8 @@ class DraftSeriesDBService(AbstractDatabaseService):
     def get(self, draft_series_id):
         with self.get_session() as session:
             # Eager load relationships to avoid N+1 queries
-            draft_series = session.query(DBDraftSeries)\
+            draft_series = session.scalars(
+                select(DBDraftSeries)
                 .options(
                     joinedload(DBDraftSeries.match).joinedload(DBMatch.team1),
                     joinedload(DBDraftSeries.match).joinedload(DBMatch.team2),
@@ -40,8 +42,9 @@ class DraftSeriesDBService(AbstractDatabaseService):
                     joinedload(DBDraftSeries.player1).joinedload(DBUser.team_seasons).joinedload(DBUserTeamSeason.season),
                     joinedload(DBDraftSeries.player2).joinedload(DBUser.w3c_stats),
                     joinedload(DBDraftSeries.player2).joinedload(DBUser.team_seasons).joinedload(DBUserTeamSeason.season)
-                )\
-                .filter_by(id=draft_series_id).first()
+                )
+                .where(DBDraftSeries.id == draft_series_id)
+            ).unique().first()
             if not draft_series:
                 raise DBException("Draft series could not be found")
             return DraftSeries.from_db_draft_series(draft_series)
@@ -50,7 +53,8 @@ class DraftSeriesDBService(AbstractDatabaseService):
         with self.get_session() as session:
             result = []
             # Eager load relationships
-            draft_series_list = session.query(DBDraftSeries)\
+            draft_series_list = session.scalars(
+                select(DBDraftSeries)
                 .options(
                     joinedload(DBDraftSeries.match).joinedload(DBMatch.team1),
                     joinedload(DBDraftSeries.match).joinedload(DBMatch.team2),
@@ -58,8 +62,9 @@ class DraftSeriesDBService(AbstractDatabaseService):
                     joinedload(DBDraftSeries.player1).joinedload(DBUser.team_seasons).joinedload(DBUserTeamSeason.season),
                     joinedload(DBDraftSeries.player2).joinedload(DBUser.w3c_stats),
                     joinedload(DBDraftSeries.player2).joinedload(DBUser.team_seasons).joinedload(DBUserTeamSeason.season)
-                )\
-                .filter_by(match_id=match_id).all()
+                )
+                .where(DBDraftSeries.match_id == match_id)
+            ).unique().all()
             for single_draft_series in draft_series_list:
                 result.append(DraftSeries.from_db_draft_series(single_draft_series))
             return result
@@ -67,4 +72,4 @@ class DraftSeriesDBService(AbstractDatabaseService):
     def deleteByMatchId(self, match_id):
         """Delete all draft series for a given match"""
         with self.get_session() as session:
-            session.query(DBDraftSeries).filter_by(match_id=match_id).delete()
+            session.execute(delete(DBDraftSeries).where(DBDraftSeries.match_id == match_id))

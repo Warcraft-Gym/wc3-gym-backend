@@ -29,7 +29,7 @@ class SeasonInfo(APISchema):
 
     @staticmethod
     def schema():
-        from src.database.model.DBSeason import DBSeason
+        from src.models.season import DBSeason
         return {
             'type': 'object',
             'properties': {

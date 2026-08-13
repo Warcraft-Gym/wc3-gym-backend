@@ -1,11 +1,12 @@
 import logging
 from src.database.abstract_database_service import AbstractDatabaseService
 
-from src.database.model.DBUser import DBUser
+from src.models.user import DBUser
 from src.schemas.user import User
 from src.schemas.w3c_stats import W3CStats
-from src.database.model.DBW3CStats import DBW3CStats
+from src.models.w3c_stats import DBW3CStats
 from src.schemas.user_team_season_stats import UserTeamSeasonStats
+from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 from custom_exceptions import DBException
 from src.util.query_util import QueryUtil
@@ -35,12 +36,14 @@ class UserDBService(AbstractDatabaseService):
     def get(self, user_id):
         with self.get_session() as session:
             # Eager load related entities, disable nested loading
-            user = session.query(DBUser)\
+            user = session.scalars(
+                select(DBUser)
                 .options(
                     joinedload(DBUser.team_seasons).noload('*'),
                     joinedload(DBUser.w3c_stats)
-                )\
-                .filter_by(id=user_id).first()
+                )
+                .where(DBUser.id == user_id)
+            ).unique().first()
             if not user:
                 return None
             return User.from_dbuser(user)
@@ -51,12 +54,14 @@ class UserDBService(AbstractDatabaseService):
             result = []
             filter = QueryUtil.convertQueryToDBFilter(DBUser, query)
             # Eager load related entities, disable nested loading
-            users = session.query(DBUser)\
+            users = session.scalars(
+                select(DBUser)
                 .options(
                     joinedload(DBUser.team_seasons).noload('*'),
                     joinedload(DBUser.w3c_stats)
-                )\
-                .filter(filter).all() if filter is not None else []
+                )
+                .where(filter)
+            ).unique().all() if filter is not None else []
             if not users:
                 logger.debug(f"No users found by searchcriteria: {query}")
                 return result
@@ -67,14 +72,16 @@ class UserDBService(AbstractDatabaseService):
 
     def getAll(self):
         with self.get_session() as session:
-            from src.database.model.DBRelationships import DBUserTeamSeason
+            from src.models.relationships import DBUserTeamSeason
             result = []
             # Eager load related entities, disable nested loading
-            users = session.query(DBUser)\
+            users = session.scalars(
+                select(DBUser)
                 .options(
                     joinedload(DBUser.team_seasons).joinedload(DBUserTeamSeason.season),
                     joinedload(DBUser.w3c_stats)
-                ).all()
+                )
+            ).unique().all()
                 
             for user in users:
                 result.append(User.from_dbuser(user))

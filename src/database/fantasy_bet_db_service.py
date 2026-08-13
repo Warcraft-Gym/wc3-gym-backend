@@ -1,8 +1,9 @@
 import logging
+from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 from src.database.abstract_database_service import AbstractDatabaseService
-from src.database.model.DBFantasyBet import DBFantasyBet
-from src.database.model.DBSeries import DBSeries
+from src.models.fantasy_bet import DBFantasyBet
+from src.models.series import DBSeries
 from custom_exceptions import DBException
 from src.util.query_util import QueryUtil
 from src.schemas.fantasy_bet import FantasyBet
@@ -31,7 +32,7 @@ class FantasyBetDBService(AbstractDatabaseService):
 
     def get(self, fantasy_bet_id):
         with self.get_session() as session:
-            fbet = session.query(DBFantasyBet).filter_by(id=fantasy_bet_id).first()
+            fbet = session.get(DBFantasyBet, fantasy_bet_id)
             if not fbet:
                 raise DBException("Fantasy Bet could not be found")
             return FantasyBet.from_dbfantasybet(fbet)
@@ -55,7 +56,8 @@ class FantasyBetDBService(AbstractDatabaseService):
             # noload('*') stops all other relations from loading, so every
             # relation that a caller reads must be listed here. The score
             # breakdown reads series.match.playday.
-            fbets = session.query(DBFantasyBet)\
+            fbets = session.scalars(
+                select(DBFantasyBet)
                 .options(
                     joinedload(DBFantasyBet.season).noload('*'),
                     joinedload(DBFantasyBet.user).noload('*'),
@@ -64,8 +66,9 @@ class FantasyBetDBService(AbstractDatabaseService):
                     joinedload(DBFantasyBet.series).joinedload(DBSeries.player1).noload('*'),
                     joinedload(DBFantasyBet.series).joinedload(DBSeries.player2).noload('*'),
                     joinedload(DBFantasyBet.series).joinedload(DBSeries.match).noload('*'),
-                )\
-                .filter(filter).all()
+                )
+                .where(filter)
+            ).unique().all()
             if not fbets:
                 logger.debug(f"No fantasy bets found by searchcriteria: {query}")
                 return result

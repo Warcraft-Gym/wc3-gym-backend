@@ -1,6 +1,6 @@
 import logging
 from src.database.abstract_database_service import AbstractDatabaseService
-from src.database.model.DBRelationships import DBTeamSeason
+from src.models.relationships import DBTeamSeason
 from custom_exceptions import DBException
 from src.schemas.season_info import SeasonInfo
 

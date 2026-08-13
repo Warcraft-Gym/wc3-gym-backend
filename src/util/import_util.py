@@ -1,4 +1,4 @@
-from src.database.model.DBEnums import Race
+from src.models.enums import Race
 import pandas as pd
 
 class ImportUtil():

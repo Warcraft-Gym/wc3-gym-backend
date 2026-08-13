@@ -1,6 +1,6 @@
 import logging
 from src.database.abstract_database_service import AbstractDatabaseService
-from src.database.model.DBMap import DBMap
+from src.models.map import DBMap
 from src.schemas.map import Map
 from custom_exceptions import DBException
 from src.util.query_util import QueryUtil

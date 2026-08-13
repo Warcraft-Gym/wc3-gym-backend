@@ -1,7 +1,7 @@
 from src.database.player_career_stats_db_service import PlayerCareerStatsDBService
 from src.database.series_db_service import SeriesDBService
-from src.database.model.DBSeries import DBSeries
-from src.database.model.DBPlayerCareerStats import DBPlayerCareerStats
+from src.models.series import DBSeries
+from src.models.player_career_stats import DBPlayerCareerStats
 import logging
 
 logger = logging.getLogger(__name__)

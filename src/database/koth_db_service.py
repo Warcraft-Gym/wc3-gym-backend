@@ -1,13 +1,14 @@
 import logging
 from src.database.abstract_database_service import AbstractDatabaseService
-from src.database.model.DBKothEvent import DBKothEvent
-from src.database.model.DBKothSignup import DBKothSignup
-from src.database.model.DBKothMatch import DBKothMatch
-from src.database.model.DBKothMatchParticipant import DBKothMatchParticipant
+from src.models.koth_event import DBKothEvent
+from src.models.koth_signup import DBKothSignup
+from src.models.koth_match import DBKothMatch
+from src.models.koth_match_participant import DBKothMatchParticipant
 from src.schemas.koth_event import KothEvent
 from src.schemas.koth_signup import KothSignup
 from src.schemas.koth_match import KothMatch
 from src.schemas.koth_match_participant import KothMatchParticipant
+from sqlalchemy import delete, select
 from sqlalchemy.orm import joinedload
 from custom_exceptions import DBException
 
@@ -35,30 +36,42 @@ class KothDBService(AbstractDatabaseService):
 
     def get_event(self, event_id):
         with self.get_session() as session:
-            event = session.query(DBKothEvent)\
+            event = session.scalars(
+                select(DBKothEvent)
                 .options(
                     joinedload(DBKothEvent.signups),
                     joinedload(DBKothEvent.matches).joinedload(DBKothMatch.participants).joinedload(DBKothMatchParticipant.signup)
-                )\
-                .filter_by(id=event_id).first()
+                )
+                .where(DBKothEvent.id == event_id)
+            ).unique().first()
             if not event:
                 return None
             return KothEvent.from_db_event(event)
 
     def get_all_events(self):
         with self.get_session() as session:
-            events = session.query(DBKothEvent).all()
+            events = session.scalars(select(DBKothEvent)).unique().all()
             return [KothEvent.from_db_event(e) for e in events]
 
     def get_active_event(self):
         with self.get_session() as session:
-            event = session.query(DBKothEvent)\
+            # Pick the one event id first. A LIMIT on the outer select would
+            # cut the joined signup and match rows, so the limit belongs in a
+            # subquery, which is also what the old Query.first() built.
+            active_event_id = (
+                select(DBKothEvent.id)
+                .where(DBKothEvent.is_active == True)
+                .limit(1)
+                .scalar_subquery()
+            )
+            event = session.scalars(
+                select(DBKothEvent)
                 .options(
                     joinedload(DBKothEvent.signups),
                     joinedload(DBKothEvent.matches).joinedload(DBKothMatch.participants).joinedload(DBKothMatchParticipant.signup)
-                )\
-                .filter_by(is_active=True)\
-                .first()
+                )
+                .where(DBKothEvent.id == active_event_id)
+            ).unique().first()
             if not event:
                 return None
             return KothEvent.from_db_event(event)
@@ -84,17 +97,18 @@ class KothDBService(AbstractDatabaseService):
 
     def get_signup(self, signup_id):
         with self.get_session() as session:
-            signup = session.query(DBKothSignup).filter_by(id=signup_id).first()
+            signup = session.get(DBKothSignup, signup_id)
             if not signup:
                 return None
             return KothSignup.from_db_signup(signup)
 
     def get_signups_by_event(self, event_id):
         with self.get_session() as session:
-            signups = session.query(DBKothSignup)\
-                .filter_by(event_id=event_id)\
-                .order_by(DBKothSignup.bracket, DBKothSignup.mmr.desc())\
-                .all()
+            signups = session.scalars(
+                select(DBKothSignup)
+                .where(DBKothSignup.event_id == event_id)
+                .order_by(DBKothSignup.bracket, DBKothSignup.mmr.desc())
+            ).unique().all()
             return [KothSignup.from_db_signup(s) for s in signups]
 
     # ============ Match Methods ============
@@ -118,24 +132,27 @@ class KothDBService(AbstractDatabaseService):
 
     def get_match(self, match_id):
         with self.get_session() as session:
-            match = session.query(DBKothMatch)\
+            match = session.scalars(
+                select(DBKothMatch)
                 .options(
                     joinedload(DBKothMatch.participants).joinedload(DBKothMatchParticipant.signup)
-                )\
-                .filter_by(id=match_id).first()
+                )
+                .where(DBKothMatch.id == match_id)
+            ).unique().first()
             if not match:
                 return None
             return KothMatch.from_db_match(match)
 
     def get_matches_by_event(self, event_id):
         with self.get_session() as session:
-            matches = session.query(DBKothMatch)\
+            matches = session.scalars(
+                select(DBKothMatch)
                 .options(
                     joinedload(DBKothMatch.participants).joinedload(DBKothMatchParticipant.signup)
-                )\
-                .filter_by(event_id=event_id)\
-                .order_by(DBKothMatch.bracket, DBKothMatch.id)\
-                .all()
+                )
+                .where(DBKothMatch.event_id == event_id)
+                .order_by(DBKothMatch.bracket, DBKothMatch.id)
+            ).unique().all()
             return [KothMatch.from_db_match(m) for m in matches]
 
     # ============ Match Participant Methods ============
@@ -149,17 +166,20 @@ class KothDBService(AbstractDatabaseService):
     def delete_participants_by_match(self, match_id):
         """Delete all participants for a given match"""
         with self.get_session() as session:
-            session.query(DBKothMatchParticipant)\
-                .filter_by(match_id=match_id)\
-                .delete(synchronize_session=False)
+            session.execute(
+                delete(DBKothMatchParticipant)
+                .where(DBKothMatchParticipant.match_id == match_id),
+                execution_options={'synchronize_session': False}
+            )
 
     def get_participants_by_match(self, match_id):
         with self.get_session() as session:
-            participants = session.query(DBKothMatchParticipant)\
-                .options(joinedload(DBKothMatchParticipant.signup))\
-                .filter_by(match_id=match_id)\
-                .order_by(DBKothMatchParticipant.team_number)\
-                .all()
+            participants = session.scalars(
+                select(DBKothMatchParticipant)
+                .options(joinedload(DBKothMatchParticipant.signup))
+                .where(DBKothMatchParticipant.match_id == match_id)
+                .order_by(DBKothMatchParticipant.team_number)
+            ).unique().all()
             return [KothMatchParticipant.from_db_participant(p) for p in participants]
 
     # Required abstract methods

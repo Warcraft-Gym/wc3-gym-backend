@@ -9,7 +9,7 @@ flask-cors
 flask-jwt-extended
 pyodbc
 pymysql
-sqlalchemy
+sqlalchemy>=2,<3
 flasgger
 gunicorn
 flask-caching

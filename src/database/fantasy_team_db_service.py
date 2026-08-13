@@ -1,8 +1,9 @@
 import logging
+from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 from src.database.abstract_database_service import AbstractDatabaseService
-from src.database.model.DBFantasyTeam import DBFantasyTeam
-from src.database.model.DBRelationships import DBFantasyTeamPlayer
+from src.models.fantasy_team import DBFantasyTeam
+from src.models.relationships import DBFantasyTeamPlayer
 from custom_exceptions import DBException
 from src.util.query_util import QueryUtil
 from src.schemas.fantasy_team import FantasyTeam
@@ -31,7 +32,7 @@ class FantasyTeamDBService(AbstractDatabaseService):
 
     def get(self, fantasy_team_id):
         with self.get_session() as session:
-            fteam = session.query(DBFantasyTeam).filter_by(id=fantasy_team_id).first()
+            fteam = session.get(DBFantasyTeam, fantasy_team_id)
             if not fteam:
                 raise DBException("Fantasy Team could not be found")
             return FantasyTeam.from_dbfantasyteam(fteam)
@@ -52,14 +53,16 @@ class FantasyTeamDBService(AbstractDatabaseService):
                 logger.debug(f"No fantasy team found by searchcriteria: {query}")
                 return result
             # Eager load only the relations the DTO reads
-            fteams = session.query(DBFantasyTeam)\
+            fteams = session.scalars(
+                select(DBFantasyTeam)
                 .options(
                     joinedload(DBFantasyTeam.season).noload('*'),
                     joinedload(DBFantasyTeam.drafted_team).noload('*'),
                     joinedload(DBFantasyTeam.captain).noload('*'),
                     joinedload(DBFantasyTeam.drafted_players).joinedload(DBFantasyTeamPlayer.users).noload('*'),
-                )\
-                .filter(filter).all()
+                )
+                .where(filter)
+            ).unique().all()
             if not fteams:
                 logger.debug(f"No fantasy team found by searchcriteria: {query}")
                 return result

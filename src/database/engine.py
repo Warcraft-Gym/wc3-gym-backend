@@ -9,7 +9,7 @@ import os
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from src.database.model.DBModel import Base
+from src.models.base import Base
 
 # src/__init__.py loads the .env file before it imports this module.
 DB_URL = os.getenv("DB_URL")

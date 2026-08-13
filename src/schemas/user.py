@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from src.database.model.DBEnums import Race
+from src.models.enums import Race
 from src.schemas.base import APISchema, NoneToList, NumToStr
 from src.schemas.season import Season
 from src.schemas.user_team_season_stats import UserTeamSeasonStats

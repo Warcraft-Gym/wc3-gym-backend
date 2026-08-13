@@ -1,6 +1,6 @@
 import logging
 from src.database.abstract_database_service import AbstractDatabaseService
-from src.database.model.DBSettings import DBSettings
+from src.models.settings import DBSettings
 from custom_exceptions import DBException
 from src.schemas.settings import Settings
 
@@ -32,7 +32,7 @@ class SettingsDBService(AbstractDatabaseService):
     def get(self, setting_id):
         """Get a setting by id"""
         with self.get_session() as session:
-            setting = session.query(DBSettings).filter_by(id=setting_id).first()
+            setting = session.get(DBSettings, setting_id)
             if not setting:
                 raise DBException(f"Setting with id '{setting_id}' not found")
             return Settings.from_dbsettings(setting)

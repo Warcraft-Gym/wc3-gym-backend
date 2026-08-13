@@ -1,8 +1,9 @@
 from src.database.abstract_database_service import AbstractDatabaseService
-from src.database.model.DBPlayerCareerStats import DBPlayerCareerStats
-from src.database.model.DBUser import DBUser
+from src.models.player_career_stats import DBPlayerCareerStats
+from src.models.user import DBUser
 from src.schemas.player_career_stats import PlayerCareerStats
 from custom_exceptions import DBException
+from sqlalchemy import select
 import logging
 
 logger = logging.getLogger(__name__)
@@ -11,7 +12,7 @@ class PlayerCareerStatsDBService(AbstractDatabaseService):
     def get(self, stat_id: int):
         """Get career stats by stats record ID (implements abstract method)"""
         with self.get_session() as session:
-            stat = session.query(DBPlayerCareerStats).filter_by(id=stat_id).first()
+            stat = session.get(DBPlayerCareerStats, stat_id)
             return PlayerCareerStats.from_db(stat) if stat else None
     
     def add(self, entity):
@@ -29,46 +30,53 @@ class PlayerCareerStatsDBService(AbstractDatabaseService):
     def delete(self, stat_id: int):
         """Delete career stats by stats ID (implements abstract method)"""
         with self.get_session() as session:
-            stats = session.query(DBPlayerCareerStats).filter_by(id=stat_id).first()
+            stats = session.get(DBPlayerCareerStats, stat_id)
             if stats:
                 session.delete(stats)
                 return True
             return False
-    
+
     def get_all(self):
         """Get all player career stats ordered by rating"""
         with self.get_session() as session:
-            stats = session.query(DBPlayerCareerStats).order_by(
-                DBPlayerCareerStats.rating.desc()
-            ).all()
+            stats = session.scalars(
+                select(DBPlayerCareerStats)
+                .order_by(DBPlayerCareerStats.rating.desc())
+            ).unique().all()
             return [PlayerCareerStats.from_db(stat) for stat in stats]
-    
+
     def get_by_user_id(self, user_id: int):
         """Get career stats for a specific user"""
         with self.get_session() as session:
-            stat = session.query(DBPlayerCareerStats).filter_by(
-                user_id=user_id
+            stat = session.scalars(
+                select(DBPlayerCareerStats)
+                .where(DBPlayerCareerStats.user_id == user_id)
+                .limit(1)
             ).first()
             return PlayerCareerStats.from_db(stat) if stat else None
-    
+
     def get_by_player_name(self, player_name: str):
         """Get career stats by player name (for unmapped historical records)"""
         with self.get_session() as session:
-            stat = session.query(DBPlayerCareerStats).filter_by(
-                player_name=player_name
+            stat = session.scalars(
+                select(DBPlayerCareerStats)
+                .where(DBPlayerCareerStats.player_name == player_name)
+                .limit(1)
             ).first()
             return PlayerCareerStats.from_db(stat) if stat else None
-    
+
     def get_or_create(self, user_id: int):
         """Get existing stats or create new record for user"""
         with self.get_session() as session:
-            stats = session.query(DBPlayerCareerStats).filter_by(
-                user_id=user_id
+            stats = session.scalars(
+                select(DBPlayerCareerStats)
+                .where(DBPlayerCareerStats.user_id == user_id)
+                .limit(1)
             ).first()
 
             if not stats:
                 # Get user name for player_name
-                user = session.query(DBUser).filter_by(id=user_id).first()
+                user = session.get(DBUser, user_id)
                 player_name = user.name if user else f"User_{user_id}"
 
                 stats = DBPlayerCareerStats(user_id=user_id, player_name=player_name)
@@ -87,13 +95,19 @@ class PlayerCareerStatsDBService(AbstractDatabaseService):
         CSV row is one short transaction.
         """
         with self.get_session() as session:
-            user = session.query(DBUser).filter_by(name=player_name).first()
+            user = session.scalars(
+                select(DBUser).where(DBUser.name == player_name).limit(1)
+            ).first()
             user_id = user.id if user else None
             if not user:
                 logger.info(f"User not found for {player_name}, importing anyway with null user_id")
 
             # Find by player_name first
-            stats = session.query(DBPlayerCareerStats).filter_by(player_name=player_name).first()
+            stats = session.scalars(
+                select(DBPlayerCareerStats)
+                .where(DBPlayerCareerStats.player_name == player_name)
+                .limit(1)
+            ).first()
             
             if stats:
                 # Update existing - also update user_id if provided and currently null
@@ -134,8 +148,12 @@ class PlayerCareerStatsDBService(AbstractDatabaseService):
                      games_winrate: float, seasons_played: int, avg_series: float):
         """Update combined total columns (from recalculation)"""
         with self.get_session() as session:
-            stats = session.query(DBPlayerCareerStats).filter_by(user_id=user_id).first()
-            
+            stats = session.scalars(
+                select(DBPlayerCareerStats)
+                .where(DBPlayerCareerStats.user_id == user_id)
+                .limit(1)
+            ).first()
+
             if stats:
                 stats.rating = rating
                 stats.series_won = series_won
@@ -187,8 +205,16 @@ class PlayerCareerStatsDBService(AbstractDatabaseService):
         # Only query by user_id if it's not None (unmapped records have user_id=None)
         record_by_user_id = None
         if user_id is not None:
-            record_by_user_id = session.query(DBPlayerCareerStats).filter_by(user_id=user_id).first()
-        record_by_name = session.query(DBPlayerCareerStats).filter_by(player_name=player_name).first()
+            record_by_user_id = session.scalars(
+                select(DBPlayerCareerStats)
+                .where(DBPlayerCareerStats.user_id == user_id)
+                .limit(1)
+            ).first()
+        record_by_name = session.scalars(
+            select(DBPlayerCareerStats)
+            .where(DBPlayerCareerStats.player_name == player_name)
+            .limit(1)
+        ).first()
 
         # Handle different scenarios
         if record_by_user_id and record_by_name and record_by_user_id.id != record_by_name.id:

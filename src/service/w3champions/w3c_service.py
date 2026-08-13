@@ -3,7 +3,7 @@ import os
 import urllib.parse
 import logging
 from src.schemas.w3c_stats import W3CStats
-from src.database.model.DBEnums import Race
+from src.models.enums import Race
 
 
 logger = logging.getLogger(__name__)
