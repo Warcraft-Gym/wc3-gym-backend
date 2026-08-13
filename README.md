@@ -201,6 +201,16 @@ backend/
 4. Check logs in VS Code Debug Console
 5. Set breakpoints for debugging
 
+## Tests
+
+```bash
+pip install pytest        # one time, into the project environment
+python -m pytest
+```
+
+The tests run against a temporary SQLite file and need no database server
+and no environment variables. See `tests/conftest.py` for the design rules.
+
 ## Additional Resources
 
 - [Backend Architecture Guide](.github/copilot-instructions.md)
