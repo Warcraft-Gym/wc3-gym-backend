@@ -1,10 +1,19 @@
 import logging
 import os
 from dotenv import load_dotenv
+
+# Before the imports below: engine.py reads DB_URL when it is imported.
+load_dotenv()
+# A wrong LOG_LEVEL must not stop the application.
+logging.basicConfig(level=getattr(logging, os.getenv('LOG_LEVEL', 'INFO').upper(), logging.INFO))
+
+logger = logging.getLogger(__name__)
+
 from flask import Flask
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
 from flask_caching import Cache
+from src.database.engine import init_schema
 from src.database.user_db_service import UserDBService
 from src.database.team_db_service import TeamDBService
 from src.database.match_db_service import MatchDBService
@@ -52,15 +61,6 @@ from src.api.fantasy_api import fantasy_blueprint
 from src.api.config_api import config_blueprint
 from src.api.koth_api import koth_blueprint
 from src.api.stats_api import stats_blueprint
-
-# Load environment variables from .env file
-load_dotenv()
-
-# Configure logging
-_log_level = getattr(logging, os.getenv('LOG_LEVEL', 'INFO').upper(), logging.INFO)
-logging.basicConfig(level=_log_level)
-
-logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
@@ -149,21 +149,22 @@ jwt = JWTManager(app)
 logger.debug("JWT initialized!")
 
 
-# Initialize services with database URL from environment variables
-db_url = os.getenv('DB_URL')
-user_service = UserDBService(db_url=db_url)
-team_service = TeamDBService(db_url=db_url)
-match_service = MatchDBService(db_url=db_url)
-season_service = SeasonDBService(db_url=db_url)
-series_service = SeriesDBService(db_url=db_url)
-draft_series_service = DraftSeriesDBService(db_url=db_url)
-map_service = MapDBService(db_url=db_url)
-team_season_service = TeamSeasonDBService(db_url=db_url)
-fantasy_bet_service = FantasyBetDBService(db_url=db_url)
-fantasy_team_service = FantasyTeamDBService(db_url=db_url)
-settings_service = SettingsDBService(db_url=db_url)
-koth_service = KothDBService(db_url=db_url)
-stats_db_service = PlayerCareerStatsDBService(db_url=db_url)
+init_schema()
+
+# The database services share the engine in src/database/engine.py.
+user_service = UserDBService()
+team_service = TeamDBService()
+match_service = MatchDBService()
+season_service = SeasonDBService()
+series_service = SeriesDBService()
+draft_series_service = DraftSeriesDBService()
+map_service = MapDBService()
+team_season_service = TeamSeasonDBService()
+fantasy_bet_service = FantasyBetDBService()
+fantasy_team_service = FantasyTeamDBService()
+settings_service = SettingsDBService()
+koth_service = KothDBService()
+stats_db_service = PlayerCareerStatsDBService()
 
 logger.debug("DB Services initialized!")
 

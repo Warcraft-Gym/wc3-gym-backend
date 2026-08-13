@@ -1,6 +1,5 @@
 from sqlalchemy import Column, Integer, String, Sequence, ForeignKey, or_, and_
 from sqlalchemy.ext.declarative import declarative_base, declared_attr
-from sqlalchemy.orm import sessionmaker, relationship
 from sqlalchemy.orm.session import Session
 from sqlalchemy.ext.declarative import AbstractConcreteBase
 from custom_exceptions import DBException

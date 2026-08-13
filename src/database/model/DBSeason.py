@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, Integer, String, Sequence, Date
+from sqlalchemy import Column, Integer, String, Sequence, Date
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm.session import Session
 from src.database.model.DBModel import DBModel

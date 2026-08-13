@@ -8,9 +8,6 @@ import logging
 logger = logging.getLogger(__name__)
 
 class PlayerCareerStatsDBService(AbstractDatabaseService):
-    def __init__(self, db_url):
-        super().__init__(db_url)
-    
     def get(self, stat_id: int):
         """Get career stats by stats record ID (implements abstract method)"""
         with self.get_session() as session:
