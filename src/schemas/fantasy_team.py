@@ -9,9 +9,17 @@ from src.schemas.team import Team
 from src.schemas.user import User
 
 DB_FIELDS = {
-    'name', 'season_id', 'captain_id', 'drafted_team_id', 'drafted_race',
-    'player_points', 'bench_points', 'team_points', 'race_points',
-    'bet_points', 'total_points',
+    "name",
+    "season_id",
+    "captain_id",
+    "drafted_team_id",
+    "drafted_race",
+    "player_points",
+    "bench_points",
+    "team_points",
+    "race_points",
+    "bet_points",
+    "total_points",
 }
 
 
@@ -37,7 +45,7 @@ class FantasyTeam(APISchema):
     bet_points: int | None = None
     total_points: int | None = None
 
-    @field_serializer('drafted_players', when_used='json')
+    @field_serializer("drafted_players", when_used="json")
     def _drafted_players_json(self, value):
         return [user.to_dict() for user in value] if value else None
 
@@ -64,7 +72,9 @@ class FantasyTeam(APISchema):
             captain_id=fteam.captain_id,
             captain=User.from_dbuser(fteam.captain) if fteam.captain else None,
             drafted_team_id=fteam.drafted_team_id,
-            drafted_team=Team.from_dbteam(fteam.drafted_team) if fteam.drafted_team else None,
+            drafted_team=Team.from_dbteam(fteam.drafted_team)
+            if fteam.drafted_team
+            else None,
             drafted_race=fteam.drafted_race,
             drafted_players=drafted_players,
             player_points=fteam.player_points,
@@ -78,18 +88,18 @@ class FantasyTeam(APISchema):
     @staticmethod
     def schema():
         return {
-            'type': 'object',
-            'properties': {
-                'season_id': {'type': 'integer'},
-                'captain_id': {'type': 'integer'},
-                'drafted_team_id': {'type': 'integer'},
-                'drafted_race': {'type': 'integer'},
-                'player_points': {'type': 'integer'},
-                'bench_points': {'type': 'integer'},
-                'team_points': {'type': 'integer'},
-                'race_points': {'type': 'integer'},
-                'bet_points': {'type': 'integer'},
-                'total_points': {'type': 'integer'}
+            "type": "object",
+            "properties": {
+                "season_id": {"type": "integer"},
+                "captain_id": {"type": "integer"},
+                "drafted_team_id": {"type": "integer"},
+                "drafted_race": {"type": "integer"},
+                "player_points": {"type": "integer"},
+                "bench_points": {"type": "integer"},
+                "team_points": {"type": "integer"},
+                "race_points": {"type": "integer"},
+                "bet_points": {"type": "integer"},
+                "total_points": {"type": "integer"},
             },
-            'required': ['season_id', 'captain_id', 'drafted_team_id', 'drafted_race']
+            "required": ["season_id", "captain_id", "drafted_team_id", "drafted_race"],
         }

@@ -14,8 +14,8 @@ from datetime import date, datetime
 
 from src.models.enums import Race
 from src.models.fantasy_bet import DBFantasyBet
-from src.models.koth_event import DBKothEvent
 from src.models.fantasy_team import DBFantasyTeam
+from src.models.koth_event import DBKothEvent
 from src.models.map import DBMap
 from src.models.match import DBMatch
 from src.models.player_career_stats import DBPlayerCareerStats
@@ -40,10 +40,42 @@ def seed_league(session):
     team_b = DBTeam(name="Beta", long_name="Team Beta")
 
     players = [
-        DBUser(name="P1", battleTag="P1#1111", discordTag="p1", discordId="1", race=Race.HU, mmr=1500, country="DE"),
-        DBUser(name="P2", battleTag="P2#2222", discordTag="p2", discordId="2", race=Race.OC, mmr=1400, country="US"),
-        DBUser(name="P3", battleTag="P3#3333", discordTag="p3", discordId="3", race=Race.NE, mmr=1600, country="FR"),
-        DBUser(name="P4", battleTag="P4#4444", discordTag="p4", discordId="4", race=Race.UD, mmr=1300, country="SE"),
+        DBUser(
+            name="P1",
+            battleTag="P1#1111",
+            discordTag="p1",
+            discordId="1",
+            race=Race.HU,
+            mmr=1500,
+            country="DE",
+        ),
+        DBUser(
+            name="P2",
+            battleTag="P2#2222",
+            discordTag="p2",
+            discordId="2",
+            race=Race.OC,
+            mmr=1400,
+            country="US",
+        ),
+        DBUser(
+            name="P3",
+            battleTag="P3#3333",
+            discordTag="p3",
+            discordId="3",
+            race=Race.NE,
+            mmr=1600,
+            country="FR",
+        ),
+        DBUser(
+            name="P4",
+            battleTag="P4#4444",
+            discordTag="p4",
+            discordId="4",
+            race=Race.UD,
+            mmr=1300,
+            country="SE",
+        ),
     ]
 
     game_map = DBMap(name="Concealed Hill", shortname="CH")
@@ -51,17 +83,29 @@ def seed_league(session):
     session.add_all([season, team_a, team_b, game_map, *players])
     session.flush()
 
-    session.add_all([
-        DBTeamSeason(team_id=team_a.id, season_id=season.id),
-        DBTeamSeason(team_id=team_b.id, season_id=season.id),
-        DBMapSeason(map_id=game_map.id, season_id=season.id),
-        DBUserTeamSeason(user_id=players[0].id, team_id=team_a.id, season_id=season.id),
-        DBUserTeamSeason(user_id=players[1].id, team_id=team_a.id, season_id=season.id),
-        DBUserTeamSeason(user_id=players[2].id, team_id=team_b.id, season_id=season.id),
-        DBUserTeamSeason(user_id=players[3].id, team_id=team_b.id, season_id=season.id),
-    ])
+    session.add_all(
+        [
+            DBTeamSeason(team_id=team_a.id, season_id=season.id),
+            DBTeamSeason(team_id=team_b.id, season_id=season.id),
+            DBMapSeason(map_id=game_map.id, season_id=season.id),
+            DBUserTeamSeason(
+                user_id=players[0].id, team_id=team_a.id, season_id=season.id
+            ),
+            DBUserTeamSeason(
+                user_id=players[1].id, team_id=team_a.id, season_id=season.id
+            ),
+            DBUserTeamSeason(
+                user_id=players[2].id, team_id=team_b.id, season_id=season.id
+            ),
+            DBUserTeamSeason(
+                user_id=players[3].id, team_id=team_b.id, season_id=season.id
+            ),
+        ]
+    )
 
-    match = DBMatch(team1_id=team_a.id, team2_id=team_b.id, season_id=season.id, playday=1)
+    match = DBMatch(
+        team1_id=team_a.id, team2_id=team_b.id, season_id=season.id, playday=1
+    )
     session.add(match)
     session.flush()
 
@@ -94,20 +138,32 @@ def seed_league(session):
     session.add(fantasy_team)
     session.flush()
 
-    session.add_all([
-        DBFantasyBet(
-            season_id=season.id,
-            series_id=series_played.id,
-            user_id=players[0].id,
-            winner_id=players[0].id,
-            bet_points=10,
-        ),
-        DBPlayerCareerStats(user_id=players[0].id, player_name="P1", series_won=1, games_won=2, games_lost=1),
-        DBPlayerCareerStats(user_id=players[1].id, player_name="P2"),
-        DBSettings(key="score_system", value="standard", description="Scoring system"),
-        DBSettings(key="KOTH_NIGHTBOT_TOKEN", value="test-nightbot-token"),
-        DBKothEvent(name="KOTH 1", event_date=datetime(2026, 1, 10, 20, 0), is_active=True),
-    ])
+    session.add_all(
+        [
+            DBFantasyBet(
+                season_id=season.id,
+                series_id=series_played.id,
+                user_id=players[0].id,
+                winner_id=players[0].id,
+                bet_points=10,
+            ),
+            DBPlayerCareerStats(
+                user_id=players[0].id,
+                player_name="P1",
+                series_won=1,
+                games_won=2,
+                games_lost=1,
+            ),
+            DBPlayerCareerStats(user_id=players[1].id, player_name="P2"),
+            DBSettings(
+                key="score_system", value="standard", description="Scoring system"
+            ),
+            DBSettings(key="KOTH_NIGHTBOT_TOKEN", value="test-nightbot-token"),
+            DBKothEvent(
+                name="KOTH 1", event_date=datetime(2026, 1, 10, 20, 0), is_active=True
+            ),
+        ]
+    )
     session.flush()
 
     return {

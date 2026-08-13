@@ -11,7 +11,7 @@ class UserTeamSeasonStats(APISchema):
     user_id: int | None = None
     team_id: int | None = None
     games: int | None = None
-    team: 'TeamReduced | None' = None
+    team: "TeamReduced | None" = None
     wins: int | None = None
     losses: int | None = None
     season_id: int | None = None
@@ -41,16 +41,17 @@ class UserTeamSeasonStats(APISchema):
     def schema():
         from src.schemas.season import Season
         from src.schemas.team import Team
+
         return {
-            'type': 'object',
-            'properties': {
-                'user_id': {'type': 'integer'},
-                'team_id': {'type': 'integer'},
-                'team': {'type': Team},
-                'games': {'type': 'integer'},
-                'wins': {'type': 'integer'},
-                'losses': {'type': 'integer'},
-                'season_id': {'type': 'integer'},
-                'season': {'type': Season},
-            }
+            "type": "object",
+            "properties": {
+                "user_id": {"type": "integer"},
+                "team_id": {"type": "integer"},
+                "team": {"type": Team},
+                "games": {"type": "integer"},
+                "wins": {"type": "integer"},
+                "losses": {"type": "integer"},
+                "season_id": {"type": "integer"},
+                "season": {"type": Season},
+            },
         }

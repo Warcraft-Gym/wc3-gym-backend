@@ -1,15 +1,25 @@
+from typing import TYPE_CHECKING
+
 from sqlalchemy import Enum, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
 from src.models.base import DBModel
 from src.models.enums import Race
 
+if TYPE_CHECKING:
+    from src.models.koth_event import DBKothEvent
+    from src.models.koth_match_participant import DBKothMatchParticipant
+
+
 class DBKothSignup(DBModel):
-    __tablename__ = 'koth_signups'
-    __table_args__ = {'mysql_charset': 'utf8mb4'}
+    __tablename__ = "koth_signups"
+    __table_args__ = {"mysql_charset": "utf8mb4"}
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    event_id: Mapped[int] = mapped_column(ForeignKey('koth_events.id'))
-    twitch_username: Mapped[str | None] = mapped_column(String(50))  # Optional Twitch username
+    event_id: Mapped[int] = mapped_column(ForeignKey("koth_events.id"))
+    twitch_username: Mapped[str | None] = mapped_column(
+        String(50)
+    )  # Optional Twitch username
     battle_tag: Mapped[str] = mapped_column(String(50))  # Can signup multiple times
     w3c_name: Mapped[str] = mapped_column(String(50))
     race: Mapped[Race] = mapped_column(Enum(Race))
@@ -19,5 +29,7 @@ class DBKothSignup(DBModel):
     is_active: Mapped[int] = mapped_column(default=1)  # 0=inactive, 1=active
 
     # Relationships
-    event: Mapped['DBKothEvent'] = relationship(back_populates='signups')
-    match_participations: Mapped[list['DBKothMatchParticipant']] = relationship(back_populates='signup', cascade='all, delete-orphan')
+    event: Mapped["DBKothEvent"] = relationship(back_populates="signups")
+    match_participations: Mapped[list["DBKothMatchParticipant"]] = relationship(
+        back_populates="signup", cascade="all, delete-orphan"
+    )

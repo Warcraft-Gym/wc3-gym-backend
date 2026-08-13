@@ -24,7 +24,7 @@ os.environ["REFRESH_TOKEN_TIME"] = "300"
 os.environ.pop("DB_URL", None)
 os.environ.pop("SCORE_SYSTEM", None)
 
-from src import create_app  # noqa: E402
+from src import create_app
 
 
 @pytest.fixture(scope="session")
@@ -59,7 +59,6 @@ def clean_db(app):
 def seeded(app):
     """A small consistent league. Returns the ids the tests refer to."""
     from src.database.engine import Session
-
     from tests.seed import seed_league
 
     with Session() as session:

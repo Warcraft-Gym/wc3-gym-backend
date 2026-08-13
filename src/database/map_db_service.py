@@ -1,20 +1,21 @@
 import logging
+
+from custom_exceptions import DBException
 from src.database.abstract_database_service import AbstractDatabaseService
 from src.models.map import DBMap
 from src.schemas.map import Map
-from custom_exceptions import DBException
 from src.util.query_util import QueryUtil
 
 logger = logging.getLogger(__name__)
 
+
 class MapDBService(AbstractDatabaseService):
-    def add(self, map : Map):
+    def add(self, map: Map):
         with self.get_session() as session:
             map = DBMap.add(session, map.to_dict())
             if not map:
                 raise DBException("Map could not be created!")
-            return Map.from_dbmap(map)              
-
+            return Map.from_dbmap(map)
 
     def update(self, map: Map):
         with self.get_session() as session:
@@ -34,7 +35,6 @@ class MapDBService(AbstractDatabaseService):
                 return None
             return Map.from_dbmap(map)
 
-
     def search(self, query):
         with self.get_session() as session:
             result = []
@@ -43,7 +43,7 @@ class MapDBService(AbstractDatabaseService):
             if not maps:
                 logger.debug(f"No maps found by searchcriteria: {query}")
                 return result
-                
+
             for map in maps:
                 result.append(Map.from_dbmap(map))
             return result
@@ -52,7 +52,7 @@ class MapDBService(AbstractDatabaseService):
         with self.get_session() as session:
             result = []
             maps = DBMap.getAll(session)
-                
+
             for map in maps:
                 result.append(Map.from_dbmap(map))
             return result

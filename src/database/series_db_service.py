@@ -1,16 +1,19 @@
 import logging
-from src.database.abstract_database_service import AbstractDatabaseService
-from src.models.series import DBSeries
-from src.models.user import DBUser
-from src.models.relationships import DBUserTeamSeason
-from src.models.match import DBMatch
+
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
+
 from custom_exceptions import DBException
-from src.util.query_util import QueryUtil
+from src.database.abstract_database_service import AbstractDatabaseService
+from src.models.match import DBMatch
+from src.models.relationships import DBUserTeamSeason
+from src.models.series import DBSeries
+from src.models.user import DBUser
 from src.schemas.series import Series
+from src.util.query_util import QueryUtil
 
 logger = logging.getLogger(__name__)
+
 
 class SeriesDBService(AbstractDatabaseService):
     def add(self, series: Series):
@@ -34,18 +37,26 @@ class SeriesDBService(AbstractDatabaseService):
     def get(self, series_id):
         with self.get_session() as session:
             # Eager load relationships to avoid N+1 queries, load w3c_stats and team_seasons with season for players
-            series = session.scalars(
-                select(DBSeries)
-                .options(
-                    joinedload(DBSeries.match).joinedload(DBMatch.team1),
-                    joinedload(DBSeries.match).joinedload(DBMatch.team2),
-                    joinedload(DBSeries.player1).joinedload(DBUser.w3c_stats),
-                    joinedload(DBSeries.player1).joinedload(DBUser.team_seasons).joinedload(DBUserTeamSeason.season),
-                    joinedload(DBSeries.player2).joinedload(DBUser.w3c_stats),
-                    joinedload(DBSeries.player2).joinedload(DBUser.team_seasons).joinedload(DBUserTeamSeason.season)
+            series = (
+                session.scalars(
+                    select(DBSeries)
+                    .options(
+                        joinedload(DBSeries.match).joinedload(DBMatch.team1),
+                        joinedload(DBSeries.match).joinedload(DBMatch.team2),
+                        joinedload(DBSeries.player1).joinedload(DBUser.w3c_stats),
+                        joinedload(DBSeries.player1)
+                        .joinedload(DBUser.team_seasons)
+                        .joinedload(DBUserTeamSeason.season),
+                        joinedload(DBSeries.player2).joinedload(DBUser.w3c_stats),
+                        joinedload(DBSeries.player2)
+                        .joinedload(DBUser.team_seasons)
+                        .joinedload(DBUserTeamSeason.season),
+                    )
+                    .where(DBSeries.id == series_id)
                 )
-                .where(DBSeries.id == series_id)
-            ).unique().first()
+                .unique()
+                .first()
+            )
             if not series:
                 raise DBException("Series could not be found")
             return Series.from_dbseries(series)
@@ -54,17 +65,24 @@ class SeriesDBService(AbstractDatabaseService):
         with self.get_session() as session:
             result = []
             # Eager load relationships, load w3c_stats and team_seasons with season for players
-            series = session.scalars(
-                select(DBSeries)
-                .options(
-                    joinedload(DBSeries.match).joinedload(DBMatch.team1),
-                    joinedload(DBSeries.match).joinedload(DBMatch.team2),
-                    joinedload(DBSeries.player1).joinedload(DBUser.w3c_stats),
-                    joinedload(DBSeries.player1).joinedload(DBUser.team_seasons).joinedload(DBUserTeamSeason.season),
-                    joinedload(DBSeries.player2).joinedload(DBUser.w3c_stats),
-                    joinedload(DBSeries.player2).joinedload(DBUser.team_seasons).joinedload(DBUserTeamSeason.season)
+            series = (
+                session.scalars(
+                    select(DBSeries).options(
+                        joinedload(DBSeries.match).joinedload(DBMatch.team1),
+                        joinedload(DBSeries.match).joinedload(DBMatch.team2),
+                        joinedload(DBSeries.player1).joinedload(DBUser.w3c_stats),
+                        joinedload(DBSeries.player1)
+                        .joinedload(DBUser.team_seasons)
+                        .joinedload(DBUserTeamSeason.season),
+                        joinedload(DBSeries.player2).joinedload(DBUser.w3c_stats),
+                        joinedload(DBSeries.player2)
+                        .joinedload(DBUser.team_seasons)
+                        .joinedload(DBUserTeamSeason.season),
+                    )
                 )
-            ).unique().all()
+                .unique()
+                .all()
+            )
             for single_series in series:
                 result.append(Series.from_dbseries(single_series))
             return result
@@ -74,18 +92,28 @@ class SeriesDBService(AbstractDatabaseService):
             result = []
             filter = QueryUtil.convertQueryToDBFilter(DBSeries, query)
             # Eager load related entities, load w3c_stats and team_seasons with season for players
-            series_list = session.scalars(
-                select(DBSeries)
-                .options(
-                    joinedload(DBSeries.match).joinedload(DBMatch.team1),
-                    joinedload(DBSeries.match).joinedload(DBMatch.team2),
-                    joinedload(DBSeries.player1).joinedload(DBUser.w3c_stats),
-                    joinedload(DBSeries.player1).joinedload(DBUser.team_seasons).joinedload(DBUserTeamSeason.season),
-                    joinedload(DBSeries.player2).joinedload(DBUser.w3c_stats),
-                    joinedload(DBSeries.player2).joinedload(DBUser.team_seasons).joinedload(DBUserTeamSeason.season)
+            series_list = (
+                session.scalars(
+                    select(DBSeries)
+                    .options(
+                        joinedload(DBSeries.match).joinedload(DBMatch.team1),
+                        joinedload(DBSeries.match).joinedload(DBMatch.team2),
+                        joinedload(DBSeries.player1).joinedload(DBUser.w3c_stats),
+                        joinedload(DBSeries.player1)
+                        .joinedload(DBUser.team_seasons)
+                        .joinedload(DBUserTeamSeason.season),
+                        joinedload(DBSeries.player2).joinedload(DBUser.w3c_stats),
+                        joinedload(DBSeries.player2)
+                        .joinedload(DBUser.team_seasons)
+                        .joinedload(DBUserTeamSeason.season),
+                    )
+                    .where(filter)
                 )
-                .where(filter)
-            ).unique().all() if filter is not None else []
+                .unique()
+                .all()
+                if filter is not None
+                else []
+            )
             if not series_list:
                 logger.debug(f"No series found by searchcriteria: {query}")
                 return result
@@ -97,7 +125,9 @@ class SeriesDBService(AbstractDatabaseService):
         with self.get_session() as session:
             result = []
             filter = QueryUtil.convertQueryToDBFilter(DBSeries, query)
-            series_list = DBSeries.searchForSeasonAndPlayday(session, season_id, playday, filter)
+            series_list = DBSeries.searchForSeasonAndPlayday(
+                session, season_id, playday, filter
+            )
             if not series_list:
                 logger.debug(f"No series found by searchcriteria: {query}")
                 return result

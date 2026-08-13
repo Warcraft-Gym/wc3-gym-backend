@@ -1,5 +1,6 @@
 from sqlalchemy import select
 from sqlalchemy.orm import DeclarativeBase, Session
+
 from custom_exceptions import DBException
 
 
@@ -13,7 +14,7 @@ class DBModel(Base):
     __abstract__ = True
 
     @classmethod
-    def add(cls, session: Session, data : dict):
+    def add(cls, session: Session, data: dict):
         obj = cls(**data)
         session.add(obj)
         session.flush()

@@ -23,12 +23,29 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = ["pytest"]
+dev = [
+    "pytest",
+    "ruff>=0.16.3",
+]
 
 [tool.uv]
 # An application, not an installable package: uv manages the environment
 # and never builds or installs the project itself.
 package = false
+
+[tool.ruff.lint]
+# Findings in existing code, suppressed rather than fixed in the ruff
+# rollout. To burn down: fix a rule's findings, then remove it from this list.
+ignore = [
+    "BLE001",  # blind `except Exception`
+    "DTZ001",  # naive datetimes match the DATETIME columns
+    "PLW0211", # staticmethod argument named cls
+    "RUF012",  # mutable class attribute default
+    "S110",    # try-except-pass
+    "TRY002",  # raise Exception
+    "TRY004",  # fixing it changes the raised exception type
+    "TRY401",  # redundant exception object in logging.exception
+]
 
 [tool.pytest]
 # Not a default: the pytest console script does not put the repo root on

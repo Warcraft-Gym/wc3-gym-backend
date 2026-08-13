@@ -7,8 +7,15 @@ from src.schemas.user_team_season_stats import UserTeamSeasonStats
 from src.schemas.w3c_stats import W3CStats
 
 DB_FIELDS = {
-    'id', 'name', 'battleTag', 'discordTag', 'discordId',
-    'race', 'mmr', 'country', 'fantasy_tier',
+    "id",
+    "name",
+    "battleTag",
+    "discordTag",
+    "discordId",
+    "race",
+    "mmr",
+    "country",
+    "fantasy_tier",
 }
 
 
@@ -45,10 +52,18 @@ class User(APISchema):
             race=user.race,
             mmr=user.mmr,
             country=user.country,
-            w3c_stats=[W3CStats.from_dbw3cstats(stat) for stat in (user.w3c_stats or [])],
-            gnl_stats=[UserTeamSeasonStats.from_db_user_team_season(stat) for stat in (user.team_seasons or [])],
+            w3c_stats=[
+                W3CStats.from_dbw3cstats(stat) for stat in (user.w3c_stats or [])
+            ],
+            gnl_stats=[
+                UserTeamSeasonStats.from_db_user_team_season(stat)
+                for stat in (user.team_seasons or [])
+            ],
             fantasy_tier=user.fantasy_tier,
-            signup_seasons=[Season.from_dbseason_reduced(signup.season) for signup in (user.signup_seasons or [])],
+            signup_seasons=[
+                Season.from_dbseason_reduced(signup.season)
+                for signup in (user.signup_seasons or [])
+            ],
         )
 
     @staticmethod
@@ -56,38 +71,14 @@ class User(APISchema):
         return {
             "type": "object",
             "properties": {
-                "name": {
-                    "type": "string",
-                    "description": "User's Name"
-                },
-                "battleTag": {
-                    "type": "string",
-                    "description": "User's BattleTag"
-                },
-                "discordId":{
-                    "type": "string",
-                    "description": "User's DiscordId"
-                },
-                "discordTag": {
-                    "type": "string",
-                    "description": "User's DiscordTag"
-                },
-                "race": {
-                    "type": "string",
-                    "description": "User's Race"
-                },
-                "mmr": {
-                    "type": "integer",
-                    "description": "User's MMR"
-                },
-                "country": {
-                    "type": "string",
-                    "description": "User's Country"
-                },
-                "fantasy_tier": {
-                    "type": "integer",
-                    "description": "fantasy tier"
-                }
+                "name": {"type": "string", "description": "User's Name"},
+                "battleTag": {"type": "string", "description": "User's BattleTag"},
+                "discordId": {"type": "string", "description": "User's DiscordId"},
+                "discordTag": {"type": "string", "description": "User's DiscordTag"},
+                "race": {"type": "string", "description": "User's Race"},
+                "mmr": {"type": "integer", "description": "User's MMR"},
+                "country": {"type": "string", "description": "User's Country"},
+                "fantasy_tier": {"type": "integer", "description": "fantasy tier"},
             },
-            "required": ["name", "battleTag", "discordId", "discordTag"]
+            "required": ["name", "battleTag", "discordId", "discordTag"],
         }

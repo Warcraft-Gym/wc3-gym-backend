@@ -1,13 +1,14 @@
 import logging
+
+from custom_exceptions import DBException
 from src.database.abstract_database_service import AbstractDatabaseService
 from src.models.settings import DBSettings
-from custom_exceptions import DBException
 from src.schemas.settings import Settings
 
 logger = logging.getLogger(__name__)
 
-class SettingsDBService(AbstractDatabaseService):
 
+class SettingsDBService(AbstractDatabaseService):
     def add(self, settings: Settings):
         """Add a new setting"""
         with self.get_session() as session:
@@ -19,7 +20,9 @@ class SettingsDBService(AbstractDatabaseService):
     def update(self, settings: Settings):
         """Update a setting"""
         with self.get_session() as session:
-            updated_setting = DBSettings.update(session, settings.id, **settings.to_db_dict())
+            updated_setting = DBSettings.update(
+                session, settings.id, **settings.to_db_dict()
+            )
             if not updated_setting:
                 raise DBException("Setting could not be updated!")
             return Settings.from_dbsettings(updated_setting)

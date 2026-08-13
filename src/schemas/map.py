@@ -23,12 +23,11 @@ class Map(APISchema):
     @staticmethod
     def schema():
         return {
-            'type': 'object',
-            'properties': {
-                'name': {'type': 'string'},
-                'shortname': {'type': 'string'},
-                'image': {'type': 'string'}
-
+            "type": "object",
+            "properties": {
+                "name": {"type": "string"},
+                "shortname": {"type": "string"},
+                "image": {"type": "string"},
             },
-            'required': ['name', 'shortname']
+            "required": ["name", "shortname"],
         }

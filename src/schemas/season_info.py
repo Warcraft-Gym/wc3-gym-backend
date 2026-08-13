@@ -11,7 +11,7 @@ class SeasonInfo(APISchema):
 
     def to_db_dict(self):
         return self.model_dump(
-            include={'season_id', 'final_score', 'points_available', 'points_against'}
+            include={"season_id", "final_score", "points_available", "points_against"}
         )
 
     @classmethod
@@ -24,19 +24,22 @@ class SeasonInfo(APISchema):
             final_score=season_info.final_score,
             points_available=season_info.points_available,
             points_against=season_info.points_against,
-            season=Season.from_dbseason(season_info.season) if season_info.season else None,
+            season=Season.from_dbseason(season_info.season)
+            if season_info.season
+            else None,
         )
 
     @staticmethod
     def schema():
         from src.models.season import DBSeason
+
         return {
-            'type': 'object',
-            'properties': {
-                'season_id': {'type': 'integer'},
-                'final_score': {'type': 'integer'},
-                'points_available': {'type': 'integer'},
-                'points_against': {'type': 'integer'},
-                'season': {'type': DBSeason},
-            }
+            "type": "object",
+            "properties": {
+                "season_id": {"type": "integer"},
+                "final_score": {"type": "integer"},
+                "points_available": {"type": "integer"},
+                "points_against": {"type": "integer"},
+                "season": {"type": DBSeason},
+            },
         }

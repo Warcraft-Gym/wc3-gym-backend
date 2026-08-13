@@ -25,5 +25,5 @@ class Settings(APISchema):
     def to_db_dict(self):
         """Convert DTO to dictionary for database operations"""
         return self.model_dump(
-            include={'key', 'value', 'description'}, exclude_none=True
+            include={"key", "value", "description"}, exclude_none=True
         )

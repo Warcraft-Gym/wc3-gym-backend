@@ -7,8 +7,14 @@ if TYPE_CHECKING:
     from src.schemas.user import User
 
 DB_FIELDS = {
-    'id', 'name', 'number_weeks', 'series_per_week', 'pick_ban',
-    'start_date', 'end_date', 'discordRole',
+    "id",
+    "name",
+    "number_weeks",
+    "series_per_week",
+    "pick_ban",
+    "start_date",
+    "end_date",
+    "discordRole",
 }
 
 
@@ -22,7 +28,7 @@ class Season(APISchema):
     end_date: Annotated[IsoDate | None, LenientDate] = None
     maps: Annotated[list[Map] | None, EmptyToNone] = None
     discordRole: Annotated[str | None, NumToStr] = None
-    user_signup: Annotated[list['User'] | None, EmptyToNone] = None
+    user_signup: Annotated[list["User"] | None, EmptyToNone] = None
 
     def to_db_dict(self):
         return self.model_dump(include=DB_FIELDS)
@@ -40,7 +46,11 @@ class Season(APISchema):
             pick_ban=season.pick_ban,
             start_date=season.start_date,
             end_date=season.end_date,
-            maps=[Map.from_dbmap(map_season.map) for map_season in (season.maps or []) if map_season and map_season.map],
+            maps=[
+                Map.from_dbmap(map_season.map)
+                for map_season in (season.maps or [])
+                if map_season and map_season.map
+            ],
             discordRole=season.discordRole,
         )
 
@@ -57,13 +67,16 @@ class Season(APISchema):
     @staticmethod
     def schema():
         return {
-            'type': 'object',
-            'properties': {
-                'name': {'type': 'string'},
-                'number_weeks' : {'type': 'integer'},
-                'series_per_week': {'type': 'integer'},
-                'pick_ban' : {'type' : 'string', 'description': 'e.g. Ban_A|Ban_B|Ban_B|Ban_A|Pick_A|Pick_B'},
-                'discordRole' : {'type': 'string'}
+            "type": "object",
+            "properties": {
+                "name": {"type": "string"},
+                "number_weeks": {"type": "integer"},
+                "series_per_week": {"type": "integer"},
+                "pick_ban": {
+                    "type": "string",
+                    "description": "e.g. Ban_A|Ban_B|Ban_B|Ban_A|Pick_A|Pick_B",
+                },
+                "discordRole": {"type": "string"},
             },
-            'required': ['name','number_weeks']
+            "required": ["name", "number_weeks"],
         }

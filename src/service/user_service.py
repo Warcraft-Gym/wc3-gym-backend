@@ -1,8 +1,8 @@
 import logging
-import traceback
+
+from custom_exceptions import NotFoundException
 from src.database.user_db_service import UserDBService
 from src.schemas.user import User
-from custom_exceptions import NotFoundException
 from src.service.w3champions.w3c_service import W3CService
 
 
@@ -11,13 +11,13 @@ class UserAppService:
         self.user_service = user_service
         self.settings_app_service = settings_app_service
 
-    def create_user(self, user : User):
-        #remove id, db generates the id
+    def create_user(self, user: User):
+        # remove id, db generates the id
         user.id = None
         user_data = self.user_service.add(user)
         return user_data
 
-    def update_user(self, user_id, user : User):
+    def update_user(self, user_id, user: User):
         user.id = user_id
         user_data = self.user_service.update(user)
         return user_data
@@ -30,7 +30,7 @@ class UserAppService:
         if not user_data:
             raise NotFoundException(f"User not found by Id: {user_id}")
         return user_data
-            
+
     def getAll(self):
         users_data = self.user_service.getAll()
         return users_data
@@ -48,7 +48,9 @@ class UserAppService:
         try:
             return w3c_service.validatePlayer(battle_tag)
         except Exception as e:
-            logging.getLogger(__name__).debug(f"BattleTag validation failed for {battle_tag}: {str(e)}")
+            logging.getLogger(__name__).debug(
+                f"BattleTag validation failed for {battle_tag}: {e!s}"
+            )
             return False
 
     def updateW3CStats(self, user: User):
@@ -57,8 +59,8 @@ class UserAppService:
         # Resolve the current W3C season so we can also fetch the previous season
         current_season = None
         if self.settings_app_service:
-            season_setting = self.settings_app_service.get_setting('current_wc3_season')
-            current_season = season_setting.get('value') if season_setting else None
+            season_setting = self.settings_app_service.get_setting("current_wc3_season")
+            current_season = season_setting.get("value") if season_setting else None
 
         all_stats = []
 
@@ -76,7 +78,9 @@ class UserAppService:
         if current_season:
             try:
                 prev_season = int(current_season) - 1
-                prev_stats = w3c_service.getPlayerStats(user.battleTag, season_override=prev_season)
+                prev_stats = w3c_service.getPlayerStats(
+                    user.battleTag, season_override=prev_season
+                )
                 if prev_stats:
                     all_stats.extend(prev_stats)
             except Exception as e:

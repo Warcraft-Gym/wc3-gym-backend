@@ -1,18 +1,20 @@
 import logging
+
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
+
+from custom_exceptions import DBException
 from src.database.abstract_database_service import AbstractDatabaseService
 from src.models.fantasy_team import DBFantasyTeam
 from src.models.relationships import DBFantasyTeamPlayer
-from custom_exceptions import DBException
-from src.util.query_util import QueryUtil
 from src.schemas.fantasy_team import FantasyTeam
+from src.util.query_util import QueryUtil
 
 logger = logging.getLogger(__name__)
 
-class FantasyTeamDBService(AbstractDatabaseService):
 
-    def add(self, fantasy_team : FantasyTeam):
+class FantasyTeamDBService(AbstractDatabaseService):
+    def add(self, fantasy_team: FantasyTeam):
         with self.get_session() as session:
             fantasy_team = DBFantasyTeam.add(session, fantasy_team.to_db_dict())
             if not fantasy_team:
@@ -21,7 +23,9 @@ class FantasyTeamDBService(AbstractDatabaseService):
 
     def update(self, fantasy_team: FantasyTeam):
         with self.get_session() as session:
-            fantasy_team = DBFantasyTeam.update(session, fantasy_team.id, **fantasy_team.to_db_dict())
+            fantasy_team = DBFantasyTeam.update(
+                session, fantasy_team.id, **fantasy_team.to_db_dict()
+            )
             if not fantasy_team:
                 raise DBException("Fantasy Team could not be updated!")
             return FantasyTeam.from_dbfantasyteam(fantasy_team)
@@ -53,16 +57,22 @@ class FantasyTeamDBService(AbstractDatabaseService):
                 logger.debug(f"No fantasy team found by searchcriteria: {query}")
                 return result
             # Eager load only the relations the DTO reads
-            fteams = session.scalars(
-                select(DBFantasyTeam)
-                .options(
-                    joinedload(DBFantasyTeam.season).noload('*'),
-                    joinedload(DBFantasyTeam.drafted_team).noload('*'),
-                    joinedload(DBFantasyTeam.captain).noload('*'),
-                    joinedload(DBFantasyTeam.drafted_players).joinedload(DBFantasyTeamPlayer.users).noload('*'),
+            fteams = (
+                session.scalars(
+                    select(DBFantasyTeam)
+                    .options(
+                        joinedload(DBFantasyTeam.season).noload("*"),
+                        joinedload(DBFantasyTeam.drafted_team).noload("*"),
+                        joinedload(DBFantasyTeam.captain).noload("*"),
+                        joinedload(DBFantasyTeam.drafted_players)
+                        .joinedload(DBFantasyTeamPlayer.users)
+                        .noload("*"),
+                    )
+                    .where(filter)
                 )
-                .where(filter)
-            ).unique().all()
+                .unique()
+                .all()
+            )
             if not fteams:
                 logger.debug(f"No fantasy team found by searchcriteria: {query}")
                 return result

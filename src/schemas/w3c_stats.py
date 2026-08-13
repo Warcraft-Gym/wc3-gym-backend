@@ -4,8 +4,15 @@ from src.models.enums import Race
 from src.schemas.base import APISchema, RoundToInt
 
 DB_FIELDS = {
-    'wc3_season', 'wins', 'losses', 'games', 'mmr',
-    'winrate', 'race', 'league', 'user_id',
+    "wc3_season",
+    "wins",
+    "losses",
+    "games",
+    "mmr",
+    "winrate",
+    "race",
+    "league",
+    "user_id",
 }
 
 
@@ -48,41 +55,14 @@ class W3CStats(APISchema):
         return {
             "type": "object",
             "properties": {
-                "wc3_season": {
-                    "type": "integer",
-                    "description": "Season Number"
-                },
-                "wins": {
-                    "type": "integer",
-                    "description": "Number of wins"
-                },
-                "losses": {
-                    "type": "integer",
-                    "description": "Number of losses"
-                },
-                "games": {
-                    "type": "intger",
-                    "description": "Number of games"
-                },
-                "mmr": {
-                    "type": "integer",
-                    "description": "User's MMR"
-                },
-                "winrate": {
-                    "type": "float",
-                    "description": "Percentage of won games"
-                },
-                "race": {
-                    "type": "string",
-                    "description": "Race of the stats"
-                },
-                 "league": {
-                    "type": "integer",
-                    "description": "Number of the league"
-                },
-                "user_id": {
-                    "type": "string",
-                    "description": "User's Id"
-                }
-            }
+                "wc3_season": {"type": "integer", "description": "Season Number"},
+                "wins": {"type": "integer", "description": "Number of wins"},
+                "losses": {"type": "integer", "description": "Number of losses"},
+                "games": {"type": "intger", "description": "Number of games"},
+                "mmr": {"type": "integer", "description": "User's MMR"},
+                "winrate": {"type": "float", "description": "Percentage of won games"},
+                "race": {"type": "string", "description": "Race of the stats"},
+                "league": {"type": "integer", "description": "Number of the league"},
+                "user_id": {"type": "string", "description": "User's Id"},
+            },
         }

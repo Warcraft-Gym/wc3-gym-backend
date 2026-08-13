@@ -46,7 +46,7 @@ class Team(TeamReduced):
     seasons_info: Annotated[list[SeasonInfo], NoneToList] = []
 
     def to_db_dict(self):
-        return self.model_dump(include={'name', 'long_name', 'discord_role'})
+        return self.model_dump(include={"name", "long_name", "discord_role"})
 
     @classmethod
     def from_dbteam(cls, team):
@@ -55,7 +55,17 @@ class Team(TeamReduced):
 
         u = {}
         coaches = {}
-        seasons_info = [s for s in (SeasonInfo.from_dbseasoninfo(info) for info in team.season_info) if s] if team.season_info else []
+        seasons_info = (
+            [
+                s
+                for s in (
+                    SeasonInfo.from_dbseasoninfo(info) for info in team.season_info
+                )
+                if s
+            ]
+            if team.season_info
+            else []
+        )
 
         if team.user_seasons:
             for ut in team.user_seasons:
@@ -64,7 +74,7 @@ class Team(TeamReduced):
                 user = User.from_dbuser(ut.user)
                 if user:
                     for gnl_stat in user.gnl_stats:
-                        if (gnl_stat.season_id == ut.season_id):
+                        if gnl_stat.season_id == ut.season_id:
                             user.gnl_stats = [gnl_stat]
                             break
                     u.get(ut.season_id).append(user)
@@ -107,11 +117,11 @@ class Team(TeamReduced):
     @staticmethod
     def schema():
         return {
-            'type': 'object',
-            'properties': {
-                'name': {'type': 'string'},
-                'long_name': {'type': 'string'},
-                'discord_role': {'type': 'string'}
+            "type": "object",
+            "properties": {
+                "name": {"type": "string"},
+                "long_name": {"type": "string"},
+                "discord_role": {"type": "string"},
             },
-            'required': ['name']
+            "required": ["name"],
         }

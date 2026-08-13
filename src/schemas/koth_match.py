@@ -15,7 +15,14 @@ class KothMatch(APISchema):
 
     def to_db_dict(self):
         return self.model_dump(
-            include={'id', 'event_id', 'bracket', 'game_mode', 'num_teams', 'winner_team_number'}
+            include={
+                "id",
+                "event_id",
+                "bracket",
+                "game_mode",
+                "num_teams",
+                "winner_team_number",
+            }
         )
 
     @classmethod
@@ -30,5 +37,9 @@ class KothMatch(APISchema):
             game_mode=match.game_mode,
             num_teams=match.num_teams,
             winner_team_number=match.winner_team_number,
-            participants=[KothMatchParticipant.from_db_participant(p) for p in match.participants] if hasattr(match, 'participants') else [],
+            participants=[
+                KothMatchParticipant.from_db_participant(p) for p in match.participants
+            ]
+            if hasattr(match, "participants")
+            else [],
         )

@@ -1,6 +1,7 @@
+from custom_exceptions import NotFoundException
 from src.database.season_db_service import SeasonDBService
 from src.schemas.season import Season
-from custom_exceptions import NotFoundException
+
 
 class SeasonAppService:
     def __init__(self, season_service: SeasonDBService):
@@ -24,27 +25,27 @@ class SeasonAppService:
         if not season_data:
             raise NotFoundException(f"Season not found by Id: {season_id}")
         return season_data
-    
+
     def getAll(self):
         season_data = self.season_service.getAll()
         return season_data
-    
+
     def addTeams(self, season_id: int, team_ids):
         season_data = self.season_service.addTeams(season_id, team_ids)
         return season_data
-      
+
     def removeTeams(self, season_id: int, team_ids):
         season_data = self.season_service.removeTeams(season_id, team_ids)
         return season_data
-    
+
     def search(self, query):
         season_data = self.season_service.search(query)
         return season_data
-    
+
     def addMaps(self, season_id: int, map_ids):
         season_data = self.season_service.addMaps(season_id, map_ids)
         return season_data
-      
+
     def removeMaps(self, season_id: int, map_ids):
         season_data = self.season_service.removeMaps(season_id, map_ids)
         return season_data
@@ -52,11 +53,11 @@ class SeasonAppService:
     def addUserSignup(self, season_id: int, user_ids):
         season_data = self.season_service.addUserSignup(season_id, user_ids)
         return season_data
-      
+
     def removeUserSignup(self, season_id: int, user_ids):
         season_data = self.season_service.removeUserSignup(season_id, user_ids)
         return season_data
-    
+
     def getSignedUpUsers(self, season_id: int):
         users = self.season_service.getSignedUpUsers(season_id)
         return users

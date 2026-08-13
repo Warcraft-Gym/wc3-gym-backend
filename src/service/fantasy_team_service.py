@@ -1,7 +1,7 @@
+from custom_exceptions import NotFoundException
 from src.database.fantasy_team_db_service import FantasyTeamDBService
 from src.schemas.fantasy_team import FantasyTeam
-from src.schemas.fantasy_bet import FantasyBet
-from custom_exceptions import NotFoundException
+
 
 class FantasyTeamAppService:
     def __init__(self, fantasy_team_service: FantasyTeamDBService):
@@ -25,7 +25,7 @@ class FantasyTeamAppService:
         if not team_data:
             raise NotFoundException(f"Fantasy Team not found by Id: {team_id}")
         return team_data
-    
+
     def getAll_fantasy_teams(self):
         team_data = self.fantasy_team_service.getAll()
         return team_data
@@ -35,9 +35,9 @@ class FantasyTeamAppService:
         return team_data
 
     def addFantasyPlayers(self, team_id: int, players):
-            team_data = self.fantasy_team_service.addPlayers(team_id, players)
-            return team_data
-      
+        team_data = self.fantasy_team_service.addPlayers(team_id, players)
+        return team_data
+
     def removeFantasyPlayers(self, team_id: int, players):
         team_data = self.fantasy_team_service.removePlayers(team_id, players)
         return team_data

@@ -10,7 +10,7 @@ class KothMatchParticipant(APISchema):
     signup: KothSignup | None = None
 
     def to_db_dict(self):
-        return self.model_dump(include={'id', 'match_id', 'signup_id', 'team_number'})
+        return self.model_dump(include={"id", "match_id", "signup_id", "team_number"})
 
     @classmethod
     def from_db_participant(cls, participant):
@@ -22,5 +22,7 @@ class KothMatchParticipant(APISchema):
             match_id=participant.match_id,
             signup_id=participant.signup_id,
             team_number=participant.team_number,
-            signup=KothSignup.from_db_signup(participant.signup) if hasattr(participant, 'signup') and participant.signup else None,
+            signup=KothSignup.from_db_signup(participant.signup)
+            if hasattr(participant, "signup") and participant.signup
+            else None,
         )

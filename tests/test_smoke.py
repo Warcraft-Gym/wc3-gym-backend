@@ -37,7 +37,14 @@ def test_get_status(client, seeded, path, expected_status):
     assert resp.status_code == expected_status
 
 
-@pytest.mark.parametrize("path", [p for p, s in ROUTES if s == 200 and "apidocs" not in p and p != "/oauth2-redirect.html"])
+@pytest.mark.parametrize(
+    "path",
+    [
+        p
+        for p, s in ROUTES
+        if s == 200 and "apidocs" not in p and p != "/oauth2-redirect.html"
+    ],
+)
 def test_get_returns_json(client, seeded, path):
     resp = client.get(path)
     assert resp.content_type.startswith("application/json")

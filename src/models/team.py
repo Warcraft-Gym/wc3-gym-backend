@@ -1,26 +1,39 @@
+from typing import TYPE_CHECKING
+
 from sqlalchemy import LargeBinary, String
 from sqlalchemy.orm import Mapped, Session, mapped_column, relationship
+
 from src.models.base import DBModel
-from src.models.user import DBUser
 from src.models.relationships import DBUserTeamSeason
+from src.models.user import DBUser
+
+if TYPE_CHECKING:
+    from src.models.relationships import DBTeamSeason
 
 
 class DBTeam(DBModel):
-    __tablename__ = 'teams'
+    __tablename__ = "teams"
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(50))
     long_name: Mapped[str | None] = mapped_column(String(100))
     icon: Mapped[bytes | None] = mapped_column(LargeBinary)
     discord_role: Mapped[str | None] = mapped_column(String(50))
-    user_seasons: Mapped[list['DBUserTeamSeason']] = relationship(back_populates='team', cascade="all, delete")
-    season_info: Mapped[list['DBTeamSeason']] = relationship(back_populates='team', cascade="all, delete")
+    user_seasons: Mapped[list["DBUserTeamSeason"]] = relationship(
+        back_populates="team", cascade="all, delete"
+    )
+    season_info: Mapped[list["DBTeamSeason"]] = relationship(
+        back_populates="team", cascade="all, delete"
+    )
 
     def to_dict(self):
-        return {column.name: getattr(self, column.name) for column in self.__table__.columns}
+        return {
+            column.name: getattr(self, column.name) for column in self.__table__.columns
+        }
 
     @classmethod
     def addPlayers(cls, session: Session, obj_id, season_id, user_ids):
         from src.models.season import DBSeason
+
         team = session.get(cls, obj_id)
         if not team:
             raise Exception(f"Team not found by id: {obj_id}")
@@ -31,9 +44,15 @@ class DBTeam(DBModel):
             user = session.get(DBUser, user_id)
             if not user:
                 raise Exception(f"User not found by id: {user_id}")
-            already_exists = session.get(DBUserTeamSeason, {'team_id': team.id, 'season_id': season_id, 'user_id': user.id}) is not None
+            already_exists = (
+                session.get(
+                    DBUserTeamSeason,
+                    {"team_id": team.id, "season_id": season_id, "user_id": user.id},
+                )
+                is not None
+            )
             if not already_exists:
-                session.add(DBUserTeamSeason(user=user,season=season,team=team))
+                session.add(DBUserTeamSeason(user=user, season=season, team=team))
 
         session.flush()
         return team
@@ -41,6 +60,7 @@ class DBTeam(DBModel):
     @classmethod
     def removePlayers(cls, session: Session, obj_id, season_id, user_ids):
         from src.models.season import DBSeason
+
         team = session.get(cls, obj_id)
         if not team:
             raise Exception(f"Team not found by id: {obj_id}")
@@ -51,7 +71,10 @@ class DBTeam(DBModel):
             user = session.get(DBUser, user_id)
             if not user:
                 raise Exception(f"User not found by id: {user_id}")
-            user_team = session.get(DBUserTeamSeason, {'team_id': obj_id, 'season_id': season_id, 'user_id': user.id})
+            user_team = session.get(
+                DBUserTeamSeason,
+                {"team_id": obj_id, "season_id": season_id, "user_id": user.id},
+            )
             if not user_team:
                 raise Exception(f"User not part of the team, user id: {user_id}")
             session.delete(user_team)
@@ -69,8 +92,8 @@ class DBTeam(DBModel):
     @classmethod
     def setCoaches(cls, session: Session, team_id, season_id, user_ids):
         """Set coaches for a team in a season (up to 3)."""
-        from src.models.season import DBSeason
         from src.models.relationships import DBTeamSeason
+        from src.models.season import DBSeason
 
         team = session.get(cls, team_id)
         if not team:
@@ -90,7 +113,9 @@ class DBTeam(DBModel):
                 raise Exception(f"User not found by id: {user_id}")
 
         # Get or create team_season entry
-        team_season = session.get(DBTeamSeason, {'team_id': team_id, 'season_id': season_id})
+        team_season = session.get(
+            DBTeamSeason, {"team_id": team_id, "season_id": season_id}
+        )
 
         if not team_season:
             team_season = DBTeamSeason(team_id=team_id, season_id=season_id)

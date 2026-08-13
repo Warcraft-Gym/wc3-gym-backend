@@ -1,11 +1,11 @@
+import logging
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
-import logging
 
 from sqlalchemy.exc import SQLAlchemyError
 
-from src.database.engine import Session
 from custom_exceptions import DBException
+from src.database.engine import Session
 
 logger = logging.getLogger(__name__)
 

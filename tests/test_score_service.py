@@ -39,23 +39,29 @@ def make_service(score_system=None):
     )
 
 
-@pytest.mark.parametrize("player,opponent,expected", [
-    (2, 0, 3),  # clean win takes the maximum
-    (2, 1, 2),
-    (1, 2, 1),  # a loss keeps the map score
-    (0, 2, 0),
-])
+@pytest.mark.parametrize(
+    "player,opponent,expected",
+    [
+        (2, 0, 3),  # clean win takes the maximum
+        (2, 1, 2),
+        (1, 2, 1),  # a loss keeps the map score
+        (0, 2, 0),
+    ],
+)
 def test_standard_scores(player, opponent, expected):
     service = make_service("standard")
     assert service.getScoreByMapScore(player, opponent) == expected
 
 
-@pytest.mark.parametrize("player,opponent,expected", [
-    (2, 0, 4),
-    (2, 1, 3),
-    (1, 2, 1),
-    (0, 2, 0),
-])
+@pytest.mark.parametrize(
+    "player,opponent,expected",
+    [
+        (2, 0, 4),
+        (2, 1, 3),
+        (1, 2, 1),
+        (0, 2, 0),
+    ],
+)
 def test_helpstone_scores(player, opponent, expected):
     service = make_service("helpstone")
     assert service.getScoreByMapScore(player, opponent) == expected
@@ -73,12 +79,15 @@ def test_unplayed_series_has_no_points():
     assert service.getScoreByMapScore(None, None) is None
 
 
-@pytest.mark.parametrize("player,opponent", [
-    (3, 0),   # above the 0-2 map score range
-    (-1, 2),
-    (2, 3),
-    (None, 1),  # half-reported result
-])
+@pytest.mark.parametrize(
+    "player,opponent",
+    [
+        (3, 0),  # above the 0-2 map score range
+        (-1, 2),
+        (2, 3),
+        (None, 1),  # half-reported result
+    ],
+)
 def test_invalid_scores_raise(player, opponent):
     service = make_service("standard")
     with pytest.raises(Exception, match="Score is not valid"):

@@ -1,6 +1,7 @@
 from src.database.team_season_db_service import TeamSeasonDBService
 from src.schemas.season_info import SeasonInfo
 
+
 class TeamSeasonAppService:
     def __init__(self, team_season_db_service: TeamSeasonDBService):
         self.team_season_db_service = team_season_db_service

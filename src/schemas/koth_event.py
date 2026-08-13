@@ -19,8 +19,13 @@ class KothEvent(APISchema):
     def to_db_dict(self):
         return self.model_dump(
             include={
-                'id', 'name', 'description', 'event_date', 'is_active',
-                'bracket_1_threshold', 'bracket_2_threshold',
+                "id",
+                "name",
+                "description",
+                "event_date",
+                "is_active",
+                "bracket_1_threshold",
+                "bracket_2_threshold",
             }
         )
 
@@ -37,6 +42,10 @@ class KothEvent(APISchema):
             is_active=event.is_active,
             bracket_1_threshold=event.bracket_1_threshold,
             bracket_2_threshold=event.bracket_2_threshold,
-            signups=[KothSignup.from_db_signup(s) for s in event.signups] if hasattr(event, 'signups') else [],
-            matches=[KothMatch.from_db_match(m) for m in event.matches] if hasattr(event, 'matches') else [],
+            signups=[KothSignup.from_db_signup(s) for s in event.signups]
+            if hasattr(event, "signups")
+            else [],
+            matches=[KothMatch.from_db_match(m) for m in event.matches]
+            if hasattr(event, "matches")
+            else [],
         )

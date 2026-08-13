@@ -1,4 +1,3 @@
-
 from typing import Annotated
 
 from src.schemas.base import APISchema, IsoDateTime, NumToStr
@@ -6,9 +5,17 @@ from src.schemas.match import Match
 from src.schemas.user import User
 
 DB_FIELDS = {
-    'match_id', 'date_time', 'caster', 'player1_id', 'player2_id',
-    'player1_score', 'player2_score', 'player1_points', 'player2_points',
-    'host_player_id', 'is_fantasy_match',
+    "match_id",
+    "date_time",
+    "caster",
+    "player1_id",
+    "player2_id",
+    "player1_score",
+    "player2_score",
+    "player1_points",
+    "player2_points",
+    "host_player_id",
+    "is_fantasy_match",
 }
 
 
@@ -58,20 +65,24 @@ class Series(APISchema):
     @staticmethod
     def schema():
         return {
-            'type': 'object',
-            'properties': {
-                'match_id': {'type': 'integer'},
-                'season_id': {'type': 'integer'},
-                'date_time': {'type': 'string', 'format':'date-time', 'description': 'ISO 8601 date-time (e.g., "2025-03-08T18:57:00Z")'},
-                'caster': {'type': 'string'},
-                'player1_id': {'type': 'integer'},
-                'player2_id': {'type': 'integer'},
-                'player1_score': {'type': 'integer'},
-                'player2_score': {'type': 'integer'},
-                'player1_points': {'type': 'integer'},
-                'player2_points': {'type': 'integer'},
-                'host_player_id': {'type': 'integer'},
-                'is_fantasy_match': {'type': 'boolean'}
+            "type": "object",
+            "properties": {
+                "match_id": {"type": "integer"},
+                "season_id": {"type": "integer"},
+                "date_time": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": 'ISO 8601 date-time (e.g., "2025-03-08T18:57:00Z")',
+                },
+                "caster": {"type": "string"},
+                "player1_id": {"type": "integer"},
+                "player2_id": {"type": "integer"},
+                "player1_score": {"type": "integer"},
+                "player2_score": {"type": "integer"},
+                "player1_points": {"type": "integer"},
+                "player2_points": {"type": "integer"},
+                "host_player_id": {"type": "integer"},
+                "is_fantasy_match": {"type": "boolean"},
             },
-            'required': ['match_id', 'player1_id', 'player2_id']
+            "required": ["match_id", "player1_id", "player2_id"],
         }

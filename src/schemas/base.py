@@ -9,6 +9,7 @@ The JSON produced by to_dict() is a public contract consumed by the
 warcraft-gym.com frontend pages - field names and value shapes must not
 change.
 """
+
 import enum
 import numbers
 from datetime import date, datetime
@@ -59,13 +60,13 @@ def _lenient_date(value: Any) -> Any:
     # The old DTOs stored raw request values for date fields: an empty string
     # became no value, and MySQL truncated a datetime to the DATE column.
     # Reproduce both before pydantic's strict date parsing runs.
-    if value == '':
+    if value == "":
         return None
     if isinstance(value, datetime):
         return value.date()
     if isinstance(value, str):
         try:
-            parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
+            parsed = datetime.fromisoformat(value)
         except ValueError:
             return value
         return parsed.date()
@@ -73,14 +74,14 @@ def _lenient_date(value: Any) -> Any:
 
 
 def _empty_str_to_none(value: Any) -> Any:
-    return None if value == '' else value
+    return None if value == "" else value
 
 
 def _round_to_int(value: Any) -> Any:
     # The w3champions API sometimes returns fractional numbers for integer
     # columns; MySQL rounded them on insert for the old DTOs.
     if isinstance(value, float) and not value.is_integer():
-        return int(round(value))
+        return round(value)
     return value
 
 
@@ -90,11 +91,15 @@ def _round_to_int(value: Any) -> Any:
 # through untouched, so the DB layer receives real date/datetime values.
 IsoDateTime = Annotated[
     datetime,
-    PlainSerializer(lambda v: v.isoformat(), return_type=str, when_used='json-unless-none'),
+    PlainSerializer(
+        lambda v: v.isoformat(), return_type=str, when_used="json-unless-none"
+    ),
 ]
 IsoDate = Annotated[
     date,
-    PlainSerializer(lambda v: v.isoformat(), return_type=str, when_used='json-unless-none'),
+    PlainSerializer(
+        lambda v: v.isoformat(), return_type=str, when_used="json-unless-none"
+    ),
 ]
 
 # Race columns hold Race enum members when read via SQLAlchemy; the API always
@@ -129,7 +134,7 @@ class APISchema(BaseModel):
     # validate_assignment: the service layer mutates these objects in place
     # (e.g. `map.id = None`, `team.player_by_season = {...}`), and those
     # values must go through the same validators as constructor input.
-    model_config = ConfigDict(extra='ignore', validate_assignment=True)
+    model_config = ConfigDict(extra="ignore", validate_assignment=True)
 
     def __init__(self, data: dict | None = _UNSET, **kwargs):
         # The old DTOs were constructed as `SomeDTO(request.json)`; keep that
@@ -142,4 +147,4 @@ class APISchema(BaseModel):
             super().__init__(**data)
 
     def to_dict(self) -> dict:
-        return self.model_dump(mode='json')
+        return self.model_dump(mode="json")

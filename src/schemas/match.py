@@ -6,8 +6,14 @@ from src.schemas.season import Season
 from src.schemas.team import TeamReduced
 
 DB_FIELDS = {
-    'team1_id', 'team2_id', 'season_id', 'playday', 'date_frame',
-    'fixed_map_id', 'team1_score', 'team2_score',
+    "team1_id",
+    "team2_id",
+    "season_id",
+    "playday",
+    "date_frame",
+    "fixed_map_id",
+    "team1_score",
+    "team2_score",
 }
 
 
@@ -51,16 +57,16 @@ class Match(APISchema):
     @staticmethod
     def schema():
         return {
-            'type': 'object',
-            'properties': {
-                'team1_id': {'type': 'integer'},
-                'team2_id': {'type': 'integer'},
-                'season_id': {'type': 'integer'},
-                'playday': {'type': 'integer'},
-                'date_frame': {'type': 'string'},
-                'fixed_map_id': {'type': 'integer'},
-                'team1_score' : {'type': 'integer'},
-                'team2_score' : {'type': 'integer'}
+            "type": "object",
+            "properties": {
+                "team1_id": {"type": "integer"},
+                "team2_id": {"type": "integer"},
+                "season_id": {"type": "integer"},
+                "playday": {"type": "integer"},
+                "date_frame": {"type": "string"},
+                "fixed_map_id": {"type": "integer"},
+                "team1_score": {"type": "integer"},
+                "team2_score": {"type": "integer"},
             },
-            'required': ['team1_id','team2_id']
+            "required": ["team1_id", "team2_id"],
         }

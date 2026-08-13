@@ -1,6 +1,7 @@
+from custom_exceptions import NotFoundException
 from src.database.match_db_service import MatchDBService
 from src.schemas.match import Match
-from custom_exceptions import NotFoundException
+
 
 class MatchAppService:
     def __init__(self, match_service: MatchDBService):
