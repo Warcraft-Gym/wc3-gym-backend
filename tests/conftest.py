@@ -1,21 +1,21 @@
-"""Shared fixtures. This is the only test module that touches Flask.
+"""Shared fixtures. This is the only test module that touches FastAPI.
 
 Every test asserts on status codes and JSON bodies through the client
 fixture, or calls a service object directly. Nothing outside this file
-imports Flask, so a move to another web framework replaces the app and
+imports a web framework, so a move to another one replaces the app and
 client fixtures and keeps the suite.
 
 The application and the process are one-to-one: Session.configure and the
-blueprint attributes are process-global, so the app fixture is
-session-scoped. Tests share one database file and the clean_db fixture
-empties it between tests.
+service singletons in app/api/deps.py are process-global, so the app
+fixture is session-scoped. Tests share one database file and the clean_db
+fixture empties it between tests.
 """
 
 import os
 
 import pytest
 
-# create_app reads these. Set before the src import so the values are the
+# create_app reads these. Set before the app import so the values are the
 # same with and without a .env file (load_dotenv does not override).
 os.environ["JWT_SECRET_KEY"] = "test-secret-key-of-at-least-32-bytes"
 os.environ["ADMIN_TOKEN"] = "test-admin-token"
@@ -38,7 +38,12 @@ def app(tmp_path_factory):
 
 @pytest.fixture
 def client(app):
-    return app.test_client()
+    from fastapi.testclient import TestClient
+
+    # follow_redirects off, like the Flask test client, so a 302 is
+    # asserted as a 302. raise_server_exceptions off so a route error is
+    # asserted as the 500 body a real client sees.
+    return TestClient(app, follow_redirects=False, raise_server_exceptions=False)
 
 
 @pytest.fixture(autouse=True)
@@ -46,7 +51,7 @@ def clean_db(app):
     """Empty every table after each test. Children first, so no foreign
     key constraint fires."""
     yield
-    from app.database.engine import Session
+    from app.core.db import Session
     from app.models.base import Base
 
     with Session() as session:
@@ -58,7 +63,7 @@ def clean_db(app):
 @pytest.fixture
 def seeded(app):
     """A small consistent league. Returns the ids the tests refer to."""
-    from app.database.engine import Session
+    from app.core.db import Session
     from tests.seed import seed_league
 
     with Session() as session:
@@ -68,15 +73,16 @@ def seeded(app):
 
 
 @pytest.fixture
-def route_count(app):
-    """Number of registered routes, excluding the static route. Lives here
-    so the url_map stays out of the test files."""
-    return len([r for r in app.url_map.iter_rules() if r.endpoint != "static"])
-
-
-@pytest.fixture
 def auth_headers(client):
     resp = client.post("/login", json={"token": "test-admin-token"})
     assert resp.status_code == 200
-    token = resp.get_json()["access_token"]
+    token = resp.json()["access_token"]
+    return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture
+def refresh_headers(client):
+    resp = client.post("/login", json={"token": "test-admin-token"})
+    assert resp.status_code == 200
+    token = resp.json()["refresh_token"]
     return {"Authorization": f"Bearer {token}"}

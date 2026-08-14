@@ -11,7 +11,7 @@ depends on the score system (standard tops at 3, helpstone at 4).
 
 import pytest
 
-from app.service.score_service import ScoreAppService
+from app.services.scores import ScoreService
 
 
 class StubSettings:
@@ -29,7 +29,7 @@ class StubSettings:
 
 
 def make_service(score_system=None):
-    return ScoreAppService(
+    return ScoreService(
         match_service=None,
         serires_service=None,
         team_service=None,

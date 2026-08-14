@@ -1,6 +1,6 @@
 # GNL Backend
 
-Flask-based REST API for GNL (Gym Newbie League) esports platform providing JWT-authenticated endpoints for user management, team operations, match scheduling, series tracking, and fantasy betting.
+FastAPI REST API for the GNL (Gym Newbie League) esports platform providing JWT-authenticated endpoints for user management, team operations, match scheduling, series tracking, and fantasy betting.
 
 ## Prerequisites
 
@@ -70,7 +70,6 @@ The project uses VS Code tasks for Docker builds and runs. The configuration is 
 ```json
 {
   "env": {
-    "FLASK_APP": "app.main:create_app",
     "DB_URL": "mysql+pymysql://gym_user:gym_user@host.docker.internal:3306/GYM_BACKEND",
     "ADMIN_TOKEN": "your-admin-token-here",
     "JWT_SECRET_KEY": "your-secret-key-here",
@@ -111,13 +110,14 @@ The project uses VS Code tasks for Docker builds and runs. The configuration is 
 This will:
 - Build the Docker image (`eashibby/gnl_backend:latest`)
 - Start the container with environment variables from tasks.json
-- Run Flask on port 5002
+- Run uvicorn on port 5002
 - Attach debugger for breakpoint support
 
 ### Accessing the Application
 
 - **Backend API:** http://localhost:5002
-- **Swagger Docs:** http://localhost:5002/apidocs/
+- **API docs (Swagger UI):** http://localhost:5002/docs
+- **OpenAPI document:** http://localhost:5002/openapi.json
 
 ### Manual Docker Commands
 
@@ -179,22 +179,27 @@ backend/
 ├── app/
 │   ├── main.py            # The application factory, create_app
 │   ├── exceptions.py      # Shared exception types
-│   ├── api/               # API blueprints (routes)
-│   ├── database/          # Database services
-│   ├── service/           # Application services
+│   ├── api/
+│   │   ├── main.py        # Collects the routers
+│   │   ├── deps.py        # Dependencies: auth guards, service instances
+│   │   └── routes/        # One module per API area
+│   ├── core/
+│   │   ├── db.py          # Engine and session factory
+│   │   └── security.py    # Token minting and validation
+│   ├── services/          # One service per entity
 │   ├── models/            # SQLAlchemy models
 │   ├── schemas/           # Pydantic schemas
-│   └── util/              # Utility functions
+│   └── utils/             # Utility functions
 ```
 
 The server calls the factory, so nothing builds an application at import:
-`gunicorn "app.main:create_app()"`.
+`uvicorn --factory app.main:create_app`.
 
 ## Development Workflow
 
 1. Make code changes
 2. Press F5 to rebuild and run in Docker
-3. Test endpoints at http://localhost:5002/apidocs/
+3. Test endpoints at http://localhost:5002/docs
 4. Check logs in VS Code Debug Console
 5. Set breakpoints for debugging
 

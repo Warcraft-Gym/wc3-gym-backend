@@ -4,7 +4,7 @@
 def test_login_with_admin_token(client):
     resp = client.post("/login", json={"token": "test-admin-token"})
     assert resp.status_code == 200
-    body = resp.get_json()
+    body = resp.json()
     assert "access_token" in body
     assert "refresh_token" in body
 
@@ -22,7 +22,7 @@ def test_guarded_route_without_token(client):
 def test_guarded_route_with_token(client, seeded, auth_headers):
     resp = client.get("/config/koth/nightbot-token", headers=auth_headers)
     assert resp.status_code == 200
-    assert resp.get_json()["token"] == "test-nightbot-token"
+    assert resp.json()["token"] == "test-nightbot-token"
 
 
 def test_refresh_rejects_access_token(client, auth_headers):

@@ -10,7 +10,7 @@ renamed or retyped one fails.
 def get_json(client, path):
     resp = client.get(path)
     assert resp.status_code == 200
-    return resp.get_json()
+    return resp.json()
 
 
 def test_users_list(client, seeded):

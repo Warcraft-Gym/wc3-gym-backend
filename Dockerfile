@@ -29,5 +29,6 @@ USER appuser
 # The project environment on PATH lets gunicorn run without uv at runtime
 ENV PATH="/app/.venv/bin:$PATH"
 
-# During debugging, this entry point will be overridden
-CMD ["gunicorn", "--bind", "0.0.0.0:5002", "--timeout=1250", "app.main:create_app()"]
+# During debugging, this entry point will be overridden. uvicorn has no
+# worker timeout, so the long import/export requests need no --timeout.
+CMD ["uvicorn", "--factory", "app.main:create_app", "--host", "0.0.0.0", "--port", "5002"]
