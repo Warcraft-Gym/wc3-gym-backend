@@ -1,17 +1,12 @@
 from sqlalchemy import select
-from sqlalchemy.orm import DeclarativeBase, Session
+from sqlalchemy.orm import Session
+from sqlmodel import SQLModel
 
 from app.exceptions import DBException
 
 
-class Base(DeclarativeBase):
-    pass
-
-
-class DBModel(Base):
+class DBModel(SQLModel):
     """Shared query helpers for the mapped classes. It has no table of its own."""
-
-    __abstract__ = True
 
     @classmethod
     def add(cls, session: Session, data: dict):

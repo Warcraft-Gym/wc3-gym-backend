@@ -1,16 +1,17 @@
-from sqlalchemy import String, select
-from sqlalchemy.orm import Mapped, Session, mapped_column
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+from sqlmodel import Field
 
 from app.models.base import DBModel
 
 
-class DBSettings(DBModel):
+class DBSettings(DBModel, table=True):
     __tablename__ = "settings"
 
-    id: Mapped[int] = mapped_column(primary_key=True)
-    key: Mapped[str] = mapped_column(String(255), unique=True, index=True)
-    value: Mapped[str | None] = mapped_column(String(1000))
-    description: Mapped[str | None] = mapped_column(String(500))
+    id: int | None = Field(default=None, primary_key=True)
+    key: str = Field(max_length=255, unique=True, index=True)
+    value: str | None = Field(default=None, max_length=1000)
+    description: str | None = Field(default=None, max_length=500)
 
     def to_dict(self):
         return {

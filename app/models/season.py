@@ -1,8 +1,8 @@
 from datetime import date
 from typing import TYPE_CHECKING
 
-from sqlalchemy import String
-from sqlalchemy.orm import Mapped, Session, mapped_column, relationship
+from sqlalchemy.orm import Session
+from sqlmodel import Field, Relationship
 
 from app.models.base import DBModel
 from app.models.map import DBMap
@@ -14,28 +14,28 @@ if TYPE_CHECKING:
     from app.models.relationships import DBUserTeamSeason
 
 
-class DBSeason(DBModel):
+class DBSeason(DBModel, table=True):
     __tablename__ = "seasons"
-    id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[str] = mapped_column(String(50))
-    number_weeks: Mapped[int] = mapped_column()
-    series_per_week: Mapped[int] = mapped_column()
-    pick_ban: Mapped[str | None] = mapped_column(String(100))
-    start_date: Mapped[date | None] = mapped_column()
-    end_date: Mapped[date | None] = mapped_column()
-    user_teams: Mapped[list["DBUserTeamSeason"]] = relationship(
-        back_populates="season", cascade="all, delete"
+    id: int | None = Field(default=None, primary_key=True)
+    name: str = Field(max_length=50)
+    number_weeks: int
+    series_per_week: int
+    pick_ban: str | None = Field(default=None, max_length=100)
+    start_date: date | None = None
+    end_date: date | None = None
+    user_teams: list["DBUserTeamSeason"] = Relationship(
+        back_populates="season", sa_relationship_kwargs={"cascade": "all, delete"}
     )
-    teams: Mapped[list["DBTeamSeason"]] = relationship(
-        back_populates="season", cascade="all, delete"
+    teams: list["DBTeamSeason"] = Relationship(
+        back_populates="season", sa_relationship_kwargs={"cascade": "all, delete"}
     )
-    maps: Mapped[list["DBMapSeason"]] = relationship(
-        back_populates="season", cascade="all, delete"
+    maps: list["DBMapSeason"] = Relationship(
+        back_populates="season", sa_relationship_kwargs={"cascade": "all, delete"}
     )
-    signup_users: Mapped[list["DBUserSeasonSignup"]] = relationship(
-        back_populates="season", cascade="all, delete"
+    signup_users: list["DBUserSeasonSignup"] = Relationship(
+        back_populates="season", sa_relationship_kwargs={"cascade": "all, delete"}
     )
-    discordRole: Mapped[str | None] = mapped_column(String(50))
+    discordRole: str | None = Field(default=None, max_length=50)
 
     def to_dict(self):
         return {

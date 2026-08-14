@@ -1,8 +1,9 @@
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, String, and_, select
-from sqlalchemy.orm import Mapped, Session, mapped_column, relationship
+from sqlalchemy import and_, select
+from sqlalchemy.orm import Session
+from sqlmodel import Field, Relationship
 
 from app.models.base import DBModel
 from app.models.match import DBMatch
@@ -11,24 +12,30 @@ if TYPE_CHECKING:
     from app.models.user import DBUser
 
 
-class DBSeries(DBModel):
+class DBSeries(DBModel, table=True):
     __tablename__ = "series"
-    id: Mapped[int] = mapped_column(primary_key=True)
-    match_id: Mapped[int] = mapped_column(ForeignKey("matches.id", ondelete="CASCADE"))
-    date_time: Mapped[datetime | None] = mapped_column()
-    caster: Mapped[str | None] = mapped_column(String(50))
-    player1_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
-    player2_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
-    player1_score: Mapped[int | None] = mapped_column()
-    player2_score: Mapped[int | None] = mapped_column()
-    player1_points: Mapped[int | None] = mapped_column()
-    player2_points: Mapped[int | None] = mapped_column()
-    host_player_id: Mapped[int] = mapped_column()
-    is_fantasy_match: Mapped[bool | None] = mapped_column()
+    id: int | None = Field(default=None, primary_key=True)
+    match_id: int = Field(foreign_key="matches.id", ondelete="CASCADE")
+    date_time: datetime | None = None
+    caster: str | None = Field(default=None, max_length=50)
+    player1_id: int = Field(foreign_key="users.id", ondelete="CASCADE")
+    player2_id: int = Field(foreign_key="users.id", ondelete="CASCADE")
+    player1_score: int | None = None
+    player2_score: int | None = None
+    player1_points: int | None = None
+    player2_points: int | None = None
+    host_player_id: int
+    is_fantasy_match: bool | None = None
 
-    match: Mapped["DBMatch"] = relationship(foreign_keys=[match_id])
-    player1: Mapped["DBUser"] = relationship(foreign_keys=[player1_id])
-    player2: Mapped["DBUser"] = relationship(foreign_keys=[player2_id])
+    match: "DBMatch" = Relationship(
+        sa_relationship_kwargs={"foreign_keys": "[DBSeries.match_id]"}
+    )
+    player1: "DBUser" = Relationship(
+        sa_relationship_kwargs={"foreign_keys": "[DBSeries.player1_id]"}
+    )
+    player2: "DBUser" = Relationship(
+        sa_relationship_kwargs={"foreign_keys": "[DBSeries.player2_id]"}
+    )
 
     def to_dict(self):
         return {

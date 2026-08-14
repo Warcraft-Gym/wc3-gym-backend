@@ -12,8 +12,7 @@ import os
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-
-from app.models.base import Base
+from sqlmodel import SQLModel
 
 # Unbound until init_engine runs. The database services import this name at
 # import time, so the object has to exist before the engine does.
@@ -44,7 +43,7 @@ def init_schema(engine):
     worker: the parent then builds the application one time, and the dispose
     below leaves each worker an empty pool, which a forked process needs.
     """
-    Base.metadata.create_all(engine)
+    SQLModel.metadata.create_all(engine)
 
     # Start up is the only user of this connection. Giving it back also
     # leaves nothing for a forked worker to inherit.

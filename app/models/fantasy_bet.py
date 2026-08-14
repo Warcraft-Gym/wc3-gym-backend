@@ -1,7 +1,6 @@
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ForeignKey
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlmodel import Field, Relationship
 
 from app.models.base import DBModel
 
@@ -11,20 +10,28 @@ if TYPE_CHECKING:
     from app.models.user import DBUser
 
 
-class DBFantasyBet(DBModel):
+class DBFantasyBet(DBModel, table=True):
     __tablename__ = "fantasy_bets"
-    id: Mapped[int] = mapped_column(primary_key=True)
-    season_id: Mapped[int] = mapped_column(ForeignKey("seasons.id", ondelete="CASCADE"))
-    series_id: Mapped[int] = mapped_column(ForeignKey("series.id", ondelete="CASCADE"))
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
-    winner_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
-    bet_points: Mapped[int] = mapped_column()
-    bet_result: Mapped[int | None] = mapped_column()
+    id: int | None = Field(default=None, primary_key=True)
+    season_id: int = Field(foreign_key="seasons.id", ondelete="CASCADE")
+    series_id: int = Field(foreign_key="series.id", ondelete="CASCADE")
+    user_id: int = Field(foreign_key="users.id", ondelete="CASCADE")
+    winner_id: int = Field(foreign_key="users.id", ondelete="CASCADE")
+    bet_points: int
+    bet_result: int | None = None
 
-    season: Mapped["DBSeason"] = relationship(foreign_keys=[season_id])
-    series: Mapped["DBSeries"] = relationship(foreign_keys=[series_id])
-    user: Mapped["DBUser"] = relationship(foreign_keys=[user_id])
-    winner: Mapped["DBUser"] = relationship(foreign_keys=[winner_id])
+    season: "DBSeason" = Relationship(
+        sa_relationship_kwargs={"foreign_keys": "[DBFantasyBet.season_id]"}
+    )
+    series: "DBSeries" = Relationship(
+        sa_relationship_kwargs={"foreign_keys": "[DBFantasyBet.series_id]"}
+    )
+    user: "DBUser" = Relationship(
+        sa_relationship_kwargs={"foreign_keys": "[DBFantasyBet.user_id]"}
+    )
+    winner: "DBUser" = Relationship(
+        sa_relationship_kwargs={"foreign_keys": "[DBFantasyBet.winner_id]"}
+    )
 
     def to_dict(self):
         return {

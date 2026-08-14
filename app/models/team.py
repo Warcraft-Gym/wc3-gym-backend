@@ -1,7 +1,7 @@
 from typing import TYPE_CHECKING
 
-from sqlalchemy import LargeBinary, String
-from sqlalchemy.orm import Mapped, Session, mapped_column, relationship
+from sqlalchemy.orm import Session
+from sqlmodel import Field, Relationship
 
 from app.models.base import DBModel
 from app.models.relationships import DBUserTeamSeason
@@ -11,18 +11,18 @@ if TYPE_CHECKING:
     from app.models.relationships import DBTeamSeason
 
 
-class DBTeam(DBModel):
+class DBTeam(DBModel, table=True):
     __tablename__ = "teams"
-    id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[str] = mapped_column(String(50))
-    long_name: Mapped[str | None] = mapped_column(String(100))
-    icon: Mapped[bytes | None] = mapped_column(LargeBinary)
-    discord_role: Mapped[str | None] = mapped_column(String(50))
-    user_seasons: Mapped[list["DBUserTeamSeason"]] = relationship(
-        back_populates="team", cascade="all, delete"
+    id: int | None = Field(default=None, primary_key=True)
+    name: str = Field(max_length=50)
+    long_name: str | None = Field(default=None, max_length=100)
+    icon: bytes | None = None
+    discord_role: str | None = Field(default=None, max_length=50)
+    user_seasons: list["DBUserTeamSeason"] = Relationship(
+        back_populates="team", sa_relationship_kwargs={"cascade": "all, delete"}
     )
-    season_info: Mapped[list["DBTeamSeason"]] = relationship(
-        back_populates="team", cascade="all, delete"
+    season_info: list["DBTeamSeason"] = Relationship(
+        back_populates="team", sa_relationship_kwargs={"cascade": "all, delete"}
     )
 
     def to_dict(self):

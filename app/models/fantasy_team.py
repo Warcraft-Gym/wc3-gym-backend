@@ -1,7 +1,7 @@
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import Enum, ForeignKey, String
-from sqlalchemy.orm import Mapped, Session, mapped_column, relationship
+from sqlalchemy.orm import Session
+from sqlmodel import Field, Relationship
 
 from app.models.base import DBModel
 from app.models.enums import Race
@@ -13,28 +13,35 @@ if TYPE_CHECKING:
     from app.models.team import DBTeam
 
 
-class DBFantasyTeam(DBModel):
+class DBFantasyTeam(DBModel, table=True):
     __tablename__ = "fantasy_teams"
-    id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[str] = mapped_column(String(100))
-    season_id: Mapped[int] = mapped_column(ForeignKey("seasons.id", ondelete="CASCADE"))
-    captain_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
-    drafted_team_id: Mapped[int | None] = mapped_column(
-        ForeignKey("teams.id", ondelete="CASCADE")
+    id: int | None = Field(default=None, primary_key=True)
+    name: str = Field(max_length=100)
+    season_id: int = Field(foreign_key="seasons.id", ondelete="CASCADE")
+    captain_id: int = Field(foreign_key="users.id", ondelete="CASCADE")
+    drafted_team_id: int | None = Field(
+        default=None, foreign_key="teams.id", ondelete="CASCADE"
     )
-    drafted_race: Mapped[Race | None] = mapped_column(Enum(Race))
-    player_points: Mapped[int | None] = mapped_column()
-    bench_points: Mapped[int | None] = mapped_column()
-    team_points: Mapped[int | None] = mapped_column()
-    race_points: Mapped[int | None] = mapped_column()
-    bet_points: Mapped[int | None] = mapped_column()
-    total_points: Mapped[int | None] = mapped_column()
+    drafted_race: Race | None = None
+    player_points: int | None = None
+    bench_points: int | None = None
+    team_points: int | None = None
+    race_points: int | None = None
+    bet_points: int | None = None
+    total_points: int | None = None
 
-    drafted_team: Mapped["DBTeam | None"] = relationship(foreign_keys=[drafted_team_id])
-    captain: Mapped["DBUser"] = relationship(foreign_keys=[captain_id])
-    season: Mapped["DBSeason"] = relationship(foreign_keys=[season_id])
-    drafted_players: Mapped[list["DBFantasyTeamPlayer"]] = relationship(
-        back_populates="fantasy_team", cascade="all, delete"
+    drafted_team: Optional["DBTeam"] = Relationship(
+        sa_relationship_kwargs={"foreign_keys": "[DBFantasyTeam.drafted_team_id]"}
+    )
+    captain: "DBUser" = Relationship(
+        sa_relationship_kwargs={"foreign_keys": "[DBFantasyTeam.captain_id]"}
+    )
+    season: "DBSeason" = Relationship(
+        sa_relationship_kwargs={"foreign_keys": "[DBFantasyTeam.season_id]"}
+    )
+    drafted_players: list["DBFantasyTeamPlayer"] = Relationship(
+        back_populates="fantasy_team",
+        sa_relationship_kwargs={"cascade": "all, delete"},
     )
 
     def to_dict(self):

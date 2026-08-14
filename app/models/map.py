@@ -1,7 +1,6 @@
 from typing import TYPE_CHECKING
 
-from sqlalchemy import String
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlmodel import Field, Relationship
 
 from app.models.base import DBModel
 
@@ -9,14 +8,14 @@ if TYPE_CHECKING:
     from app.models.relationships import DBMapSeason
 
 
-class DBMap(DBModel):
+class DBMap(DBModel, table=True):
     __tablename__ = "maps"
-    id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[str | None] = mapped_column(String(50))
-    shortname: Mapped[str | None] = mapped_column(String(50))
-    image: Mapped[str | None] = mapped_column(String(100))
-    seasons: Mapped[list["DBMapSeason"]] = relationship(
-        back_populates="map", cascade="all, delete"
+    id: int | None = Field(default=None, primary_key=True)
+    name: str | None = Field(default=None, max_length=50)
+    shortname: str | None = Field(default=None, max_length=50)
+    image: str | None = Field(default=None, max_length=100)
+    seasons: list["DBMapSeason"] = Relationship(
+        back_populates="map", sa_relationship_kwargs={"cascade": "all, delete"}
     )
 
     def to_dict(self):

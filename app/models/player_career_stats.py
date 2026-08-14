@@ -1,8 +1,8 @@
 from decimal import Decimal
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import DECIMAL, ForeignKey, String
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy import DECIMAL
+from sqlmodel import Field, Relationship
 
 from app.models.base import DBModel
 
@@ -10,38 +10,38 @@ if TYPE_CHECKING:
     from app.models.user import DBUser
 
 
-class DBPlayerCareerStats(DBModel):
+class DBPlayerCareerStats(DBModel, table=True):
     __tablename__ = "player_career_stats"
 
-    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    user_id: Mapped[int | None] = mapped_column(
-        ForeignKey("users.id", ondelete="SET NULL")
+    id: int | None = Field(
+        default=None, primary_key=True, sa_column_kwargs={"autoincrement": True}
     )
-    player_name: Mapped[str] = mapped_column(String(255), unique=True)
+    user_id: int | None = Field(
+        default=None, foreign_key="users.id", ondelete="SET NULL"
+    )
+    player_name: str = Field(max_length=255, unique=True)
 
     # Historical baseline (imported from CSV, immutable)
-    historical_rating: Mapped[int | None] = mapped_column(default=0)
-    historical_series_won: Mapped[int | None] = mapped_column(default=0)
-    historical_series_lost: Mapped[int | None] = mapped_column(default=0)
-    historical_games_won: Mapped[int | None] = mapped_column(default=0)
-    historical_games_lost: Mapped[int | None] = mapped_column(default=0)
-    historical_seasons_played: Mapped[int | None] = mapped_column(default=0)
+    historical_rating: int | None = 0
+    historical_series_won: int | None = 0
+    historical_series_lost: int | None = 0
+    historical_games_won: int | None = 0
+    historical_games_lost: int | None = 0
+    historical_seasons_played: int | None = 0
 
     # Combined totals (historical + calculated, for display)
-    rating: Mapped[int | None] = mapped_column(default=0)
-    series_won: Mapped[int | None] = mapped_column(default=0)
-    series_lost: Mapped[int | None] = mapped_column(default=0)
-    series_winrate: Mapped[Decimal | None] = mapped_column(DECIMAL(5, 2), default=0.00)
-    games_won: Mapped[int | None] = mapped_column(default=0)
-    games_lost: Mapped[int | None] = mapped_column(default=0)
-    games_winrate: Mapped[Decimal | None] = mapped_column(DECIMAL(5, 2), default=0.00)
-    seasons_played: Mapped[int | None] = mapped_column(default=0)
-    avg_series_per_season: Mapped[Decimal | None] = mapped_column(
-        DECIMAL(5, 2), default=0.00
-    )
+    rating: int | None = 0
+    series_won: int | None = 0
+    series_lost: int | None = 0
+    series_winrate: Decimal | None = Field(default=0.00, sa_type=DECIMAL(5, 2))
+    games_won: int | None = 0
+    games_lost: int | None = 0
+    games_winrate: Decimal | None = Field(default=0.00, sa_type=DECIMAL(5, 2))
+    seasons_played: int | None = 0
+    avg_series_per_season: Decimal | None = Field(default=0.00, sa_type=DECIMAL(5, 2))
 
     # Relationships
-    user: Mapped["DBUser | None"] = relationship(back_populates="career_stats")
+    user: Optional["DBUser"] = Relationship(back_populates="career_stats")
 
     def to_dict(self):
         return {

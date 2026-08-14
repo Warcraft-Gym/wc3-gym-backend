@@ -1,7 +1,7 @@
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Enum, String
-from sqlalchemy.orm import Mapped, Session, mapped_column, relationship
+from sqlalchemy.orm import Session
+from sqlmodel import Field, Relationship
 
 from app.models.base import DBModel
 from app.models.enums import Race
@@ -13,33 +13,33 @@ if TYPE_CHECKING:
     from app.models.w3c_stats import DBW3CStats
 
 
-class DBUser(DBModel):
+class DBUser(DBModel, table=True):
     __tablename__ = "users"
     __table_args__ = {"mysql_charset": "utf8mb4"}
-    id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[str] = mapped_column(String(50))
-    battleTag: Mapped[str] = mapped_column(String(50))
-    discordTag: Mapped[str] = mapped_column(String(50))
-    discordId: Mapped[str] = mapped_column(String(50))
-    race: Mapped[Race] = mapped_column(Enum(Race))
-    mmr: Mapped[int | None] = mapped_column()
-    country: Mapped[str | None] = mapped_column(String(2))
-    fantasy_tier: Mapped[int | None] = mapped_column()
-    team_seasons: Mapped[list["DBUserTeamSeason"]] = relationship(
-        back_populates="user", cascade="all, delete"
+    id: int | None = Field(default=None, primary_key=True)
+    name: str = Field(max_length=50)
+    battleTag: str = Field(max_length=50)
+    discordTag: str = Field(max_length=50)
+    discordId: str = Field(max_length=50)
+    race: Race
+    mmr: int | None = None
+    country: str | None = Field(default=None, max_length=2)
+    fantasy_tier: int | None = None
+    team_seasons: list["DBUserTeamSeason"] = Relationship(
+        back_populates="user", sa_relationship_kwargs={"cascade": "all, delete"}
     )
-    w3c_stats: Mapped[list["DBW3CStats"]] = relationship(
-        back_populates="user", cascade="all, delete-orphan"
+    w3c_stats: list["DBW3CStats"] = Relationship(
+        back_populates="user",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"},
     )
-    fantasy_teams: Mapped[list["DBFantasyTeamPlayer"]] = relationship(
-        back_populates="users", cascade="all, delete-orphan"
+    fantasy_teams: list["DBFantasyTeamPlayer"] = Relationship(
+        back_populates="users",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"},
     )
-    signup_seasons: Mapped[list["DBUserSeasonSignup"]] = relationship(
-        back_populates="user", cascade="all, delete"
+    signup_seasons: list["DBUserSeasonSignup"] = Relationship(
+        back_populates="user", sa_relationship_kwargs={"cascade": "all, delete"}
     )
-    career_stats: Mapped[list["DBPlayerCareerStats"]] = relationship(
-        back_populates="user"
-    )
+    career_stats: list["DBPlayerCareerStats"] = Relationship(back_populates="user")
 
     @classmethod
     def updateUserTeamSeasonStats(cls, session: Session, season_stats):

@@ -51,11 +51,12 @@ def clean_db(app):
     """Empty every table after each test. Children first, so no foreign
     key constraint fires."""
     yield
+    from sqlmodel import SQLModel
+
     from app.core.db import Session
-    from app.models.base import Base
 
     with Session() as session:
-        for table in reversed(Base.metadata.sorted_tables):
+        for table in reversed(SQLModel.metadata.sorted_tables):
             session.execute(table.delete())
         session.commit()
 
