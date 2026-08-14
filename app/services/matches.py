@@ -26,7 +26,7 @@ class MatchService(BaseService):
             match = DBMatch.update(session, match_id, **match.to_db_dict())
             if not match:
                 logger.error("Match could not be updated!")
-                raise DBException("Match could not be updated!")
+                raise NotFoundException("Match not found")
             return Match.from_dbmatch(match)
 
     def delete(self, match_id):
@@ -53,7 +53,7 @@ class MatchService(BaseService):
             )
             if not match:
                 logger.error("Match could not be found!")
-                raise DBException("Match could not be found!")
+                raise NotFoundException("Match not found")
             return Match.from_dbmatch(match)
 
     def search(self, query):

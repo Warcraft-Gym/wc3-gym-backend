@@ -21,7 +21,7 @@ class MapService(BaseService):
         with self.get_session() as session:
             map = DBMap.update(session, map.id, **map.to_dict())
             if not map:
-                raise DBException("Map could not be updated")
+                raise NotFoundException("Map not found")
             return Map.from_dbmap(map)
 
     def delete(self, map_id):

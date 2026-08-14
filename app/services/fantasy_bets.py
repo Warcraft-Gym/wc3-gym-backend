@@ -30,7 +30,7 @@ class FantasyBetService(BaseService):
                 session, fantasy_bet.id, **fantasy_bet.to_db_dict()
             )
             if not fantasy_bet:
-                raise DBException("Fantasy Bet could not be updated!")
+                raise NotFoundException("Fantasy Bet not found")
             return FantasyBet.from_dbfantasybet(fantasy_bet)
 
     def delete(self, fantasy_bet_id):
@@ -41,7 +41,7 @@ class FantasyBetService(BaseService):
         with self.get_session() as session:
             fbet = session.get(DBFantasyBet, fantasy_bet_id)
             if not fbet:
-                raise DBException("Fantasy Bet could not be found")
+                raise NotFoundException("Fantasy Bet not found")
             return FantasyBet.from_dbfantasybet(fbet)
 
     def getAll(self):

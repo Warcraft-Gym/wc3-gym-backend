@@ -29,7 +29,7 @@ class DraftSeriesService(BaseService):
                 session, draft_series.id, **draft_series.to_db_dict()
             )
             if not draft_series:
-                raise DBException("Draft series could not be updated!")
+                raise NotFoundException("Draft series not found")
             return DraftSeries.from_db_draft_series(draft_series)
 
     def delete(self, draft_series_id):
@@ -60,7 +60,7 @@ class DraftSeriesService(BaseService):
                 .first()
             )
             if not draft_series:
-                raise DBException("Draft series could not be found")
+                raise NotFoundException("Draft series not found")
             return DraftSeries.from_db_draft_series(draft_series)
 
     def getByMatchId(self, match_id):

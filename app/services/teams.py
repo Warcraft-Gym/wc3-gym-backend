@@ -28,14 +28,14 @@ class TeamService(BaseService):
         with self.get_session() as session:
             team = DBTeam.update(session, team.id, **team.to_db_dict())
             if not team:
-                raise DBException("Team could not be updated!")
+                raise NotFoundException("Team not found")
             return Team.from_dbteam(team)
 
     def update_icon(self, team_id, file):
         with self.get_session() as session:
             team = DBTeam.update_icon(session, team_id, file)
             if not team:
-                raise DBException("Team icon could not be updated!")
+                raise NotFoundException("Team not found")
             return Team.from_dbteam(team)
 
     def addPlayers(self, team_id, season_id, player_ids):
@@ -83,7 +83,7 @@ class TeamService(BaseService):
                 .first()
             )
             if not team:
-                raise DBException("Team could not be found!")
+                raise NotFoundException("Team not found")
             return Team.from_dbteam(team)
 
     def get_with_nested_users(self, team_id):
@@ -112,7 +112,7 @@ class TeamService(BaseService):
                 .first()
             )
             if not team:
-                raise DBException("Team could not be found!")
+                raise NotFoundException("Team not found")
             return Team.from_dbteam(team)
 
     def get_with_nested_users_by_season(self, team_id, season_id):
@@ -164,14 +164,14 @@ class TeamService(BaseService):
                 .first()
             )
             if not team:
-                raise DBException("Team could not be found!")
+                raise NotFoundException("Team not found")
             return Team.from_dbteam(team)
 
     def get_icon(self, team_id):
         with self.get_session() as session:
             team = session.get(DBTeam, team_id)
             if not team:
-                raise DBException("Team could not be found!")
+                raise NotFoundException("Team not found")
             return team.icon
 
     def search(self, query):

@@ -1,6 +1,6 @@
 import logging
 
-from app.exceptions import DBException
+from app.exceptions import DBException, NotFoundException
 from app.models.settings import DBSettings
 from app.schemas.settings import Settings
 from app.services.base import BaseService
@@ -24,7 +24,7 @@ class SettingsService(BaseService):
                 session, settings.id, **settings.to_db_dict()
             )
             if not updated_setting:
-                raise DBException("Setting could not be updated!")
+                raise NotFoundException("Setting not found")
             return Settings.from_dbsettings(updated_setting)
 
     def delete(self, setting_id):
@@ -37,7 +37,7 @@ class SettingsService(BaseService):
         with self.get_session() as session:
             setting = session.get(DBSettings, setting_id)
             if not setting:
-                raise DBException(f"Setting with id '{setting_id}' not found")
+                raise NotFoundException(f"Setting with id '{setting_id}' not found")
             return Settings.from_dbsettings(setting)
 
     def getAll(self):
@@ -59,7 +59,7 @@ class SettingsService(BaseService):
         with self.get_session() as session:
             setting = DBSettings.get_by_key(session, key)
             if not setting:
-                raise DBException(f"Setting with key '{key}' not found")
+                raise NotFoundException(f"Setting with key '{key}' not found")
             return Settings.from_dbsettings(setting)
 
     def get_setting(self, key):

@@ -21,13 +21,16 @@ class BaseService(ABC):
         """One transaction per call: commit on success, roll back on error,
         always close. Callers must not commit; to share a transaction, pass
         the session instead of opening a new one. Database errors become
-        DBException here and nowhere else."""
+        DBException here and nowhere else.
+
+        The message is fixed because the API sends it to the client. What
+        the database said, including the statement, goes to the log."""
         try:
             with Session.begin() as session:
                 yield session
         except SQLAlchemyError as e:
             logger.exception("Database error")
-            raise DBException(f"Database error: {e}") from e
+            raise DBException("Database error") from e
 
     @abstractmethod
     def add(self, **kwargs):

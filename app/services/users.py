@@ -31,7 +31,7 @@ class UserService(BaseService):
         with self.get_session() as session:
             user = DBUser.update(session, user.id, **user.to_db_dict())
             if not user:
-                raise DBException("User could not be updated")
+                raise NotFoundException("User not found")
             return User.from_dbuser(user)
 
     def delete(self, user_id):
@@ -195,7 +195,7 @@ class UserService(BaseService):
                                 session, s.id, **s.to_db_dict()
                             )
                             if not db_stats:
-                                raise DBException("W3CStats could not be updated")
+                                raise NotFoundException("W3CStats not found")
                             W3CStats.from_dbw3cstats(db_stats)
                 if not exists:
                     s.user_id = user.id

@@ -39,7 +39,7 @@ class KothService(BaseService):
         with self.get_session() as session:
             db_event = DBKothEvent.update(session, event.id, **event.to_db_dict())
             if not db_event:
-                raise DBException("KOTH Event could not be updated")
+                raise NotFoundException("KOTH Event not found")
             return KothEvent.from_db_event(db_event)
 
     def delete_event(self, event_id):
@@ -120,7 +120,7 @@ class KothService(BaseService):
         with self.get_session() as session:
             db_signup = DBKothSignup.update(session, signup.id, **signup.to_db_dict())
             if not db_signup:
-                raise DBException("KOTH Signup could not be updated")
+                raise NotFoundException("KOTH Signup not found")
             return KothSignup.from_db_signup(db_signup)
 
     def delete_signup(self, signup_id):
@@ -338,7 +338,7 @@ class KothService(BaseService):
         with self.get_session() as session:
             db_match = DBKothMatch.update(session, match.id, **match.to_db_dict())
             if not db_match:
-                raise DBException("KOTH Match could not be updated")
+                raise NotFoundException("KOTH Match not found")
             return KothMatch.from_db_match(db_match)
 
     def delete_match(self, match_id):

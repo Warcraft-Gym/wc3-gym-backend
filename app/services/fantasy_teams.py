@@ -27,7 +27,7 @@ class FantasyTeamService(BaseService):
                 session, fantasy_team.id, **fantasy_team.to_db_dict()
             )
             if not fantasy_team:
-                raise DBException("Fantasy Team could not be updated!")
+                raise NotFoundException("Fantasy Team not found")
             return FantasyTeam.from_dbfantasyteam(fantasy_team)
 
     def delete(self, fantasy_team_id):
@@ -38,7 +38,7 @@ class FantasyTeamService(BaseService):
         with self.get_session() as session:
             fteam = session.get(DBFantasyTeam, fantasy_team_id)
             if not fteam:
-                raise DBException("Fantasy Team could not be found")
+                raise NotFoundException("Fantasy Team not found")
             return FantasyTeam.from_dbfantasyteam(fteam)
 
     def getAll(self):

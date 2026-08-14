@@ -32,7 +32,7 @@ class SeriesService(BaseService):
         with self.get_session() as session:
             series = DBSeries.update(session, series.id, **series.to_db_dict())
             if not series:
-                raise DBException("Series could not be updated!")
+                raise NotFoundException("Series not found")
             return Series.from_dbseries(series)
 
     def delete(self, series_id):
@@ -63,7 +63,7 @@ class SeriesService(BaseService):
                 .first()
             )
             if not series:
-                raise DBException("Series could not be found")
+                raise NotFoundException("Series not found")
             return Series.from_dbseries(series)
 
     def getAll(self):

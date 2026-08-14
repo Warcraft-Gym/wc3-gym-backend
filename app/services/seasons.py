@@ -26,7 +26,7 @@ class SeasonService(BaseService):
             season = DBSeason.update(session, season.id, **season.to_db_dict())
             # Example usage
             if not season:
-                raise DBException("Season could not be updated!")
+                raise NotFoundException("Season not found")
             return Season.from_dbseason(season)
 
     def delete(self, season_id):
@@ -54,7 +54,7 @@ class SeasonService(BaseService):
             )
             # Example usage
             if not season:
-                raise DBException("Season could not be found!")
+                raise NotFoundException("Season not found")
             return Season.from_dbseason(season)
 
     def getAll(self):
@@ -174,7 +174,7 @@ class SeasonService(BaseService):
             )
 
             if not season:
-                raise DBException("Season could not be found!")
+                raise NotFoundException("Season not found")
 
             result = []
             if season.signup_users:
