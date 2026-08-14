@@ -5,6 +5,8 @@ through create_all, which no longer runs, so the table would be missing
 the column instead.
 """
 
+from pathlib import Path
+
 from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
 from sqlalchemy import create_engine
@@ -14,7 +16,7 @@ from tests.migrate import upgrade_to_head
 from tests.test_models import import_all_models
 
 
-def test_a_migrated_database_matches_the_models(tmp_path):
+def test_a_migrated_database_matches_the_models(tmp_path: Path) -> None:
     import_all_models()
     db_file = tmp_path / "migrated.sqlite"
     upgrade_to_head(f"sqlite:///{db_file}")

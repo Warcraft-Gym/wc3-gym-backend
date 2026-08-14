@@ -1,4 +1,5 @@
 import logging
+from typing import TYPE_CHECKING
 
 from sqlalchemy import delete, select
 from sqlalchemy.orm import joinedload
@@ -30,23 +31,27 @@ from app.models.koth_signup import (
 from app.services.base import BaseService
 from app.services.w3c import W3CService
 
+if TYPE_CHECKING:
+    from app.models.w3c_stats import W3CStatsCreate
+    from app.services.settings import SettingsService
+
 logger = logging.getLogger(__name__)
 
 
 class KothService(BaseService):
-    def __init__(self, settings_app_service=None):
+    def __init__(self, settings_app_service: "SettingsService | None" = None) -> None:
         self.settings_app_service = settings_app_service
 
     # ============ Event Methods ============
-    def add_event(self, event: KothEventCreate):
+    def add_event(self, event: KothEventCreate) -> KothEventPublic:
         with self.get_session() as session:
             db_event = KothEvent.add(session, event.model_dump())
             return KothEventPublic.model_validate(db_event)
 
-    def create_event(self, event: KothEventCreate):
+    def create_event(self, event: KothEventCreate) -> KothEventPublic:
         return self.add_event(event)
 
-    def update_event(self, event_id, event: KothEventUpdate):
+    def update_event(self, event_id: int, event: KothEventUpdate) -> KothEventPublic:
         with self.get_session() as session:
             db_event = KothEvent.update(
                 session, event_id, **event.model_dump(exclude_unset=True)
@@ -55,11 +60,11 @@ class KothService(BaseService):
                 raise NotFoundException("KOTH Event not found")
             return KothEventPublic.model_validate(db_event)
 
-    def delete_event(self, event_id):
+    def delete_event(self, event_id: int) -> None:
         with self.get_session() as session:
             KothEvent.delete(session, event_id)
 
-    def get_event(self, event_id):
+    def get_event(self, event_id: int) -> KothEventPublic:
         with self.get_session() as session:
             event = (
                 session.scalars(
@@ -79,12 +84,12 @@ class KothService(BaseService):
                 raise NotFoundException(f"KOTH Event not found by Id: {event_id}")
             return KothEventPublic.model_validate(event)
 
-    def get_all_events(self):
+    def get_all_events(self) -> list[KothEventPublic]:
         with self.get_session() as session:
             events = session.scalars(select(KothEvent)).unique().all()
             return [KothEventPublic.model_validate(e) for e in events]
 
-    def get_active_event(self):
+    def get_active_event(self) -> KothEventPublic:
         with self.get_session() as session:
             # Pick the one event id first. A LIMIT on the outer select would
             # cut the joined signup and match rows, so the limit belongs in a
@@ -113,7 +118,7 @@ class KothService(BaseService):
                 raise NotFoundException("No active KOTH event found")
             return KothEventPublic.model_validate(event)
 
-    def set_active_event(self, event_id: int):
+    def set_active_event(self, event_id: int) -> KothEventPublic:
         """Set an event as active and deactivate all others"""
         all_events = self.get_all_events()
         for e in all_events:
@@ -121,12 +126,14 @@ class KothService(BaseService):
         return self.get_event(event_id)
 
     # ============ Signup Methods ============
-    def add_signup(self, signup: KothSignupCreate):
+    def add_signup(self, signup: KothSignupCreate) -> KothSignupPublic:
         with self.get_session() as session:
             db_signup = KothSignup.add(session, signup.model_dump())
             return KothSignupPublic.model_validate(db_signup)
 
-    def update_signup(self, signup_id, signup: KothSignupUpdate):
+    def update_signup(
+        self, signup_id: int, signup: KothSignupUpdate
+    ) -> KothSignupPublic:
         with self.get_session() as session:
             db_signup = KothSignup.update(
                 session, signup_id, **signup.model_dump(exclude_unset=True)
@@ -135,18 +142,18 @@ class KothService(BaseService):
                 raise NotFoundException("KOTH Signup not found")
             return KothSignupPublic.model_validate(db_signup)
 
-    def delete_signup(self, signup_id):
+    def delete_signup(self, signup_id: int) -> None:
         with self.get_session() as session:
             KothSignup.delete(session, signup_id)
 
-    def get_signup(self, signup_id):
+    def get_signup(self, signup_id: int) -> KothSignupPublic | None:
         with self.get_session() as session:
             signup = session.get(KothSignup, signup_id)
             if not signup:
                 return None
             return KothSignupPublic.model_validate(signup)
 
-    def get_signups_by_event(self, event_id):
+    def get_signups_by_event(self, event_id: int) -> list[KothSignupPublic]:
         with self.get_session() as session:
             signups = (
                 session.scalars(
@@ -161,7 +168,7 @@ class KothService(BaseService):
 
     def create_signup_from_twitch(
         self, twitch_username: str, battle_tag: str, preferred_race: str | None = None
-    ):
+    ) -> KothSignupPublic:
         """
         Create a signup from Twitch/Nightbot with automatic W3C validation and bracket assignment.
         Only allows signup if no active signup exists for this twitch username.
@@ -289,7 +296,9 @@ class KothService(BaseService):
 
         return self.add_signup(signup)
 
-    def update_signup_bracket(self, signup_id: int, new_bracket: int):
+    def update_signup_bracket(
+        self, signup_id: int, new_bracket: int
+    ) -> KothSignupPublic:
         """Manually update a player's bracket"""
         if new_bracket not in [1, 2, 3]:
             raise ValueError("Bracket must be 1, 2, or 3")
@@ -300,7 +309,7 @@ class KothService(BaseService):
 
         return self.update_signup(signup_id, KothSignupUpdate(bracket=new_bracket))
 
-    def set_king(self, signup_id: int):
+    def set_king(self, signup_id: int) -> KothSignupPublic:
         """Set a player as king of their bracket (clears other kings in bracket)"""
         signup = self.get_signup(signup_id)
         if not signup:
@@ -314,7 +323,7 @@ class KothService(BaseService):
 
         return self.update_signup(signup_id, KothSignupUpdate(is_king=1))
 
-    def add_king(self, signup_id: int):
+    def add_king(self, signup_id: int) -> KothSignupPublic:
         """Add a player as king of their bracket (keeps existing kings)"""
         signup = self.get_signup(signup_id)
         if not signup:
@@ -322,7 +331,7 @@ class KothService(BaseService):
 
         return self.update_signup(signup_id, KothSignupUpdate(is_king=1))
 
-    def unset_king(self, signup_id: int):
+    def unset_king(self, signup_id: int) -> KothSignupPublic:
         """Remove king status from a player"""
         signup = self.get_signup(signup_id)
         if not signup:
@@ -331,12 +340,12 @@ class KothService(BaseService):
         return self.update_signup(signup_id, KothSignupUpdate(is_king=0))
 
     # ============ Match Methods ============
-    def add_match(self, match: KothMatchCreate):
+    def add_match(self, match: KothMatchCreate) -> KothMatchPublic:
         with self.get_session() as session:
             db_match = KothMatch.add(session, match.model_dump())
             return KothMatchPublic.model_validate(db_match)
 
-    def update_match(self, match_id: int, match: KothMatchUpdate):
+    def update_match(self, match_id: int, match: KothMatchUpdate) -> KothMatchPublic:
         with self.get_session() as session:
             db_match = KothMatch.update(
                 session, match_id, **match.model_dump(exclude_unset=True)
@@ -345,11 +354,11 @@ class KothService(BaseService):
                 raise NotFoundException("KOTH Match not found")
             return KothMatchPublic.model_validate(db_match)
 
-    def delete_match(self, match_id):
+    def delete_match(self, match_id: int) -> None:
         with self.get_session() as session:
             KothMatch.delete(session, match_id)
 
-    def get_match(self, match_id):
+    def get_match(self, match_id: int) -> KothMatchPublic | None:
         with self.get_session() as session:
             match = (
                 session.scalars(
@@ -368,7 +377,7 @@ class KothService(BaseService):
                 return None
             return KothMatchPublic.model_validate(match)
 
-    def get_matches_by_event(self, event_id):
+    def get_matches_by_event(self, event_id: int) -> list[KothMatchPublic]:
         with self.get_session() as session:
             matches = (
                 session.scalars(
@@ -386,7 +395,9 @@ class KothService(BaseService):
             )
             return [KothMatchPublic.model_validate(m) for m in matches]
 
-    def create_match(self, match: KothMatchCreate, participant_signup_ids: list):
+    def create_match(
+        self, match: KothMatchCreate, participant_signup_ids: list[dict[str, int]]
+    ) -> KothMatchPublic | None:
         """
         Create a team-based match with participants.
         participant_signup_ids: list of dicts with {'signup_id': int, 'team_number': int}
@@ -437,7 +448,9 @@ class KothService(BaseService):
         # Return match with participants loaded
         return self.get_match(created_match.id)
 
-    def update_match_result(self, match_id: int, winner_team_number: int):
+    def update_match_result(
+        self, match_id: int, winner_team_number: int
+    ) -> KothMatchPublic:
         """Update match winner, set all winning team members as kings, and delete losing participant signups"""
         match = self.get_match(match_id)
         if not match:
@@ -472,12 +485,14 @@ class KothService(BaseService):
         return updated_match
 
     # ============ Match Participant Methods ============
-    def add_participant(self, participant: KothMatchParticipantCreate):
+    def add_participant(
+        self, participant: KothMatchParticipantCreate
+    ) -> KothMatchParticipantPublic:
         with self.get_session() as session:
             db_participant = KothMatchParticipant.add(session, participant.model_dump())
             return KothMatchParticipantPublic.model_validate(db_participant)
 
-    def delete_participants_by_match(self, match_id):
+    def delete_participants_by_match(self, match_id: int) -> None:
         """Delete all participants for a given match"""
         with self.get_session() as session:
             session.execute(
@@ -487,7 +502,9 @@ class KothService(BaseService):
                 execution_options={"synchronize_session": False},
             )
 
-    def get_participants_by_match(self, match_id):
+    def get_participants_by_match(
+        self, match_id: int
+    ) -> list[KothMatchParticipantPublic]:
         with self.get_session() as session:
             participants = (
                 session.scalars(
@@ -501,10 +518,10 @@ class KothService(BaseService):
             )
             return [KothMatchParticipantPublic.model_validate(p) for p in participants]
 
-    def get_bracket_kings(self, event_id: int):
+    def get_bracket_kings(self, event_id: int) -> dict[int, list[KothSignupPublic]]:
         """Get all kings for each bracket"""
         signups = self.get_signups_by_event(event_id)
-        kings = {}
+        kings: dict[int, list[KothSignupPublic]] = {}
         for signup in signups:
             if signup.is_king == 1:
                 if signup.bracket not in kings:
@@ -539,7 +556,7 @@ class KothService(BaseService):
 
     def _get_w3c_stats_for_season(
         self, w3c_service: W3CService, battle_tag: str, season: int
-    ):
+    ) -> list["W3CStatsCreate"]:
         """Get W3C stats for a specific season"""
         import os
         import urllib.parse
@@ -587,14 +604,16 @@ class KothService(BaseService):
         return stats
 
     # Required abstract methods
-    def get(self, obj_id):
+    # BaseService asks for these four. This service works through the
+    # add_event/add_signup/add_match methods above, so they stay empty.
+    def get(self, obj_id: object) -> None:
         pass
 
-    def add(self, **kwargs):
+    def add(self, **kwargs: object) -> None:
         pass
 
-    def update(self, obj_id, **kwargs):
+    def update(self, obj_id: object, **kwargs: object) -> None:
         pass
 
-    def delete(self, obj_id):
+    def delete(self, obj_id: object) -> None:
         pass

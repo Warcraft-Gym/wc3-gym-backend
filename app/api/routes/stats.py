@@ -1,7 +1,7 @@
 import csv
 import io
 import logging
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Body, Depends, File, UploadFile
 from fastapi.responses import JSONResponse
@@ -17,13 +17,13 @@ router = APIRouter(tags=["stats"])
 
 
 @router.get("/stats/career")
-def get_all_career_stats(service: StatsServiceDep):
+def get_all_career_stats(service: StatsServiceDep) -> list[dict[str, Any]]:
     """Retrieve career statistics for all players, ordered by rating."""
     return [stat.to_dict() for stat in service.get_all_career_stats() or []]
 
 
 @router.get("/stats/career/{stat_id}")
-def get_career_stats_by_user(stat_id: int, service: StatsServiceDep):
+def get_career_stats_by_user(stat_id: int, service: StatsServiceDep) -> JSONResponse:
     """Retrieve career statistics for a single player by user ID."""
     stat = service.get_career_stats_by_user(stat_id)
     if stat:
@@ -34,7 +34,7 @@ def get_career_stats_by_user(stat_id: int, service: StatsServiceDep):
 @router.put("/stats/career/{stat_id}", dependencies=[Depends(require_admin)])
 def update_career_stats(
     stat_id: int, data: Annotated[dict, Body()], service: StatsServiceDep
-):
+) -> JSONResponse:
     """Update historical baseline values and user link for career stats."""
     stat_dto = PlayerCareerStatsUpdate(**data)
     stat = service.update_career_stats(stat_id, stat_dto)
@@ -44,7 +44,7 @@ def update_career_stats(
 
 
 @router.delete("/stats/career/{stat_id}", dependencies=[Depends(require_admin)])
-def delete_career_stats(stat_id: int, service: StatsServiceDep):
+def delete_career_stats(stat_id: int, service: StatsServiceDep) -> JSONResponse:
     """Delete career statistics record."""
     success = service.delete_career_stats(stat_id)
     if success:
@@ -55,7 +55,7 @@ def delete_career_stats(stat_id: int, service: StatsServiceDep):
 @router.post("/stats/career/import-csv", dependencies=[Depends(require_admin)])
 def import_historical_csv(
     service: StatsServiceDep, file: Annotated[UploadFile | None, File()] = None
-):
+) -> JSONResponse:
     """One-time import of historical stats.
 
     Requires CSV file upload with columns: NAME, RATING, WON Series, LOST
@@ -96,7 +96,7 @@ def import_historical_csv(
 
 
 @router.post("/stats/career/recalculate", dependencies=[Depends(require_admin)])
-def recalculate_stats(service: StatsServiceDep):
+def recalculate_stats(service: StatsServiceDep) -> dict[str, Any]:
     """Combines historical baseline with ALL series data in the database to
     update player stats. Always uses complete series history for accurate
     career totals. Run this after importing data or to refresh stats.

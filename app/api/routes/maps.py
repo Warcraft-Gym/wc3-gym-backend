@@ -17,7 +17,7 @@ router = APIRouter(tags=["maps"])
     response_model=MapPublic,
     dependencies=[Depends(require_admin)],
 )
-def add_map(data: MapCreate, service: MapServiceDep):
+def add_map(data: MapCreate, service: MapServiceDep) -> MapPublic:
     """Create a new map with the provided details."""
     return service.create_map(data)
 
@@ -25,31 +25,31 @@ def add_map(data: MapCreate, service: MapServiceDep):
 @router.put(
     "/maps/{map_id}", response_model=MapPublic, dependencies=[Depends(require_admin)]
 )
-def update_map(map_id: int, data: MapUpdate, service: MapServiceDep):
+def update_map(map_id: int, data: MapUpdate, service: MapServiceDep) -> MapPublic:
     """Update the details of an existing map."""
     return service.update_map(map_id, data)
 
 
 @router.delete("/maps/{map_id}", status_code=204, dependencies=[Depends(require_admin)])
-def delete_map(map_id: int, service: MapServiceDep):
+def delete_map(map_id: int, service: MapServiceDep) -> None:
     """Delete a map by their ID."""
     service.delete_map(map_id)
 
 
 @router.get("/maps/{map_id}", response_model=MapPublic)
-def get_map(map_id: int, service: MapServiceDep):
+def get_map(map_id: int, service: MapServiceDep) -> MapPublic:
     """Retrieve a map by their ID."""
     return service.get_map(map_id)
 
 
 @router.get("/maps", response_model=list[MapPublic])
-def get_all_maps(service: MapServiceDep):
+def get_all_maps(service: MapServiceDep) -> list[MapPublic]:
     """Retrieve all maps."""
     return service.getAll()
 
 
 @router.post("/maps/search", response_model=list[MapPublic])
-def search_maps(service: MapServiceDep, query: str = ""):
+def search_maps(service: MapServiceDep, query: str = "") -> list[MapPublic]:
     """Search maps by criteria using a custom query format."""
     query_param = query
     query = QueryUtil.parseQuery(query_param)

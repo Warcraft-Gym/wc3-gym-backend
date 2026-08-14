@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Optional, Self
 
 from sqlalchemy import JSON, Column, select
 from sqlalchemy.orm import Session, joinedload
@@ -58,6 +58,14 @@ class DBTeamSeason(DBModel, table=True):
     # Relationships
     team: "Team" = Relationship(back_populates="season_info")
     season: "Season" = Relationship(back_populates="teams")
+    # The three coaches keep Optional[...] where the rest of the code writes
+    # `X | None`. SQLModel finds the target by unwrapping a real union, so the
+    # modern form needs User to be a real class here, and importing it closes
+    # the cycle relationships -> user -> season -> relationships. That leaves
+    # a forward reference, and Optional["User"] is the only spelling that puts
+    # a quoted name inside a union: "User | None" is one opaque string that
+    # reaches SQLAlchemy unparsed and leaves every mapper unconfigured.
+    # Untangling those three modules would fix it, and is its own change.
     coach_1: Optional["User"] = Relationship(
         sa_relationship_kwargs={"foreign_keys": "[DBTeamSeason.coach_1_id]"}
     )
@@ -69,7 +77,9 @@ class DBTeamSeason(DBModel, table=True):
     )
 
     @classmethod
-    def updateSeasonInfo(cls, session: Session, obj_id, team_id, **kwargs):
+    def updateSeasonInfo(
+        cls, session: Session, obj_id: int, team_id: int, **kwargs: object
+    ) -> Self | None:
         # Eager load related entities to prevent N+1 queries
         obj = session.scalars(
             select(cls)

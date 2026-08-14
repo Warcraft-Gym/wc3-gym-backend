@@ -7,18 +7,18 @@ from app.exceptions import NotFoundException
 from app.models.season import Season, SeasonCreate, SeasonPublic, SeasonUpdate
 from app.models.user import UserPublic
 from app.services.base import BaseService
-from app.utils.query_util import QueryUtil
+from app.utils.query_util import QueryElement, QueryUtil
 
 logger = logging.getLogger(__name__)
 
 
 class SeasonService(BaseService):
-    def add(self, season: SeasonCreate):
+    def add(self, season: SeasonCreate) -> SeasonPublic:
         with self.get_session() as session:
             new_season = Season.add(session, season.model_dump())
             return SeasonPublic.from_season(new_season)
 
-    def update(self, season_id, season: SeasonUpdate):
+    def update(self, season_id: int, season: SeasonUpdate) -> SeasonPublic:
         with self.get_session() as session:
             season = Season.update(
                 session, season_id, **season.model_dump(exclude_unset=True)
@@ -28,11 +28,11 @@ class SeasonService(BaseService):
                 raise NotFoundException("Season not found")
             return SeasonPublic.from_season(season)
 
-    def delete(self, season_id):
+    def delete(self, season_id: int) -> None:
         with self.get_session() as session:
             Season.delete(session, season_id)
 
-    def get(self, season_id):
+    def get(self, season_id: int) -> SeasonPublic:
         with self.get_session() as session:
             from app.models.relationships import DBMapSeason
 
@@ -56,7 +56,7 @@ class SeasonService(BaseService):
                 raise NotFoundException("Season not found")
             return SeasonPublic.from_season(season)
 
-    def getAll(self):
+    def getAll(self) -> list[SeasonPublic]:
         with self.get_session() as session:
             result = []
             from app.models.relationships import DBMapSeason
@@ -78,12 +78,12 @@ class SeasonService(BaseService):
                 result.append(SeasonPublic.from_season(season))
             return result
 
-    def addTeams(self, season_id, team_ids):
+    def addTeams(self, season_id: int, team_ids: list[int]) -> SeasonPublic:
         with self.get_session() as session:
             season = Season.addTeams(session, season_id, team_ids)
             return SeasonPublic.from_season(season)
 
-    def search(self, query):
+    def search(self, query: QueryElement | None) -> list[SeasonPublic]:
         with self.get_session() as session:
             result = []
             from app.models.relationships import DBMapSeason
@@ -113,32 +113,32 @@ class SeasonService(BaseService):
                 result.append(SeasonPublic.from_season(season))
             return result
 
-    def removeTeams(self, season_id, team_ids):
+    def removeTeams(self, season_id: int, team_ids: list[int]) -> SeasonPublic:
         with self.get_session() as session:
             season = Season.removeTeams(session, season_id, team_ids)
             return SeasonPublic.from_season(season)
 
-    def addMaps(self, season_id, map_ids):
+    def addMaps(self, season_id: int, map_ids: list[int]) -> SeasonPublic:
         with self.get_session() as session:
             season = Season.addMaps(session, season_id, map_ids)
             return SeasonPublic.from_season(season)
 
-    def removeMaps(self, season_id, map_ids):
+    def removeMaps(self, season_id: int, map_ids: list[int]) -> SeasonPublic:
         with self.get_session() as session:
             season = Season.removeMaps(session, season_id, map_ids)
             return SeasonPublic.from_season(season)
 
-    def addUserSignup(self, season_id, user_ids):
+    def addUserSignup(self, season_id: int, user_ids: list[int]) -> SeasonPublic:
         with self.get_session() as session:
             season = Season.addUserSignup(session, season_id, user_ids)
             return SeasonPublic.from_season(season)
 
-    def removeUserSignup(self, season_id, user_ids):
+    def removeUserSignup(self, season_id: int, user_ids: list[int]) -> SeasonPublic:
         with self.get_session() as session:
             season = Season.removeUserSignup(session, season_id, user_ids)
             return SeasonPublic.from_season(season)
 
-    def getSignedUpUsers(self, season_id):
+    def getSignedUpUsers(self, season_id: int) -> list[UserPublic]:
         with self.get_session() as session:
             from app.models.relationships import DBUserSeasonSignup
             from app.models.user import User
@@ -176,16 +176,16 @@ class SeasonService(BaseService):
 
             return result
 
-    def create_season(self, season: SeasonCreate):
+    def create_season(self, season: SeasonCreate) -> SeasonPublic:
         return self.add(season)
 
-    def update_season(self, season_id: int, season: SeasonUpdate):
+    def update_season(self, season_id: int, season: SeasonUpdate) -> SeasonPublic:
         return self.update(season_id, season)
 
-    def delete_season(self, season_id: int):
+    def delete_season(self, season_id: int) -> None:
         self.delete(season_id)
 
-    def get_season(self, season_id: int):
+    def get_season(self, season_id: int) -> SeasonPublic:
         season_data = self.get(season_id)
         if not season_data:
             raise NotFoundException(f"Season not found by Id: {season_id}")

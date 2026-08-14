@@ -5,11 +5,15 @@ signups through the session and then drive the match, king and bracket
 endpoints through the API.
 """
 
+from typing import Any
+
 import pytest
+from fastapi import FastAPI
+from httpx2 import Client
 
 
 @pytest.fixture
-def koth(app, seeded):
+def koth(app: FastAPI, seeded: dict[str, Any]) -> dict[str, Any]:
     """An active event with two signups in bracket 1."""
     from app.core.db import Session
     from app.models.enums import Race
@@ -41,7 +45,7 @@ def koth(app, seeded):
         return {"event_id": event.id, "signup_ids": [one.id, two.id]}
 
 
-def test_the_event_carries_its_signups(client, koth):
+def test_the_event_carries_its_signups(client: Client, koth: dict[str, Any]) -> None:
     event = client.get(f"/koth/events/{koth['event_id']}").json()
     assert len(event["signups"]) == 2
     # The race reads as the plain value, not the name of the enum member.
@@ -49,7 +53,9 @@ def test_the_event_carries_its_signups(client, koth):
     assert all(s["is_active"] == 1 and s["is_king"] == 0 for s in event["signups"])
 
 
-def test_a_match_takes_its_bracket_from_the_participants(client, auth_headers, koth):
+def test_a_match_takes_its_bracket_from_the_participants(
+    client: Client, auth_headers: dict[str, str], koth: dict[str, Any]
+) -> None:
     one, two = koth["signup_ids"]
     resp = client.post(
         "/koth/matches",
@@ -74,7 +80,9 @@ def test_a_match_takes_its_bracket_from_the_participants(client, auth_headers, k
     }
 
 
-def test_a_result_crowns_the_winner_and_retires_the_loser(client, auth_headers, koth):
+def test_a_result_crowns_the_winner_and_retires_the_loser(
+    client: Client, auth_headers: dict[str, str], koth: dict[str, Any]
+) -> None:
     one, two = koth["signup_ids"]
     match = client.post(
         "/koth/matches",
@@ -108,7 +116,9 @@ def test_a_result_crowns_the_winner_and_retires_the_loser(client, auth_headers, 
     assert signups[two]["is_active"] == 0
 
 
-def test_a_bracket_change_touches_only_the_bracket(client, auth_headers, koth):
+def test_a_bracket_change_touches_only_the_bracket(
+    client: Client, auth_headers: dict[str, str], koth: dict[str, Any]
+) -> None:
     one = koth["signup_ids"][0]
     before = client.get(f"/koth/events/{koth['event_id']}").json()["signups"]
     before = next(s for s in before if s["id"] == one)
@@ -123,7 +133,9 @@ def test_a_bracket_change_touches_only_the_bracket(client, auth_headers, koth):
         assert after[field] == before[field]
 
 
-def test_the_king_endpoints_move_the_crown(client, auth_headers, koth):
+def test_the_king_endpoints_move_the_crown(
+    client: Client, auth_headers: dict[str, str], koth: dict[str, Any]
+) -> None:
     one, two = koth["signup_ids"]
 
     assert (
@@ -156,7 +168,9 @@ def test_the_king_endpoints_move_the_crown(client, auth_headers, koth):
     assert [s["id"] for s in kings["1"]] == [one]
 
 
-def test_an_event_update_keeps_the_fields_it_was_not_given(client, auth_headers, koth):
+def test_an_event_update_keeps_the_fields_it_was_not_given(
+    client: Client, auth_headers: dict[str, str], koth: dict[str, Any]
+) -> None:
     before = client.get(f"/koth/events/{koth['event_id']}").json()
     resp = client.put(
         f"/koth/events/{koth['event_id']}",

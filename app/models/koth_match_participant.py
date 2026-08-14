@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from sqlmodel import Field, Relationship, SQLModel
 
@@ -35,5 +35,5 @@ class KothMatchParticipantPublic(KothMatchParticipantBase):
     id: int
     signup: KothSignupPublic | None = None
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return self.model_dump(mode="json")

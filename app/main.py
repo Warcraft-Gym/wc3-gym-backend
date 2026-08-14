@@ -12,6 +12,7 @@ import.
 
 import logging
 import os
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 import anyio.to_thread
@@ -35,13 +36,13 @@ MAX_CONCURRENT_REQUESTS = 1
 
 
 @asynccontextmanager
-async def _lifespan(app: FastAPI):
+async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
     limiter = anyio.to_thread.current_default_thread_limiter()
     limiter.total_tokens = MAX_CONCURRENT_REQUESTS
     yield
 
 
-def create_app(db_url=None):
+def create_app(db_url: str | None = None) -> FastAPI:
     """Build the application: engine, routers.
 
     Reads the environment when the caller passes no db_url. The tables come
@@ -69,21 +70,23 @@ def create_app(db_url=None):
     )
 
     @app.exception_handler(NotFoundException)
-    async def not_found(request: Request, exc: NotFoundException):
+    async def not_found(request: Request, exc: NotFoundException) -> JSONResponse:
         logger.error(exc)
         return JSONResponse({"error": str(exc)}, status_code=404)
 
     @app.exception_handler(DBException)
-    async def db_error(request: Request, exc: DBException):
+    async def db_error(request: Request, exc: DBException) -> JSONResponse:
         logger.error(exc)
         return JSONResponse({"error": str(exc)}, status_code=500)
 
     @app.exception_handler(AuthError)
-    async def auth_error(request: Request, exc: AuthError):
+    async def auth_error(request: Request, exc: AuthError) -> JSONResponse:
         return JSONResponse({"msg": exc.message}, status_code=exc.status_code)
 
     @app.exception_handler(RequestValidationError)
-    async def invalid_request(request: Request, exc: RequestValidationError):
+    async def invalid_request(
+        request: Request, exc: RequestValidationError
+    ) -> JSONResponse:
         """A body the route model rejects.
 
         The answer keeps the error field every other failure uses, because
@@ -98,7 +101,7 @@ def create_app(db_url=None):
         return JSONResponse({"error": problems}, status_code=422)
 
     @app.exception_handler(Exception)
-    async def unhandled(request: Request, exc: Exception):
+    async def unhandled(request: Request, exc: Exception) -> JSONResponse:
         logger.error(exc)
         return JSONResponse({"error": str(exc)}, status_code=500)
 

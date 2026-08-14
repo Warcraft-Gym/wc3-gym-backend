@@ -5,7 +5,7 @@ instance of each serves the process. Constructing them touches no
 database; the engine work happens in create_app.
 """
 
-from typing import Annotated
+from typing import Annotated, Any
 
 import jwt
 from fastapi import Depends
@@ -35,7 +35,7 @@ class AuthError(Exception):
     or an expired token, 422 for a malformed token or the wrong token
     type, so clients see the same auth errors before and after the port."""
 
-    def __init__(self, message, status_code=401):
+    def __init__(self, message: str, status_code: int = 401) -> None:
         super().__init__(message)
         self.message = message
         self.status_code = status_code
@@ -46,7 +46,7 @@ _bearer = HTTPBearer(auto_error=False)
 _Credentials = Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)]
 
 
-def _decode(credentials: _Credentials) -> dict:
+def _decode(credentials: _Credentials) -> dict[str, Any]:
     if credentials is None:
         raise AuthError("Missing Authorization Header")
     try:

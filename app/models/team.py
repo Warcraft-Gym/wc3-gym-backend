@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any, Self
 
 from pydantic import BeforeValidator
 from sqlalchemy.orm import Session
@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from app.models.relationships import DBTeamSeason
 
 
-def _season_lists(value: Any) -> Any:
+def _season_lists(value: Any) -> Any:  # noqa: ANN401  # a validator sees raw input
     """Per-season lists: drop empty seasons and None entries."""
     if not value:
         return {}
@@ -51,7 +51,9 @@ class Team(TeamBase, DBModel, table=True):
     )
 
     @classmethod
-    def addPlayers(cls, session: Session, obj_id, season_id, user_ids):
+    def addPlayers(
+        cls, session: Session, obj_id: int, season_id: int, user_ids: list[int]
+    ) -> Self:
         from app.models.season import Season
 
         team = session.get(cls, obj_id)
@@ -78,7 +80,9 @@ class Team(TeamBase, DBModel, table=True):
         return team
 
     @classmethod
-    def removePlayers(cls, session: Session, obj_id, season_id, user_ids):
+    def removePlayers(
+        cls, session: Session, obj_id: int, season_id: int, user_ids: list[int]
+    ) -> Self:
         from app.models.season import Season
 
         team = session.get(cls, obj_id)
@@ -102,7 +106,7 @@ class Team(TeamBase, DBModel, table=True):
         return team
 
     @classmethod
-    def update_icon(cls, session: Session, obj_id, file):
+    def update_icon(cls, session: Session, obj_id: int, file: bytes) -> Self | None:
         obj = session.get(cls, obj_id)
         if obj:
             obj.icon = file
@@ -110,7 +114,9 @@ class Team(TeamBase, DBModel, table=True):
         return obj
 
     @classmethod
-    def setCoaches(cls, session: Session, team_id, season_id, user_ids):
+    def setCoaches(
+        cls, session: Session, team_id: int, season_id: int, user_ids: list[int]
+    ) -> Self:
         """Set coaches for a team in a season (up to 3)."""
         from app.models.relationships import DBTeamSeason
         from app.models.season import Season
@@ -172,7 +178,7 @@ class TeamPublic(TeamReduced):
     seasons_info: Annotated[list[SeasonInfoPublic], NoneToList] = []
 
     @classmethod
-    def from_team(cls, team):
+    def from_team(cls, team: Team | None) -> Self | None:
         if not team:
             return None
 

@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING, Annotated, Any, Self
 
 from sqlalchemy.orm import Session
 from sqlmodel import Field, Relationship, SQLModel
@@ -51,7 +51,9 @@ class User(UserBase, DBModel, table=True):
     career_stats: list["PlayerCareerStats"] = Relationship(back_populates="user")
 
     @classmethod
-    def updateUserTeamSeasonStats(cls, session: Session, season_stats):
+    def updateUserTeamSeasonStats(
+        cls, session: Session, season_stats: "UserTeamSeasonStatsPublic"
+    ) -> "DBUserTeamSeason":
         from app.models.season import Season
         from app.models.team import Team
 
@@ -111,7 +113,7 @@ class UserPublic(UserBase):
     signup_seasons: Annotated[list[SeasonPublic], NoneToList] = []
 
     @classmethod
-    def from_user(cls, user):
+    def from_user(cls, user: User | None) -> Self | None:
         if not user:
             return None
 
@@ -138,5 +140,5 @@ class UserPublic(UserBase):
             ],
         )
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return self.model_dump(mode="json")

@@ -3,7 +3,7 @@ import logging
 import os
 import secrets
 from datetime import UTC, datetime, timedelta
-from typing import Annotated
+from typing import Annotated, Any
 
 import requests
 from fastapi import APIRouter, Body, Request
@@ -20,7 +20,10 @@ from app.api.deps import (
 )
 from app.models.fantasy_bet import FantasyBetCreate, FantasyBetUpdate
 from app.models.fantasy_team import FantasyTeamCreate, FantasyTeamUpdate
+from app.models.series import SeriesPublic
 from app.models.user import UserCreate
+from app.services.series import SeriesService
+from app.services.users import UserService
 from app.utils.files import secure_filename
 from app.utils.query_util import QueryUtil
 
@@ -30,10 +33,10 @@ router = APIRouter(tags=["public"])
 
 # Simple in-memory token store: token -> {discord_id, discord_tag, season_id, expires_at, access_type}
 # access_type can be 'signup' or 'dashboard'
-_token_store = {}
+_token_store: dict[str, dict[str, Any]] = {}
 
 
-def _cleanup_expired():
+def _cleanup_expired() -> None:
     # use timezone-aware UTC now
     now = datetime.now(UTC)
     expired = [t for t, v in _token_store.items() if v["expires_at"] <= now]
@@ -41,7 +44,12 @@ def _cleanup_expired():
         del _token_store[t]
 
 
-def _notify_discord_series_update(series, player_name, action, uploaded_files=None):
+def _notify_discord_series_update(
+    series: SeriesPublic,
+    player_name: str,
+    action: str,
+    uploaded_files: dict[str, dict[str, Any]] | None = None,
+) -> bool:
     """Send series update notification to Discord bot webhook with optional file attachments
 
     This function is designed to be non-blocking - if Discord notifications fail,
@@ -127,7 +135,7 @@ def _notify_discord_series_update(series, player_name, action, uploaded_files=No
         return False
 
 
-@router.post("/public-access-helper")
+@router.post("/public-access-helper", response_model=None)
 def create_public_access_helper(
     request: Request,
     data: Annotated[dict | None, Body()] = None,
@@ -137,7 +145,7 @@ def create_public_access_helper(
     season_id: str | None = None,
     access_type: str | None = None,
     ttl_minutes: str | None = None,
-):
+) -> JSONResponse | dict[str, Any]:
     """Protected endpoint for the Discord bot to request a one-time public access URL. Requires BOT client token."""
     data = data or {}
     client_token = data.get("client_token") or client_token
@@ -183,8 +191,8 @@ def create_public_access_helper(
     return {"access_url": access_url, "token": token}
 
 
-@router.get("/public-token/{token}")
-def get_public_token(token: str):
+@router.get("/public-token/{token}", response_model=None)
+def get_public_token(token: str) -> JSONResponse | dict[str, Any]:
     """Return token metadata (used by public pages to validate token)."""
     _cleanup_expired()
     entry = _token_store.get(token)
@@ -198,8 +206,8 @@ def get_public_token(token: str):
     }
 
 
-@router.delete("/public-token/{token}")
-def delete_public_token(token: str):
+@router.delete("/public-token/{token}", response_model=None)
+def delete_public_token(token: str) -> JSONResponse | dict[str, Any]:
     """Remove a token after it has been used."""
     if token in _token_store:
         del _token_store[token]
@@ -207,13 +215,13 @@ def delete_public_token(token: str):
     return JSONResponse({"error": "not_found"}, status_code=404)
 
 
-@router.post("/signup", status_code=201)
+@router.post("/signup", status_code=201, response_model=None)
 def public_create_user(
     settings_service: SettingsServiceDep,
     user_service: UserServiceDep,
     season_service: SeasonServiceDep,
     data: Annotated[dict | None, Body()] = None,
-):
+) -> JSONResponse | dict[str, Any]:
     """Create user and optionally assign to season using a one-time token."""
     # Check if signups are enabled
     try:
@@ -310,12 +318,12 @@ def public_create_user(
     return JSONResponse({"error": "user_creation_failed"}, status_code=500)
 
 
-@router.get("/player-series")
+@router.get("/player-series", response_model=None)
 def get_player_series(
     user_service: UserServiceDep,
     series_service: SeriesServiceDep,
     token: str | None = None,
-):
+) -> JSONResponse | dict[str, Any]:
     """Get player's series for dashboard view using a one-time token."""
     if not token:
         return JSONResponse({"error": "missing token"}, status_code=400)
@@ -367,13 +375,13 @@ def get_player_series(
     }
 
 
-@router.put("/player-series/{series_id}")
+@router.put("/player-series/{series_id}", response_model=None)
 async def update_player_series(
     series_id: int,
     request: Request,
     user_service: UserServiceDep,
     series_service: SeriesServiceDep,
-):
+) -> JSONResponse | dict[str, Any]:
     """Update a series that belongs to the authenticated player."""
     # Handle both form data and JSON
     content_type = request.headers.get("content-type")
@@ -409,13 +417,13 @@ async def update_player_series(
 
 
 def _update_player_series(
-    series_id,
-    content_type,
-    data,
-    files,
-    user_service,
-    series_service,
-):
+    series_id: int,
+    content_type: str | None,
+    data: dict[str, Any],
+    files: dict[str, dict[str, Any]],
+    user_service: UserService,
+    series_service: SeriesService,
+) -> JSONResponse | dict[str, Any]:
     token = data.get("token")
     if not token:
         return JSONResponse({"error": "missing token"}, status_code=400)
@@ -463,7 +471,7 @@ def _update_player_series(
         f"Files details: {[(k, v['filename'] if v['filename'] else 'no filename') for k, v in files.items()]}"
     )
 
-    def allowed_file(filename):
+    def allowed_file(filename: str) -> bool:
         return (
             "." in filename and filename.rsplit(".", 1)[1].lower() in allowed_extensions
         )
@@ -621,8 +629,10 @@ def _update_player_series(
     return result
 
 
-@router.get("/user-info")
-def get_user_info(user_service: UserServiceDep, token: str | None = None):
+@router.get("/user-info", response_model=None)
+def get_user_info(
+    user_service: UserServiceDep, token: str | None = None
+) -> JSONResponse | dict[str, Any]:
     """Get user information by token (for fantasy team captains who may not be players)."""
     if not token:
         return JSONResponse({"error": "missing token"}, status_code=400)
@@ -654,13 +664,13 @@ def get_user_info(user_service: UserServiceDep, token: str | None = None):
     }
 
 
-@router.post("/fantasy-team", status_code=201)
+@router.post("/fantasy-team", status_code=201, response_model=None)
 def create_fantasy_team(
     settings_service: SettingsServiceDep,
     user_service: UserServiceDep,
     fantasy_team_service: FantasyTeamServiceDep,
     data: Annotated[dict | None, Body()] = None,
-):
+) -> JSONResponse | dict[str, Any]:
     """Create or update fantasy team, creating user if needed."""
     # Check if fantasy team creation is enabled
     try:
@@ -773,12 +783,12 @@ def create_fantasy_team(
     return final_team.to_dict() if hasattr(final_team, "to_dict") else final_team
 
 
-@router.post("/fantasy-bet", status_code=201)
+@router.post("/fantasy-bet", status_code=201, response_model=None)
 def create_fantasy_bet(
     user_service: UserServiceDep,
     fantasy_bet_service: FantasyBetServiceDep,
     data: Annotated[dict | None, Body()] = None,
-):
+) -> JSONResponse | dict[str, Any] | None:
     """Create a fantasy bet using a token."""
     try:
         data = data or {}
@@ -835,13 +845,13 @@ def create_fantasy_bet(
         )
 
 
-@router.put("/fantasy-bet/{bet_id}")
+@router.put("/fantasy-bet/{bet_id}", response_model=None)
 def update_fantasy_bet(
     bet_id: int,
     user_service: UserServiceDep,
     fantasy_bet_service: FantasyBetServiceDep,
     data: Annotated[dict | None, Body()] = None,
-):
+) -> JSONResponse | dict[str, Any] | None:
     """Update a fantasy bet using a token."""
     try:
         data = data or {}
@@ -909,13 +919,13 @@ def update_fantasy_bet(
         )
 
 
-@router.delete("/fantasy-bet/{bet_id}", status_code=204)
+@router.delete("/fantasy-bet/{bet_id}", status_code=204, response_model=None)
 def delete_fantasy_bet(
     bet_id: int,
     user_service: UserServiceDep,
     fantasy_bet_service: FantasyBetServiceDep,
     token: str | None = None,
-):
+) -> JSONResponse | None:
     """Delete a fantasy bet using a token."""
     if not token:
         return JSONResponse({"error": "missing token"}, status_code=400)

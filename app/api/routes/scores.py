@@ -1,4 +1,5 @@
 import logging
+from typing import Any
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
@@ -13,6 +14,10 @@ from app.api.deps import (
 from app.exceptions import NotFoundException
 from app.models.match import MatchUpdate
 from app.models.series import SeriesUpdate
+from app.services.matches import MatchService
+from app.services.scores import ScoreService
+from app.services.seasons import SeasonService
+from app.services.series import SeriesService
 from app.utils.query_util import QueryUtil
 
 logger = logging.getLogger(__name__)
@@ -24,7 +29,7 @@ calculation_progress = {}
 
 
 @router.get("/season/{season_id}/calculate/status")
-def get_calc_status(season_id: int):
+def get_calc_status(season_id: int) -> dict[str, Any]:
     """Get the current calculation progress for a season"""
     progress = calculation_progress.get(season_id)
 
@@ -47,7 +52,7 @@ def calc_score(
     match_service: MatchServiceDep,
     series_service: SeriesServiceDep,
     score_service: ScoreServiceDep,
-):
+) -> JSONResponse:
     """Calculate the scores of a given season.
 
     Calculates series, match and team scores for the given season. This is a
@@ -83,8 +88,12 @@ def calc_score(
 
 
 def perform_calculation(
-    season_id: int, season_service, match_service, series_service, score_service
-):
+    season_id: int,
+    season_service: SeasonService,
+    match_service: MatchService,
+    series_service: SeriesService,
+    score_service: ScoreService,
+) -> dict[str, Any] | None:
     """Perform the actual score calculation with progress tracking"""
     try:
         teams = {}

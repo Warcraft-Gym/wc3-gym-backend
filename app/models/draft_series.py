@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING, Annotated, Any, Self
 
 from sqlalchemy import TIMESTAMP
 from sqlmodel import Field, Relationship, SQLModel
@@ -72,7 +72,7 @@ class DraftSeriesPublic(DraftSeriesBase):
     player2: UserPublic | None = None
 
     @classmethod
-    def from_draft_series(cls, draft_series):
+    def from_draft_series(cls, draft_series: DraftSeries | None) -> Self | None:
         if not draft_series:
             return None
 
@@ -99,5 +99,5 @@ class DraftSeriesPublic(DraftSeriesBase):
             created_at=draft_series.created_at,
         )
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return self.model_dump(mode="json")

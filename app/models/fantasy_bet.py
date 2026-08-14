@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING, Annotated, Any, Self
 
 from sqlmodel import Field, Relationship, SQLModel
 
@@ -71,7 +71,7 @@ class FantasyBetPublic(FantasyBetBase):
     winner: UserPublic | None = None
 
     @classmethod
-    def from_fantasy_bet(cls, fbet):
+    def from_fantasy_bet(cls, fbet: FantasyBet | None) -> Self | None:
         if not fbet:
             return None
 
@@ -89,5 +89,5 @@ class FantasyBetPublic(FantasyBetBase):
             bet_result=fbet.bet_result,
         )
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return self.model_dump(mode="json")

@@ -1,17 +1,21 @@
 import logging
 import os
 import urllib.parse
+from typing import TYPE_CHECKING, Any
 
 import requests
 
 from app.models.enums import Race
 from app.models.w3c_stats import W3CStatsCreate
 
+if TYPE_CHECKING:
+    from app.services.settings import SettingsService
+
 logger = logging.getLogger(__name__)
 
 
 class W3CService:
-    def __init__(self, settings_app_service=None):
+    def __init__(self, settings_app_service: "SettingsService | None" = None) -> None:
         self.settings_app_service = settings_app_service
 
     GET = "GET"
@@ -22,7 +26,7 @@ class W3CService:
     HEAD = "HEAD"
     OPTIONS = "OPTIONS"
 
-    def validatePlayer(self, bnet_name):
+    def validatePlayer(self, bnet_name: str) -> bool:
         """
         Validate that a player exists on W3Champions.
         Uses the /api/players endpoint which is simpler and doesn't require season info.
@@ -56,7 +60,9 @@ class W3CService:
             logger.debug(f"Player validation failed for {bnet_name}: {e!s}")
             return False
 
-    def getPlayerStats(self, bnet_name, season_override=None):
+    def getPlayerStats(
+        self, bnet_name: str, season_override: int | None = None
+    ) -> list[W3CStatsCreate]:
         if not isinstance(bnet_name, str):
             raise ValueError("bnet_name must be a string")
 
@@ -98,7 +104,7 @@ class W3CService:
         if not result:
             logger.debug(f"no stats found for player {bnet_name} on w3c")
             raise Exception(f"No stats found for player {bnet_name} on W3C")
-        stats = []
+        stats: list[W3CStatsCreate] = []
         for gmode_stats in result:
             if gmode_stats.get("gameMode") and gmode_stats.get("gameMode") == 1:
                 stats.append(
@@ -115,14 +121,21 @@ class W3CService:
                 )
         return stats
 
-    def getRaceEnum(self, race_int):
+    def getRaceEnum(self, race_int: int | None) -> Race | None:
         if race_int is None:
             return None
         race_mapping = {0: Race.RANDOM, 8: Race.UD, 1: Race.HU, 4: Race.NE, 2: Race.OC}
         race = race_mapping.get(race_int)
         return race
 
-    def send_request(self, method, url, data=None, headers=None, params=None):
+    def send_request(
+        self,
+        method: str,
+        url: str,
+        data: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+        params: dict[str, Any] | None = None,
+    ) -> Any:  # noqa: ANN401  # the w3champions body has no fixed shape
         try:
             # Send the request
             response = requests.request(

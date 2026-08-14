@@ -6,7 +6,10 @@ is part of the contract the frontend and the Discord bot read, so it is
 pinned here.
 """
 
+from typing import Any
+
 import pytest
+from httpx2 import Client
 
 MISSING = 999999
 
@@ -35,15 +38,22 @@ ROUTES = [
 
 
 @pytest.mark.parametrize("method,path,body", ROUTES)
-def test_missing_row_answers_404(client, auth_headers, seeded, method, path, body):
+def test_missing_row_answers_404(
+    client: Client,
+    auth_headers: dict[str, str],
+    seeded: dict[str, Any],
+    method: str,
+    path: str,
+    body: dict[str, Any] | None,
+) -> None:
     url = path.format(id=MISSING)
     resp = client.request(method, url, headers=auth_headers, json=body)
     assert resp.status_code == 404, resp.text
 
 
 def test_the_body_carries_the_message_without_the_class_name(
-    client, auth_headers, seeded
-):
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
     resp = client.get(f"/maps/{MISSING}", headers=auth_headers)
     assert resp.status_code == 404
     error = resp.json()["error"]

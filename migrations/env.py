@@ -34,14 +34,14 @@ for module in pkgutil.iter_modules(app.models.__path__):
 target_metadata = SQLModel.metadata
 
 
-def get_url():
+def get_url() -> str:
     url = os.getenv("DB_URL")
     if not url:
         raise RuntimeError("DB_URL is not set. See the variable table in README.md.")
     return url
 
 
-def run_migrations_offline():
+def run_migrations_offline() -> None:
     """Emit the SQL of a migration without connecting."""
     context.configure(
         url=get_url(),
@@ -54,7 +54,7 @@ def run_migrations_offline():
         context.run_migrations()
 
 
-def run_migrations_online():
+def run_migrations_online() -> None:
     """Run the migrations against a live connection."""
     section = config.get_section(config.config_ini_section, {})
     section["sqlalchemy.url"] = get_url()

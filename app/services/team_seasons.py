@@ -9,26 +9,30 @@ logger = logging.getLogger(__name__)
 
 
 class TeamSeasonService(BaseService):
-    def add(self):
+    # add, delete and get build an exception and hand it back as the
+    # result. They are typed as they behave; see the pull request.
+    def add(self) -> Exception:
         return Exception("Method not available")
 
-    def update(self, team_id: int, season_info: SeasonInfoUpdate):
+    def update(self, team_id: int, season_info: SeasonInfoUpdate) -> SeasonInfoPublic:
         with self.get_session() as session:
-            season_info = DBTeamSeason.updateSeasonInfo(
+            team_season = DBTeamSeason.updateSeasonInfo(
                 session,
                 season_info.season_id,
                 team_id,
                 **season_info.model_dump(),
             )
-            if not season_info:
+            if not team_season:
                 raise NotFoundException("Team season not found")
-            return SeasonInfoPublic.from_team_season(season_info)
+            return SeasonInfoPublic.from_team_season(team_season)
 
-    def delete(self):
+    def delete(self) -> Exception:
         return Exception("Method not available")
 
-    def get(self):
+    def get(self) -> Exception:
         return Exception("Method not available")
 
-    def update_team_season(self, team_id: int, season_info: SeasonInfoUpdate):
+    def update_team_season(
+        self, team_id: int, season_info: SeasonInfoUpdate
+    ) -> SeasonInfoPublic:
         return self.update(team_id, season_info)

@@ -4,7 +4,10 @@ The expected values pin behavior on the seeded database, so a change
 that breaks routing, auth, or serialization fails here first.
 """
 
+from typing import Any
+
 import pytest
+from httpx2 import Client
 
 ROUTES = [
     ("/", 302),  # redirects to /docs
@@ -29,7 +32,9 @@ ROUTES = [
 
 
 @pytest.mark.parametrize("path,expected_status", ROUTES)
-def test_get_status(client, seeded, path, expected_status):
+def test_get_status(
+    client: Client, seeded: dict[str, Any], path: str, expected_status: int
+) -> None:
     resp = client.get(path)
     assert resp.status_code == expected_status
 
@@ -38,6 +43,6 @@ def test_get_status(client, seeded, path, expected_status):
     "path",
     [p for p, s in ROUTES if s == 200 and p != "/docs"],
 )
-def test_get_returns_json(client, seeded, path):
+def test_get_returns_json(client: Client, seeded: dict[str, Any], path: str) -> None:
     resp = client.get(path)
     assert resp.headers["content-type"].startswith("application/json")

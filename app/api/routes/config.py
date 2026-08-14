@@ -1,6 +1,6 @@
 import logging
 import secrets
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Body, Depends
 from fastapi.responses import JSONResponse
@@ -13,14 +13,14 @@ router = APIRouter(tags=["config"])
 
 
 @router.get("/config/settings")
-def get_settings(service: SettingsServiceDep):
+def get_settings(service: SettingsServiceDep) -> dict[str, Any]:
     """Retrieve all configuration settings from database."""
     settings = service.get_all_settings()
     return {"settings": settings}
 
 
 @router.get("/config/settings/{key}")
-def get_setting(key: str, service: SettingsServiceDep):
+def get_setting(key: str, service: SettingsServiceDep) -> JSONResponse:
     """Retrieve a specific setting by key."""
     setting = service.get_setting(key)
     if not setting:
@@ -29,7 +29,9 @@ def get_setting(key: str, service: SettingsServiceDep):
 
 
 @router.put("/config/settings", dependencies=[Depends(require_admin)])
-def update_settings(data: Annotated[dict, Body()], service: SettingsServiceDep):
+def update_settings(
+    data: Annotated[dict, Body()], service: SettingsServiceDep
+) -> JSONResponse:
     """Update one or more configuration settings."""
     settings = data.get("settings", {})
 
@@ -47,7 +49,7 @@ def update_settings(data: Annotated[dict, Body()], service: SettingsServiceDep):
 @router.put("/config/settings/{key}", dependencies=[Depends(require_admin)])
 def update_setting(
     key: str, data: Annotated[dict, Body()], service: SettingsServiceDep
-):
+) -> JSONResponse:
     """Update a specific setting by key."""
     value = data.get("value")
     description = data.get("description")
@@ -64,7 +66,7 @@ def update_setting(
 
 
 @router.delete("/config/settings/{key}", dependencies=[Depends(require_admin)])
-def delete_setting(key: str, service: SettingsServiceDep):
+def delete_setting(key: str, service: SettingsServiceDep) -> JSONResponse:
     """Delete a specific setting by key."""
     deleted = service.delete_setting(key)
     if not deleted:
@@ -76,7 +78,7 @@ def delete_setting(key: str, service: SettingsServiceDep):
 
 
 @router.post("/config/koth/nightbot-token", dependencies=[Depends(require_admin)])
-def generate_nightbot_token(service: SettingsServiceDep):
+def generate_nightbot_token(service: SettingsServiceDep) -> dict[str, Any]:
     """Generate a new secure token for KOTH Nightbot integration"""
     # Generate a secure random token (64 characters hex)
     new_token = secrets.token_hex(32)
@@ -95,7 +97,7 @@ def generate_nightbot_token(service: SettingsServiceDep):
 
 
 @router.get("/config/koth/nightbot-token", dependencies=[Depends(require_admin)])
-def get_nightbot_token(service: SettingsServiceDep):
+def get_nightbot_token(service: SettingsServiceDep) -> dict[str, Any] | None:
     """Get the current KOTH Nightbot token"""
     setting = service.get_setting("KOTH_NIGHTBOT_TOKEN")
 

@@ -9,6 +9,7 @@ keeps working after it.
 import os
 import uuid
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import jwt
 
@@ -37,7 +38,7 @@ def create_refresh_token(identity: str, minutes: int) -> str:
     return _mint(identity, "refresh", minutes)
 
 
-def decode_token(token: str) -> dict:
+def decode_token(token: str) -> dict[str, Any]:
     """Validate signature and expiry; raises jwt.InvalidTokenError."""
     return jwt.decode(
         token,

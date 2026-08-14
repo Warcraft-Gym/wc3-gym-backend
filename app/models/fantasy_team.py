@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Annotated, Optional
+from typing import TYPE_CHECKING, Annotated, Any, Self
 
 from pydantic import field_serializer
 from sqlalchemy.orm import Session
@@ -37,7 +37,7 @@ class FantasyTeam(FantasyTeamBase, DBModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     drafted_race: Race | None = None
 
-    drafted_team: Optional["Team"] = Relationship(
+    drafted_team: Team | None = Relationship(
         sa_relationship_kwargs={"foreign_keys": "[FantasyTeam.drafted_team_id]"}
     )
     captain: "User" = Relationship(
@@ -52,7 +52,7 @@ class FantasyTeam(FantasyTeamBase, DBModel, table=True):
     )
 
     @classmethod
-    def addPlayers(cls, session: Session, obj_id, user_ids):
+    def addPlayers(cls, session: Session, obj_id: int, user_ids: list[int]) -> Self:
         team = session.get(cls, obj_id)
         if not team:
             raise Exception(f"Team not found by id: {obj_id}")
@@ -74,7 +74,7 @@ class FantasyTeam(FantasyTeamBase, DBModel, table=True):
         return team
 
     @classmethod
-    def removePlayers(cls, session: Session, obj_id, user_ids):
+    def removePlayers(cls, session: Session, obj_id: int, user_ids: list[int]) -> Self:
         team = session.get(cls, obj_id)
         if not team:
             raise Exception(f"Fantasy Team not found by id: {obj_id}")
@@ -129,12 +129,22 @@ class FantasyTeamPublic(FantasyTeamBase):
     # validator.
     drafted_players: Annotated[list[UserPublic] | None, DropNoneItems] = None
 
+    # Only the empty list needs handling; pydantic serializes the players
+    # itself. Returning them instead of their dicts keeps UserPublic in the
+    # published schema, because pydantic builds that from this return type.
+    #
+    # An empty team reads as null rather than []. Every drafted_players site
+    # in admin_frontend accepts either shape, and the offline leaderboard
+    # generator lives outside these repos, so nothing here says which the
+    # published pages need.
     @field_serializer("drafted_players", when_used="json")
-    def _drafted_players_json(self, value):
-        return [user.to_dict() for user in value] if value else None
+    def _drafted_players_json(
+        self, value: list[UserPublic] | None
+    ) -> list[UserPublic] | None:
+        return value if value else None
 
     @classmethod
-    def from_fantasy_team(cls, fteam):
+    def from_fantasy_team(cls, fteam: FantasyTeam | None) -> Self | None:
         if not fteam:
             return None
 
@@ -166,5 +176,5 @@ class FantasyTeamPublic(FantasyTeamBase):
             total_points=fteam.total_points,
         )
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return self.model_dump(mode="json")

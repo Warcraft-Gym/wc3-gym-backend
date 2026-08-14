@@ -1,15 +1,14 @@
-from typing import TYPE_CHECKING, Annotated, Optional
+from typing import TYPE_CHECKING, Annotated, Any, Self
 
 from sqlmodel import Field, Relationship, SQLModel
 
 from app.models.base import DBModel
-from app.models.map import MapPublic
+from app.models.map import Map, MapPublic
 from app.models.season import SeasonPublic
 from app.models.team_reduced import TeamReduced
 from app.models.types import NumToStr
 
 if TYPE_CHECKING:
-    from app.models.map import Map
     from app.models.season import Season
     from app.models.team import Team
 
@@ -39,7 +38,7 @@ class Match(MatchBase, DBModel, table=True):
     season: "Season" = Relationship(
         sa_relationship_kwargs={"foreign_keys": "[Match.season_id]"}
     )
-    fixed_map: Optional["Map"] = Relationship(
+    fixed_map: Map | None = Relationship(
         sa_relationship_kwargs={"foreign_keys": "[Match.fixed_map_id]"}
     )
 
@@ -71,7 +70,7 @@ class MatchPublic(MatchBase):
     fixed_map: MapPublic | None = None
 
     @classmethod
-    def from_match(cls, match):
+    def from_match(cls, match: Match | None) -> Self | None:
         if not match:
             return None
 
@@ -95,5 +94,5 @@ class MatchPublic(MatchBase):
             team2_score=match.team2_score,
         )
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return self.model_dump(mode="json")

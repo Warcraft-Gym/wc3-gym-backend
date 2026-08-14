@@ -1,6 +1,6 @@
 import os
 
-from app.models.match import MatchUpdate
+from app.models.match import MatchPublic, MatchUpdate
 from app.models.season_info import SeasonInfoUpdate
 from app.models.series import SeriesPublic, SeriesUpdate
 from app.models.team import TeamPublic
@@ -26,7 +26,7 @@ class ScoreService:
         team_season_service: TeamSeasonService,
         season_service: SeasonService,
         settings_service: SettingsService,
-    ):
+    ) -> None:
         self.match_service = match_service
         self.serires_service = serires_service
         self.team_service = team_service
@@ -34,7 +34,7 @@ class ScoreService:
         self.season_service = season_service
         self.settings_service = settings_service
 
-    def calculateSeriesScore(self, series: SeriesPublic):
+    def calculateSeriesScore(self, series: SeriesPublic) -> SeriesPublic:
         series.player1_points = self.getScoreByMapScore(
             series.player1_score, series.player2_score
         )
@@ -43,7 +43,7 @@ class ScoreService:
         )
         return series
 
-    def updateMatchScore(self, matchId: int):
+    def updateMatchScore(self, matchId: int) -> MatchPublic:
         match = self.match_service.get(matchId)
 
         query = QueryUtil.parseQuery("match_id == " + str(matchId))
@@ -85,7 +85,9 @@ class ScoreService:
 
         return match_data
 
-    def updateTeamScore(self, team: TeamPublic | TeamReduced, seasonId: int):
+    def updateTeamScore(
+        self, team: TeamPublic | TeamReduced, seasonId: int
+    ) -> TeamPublic | TeamReduced:
         # A match carries reduced team objects without seasons_info;
         # fetch the full team data in that case
         if not getattr(team, "seasons_info", None):
@@ -159,7 +161,7 @@ class ScoreService:
         team.seasons_info[season_key] = updated_season_info
         return team
 
-    def _get_score_system(self):
+    def _get_score_system(self) -> str:
         """Get the score system from settings, fallback to environment variable, default to 'standard'"""
         try:
             score_system_setting = self.settings_service.get_by_key("score_system")
@@ -171,7 +173,10 @@ class ScoreService:
         # Fallback to environment variable for backward compatibility
         return os.getenv("SCORE_SYSTEM", "standard")
 
-    def getScoreByMapScore(self, playerScore: int, opponentScore: int):
+    # The body accepts no score at all, so both arguments are optional.
+    def getScoreByMapScore(
+        self, playerScore: int | None, opponentScore: int | None
+    ) -> int | None:
         if playerScore == None and opponentScore == None:
             return None
         if playerScore == None or playerScore < 0 or playerScore > 2:
@@ -187,19 +192,19 @@ class ScoreService:
 
         return self.getStandardScoreByMapScore(opponentScore)
 
-    def getHelpstoneScoreByMapScore(self, opponentScore: int):
+    def getHelpstoneScoreByMapScore(self, opponentScore: int) -> int | None:
         if opponentScore == 0:
             return self.HELPSTONE_MAX_SCORE
         elif opponentScore == 1:
             return self.HELPSTONE_MAX_SCORE - 1
 
-    def getStandardScoreByMapScore(self, opponentScore: int):
+    def getStandardScoreByMapScore(self, opponentScore: int) -> int | None:
         if opponentScore == 0:
             return self.STANDARD_MAX_SCORE
         elif opponentScore == 1:
             return self.STANDARD_MAX_SCORE - 1
 
-    def getMaxPointsPerSeries(self):
+    def getMaxPointsPerSeries(self) -> int:
         if self._get_score_system() == "helpstone":
             return self.HELPSTONE_MAX_SCORE
         return self.STANDARD_MAX_SCORE

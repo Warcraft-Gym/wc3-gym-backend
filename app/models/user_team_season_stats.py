@@ -4,13 +4,16 @@ The row is the user_team_season link table; this is the shape the API
 sends for it, under the name gnl_stats on a user.
 """
 
-from typing import Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any, Self
 
 from sqlmodel import SQLModel
 
 from app.models.season import SeasonPublic
 from app.models.team_reduced import TeamReduced
 from app.models.types import NoneToList
+
+if TYPE_CHECKING:
+    from app.models.relationships import DBUserTeamSeason
 
 
 class UserTeamSeasonStatsPublic(SQLModel):
@@ -25,7 +28,7 @@ class UserTeamSeasonStatsPublic(SQLModel):
     matchup_history: Annotated[list[Any], NoneToList] = []
 
     @classmethod
-    def from_user_team_season(cls, uts):
+    def from_user_team_season(cls, uts: "DBUserTeamSeason | None") -> Self | None:
         if not uts:
             return None
 
@@ -41,5 +44,5 @@ class UserTeamSeasonStatsPublic(SQLModel):
             matchup_history=uts.matchup_history if uts.matchup_history else [],
         )
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return self.model_dump(mode="json")

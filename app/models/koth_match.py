@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING, Annotated, Any
 
 from sqlmodel import Field, Relationship, SQLModel
 
@@ -66,5 +66,5 @@ class KothMatchPublic(KothMatchBase):
     id: int
     participants: Annotated[list[KothMatchParticipantPublic], NoneToList] = []
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return self.model_dump(mode="json")

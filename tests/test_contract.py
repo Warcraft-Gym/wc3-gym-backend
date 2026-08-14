@@ -6,14 +6,18 @@ consumers depend on, not every field, so an added field passes and a
 renamed or retyped one fails.
 """
 
+from typing import Any
 
-def get_json(client, path):
+from httpx2 import Client
+
+
+def get_json(client: Client, path: str) -> Any:  # noqa: ANN401  # a JSON body
     resp = client.get(path)
     assert resp.status_code == 200
     return resp.json()
 
 
-def test_users_list(client, seeded):
+def test_users_list(client: Client, seeded: dict[str, Any]) -> None:
     users = get_json(client, "/users")
     assert len(users) == 4
     by_tag = {u["battleTag"]: u for u in users}
@@ -28,7 +32,7 @@ def test_users_list(client, seeded):
     assert p1["gnl_stats"][0]["team"]["name"] == "Alpha"
 
 
-def test_seasons_list(client, seeded):
+def test_seasons_list(client: Client, seeded: dict[str, Any]) -> None:
     seasons = get_json(client, "/seasons")
     assert len(seasons) == 1
     season = seasons[0]
@@ -41,14 +45,14 @@ def test_seasons_list(client, seeded):
     assert [m["shortname"] for m in season["maps"]] == ["CH"]
 
 
-def test_teams_basic(client, seeded):
+def test_teams_basic(client: Client, seeded: dict[str, Any]) -> None:
     teams = get_json(client, "/teams/basic")
     assert {t["name"] for t in teams} == {"Alpha", "Beta"}
     alpha = next(t for t in teams if t["name"] == "Alpha")
     assert alpha["long_name"] == "Team Alpha"
 
 
-def test_series_for_season(client, seeded):
+def test_series_for_season(client: Client, seeded: dict[str, Any]) -> None:
     ids = seeded
     series = get_json(client, f"/series/season/{ids['season_id']}")
     assert len(series) == 2
@@ -64,7 +68,7 @@ def test_series_for_season(client, seeded):
     assert open_series["player1_points"] is None
 
 
-def test_career_stats(client, seeded):
+def test_career_stats(client: Client, seeded: dict[str, Any]) -> None:
     stats = get_json(client, "/stats/career")
     assert len(stats) == 2
     p1 = next(s for s in stats if s["player_name"] == "P1")
@@ -74,13 +78,13 @@ def test_career_stats(client, seeded):
     assert p1["user"]["battleTag"] == "P1#1111"
 
 
-def test_settings(client, seeded):
+def test_settings(client: Client, seeded: dict[str, Any]) -> None:
     body = get_json(client, "/config/settings")
     by_key = {s["key"]: s["value"] for s in body["settings"]}
     assert by_key["score_system"] == "standard"
 
 
-def test_fantasy_bets(client, seeded):
+def test_fantasy_bets(client: Client, seeded: dict[str, Any]) -> None:
     bets = get_json(client, "/fantasy/bets")
     assert len(bets) == 1
     bet = bets[0]
@@ -89,7 +93,7 @@ def test_fantasy_bets(client, seeded):
     assert bet["series"]["id"] == seeded["series_played_id"]
 
 
-def test_fantasy_teams(client, seeded):
+def test_fantasy_teams(client: Client, seeded: dict[str, Any]) -> None:
     teams = get_json(client, "/fantasy/teams")
     assert len(teams) == 1
     team = teams[0]
@@ -98,6 +102,6 @@ def test_fantasy_teams(client, seeded):
     assert team["drafted_race"] == "HU"
 
 
-def test_empty_database_returns_empty_lists(client):
+def test_empty_database_returns_empty_lists(client: Client) -> None:
     for path in ["/users", "/seasons", "/maps", "/stats/career"]:
         assert get_json(client, path) == []

@@ -1,8 +1,10 @@
+from collections.abc import Sequence
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Any, Self
 
-from sqlalchemy import and_, select
+from sqlalchemy import ColumnExpressionArgument, and_, select
 from sqlalchemy.orm import Session
+from sqlalchemy.sql.base import ExecutableOption
 from sqlmodel import Field, Relationship, SQLModel
 
 from app.models.base import DBModel
@@ -40,7 +42,13 @@ class Series(SeriesBase, DBModel, table=True):
     )
 
     @classmethod
-    def searchForSeasonAndPlayday(cls, session: Session, season_id, playday, filters):
+    def searchForSeasonAndPlayday(
+        cls,
+        session: Session,
+        season_id: int,
+        playday: int,
+        filters: ColumnExpressionArgument[bool] | None,
+    ) -> Sequence[Self]:
         stmt = select(cls).options(*cls._eager_options())
         stmt = stmt.where(
             cls.match.has(and_(Match.season_id == season_id, Match.playday == playday))
@@ -50,7 +58,12 @@ class Series(SeriesBase, DBModel, table=True):
         return session.scalars(stmt).unique().all()
 
     @classmethod
-    def searchForSeason(cls, session: Session, season_id, filters):
+    def searchForSeason(
+        cls,
+        session: Session,
+        season_id: int,
+        filters: ColumnExpressionArgument[bool] | None,
+    ) -> Sequence[Self]:
         stmt = select(cls).options(*cls._eager_options())
         stmt = stmt.where(cls.match.has(Match.season_id == season_id))
         if filters is not None:
@@ -58,7 +71,7 @@ class Series(SeriesBase, DBModel, table=True):
         return session.scalars(stmt).unique().all()
 
     @classmethod
-    def _eager_options(cls):
+    def _eager_options(cls) -> tuple[ExecutableOption, ...]:
         """The rows a season report reads off every series."""
         from sqlalchemy.orm import joinedload
 
@@ -108,7 +121,7 @@ class SeriesPublic(SeriesBase):
     player2: UserPublic | None = None
 
     @classmethod
-    def from_series(cls, series):
+    def from_series(cls, series: Series | None) -> Self | None:
         if not series:
             return None
 
@@ -130,5 +143,5 @@ class SeriesPublic(SeriesBase):
             is_fantasy_match=series.is_fantasy_match,
         )
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return self.model_dump(mode="json")

@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING, Annotated, Any
 
 from sqlmodel import Field, Relationship, SQLModel
 
@@ -37,5 +37,5 @@ class MapUpdate(MapBase):
 class MapPublic(MapBase):
     id: int
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return self.model_dump(mode="json")

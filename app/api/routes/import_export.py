@@ -2,7 +2,7 @@ import io
 import logging
 import threading
 from io import BytesIO
-from typing import Annotated
+from typing import Annotated, Any
 
 import openpyxl
 import pandas as pd
@@ -29,6 +29,14 @@ from app.models.season import SeasonCreate, SeasonUpdate
 from app.models.series import SeriesCreate, SeriesUpdate
 from app.models.team import TeamCreate, TeamUpdate
 from app.models.user import UserCreate
+from app.services.fantasy_bets import FantasyBetService
+from app.services.fantasy_teams import FantasyTeamService
+from app.services.maps import MapService
+from app.services.matches import MatchService
+from app.services.seasons import SeasonService
+from app.services.series import SeriesService
+from app.services.teams import TeamService
+from app.services.users import UserService
 from app.utils.import_util import ImportUtil
 from app.utils.query_util import QueryUtil
 
@@ -38,17 +46,17 @@ router = APIRouter(tags=["import export"])
 
 
 def _process_import(
-    file_bytes,
-    create_new,
-    season_service,
-    map_service,
-    team_service,
-    user_service,
-    match_service,
-    series_service,
-    fantasy_team_service,
-    fantasy_bet_service,
-):
+    file_bytes: bytes,
+    create_new: bool,
+    season_service: SeasonService,
+    map_service: MapService,
+    team_service: TeamService,
+    user_service: UserService,
+    match_service: MatchService,
+    series_service: SeriesService,
+    fantasy_team_service: FantasyTeamService,
+    fantasy_bet_service: FantasyBetService,
+) -> None:
     """
     Helper function to process import. Can be called synchronously or in a thread.
 
@@ -537,7 +545,7 @@ def _process_import(
 
 
 # import export endpoints
-@router.post("/import", dependencies=[Depends(require_admin)])
+@router.post("/import", dependencies=[Depends(require_admin)], response_model=None)
 def import_season(
     season_service: SeasonServiceDep,
     map_service: MapServiceDep,
@@ -550,7 +558,7 @@ def import_season(
     file: Annotated[UploadFile | None, File()] = None,
     create_new: str = "false",
     background: str = "false",
-):
+) -> JSONResponse | dict[str, Any]:
     """Import complete season data from Excel.
 
     Imports ALL season data (season, maps, teams, players, matches, series)
@@ -629,7 +637,7 @@ def export_season(
     fantasy_team_service: FantasyTeamServiceDep,
     fantasy_bet_service: FantasyBetServiceDep,
     season_id: str | None = None,
-):
+) -> Response:
     """Export complete season data for migration.
 
     Export an Excel file with ALL season data (season, maps, teams, players,
@@ -915,7 +923,7 @@ def export_season(
 
 
 # import export endpoints
-@router.post("/fantasy/import/teams")
+@router.post("/fantasy/import/teams", response_model=None)
 def import_fantasy_teams(
     season_service: SeasonServiceDep,
     user_service: UserServiceDep,
@@ -924,7 +932,7 @@ def import_fantasy_teams(
     file: Annotated[UploadFile | None, File()] = None,
     season_id: str | None = None,
     season_name: str | None = None,
-):
+) -> JSONResponse | dict[str, Any] | None:
     """Import a xlsx with the information for a GNL fantasy season.
 
     Updates the database based on the import sheet.
@@ -1059,7 +1067,7 @@ def import_fantasy_teams(
         return JSONResponse({"error": "File type not allowed"}, status_code=400)
 
 
-@router.post("/fantasy/import/bets")
+@router.post("/fantasy/import/bets", response_model=None)
 def import_fantasy_bets(
     season_service: SeasonServiceDep,
     user_service: UserServiceDep,
@@ -1069,7 +1077,7 @@ def import_fantasy_bets(
     file: Annotated[UploadFile | None, File()] = None,
     season_id: str | None = None,
     season_name: str | None = None,
-):
+) -> JSONResponse | dict[str, Any] | None:
     """Import a xlsx with the information for a GNL fantasy season.
 
     Updates the database based on the import sheet.

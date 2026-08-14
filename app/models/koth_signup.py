@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING, Annotated, Any
 
 from sqlmodel import Field, Relationship, SQLModel
 
@@ -60,5 +60,5 @@ class KothSignupPublic(KothSignupBase):
     id: int
     race: Annotated[str | None, EnumValue] = None
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return self.model_dump(mode="json")

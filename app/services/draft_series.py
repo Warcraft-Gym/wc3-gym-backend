@@ -20,12 +20,14 @@ logger = logging.getLogger(__name__)
 
 
 class DraftSeriesService(BaseService):
-    def add(self, draft_series: DraftSeriesCreate):
+    def add(self, draft_series: DraftSeriesCreate) -> DraftSeriesPublic:
         with self.get_session() as session:
             draft_series = DraftSeries.add(session, draft_series.model_dump())
             return DraftSeriesPublic.from_draft_series(draft_series)
 
-    def update(self, draft_series_id, draft_series: DraftSeriesUpdate):
+    def update(
+        self, draft_series_id: int, draft_series: DraftSeriesUpdate
+    ) -> DraftSeriesPublic:
         with self.get_session() as session:
             draft_series = DraftSeries.update(
                 session,
@@ -36,11 +38,11 @@ class DraftSeriesService(BaseService):
                 raise NotFoundException("Draft series not found")
             return DraftSeriesPublic.from_draft_series(draft_series)
 
-    def delete(self, draft_series_id):
+    def delete(self, draft_series_id: int) -> None:
         with self.get_session() as session:
             DraftSeries.delete(session, draft_series_id)
 
-    def get(self, draft_series_id):
+    def get(self, draft_series_id: int) -> DraftSeriesPublic:
         with self.get_session() as session:
             # Eager load relationships to avoid N+1 queries
             draft_series = (
@@ -67,7 +69,7 @@ class DraftSeriesService(BaseService):
                 raise NotFoundException("Draft series not found")
             return DraftSeriesPublic.from_draft_series(draft_series)
 
-    def getByMatchId(self, match_id):
+    def getByMatchId(self, match_id: int) -> list[DraftSeriesPublic]:
         with self.get_session() as session:
             result = []
             # Eager load relationships
@@ -95,41 +97,41 @@ class DraftSeriesService(BaseService):
                 result.append(DraftSeriesPublic.from_draft_series(single_draft_series))
             return result
 
-    def deleteByMatchId(self, match_id):
+    def deleteByMatchId(self, match_id: int) -> None:
         """Delete all draft series for a given match"""
         with self.get_session() as session:
             session.execute(delete(DraftSeries).where(DraftSeries.match_id == match_id))
 
-    def create_draft_series(self, draft_series: DraftSeriesCreate):
+    def create_draft_series(self, draft_series: DraftSeriesCreate) -> DraftSeriesPublic:
         """Create a new draft series"""
         return self.add(draft_series)
 
     def update_draft_series(
         self, draft_series_id: int, draft_series: DraftSeriesUpdate
-    ):
+    ) -> DraftSeriesPublic:
         """Update an existing draft series"""
         return self.update(draft_series_id, draft_series)
 
-    def delete_draft_series(self, draft_series_id: int):
+    def delete_draft_series(self, draft_series_id: int) -> None:
         """Delete a draft series"""
         self.delete(draft_series_id)
 
-    def get_draft_series(self, draft_series_id: int):
+    def get_draft_series(self, draft_series_id: int) -> DraftSeriesPublic:
         """Get a draft series by ID"""
         draft_series_data = self.get(draft_series_id)
         if not draft_series_data:
             raise NotFoundException(f"Draft series not found by ID: {draft_series_id}")
         return draft_series_data
 
-    def get_draft_series_by_match(self, match_id: int):
+    def get_draft_series_by_match(self, match_id: int) -> list[DraftSeriesPublic]:
         """Get all draft series for a match"""
         return self.getByMatchId(match_id)
 
-    def delete_all_drafts_for_match(self, match_id: int):
+    def delete_all_drafts_for_match(self, match_id: int) -> None:
         """Delete all draft series for a match"""
         self.deleteByMatchId(match_id)
 
-    def convert_to_series(self, draft_series: DraftSeries):
+    def convert_to_series(self, draft_series: DraftSeries) -> SeriesCreate:
         """Convert a draft series to a real series (DTO only, actual creation handled by SeriesService)"""
         # Create a Series from the draft data
         series_dto = SeriesCreate(

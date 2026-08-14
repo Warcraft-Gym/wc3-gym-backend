@@ -1,4 +1,5 @@
 import logging
+from typing import Any
 
 from fastapi import APIRouter, Depends
 
@@ -20,7 +21,9 @@ router = APIRouter(tags=["draft-series"])
     response_model=DraftSeriesPublic,
     dependencies=[Depends(require_admin)],
 )
-def add_draft_series(data: DraftSeriesCreate, service: DraftSeriesServiceDep):
+def add_draft_series(
+    data: DraftSeriesCreate, service: DraftSeriesServiceDep
+) -> DraftSeriesPublic:
     """Create a new draft series (visible in admin UI only)"""
     return service.create_draft_series(data)
 
@@ -34,7 +37,7 @@ def update_draft_series(
     draft_series_id: int,
     data: DraftSeriesUpdate,
     service: DraftSeriesServiceDep,
-):
+) -> DraftSeriesPublic:
     """Update the data of an existing draft series"""
     return service.update_draft_series(draft_series_id, data)
 
@@ -44,20 +47,24 @@ def update_draft_series(
     status_code=204,
     dependencies=[Depends(require_admin)],
 )
-def delete_draft_series(draft_series_id: int, service: DraftSeriesServiceDep):
+def delete_draft_series(draft_series_id: int, service: DraftSeriesServiceDep) -> None:
     """Delete a draft series by its ID."""
     service.delete_draft_series(draft_series_id)
 
 
 @router.get("/draft-series/{draft_series_id}")
-def get_draft_series(draft_series_id: int, service: DraftSeriesServiceDep):
+def get_draft_series(
+    draft_series_id: int, service: DraftSeriesServiceDep
+) -> dict[str, Any] | None:
     """Retrieve a draft series by its ID."""
     draft_series = service.get_draft_series(draft_series_id)
     return draft_series.to_dict() if draft_series else None
 
 
 @router.get("/draft-series/match/{match_id}")
-def get_draft_series_by_match(match_id: int, service: DraftSeriesServiceDep):
+def get_draft_series_by_match(
+    match_id: int, service: DraftSeriesServiceDep
+) -> list[dict[str, Any]]:
     """Return all draft series for a specific match"""
     return [
         draft_series.to_dict()
@@ -70,7 +77,9 @@ def get_draft_series_by_match(match_id: int, service: DraftSeriesServiceDep):
     status_code=204,
     dependencies=[Depends(require_admin)],
 )
-def delete_all_draft_series_for_match(match_id: int, service: DraftSeriesServiceDep):
+def delete_all_draft_series_for_match(
+    match_id: int, service: DraftSeriesServiceDep
+) -> None:
     """Delete all draft series for a specific match"""
     service.delete_all_drafts_for_match(match_id)
 
@@ -84,7 +93,7 @@ def promote_draft_series(
     draft_series_id: int,
     service: DraftSeriesServiceDep,
     series_service: SeriesServiceDep,
-):
+) -> dict[str, Any] | None:
     """Convert a draft series to a real published series and delete the draft"""
     # Get the draft series
     draft_series = service.get_draft_series(draft_series_id)

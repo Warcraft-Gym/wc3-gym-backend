@@ -1,14 +1,11 @@
 from decimal import Decimal
-from typing import TYPE_CHECKING, Optional
+from typing import Any, Self
 
 from sqlalchemy import DECIMAL
 from sqlmodel import Field, Relationship, SQLModel
 
 from app.models.base import DBModel
-from app.models.user import UserPublic
-
-if TYPE_CHECKING:
-    from app.models.user import User
+from app.models.user import User, UserPublic
 
 # The response reads these as floats, and null or zero reads as 0.0.
 _FLOAT_FIELDS = ("series_winrate", "games_winrate", "avg_series_per_season")
@@ -48,7 +45,7 @@ class PlayerCareerStats(PlayerCareerStatsBase, DBModel, table=True):
     avg_series_per_season: Decimal | None = Field(default=0.00, sa_type=DECIMAL(5, 2))
 
     # Relationships
-    user: Optional["User"] = Relationship(back_populates="career_stats")
+    user: User | None = Relationship(back_populates="career_stats")
 
 
 class PlayerCareerStatsCreate(PlayerCareerStatsBase):
@@ -86,7 +83,7 @@ class PlayerCareerStatsPublic(PlayerCareerStatsBase):
     avg_series_per_season: float | None = None
 
     @classmethod
-    def from_career_stats(cls, stats):
+    def from_career_stats(cls, stats: PlayerCareerStats | None) -> Self | None:
         if not stats:
             return None
 
@@ -112,7 +109,7 @@ class PlayerCareerStatsPublic(PlayerCareerStatsBase):
             avg_series_per_season=stats.avg_series_per_season,
         )
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         result = self.model_dump(mode="json")
         for key in _FLOAT_FIELDS:
             result[key] = result[key] if result[key] else 0.0

@@ -11,7 +11,7 @@ worker can start at the same time.
 
 import os
 
-from sqlalchemy import create_engine
+from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import sessionmaker
 
 # Unbound until init_engine runs. The database services import this name at
@@ -19,7 +19,7 @@ from sqlalchemy.orm import sessionmaker
 Session = sessionmaker()
 
 
-def init_engine(db_url=None):
+def init_engine(db_url: str | None = None) -> Engine:
     """Build the engine and bind the session factory to it.
 
     Reads DB_URL when the caller passes no url. Both engine settings are for

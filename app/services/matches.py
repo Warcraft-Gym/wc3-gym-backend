@@ -6,18 +6,18 @@ from sqlalchemy.orm import joinedload
 from app.exceptions import NotFoundException
 from app.models.match import Match, MatchCreate, MatchPublic, MatchUpdate
 from app.services.base import BaseService
-from app.utils.query_util import QueryUtil
+from app.utils.query_util import QueryElement, QueryUtil
 
 logger = logging.getLogger(__name__)
 
 
 class MatchService(BaseService):
-    def add(self, match: MatchCreate):
+    def add(self, match: MatchCreate) -> MatchPublic:
         with self.get_session() as session:
             match = Match.add(session, match.model_dump())
             return MatchPublic.from_match(match)
 
-    def update(self, match_id, match: MatchUpdate):
+    def update(self, match_id: int, match: MatchUpdate) -> MatchPublic:
         with self.get_session() as session:
             match = Match.update(
                 session, match_id, **match.model_dump(exclude_unset=True)
@@ -27,11 +27,11 @@ class MatchService(BaseService):
                 raise NotFoundException("Match not found")
             return MatchPublic.from_match(match)
 
-    def delete(self, match_id):
+    def delete(self, match_id: int) -> None:
         with self.get_session() as session:
             Match.delete(session, match_id)
 
-    def get(self, match_id):
+    def get(self, match_id: int) -> MatchPublic:
         with self.get_session() as session:
             # Eager load related entities, disable nested loading
             match = (
@@ -54,9 +54,9 @@ class MatchService(BaseService):
                 raise NotFoundException("Match not found")
             return MatchPublic.from_match(match)
 
-    def search(self, query):
+    def search(self, query: QueryElement | None) -> list[MatchPublic]:
         with self.get_session() as session:
-            result = []
+            result: list[MatchPublic] = []
             filter = QueryUtil.convertQueryToDBFilter(Match, query)
             # Eager load only what we need, explicitly disable other relationships
             matches = (
@@ -82,16 +82,16 @@ class MatchService(BaseService):
                 result.append(MatchPublic.from_match(match))
             return result
 
-    def create_match(self, match: MatchCreate):
+    def create_match(self, match: MatchCreate) -> MatchPublic:
         return self.add(match)
 
-    def update_match(self, match_id: int, match: MatchUpdate):
+    def update_match(self, match_id: int, match: MatchUpdate) -> MatchPublic:
         return self.update(match_id, match)
 
-    def delete_match(self, match_id: int):
+    def delete_match(self, match_id: int) -> None:
         self.delete(match_id)
 
-    def get_match(self, match_id: int):
+    def get_match(self, match_id: int) -> MatchPublic:
         match_data = self.get(match_id)
         if not match_data:
             raise NotFoundException(f"Match not found by Id: {match_id}")

@@ -1,19 +1,30 @@
 import re
+from typing import Self, cast
 
-from sqlalchemy import and_, or_
+from sqlalchemy import ColumnElement, and_, or_
+
+from app.models.base import DBModel
 
 
 class ConcatenationType:
-    _instances = {}
+    # The three members below, assigned right after the class body.
+    OR: "ConcatenationType"
+    QUERY: "ConcatenationType"
+    AND: "ConcatenationType"
 
-    def __new__(cls, value, *args, **kwargs):
+    _instances: dict[str, "ConcatenationType"] = {}
+    value: str
+
+    def __new__(cls, value: str, *args: object, **kwargs: object) -> Self:
         if value not in cls._instances:
             instance = super().__new__(cls, *args, **kwargs)
             instance.value = value
             cls._instances[value] = instance
-        return cls._instances[value]
+        # The cache is shared by the whole class tree, so the entry is only
+        # a cls instance because nothing subclasses this.
+        return cast(Self, cls._instances[value])
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f"ConcatenationType({self.value})"
 
 
@@ -24,34 +35,37 @@ ConcatenationType.AND = ConcatenationType("AND")
 
 
 class QueryElement:
-    def __init__(self):
-        self.type = None
-        self.elementA = None
-        self.elementB = None
+    """One node of the parsed query tree. A QUERY node holds a single
+    condition in elementA; an AND/OR node holds a subtree on each side."""
 
-    def setQueryElement(self, elem):
+    def __init__(self) -> None:
+        self.type: ConcatenationType | None = None
+        self.elementA: QueryElement | QueryCondition | None = None
+        self.elementB: QueryElement | QueryCondition | None = None
+
+    def setQueryElement(self, elem: "QueryElement | QueryCondition") -> None:
         if not self.elementA:
             self.elementA = elem
         else:
             self.elementB = elem
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"QueryElement(type={self.type}, elementA={self.elementA}, elementB={self.elementB})"
 
 
 class QueryCondition:
-    def __init__(self, operator, key, value):
+    def __init__(self, operator: str, key: str, value: str | bool) -> None:
         self.operator = operator
         self.key = key
         self.value = value
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"QueryCondition(key={self.key}, operator={self.operator}, value={self.value})"
 
 
 class QueryUtil:
     @staticmethod
-    def parseQuery(query):
+    def parseQuery(query: str | None) -> QueryElement | None:
         if not query:
             return None
         result = QueryElement()
@@ -59,7 +73,7 @@ class QueryUtil:
         return result
 
     @staticmethod
-    def convertToQueryCondition(query):
+    def convertToQueryCondition(query: str) -> QueryCondition:
         pattern = r"(\w+)\s*(==|!=|>=|<=|>|<|ilike)\s*(.+)"
         match = re.match(pattern, query)
         if match:
@@ -77,7 +91,9 @@ class QueryUtil:
         return QueryCondition(operator, key, value)
 
     @staticmethod
-    def createClassQuery(cls, query):
+    def createClassQuery(
+        cls: type[DBModel], query: QueryCondition
+    ) -> ColumnElement[bool] | None:
         filter = None
         column = getattr(cls, query.key, None)
         if column is not None:
@@ -98,19 +114,29 @@ class QueryUtil:
         return filter
 
     @staticmethod
-    def convertQueryToDBFilter(cls, query):
+    def convertQueryToDBFilter(
+        cls: type[DBModel], query: QueryElement | None
+    ) -> ColumnElement[bool] | None:
         if not query:
             return None
         return QueryUtil.convertQueryToDBFilter_Rec(cls, query)
 
     @staticmethod
-    def convertQueryToDBFilter_Rec(cls, query):
+    def convertQueryToDBFilter_Rec(
+        cls: type[DBModel], query: QueryElement | None
+    ) -> ColumnElement[bool] | None:
         if not query:
             return None
+        # find_and_split builds the tree: a QUERY node holds one condition,
+        # and an AND/OR node holds a QueryElement on each side.
         if query.type == ConcatenationType.QUERY:
-            return QueryUtil.createClassQuery(cls, query.elementA)
-        queryA = QueryUtil.convertQueryToDBFilter_Rec(cls, query.elementA)
-        queryB = QueryUtil.convertQueryToDBFilter_Rec(cls, query.elementB)
+            return QueryUtil.createClassQuery(cls, cast(QueryCondition, query.elementA))
+        queryA = QueryUtil.convertQueryToDBFilter_Rec(
+            cls, cast(QueryElement | None, query.elementA)
+        )
+        queryB = QueryUtil.convertQueryToDBFilter_Rec(
+            cls, cast(QueryElement | None, query.elementB)
+        )
         if queryA is None or queryB is None:
             return None
         if query.type == ConcatenationType.OR:
@@ -120,7 +146,7 @@ class QueryUtil:
         return None
 
     @staticmethod
-    def find_and_split(concatCondition, query):
+    def find_and_split(concatCondition: QueryElement, query: str) -> None:
         # Define the regex pattern to match " or " or " and "
         pattern_and = r"\s+((?i:and))\s+"
         pattern_or = r"\s+((?i:or))\s+"

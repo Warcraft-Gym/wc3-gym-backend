@@ -5,11 +5,14 @@ team itself, a match, and the per-season stats of a player - and it
 depends on nothing, so importing it never closes a cycle.
 """
 
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated, Any, Self
 
 from sqlmodel import SQLModel
 
 from app.models.types import NumToStr
+
+if TYPE_CHECKING:
+    from app.models.team import Team
 
 
 class TeamReduced(SQLModel):
@@ -20,7 +23,7 @@ class TeamReduced(SQLModel):
     discord_role: Annotated[str | None, NumToStr] = None
 
     @classmethod
-    def from_team(cls, team):
+    def from_team(cls, team: "Team") -> Self:
         return cls(
             id=team.id,
             name=team.name,
@@ -28,5 +31,5 @@ class TeamReduced(SQLModel):
             discord_role=team.discord_role,
         )
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return self.model_dump(mode="json")

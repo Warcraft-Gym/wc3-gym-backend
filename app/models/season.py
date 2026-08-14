@@ -1,5 +1,5 @@
 from datetime import date
-from typing import TYPE_CHECKING, Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any, Self
 
 from sqlalchemy.orm import Session
 from sqlmodel import Field, Relationship, SQLModel
@@ -41,7 +41,7 @@ class Season(SeasonBase, DBModel, table=True):
     )
 
     @classmethod
-    def addTeams(cls, session: Session, obj_id, team_ids):
+    def addTeams(cls, session: Session, obj_id: int, team_ids: list[int]) -> Self:
         from app.models.team import Team
 
         season = session.get(cls, obj_id)
@@ -62,7 +62,7 @@ class Season(SeasonBase, DBModel, table=True):
         return season
 
     @classmethod
-    def removeTeams(cls, session: Session, obj_id, team_ids):
+    def removeTeams(cls, session: Session, obj_id: int, team_ids: list[int]) -> Self:
         from app.models.team import Team
 
         season = session.get(cls, obj_id)
@@ -84,7 +84,7 @@ class Season(SeasonBase, DBModel, table=True):
         return season
 
     @classmethod
-    def addMaps(cls, session: Session, obj_id, map_ids):
+    def addMaps(cls, session: Session, obj_id: int, map_ids: list[int]) -> Self:
         from app.models.map import Map
 
         season = session.get(cls, obj_id)
@@ -105,7 +105,7 @@ class Season(SeasonBase, DBModel, table=True):
         return season
 
     @classmethod
-    def removeMaps(cls, session: Session, obj_id, map_ids):
+    def removeMaps(cls, session: Session, obj_id: int, map_ids: list[int]) -> Self:
         from app.models.map import Map
 
         season = session.get(cls, obj_id)
@@ -128,7 +128,7 @@ class Season(SeasonBase, DBModel, table=True):
         return season
 
     @classmethod
-    def addUserSignup(cls, session: Session, obj_id, user_ids):
+    def addUserSignup(cls, session: Session, obj_id: int, user_ids: list[int]) -> Self:
         from app.models.user import User
 
         season = session.get(cls, obj_id)
@@ -151,7 +151,9 @@ class Season(SeasonBase, DBModel, table=True):
         return season
 
     @classmethod
-    def removeUserSignup(cls, session: Session, obj_id, user_ids):
+    def removeUserSignup(
+        cls, session: Session, obj_id: int, user_ids: list[int]
+    ) -> Self:
         from app.models.user import User
 
         season = session.get(cls, obj_id)
@@ -202,7 +204,7 @@ class SeasonPublic(SeasonBase):
     user_signup: Annotated[list[Any] | None, EmptyToNone] = None
 
     @classmethod
-    def from_season(cls, season):
+    def from_season(cls, season: Season | None) -> Self | None:
         if not season:
             return None
 
@@ -223,7 +225,7 @@ class SeasonPublic(SeasonBase):
         )
 
     @classmethod
-    def from_season_reduced(cls, season):
+    def from_season_reduced(cls, season: Season | None) -> Self | None:
         """The name and the id only. Used where a season is a label on
         another object rather than the subject of the response."""
         if not season:
@@ -231,5 +233,5 @@ class SeasonPublic(SeasonBase):
 
         return cls(id=season.id, name=season.name)
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return self.model_dump(mode="json")

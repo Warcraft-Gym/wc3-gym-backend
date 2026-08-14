@@ -11,6 +11,9 @@ active KOTH event.
 """
 
 from datetime import date, datetime
+from typing import Any
+
+from sqlalchemy.orm import Session
 
 from app.models.enums import Race
 from app.models.fantasy_bet import FantasyBet
@@ -27,7 +30,7 @@ from app.models.team import Team
 from app.models.user import User
 
 
-def seed_league(session):
+def seed_league(session: Session) -> dict[str, Any]:
     season = Season(
         name="Season 1",
         number_weeks=4,

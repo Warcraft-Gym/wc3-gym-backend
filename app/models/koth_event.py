@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Any
 
 from sqlmodel import Field, Relationship, SQLModel
 
@@ -55,5 +55,5 @@ class KothEventPublic(KothEventBase):
     signups: Annotated[list[KothSignupPublic], NoneToList] = []
     matches: Annotated[list[KothMatchPublic], NoneToList] = []
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return self.model_dump(mode="json")

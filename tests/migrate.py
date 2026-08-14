@@ -14,13 +14,13 @@ from alembic.config import Config
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
-def alembic_config():
+def alembic_config() -> Config:
     config = Config(REPO_ROOT / "alembic.ini")
     config.set_main_option("script_location", str(REPO_ROOT / "migrations"))
     return config
 
 
-def upgrade_to_head(db_url):
+def upgrade_to_head(db_url: str) -> None:
     # migrations/env.py reads DB_URL, the same variable the application
     # reads, so point it at the database under test.
     previous = os.environ.get("DB_URL")
