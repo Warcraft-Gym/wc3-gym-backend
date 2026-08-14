@@ -1,7 +1,10 @@
 import os
 
-from app.schemas.series import Series
-from app.schemas.team import Team, TeamReduced
+from app.models.match import MatchUpdate
+from app.models.season_info import SeasonInfoUpdate
+from app.models.series import SeriesPublic, SeriesUpdate
+from app.models.team import TeamPublic
+from app.models.team_reduced import TeamReduced
 from app.services.matches import MatchService
 from app.services.seasons import SeasonService
 from app.services.series import SeriesService
@@ -31,7 +34,7 @@ class ScoreService:
         self.season_service = season_service
         self.settings_service = settings_service
 
-    def calculateSeriesScore(self, series: Series):
+    def calculateSeriesScore(self, series: SeriesPublic):
         series.player1_points = self.getScoreByMapScore(
             series.player1_score, series.player2_score
         )
@@ -59,24 +62,30 @@ class ScoreService:
                 or single_series.player2_points is None
             ):
                 single_series = self.calculateSeriesScore(single_series)
-                self.serires_service.update(single_series)
+                self.serires_service.update(
+                    single_series.id,
+                    SeriesUpdate(
+                        player1_points=single_series.player1_points,
+                        player2_points=single_series.player2_points,
+                    ),
+                )
 
             if single_series.player1_points is not None:
                 team1_score += single_series.player1_points
             if single_series.player2_points is not None:
                 team2_score += single_series.player2_points
 
-        match.team1_score = team1_score
-        match.team2_score = team2_score
-
-        match_data = self.match_service.update(matchId, match)
+        match_data = self.match_service.update(
+            matchId,
+            MatchUpdate(team1_score=team1_score, team2_score=team2_score),
+        )
 
         match_data.team1 = self.updateTeamScore(match.team1, match.season_id)
         match_data.team2 = self.updateTeamScore(match.team2, match.season_id)
 
         return match_data
 
-    def updateTeamScore(self, team: Team | TeamReduced, seasonId: int):
+    def updateTeamScore(self, team: TeamPublic | TeamReduced, seasonId: int):
         # A match carries reduced team objects without seasons_info;
         # fetch the full team data in that case
         if not getattr(team, "seasons_info", None):
@@ -136,8 +145,15 @@ class ScoreService:
                 max_available - team_points - team_against
             )
 
+        info = team.seasons_info[season_key]
         updated_season_info = self.team_season_service.update(
-            team.id, team.seasons_info[season_key]
+            team.id,
+            SeasonInfoUpdate(
+                season_id=info.season_id,
+                final_score=info.final_score,
+                points_available=info.points_available,
+                points_against=info.points_against,
+            ),
         )
 
         team.seasons_info[season_key] = updated_season_info

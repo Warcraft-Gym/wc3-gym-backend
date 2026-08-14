@@ -17,6 +17,7 @@ from contextlib import asynccontextmanager
 import anyio.to_thread
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -80,6 +81,21 @@ def create_app(db_url=None):
     @app.exception_handler(AuthError)
     async def auth_error(request: Request, exc: AuthError):
         return JSONResponse({"msg": exc.message}, status_code=exc.status_code)
+
+    @app.exception_handler(RequestValidationError)
+    async def invalid_request(request: Request, exc: RequestValidationError):
+        """A body the route model rejects.
+
+        The answer keeps the error field every other failure uses, because
+        the frontend reads that field to decide a request failed. The list
+        of fields goes into the message.
+        """
+        problems = "; ".join(
+            f"{'.'.join(str(part) for part in error['loc'][1:])}: {error['msg']}"
+            for error in exc.errors()
+        )
+        logger.error("Invalid request: %s", problems)
+        return JSONResponse({"error": problems}, status_code=422)
 
     @app.exception_handler(Exception)
     async def unhandled(request: Request, exc: Exception):

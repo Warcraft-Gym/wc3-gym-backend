@@ -1,6 +1,6 @@
+from app.models.match import MatchPublic
+from app.models.user import UserPublic
 from app.schemas.base import APISchema, IsoDateTime
-from app.schemas.match import Match
-from app.schemas.user import User
 
 DB_FIELDS = {
     "match_id",
@@ -18,13 +18,13 @@ DB_FIELDS = {
 class DraftSeries(APISchema):
     id: int | None = None
     match_id: int | None = None
-    match: Match | None = None
+    match: MatchPublic | None = None
     date_time: IsoDateTime | None = None
     caster: str | None = None
     player1_id: int | None = None
-    player1: User | None = None
+    player1: UserPublic | None = None
     player2_id: int | None = None
-    player2: User | None = None
+    player2: UserPublic | None = None
     player1_score: int | None = 0
     player2_score: int | None = 0
     host_player_id: int | None = None
@@ -42,17 +42,17 @@ class DraftSeries(APISchema):
         return cls(
             id=draft_series.id,
             match_id=draft_series.match_id,
-            match=Match.from_dbmatch(draft_series.match)
+            match=MatchPublic.from_match(draft_series.match)
             if draft_series.match
             else None,
             date_time=draft_series.date_time,
             caster=draft_series.caster,
             player1_id=draft_series.player1_id,
-            player1=User.from_dbuser(draft_series.player1)
+            player1=UserPublic.from_user(draft_series.player1)
             if draft_series.player1
             else None,
             player2_id=draft_series.player2_id,
-            player2=User.from_dbuser(draft_series.player2)
+            player2=UserPublic.from_user(draft_series.player2)
             if draft_series.player2
             else None,
             player1_score=draft_series.player1_score,

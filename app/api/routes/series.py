@@ -1,10 +1,9 @@
 import logging
-from typing import Annotated
 
-from fastapi import APIRouter, Body, Depends
+from fastapi import APIRouter, Depends
 
 from app.api.deps import SeriesServiceDep, require_admin
-from app.schemas.series import Series
+from app.models.series import SeriesCreate, SeriesPublic, SeriesUpdate
 from app.utils.query_util import QueryUtil
 
 logger = logging.getLogger(__name__)
@@ -12,20 +11,25 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["series"])
 
 
-@router.post("/series", status_code=201, dependencies=[Depends(require_admin)])
-def add_series(data: Annotated[dict, Body()], service: SeriesServiceDep):
+@router.post(
+    "/series",
+    status_code=201,
+    response_model=SeriesPublic,
+    dependencies=[Depends(require_admin)],
+)
+def add_series(data: SeriesCreate, service: SeriesServiceDep):
     """Create a new series with the provided data"""
-    series = service.create_series(Series(data))
-    return series.to_dict() if series else None
+    return service.create_series(data)
 
 
-@router.put("/series/{series_id}", dependencies=[Depends(require_admin)])
-def update_series(
-    series_id: int, data: Annotated[dict, Body()], service: SeriesServiceDep
-):
+@router.put(
+    "/series/{series_id}",
+    response_model=SeriesPublic,
+    dependencies=[Depends(require_admin)],
+)
+def update_series(series_id: int, data: SeriesUpdate, service: SeriesServiceDep):
     """Update the series data of an existing series"""
-    series = service.update_series(series_id, Series(data))
-    return series.to_dict() if series else None
+    return service.update_series(series_id, data)
 
 
 @router.delete(

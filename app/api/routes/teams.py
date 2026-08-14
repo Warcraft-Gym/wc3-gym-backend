@@ -6,7 +6,7 @@ from fastapi import APIRouter, Body, Depends, File, Response, UploadFile
 from fastapi.responses import JSONResponse
 
 from app.api.deps import TeamServiceDep, require_admin, ttl_cache
-from app.schemas.team import Team
+from app.models.team import TeamCreate, TeamPublic, TeamUpdate
 from app.utils.query_util import QueryUtil
 
 logger = logging.getLogger(__name__)
@@ -14,18 +14,25 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["teams"])
 
 
-@router.post("/teams", status_code=201, dependencies=[Depends(require_admin)])
-def add_team(data: Annotated[dict, Body()], service: TeamServiceDep):
+@router.post(
+    "/teams",
+    status_code=201,
+    response_model=TeamPublic,
+    dependencies=[Depends(require_admin)],
+)
+def add_team(data: TeamCreate, service: TeamServiceDep):
     """Create a new team with the provided name."""
-    team = service.create_team(Team(data))
-    return team.to_dict() if team else None
+    return service.create_team(data)
 
 
-@router.put("/teams/{team_id}", dependencies=[Depends(require_admin)])
-def update_team(team_id: int, data: Annotated[dict, Body()], service: TeamServiceDep):
+@router.put(
+    "/teams/{team_id}",
+    response_model=TeamPublic,
+    dependencies=[Depends(require_admin)],
+)
+def update_team(team_id: int, data: TeamUpdate, service: TeamServiceDep):
     """Update the name of an existing team."""
-    team = service.update_team(team_id, Team(data))
-    return team.to_dict() if team else None
+    return service.update_team(team_id, data)
 
 
 @router.delete(

@@ -4,7 +4,7 @@ from sqlalchemy import select
 
 from app.exceptions import DBException
 from app.models.player_career_stats import DBPlayerCareerStats
-from app.models.user import DBUser
+from app.models.user import User
 from app.schemas.player_career_stats import PlayerCareerStats
 from app.services.base import BaseService
 from app.services.series import SeriesService
@@ -99,7 +99,7 @@ class PlayerCareerStatsService(BaseService):
 
             if not stats:
                 # Get user name for player_name
-                user = session.get(DBUser, user_id)
+                user = session.get(User, user_id)
                 player_name = user.name if user else f"User_{user_id}"
 
                 stats = DBPlayerCareerStats(user_id=user_id, player_name=player_name)
@@ -128,7 +128,7 @@ class PlayerCareerStatsService(BaseService):
         """
         with self.get_session() as session:
             user = session.scalars(
-                select(DBUser).where(DBUser.name == player_name).limit(1)
+                select(User).where(User.name == player_name).limit(1)
             ).first()
             user_id = user.id if user else None
             if not user:

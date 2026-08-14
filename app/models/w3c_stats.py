@@ -7,7 +7,7 @@ from app.models.enums import Race
 from app.models.types import RoundToInt
 
 if TYPE_CHECKING:
-    from app.models.user import DBUser
+    from app.models.user import User
 
 
 class W3CStatsBase(SQLModel):
@@ -27,7 +27,7 @@ class W3CStats(W3CStatsBase, DBModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     race: Race | None = None
     user_id: int = Field(foreign_key="users.id")
-    user: "DBUser" = Relationship(back_populates="w3c_stats")
+    user: "User" = Relationship(back_populates="w3c_stats")
 
 
 class W3CStatsCreate(W3CStatsBase):

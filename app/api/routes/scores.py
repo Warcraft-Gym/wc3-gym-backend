@@ -11,6 +11,8 @@ from app.api.deps import (
     require_admin,
 )
 from app.exceptions import NotFoundException
+from app.models.match import MatchUpdate
+from app.models.series import SeriesUpdate
 from app.utils.query_util import QueryUtil
 
 logger = logging.getLogger(__name__)
@@ -129,17 +131,25 @@ def perform_calculation(
                         str(e) + " for series with id " + str(singleSeries.id)
                     )
 
-                series_service.update_series(calculatedSeries.id, calculatedSeries)
+                series_service.update_series(
+                    calculatedSeries.id,
+                    SeriesUpdate(
+                        player1_points=calculatedSeries.player1_points,
+                        player2_points=calculatedSeries.player2_points,
+                    ),
+                )
                 team1_points += calculatedSeries.player1_points
                 team2_points += calculatedSeries.player2_points
 
+            match_service.update_match(
+                match.id,
+                MatchUpdate(team1_score=team1_points, team2_score=team2_points),
+            )
             match.team1_score = team1_points
             match.team2_score = team2_points
 
             teams[match.team1.id] = match.team1
             teams[match.team2.id] = match.team2
-
-            match_service.update_match(match.id, match)
 
         # Update team scores
         calculation_progress[season_id]["message"] = "Updating team standings..."

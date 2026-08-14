@@ -1,5 +1,5 @@
+from app.models.user import UserPublic
 from app.schemas.base import APISchema
-from app.schemas.user import User
 
 DB_FIELDS = {
     "user_id",
@@ -29,7 +29,7 @@ class PlayerCareerStats(APISchema):
     id: int | None = None
     user_id: int | None = None
     player_name: str | None = None
-    user: User | None = None
+    user: UserPublic | None = None
     # Historical baseline
     historical_rating: int | None = None
     historical_series_won: int | None = None
@@ -67,7 +67,7 @@ class PlayerCareerStats(APISchema):
             id=stats.id,
             user_id=stats.user_id,
             player_name=stats.player_name,
-            user=User.from_dbuser(stats.user) if stats.user else None,
+            user=UserPublic.from_user(stats.user) if stats.user else None,
             # Historical baseline
             historical_rating=stats.historical_rating,
             historical_series_won=stats.historical_series_won,

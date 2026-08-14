@@ -22,13 +22,13 @@ from app.api.deps import (
 )
 from app.exceptions import NotFoundException
 from app.models.map import MapCreate, MapUpdate
+from app.models.match import MatchCreate, MatchUpdate
+from app.models.season import SeasonCreate, SeasonUpdate
+from app.models.series import SeriesCreate, SeriesUpdate
+from app.models.team import TeamCreate, TeamUpdate
+from app.models.user import UserCreate
 from app.schemas.fantasy_bet import FantasyBet
 from app.schemas.fantasy_team import FantasyTeam
-from app.schemas.match import Match
-from app.schemas.season import Season
-from app.schemas.series import Series
-from app.schemas.team import Team
-from app.schemas.user import User
 from app.utils.import_util import ImportUtil
 from app.utils.query_util import QueryUtil
 
@@ -84,14 +84,14 @@ def _process_import(
         season_id = None
         if create_new:
             # Force create new season
-            season = season_service.create_season(Season(season_data))
+            season = season_service.create_season(SeasonCreate(**season_data))
             season_id = season.id
             logger.info(f"Created new season with ID: {season_id}")
         else:
             # If Season ID is missing, auto-create new season instead of error
             if pd.isna(season_row["ID"]):
                 logger.info("Season ID not found in Excel, creating new season")
-                season = season_service.create_season(Season(season_data))
+                season = season_service.create_season(SeasonCreate(**season_data))
                 season_id = season.id
                 logger.info(f"Created new season with ID: {season_id}")
             else:
@@ -101,13 +101,13 @@ def _process_import(
                     season_service.get_season(original_season_id)
                     # Season exists, update it
                     season_service.update_season(
-                        original_season_id, Season(season_data)
+                        original_season_id, SeasonUpdate(**season_data)
                     )
                     season_id = original_season_id
                     logger.info(f"Updated existing season with ID: {season_id}")
                 except NotFoundException:
                     # Season doesn't exist, create it
-                    season = season_service.create_season(Season(season_data))
+                    season = season_service.create_season(SeasonCreate(**season_data))
                     season_id = season.id
                     logger.info(
                         f"Created new season with ID: {season_id} (original ID {original_season_id} not found)"
@@ -166,9 +166,9 @@ def _process_import(
                 existing_teams = team_service.search(query)
                 if existing_teams:
                     team = existing_teams[0]
-                    team_service.update_team(team.id, Team(team_data))
+                    team_service.update_team(team.id, TeamUpdate(**team_data))
                 else:
-                    team = team_service.create_team(Team(team_data))
+                    team = team_service.create_team(TeamCreate(**team_data))
 
                 if old_team_id:
                     team_id_mapping[old_team_id] = team.id
@@ -214,7 +214,7 @@ def _process_import(
                     )
                 else:
                     # User doesn't exist - create new user
-                    user = user_service.create_user(User(user_data))
+                    user = user_service.create_user(UserCreate(**user_data))
                     logger.info(f"Created new user: {user.battleTag} (ID: {user.id})")
 
                 if old_user_id:
@@ -274,9 +274,9 @@ def _process_import(
                 existing_matches = match_service.search(query)
                 if existing_matches:
                     match = existing_matches[0]
-                    match_service.update_match(match.id, Match(match_data))
+                    match_service.update_match(match.id, MatchUpdate(**match_data))
                 else:
-                    match = match_service.create_match(Match(match_data))
+                    match = match_service.create_match(MatchCreate(**match_data))
 
                 if old_match_id:
                     match_id_mapping[old_match_id] = match.id
@@ -359,12 +359,12 @@ def _process_import(
                 existing_series = series_service.search(query)
                 if existing_series:
                     series_service.update_series(
-                        existing_series[0].id, Series(series_data)
+                        existing_series[0].id, SeriesUpdate(**series_data)
                     )
                     if old_series_id:
                         series_id_mapping[old_series_id] = existing_series[0].id
                 else:
-                    series = series_service.create_series(Series(series_data))
+                    series = series_service.create_series(SeriesCreate(**series_data))
                     if old_series_id:
                         series_id_mapping[old_series_id] = series.id
 
@@ -977,7 +977,7 @@ def import_fantasy_teams(
                     "discordTag": row.iloc[1],
                     "race": "Random",
                 }
-                captain = user_service.create_user(User(user_data))
+                captain = user_service.create_user(UserCreate(**user_data))
             elif len(users) != 1:
                 raise Exception(
                     f"No or multiple users found for captain[{row.iloc[1]}]: {users}"
@@ -1141,8 +1141,7 @@ def import_fantasy_bets(
                     raise Exception(
                         f"Could not identfy series for player: {row.iloc[1]}!"
                     )
-            series.is_fantasy_match = True
-            series_service.update_series(series.id, series)
+            series_service.update_series(series.id, SeriesUpdate(is_fantasy_match=True))
 
         # Load the Google Sheet into a DataFrame
         df_bets = pd.read_excel(file_stream, sheet_name="Bets")

@@ -4,7 +4,7 @@ from typing import Annotated
 from fastapi import APIRouter, Body, Depends
 
 from app.api.deps import SeasonServiceDep, require_admin
-from app.schemas.season import Season
+from app.models.season import SeasonCreate, SeasonPublic, SeasonUpdate
 from app.utils.query_util import QueryUtil
 
 logger = logging.getLogger(__name__)
@@ -12,20 +12,25 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["seasons"])
 
 
-@router.post("/seasons", status_code=201, dependencies=[Depends(require_admin)])
-def add_season(data: Annotated[dict, Body()], service: SeasonServiceDep):
+@router.post(
+    "/seasons",
+    status_code=201,
+    response_model=SeasonPublic,
+    dependencies=[Depends(require_admin)],
+)
+def add_season(data: SeasonCreate, service: SeasonServiceDep):
     """Create a new season with the provided name."""
-    season = service.create_season(Season(data))
-    return season.to_dict() if season else None
+    return service.create_season(data)
 
 
-@router.put("/seasons/{season_id}", dependencies=[Depends(require_admin)])
-def update_season(
-    season_id: int, data: Annotated[dict, Body()], service: SeasonServiceDep
-):
+@router.put(
+    "/seasons/{season_id}",
+    response_model=SeasonPublic,
+    dependencies=[Depends(require_admin)],
+)
+def update_season(season_id: int, data: SeasonUpdate, service: SeasonServiceDep):
     """Update the name of an existing season."""
-    season = service.update_season(season_id, Season(data))
-    return season.to_dict() if season else None
+    return service.update_season(season_id, data)
 
 
 @router.delete(

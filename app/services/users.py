@@ -4,10 +4,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
 from app.exceptions import NotFoundException
-from app.models.user import DBUser
+from app.models.user import User, UserCreate, UserPublic, UserUpdate
+from app.models.user_team_season_stats import UserTeamSeasonStatsPublic
 from app.models.w3c_stats import W3CStats, W3CStatsCreate, W3CStatsPublic
-from app.schemas.user import User
-from app.schemas.user_team_season_stats import UserTeamSeasonStats
 from app.services.base import BaseService
 from app.services.w3c import W3CService
 from app.utils.query_util import QueryUtil
@@ -19,52 +18,52 @@ class UserService(BaseService):
     def __init__(self, settings_app_service=None):
         self.settings_app_service = settings_app_service
 
-    def add(self, user: User):
+    def add(self, user: UserCreate):
         with self.get_session() as session:
-            user = DBUser.add(session, user.to_db_dict())
-            return User.from_dbuser(user)
+            user = User.add(session, user.model_dump())
+            return UserPublic.from_user(user)
 
-    def update(self, user: User):
+    def update(self, user_id, user: UserUpdate):
         with self.get_session() as session:
-            user = DBUser.update(session, user.id, **user.to_db_dict())
+            user = User.update(session, user_id, **user.model_dump(exclude_unset=True))
             if not user:
                 raise NotFoundException("User not found")
-            return User.from_dbuser(user)
+            return UserPublic.from_user(user)
 
     def delete(self, user_id):
         with self.get_session() as session:
-            DBUser.delete(session, user_id)
+            User.delete(session, user_id)
 
     def get(self, user_id):
         with self.get_session() as session:
             # Eager load related entities, disable nested loading
             user = (
                 session.scalars(
-                    select(DBUser)
+                    select(User)
                     .options(
-                        joinedload(DBUser.team_seasons).noload("*"),
-                        joinedload(DBUser.w3c_stats),
+                        joinedload(User.team_seasons).noload("*"),
+                        joinedload(User.w3c_stats),
                     )
-                    .where(DBUser.id == user_id)
+                    .where(User.id == user_id)
                 )
                 .unique()
                 .first()
             )
             if not user:
                 return None
-            return User.from_dbuser(user)
+            return UserPublic.from_user(user)
 
     def search(self, query):
         with self.get_session() as session:
             result = []
-            filter = QueryUtil.convertQueryToDBFilter(DBUser, query)
+            filter = QueryUtil.convertQueryToDBFilter(User, query)
             # Eager load related entities, disable nested loading
             users = (
                 session.scalars(
-                    select(DBUser)
+                    select(User)
                     .options(
-                        joinedload(DBUser.team_seasons).noload("*"),
-                        joinedload(DBUser.w3c_stats),
+                        joinedload(User.team_seasons).noload("*"),
+                        joinedload(User.w3c_stats),
                     )
                     .where(filter)
                 )
@@ -78,7 +77,7 @@ class UserService(BaseService):
                 return result
 
             for user in users:
-                result.append(User.from_dbuser(user))
+                result.append(UserPublic.from_user(user))
             return result
 
     def getAll(self):
@@ -89,11 +88,11 @@ class UserService(BaseService):
             # Eager load related entities, disable nested loading
             users = (
                 session.scalars(
-                    select(DBUser).options(
-                        joinedload(DBUser.team_seasons).joinedload(
+                    select(User).options(
+                        joinedload(User.team_seasons).joinedload(
                             DBUserTeamSeason.season
                         ),
-                        joinedload(DBUser.w3c_stats),
+                        joinedload(User.w3c_stats),
                     )
                 )
                 .unique()
@@ -101,7 +100,7 @@ class UserService(BaseService):
             )
 
             for user in users:
-                result.append(User.from_dbuser(user))
+                result.append(UserPublic.from_user(user))
             return result
 
     def createW3CStats(self, w3c_stats: W3CStatsCreate, user_id):
@@ -120,14 +119,11 @@ class UserService(BaseService):
                 raise NotFoundException("W3CStats not found")
             return W3CStatsPublic.model_validate(stats)
 
-    def create_user(self, user: User):
-        # remove id, db generates the id
-        user.id = None
+    def create_user(self, user: UserCreate):
         return self.add(user)
 
-    def update_user(self, user_id, user: User):
-        user.id = user_id
-        return self.update(user)
+    def update_user(self, user_id, user: UserUpdate):
+        return self.update(user_id, user)
 
     def delete_user(self, user_id: int):
         self.delete(user_id)
@@ -152,7 +148,7 @@ class UserService(BaseService):
             )
             return False
 
-    def updateW3CStats(self, user: User):
+    def updateW3CStats(self, user: UserPublic):
         w3c_service = W3CService(settings_app_service=self.settings_app_service)
 
         # Resolve the current W3C season so we can also fetch the previous season
@@ -211,6 +207,6 @@ class UserService(BaseService):
         if not season_stats:
             raise Exception("Seasonstats not defined")
         with self.get_session() as session:
-            stats = DBUser.updateUserTeamSeasonStats(session, season_stats)
-            UserTeamSeasonStats.from_db_user_team_season(stats)
+            stats = User.updateUserTeamSeasonStats(session, season_stats)
+            UserTeamSeasonStatsPublic.from_user_team_season(stats)
         return self.get_user(season_stats.user_id)

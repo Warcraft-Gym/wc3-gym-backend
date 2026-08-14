@@ -5,9 +5,9 @@ from sqlmodel import Field, Relationship
 from app.models.base import DBModel
 
 if TYPE_CHECKING:
-    from app.models.season import DBSeason
-    from app.models.series import DBSeries
-    from app.models.user import DBUser
+    from app.models.season import Season
+    from app.models.series import Series
+    from app.models.user import User
 
 
 class DBFantasyBet(DBModel, table=True):
@@ -20,16 +20,16 @@ class DBFantasyBet(DBModel, table=True):
     bet_points: int
     bet_result: int | None = None
 
-    season: "DBSeason" = Relationship(
+    season: "Season" = Relationship(
         sa_relationship_kwargs={"foreign_keys": "[DBFantasyBet.season_id]"}
     )
-    series: "DBSeries" = Relationship(
+    series: "Series" = Relationship(
         sa_relationship_kwargs={"foreign_keys": "[DBFantasyBet.series_id]"}
     )
-    user: "DBUser" = Relationship(
+    user: "User" = Relationship(
         sa_relationship_kwargs={"foreign_keys": "[DBFantasyBet.user_id]"}
     )
-    winner: "DBUser" = Relationship(
+    winner: "User" = Relationship(
         sa_relationship_kwargs={"foreign_keys": "[DBFantasyBet.winner_id]"}
     )
 

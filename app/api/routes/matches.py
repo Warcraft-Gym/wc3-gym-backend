@@ -1,10 +1,9 @@
 import logging
-from typing import Annotated
 
-from fastapi import APIRouter, Body, Depends
+from fastapi import APIRouter, Depends
 
 from app.api.deps import MatchServiceDep, require_admin
-from app.schemas.match import Match
+from app.models.match import MatchCreate, MatchPublic, MatchUpdate
 from app.utils.query_util import QueryUtil
 
 logger = logging.getLogger(__name__)
@@ -12,20 +11,25 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["matches"])
 
 
-@router.post("/matches", status_code=201, dependencies=[Depends(require_admin)])
-def add_match(data: Annotated[dict, Body()], service: MatchServiceDep):
+@router.post(
+    "/matches",
+    status_code=201,
+    response_model=MatchPublic,
+    dependencies=[Depends(require_admin)],
+)
+def add_match(data: MatchCreate, service: MatchServiceDep):
     """Creates a new match between two teams with the given teams and score."""
-    match = service.create_match(Match(data))
-    return match.to_dict() if match else None
+    return service.create_match(data)
 
 
-@router.put("/matches/{match_id}", dependencies=[Depends(require_admin)])
-def update_match(
-    match_id: int, data: Annotated[dict, Body()], service: MatchServiceDep
-):
+@router.put(
+    "/matches/{match_id}",
+    response_model=MatchPublic,
+    dependencies=[Depends(require_admin)],
+)
+def update_match(match_id: int, data: MatchUpdate, service: MatchServiceDep):
     """Update the data of an existing matcht."""
-    match = service.update_match(match_id, Match(data))
-    return match.to_dict() if match else None
+    return service.update_match(match_id, data)
 
 
 @router.delete(

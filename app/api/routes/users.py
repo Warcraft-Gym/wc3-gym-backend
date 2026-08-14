@@ -1,10 +1,9 @@
 import logging
-from typing import Annotated
 
-from fastapi import APIRouter, Body, Depends
+from fastapi import APIRouter, Depends
 
 from app.api.deps import UserServiceDep, require_admin
-from app.schemas.user import User
+from app.models.user import UserCreate, UserPublic, UserUpdate
 from app.utils.query_util import QueryUtil
 
 logger = logging.getLogger(__name__)
@@ -12,18 +11,25 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["users"])
 
 
-@router.post("/users", status_code=201, dependencies=[Depends(require_admin)])
-def add_user(data: Annotated[dict, Body()], service: UserServiceDep):
+@router.post(
+    "/users",
+    status_code=201,
+    response_model=UserPublic,
+    dependencies=[Depends(require_admin)],
+)
+def add_user(data: UserCreate, service: UserServiceDep):
     """Create a new user with the provided details."""
-    user = service.create_user(User(data))
-    return user.to_dict() if user else None
+    return service.create_user(data)
 
 
-@router.put("/users/{user_id}", dependencies=[Depends(require_admin)])
-def update_user(user_id: int, data: Annotated[dict, Body()], service: UserServiceDep):
+@router.put(
+    "/users/{user_id}",
+    response_model=UserPublic,
+    dependencies=[Depends(require_admin)],
+)
+def update_user(user_id: int, data: UserUpdate, service: UserServiceDep):
     """Update the details of an existing user."""
-    user = service.update_user(user_id, User(data))
-    return user.to_dict() if user else None
+    return service.update_user(user_id, data)
 
 
 @router.delete(

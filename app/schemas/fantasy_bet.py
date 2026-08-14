@@ -1,9 +1,9 @@
 from typing import Annotated
 
+from app.models.season import SeasonPublic
+from app.models.series import SeriesPublic
+from app.models.user import UserPublic
 from app.schemas.base import APISchema, EmptyStrToNone
-from app.schemas.season import Season
-from app.schemas.series import Series
-from app.schemas.user import User
 
 DB_FIELDS = {
     "series_id",
@@ -18,13 +18,13 @@ DB_FIELDS = {
 class FantasyBet(APISchema):
     id: int | None = None
     series_id: int | None = None
-    series: Series | None = None
+    series: SeriesPublic | None = None
     season_id: int | None = None
-    season: Season | None = None
+    season: SeasonPublic | None = None
     user_id: int | None = None
-    user: User | None = None
+    user: UserPublic | None = None
     winner_id: int | None = None
-    winner: User | None = None
+    winner: UserPublic | None = None
     # With fixed bet points enabled, the service overwrites this after
     # construction, so a cleared input from the UI must not fail here.
     bet_points: Annotated[int | None, EmptyStrToNone] = None
@@ -42,12 +42,12 @@ class FantasyBet(APISchema):
             id=fbet.id,
             series_id=fbet.series_id,
             season_id=fbet.season_id,
-            season=Season.from_dbseason(fbet.season) if fbet.season else None,
-            series=Series.from_dbseries(fbet.series) if fbet.series else None,
+            season=SeasonPublic.from_season(fbet.season) if fbet.season else None,
+            series=SeriesPublic.from_series(fbet.series) if fbet.series else None,
             user_id=fbet.user_id,
-            user=User.from_dbuser(fbet.user) if fbet.user else None,
+            user=UserPublic.from_user(fbet.user) if fbet.user else None,
             winner_id=fbet.winner_id,
-            winner=User.from_dbuser(fbet.winner) if fbet.winner else None,
+            winner=UserPublic.from_user(fbet.winner) if fbet.winner else None,
             bet_points=fbet.bet_points,
             bet_result=fbet.bet_result,
         )

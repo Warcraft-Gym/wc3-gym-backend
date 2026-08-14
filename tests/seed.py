@@ -17,18 +17,18 @@ from app.models.fantasy_bet import DBFantasyBet
 from app.models.fantasy_team import DBFantasyTeam
 from app.models.koth_event import KothEvent
 from app.models.map import Map
-from app.models.match import DBMatch
+from app.models.match import Match
 from app.models.player_career_stats import DBPlayerCareerStats
 from app.models.relationships import DBMapSeason, DBTeamSeason, DBUserTeamSeason
-from app.models.season import DBSeason
-from app.models.series import DBSeries
+from app.models.season import Season
+from app.models.series import Series
 from app.models.settings import Settings
-from app.models.team import DBTeam
-from app.models.user import DBUser
+from app.models.team import Team
+from app.models.user import User
 
 
 def seed_league(session):
-    season = DBSeason(
+    season = Season(
         name="Season 1",
         number_weeks=4,
         series_per_week=2,
@@ -36,11 +36,11 @@ def seed_league(session):
         end_date=date(2026, 2, 27),
     )
 
-    team_a = DBTeam(name="Alpha", long_name="Team Alpha")
-    team_b = DBTeam(name="Beta", long_name="Team Beta")
+    team_a = Team(name="Alpha", long_name="Team Alpha")
+    team_b = Team(name="Beta", long_name="Team Beta")
 
     players = [
-        DBUser(
+        User(
             name="P1",
             battleTag="P1#1111",
             discordTag="p1",
@@ -49,7 +49,7 @@ def seed_league(session):
             mmr=1500,
             country="DE",
         ),
-        DBUser(
+        User(
             name="P2",
             battleTag="P2#2222",
             discordTag="p2",
@@ -58,7 +58,7 @@ def seed_league(session):
             mmr=1400,
             country="US",
         ),
-        DBUser(
+        User(
             name="P3",
             battleTag="P3#3333",
             discordTag="p3",
@@ -67,7 +67,7 @@ def seed_league(session):
             mmr=1600,
             country="FR",
         ),
-        DBUser(
+        User(
             name="P4",
             battleTag="P4#4444",
             discordTag="p4",
@@ -103,13 +103,13 @@ def seed_league(session):
         ]
     )
 
-    match = DBMatch(
+    match = Match(
         team1_id=team_a.id, team2_id=team_b.id, season_id=season.id, playday=1
     )
     session.add(match)
     session.flush()
 
-    series_played = DBSeries(
+    series_played = Series(
         match_id=match.id,
         date_time=datetime(2026, 1, 7, 19, 0),
         player1_id=players[0].id,
@@ -120,7 +120,7 @@ def seed_league(session):
         player2_points=1,
         host_player_id=players[0].id,
     )
-    series_open = DBSeries(
+    series_open = Series(
         match_id=match.id,
         player1_id=players[1].id,
         player2_id=players[3].id,

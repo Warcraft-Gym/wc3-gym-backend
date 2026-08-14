@@ -4,8 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
 from app.exceptions import NotFoundException
-from app.models.match import DBMatch
-from app.schemas.match import Match
+from app.models.match import Match, MatchCreate, MatchPublic, MatchUpdate
 from app.services.base import BaseService
 from app.utils.query_util import QueryUtil
 
@@ -13,36 +12,38 @@ logger = logging.getLogger(__name__)
 
 
 class MatchService(BaseService):
-    def add(self, match: Match):
+    def add(self, match: MatchCreate):
         with self.get_session() as session:
-            match = DBMatch.add(session, match.to_db_dict())
-            return Match.from_dbmatch(match)
+            match = Match.add(session, match.model_dump())
+            return MatchPublic.from_match(match)
 
-    def update(self, match_id, match: Match):
+    def update(self, match_id, match: MatchUpdate):
         with self.get_session() as session:
-            match = DBMatch.update(session, match_id, **match.to_db_dict())
+            match = Match.update(
+                session, match_id, **match.model_dump(exclude_unset=True)
+            )
             if not match:
                 logger.error("Match could not be updated!")
                 raise NotFoundException("Match not found")
-            return Match.from_dbmatch(match)
+            return MatchPublic.from_match(match)
 
     def delete(self, match_id):
         with self.get_session() as session:
-            DBMatch.delete(session, match_id)
+            Match.delete(session, match_id)
 
     def get(self, match_id):
         with self.get_session() as session:
             # Eager load related entities, disable nested loading
             match = (
                 session.scalars(
-                    select(DBMatch)
+                    select(Match)
                     .options(
-                        joinedload(DBMatch.team1).noload("*"),
-                        joinedload(DBMatch.team2).noload("*"),
-                        joinedload(DBMatch.season).noload("*"),
-                        joinedload(DBMatch.fixed_map),
+                        joinedload(Match.team1).noload("*"),
+                        joinedload(Match.team2).noload("*"),
+                        joinedload(Match.season).noload("*"),
+                        joinedload(Match.fixed_map),
                     )
-                    .where(DBMatch.id == match_id)
+                    .where(Match.id == match_id)
                     .limit(1)
                 )
                 .unique()
@@ -51,21 +52,21 @@ class MatchService(BaseService):
             if not match:
                 logger.error("Match could not be found!")
                 raise NotFoundException("Match not found")
-            return Match.from_dbmatch(match)
+            return MatchPublic.from_match(match)
 
     def search(self, query):
         with self.get_session() as session:
             result = []
-            filter = QueryUtil.convertQueryToDBFilter(DBMatch, query)
+            filter = QueryUtil.convertQueryToDBFilter(Match, query)
             # Eager load only what we need, explicitly disable other relationships
             matches = (
                 session.scalars(
-                    select(DBMatch)
+                    select(Match)
                     .options(
-                        joinedload(DBMatch.team1).noload("*"),
-                        joinedload(DBMatch.team2).noload("*"),
-                        joinedload(DBMatch.season).noload("*"),
-                        joinedload(DBMatch.fixed_map),
+                        joinedload(Match.team1).noload("*"),
+                        joinedload(Match.team2).noload("*"),
+                        joinedload(Match.season).noload("*"),
+                        joinedload(Match.fixed_map),
                     )
                     .where(filter)
                 )
@@ -78,13 +79,13 @@ class MatchService(BaseService):
                 logger.debug(f"No matches found by searchcriteria: {query}")
                 return result
             for match in matches:
-                result.append(Match.from_dbmatch(match))
+                result.append(MatchPublic.from_match(match))
             return result
 
-    def create_match(self, match: Match):
+    def create_match(self, match: MatchCreate):
         return self.add(match)
 
-    def update_match(self, match_id: int, match: Match):
+    def update_match(self, match_id: int, match: MatchUpdate):
         return self.update(match_id, match)
 
     def delete_match(self, match_id: int):

@@ -9,9 +9,9 @@ from app.models.base import DBModel
 if TYPE_CHECKING:
     from app.models.fantasy_team import DBFantasyTeam
     from app.models.map import Map
-    from app.models.season import DBSeason
-    from app.models.team import DBTeam
-    from app.models.user import DBUser
+    from app.models.season import Season
+    from app.models.team import Team
+    from app.models.user import User
 
 
 class DBUserTeamSeason(DBModel, table=True):
@@ -27,9 +27,9 @@ class DBUserTeamSeason(DBModel, table=True):
         default=None, sa_column=Column("matchup_history", JSON)
     )
     # Additional columns can be added here if needed
-    user: "DBUser" = Relationship(back_populates="team_seasons")
-    team: "DBTeam" = Relationship(back_populates="user_seasons")
-    season: "DBSeason" = Relationship(back_populates="user_teams")
+    user: "User" = Relationship(back_populates="team_seasons")
+    team: "Team" = Relationship(back_populates="user_seasons")
+    season: "Season" = Relationship(back_populates="user_teams")
 
 
 class DBUserSeasonSignup(DBModel, table=True):
@@ -37,8 +37,8 @@ class DBUserSeasonSignup(DBModel, table=True):
     user_id: int = Field(foreign_key="users.id", primary_key=True)
     season_id: int = Field(foreign_key="seasons.id", primary_key=True)
     # Additional columns can be added here if needed
-    user: "DBUser" = Relationship(back_populates="signup_seasons")
-    season: "DBSeason" = Relationship(back_populates="signup_users")
+    user: "User" = Relationship(back_populates="signup_seasons")
+    season: "Season" = Relationship(back_populates="signup_users")
 
 
 class DBTeamSeason(DBModel, table=True):
@@ -56,15 +56,15 @@ class DBTeamSeason(DBModel, table=True):
     maps_won: int | None = None
     maps_lost: int | None = None
     # Relationships
-    team: "DBTeam" = Relationship(back_populates="season_info")
-    season: "DBSeason" = Relationship(back_populates="teams")
-    coach_1: Optional["DBUser"] = Relationship(
+    team: "Team" = Relationship(back_populates="season_info")
+    season: "Season" = Relationship(back_populates="teams")
+    coach_1: Optional["User"] = Relationship(
         sa_relationship_kwargs={"foreign_keys": "[DBTeamSeason.coach_1_id]"}
     )
-    coach_2: Optional["DBUser"] = Relationship(
+    coach_2: Optional["User"] = Relationship(
         sa_relationship_kwargs={"foreign_keys": "[DBTeamSeason.coach_2_id]"}
     )
-    coach_3: Optional["DBUser"] = Relationship(
+    coach_3: Optional["User"] = Relationship(
         sa_relationship_kwargs={"foreign_keys": "[DBTeamSeason.coach_3_id]"}
     )
 
@@ -88,7 +88,7 @@ class DBMapSeason(DBModel, table=True):
     __tablename__ = "map_season"
     map_id: int = Field(foreign_key="maps.id", primary_key=True)
     season_id: int = Field(foreign_key="seasons.id", primary_key=True)
-    season: "DBSeason" = Relationship(back_populates="maps")
+    season: "Season" = Relationship(back_populates="maps")
     map: "Map" = Relationship(back_populates="seasons")
 
 
@@ -98,4 +98,4 @@ class DBFantasyTeamPlayer(DBModel, table=True):
     user_id: int = Field(foreign_key="users.id", primary_key=True)
     # Additional columns can be added here if needed
     fantasy_team: "DBFantasyTeam" = Relationship(back_populates="drafted_players")
-    users: "DBUser" = Relationship(back_populates="fantasy_teams")
+    users: "User" = Relationship(back_populates="fantasy_teams")

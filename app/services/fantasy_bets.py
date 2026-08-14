@@ -5,7 +5,7 @@ from sqlalchemy.orm import joinedload
 
 from app.exceptions import NotFoundException
 from app.models.fantasy_bet import DBFantasyBet
-from app.models.series import DBSeries
+from app.models.series import Series
 from app.schemas.fantasy_bet import FantasyBet
 from app.services.base import BaseService
 from app.utils.query_util import QueryUtil
@@ -70,13 +70,13 @@ class FantasyBetService(BaseService):
                         joinedload(DBFantasyBet.winner).noload("*"),
                         joinedload(DBFantasyBet.series).noload("*"),
                         joinedload(DBFantasyBet.series)
-                        .joinedload(DBSeries.player1)
+                        .joinedload(Series.player1)
                         .noload("*"),
                         joinedload(DBFantasyBet.series)
-                        .joinedload(DBSeries.player2)
+                        .joinedload(Series.player2)
                         .noload("*"),
                         joinedload(DBFantasyBet.series)
-                        .joinedload(DBSeries.match)
+                        .joinedload(Series.match)
                         .noload("*"),
                     )
                     .where(filter)

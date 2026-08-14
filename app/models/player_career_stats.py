@@ -7,7 +7,7 @@ from sqlmodel import Field, Relationship
 from app.models.base import DBModel
 
 if TYPE_CHECKING:
-    from app.models.user import DBUser
+    from app.models.user import User
 
 
 class DBPlayerCareerStats(DBModel, table=True):
@@ -41,7 +41,7 @@ class DBPlayerCareerStats(DBModel, table=True):
     avg_series_per_season: Decimal | None = Field(default=0.00, sa_type=DECIMAL(5, 2))
 
     # Relationships
-    user: Optional["DBUser"] = Relationship(back_populates="career_stats")
+    user: Optional["User"] = Relationship(back_populates="career_stats")
 
     def to_dict(self):
         return {

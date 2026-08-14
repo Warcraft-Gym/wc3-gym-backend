@@ -5,11 +5,11 @@ from sqlalchemy.orm import joinedload
 
 from app.exceptions import NotFoundException
 from app.models.draft_series import DBDraftSeries
-from app.models.match import DBMatch
+from app.models.match import Match
 from app.models.relationships import DBUserTeamSeason
-from app.models.user import DBUser
+from app.models.series import SeriesCreate
+from app.models.user import User
 from app.schemas.draft_series import DraftSeries
-from app.schemas.series import Series
 from app.services.base import BaseService
 
 logger = logging.getLogger(__name__)
@@ -41,15 +41,15 @@ class DraftSeriesService(BaseService):
                 session.scalars(
                     select(DBDraftSeries)
                     .options(
-                        joinedload(DBDraftSeries.match).joinedload(DBMatch.team1),
-                        joinedload(DBDraftSeries.match).joinedload(DBMatch.team2),
-                        joinedload(DBDraftSeries.player1).joinedload(DBUser.w3c_stats),
+                        joinedload(DBDraftSeries.match).joinedload(Match.team1),
+                        joinedload(DBDraftSeries.match).joinedload(Match.team2),
+                        joinedload(DBDraftSeries.player1).joinedload(User.w3c_stats),
                         joinedload(DBDraftSeries.player1)
-                        .joinedload(DBUser.team_seasons)
+                        .joinedload(User.team_seasons)
                         .joinedload(DBUserTeamSeason.season),
-                        joinedload(DBDraftSeries.player2).joinedload(DBUser.w3c_stats),
+                        joinedload(DBDraftSeries.player2).joinedload(User.w3c_stats),
                         joinedload(DBDraftSeries.player2)
-                        .joinedload(DBUser.team_seasons)
+                        .joinedload(User.team_seasons)
                         .joinedload(DBUserTeamSeason.season),
                     )
                     .where(DBDraftSeries.id == draft_series_id)
@@ -69,15 +69,15 @@ class DraftSeriesService(BaseService):
                 session.scalars(
                     select(DBDraftSeries)
                     .options(
-                        joinedload(DBDraftSeries.match).joinedload(DBMatch.team1),
-                        joinedload(DBDraftSeries.match).joinedload(DBMatch.team2),
-                        joinedload(DBDraftSeries.player1).joinedload(DBUser.w3c_stats),
+                        joinedload(DBDraftSeries.match).joinedload(Match.team1),
+                        joinedload(DBDraftSeries.match).joinedload(Match.team2),
+                        joinedload(DBDraftSeries.player1).joinedload(User.w3c_stats),
                         joinedload(DBDraftSeries.player1)
-                        .joinedload(DBUser.team_seasons)
+                        .joinedload(User.team_seasons)
                         .joinedload(DBUserTeamSeason.season),
-                        joinedload(DBDraftSeries.player2).joinedload(DBUser.w3c_stats),
+                        joinedload(DBDraftSeries.player2).joinedload(User.w3c_stats),
                         joinedload(DBDraftSeries.player2)
-                        .joinedload(DBUser.team_seasons)
+                        .joinedload(User.team_seasons)
                         .joinedload(DBUserTeamSeason.season),
                     )
                     .where(DBDraftSeries.match_id == match_id)
@@ -128,17 +128,15 @@ class DraftSeriesService(BaseService):
     def convert_to_series(self, draft_series: DraftSeries):
         """Convert a draft series to a real series (DTO only, actual creation handled by SeriesService)"""
         # Create a Series from the draft data
-        series_dto = Series(
-            {
-                "match_id": draft_series.match_id,
-                "date_time": draft_series.date_time,
-                "caster": draft_series.caster,
-                "player1_id": draft_series.player1_id,
-                "player2_id": draft_series.player2_id,
-                "player1_score": draft_series.player1_score or 0,
-                "player2_score": draft_series.player2_score or 0,
-                "host_player_id": draft_series.host_player_id,
-                "is_fantasy_match": draft_series.is_fantasy_match,
-            }
+        series_dto = SeriesCreate(
+            match_id=draft_series.match_id,
+            date_time=draft_series.date_time,
+            caster=draft_series.caster,
+            player1_id=draft_series.player1_id,
+            player2_id=draft_series.player2_id,
+            player1_score=draft_series.player1_score or 0,
+            player2_score=draft_series.player2_score or 0,
+            host_player_id=draft_series.host_player_id,
+            is_fantasy_match=draft_series.is_fantasy_match,
         )
         return series_dto

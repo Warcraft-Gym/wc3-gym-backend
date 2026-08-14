@@ -18,9 +18,9 @@ from app.api.deps import (
     SettingsServiceDep,
     UserServiceDep,
 )
+from app.models.user import UserCreate
 from app.schemas.fantasy_bet import FantasyBet
 from app.schemas.fantasy_team import FantasyTeam
-from app.schemas.user import User
 from app.utils.files import secure_filename
 from app.utils.query_util import QueryUtil
 
@@ -276,11 +276,11 @@ def public_create_user(
     if existing_users and len(existing_users) > 0:
         # update first matched user
         existing = existing_users[0]
-        user_dto = User(user_payload)
+        user_dto = UserCreate(**user_payload)
         user = user_service.update_user(existing.id, user_dto)
     else:
         # create new user
-        user = user_service.create_user(User(user_payload))
+        user = user_service.create_user(UserCreate(**user_payload))
 
     # Add to season if specified
     season_id = entry.get("season_id") or data.get("season_id") or data.get("seasonId")
@@ -713,7 +713,7 @@ def create_fantasy_team(
             "race": "RANDOM",
         }
 
-        user = user_service.create_user(User(user_payload))
+        user = user_service.create_user(UserCreate(**user_payload))
         logger.info(f"Created new user for fantasy team captain: {user.id}")
     else:
         user = users[0]

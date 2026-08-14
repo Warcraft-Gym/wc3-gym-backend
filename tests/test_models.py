@@ -1,7 +1,7 @@
 """Checks on the mapping itself, independent of any request.
 
 A relationship that needs foreign_keys names its columns in a string, for
-example "[DBSeries.match_id]". SQLAlchemy resolves that string the first
+example "[Series.match_id]". SQLAlchemy resolves that string the first
 time the class is queried, so a wrong name would otherwise surface as a
 failing request rather than as a failing test.
 """

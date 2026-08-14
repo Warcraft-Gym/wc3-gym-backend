@@ -1,23 +1,48 @@
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Annotated, Any
 
+from pydantic import BeforeValidator
 from sqlalchemy.orm import Session
-from sqlmodel import Field, Relationship
+from sqlmodel import Field, Relationship, SQLModel
 
 from app.models.base import DBModel
 from app.models.relationships import DBUserTeamSeason
-from app.models.user import DBUser
+from app.models.season_info import SeasonInfoPublic
+from app.models.team_reduced import TeamReduced
+from app.models.types import NoneToList, NumToStr
+from app.models.user import User, UserPublic
 
 if TYPE_CHECKING:
     from app.models.relationships import DBTeamSeason
 
 
-class DBTeam(DBModel, table=True):
+def _season_lists(value: Any) -> Any:
+    """Per-season lists: drop empty seasons and None entries."""
+    if not value:
+        return {}
+    if not isinstance(value, dict):
+        return value
+    result = {}
+    for season, items in value.items():
+        if items:
+            result[season] = [item for item in items if item is not None]
+    return result
+
+
+SeasonLists = BeforeValidator(_season_lists)
+
+
+class TeamBase(SQLModel):
+    # name and long_name also receive numeric cells from the xlsx import.
+    name: Annotated[str, NumToStr] = Field(max_length=50)
+    long_name: Annotated[str | None, NumToStr] = Field(default=None, max_length=100)
+    discord_role: Annotated[str | None, NumToStr] = Field(default=None, max_length=50)
+
+
+class Team(TeamBase, DBModel, table=True):
     __tablename__ = "teams"
+
     id: int | None = Field(default=None, primary_key=True)
-    name: str = Field(max_length=50)
-    long_name: str | None = Field(default=None, max_length=100)
     icon: bytes | None = None
-    discord_role: str | None = Field(default=None, max_length=50)
     user_seasons: list["DBUserTeamSeason"] = Relationship(
         back_populates="team", sa_relationship_kwargs={"cascade": "all, delete"}
     )
@@ -25,23 +50,18 @@ class DBTeam(DBModel, table=True):
         back_populates="team", sa_relationship_kwargs={"cascade": "all, delete"}
     )
 
-    def to_dict(self):
-        return {
-            column.name: getattr(self, column.name) for column in self.__table__.columns
-        }
-
     @classmethod
     def addPlayers(cls, session: Session, obj_id, season_id, user_ids):
-        from app.models.season import DBSeason
+        from app.models.season import Season
 
         team = session.get(cls, obj_id)
         if not team:
             raise Exception(f"Team not found by id: {obj_id}")
-        season = session.get(DBSeason, season_id)
+        season = session.get(Season, season_id)
         if not season:
             raise Exception(f"Season not found by id: {season_id}")
         for user_id in user_ids:
-            user = session.get(DBUser, user_id)
+            user = session.get(User, user_id)
             if not user:
                 raise Exception(f"User not found by id: {user_id}")
             already_exists = (
@@ -59,16 +79,16 @@ class DBTeam(DBModel, table=True):
 
     @classmethod
     def removePlayers(cls, session: Session, obj_id, season_id, user_ids):
-        from app.models.season import DBSeason
+        from app.models.season import Season
 
         team = session.get(cls, obj_id)
         if not team:
             raise Exception(f"Team not found by id: {obj_id}")
-        season = session.get(DBSeason, season_id)
+        season = session.get(Season, season_id)
         if not season:
             raise Exception(f"Season not found by id: {season_id}")
         for user_id in user_ids:
-            user = session.get(DBUser, user_id)
+            user = session.get(User, user_id)
             if not user:
                 raise Exception(f"User not found by id: {user_id}")
             user_team = session.get(
@@ -85,7 +105,7 @@ class DBTeam(DBModel, table=True):
     def update_icon(cls, session: Session, obj_id, file):
         obj = session.get(cls, obj_id)
         if obj:
-            setattr(obj, DBTeam.icon.name, file)
+            obj.icon = file
             session.flush()
         return obj
 
@@ -93,12 +113,12 @@ class DBTeam(DBModel, table=True):
     def setCoaches(cls, session: Session, team_id, season_id, user_ids):
         """Set coaches for a team in a season (up to 3)."""
         from app.models.relationships import DBTeamSeason
-        from app.models.season import DBSeason
+        from app.models.season import Season
 
         team = session.get(cls, team_id)
         if not team:
             raise Exception(f"Team not found by id: {team_id}")
-        season = session.get(DBSeason, season_id)
+        season = session.get(Season, season_id)
         if not season:
             raise Exception(f"Season not found by id: {season_id}")
 
@@ -108,7 +128,7 @@ class DBTeam(DBModel, table=True):
 
         # Validate all users exist
         for user_id in user_ids:
-            user = session.get(DBUser, user_id)
+            user = session.get(User, user_id)
             if not user:
                 raise Exception(f"User not found by id: {user_id}")
 
@@ -128,3 +148,83 @@ class DBTeam(DBModel, table=True):
 
         session.flush()
         return team
+
+
+class TeamCreate(TeamBase):
+    pass
+
+
+class TeamUpdate(SQLModel):
+    name: Annotated[str | None, NumToStr] = None
+    long_name: Annotated[str | None, NumToStr] = None
+    discord_role: Annotated[str | None, NumToStr] = None
+
+
+class TeamPublic(TeamReduced):
+    """A team plus who played and coached for it, season by season.
+
+    The lists are assembled from the link rows rather than read off the
+    team, so this one is built by from_team, not by model_validate.
+    """
+
+    player_by_season: Annotated[dict[int, list[UserPublic]], SeasonLists] = {}
+    coaches_by_season: Annotated[dict[int, list[UserPublic]], SeasonLists] = {}
+    seasons_info: Annotated[list[SeasonInfoPublic], NoneToList] = []
+
+    @classmethod
+    def from_team(cls, team):
+        if not team:
+            return None
+
+        players = {}
+        coaches = {}
+        seasons_info = (
+            [
+                s
+                for s in (
+                    SeasonInfoPublic.from_team_season(info) for info in team.season_info
+                )
+                if s
+            ]
+            if team.season_info
+            else []
+        )
+
+        if team.user_seasons:
+            for ut in team.user_seasons:
+                if not players.get(ut.season_id):
+                    players[ut.season_id] = []
+                user = UserPublic.from_user(ut.user)
+                if user:
+                    for gnl_stat in user.gnl_stats:
+                        if gnl_stat.season_id == ut.season_id:
+                            user.gnl_stats = [gnl_stat]
+                            break
+                    players.get(ut.season_id).append(user)
+
+        # Load coaches from team_season entries
+        if team.season_info:
+            for season_info in team.season_info:
+                season_coaches = []
+                for coach in (
+                    season_info.coach_1,
+                    season_info.coach_2,
+                    season_info.coach_3,
+                ):
+                    if coach:
+                        built = UserPublic.from_user(coach)
+                        if built:
+                            season_coaches.append(built)
+
+                if season_coaches:
+                    coaches[season_info.season_id] = season_coaches
+
+        return cls(
+            id=team.id,
+            name=team.name,
+            long_name=team.long_name,
+            discord_role=team.discord_role,
+            player_by_season=players,
+            coaches_by_season=coaches,
+            seasons_info=seasons_info,
+        )

@@ -4,12 +4,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
 from app.exceptions import NotFoundException
-from app.models.match import DBMatch
+from app.models.match import Match
 from app.models.relationships import DBUserTeamSeason
-from app.models.series import DBSeries
-from app.models.user import DBUser
-from app.schemas.series import Series
-from app.schemas.user_team_season_stats import UserTeamSeasonStats
+from app.models.series import Series, SeriesCreate, SeriesPublic, SeriesUpdate
+from app.models.user import User
+from app.models.user_team_season_stats import UserTeamSeasonStatsPublic
 from app.services.base import BaseService
 from app.utils.query_util import QueryUtil
 
@@ -21,48 +20,50 @@ class SeriesService(BaseService):
         self.score_app_service = score_app_service
         self.user_app_service = user_app_service
 
-    def add(self, series: Series):
+    def add(self, series: SeriesCreate):
         with self.get_session() as session:
-            series = DBSeries.add(session, series.to_db_dict())
-            return Series.from_dbseries(series)
+            series = Series.add(session, series.model_dump())
+            return SeriesPublic.from_series(series)
 
-    def update(self, series: Series):
+    def update(self, series_id, series: SeriesUpdate):
         with self.get_session() as session:
-            series = DBSeries.update(session, series.id, **series.to_db_dict())
+            series = Series.update(
+                session, series_id, **series.model_dump(exclude_unset=True)
+            )
             if not series:
                 raise NotFoundException("Series not found")
-            return Series.from_dbseries(series)
+            return SeriesPublic.from_series(series)
 
     def delete(self, series_id):
         with self.get_session() as session:
-            DBSeries.delete(session, series_id)
+            Series.delete(session, series_id)
 
     def get(self, series_id):
         with self.get_session() as session:
             # Eager load relationships to avoid N+1 queries, load w3c_stats and team_seasons with season for players
             series = (
                 session.scalars(
-                    select(DBSeries)
+                    select(Series)
                     .options(
-                        joinedload(DBSeries.match).joinedload(DBMatch.team1),
-                        joinedload(DBSeries.match).joinedload(DBMatch.team2),
-                        joinedload(DBSeries.player1).joinedload(DBUser.w3c_stats),
-                        joinedload(DBSeries.player1)
-                        .joinedload(DBUser.team_seasons)
+                        joinedload(Series.match).joinedload(Match.team1),
+                        joinedload(Series.match).joinedload(Match.team2),
+                        joinedload(Series.player1).joinedload(User.w3c_stats),
+                        joinedload(Series.player1)
+                        .joinedload(User.team_seasons)
                         .joinedload(DBUserTeamSeason.season),
-                        joinedload(DBSeries.player2).joinedload(DBUser.w3c_stats),
-                        joinedload(DBSeries.player2)
-                        .joinedload(DBUser.team_seasons)
+                        joinedload(Series.player2).joinedload(User.w3c_stats),
+                        joinedload(Series.player2)
+                        .joinedload(User.team_seasons)
                         .joinedload(DBUserTeamSeason.season),
                     )
-                    .where(DBSeries.id == series_id)
+                    .where(Series.id == series_id)
                 )
                 .unique()
                 .first()
             )
             if not series:
                 raise NotFoundException("Series not found")
-            return Series.from_dbseries(series)
+            return SeriesPublic.from_series(series)
 
     def getAll(self):
         with self.get_session() as session:
@@ -70,16 +71,16 @@ class SeriesService(BaseService):
             # Eager load relationships, load w3c_stats and team_seasons with season for players
             series = (
                 session.scalars(
-                    select(DBSeries).options(
-                        joinedload(DBSeries.match).joinedload(DBMatch.team1),
-                        joinedload(DBSeries.match).joinedload(DBMatch.team2),
-                        joinedload(DBSeries.player1).joinedload(DBUser.w3c_stats),
-                        joinedload(DBSeries.player1)
-                        .joinedload(DBUser.team_seasons)
+                    select(Series).options(
+                        joinedload(Series.match).joinedload(Match.team1),
+                        joinedload(Series.match).joinedload(Match.team2),
+                        joinedload(Series.player1).joinedload(User.w3c_stats),
+                        joinedload(Series.player1)
+                        .joinedload(User.team_seasons)
                         .joinedload(DBUserTeamSeason.season),
-                        joinedload(DBSeries.player2).joinedload(DBUser.w3c_stats),
-                        joinedload(DBSeries.player2)
-                        .joinedload(DBUser.team_seasons)
+                        joinedload(Series.player2).joinedload(User.w3c_stats),
+                        joinedload(Series.player2)
+                        .joinedload(User.team_seasons)
                         .joinedload(DBUserTeamSeason.season),
                     )
                 )
@@ -87,27 +88,27 @@ class SeriesService(BaseService):
                 .all()
             )
             for single_series in series:
-                result.append(Series.from_dbseries(single_series))
+                result.append(SeriesPublic.from_series(single_series))
             return result
 
     def search(self, query):
         with self.get_session() as session:
             result = []
-            filter = QueryUtil.convertQueryToDBFilter(DBSeries, query)
+            filter = QueryUtil.convertQueryToDBFilter(Series, query)
             # Eager load related entities, load w3c_stats and team_seasons with season for players
             series_list = (
                 session.scalars(
-                    select(DBSeries)
+                    select(Series)
                     .options(
-                        joinedload(DBSeries.match).joinedload(DBMatch.team1),
-                        joinedload(DBSeries.match).joinedload(DBMatch.team2),
-                        joinedload(DBSeries.player1).joinedload(DBUser.w3c_stats),
-                        joinedload(DBSeries.player1)
-                        .joinedload(DBUser.team_seasons)
+                        joinedload(Series.match).joinedload(Match.team1),
+                        joinedload(Series.match).joinedload(Match.team2),
+                        joinedload(Series.player1).joinedload(User.w3c_stats),
+                        joinedload(Series.player1)
+                        .joinedload(User.team_seasons)
                         .joinedload(DBUserTeamSeason.season),
-                        joinedload(DBSeries.player2).joinedload(DBUser.w3c_stats),
-                        joinedload(DBSeries.player2)
-                        .joinedload(DBUser.team_seasons)
+                        joinedload(Series.player2).joinedload(User.w3c_stats),
+                        joinedload(Series.player2)
+                        .joinedload(User.team_seasons)
                         .joinedload(DBUserTeamSeason.season),
                     )
                     .where(filter)
@@ -121,37 +122,36 @@ class SeriesService(BaseService):
                 logger.debug(f"No series found by searchcriteria: {query}")
                 return result
             for series in series_list:
-                result.append(Series.from_dbseries(series))
+                result.append(SeriesPublic.from_series(series))
             return result
 
     def searchForSeasonAndPlayday(self, season_id, playday, query):
         with self.get_session() as session:
             result = []
-            filter = QueryUtil.convertQueryToDBFilter(DBSeries, query)
-            series_list = DBSeries.searchForSeasonAndPlayday(
+            filter = QueryUtil.convertQueryToDBFilter(Series, query)
+            series_list = Series.searchForSeasonAndPlayday(
                 session, season_id, playday, filter
             )
             if not series_list:
                 logger.debug(f"No series found by searchcriteria: {query}")
                 return result
             for series in series_list:
-                result.append(Series.from_dbseries(series))
+                result.append(SeriesPublic.from_series(series))
             return result
 
     def searchForSeason(self, season_id, query):
         with self.get_session() as session:
             result = []
-            filter = QueryUtil.convertQueryToDBFilter(DBSeries, query)
-            series_list = DBSeries.searchForSeason(session, season_id, filter)
+            filter = QueryUtil.convertQueryToDBFilter(Series, query)
+            series_list = Series.searchForSeason(session, season_id, filter)
             if not series_list:
                 logger.debug(f"No series found by searchcriteria: {query}")
                 return result
             for series in series_list:
-                result.append(Series.from_dbseries(series))
+                result.append(SeriesPublic.from_series(series))
             return result
 
-    def create_series(self, series: Series):
-        series.id = None
+    def create_series(self, series: SeriesCreate):
         series = self.score_app_service.calculateSeriesScore(series)
         series = self.add(series)
         self.updateGNLSeasonStats(series)
@@ -161,10 +161,9 @@ class SeriesService(BaseService):
 
         return series
 
-    def update_series(self, series_id: int, series: Series):
-        series.id = series_id
+    def update_series(self, series_id: int, series: SeriesUpdate):
         series = self.score_app_service.calculateSeriesScore(series)
-        series = self.update(series)
+        series = self.update(series_id, series)
         self.updateGNLSeasonStats(series)
         if not series.player1_points and not series.player2_points:
             return series
@@ -234,16 +233,14 @@ class SeriesService(BaseService):
                         else s.player1.race
                     )
                     matchup_history.append(race_value)
-        return UserTeamSeasonStats(
-            {
-                "user_id": user_id,
-                "games": games,
-                "wins": wins,
-                "losses": losses,
-                "season_id": season_id,
-                "team_id": team_id,
-                "matchup_history": matchup_history,
-            }
+        return UserTeamSeasonStatsPublic(
+            user_id=user_id,
+            games=games,
+            wins=wins,
+            losses=losses,
+            season_id=season_id,
+            team_id=team_id,
+            matchup_history=matchup_history,
         )
 
     def isSeriesWon(self, user_id, series):

@@ -6,11 +6,11 @@ from sqlmodel import Field, Relationship
 from app.models.base import DBModel
 from app.models.enums import Race
 from app.models.relationships import DBFantasyTeamPlayer
-from app.models.user import DBUser
+from app.models.user import User
 
 if TYPE_CHECKING:
-    from app.models.season import DBSeason
-    from app.models.team import DBTeam
+    from app.models.season import Season
+    from app.models.team import Team
 
 
 class DBFantasyTeam(DBModel, table=True):
@@ -30,13 +30,13 @@ class DBFantasyTeam(DBModel, table=True):
     bet_points: int | None = None
     total_points: int | None = None
 
-    drafted_team: Optional["DBTeam"] = Relationship(
+    drafted_team: Optional["Team"] = Relationship(
         sa_relationship_kwargs={"foreign_keys": "[DBFantasyTeam.drafted_team_id]"}
     )
-    captain: "DBUser" = Relationship(
+    captain: "User" = Relationship(
         sa_relationship_kwargs={"foreign_keys": "[DBFantasyTeam.captain_id]"}
     )
-    season: "DBSeason" = Relationship(
+    season: "Season" = Relationship(
         sa_relationship_kwargs={"foreign_keys": "[DBFantasyTeam.season_id]"}
     )
     drafted_players: list["DBFantasyTeamPlayer"] = Relationship(
@@ -55,7 +55,7 @@ class DBFantasyTeam(DBModel, table=True):
         if not team:
             raise Exception(f"Team not found by id: {obj_id}")
         for user_id in user_ids:
-            user = session.get(DBUser, user_id)
+            user = session.get(User, user_id)
             if not user:
                 raise Exception(f"User not found by id: {user_id}")
             already_exists = (
@@ -77,7 +77,7 @@ class DBFantasyTeam(DBModel, table=True):
         if not team:
             raise Exception(f"Fantasy Team not found by id: {obj_id}")
         for user_id in user_ids:
-            user = session.get(DBUser, user_id)
+            user = session.get(User, user_id)
             if not user:
                 raise Exception(f"User not found by id: {user_id}")
             user_team = session.get(

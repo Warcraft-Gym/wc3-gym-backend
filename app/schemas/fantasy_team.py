@@ -3,10 +3,10 @@ from typing import Annotated
 from pydantic import field_serializer
 
 from app.models.enums import Race
+from app.models.season import SeasonPublic
+from app.models.team import TeamPublic
+from app.models.user import UserPublic
 from app.schemas.base import APISchema, DropNoneItems, NumToStr
-from app.schemas.season import Season
-from app.schemas.team import Team
-from app.schemas.user import User
 
 DB_FIELDS = {
     "name",
@@ -27,17 +27,17 @@ class FantasyTeam(APISchema):
     id: int | None = None
     name: Annotated[str | None, NumToStr] = None
     season_id: int | None = None
-    season: Season | None = None
+    season: SeasonPublic | None = None
     captain_id: int | None = None
-    captain: User | None = None
+    captain: UserPublic | None = None
     drafted_team_id: int | None = None
-    drafted_team: Team | None = None
+    drafted_team: TeamPublic | None = None
     drafted_race: Race | str | None = None
     # The attribute keeps the list it was given (the import endpoint iterates
     # it), while the JSON output shows null for an empty list - exactly like
     # the old DTO. So the empty-to-None step lives in the serializer, not in
     # a validator.
-    drafted_players: Annotated[list[User] | None, DropNoneItems] = None
+    drafted_players: Annotated[list[UserPublic] | None, DropNoneItems] = None
     player_points: int | None = None
     bench_points: int | None = None
     team_points: int | None = None
@@ -60,7 +60,7 @@ class FantasyTeam(APISchema):
         drafted_players = []
         if fteam.drafted_players:
             for dp in fteam.drafted_players:
-                user = User.from_dbuser(dp.users)
+                user = UserPublic.from_user(dp.users)
                 if user:
                     drafted_players.append(user)
 
@@ -68,11 +68,11 @@ class FantasyTeam(APISchema):
             id=fteam.id,
             name=fteam.name,
             season_id=fteam.season_id,
-            season=Season.from_dbseason(fteam.season) if fteam.season else None,
+            season=SeasonPublic.from_season(fteam.season) if fteam.season else None,
             captain_id=fteam.captain_id,
-            captain=User.from_dbuser(fteam.captain) if fteam.captain else None,
+            captain=UserPublic.from_user(fteam.captain) if fteam.captain else None,
             drafted_team_id=fteam.drafted_team_id,
-            drafted_team=Team.from_dbteam(fteam.drafted_team)
+            drafted_team=TeamPublic.from_team(fteam.drafted_team)
             if fteam.drafted_team
             else None,
             drafted_race=fteam.drafted_race,

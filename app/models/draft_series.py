@@ -7,8 +7,8 @@ from sqlmodel import Field, Relationship
 from app.models.base import DBModel
 
 if TYPE_CHECKING:
-    from app.models.match import DBMatch
-    from app.models.user import DBUser
+    from app.models.match import Match
+    from app.models.user import User
 
 
 class DBDraftSeries(DBModel, table=True):
@@ -25,13 +25,13 @@ class DBDraftSeries(DBModel, table=True):
     is_fantasy_match: bool | None = False
     created_at: datetime | None = Field(default=None, sa_type=TIMESTAMP)
 
-    match: "DBMatch" = Relationship(
+    match: "Match" = Relationship(
         sa_relationship_kwargs={"foreign_keys": "[DBDraftSeries.match_id]"}
     )
-    player1: "DBUser" = Relationship(
+    player1: "User" = Relationship(
         sa_relationship_kwargs={"foreign_keys": "[DBDraftSeries.player1_id]"}
     )
-    player2: "DBUser" = Relationship(
+    player2: "User" = Relationship(
         sa_relationship_kwargs={"foreign_keys": "[DBDraftSeries.player2_id]"}
     )
 

@@ -2,7 +2,7 @@ import logging
 
 from app.exceptions import NotFoundException
 from app.models.relationships import DBTeamSeason
-from app.schemas.season_info import SeasonInfo
+from app.models.season_info import SeasonInfoPublic, SeasonInfoUpdate
 from app.services.base import BaseService
 
 logger = logging.getLogger(__name__)
@@ -12,14 +12,17 @@ class TeamSeasonService(BaseService):
     def add(self):
         return Exception("Method not available")
 
-    def update(self, team_id: int, season_info: SeasonInfo):
+    def update(self, team_id: int, season_info: SeasonInfoUpdate):
         with self.get_session() as session:
             season_info = DBTeamSeason.updateSeasonInfo(
-                session, season_info.season_id, team_id, **season_info.to_db_dict()
+                session,
+                season_info.season_id,
+                team_id,
+                **season_info.model_dump(),
             )
             if not season_info:
                 raise NotFoundException("Team season not found")
-            return SeasonInfo.from_dbseasoninfo(season_info)
+            return SeasonInfoPublic.from_team_season(season_info)
 
     def delete(self):
         return Exception("Method not available")
@@ -27,5 +30,5 @@ class TeamSeasonService(BaseService):
     def get(self):
         return Exception("Method not available")
 
-    def update_team_season(self, team_id: int, season_info: SeasonInfo):
+    def update_team_season(self, team_id: int, season_info: SeasonInfoUpdate):
         return self.update(team_id, season_info)
