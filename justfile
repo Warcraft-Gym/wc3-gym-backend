@@ -59,9 +59,29 @@ migrate db_url="mysql+pymysql://gym_user:gym_user@localhost:3306/GYM_BACKEND":
 revision message db_url="mysql+pymysql://gym_user:gym_user@localhost:3306/GYM_BACKEND":
     DB_URL="{{db_url}}" uv run alembic revision --autogenerate -m "{{message}}"
 
+# Show the revision a database is on, and the revisions that exist.
+db-status db_url="mysql+pymysql://gym_user:gym_user@localhost:3306/GYM_BACKEND":
+    DB_URL="{{db_url}}" uv run alembic current
+    DB_URL="{{db_url}}" uv run alembic history
+
 # Stop the backend and MySQL. The data stays in the gnl-mysql-data volume.
 down:
     docker stop gnl-backend gnl-mysql
+
+# Run the tests. Takes pytest arguments, for example `just test -k koth`.
+# CI runs this recipe, so a green run here is a green run there.
+test *args:
+    uv run pytest {{args}}
+
+# Check formatting and lint. CI runs this recipe too.
+lint:
+    uv run ruff format --check .
+    uv run ruff check .
+
+# Format the code and apply the lint fixes ruff can make.
+fmt:
+    uv run ruff format .
+    uv run ruff check --fix .
 
 # Show the gnl containers.
 status:

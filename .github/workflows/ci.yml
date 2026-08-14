@@ -1,5 +1,9 @@
 name: CI
 
+# The steps below call the justfile, so the recipes and the checks are one
+# thing rather than two lists that drift apart. `just` comes from the dev
+# dependency group, which is why the sync must not pass --no-dev.
+
 on:
   push:
     branches: [main]
@@ -12,10 +16,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
       - run: uv sync --frozen
-      - name: ruff format
-        run: uv run ruff format --check .
-      - name: ruff check
-        run: uv run ruff check .
+      - run: uv run just lint
 
   test:
     runs-on: ubuntu-latest
@@ -23,4 +24,4 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
       - run: uv sync --frozen
-      - run: uv run pytest
+      - run: uv run just test
