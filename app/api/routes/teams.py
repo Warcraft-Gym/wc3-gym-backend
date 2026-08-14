@@ -151,7 +151,11 @@ def search_teams(service: TeamServiceDep, query: str = "") -> list[dict[str, Any
     return [team.to_dict() for team in service.search(parsed_query) or []]
 
 
-@router.post("/teams/w3c_sync/{team_id}/seasons/{season_id}", response_model=None)
+@router.post(
+    "/teams/w3c_sync/{team_id}/seasons/{season_id}",
+    response_model=None,
+    dependencies=[Depends(require_admin)],
+)
 def sync_w3c_users_season(
     team_id: int, season_id: int, service: TeamServiceDep
 ) -> Response | dict[str, Any] | None:
@@ -173,7 +177,7 @@ def sync_w3c_users_season(
     return team.to_dict() if team else None
 
 
-@router.post("/teams/{team_id}/image")
+@router.post("/teams/{team_id}/image", dependencies=[Depends(require_admin)])
 def upload_team_image(
     team_id: int,
     service: TeamServiceDep,
