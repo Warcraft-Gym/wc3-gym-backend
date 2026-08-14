@@ -152,6 +152,28 @@ docker run -d \
   eashibby/gnl_backend:latest
 ```
 
+## Database Migrations
+
+Alembic owns the database structure. The container runs `alembic upgrade head` once at start, before the server, so the application itself never creates or changes a table.
+
+```bash
+export DB_URL="mysql+pymysql://gym_user:gym_user@localhost:3306/GYM_BACKEND"
+
+uv run alembic upgrade head        # bring the database up to date
+uv run alembic current             # show the revision the database is on
+uv run alembic history             # list the revisions
+```
+
+After changing a model, write the migration for it:
+
+```bash
+uv run alembic revision --autogenerate -m "Add the column"
+```
+
+Read what autogenerate wrote before committing it. It compares the models against the connected database and will happily drop a column the models no longer declare.
+
+**A database that already holds the tables** — the production one, and any development database made before this repository had migrations — needs no work. The first revision sees the tables, creates nothing and records itself, so `alembic upgrade head` is safe to run against it.
+
 ## Troubleshooting
 
 ### Backend Can't Connect to MySQL
@@ -204,9 +226,11 @@ backend/
 │   │   ├── db.py          # Engine and session factory
 │   │   └── security.py    # Token minting and validation
 │   ├── services/          # One service per entity
-│   ├── models/            # SQLAlchemy models
+│   ├── models/            # SQLModel table models
 │   ├── schemas/           # Pydantic schemas
 │   └── utils/             # Utility functions
+├── alembic.ini            # Alembic configuration
+└── migrations/            # Schema migrations
 ```
 
 The server calls the factory, so nothing builds an application at import:
@@ -227,7 +251,9 @@ uv run pytest
 ```
 
 The tests run against a temporary SQLite file and need no database server
-and no environment variables. See `tests/conftest.py` for the design rules.
+and no environment variables. The suite builds that file with
+`alembic upgrade head`, the way a deployment does, so every run checks the
+migrations as well. See `tests/conftest.py` for the design rules.
 
 ## Additional Resources
 

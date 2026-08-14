@@ -29,6 +29,9 @@ USER appuser
 # The project environment on PATH lets gunicorn run without uv at runtime
 ENV PATH="/app/.venv/bin:$PATH"
 
+# The migrations run one time per container, before the server, so the
+# application itself never changes the database structure.
+#
 # During debugging, this entry point will be overridden. uvicorn has no
 # worker timeout, so the long import/export requests need no --timeout.
-CMD ["uvicorn", "--factory", "app.main:create_app", "--host", "0.0.0.0", "--port", "5002"]
+CMD ["sh", "-c", "alembic upgrade head && exec uvicorn --factory app.main:create_app --host 0.0.0.0 --port 5002"]

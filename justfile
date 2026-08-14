@@ -51,6 +51,14 @@ up:
     echo
     echo "Backend: http://localhost:5002/docs (ready in ~30s, admin token: devtoken)"
 
+# Bring a database reached from the host up to date. The container does this itself at start.
+migrate db_url="mysql+pymysql://gym_user:gym_user@localhost:3306/GYM_BACKEND":
+    DB_URL="{{db_url}}" uv run alembic upgrade head
+
+# Write a migration for the current models. Read it before committing: autogenerate also drops.
+revision message db_url="mysql+pymysql://gym_user:gym_user@localhost:3306/GYM_BACKEND":
+    DB_URL="{{db_url}}" uv run alembic revision --autogenerate -m "{{message}}"
+
 # Stop the backend and MySQL. The data stays in the gnl-mysql-data volume.
 down:
     docker stop gnl-backend gnl-mysql

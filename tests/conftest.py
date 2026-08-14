@@ -28,12 +28,20 @@ from app.main import create_app
 
 
 @pytest.fixture(scope="session")
-def app(tmp_path_factory):
-    # A file, not :memory:. init_schema disposes the pool, and disposing
-    # the only connection of an in-memory SQLite database deletes the
-    # tables with it.
+def db_url(tmp_path_factory):
+    """A migrated database. A file, not :memory:, because the migration and
+    the application open their own connections to it."""
+    from tests.migrate import upgrade_to_head
+
     db_file = tmp_path_factory.mktemp("db") / "test.sqlite"
-    return create_app(db_url=f"sqlite:///{db_file}")
+    url = f"sqlite:///{db_file}"
+    upgrade_to_head(url)
+    return url
+
+
+@pytest.fixture(scope="session")
+def app(db_url):
+    return create_app(db_url=db_url)
 
 
 @pytest.fixture

@@ -22,7 +22,7 @@ from fastapi.responses import JSONResponse
 
 from app.api.deps import AuthError
 from app.api.main import api_router
-from app.core.db import init_engine, init_schema
+from app.core.db import init_engine
 from app.exceptions import DBException, NotFoundException
 
 logger = logging.getLogger(__name__)
@@ -41,9 +41,10 @@ async def _lifespan(app: FastAPI):
 
 
 def create_app(db_url=None):
-    """Build the application: engine, schema, routers.
+    """Build the application: engine, routers.
 
-    Reads the environment when the caller passes no db_url.
+    Reads the environment when the caller passes no db_url. The tables come
+    from `alembic upgrade head`, which runs before the server starts.
     """
     load_dotenv()
     # A wrong LOG_LEVEL must not stop the application.
@@ -51,8 +52,7 @@ def create_app(db_url=None):
         level=getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper(), logging.INFO)
     )
 
-    engine = init_engine(db_url)
-    init_schema(engine)
+    init_engine(db_url)
 
     app = FastAPI(
         title="GNL Backend API",

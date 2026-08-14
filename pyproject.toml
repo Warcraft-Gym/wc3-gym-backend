@@ -21,6 +21,7 @@ dependencies = [
     "uvicorn>=0.52.3",
     "python-multipart>=0.0.32",
     "sqlmodel>=0.0.39",
+    "alembic>=1.19.1",
 ]
 
 [build-system]
