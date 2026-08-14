@@ -3,6 +3,17 @@
 
 set shell := ["bash", "-euo", "pipefail", "-c"]
 
+# The tag `up` builds from the working tree. It is a local development
+# image and nothing publishes it, so a deployment names its own image.
+image := "gnl-backend:local"
+
+# The same database under its two names. Which one is right depends on
+# where the command runs, and that is the usual reason a connection fails.
+# The backend container reaches MySQL over the gnl-net network by container
+# name; a command on the host reaches it through the published port.
+container_db_url := "mysql+pymysql://gym_user:gym_user@gnl-mysql:3306/GYM_BACKEND"
+host_db_url := "mysql+pymysql://gym_user:gym_user@localhost:3306/GYM_BACKEND"
+
 default:
     @just --list
 
@@ -34,10 +45,10 @@ up:
         sleep 2
     done
 
-    docker build -t gnl-backend:local {{justfile_directory()}}
+    docker build -t {{image}} {{justfile_directory()}}
     docker rm -f gnl-backend >/dev/null 2>&1 || true
     docker run -d --name gnl-backend --network gnl-net -p 5002:5002 \
-        -e DB_URL="mysql+pymysql://gym_user:gym_user@gnl-mysql:3306/GYM_BACKEND" \
+        -e DB_URL="{{container_db_url}}" \
         -e ADMIN_TOKEN=devtoken \
         -e JWT_SECRET_KEY=devsecret \
         -e JWT_ALGORITHM=HS256 \
@@ -46,30 +57,38 @@ up:
         -e BOT_CLIENT_TOKEN=dummy \
         -e BOT_WEBHOOK_URL=http://localhost:9999 \
         -e FRONTEND_URL=http://localhost:5003 \
-        gnl-backend:local
+        {{image}}
 
     echo
     echo "Backend: http://localhost:5002/docs (ready in ~30s, admin token: devtoken)"
 
-# Bring a database reached from the host up to date. The container does this itself at start.
-migrate db_url="mysql+pymysql://gym_user:gym_user@localhost:3306/GYM_BACKEND":
+# Start the stopped containers again, MySQL first. Use after Docker Desktop restarts.
+restart:
+    docker start gnl-mysql
+    docker start gnl-backend
+
+# Follow the backend log, where the migration and the server both write.
+logs *args:
+    docker logs --follow --tail 50 {{args}} gnl-backend
+
+# Bring a database up to date by hand. The backend container does this at every start.
+migrate db_url=host_db_url:
     DB_URL="{{db_url}}" uv run alembic upgrade head
 
 # Write a migration for the current models. Read it before committing: autogenerate also drops.
-revision message db_url="mysql+pymysql://gym_user:gym_user@localhost:3306/GYM_BACKEND":
+revision message db_url=host_db_url:
     DB_URL="{{db_url}}" uv run alembic revision --autogenerate -m "{{message}}"
 
 # Show the revision a database is on, and the revisions that exist.
-db-status db_url="mysql+pymysql://gym_user:gym_user@localhost:3306/GYM_BACKEND":
+db-status db_url=host_db_url:
     DB_URL="{{db_url}}" uv run alembic current
     DB_URL="{{db_url}}" uv run alembic history
 
-# Stop the backend and MySQL. The data stays in the gnl-mysql-data volume.
+# Stop the backend and MySQL, keeping the data. A missing container is not an error.
 down:
-    docker stop gnl-backend gnl-mysql
+    docker stop gnl-backend gnl-mysql 2>/dev/null || true
 
-# Run the tests. Takes pytest arguments, for example `just test -k koth`.
-# CI runs this recipe, so a green run here is a green run there.
+# Run the tests as CI runs them. Takes pytest arguments, for example `just test -k koth`.
 test *args:
     uv run pytest {{args}}
 

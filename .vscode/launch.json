@@ -1,0 +1,34 @@
+{
+    // Runs the backend on the host, under the debugger, against the MySQL
+    // container `just up` starts. Breakpoints work because the code runs
+    // here rather than in a container.
+    //
+    // TOKEN_TIME, REFRESH_TOKEN_TIME, CURRENT_WC3_SEASON and W3C_URL are
+    // not listed: create_app calls load_dotenv, which reads them from .env.
+    //
+    // These values are for local development. Do not use them anywhere else.
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug the backend",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "uvicorn",
+            "args": [
+                "--factory",
+                "app.main:create_app",
+                "--port",
+                "5002",
+                "--reload"
+            ],
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "DB_URL": "mysql+pymysql://gym_user:gym_user@localhost:3306/GYM_BACKEND",
+                "ADMIN_TOKEN": "devtoken",
+                "JWT_SECRET_KEY": "devsecret",
+                "JWT_ALGORITHM": "HS256"
+            },
+            "console": "integratedTerminal"
+        }
+    ]
+}

@@ -40,7 +40,7 @@ If you have MySQL installed locally:
 2. Create user: `CREATE USER 'gym_user'@'localhost' IDENTIFIED BY 'your_password';`
 3. Grant privileges: `GRANT ALL PRIVILEGES ON GYM_BACKEND.* TO 'gym_user'@'localhost';`
 
-## VS Code Setup
+## Project Setup
 
 ### 1. Clone Repository
 
@@ -61,24 +61,22 @@ VS Code will prompt to select `.venv` as the workspace interpreter - click "Yes"
 
 Dependencies live in `pyproject.toml`: runtime packages under `[project] dependencies`, development-only packages under `[dependency-groups] dev`. After editing either list, run `uv sync` again and commit the updated `uv.lock`. The Docker image installs from the same `uv.lock`, so one edit covers both local development and deployment.
 
-### 3. Configure tasks.json
+### 3. Know the environment variables
 
-The project uses VS Code tasks for Docker builds and runs. The configuration is in `.vscode/tasks.json`.
+The backend reads its configuration from the environment. `just up` and the debug configuration both pass development-only values, so nothing here needs setting by hand to run the project locally. Read this table before deploying, and when a container starts but behaves oddly.
 
-**Key environment variables to configure:**
+`.env` is committed and holds the values that are not secret: `TOKEN_TIME`, `REFRESH_TOKEN_TIME`, `CURRENT_WC3_SEASON` and `W3C_URL`. `create_app` calls `load_dotenv`, so those arrive on their own. The rest are passed in.
 
-```json
-{
-  "env": {
-    "DB_URL": "mysql+pymysql://gym_user:gym_user@host.docker.internal:3306/GYM_BACKEND",
-    "ADMIN_TOKEN": "your-admin-token-here",
-    "JWT_SECRET_KEY": "your-secret-key-here",
-    "JWT_ALGORITHM": "HS256",
-    "BOT_CLIENT_TOKEN": "your-bot-client-token-here",
-    "FRONTEND_URL": "http://localhost:5003",
-    "BOT_WEBHOOK_URL": "http://host.docker.internal:3001/webhook/series-updated"
-  }
-}
+**Key environment variables:**
+
+```bash
+DB_URL="mysql+pymysql://gym_user:gym_user@host.docker.internal:3306/GYM_BACKEND"
+ADMIN_TOKEN="your-admin-token-here"
+JWT_SECRET_KEY="your-secret-key-here"
+JWT_ALGORITHM="HS256"
+BOT_CLIENT_TOKEN="your-bot-client-token-here"
+FRONTEND_URL="http://localhost:5003"
+BOT_WEBHOOK_URL="http://host.docker.internal:3001/webhook/series-updated"
 ```
 
 **Environment Variable Explanations:**
@@ -106,29 +104,37 @@ The project uses VS Code tasks for Docker builds and runs. The configuration is 
 [just](https://github.com/casey/just) is a command runner. It reads recipes from the `justfile` in the repository root. The dev dependencies install it (PyPI package `rust-just`), so after `uv sync` no separate install is needed — run recipes with `uv run just`:
 
 ```bash
-uv run just          # list the recipes
-uv run just up       # start MySQL and the backend in Docker
-uv run just status   # show the gnl containers
-uv run just down     # stop the containers
+uv run just             # list the recipes
+uv run just up          # build the image, start MySQL and the backend in Docker
+uv run just restart     # start the containers again after a stop
+uv run just logs        # follow the backend log
+uv run just status      # show the gnl containers
+uv run just down        # stop the containers
+uv run just test        # run the tests, as CI runs them
+uv run just lint        # check formatting and lint, as CI runs them
+uv run just fmt         # apply the formatting and lint fixes
+uv run just db-status   # show the revision the database is on
+uv run just migrate     # bring a database up to date by hand
+uv run just revision    # write a migration for the current models
 ```
 
-`up` covers the full MySQL setup from above: on first use it creates the `gnl-net` Docker network and the `gnl-mysql` container with a named volume (`gnl-mysql-data`), so the database survives `down` and container removal. It then builds the image `gnl-backend:local` from the working tree and starts it on port 5002. Run it again after a code change to rebuild and restart the backend.
+`up` covers the full MySQL setup from above: on first use it creates the `gnl-net` Docker network and the `gnl-mysql` container with a named volume (`gnl-mysql-data`), so the database survives `down` and container removal. It then builds the image and starts it on port 5002. Run it again after a code change to rebuild and restart the backend.
+
+The image is tagged `gnl-backend:local`. The tag means what it says: `just up` builds it from the working tree for use on this machine, and nothing pushes it to a registry. A deployment builds and names its own image, so treat `gnl-backend:local` as a local name only and do not read it as a stage of a release.
+
+`up` replaces the backend container, which is what makes it the recipe for a code change. `restart` starts the containers that are already there, which is what a stopped Docker Desktop leaves behind. Neither loses the database: the data is in the `gnl-mysql-data` volume.
 
 The container starts with development-only values (`ADMIN_TOKEN=devtoken`, `JWT_SECRET_KEY=devsecret`). Log in with `devtoken`. Do not use these values outside local development. The backend accepts connections about 30 seconds after `up` returns.
 
 If `just` is installed system-wide, the `uv run` prefix is optional.
 
-### Using VS Code Docker Tasks
+### Debugging in VS Code
 
-1. Open the **Run and Debug** panel (Ctrl+Shift+D)
-2. Select **"docker-run: debug"** from the dropdown
-3. Press F5 or click the green play button
+`.vscode/launch.json` holds one configuration, **Debug the backend**. Start MySQL with `uv run just up`, then open the **Run and Debug** panel (Ctrl+Shift+D), pick it and press F5.
 
-This will:
-- Build the Docker image (`eashibby/gnl_backend:latest`)
-- Start the container with environment variables from tasks.json
-- Run uvicorn on port 5002
-- Attach debugger for breakpoint support
+It runs uvicorn on port 5002 on your machine, under the debugger, against the MySQL container. Breakpoints work because the code runs on the host rather than in a container, and `--reload` picks up an edit without a restart. Stop the backend container first, or both will want port 5002.
+
+Debugging the code *inside* the container is not set up. That needs `debugpy` in the image, and the image installs with `--no-dev`, so the dependency would have to ship to production or the image would need a separate debug target. Neither exists today.
 
 ### Accessing the Application
 
@@ -137,6 +143,8 @@ This will:
 - **OpenAPI document:** http://localhost:5002/openapi.json
 
 ### Manual Docker Commands
+
+The image name is the only difference from what `just up` runs. `gnl-backend:local` is the tag `up` builds for this machine; `eashibby/gnl_backend:latest` is the published name a deployment pulls. One Dockerfile builds both, so the tag records where an image is meant to run and nothing else.
 
 ```bash
 # Build image
@@ -164,6 +172,20 @@ uv run alembic current             # show the revision the database is on
 uv run alembic history             # list the revisions
 ```
 
+The justfile wraps these as `just migrate`, `just db-status` and `just revision`, each taking the same URL as an optional argument, so `just db-status` answers the everyday question without exporting anything.
+
+### DB_URL names the same database twice
+
+`DB_URL` is one variable with two correct values, and picking the wrong one is the usual reason a command cannot connect:
+
+| Where the command runs | Host to use | Why |
+|---|---|---|
+| Inside a container on `gnl-net` | `gnl-mysql:3306` | Docker resolves the container name on that network |
+| On the host, or in an IDE | `localhost:3306` | reaches the port `gnl-mysql` publishes |
+| In a container, MySQL on the host | `host.docker.internal:3306` | Docker Desktop's name for the host |
+
+A container started with the `localhost` form will not find MySQL, because `localhost` inside a container is that container. A container started with the `gnl-mysql` form but no `--network gnl-net` will not find it either, because the name only resolves on that network. The justfile holds both forms as `container_db_url` and `host_db_url` and passes the right one, which is the reason to prefer the recipes over typing the commands.
+
 After changing a model, write the migration for it:
 
 ```bash
@@ -174,13 +196,43 @@ Read what autogenerate wrote before committing it. It compares the models agains
 
 **A database that already holds the tables** — the production one, and any development database made before this repository had migrations — needs no work. The first revision sees the tables, creates nothing and records itself, so `alembic upgrade head` is safe to run against it.
 
-**The migration step belongs to the container, so run one backend container per database.** The command starts `alembic upgrade head` and then the server, which is once per container however many workers the server runs. Two containers against the same database would run it twice at the same time, and Alembic does not lock MySQL. To serve from more than one container, run the migration as its own step first and give the containers the server command alone:
+### Stopping and starting a container
+
+Starting a container again runs its command again, so `alembic upgrade head` runs at every start. It is the migration command that repeats, not the migration. Alembic reads the revision recorded in the `alembic_version` table, finds the database already at head, and emits no DDL, so the tables and the data are untouched. There is nothing to clean up between a `docker stop` and a `docker start`, and `just restart` is safe to run as often as you like.
+
+The log tells the two apart. A start with work to do names the revision it applies:
+
+```
+INFO  [alembic.runtime.migration] Running upgrade  -> 658616cf0c2b, Create the initial schema
+```
+
+A start with nothing to do logs the two context lines and goes straight to the server, with no `Running upgrade` line. `just logs` shows this.
+
+### Serving from more than one container
+
+**The migration step belongs to the container, so run one backend container per database.** The command starts `alembic upgrade head` and then the server, which is once per container however many workers the server runs. Two containers started together against the same database would run it at the same time, and Alembic does not lock MySQL. To serve from more than one container, run the migration as its own step first and give the containers the server command alone:
 
 ```bash
-docker run --rm -e DB_URL="$DB_URL" gnl-backend:local alembic upgrade head
-docker run -d -e DB_URL="$DB_URL" gnl-backend:local \
+# The migration, once, and wait for it to finish before starting any server.
+docker run --rm --network gnl-net -e DB_URL="$DB_URL" gnl-backend:local alembic upgrade head
+
+# Then the servers, which now only serve.
+docker run -d --network gnl-net -p 5002:5002 \
+    -e DB_URL="$DB_URL" \
+    -e ADMIN_TOKEN="$ADMIN_TOKEN" \
+    -e JWT_SECRET_KEY="$JWT_SECRET_KEY" \
+    -e JWT_ALGORITHM=HS256 \
+    -e TOKEN_TIME=60 \
+    -e REFRESH_TOKEN_TIME=1440 \
+    gnl-backend:local \
     uvicorn --factory app.main:create_app --host 0.0.0.0 --port 5002
 ```
+
+Both commands need the network that reaches MySQL, and both need `DB_URL` in the form that resolves there — see the table above. The server command needs the rest of the variables too. Without them the container still starts and still serves, and every admin login answers 401, because `ADMIN_TOKEN` is read per request and an unset one matches no token. Read the variable table before deploying rather than after.
+
+`gnl-backend:local` stands in for the image here because this repository builds no other. A deployment substitutes its own image name.
+
+This is where the deployment differs from the official FastAPI template, which runs `alembic upgrade head` from a `prestart` step of its own and leaves the container command as the server alone. That shape is the right destination. Today there is no compose file and no deploy pipeline in this repository — CI runs lint and tests only — so the single `docker run` carries both, and the commands above are what splitting them looks like by hand.
 
 ## Troubleshooting
 
@@ -203,7 +255,7 @@ uv sync
 
 ### Port 5002 Already in Use
 
-**Solution:** Stop existing process or change port in tasks.json
+**Solution:** Stop whatever holds the port. The usual cause is the backend container and the debug configuration both wanting 5002: run `uv run just down`, or change the port in `.vscode/launch.json`.
 ```bash
 # Find process using port
 netstat -ano | findstr :5002
@@ -219,9 +271,11 @@ backend/
 ├── pyproject.toml          # Project metadata and dependencies
 ├── uv.lock                 # Pinned dependency versions (managed by uv)
 ├── Dockerfile             # Docker image definition
+├── justfile               # The everyday commands
+├── .env                   # Committed configuration that is not secret
 ├── .vscode/
-│   └── tasks.json         # VS Code build/run tasks
-├── db_scripts/            # Database migration scripts
+│   └── launch.json        # VS Code debug configuration
+├── db_scripts/            # Hand-run SQL. Alembic owns the schema, not this
 ├── tests/                 # pytest suite
 ├── app/
 │   ├── main.py            # The application factory, create_app
@@ -234,8 +288,7 @@ backend/
 │   │   ├── db.py          # Engine and session factory
 │   │   └── security.py    # Token minting and validation
 │   ├── services/          # One service per entity
-│   ├── models/            # SQLModel table models
-│   ├── schemas/           # Pydantic schemas
+│   ├── models/            # SQLModel table models and their API schemas
 │   └── utils/             # Utility functions
 ├── alembic.ini            # Alembic configuration
 └── migrations/            # Schema migrations
