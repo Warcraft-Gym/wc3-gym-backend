@@ -44,18 +44,6 @@ def _num_to_str(value: Any) -> Any:
     return value
 
 
-def _empty_to_none(value: Any) -> Any:
-    if isinstance(value, list):
-        value = [item for item in value if item is not None]
-    return value if value else None
-
-
-def _drop_none_items(value: Any) -> Any:
-    if isinstance(value, list):
-        return [item for item in value if item is not None]
-    return value
-
-
 def _lenient_date(value: Any) -> Any:
     # An empty string means no value, and a datetime is truncated the way
     # the DATE column truncates it. Both run before pydantic's strict date
@@ -107,10 +95,6 @@ IsoDate = Annotated[
 EnumValue = BeforeValidator(_enum_to_value)
 # Output. Null reads as an empty list.
 NoneToList = BeforeValidator(_none_to_list)
-# Output. An empty list reads as null.
-EmptyToNone = BeforeValidator(_empty_to_none)
-# Output. A list keeps its None items out of the response.
-DropNoneItems = BeforeValidator(_drop_none_items)
 
 # Input. String columns that also receive numbers: Discord role ids and
 # the cells of the xlsx import.

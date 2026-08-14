@@ -7,7 +7,7 @@ from sqlmodel import Field, Relationship, SQLModel
 from app.models.base import DBModel
 from app.models.map import MapPublic
 from app.models.relationships import DBMapSeason, DBTeamSeason, DBUserSeasonSignup
-from app.models.types import EmptyToNone, IsoDate, LenientDate, NumToStr
+from app.models.types import IsoDate, LenientDate, NoneToList, NumToStr
 
 if TYPE_CHECKING:
     from app.models.relationships import DBUserTeamSeason
@@ -198,10 +198,10 @@ class SeasonPublic(SeasonBase):
     series_per_week: int | None = None
     start_date: Annotated[IsoDate | None, LenientDate] = None
     end_date: Annotated[IsoDate | None, LenientDate] = None
-    maps: Annotated[list[MapPublic] | None, EmptyToNone] = None
+    maps: Annotated[list[MapPublic], NoneToList] = []
     # Nothing fills this. It is part of the response shape that the public
-    # pages read, so the field stays and always reads null.
-    user_signup: Annotated[list[Any] | None, EmptyToNone] = None
+    # pages read, so the field stays and always reads as an empty list.
+    user_signup: Annotated[list[Any], NoneToList] = []
 
     @classmethod
     def from_season(cls, season: Season | None) -> Self | None:

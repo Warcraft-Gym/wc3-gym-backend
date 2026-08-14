@@ -55,11 +55,11 @@ def test_the_metadata_holds_every_table() -> None:
     assert set(SQLModel.metadata.tables) == TABLES
 
 
-def test_drafted_players_serialize_as_objects_and_empty_reads_as_null() -> None:
-    """The drafted players serializer hands pydantic the players themselves.
+def test_every_list_field_reads_as_a_list() -> None:
+    """A list field answers with a list, empty or not, and never with null.
 
-    Their JSON must stay what UserPublic writes, and an empty list must
-    still read as null, which is the shape the fantasy pages expect.
+    The API used to answer null for an empty list on three fields and a
+    list on the other seven; these assertions pin the one rule.
     """
     from app.models.enums import Race
     from app.models.fantasy_team import FantasyTeamPublic
@@ -76,4 +76,14 @@ def test_drafted_players_serialize_as_objects_and_empty_reads_as_null() -> None:
     ]
 
     empty = FantasyTeamPublic(id=8, name="Empty", drafted_players=[])
-    assert empty.model_dump(mode="json")["drafted_players"] is None
+    assert empty.model_dump(mode="json")["drafted_players"] == []
+
+    unset = FantasyTeamPublic(id=9, name="Unset")
+    assert unset.model_dump(mode="json")["drafted_players"] == []
+
+    from app.models.season import SeasonPublic
+
+    season = SeasonPublic(id=1, name="Season 1")
+    dumped = SeasonPublic.model_dump(season, mode="json")
+    assert dumped["maps"] == []
+    assert dumped["user_signup"] == []

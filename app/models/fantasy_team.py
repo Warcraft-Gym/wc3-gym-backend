@@ -1,6 +1,5 @@
 from typing import TYPE_CHECKING, Annotated, Any, Self
 
-from pydantic import field_serializer
 from sqlalchemy.orm import Session
 from sqlmodel import Field, Relationship, SQLModel
 
@@ -9,7 +8,7 @@ from app.models.enums import Race
 from app.models.relationships import DBFantasyTeamPlayer
 from app.models.season import SeasonPublic
 from app.models.team import Team, TeamPublic
-from app.models.types import DropNoneItems, NumToStr
+from app.models.types import NoneToList, NumToStr
 from app.models.user import User, UserPublic
 
 if TYPE_CHECKING:
@@ -123,25 +122,7 @@ class FantasyTeamPublic(FantasyTeamBase):
     season: SeasonPublic | None = None
     captain: UserPublic | None = None
     drafted_team: TeamPublic | None = None
-    # The attribute keeps the list it was given, because the import
-    # endpoint iterates it, while the JSON shows null for an empty list.
-    # So the empty-to-null step lives in the serializer, not in a
-    # validator.
-    drafted_players: Annotated[list[UserPublic] | None, DropNoneItems] = None
-
-    # Only the empty list needs handling; pydantic serializes the players
-    # itself. Returning them instead of their dicts keeps UserPublic in the
-    # published schema, because pydantic builds that from this return type.
-    #
-    # An empty team reads as null rather than []. Every drafted_players site
-    # in admin_frontend accepts either shape, and the offline leaderboard
-    # generator lives outside these repos, so nothing here says which the
-    # published pages need.
-    @field_serializer("drafted_players", when_used="json")
-    def _drafted_players_json(
-        self, value: list[UserPublic] | None
-    ) -> list[UserPublic] | None:
-        return value if value else None
+    drafted_players: Annotated[list[UserPublic], NoneToList] = []
 
     @classmethod
     def from_fantasy_team(cls, fteam: FantasyTeam | None) -> Self | None:
