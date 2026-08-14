@@ -18,9 +18,9 @@ from app.api.deps import (
     SettingsServiceDep,
     UserServiceDep,
 )
+from app.models.fantasy_bet import FantasyBetCreate, FantasyBetUpdate
+from app.models.fantasy_team import FantasyTeamCreate, FantasyTeamUpdate
 from app.models.user import UserCreate
-from app.schemas.fantasy_bet import FantasyBet
-from app.schemas.fantasy_team import FantasyTeam
 from app.utils.files import secure_filename
 from app.utils.query_util import QueryUtil
 
@@ -737,12 +737,12 @@ def create_fantasy_team(
     if existing_teams and len(existing_teams) > 0:
         # Update existing team
         team = fantasy_team_service.update_fantasy_team(
-            existing_teams[0].id, FantasyTeam(team_data)
+            existing_teams[0].id, FantasyTeamUpdate(**team_data)
         )
         team_id = existing_teams[0].id
     else:
         # Create new team
-        team = fantasy_team_service.create_fantasy_team(FantasyTeam(team_data))
+        team = fantasy_team_service.create_fantasy_team(FantasyTeamCreate(**team_data))
         team_id = team.id
 
     # Update players if provided
@@ -824,7 +824,7 @@ def create_fantasy_bet(
             "bet_points": data.get("bet_points"),
         }
 
-        bet = fantasy_bet_service.create_fantasy_bet(FantasyBet(bet_payload))
+        bet = fantasy_bet_service.create_fantasy_bet(FantasyBetCreate(**bet_payload))
 
         return bet.to_dict() if hasattr(bet, "to_dict") else bet
 
@@ -896,7 +896,9 @@ def update_fantasy_bet(
             "bet_points": data.get("bet_points", existing_bet.bet_points),
         }
 
-        bet = fantasy_bet_service.update_fantasy_bet(bet_id, FantasyBet(bet_payload))
+        bet = fantasy_bet_service.update_fantasy_bet(
+            bet_id, FantasyBetUpdate(**bet_payload)
+        )
 
         return bet.to_dict() if hasattr(bet, "to_dict") else bet
 

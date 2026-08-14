@@ -1,32 +1,42 @@
 import logging
-from typing import Annotated
 
-from fastapi import APIRouter, Body, Depends
+from fastapi import APIRouter, Depends
 
 from app.api.deps import DraftSeriesServiceDep, SeriesServiceDep, require_admin
-from app.schemas.draft_series import DraftSeries
+from app.models.draft_series import (
+    DraftSeriesCreate,
+    DraftSeriesPublic,
+    DraftSeriesUpdate,
+)
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["draft-series"])
 
 
-@router.post("/draft-series", status_code=201, dependencies=[Depends(require_admin)])
-def add_draft_series(data: Annotated[dict, Body()], service: DraftSeriesServiceDep):
+@router.post(
+    "/draft-series",
+    status_code=201,
+    response_model=DraftSeriesPublic,
+    dependencies=[Depends(require_admin)],
+)
+def add_draft_series(data: DraftSeriesCreate, service: DraftSeriesServiceDep):
     """Create a new draft series (visible in admin UI only)"""
-    draft_series = service.create_draft_series(DraftSeries(data))
-    return draft_series.to_dict() if draft_series else None
+    return service.create_draft_series(data)
 
 
-@router.put("/draft-series/{draft_series_id}", dependencies=[Depends(require_admin)])
+@router.put(
+    "/draft-series/{draft_series_id}",
+    response_model=DraftSeriesPublic,
+    dependencies=[Depends(require_admin)],
+)
 def update_draft_series(
     draft_series_id: int,
-    data: Annotated[dict, Body()],
+    data: DraftSeriesUpdate,
     service: DraftSeriesServiceDep,
 ):
     """Update the data of an existing draft series"""
-    draft_series = service.update_draft_series(draft_series_id, DraftSeries(data))
-    return draft_series.to_dict() if draft_series else None
+    return service.update_draft_series(draft_series_id, data)
 
 
 @router.delete(

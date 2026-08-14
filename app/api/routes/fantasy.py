@@ -11,8 +11,16 @@ from app.api.deps import (
     SeasonServiceDep,
     require_admin,
 )
-from app.schemas.fantasy_bet import FantasyBet
-from app.schemas.fantasy_team import FantasyTeam
+from app.models.fantasy_bet import (
+    FantasyBetCreate,
+    FantasyBetPublic,
+    FantasyBetUpdate,
+)
+from app.models.fantasy_team import (
+    FantasyTeamCreate,
+    FantasyTeamPublic,
+    FantasyTeamUpdate,
+)
 from app.utils.query_util import QueryUtil
 
 logger = logging.getLogger(__name__)
@@ -21,20 +29,25 @@ router = APIRouter(tags=["fantasy"])
 
 
 # Team endpoints
-@router.post("/fantasy/teams", status_code=201, dependencies=[Depends(require_admin)])
-def add_fantasy_team(data: Annotated[dict, Body()], service: FantasyTeamServiceDep):
+@router.post(
+    "/fantasy/teams",
+    status_code=201,
+    response_model=FantasyTeamPublic,
+    dependencies=[Depends(require_admin)],
+)
+def add_fantasy_team(data: FantasyTeamCreate, service: FantasyTeamServiceDep):
     """Create a new fantasy team with the provided name."""
-    team = service.create_fantasy_team(FantasyTeam(data))
-    return team.to_dict() if team else None
+    return service.create_fantasy_team(data)
 
 
-@router.put("/fantasy/teams/{team_id}", dependencies=[Depends(require_admin)])
-def update_team(
-    team_id: int, data: Annotated[dict, Body()], service: FantasyTeamServiceDep
-):
+@router.put(
+    "/fantasy/teams/{team_id}",
+    response_model=FantasyTeamPublic,
+    dependencies=[Depends(require_admin)],
+)
+def update_team(team_id: int, data: FantasyTeamUpdate, service: FantasyTeamServiceDep):
     """Update an existing fantasy team."""
-    team = service.update_fantasy_team(team_id, FantasyTeam(data))
-    return team.to_dict() if team else None
+    return service.update_fantasy_team(team_id, data)
 
 
 @router.delete(
@@ -90,25 +103,30 @@ def search_teams(service: FantasyTeamServiceDep, query: str = ""):
 
 
 # Bet endpoints
-@router.post("/fantasy/bets", status_code=201, dependencies=[Depends(require_admin)])
-def add_fantasy_bet(data: Annotated[dict, Body()], service: FantasyBetServiceDep):
+@router.post(
+    "/fantasy/bets",
+    status_code=201,
+    response_model=FantasyBetPublic,
+    dependencies=[Depends(require_admin)],
+)
+def add_fantasy_bet(data: FantasyBetCreate, service: FantasyBetServiceDep):
     """Create a new fantasy bet with the provided name."""
     try:
-        bet = service.create_fantasy_bet(FantasyBet(data))
-        return bet.to_dict() if bet else None
+        return service.create_fantasy_bet(data)
     except ValueError as e:
         logger.error(f"Validation error: {e}")
         return JSONResponse({"error": str(e)}, status_code=400)
 
 
-@router.put("/fantasy/bets/{bet_id}", dependencies=[Depends(require_admin)])
-def update_bet(
-    bet_id: int, data: Annotated[dict, Body()], service: FantasyBetServiceDep
-):
+@router.put(
+    "/fantasy/bets/{bet_id}",
+    response_model=FantasyBetPublic,
+    dependencies=[Depends(require_admin)],
+)
+def update_bet(bet_id: int, data: FantasyBetUpdate, service: FantasyBetServiceDep):
     """Update an existing fantasy bet."""
     try:
-        bet = service.update_fantasy_bet(bet_id, FantasyBet(data))
-        return bet.to_dict() if bet else None
+        return service.update_fantasy_bet(bet_id, data)
     except ValueError as e:
         logger.error(f"Validation error: {e}")
         return JSONResponse({"error": str(e)}, status_code=400)

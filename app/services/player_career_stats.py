@@ -3,9 +3,11 @@ import logging
 from sqlalchemy import select
 
 from app.exceptions import DBException
-from app.models.player_career_stats import DBPlayerCareerStats
+from app.models.player_career_stats import (
+    PlayerCareerStats,
+    PlayerCareerStatsPublic,
+)
 from app.models.user import User
-from app.schemas.player_career_stats import PlayerCareerStats
 from app.services.base import BaseService
 from app.services.series import SeriesService
 
@@ -28,27 +30,27 @@ class PlayerCareerStatsService(BaseService):
     def get(self, stat_id: int):
         """Get career stats by stats record ID (implements abstract method)"""
         with self.get_session() as session:
-            stat = session.get(DBPlayerCareerStats, stat_id)
-            return PlayerCareerStats.from_db(stat) if stat else None
+            stat = session.get(PlayerCareerStats, stat_id)
+            return PlayerCareerStatsPublic.from_career_stats(stat) if stat else None
 
     def add(self, entity):
         """Add new career stats record (implements abstract method)"""
         with self.get_session() as session:
-            new_stat = DBPlayerCareerStats.add(session, entity)
-            return PlayerCareerStats.from_db(new_stat)
+            new_stat = PlayerCareerStats.add(session, entity)
+            return PlayerCareerStatsPublic.from_career_stats(new_stat)
 
     def update(self, stat_dto):
         """Update career stats record (implements abstract method)"""
         with self.get_session() as session:
-            updated_stat = DBPlayerCareerStats.update(
-                session, stat_dto.id, **stat_dto.to_db_dict()
+            updated_stat = PlayerCareerStats.update(
+                session, stat_dto.id, **stat_dto.model_dump(exclude_unset=True)
             )
-            return PlayerCareerStats.from_db(updated_stat)
+            return PlayerCareerStatsPublic.from_career_stats(updated_stat)
 
     def delete(self, stat_id: int):
         """Delete career stats by stats ID (implements abstract method)"""
         with self.get_session() as session:
-            stats = session.get(DBPlayerCareerStats, stat_id)
+            stats = session.get(PlayerCareerStats, stat_id)
             if stats:
                 session.delete(stats)
                 return True
@@ -59,41 +61,39 @@ class PlayerCareerStatsService(BaseService):
         with self.get_session() as session:
             stats = (
                 session.scalars(
-                    select(DBPlayerCareerStats).order_by(
-                        DBPlayerCareerStats.rating.desc()
-                    )
+                    select(PlayerCareerStats).order_by(PlayerCareerStats.rating.desc())
                 )
                 .unique()
                 .all()
             )
-            return [PlayerCareerStats.from_db(stat) for stat in stats]
+            return [PlayerCareerStatsPublic.from_career_stats(stat) for stat in stats]
 
     def get_by_user_id(self, user_id: int):
         """Get career stats for a specific user"""
         with self.get_session() as session:
             stat = session.scalars(
-                select(DBPlayerCareerStats)
-                .where(DBPlayerCareerStats.user_id == user_id)
+                select(PlayerCareerStats)
+                .where(PlayerCareerStats.user_id == user_id)
                 .limit(1)
             ).first()
-            return PlayerCareerStats.from_db(stat) if stat else None
+            return PlayerCareerStatsPublic.from_career_stats(stat) if stat else None
 
     def get_by_player_name(self, player_name: str):
         """Get career stats by player name (for unmapped historical records)"""
         with self.get_session() as session:
             stat = session.scalars(
-                select(DBPlayerCareerStats)
-                .where(DBPlayerCareerStats.player_name == player_name)
+                select(PlayerCareerStats)
+                .where(PlayerCareerStats.player_name == player_name)
                 .limit(1)
             ).first()
-            return PlayerCareerStats.from_db(stat) if stat else None
+            return PlayerCareerStatsPublic.from_career_stats(stat) if stat else None
 
     def get_or_create(self, user_id: int):
         """Get existing stats or create new record for user"""
         with self.get_session() as session:
             stats = session.scalars(
-                select(DBPlayerCareerStats)
-                .where(DBPlayerCareerStats.user_id == user_id)
+                select(PlayerCareerStats)
+                .where(PlayerCareerStats.user_id == user_id)
                 .limit(1)
             ).first()
 
@@ -102,11 +102,11 @@ class PlayerCareerStatsService(BaseService):
                 user = session.get(User, user_id)
                 player_name = user.name if user else f"User_{user_id}"
 
-                stats = DBPlayerCareerStats(user_id=user_id, player_name=player_name)
+                stats = PlayerCareerStats(user_id=user_id, player_name=player_name)
                 session.add(stats)
                 session.flush()
 
-            return PlayerCareerStats.from_db(stats)
+            return PlayerCareerStatsPublic.from_career_stats(stats)
 
     def update_historical_baseline(
         self,
@@ -138,8 +138,8 @@ class PlayerCareerStatsService(BaseService):
 
             # Find by player_name first
             stats = session.scalars(
-                select(DBPlayerCareerStats)
-                .where(DBPlayerCareerStats.player_name == player_name)
+                select(PlayerCareerStats)
+                .where(PlayerCareerStats.player_name == player_name)
                 .limit(1)
             ).first()
 
@@ -155,7 +155,7 @@ class PlayerCareerStatsService(BaseService):
                 stats.historical_seasons_played = seasons_played
             else:
                 # Create new with historical baseline
-                stats = DBPlayerCareerStats(
+                stats = PlayerCareerStats(
                     user_id=user_id,
                     player_name=player_name,
                     historical_rating=rating,
@@ -193,8 +193,8 @@ class PlayerCareerStatsService(BaseService):
         """Update combined total columns (from recalculation)"""
         with self.get_session() as session:
             stats = session.scalars(
-                select(DBPlayerCareerStats)
-                .where(DBPlayerCareerStats.user_id == user_id)
+                select(PlayerCareerStats)
+                .where(PlayerCareerStats.user_id == user_id)
                 .limit(1)
             ).first()
 
@@ -250,13 +250,13 @@ class PlayerCareerStatsService(BaseService):
         record_by_user_id = None
         if user_id is not None:
             record_by_user_id = session.scalars(
-                select(DBPlayerCareerStats)
-                .where(DBPlayerCareerStats.user_id == user_id)
+                select(PlayerCareerStats)
+                .where(PlayerCareerStats.user_id == user_id)
                 .limit(1)
             ).first()
         record_by_name = session.scalars(
-            select(DBPlayerCareerStats)
-            .where(DBPlayerCareerStats.player_name == player_name)
+            select(PlayerCareerStats)
+            .where(PlayerCareerStats.player_name == player_name)
             .limit(1)
         ).first()
 
@@ -306,7 +306,7 @@ class PlayerCareerStatsService(BaseService):
 
         else:
             # No existing record - create new with provided name
-            stats_record = DBPlayerCareerStats(user_id=user_id, player_name=player_name)
+            stats_record = PlayerCareerStats(user_id=user_id, player_name=player_name)
             session.add(stats_record)
 
         # Update all stat fields
@@ -860,13 +860,13 @@ class PlayerCareerStatsService(BaseService):
         """Update career stats (historical values and user link)"""
         # Use DBModel.update pattern with DTO's to_db_dict()
         with self.get_session() as session:
-            updated_stat = DBPlayerCareerStats.update(
-                session, stat_id, **stat_dto.to_db_dict()
+            updated_stat = PlayerCareerStats.update(
+                session, stat_id, **stat_dto.model_dump(exclude_unset=True)
             )
             if not updated_stat:
                 return None
 
-            return PlayerCareerStats.from_db(updated_stat)
+            return PlayerCareerStatsPublic.from_career_stats(updated_stat)
 
     def delete_career_stats(self, stat_id: int):
         """Delete career stats record"""

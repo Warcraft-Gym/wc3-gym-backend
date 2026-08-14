@@ -12,7 +12,7 @@ from app.models.user_team_season_stats import UserTeamSeasonStatsPublic
 from app.models.w3c_stats import W3CStats, W3CStatsPublic
 
 if TYPE_CHECKING:
-    from app.models.player_career_stats import DBPlayerCareerStats
+    from app.models.player_career_stats import PlayerCareerStats
     from app.models.relationships import DBFantasyTeamPlayer, DBUserSeasonSignup
 
 
@@ -48,7 +48,7 @@ class User(UserBase, DBModel, table=True):
     signup_seasons: list["DBUserSeasonSignup"] = Relationship(
         back_populates="user", sa_relationship_kwargs={"cascade": "all, delete"}
     )
-    career_stats: list["DBPlayerCareerStats"] = Relationship(back_populates="user")
+    career_stats: list["PlayerCareerStats"] = Relationship(back_populates="user")
 
     @classmethod
     def updateUserTeamSeasonStats(cls, session: Session, season_stats):

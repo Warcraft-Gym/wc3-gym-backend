@@ -4,62 +4,68 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import joinedload
 
 from app.exceptions import NotFoundException
-from app.models.draft_series import DBDraftSeries
+from app.models.draft_series import (
+    DraftSeries,
+    DraftSeriesCreate,
+    DraftSeriesPublic,
+    DraftSeriesUpdate,
+)
 from app.models.match import Match
 from app.models.relationships import DBUserTeamSeason
 from app.models.series import SeriesCreate
 from app.models.user import User
-from app.schemas.draft_series import DraftSeries
 from app.services.base import BaseService
 
 logger = logging.getLogger(__name__)
 
 
 class DraftSeriesService(BaseService):
-    def add(self, draft_series: DraftSeries):
+    def add(self, draft_series: DraftSeriesCreate):
         with self.get_session() as session:
-            draft_series = DBDraftSeries.add(session, draft_series.to_db_dict())
-            return DraftSeries.from_db_draft_series(draft_series)
+            draft_series = DraftSeries.add(session, draft_series.model_dump())
+            return DraftSeriesPublic.from_draft_series(draft_series)
 
-    def update(self, draft_series: DraftSeries):
+    def update(self, draft_series_id, draft_series: DraftSeriesUpdate):
         with self.get_session() as session:
-            draft_series = DBDraftSeries.update(
-                session, draft_series.id, **draft_series.to_db_dict()
+            draft_series = DraftSeries.update(
+                session,
+                draft_series_id,
+                **draft_series.model_dump(exclude_unset=True),
             )
             if not draft_series:
                 raise NotFoundException("Draft series not found")
-            return DraftSeries.from_db_draft_series(draft_series)
+            return DraftSeriesPublic.from_draft_series(draft_series)
 
     def delete(self, draft_series_id):
         with self.get_session() as session:
-            DBDraftSeries.delete(session, draft_series_id)
+            DraftSeries.delete(session, draft_series_id)
 
     def get(self, draft_series_id):
         with self.get_session() as session:
             # Eager load relationships to avoid N+1 queries
             draft_series = (
                 session.scalars(
-                    select(DBDraftSeries)
+                    select(DraftSeries)
                     .options(
-                        joinedload(DBDraftSeries.match).joinedload(Match.team1),
-                        joinedload(DBDraftSeries.match).joinedload(Match.team2),
-                        joinedload(DBDraftSeries.player1).joinedload(User.w3c_stats),
-                        joinedload(DBDraftSeries.player1)
+                        joinedload(DraftSeries.match).joinedload(Match.team1),
+                        joinedload(DraftSeries.match).joinedload(Match.team2),
+                        joinedload(DraftSeries.player1).joinedload(User.w3c_stats),
+                        joinedload(DraftSeries.player1)
                         .joinedload(User.team_seasons)
                         .joinedload(DBUserTeamSeason.season),
-                        joinedload(DBDraftSeries.player2).joinedload(User.w3c_stats),
-                        joinedload(DBDraftSeries.player2)
+                        joinedload(DraftSeries.player2).joinedload(User.w3c_stats),
+                        joinedload(DraftSeries.player2)
                         .joinedload(User.team_seasons)
                         .joinedload(DBUserTeamSeason.season),
                     )
-                    .where(DBDraftSeries.id == draft_series_id)
+                    .where(DraftSeries.id == draft_series_id)
                 )
                 .unique()
                 .first()
             )
             if not draft_series:
                 raise NotFoundException("Draft series not found")
-            return DraftSeries.from_db_draft_series(draft_series)
+            return DraftSeriesPublic.from_draft_series(draft_series)
 
     def getByMatchId(self, match_id):
         with self.get_session() as session:
@@ -67,44 +73,42 @@ class DraftSeriesService(BaseService):
             # Eager load relationships
             draft_series_list = (
                 session.scalars(
-                    select(DBDraftSeries)
+                    select(DraftSeries)
                     .options(
-                        joinedload(DBDraftSeries.match).joinedload(Match.team1),
-                        joinedload(DBDraftSeries.match).joinedload(Match.team2),
-                        joinedload(DBDraftSeries.player1).joinedload(User.w3c_stats),
-                        joinedload(DBDraftSeries.player1)
+                        joinedload(DraftSeries.match).joinedload(Match.team1),
+                        joinedload(DraftSeries.match).joinedload(Match.team2),
+                        joinedload(DraftSeries.player1).joinedload(User.w3c_stats),
+                        joinedload(DraftSeries.player1)
                         .joinedload(User.team_seasons)
                         .joinedload(DBUserTeamSeason.season),
-                        joinedload(DBDraftSeries.player2).joinedload(User.w3c_stats),
-                        joinedload(DBDraftSeries.player2)
+                        joinedload(DraftSeries.player2).joinedload(User.w3c_stats),
+                        joinedload(DraftSeries.player2)
                         .joinedload(User.team_seasons)
                         .joinedload(DBUserTeamSeason.season),
                     )
-                    .where(DBDraftSeries.match_id == match_id)
+                    .where(DraftSeries.match_id == match_id)
                 )
                 .unique()
                 .all()
             )
             for single_draft_series in draft_series_list:
-                result.append(DraftSeries.from_db_draft_series(single_draft_series))
+                result.append(DraftSeriesPublic.from_draft_series(single_draft_series))
             return result
 
     def deleteByMatchId(self, match_id):
         """Delete all draft series for a given match"""
         with self.get_session() as session:
-            session.execute(
-                delete(DBDraftSeries).where(DBDraftSeries.match_id == match_id)
-            )
+            session.execute(delete(DraftSeries).where(DraftSeries.match_id == match_id))
 
-    def create_draft_series(self, draft_series: DraftSeries):
+    def create_draft_series(self, draft_series: DraftSeriesCreate):
         """Create a new draft series"""
-        draft_series.id = None
         return self.add(draft_series)
 
-    def update_draft_series(self, draft_series_id: int, draft_series: DraftSeries):
+    def update_draft_series(
+        self, draft_series_id: int, draft_series: DraftSeriesUpdate
+    ):
         """Update an existing draft series"""
-        draft_series.id = draft_series_id
-        return self.update(draft_series)
+        return self.update(draft_series_id, draft_series)
 
     def delete_draft_series(self, draft_series_id: int):
         """Delete a draft series"""

@@ -7,7 +7,7 @@ from sqlmodel import Field, Relationship
 from app.models.base import DBModel
 
 if TYPE_CHECKING:
-    from app.models.fantasy_team import DBFantasyTeam
+    from app.models.fantasy_team import FantasyTeam
     from app.models.map import Map
     from app.models.season import Season
     from app.models.team import Team
@@ -97,5 +97,5 @@ class DBFantasyTeamPlayer(DBModel, table=True):
     fantasy_team_id: int = Field(foreign_key="fantasy_teams.id", primary_key=True)
     user_id: int = Field(foreign_key="users.id", primary_key=True)
     # Additional columns can be added here if needed
-    fantasy_team: "DBFantasyTeam" = Relationship(back_populates="drafted_players")
+    fantasy_team: "FantasyTeam" = Relationship(back_populates="drafted_players")
     users: "User" = Relationship(back_populates="fantasy_teams")

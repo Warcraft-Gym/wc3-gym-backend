@@ -13,12 +13,12 @@ active KOTH event.
 from datetime import date, datetime
 
 from app.models.enums import Race
-from app.models.fantasy_bet import DBFantasyBet
-from app.models.fantasy_team import DBFantasyTeam
+from app.models.fantasy_bet import FantasyBet
+from app.models.fantasy_team import FantasyTeam
 from app.models.koth_event import KothEvent
 from app.models.map import Map
 from app.models.match import Match
-from app.models.player_career_stats import DBPlayerCareerStats
+from app.models.player_career_stats import PlayerCareerStats
 from app.models.relationships import DBMapSeason, DBTeamSeason, DBUserTeamSeason
 from app.models.season import Season
 from app.models.series import Series
@@ -128,7 +128,7 @@ def seed_league(session):
     )
     session.add_all([series_played, series_open])
 
-    fantasy_team = DBFantasyTeam(
+    fantasy_team = FantasyTeam(
         name="The Optimists",
         season_id=season.id,
         captain_id=players[0].id,
@@ -140,21 +140,21 @@ def seed_league(session):
 
     session.add_all(
         [
-            DBFantasyBet(
+            FantasyBet(
                 season_id=season.id,
                 series_id=series_played.id,
                 user_id=players[0].id,
                 winner_id=players[0].id,
                 bet_points=10,
             ),
-            DBPlayerCareerStats(
+            PlayerCareerStats(
                 user_id=players[0].id,
                 player_name="P1",
                 series_won=1,
                 games_won=2,
                 games_lost=1,
             ),
-            DBPlayerCareerStats(user_id=players[1].id, player_name="P2"),
+            PlayerCareerStats(user_id=players[1].id, player_name="P2"),
             Settings(
                 key="score_system", value="standard", description="Scoring system"
             ),

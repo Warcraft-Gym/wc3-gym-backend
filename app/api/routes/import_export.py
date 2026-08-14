@@ -21,14 +21,14 @@ from app.api.deps import (
     require_admin,
 )
 from app.exceptions import NotFoundException
+from app.models.fantasy_bet import FantasyBetCreate, FantasyBetUpdate
+from app.models.fantasy_team import FantasyTeamCreate, FantasyTeamUpdate
 from app.models.map import MapCreate, MapUpdate
 from app.models.match import MatchCreate, MatchUpdate
 from app.models.season import SeasonCreate, SeasonUpdate
 from app.models.series import SeriesCreate, SeriesUpdate
 from app.models.team import TeamCreate, TeamUpdate
 from app.models.user import UserCreate
-from app.schemas.fantasy_bet import FantasyBet
-from app.schemas.fantasy_team import FantasyTeam
 from app.utils.import_util import ImportUtil
 from app.utils.query_util import QueryUtil
 
@@ -433,11 +433,11 @@ def _process_import(
                     if existing_fteams:
                         fteam = existing_fteams[0]
                         fantasy_team_service.update_fantasy_team(
-                            fteam.id, FantasyTeam(fteam_data)
+                            fteam.id, FantasyTeamUpdate(**fteam_data)
                         )
                     else:
                         fteam = fantasy_team_service.create_fantasy_team(
-                            FantasyTeam(fteam_data)
+                            FantasyTeamCreate(**fteam_data)
                         )
 
                     if old_fteam_id:
@@ -518,10 +518,12 @@ def _process_import(
                     existing_bets = fantasy_bet_service.search_fantasy_bets(query)
                     if existing_bets:
                         fantasy_bet_service.update_fantasy_bet(
-                            existing_bets[0].id, FantasyBet(fbet_data)
+                            existing_bets[0].id, FantasyBetUpdate(**fbet_data)
                         )
                     else:
-                        fantasy_bet_service.create_fantasy_bet(FantasyBet(fbet_data))
+                        fantasy_bet_service.create_fantasy_bet(
+                            FantasyBetCreate(**fbet_data)
+                        )
         except Exception as e:
             logger.warning(f"Fantasy Bets sheet not found or error: {e}")
 
@@ -1017,13 +1019,13 @@ def import_fantasy_teams(
             if found_teams and len(found_teams) == 1:
                 team = found_teams[0]
                 fantasy_team = fantasy_team_service.update_fantasy_team(
-                    team.id, FantasyTeam(team_data)
+                    team.id, FantasyTeamUpdate(**team_data)
                 )
             elif len(found_teams) > 1:
                 raise Exception(f"More than one bet found by search: {fteam_q_string}")
             else:
                 fantasy_team = fantasy_team_service.create_fantasy_team(
-                    FantasyTeam(team_data)
+                    FantasyTeamCreate(**team_data)
                 )
 
             players = []
@@ -1219,11 +1221,13 @@ def import_fantasy_bets(
             found_bets = fantasy_bet_service.search_fantasy_bets(bet_query)
             if found_bets and len(found_bets) == 1:
                 bet = found_bets[0]
-                fantasy_bet_service.update_fantasy_bet(bet.id, FantasyBet(bet_data))
+                fantasy_bet_service.update_fantasy_bet(
+                    bet.id, FantasyBetUpdate(**bet_data)
+                )
             elif len(found_bets) > 1:
                 raise Exception(f"More than one bet found by search: {bet_q_string}")
             else:
-                fantasy_bet_service.create_fantasy_bet(FantasyBet(bet_data))
+                fantasy_bet_service.create_fantasy_bet(FantasyBetCreate(**bet_data))
 
         return {"message": "File uploaded successfully and data inserted into database"}
     else:

@@ -7,7 +7,9 @@ from fastapi import APIRouter, Body, Depends, File, UploadFile
 from fastapi.responses import JSONResponse
 
 from app.api.deps import StatsServiceDep, require_admin
-from app.schemas.player_career_stats import PlayerCareerStats
+from app.models.player_career_stats import (
+    PlayerCareerStatsUpdate,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +36,7 @@ def update_career_stats(
     stat_id: int, data: Annotated[dict, Body()], service: StatsServiceDep
 ):
     """Update historical baseline values and user link for career stats."""
-    stat_dto = PlayerCareerStats(data)
+    stat_dto = PlayerCareerStatsUpdate(**data)
     stat = service.update_career_stats(stat_id, stat_dto)
     if stat:
         return JSONResponse(stat.to_dict(), status_code=200)
