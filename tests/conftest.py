@@ -24,7 +24,7 @@ os.environ["REFRESH_TOKEN_TIME"] = "300"
 os.environ.pop("DB_URL", None)
 os.environ.pop("SCORE_SYSTEM", None)
 
-from src import create_app
+from app.main import create_app
 
 
 @pytest.fixture(scope="session")
@@ -46,8 +46,8 @@ def clean_db(app):
     """Empty every table after each test. Children first, so no foreign
     key constraint fires."""
     yield
-    from src.database.engine import Session
-    from src.models.base import Base
+    from app.database.engine import Session
+    from app.models.base import Base
 
     with Session() as session:
         for table in reversed(Base.metadata.sorted_tables):
@@ -58,7 +58,7 @@ def clean_db(app):
 @pytest.fixture
 def seeded(app):
     """A small consistent league. Returns the ids the tests refer to."""
-    from src.database.engine import Session
+    from app.database.engine import Session
     from tests.seed import seed_league
 
     with Session() as session:

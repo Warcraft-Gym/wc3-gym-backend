@@ -70,7 +70,7 @@ The project uses VS Code tasks for Docker builds and runs. The configuration is 
 ```json
 {
   "env": {
-    "FLASK_APP": "app.py",
+    "FLASK_APP": "app.main:create_app",
     "DB_URL": "mysql+pymysql://gym_user:gym_user@host.docker.internal:3306/GYM_BACKEND",
     "ADMIN_TOKEN": "your-admin-token-here",
     "JWT_SECRET_KEY": "your-secret-key-here",
@@ -169,21 +169,26 @@ taskkill /PID <pid> /F
 
 ```
 backend/
-├── app.py                  # Flask application entry point
 ├── pyproject.toml          # Project metadata and dependencies
 ├── uv.lock                 # Pinned dependency versions (managed by uv)
 ├── Dockerfile             # Docker image definition
 ├── .vscode/
 │   └── tasks.json         # VS Code build/run tasks
 ├── db_scripts/            # Database migration scripts
-├── src/
-│   ├── __init__.py        # Flask app initialization
+├── tests/                 # pytest suite
+├── app/
+│   ├── main.py            # The application factory, create_app
+│   ├── exceptions.py      # Shared exception types
 │   ├── api/               # API blueprints (routes)
 │   ├── database/          # Database services
 │   ├── service/           # Application services
-│   ├── dtos/              # Data transfer objects
-│   └── helpers/           # Utility functions
+│   ├── models/            # SQLAlchemy models
+│   ├── schemas/           # Pydantic schemas
+│   └── util/              # Utility functions
 ```
+
+The server calls the factory, so nothing builds an application at import:
+`gunicorn "app.main:create_app()"`.
 
 ## Development Workflow
 

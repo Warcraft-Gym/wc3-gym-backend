@@ -11,7 +11,7 @@ depends on the score system (standard tops at 3, helpstone at 4).
 
 import pytest
 
-from src.service.score_service import ScoreAppService
+from app.service.score_service import ScoreAppService
 
 
 class StubSettings:

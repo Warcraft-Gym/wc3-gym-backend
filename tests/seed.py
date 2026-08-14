@@ -12,19 +12,19 @@ active KOTH event.
 
 from datetime import date, datetime
 
-from src.models.enums import Race
-from src.models.fantasy_bet import DBFantasyBet
-from src.models.fantasy_team import DBFantasyTeam
-from src.models.koth_event import DBKothEvent
-from src.models.map import DBMap
-from src.models.match import DBMatch
-from src.models.player_career_stats import DBPlayerCareerStats
-from src.models.relationships import DBMapSeason, DBTeamSeason, DBUserTeamSeason
-from src.models.season import DBSeason
-from src.models.series import DBSeries
-from src.models.settings import DBSettings
-from src.models.team import DBTeam
-from src.models.user import DBUser
+from app.models.enums import Race
+from app.models.fantasy_bet import DBFantasyBet
+from app.models.fantasy_team import DBFantasyTeam
+from app.models.koth_event import DBKothEvent
+from app.models.map import DBMap
+from app.models.match import DBMatch
+from app.models.player_career_stats import DBPlayerCareerStats
+from app.models.relationships import DBMapSeason, DBTeamSeason, DBUserTeamSeason
+from app.models.season import DBSeason
+from app.models.series import DBSeries
+from app.models.settings import DBSettings
+from app.models.team import DBTeam
+from app.models.user import DBUser
 
 
 def seed_league(session):

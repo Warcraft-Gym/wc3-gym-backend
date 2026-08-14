@@ -28,4 +28,4 @@ USER appuser
 ENV PATH="/app/.venv/bin:$PATH"
 
 # During debugging, this entry point will be overridden
-CMD ["gunicorn", "--bind", "0.0.0.0:5002", "--timeout=1250", "app:app"]
+CMD ["gunicorn", "--bind", "0.0.0.0:5002", "--timeout=1250", "app.main:create_app()"]
