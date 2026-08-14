@@ -3,7 +3,7 @@ import logging
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
-from app.exceptions import DBException, NotFoundException
+from app.exceptions import NotFoundException
 from app.models.team import DBTeam
 from app.schemas.team import Team
 from app.services.base import BaseService
@@ -20,8 +20,6 @@ class TeamService(BaseService):
     def add(self, team: Team):
         with self.get_session() as session:
             new_team = DBTeam.add(session, team.to_db_dict())
-            if not new_team:
-                raise DBException("Team could not be created!")
             return Team.from_dbteam(new_team)
 
     def update(self, team: Team):
@@ -41,22 +39,16 @@ class TeamService(BaseService):
     def addPlayers(self, team_id, season_id, player_ids):
         with self.get_session() as session:
             team = DBTeam.addPlayers(session, team_id, season_id, player_ids)
-            if not team:
-                raise DBException("Team could not be updated!")
             return Team.from_dbteam(team)
 
     def removePlayers(self, team_id, season_id, player_ids):
         with self.get_session() as session:
             team = DBTeam.removePlayers(session, team_id, season_id, player_ids)
-            if not team:
-                raise DBException("Team could not be updated!")
             return Team.from_dbteam(team)
 
     def setCoaches(self, team_id, season_id, coach_ids):
         with self.get_session() as session:
             team = DBTeam.setCoaches(session, team_id, season_id, coach_ids)
-            if not team:
-                raise DBException("Team could not be updated!")
             return Team.from_dbteam(team)
 
     def delete(self, team_id):

@@ -1,6 +1,6 @@
 import logging
 
-from app.exceptions import DBException, NotFoundException
+from app.exceptions import NotFoundException
 from app.models.settings import DBSettings
 from app.schemas.settings import Settings
 from app.services.base import BaseService
@@ -13,8 +13,6 @@ class SettingsService(BaseService):
         """Add a new setting"""
         with self.get_session() as session:
             new_setting = DBSettings.add(session, settings.to_db_dict())
-            if not new_setting:
-                raise DBException("Setting could not be created!")
             return Settings.from_dbsettings(new_setting)
 
     def update(self, settings: Settings):

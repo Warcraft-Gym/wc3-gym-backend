@@ -3,7 +3,7 @@ import logging
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload, noload
 
-from app.exceptions import DBException, NotFoundException
+from app.exceptions import NotFoundException
 from app.models.season import DBSeason
 from app.schemas.season import Season
 from app.services.base import BaseService
@@ -16,9 +16,6 @@ class SeasonService(BaseService):
     def add(self, season: Season):
         with self.get_session() as session:
             new_season = DBSeason.add(session, season.to_db_dict())
-            # Example usage
-            if not new_season:
-                raise DBException("Season could not be created!")
             return Season.from_dbseason(new_season)
 
     def update(self, season: Season):
@@ -82,8 +79,6 @@ class SeasonService(BaseService):
     def addTeams(self, season_id, team_ids):
         with self.get_session() as session:
             season = DBSeason.addTeams(session, season_id, team_ids)
-            if not season:
-                raise DBException("Season could not be updated!")
             return Season.from_dbseason(season)
 
     def search(self, query):
@@ -119,8 +114,6 @@ class SeasonService(BaseService):
     def removeTeams(self, season_id, team_ids):
         with self.get_session() as session:
             season = DBSeason.removeTeams(session, season_id, team_ids)
-            if not season:
-                raise DBException("Season could not be updated!")
             return Season.from_dbseason(season)
 
     def addMaps(self, season_id, map_ids):
@@ -136,15 +129,11 @@ class SeasonService(BaseService):
     def addUserSignup(self, season_id, user_ids):
         with self.get_session() as session:
             season = DBSeason.addUserSignup(session, season_id, user_ids)
-            if not season:
-                raise DBException("Season could not be updated!")
             return Season.from_dbseason(season)
 
     def removeUserSignup(self, season_id, user_ids):
         with self.get_session() as session:
             season = DBSeason.removeUserSignup(session, season_id, user_ids)
-            if not season:
-                raise DBException("Season could not be updated!")
             return Season.from_dbseason(season)
 
     def getSignedUpUsers(self, season_id):

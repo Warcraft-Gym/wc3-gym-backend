@@ -3,7 +3,7 @@ import logging
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
-from app.exceptions import DBException, NotFoundException
+from app.exceptions import NotFoundException
 from app.models.fantasy_bet import DBFantasyBet
 from app.models.series import DBSeries
 from app.schemas.fantasy_bet import FantasyBet
@@ -20,8 +20,6 @@ class FantasyBetService(BaseService):
     def add(self, fantasy_bet: FantasyBet):
         with self.get_session() as session:
             fbet = DBFantasyBet.add(session, fantasy_bet.to_db_dict())
-            if not fbet:
-                raise DBException("FantasyBet could not be created!")
             return FantasyBet.from_dbfantasybet(fbet)
 
     def update(self, fantasy_bet: FantasyBet):

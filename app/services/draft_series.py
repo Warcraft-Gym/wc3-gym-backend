@@ -3,7 +3,7 @@ import logging
 from sqlalchemy import delete, select
 from sqlalchemy.orm import joinedload
 
-from app.exceptions import DBException, NotFoundException
+from app.exceptions import NotFoundException
 from app.models.draft_series import DBDraftSeries
 from app.models.match import DBMatch
 from app.models.relationships import DBUserTeamSeason
@@ -19,8 +19,6 @@ class DraftSeriesService(BaseService):
     def add(self, draft_series: DraftSeries):
         with self.get_session() as session:
             draft_series = DBDraftSeries.add(session, draft_series.to_db_dict())
-            if not draft_series:
-                raise DBException("Draft series could not be created!")
             return DraftSeries.from_db_draft_series(draft_series)
 
     def update(self, draft_series: DraftSeries):

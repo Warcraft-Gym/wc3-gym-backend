@@ -3,7 +3,7 @@ import logging
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
-from app.exceptions import DBException, NotFoundException
+from app.exceptions import NotFoundException
 from app.models.fantasy_team import DBFantasyTeam
 from app.models.relationships import DBFantasyTeamPlayer
 from app.schemas.fantasy_team import FantasyTeam
@@ -17,8 +17,6 @@ class FantasyTeamService(BaseService):
     def add(self, fantasy_team: FantasyTeam):
         with self.get_session() as session:
             fantasy_team = DBFantasyTeam.add(session, fantasy_team.to_db_dict())
-            if not fantasy_team:
-                raise DBException("FantasyTeam could not be created!")
             return FantasyTeam.from_dbfantasyteam(fantasy_team)
 
     def update(self, fantasy_team: FantasyTeam):
@@ -83,15 +81,11 @@ class FantasyTeamService(BaseService):
     def addPlayers(self, team_id, player_ids):
         with self.get_session() as session:
             fteam = DBFantasyTeam.addPlayers(session, team_id, player_ids)
-            if not fteam:
-                raise DBException("Fantasy Team could not be updated!")
             return FantasyTeam.from_dbfantasyteam(fteam)
 
     def removePlayers(self, team_id, player_ids):
         with self.get_session() as session:
             team = DBFantasyTeam.removePlayers(session, team_id, player_ids)
-            if not team:
-                raise DBException("Fantasy Team could not be updated!")
             return FantasyTeam.from_dbfantasyteam(team)
 
     def create_fantasy_team(self, team: FantasyTeam):

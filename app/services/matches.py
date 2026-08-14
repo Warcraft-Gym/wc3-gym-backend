@@ -3,7 +3,7 @@ import logging
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
-from app.exceptions import DBException, NotFoundException
+from app.exceptions import NotFoundException
 from app.models.match import DBMatch
 from app.schemas.match import Match
 from app.services.base import BaseService
@@ -16,9 +16,6 @@ class MatchService(BaseService):
     def add(self, match: Match):
         with self.get_session() as session:
             match = DBMatch.add(session, match.to_db_dict())
-            if not match:
-                logger.error("Match could not be created!")
-                raise DBException("Match could not be created!")
             return Match.from_dbmatch(match)
 
     def update(self, match_id, match: Match):

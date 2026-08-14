@@ -3,7 +3,7 @@ import logging
 from sqlalchemy import delete, select
 from sqlalchemy.orm import joinedload
 
-from app.exceptions import DBException, NotFoundException
+from app.exceptions import NotFoundException
 from app.models.koth_event import DBKothEvent
 from app.models.koth_match import DBKothMatch
 from app.models.koth_match_participant import DBKothMatchParticipant
@@ -26,8 +26,6 @@ class KothService(BaseService):
     def add_event(self, event: KothEvent):
         with self.get_session() as session:
             db_event = DBKothEvent.add(session, event.to_db_dict())
-            if not db_event:
-                raise DBException("KOTH Event could not be created!")
             return KothEvent.from_db_event(db_event)
 
     def create_event(self, event: KothEvent):
@@ -112,8 +110,6 @@ class KothService(BaseService):
     def add_signup(self, signup: KothSignup):
         with self.get_session() as session:
             db_signup = DBKothSignup.add(session, signup.to_db_dict())
-            if not db_signup:
-                raise DBException("KOTH Signup could not be created!")
             return KothSignup.from_db_signup(db_signup)
 
     def update_signup(self, signup: KothSignup):
@@ -329,8 +325,6 @@ class KothService(BaseService):
     def add_match(self, match: KothMatch):
         with self.get_session() as session:
             db_match = DBKothMatch.add(session, match.to_db_dict())
-            if not db_match:
-                raise DBException("KOTH Match could not be created!")
             return KothMatch.from_db_match(db_match)
 
     def update_match(self, match_id: int, match: KothMatch):
@@ -480,8 +474,6 @@ class KothService(BaseService):
             db_participant = DBKothMatchParticipant.add(
                 session, participant.to_db_dict()
             )
-            if not db_participant:
-                raise DBException("KOTH Match Participant could not be created!")
             return KothMatchParticipant.from_db_participant(db_participant)
 
     def delete_participants_by_match(self, match_id):

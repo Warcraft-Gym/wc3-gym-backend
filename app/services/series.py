@@ -3,7 +3,7 @@ import logging
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
-from app.exceptions import DBException, NotFoundException
+from app.exceptions import NotFoundException
 from app.models.match import DBMatch
 from app.models.relationships import DBUserTeamSeason
 from app.models.series import DBSeries
@@ -24,8 +24,6 @@ class SeriesService(BaseService):
     def add(self, series: Series):
         with self.get_session() as session:
             series = DBSeries.add(session, series.to_db_dict())
-            if not series:
-                raise DBException("Series could not be created!")
             return Series.from_dbseries(series)
 
     def update(self, series: Series):

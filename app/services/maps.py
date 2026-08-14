@@ -1,6 +1,6 @@
 import logging
 
-from app.exceptions import DBException, NotFoundException
+from app.exceptions import NotFoundException
 from app.models.map import DBMap
 from app.schemas.map import Map
 from app.services.base import BaseService
@@ -13,8 +13,6 @@ class MapService(BaseService):
     def add(self, map: Map):
         with self.get_session() as session:
             map = DBMap.add(session, map.to_dict())
-            if not map:
-                raise DBException("Map could not be created!")
             return Map.from_dbmap(map)
 
     def update(self, map: Map):

@@ -3,7 +3,7 @@ import logging
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
-from app.exceptions import DBException, NotFoundException
+from app.exceptions import NotFoundException
 from app.models.user import DBUser
 from app.models.w3c_stats import DBW3CStats
 from app.schemas.user import User
@@ -23,8 +23,6 @@ class UserService(BaseService):
     def add(self, user: User):
         with self.get_session() as session:
             user = DBUser.add(session, user.to_db_dict())
-            if not user:
-                raise DBException("User could not be created!")
             return User.from_dbuser(user)
 
     def update(self, user: User):
@@ -110,8 +108,6 @@ class UserService(BaseService):
     def createW3CStats(self, w3c_stats: W3CStats):
         with self.get_session() as session:
             stats = DBW3CStats.add(session, w3c_stats.to_db_dict())
-            if not stats:
-                raise DBException("W3CStats could not be created")
             return W3CStats.from_dbw3cstats(stats)
 
     def create_user(self, user: User):
@@ -213,7 +209,5 @@ class UserService(BaseService):
             raise Exception("Seasonstats not defined")
         with self.get_session() as session:
             stats = DBUser.updateUserTeamSeasonStats(session, season_stats)
-            if not stats:
-                raise DBException("User Team Season Stats could not be updated")
             UserTeamSeasonStats.from_db_user_team_season(stats)
         return self.get_user(season_stats.user_id)
