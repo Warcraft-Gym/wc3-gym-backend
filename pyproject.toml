@@ -1,5 +1,7 @@
 [project]
-name = "gnl-backend"
+# The name matches the app/ directory, so hatchling ships that directory as
+# the package with no further build config.
+name = "app"
 version = "1.0.0"
 description = "Flask REST API for the GNL (Gym Newbie League) esports platform"
 requires-python = ">=3.12"
@@ -22,16 +24,15 @@ dependencies = [
     "pydantic>=2,<3",
 ]
 
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
 [dependency-groups]
 dev = [
     "pytest",
     "ruff>=0.16.3",
 ]
-
-[tool.uv]
-# An application, not an installable package: uv manages the environment
-# and never builds or installs the project itself.
-package = false
 
 [tool.ruff.lint]
 # Findings in existing code, suppressed rather than fixed in the ruff
@@ -48,6 +49,7 @@ ignore = [
 ]
 
 [tool.pytest]
-# Not a default: the pytest console script does not put the repo root on
-# sys.path, and the tests import app. python -m pytest works without this.
-pythonpath = ["."]
+# Collect from tests/ only. A non-empty table here also anchors pytest's
+# rootdir to this file, so a nested worktree never inherits the config of a
+# checkout above it.
+testpaths = ["tests"]

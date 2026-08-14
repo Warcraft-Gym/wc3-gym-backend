@@ -14,11 +14,13 @@ ENV UV_PYTHON_DOWNLOADS=0
 
 WORKDIR /app
 
-# Install dependencies before the code so this layer caches across code changes
+# Install dependencies before the code so this layer caches across code changes.
+# The project itself installs in the second sync, after the source is copied.
 COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-dev
+RUN uv sync --frozen --no-dev --no-install-project
 
 COPY . /app
+RUN uv sync --frozen --no-dev
 
 # Creates a non-root user with an explicit UID and adds permission to access the /app folder
 RUN adduser -u 5678 --disabled-password --gecos "" appuser && chown -R appuser /app
