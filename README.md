@@ -174,6 +174,14 @@ Read what autogenerate wrote before committing it. It compares the models agains
 
 **A database that already holds the tables** — the production one, and any development database made before this repository had migrations — needs no work. The first revision sees the tables, creates nothing and records itself, so `alembic upgrade head` is safe to run against it.
 
+**The migration step belongs to the container, so run one backend container per database.** The command starts `alembic upgrade head` and then the server, which is once per container however many workers the server runs. Two containers against the same database would run it twice at the same time, and Alembic does not lock MySQL. To serve from more than one container, run the migration as its own step first and give the containers the server command alone:
+
+```bash
+docker run --rm -e DB_URL="$DB_URL" gnl-backend:local alembic upgrade head
+docker run -d -e DB_URL="$DB_URL" gnl-backend:local \
+    uvicorn --factory app.main:create_app --host 0.0.0.0 --port 5002
+```
+
 ## Troubleshooting
 
 ### Backend Can't Connect to MySQL

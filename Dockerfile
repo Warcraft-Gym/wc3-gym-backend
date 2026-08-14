@@ -26,11 +26,13 @@ RUN uv sync --frozen --no-dev
 RUN adduser -u 5678 --disabled-password --gecos "" appuser && chown -R appuser /app
 USER appuser
 
-# The project environment on PATH lets gunicorn run without uv at runtime
+# The project environment on PATH lets the server run without uv at runtime
 ENV PATH="/app/.venv/bin:$PATH"
 
 # The migrations run one time per container, before the server, so the
-# application itself never changes the database structure.
+# application itself never changes the database structure. That holds for
+# any number of workers in this container, and for one container per
+# database. See the migration section of README.md to serve from more.
 #
 # During debugging, this entry point will be overridden. uvicorn has no
 # worker timeout, so the long import/export requests need no --timeout.
