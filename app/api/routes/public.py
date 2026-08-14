@@ -7,6 +7,7 @@ from typing import Annotated
 
 import requests
 from fastapi import APIRouter, Body, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 
 from app.api.deps import (
@@ -380,11 +381,41 @@ async def update_player_series(
     files = {}
     if content_type and "multipart/form-data" in content_type:
         for key, value in (await request.form()).multi_items():
-            target = files if hasattr(value, "filename") else data
-            target.setdefault(key, value)
+            if hasattr(value, "filename"):
+                if key not in files:
+                    await value.seek(0)
+                    files[key] = {
+                        "filename": value.filename,
+                        "data": await value.read(),
+                        "content_type": value.content_type,
+                    }
+            else:
+                data.setdefault(key, value)
     else:
         data = await request.json() or {}
 
+    # Only the request parsing above needs the event loop; the rest of the
+    # handler blocks on the DB and the Discord webhook, so it runs in the
+    # thread pool like every sync route, bounded by the same limiter.
+    return await run_in_threadpool(
+        _update_player_series,
+        series_id,
+        content_type,
+        data,
+        files,
+        user_service,
+        series_service,
+    )
+
+
+def _update_player_series(
+    series_id,
+    content_type,
+    data,
+    files,
+    user_service,
+    series_service,
+):
     token = data.get("token")
     if not token:
         return JSONResponse({"error": "missing token"}, status_code=400)
@@ -429,7 +460,7 @@ async def update_player_series(
     logger.info(f"Form data keys: {list(data.keys())}")
     logger.info(f"Files keys: {list(files.keys())}")
     logger.info(
-        f"Files details: {[(k, v.filename if v.filename else 'no filename') for k, v in files.items()]}"
+        f"Files details: {[(k, v['filename'] if v['filename'] else 'no filename') for k, v in files.items()]}"
     )
 
     def allowed_file(filename):
@@ -438,21 +469,18 @@ async def update_player_series(
         )
 
     for file_key in ["game1", "game2", "game3"]:
-        if file_key in files and files[file_key].filename:
+        if file_key in files and files[file_key]["filename"]:
             file = files[file_key]
-            logger.info(f"Processing file {file_key}: {file.filename}")
-            if file and allowed_file(file.filename):
-                # Read file data for Discord transmission
-                await file.seek(0)  # Reset file pointer
-                file_data = await file.read()
+            logger.info(f"Processing file {file_key}: {file['filename']}")
+            if allowed_file(file["filename"]):
                 uploaded_files[file_key] = {
-                    "filename": secure_filename(file.filename),
-                    "data": file_data,
-                    "content_type": file.content_type or "application/octet-stream",
+                    "filename": secure_filename(file["filename"]),
+                    "data": file["data"],
+                    "content_type": file["content_type"] or "application/octet-stream",
                 }
-                logger.info(f"Prepared replay file for Discord: {file.filename}")
+                logger.info(f"Prepared replay file for Discord: {file['filename']}")
             else:
-                logger.warning(f"File {file_key} failed validation: {file.filename}")
+                logger.warning(f"File {file_key} failed validation: {file['filename']}")
                 return JSONResponse(
                     {
                         "error": f"Invalid file type for {file_key}. Only .w3g files are allowed."
@@ -769,10 +797,14 @@ def create_fantasy_bet(
         # Get or create user based on discord info
 
         user = None
-        query = QueryUtil.parseQuery(f"discordId == {entry.get('discord_id')}")
-        existing_users = user_service.search(query)
-        if existing_users and len(existing_users) > 0:
-            user = existing_users[0]
+        try:
+            query = QueryUtil.parseQuery(f"discordId == {entry.get('discord_id')}")
+            existing_users = user_service.search(query)
+            if existing_users and len(existing_users) > 0:
+                user = existing_users[0]
+        except Exception as e:
+            logger.error(f"Error searching for user: {e}")
+            return JSONResponse({"error": "user_lookup_failed"}, status_code=500)
 
         if not user:
             return JSONResponse(
@@ -828,10 +860,14 @@ def update_fantasy_bet(
         # Get user based on discord info
 
         user = None
-        query = QueryUtil.parseQuery(f"discordId == {entry.get('discord_id')}")
-        existing_users = user_service.search(query)
-        if existing_users and len(existing_users) > 0:
-            user = existing_users[0]
+        try:
+            query = QueryUtil.parseQuery(f"discordId == {entry.get('discord_id')}")
+            existing_users = user_service.search(query)
+            if existing_users and len(existing_users) > 0:
+                user = existing_users[0]
+        except Exception as e:
+            logger.error(f"Error searching for user: {e}")
+            return JSONResponse({"error": "user_lookup_failed"}, status_code=500)
 
         if not user:
             return JSONResponse({"error": "user_not_found"}, status_code=404)
@@ -890,10 +926,14 @@ def delete_fantasy_bet(
     # Get user based on discord info
 
     user = None
-    query = QueryUtil.parseQuery(f"discordId == {entry.get('discord_id')}")
-    existing_users = user_service.search(query)
-    if existing_users and len(existing_users) > 0:
-        user = existing_users[0]
+    try:
+        query = QueryUtil.parseQuery(f"discordId == {entry.get('discord_id')}")
+        existing_users = user_service.search(query)
+        if existing_users and len(existing_users) > 0:
+            user = existing_users[0]
+    except Exception as e:
+        logger.error(f"Error searching for user: {e}")
+        return JSONResponse({"error": "user_lookup_failed"}, status_code=500)
 
     if not user:
         return JSONResponse({"error": "user_not_found"}, status_code=404)
