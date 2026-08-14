@@ -21,9 +21,9 @@ from app.api.deps import (
     require_admin,
 )
 from app.exceptions import NotFoundException
+from app.models.map import MapCreate, MapUpdate
 from app.schemas.fantasy_bet import FantasyBet
 from app.schemas.fantasy_team import FantasyTeam
-from app.schemas.map import Map
 from app.schemas.match import Match
 from app.schemas.season import Season
 from app.schemas.series import Series
@@ -138,9 +138,9 @@ def _process_import(
                     existing_maps = map_service.search(query)
                     if existing_maps:
                         map_obj = existing_maps[0]
-                        map_service.update_map(map_obj.id, Map(map_data))
+                        map_service.update_map(map_obj.id, MapUpdate(**map_data))
                     else:
-                        map_obj = map_service.create_map(Map(map_data))
+                        map_obj = map_service.create_map(MapCreate(**map_data))
 
                     if old_map_id:
                         map_id_mapping[old_map_id] = map_obj.id

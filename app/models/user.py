@@ -10,7 +10,7 @@ from app.models.relationships import DBUserTeamSeason
 if TYPE_CHECKING:
     from app.models.player_career_stats import DBPlayerCareerStats
     from app.models.relationships import DBFantasyTeamPlayer, DBUserSeasonSignup
-    from app.models.w3c_stats import DBW3CStats
+    from app.models.w3c_stats import W3CStats
 
 
 class DBUser(DBModel, table=True):
@@ -28,7 +28,7 @@ class DBUser(DBModel, table=True):
     team_seasons: list["DBUserTeamSeason"] = Relationship(
         back_populates="user", sa_relationship_kwargs={"cascade": "all, delete"}
     )
-    w3c_stats: list["DBW3CStats"] = Relationship(
+    w3c_stats: list["W3CStats"] = Relationship(
         back_populates="user",
         sa_relationship_kwargs={"cascade": "all, delete-orphan"},
     )

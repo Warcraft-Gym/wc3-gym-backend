@@ -16,13 +16,13 @@ from app.models.enums import Race
 from app.models.fantasy_bet import DBFantasyBet
 from app.models.fantasy_team import DBFantasyTeam
 from app.models.koth_event import DBKothEvent
-from app.models.map import DBMap
+from app.models.map import Map
 from app.models.match import DBMatch
 from app.models.player_career_stats import DBPlayerCareerStats
 from app.models.relationships import DBMapSeason, DBTeamSeason, DBUserTeamSeason
 from app.models.season import DBSeason
 from app.models.series import DBSeries
-from app.models.settings import DBSettings
+from app.models.settings import Settings
 from app.models.team import DBTeam
 from app.models.user import DBUser
 
@@ -78,7 +78,7 @@ def seed_league(session):
         ),
     ]
 
-    game_map = DBMap(name="Concealed Hill", shortname="CH")
+    game_map = Map(name="Concealed Hill", shortname="CH")
 
     session.add_all([season, team_a, team_b, game_map, *players])
     session.flush()
@@ -155,10 +155,10 @@ def seed_league(session):
                 games_lost=1,
             ),
             DBPlayerCareerStats(user_id=players[1].id, player_name="P2"),
-            DBSettings(
+            Settings(
                 key="score_system", value="standard", description="Scoring system"
             ),
-            DBSettings(key="KOTH_NIGHTBOT_TOKEN", value="test-nightbot-token"),
+            Settings(key="KOTH_NIGHTBOT_TOKEN", value="test-nightbot-token"),
             DBKothEvent(
                 name="KOTH 1", event_date=datetime(2026, 1, 10, 20, 0), is_active=True
             ),

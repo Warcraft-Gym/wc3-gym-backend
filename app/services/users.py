@@ -5,10 +5,9 @@ from sqlalchemy.orm import joinedload
 
 from app.exceptions import NotFoundException
 from app.models.user import DBUser
-from app.models.w3c_stats import DBW3CStats
+from app.models.w3c_stats import W3CStats, W3CStatsCreate, W3CStatsPublic
 from app.schemas.user import User
 from app.schemas.user_team_season_stats import UserTeamSeasonStats
-from app.schemas.w3c_stats import W3CStats
 from app.services.base import BaseService
 from app.services.w3c import W3CService
 from app.utils.query_util import QueryUtil
@@ -105,10 +104,21 @@ class UserService(BaseService):
                 result.append(User.from_dbuser(user))
             return result
 
-    def createW3CStats(self, w3c_stats: W3CStats):
+    def createW3CStats(self, w3c_stats: W3CStatsCreate, user_id):
         with self.get_session() as session:
-            stats = DBW3CStats.add(session, w3c_stats.to_db_dict())
-            return W3CStats.from_dbw3cstats(stats)
+            stats = W3CStats.add(
+                session, {**w3c_stats.model_dump(), "user_id": user_id}
+            )
+            return W3CStatsPublic.model_validate(stats)
+
+    def replaceW3CStats(self, stats_id, user_id, w3c_stats: W3CStatsCreate):
+        with self.get_session() as session:
+            stats = W3CStats.update(
+                session, stats_id, **w3c_stats.model_dump(), user_id=user_id
+            )
+            if not stats:
+                raise NotFoundException("W3CStats not found")
+            return W3CStatsPublic.model_validate(stats)
 
     def create_user(self, user: User):
         # remove id, db generates the id
@@ -177,25 +187,18 @@ class UserService(BaseService):
                     f"Failed to fetch previous season W3C stats for {user.battleTag}: {e}"
                 )
 
-        if all_stats:
-            for s in all_stats:
-                exists = False
-                for u_s in user.w3c_stats:
-                    # Match by both race AND season to correctly distinguish per-season records
-                    if u_s.race == s.race and u_s.wc3_season == s.wc3_season:
-                        exists = True
-                        s.id = u_s.id
-                        s.user_id = u_s.user_id
-                        with self.get_session() as session:
-                            db_stats = DBW3CStats.update(
-                                session, s.id, **s.to_db_dict()
-                            )
-                            if not db_stats:
-                                raise NotFoundException("W3CStats not found")
-                            W3CStats.from_dbw3cstats(db_stats)
-                if not exists:
-                    s.user_id = user.id
-                    self.createW3CStats(s)
+        for s in all_stats:
+            # Match by both race AND season to correctly distinguish
+            # per-season records
+            existing = [
+                u_s
+                for u_s in user.w3c_stats
+                if u_s.race == s.race and u_s.wc3_season == s.wc3_season
+            ]
+            for u_s in existing:
+                self.replaceW3CStats(u_s.id, u_s.user_id, s)
+            if not existing:
+                self.createW3CStats(s, user.id)
 
     def updateW3CStats_ById(self, user_id):
         user = self.get(user_id)

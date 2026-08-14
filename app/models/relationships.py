@@ -8,7 +8,7 @@ from app.models.base import DBModel
 
 if TYPE_CHECKING:
     from app.models.fantasy_team import DBFantasyTeam
-    from app.models.map import DBMap
+    from app.models.map import Map
     from app.models.season import DBSeason
     from app.models.team import DBTeam
     from app.models.user import DBUser
@@ -89,7 +89,7 @@ class DBMapSeason(DBModel, table=True):
     map_id: int = Field(foreign_key="maps.id", primary_key=True)
     season_id: int = Field(foreign_key="seasons.id", primary_key=True)
     season: "DBSeason" = Relationship(back_populates="maps")
-    map: "DBMap" = Relationship(back_populates="seasons")
+    map: "Map" = Relationship(back_populates="seasons")
 
 
 class DBFantasyTeamPlayer(DBModel, table=True):

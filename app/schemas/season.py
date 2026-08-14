@@ -1,7 +1,7 @@
 from typing import TYPE_CHECKING, Annotated
 
+from app.models.map import MapPublic
 from app.schemas.base import APISchema, EmptyToNone, IsoDate, LenientDate, NumToStr
-from app.schemas.map import Map
 
 if TYPE_CHECKING:
     from app.schemas.user import User
@@ -26,7 +26,7 @@ class Season(APISchema):
     pick_ban: Annotated[str | None, NumToStr] = None
     start_date: Annotated[IsoDate | None, LenientDate] = None
     end_date: Annotated[IsoDate | None, LenientDate] = None
-    maps: Annotated[list[Map] | None, EmptyToNone] = None
+    maps: Annotated[list[MapPublic] | None, EmptyToNone] = None
     discordRole: Annotated[str | None, NumToStr] = None
     user_signup: Annotated[list["User"] | None, EmptyToNone] = None
 
@@ -47,7 +47,7 @@ class Season(APISchema):
             start_date=season.start_date,
             end_date=season.end_date,
             maps=[
-                Map.from_dbmap(map_season.map)
+                MapPublic.model_validate(map_season.map)
                 for map_season in (season.maps or [])
                 if map_season and map_season.map
             ],

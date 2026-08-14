@@ -5,7 +5,7 @@ from sqlmodel import Field, Relationship
 from app.models.base import DBModel
 
 if TYPE_CHECKING:
-    from app.models.map import DBMap
+    from app.models.map import Map
     from app.models.season import DBSeason
     from app.models.team import DBTeam
 
@@ -31,7 +31,7 @@ class DBMatch(DBModel, table=True):
     season: "DBSeason" = Relationship(
         sa_relationship_kwargs={"foreign_keys": "[DBMatch.season_id]"}
     )
-    fixed_map: Optional["DBMap"] = Relationship(
+    fixed_map: Optional["Map"] = Relationship(
         sa_relationship_kwargs={"foreign_keys": "[DBMatch.fixed_map_id]"}
     )
 

@@ -1,90 +1,92 @@
 import logging
 
 from app.exceptions import NotFoundException
-from app.models.settings import DBSettings
-from app.schemas.settings import Settings
+from app.models.settings import (
+    Settings,
+    SettingsCreate,
+    SettingsPublic,
+    SettingsUpdate,
+)
 from app.services.base import BaseService
 
 logger = logging.getLogger(__name__)
 
 
 class SettingsService(BaseService):
-    def add(self, settings: Settings):
+    def add(self, settings: SettingsCreate):
         """Add a new setting"""
         with self.get_session() as session:
-            new_setting = DBSettings.add(session, settings.to_db_dict())
-            return Settings.from_dbsettings(new_setting)
+            new_setting = Settings.add(session, settings.model_dump())
+            return SettingsPublic.model_validate(new_setting)
 
-    def update(self, settings: Settings):
+    def update(self, setting_id, settings: SettingsUpdate):
         """Update a setting"""
         with self.get_session() as session:
-            updated_setting = DBSettings.update(
-                session, settings.id, **settings.to_db_dict()
+            updated_setting = Settings.update(
+                session, setting_id, **settings.model_dump(exclude_unset=True)
             )
             if not updated_setting:
                 raise NotFoundException("Setting not found")
-            return Settings.from_dbsettings(updated_setting)
+            return SettingsPublic.model_validate(updated_setting)
 
     def delete(self, setting_id):
         """Delete a setting by id"""
         with self.get_session() as session:
-            DBSettings.delete(session, setting_id)
+            Settings.delete(session, setting_id)
 
     def get(self, setting_id):
         """Get a setting by id"""
         with self.get_session() as session:
-            setting = session.get(DBSettings, setting_id)
+            setting = session.get(Settings, setting_id)
             if not setting:
                 raise NotFoundException(f"Setting with id '{setting_id}' not found")
-            return Settings.from_dbsettings(setting)
+            return SettingsPublic.model_validate(setting)
 
     def getAll(self):
         """Get all settings"""
         with self.get_session() as session:
-            result = []
-            settings = DBSettings.getAll(session)
-            for setting in settings:
-                result.append(Settings.from_dbsettings(setting))
-            return result
+            return [
+                SettingsPublic.model_validate(setting)
+                for setting in Settings.getAll(session)
+            ]
 
     def get_settings_dict(self):
         """Get all settings as a dictionary"""
         with self.get_session() as session:
-            return DBSettings.get_all_as_dict(session)
+            return Settings.get_all_as_dict(session)
 
     def get_by_key(self, key):
         """Get a setting by key (helper method for API)"""
         with self.get_session() as session:
-            setting = DBSettings.get_by_key(session, key)
+            setting = Settings.get_by_key(session, key)
             if not setting:
                 raise NotFoundException(f"Setting with key '{key}' not found")
-            return Settings.from_dbsettings(setting)
+            return SettingsPublic.model_validate(setting)
 
     def get_setting(self, key):
         """Get a single setting by key"""
-        setting_dto = self.get_by_key(key)
-        return setting_dto.to_dict() if setting_dto else None
+        setting = self.get_by_key(key)
+        return setting.to_dict() if setting else None
 
     def get_all_settings(self):
         """Get all settings"""
-        settings_dtos = self.getAll()
-        return [s.to_dict() for s in settings_dtos]
+        return [setting.to_dict() for setting in self.getAll()]
 
     def update_setting(self, key, value, description=None):
         """Update or create a single setting"""
         try:
             # Try to get existing setting by key
-            existing_dto = self.get_by_key(key)
-            # Update it
-            settings_dto = Settings(
-                id=existing_dto.id, key=key, value=value, description=description
+            existing = self.get_by_key(key)
+            updated = self.update(
+                existing.id,
+                SettingsUpdate(key=key, value=value, description=description),
             )
-            updated = self.update(settings_dto)
             return updated.to_dict()
         except Exception:
             # If not found, create new setting
-            settings_dto = Settings(key=key, value=value, description=description)
-            created = self.add(settings_dto)
+            created = self.add(
+                SettingsCreate(key=key, value=value, description=description)
+            )
             return created.to_dict()
 
     def update_settings(self, settings_dict):
@@ -98,5 +100,5 @@ class SettingsService(BaseService):
     def delete_setting(self, key):
         """Delete a setting by key"""
         # Get setting by key first to find its ID
-        setting_dto = self.get_by_key(key)
-        self.delete(setting_dto.id)
+        setting = self.get_by_key(key)
+        self.delete(setting.id)

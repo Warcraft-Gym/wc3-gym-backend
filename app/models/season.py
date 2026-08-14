@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from sqlmodel import Field, Relationship
 
 from app.models.base import DBModel
-from app.models.map import DBMap
+from app.models.map import Map
 from app.models.relationships import DBMapSeason, DBTeamSeason, DBUserSeasonSignup
 from app.models.team import DBTeam
 from app.models.user import DBUser
@@ -87,7 +87,7 @@ class DBSeason(DBModel, table=True):
         if not season:
             raise Exception(f"Season not found by id: {obj_id}")
         for map_id in map_ids:
-            map = session.get(DBMap, map_id)
+            map = session.get(Map, map_id)
             if not map:
                 raise Exception(f"Map not found by id: {map_id}")
             already_exists = (
@@ -106,7 +106,7 @@ class DBSeason(DBModel, table=True):
         if not season:
             raise Exception(f"Season not found by id: {obj_id}")
         for map_id in map_ids:
-            map = session.get(DBMap, map_id)
+            map = session.get(Map, map_id)
             if not map:
                 raise Exception(f"Map not found by id: {map_id}")
             map_season = session.get(

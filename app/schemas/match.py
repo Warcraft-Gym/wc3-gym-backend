@@ -1,7 +1,7 @@
 from typing import Annotated
 
+from app.models.map import MapPublic
 from app.schemas.base import APISchema, NumToStr
-from app.schemas.map import Map
 from app.schemas.season import Season
 from app.schemas.team import TeamReduced
 
@@ -29,7 +29,7 @@ class Match(APISchema):
     # date_frame receives numeric cells from the xlsx import.
     date_frame: Annotated[str | None, NumToStr] = None
     fixed_map_id: int | None = None
-    fixed_map: Map | None = None
+    fixed_map: MapPublic | None = None
     team1_score: int | None = None
     team2_score: int | None = None
 
@@ -49,7 +49,9 @@ class Match(APISchema):
             playday=match.playday,
             date_frame=match.date_frame,
             fixed_map_id=match.fixed_map_id,
-            fixed_map=Map.from_dbmap(match.fixed_map) if match.fixed_map else None,
+            fixed_map=MapPublic.model_validate(match.fixed_map)
+            if match.fixed_map
+            else None,
             team1_score=match.team1_score,
             team2_score=match.team2_score,
         )

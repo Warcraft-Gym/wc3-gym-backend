@@ -1,10 +1,10 @@
 from typing import Annotated
 
 from app.models.enums import Race
+from app.models.w3c_stats import W3CStatsPublic
 from app.schemas.base import APISchema, NoneToList, NumToStr
 from app.schemas.season import Season
 from app.schemas.user_team_season_stats import UserTeamSeasonStats
-from app.schemas.w3c_stats import W3CStats
 
 DB_FIELDS = {
     "id",
@@ -30,7 +30,7 @@ class User(APISchema):
     race: Race | str | None = None
     mmr: int | None = None
     country: Annotated[str | None, NumToStr] = None
-    w3c_stats: Annotated[list[W3CStats], NoneToList] = []
+    w3c_stats: Annotated[list[W3CStatsPublic], NoneToList] = []
     gnl_stats: Annotated[list[UserTeamSeasonStats], NoneToList] = []
     fantasy_tier: int | None = None
     signup_seasons: Annotated[list[Season], NoneToList] = []
@@ -53,7 +53,7 @@ class User(APISchema):
             mmr=user.mmr,
             country=user.country,
             w3c_stats=[
-                W3CStats.from_dbw3cstats(stat) for stat in (user.w3c_stats or [])
+                W3CStatsPublic.model_validate(stat) for stat in (user.w3c_stats or [])
             ],
             gnl_stats=[
                 UserTeamSeasonStats.from_db_user_team_season(stat)

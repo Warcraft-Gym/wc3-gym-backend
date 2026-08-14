@@ -566,12 +566,12 @@ class KothService(BaseService):
             return []
 
         stats = []
-        from app.schemas.w3c_stats import W3CStats
+        from app.models.w3c_stats import W3CStatsCreate
 
         for gmode_stats in result:
             if gmode_stats.get("gameMode") and gmode_stats.get("gameMode") == 1:
                 stats.append(
-                    W3CStats(
+                    W3CStatsCreate(
                         wc3_season=gmode_stats.get("season"),
                         wins=gmode_stats.get("wins"),
                         losses=gmode_stats.get("losses"),
