@@ -101,6 +101,23 @@ The project uses VS Code tasks for Docker builds and runs. The configuration is 
 
 ## Running the Application
 
+### Using just (Recommended)
+
+[just](https://github.com/casey/just) is a command runner. It reads recipes from the `justfile` in the repository root. The dev dependencies install it (PyPI package `rust-just`), so after `uv sync` no separate install is needed — run recipes with `uv run just`:
+
+```bash
+uv run just          # list the recipes
+uv run just up       # start MySQL and the backend in Docker
+uv run just status   # show the gnl containers
+uv run just down     # stop the containers
+```
+
+`up` covers the full MySQL setup from above: on first use it creates the `gnl-net` Docker network and the `gnl-mysql` container with a named volume (`gnl-mysql-data`), so the database survives `down` and container removal. It then builds the image `gnl-backend:local` from the working tree and starts it on port 5002. Run it again after a code change to rebuild and restart the backend.
+
+The container starts with development-only values (`ADMIN_TOKEN=devtoken`, `JWT_SECRET_KEY=devsecret`). Log in with `devtoken`. Do not use these values outside local development. The backend accepts connections about 30 seconds after `up` returns.
+
+If `just` is installed system-wide, the `uv run` prefix is optional.
+
 ### Using VS Code Docker Tasks
 
 1. Open the **Run and Debug** panel (Ctrl+Shift+D)
