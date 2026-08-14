@@ -68,10 +68,7 @@ def update_setting(
 @router.delete("/config/settings/{key}", dependencies=[Depends(require_admin)])
 def delete_setting(key: str, service: SettingsServiceDep) -> JSONResponse:
     """Delete a specific setting by key."""
-    deleted = service.delete_setting(key)
-    if not deleted:
-        return JSONResponse({"error": f"Setting '{key}' not found"}, status_code=404)
-
+    service.delete_setting(key)
     return JSONResponse(
         {"message": f"Setting '{key}' deleted successfully"}, status_code=200
     )
