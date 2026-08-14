@@ -19,15 +19,3 @@ class Map(APISchema):
             shortname=map.shortname,
             image=map.image,
         )
-
-    @staticmethod
-    def schema():
-        return {
-            "type": "object",
-            "properties": {
-                "name": {"type": "string"},
-                "shortname": {"type": "string"},
-                "image": {"type": "string"},
-            },
-            "required": ["name", "shortname"],
-        }

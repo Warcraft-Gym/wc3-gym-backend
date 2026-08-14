@@ -49,20 +49,3 @@ class W3CStats(APISchema):
             league=stats.league,
             user_id=stats.user_id,
         )
-
-    @staticmethod
-    def schema():
-        return {
-            "type": "object",
-            "properties": {
-                "wc3_season": {"type": "integer", "description": "Season Number"},
-                "wins": {"type": "integer", "description": "Number of wins"},
-                "losses": {"type": "integer", "description": "Number of losses"},
-                "games": {"type": "intger", "description": "Number of games"},
-                "mmr": {"type": "integer", "description": "User's MMR"},
-                "winrate": {"type": "float", "description": "Percentage of won games"},
-                "race": {"type": "string", "description": "Race of the stats"},
-                "league": {"type": "integer", "description": "Number of the league"},
-                "user_id": {"type": "string", "description": "User's Id"},
-            },
-        }

@@ -36,22 +36,3 @@ class UserTeamSeasonStats(APISchema):
             season=Season.from_dbseason_reduced(uts.season) if uts.season else None,
             matchup_history=uts.matchup_history if uts.matchup_history else [],
         )
-
-    @staticmethod
-    def schema():
-        from app.schemas.season import Season
-        from app.schemas.team import Team
-
-        return {
-            "type": "object",
-            "properties": {
-                "user_id": {"type": "integer"},
-                "team_id": {"type": "integer"},
-                "team": {"type": Team},
-                "games": {"type": "integer"},
-                "wins": {"type": "integer"},
-                "losses": {"type": "integer"},
-                "season_id": {"type": "integer"},
-                "season": {"type": Season},
-            },
-        }

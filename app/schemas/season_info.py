@@ -28,18 +28,3 @@ class SeasonInfo(APISchema):
             if season_info.season
             else None,
         )
-
-    @staticmethod
-    def schema():
-        from app.models.season import DBSeason
-
-        return {
-            "type": "object",
-            "properties": {
-                "season_id": {"type": "integer"},
-                "final_score": {"type": "integer"},
-                "points_available": {"type": "integer"},
-                "points_against": {"type": "integer"},
-                "season": {"type": DBSeason},
-            },
-        }

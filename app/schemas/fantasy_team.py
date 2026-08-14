@@ -84,22 +84,3 @@ class FantasyTeam(APISchema):
             bet_points=fteam.bet_points,
             total_points=fteam.total_points,
         )
-
-    @staticmethod
-    def schema():
-        return {
-            "type": "object",
-            "properties": {
-                "season_id": {"type": "integer"},
-                "captain_id": {"type": "integer"},
-                "drafted_team_id": {"type": "integer"},
-                "drafted_race": {"type": "integer"},
-                "player_points": {"type": "integer"},
-                "bench_points": {"type": "integer"},
-                "team_points": {"type": "integer"},
-                "race_points": {"type": "integer"},
-                "bet_points": {"type": "integer"},
-                "total_points": {"type": "integer"},
-            },
-            "required": ["season_id", "captain_id", "drafted_team_id", "drafted_race"],
-        }

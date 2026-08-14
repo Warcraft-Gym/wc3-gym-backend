@@ -86,29 +86,3 @@ class PlayerCareerStats(APISchema):
             seasons_played=stats.seasons_played,
             avg_series_per_season=stats.avg_series_per_season,
         )
-
-    @staticmethod
-    def schema():
-        return {
-            "type": "object",
-            "properties": {
-                "user_id": {"type": "integer"},
-                "player_name": {"type": "string"},
-                "historical_rating": {"type": "integer"},
-                "historical_series_won": {"type": "integer"},
-                "historical_series_lost": {"type": "integer"},
-                "historical_games_won": {"type": "integer"},
-                "historical_games_lost": {"type": "integer"},
-                "historical_seasons_played": {"type": "integer"},
-                "rating": {"type": "integer"},
-                "series_won": {"type": "integer"},
-                "series_lost": {"type": "integer"},
-                "series_winrate": {"type": "number"},
-                "games_won": {"type": "integer"},
-                "games_lost": {"type": "integer"},
-                "games_winrate": {"type": "number"},
-                "seasons_played": {"type": "integer"},
-                "avg_series_per_season": {"type": "number"},
-            },
-            "required": ["player_name"],
-        }

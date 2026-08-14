@@ -53,20 +53,3 @@ class Match(APISchema):
             team1_score=match.team1_score,
             team2_score=match.team2_score,
         )
-
-    @staticmethod
-    def schema():
-        return {
-            "type": "object",
-            "properties": {
-                "team1_id": {"type": "integer"},
-                "team2_id": {"type": "integer"},
-                "season_id": {"type": "integer"},
-                "playday": {"type": "integer"},
-                "date_frame": {"type": "string"},
-                "fixed_map_id": {"type": "integer"},
-                "team1_score": {"type": "integer"},
-                "team2_score": {"type": "integer"},
-            },
-            "required": ["team1_id", "team2_id"],
-        }

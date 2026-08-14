@@ -61,25 +61,3 @@ class DraftSeries(APISchema):
             is_fantasy_match=draft_series.is_fantasy_match,
             created_at=draft_series.created_at,
         )
-
-    @staticmethod
-    def schema():
-        return {
-            "type": "object",
-            "properties": {
-                "match_id": {"type": "integer"},
-                "date_time": {
-                    "type": "string",
-                    "format": "date-time",
-                    "description": 'ISO 8601 date-time (e.g., "2025-03-08T18:57:00Z")',
-                },
-                "caster": {"type": "string"},
-                "player1_id": {"type": "integer"},
-                "player2_id": {"type": "integer"},
-                "player1_score": {"type": "integer"},
-                "player2_score": {"type": "integer"},
-                "host_player_id": {"type": "integer"},
-                "is_fantasy_match": {"type": "boolean"},
-            },
-            "required": ["match_id", "player1_id", "player2_id", "host_player_id"],
-        }

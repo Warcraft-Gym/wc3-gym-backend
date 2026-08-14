@@ -63,20 +63,3 @@ class Season(APISchema):
             id=season.id,
             name=season.name,
         )
-
-    @staticmethod
-    def schema():
-        return {
-            "type": "object",
-            "properties": {
-                "name": {"type": "string"},
-                "number_weeks": {"type": "integer"},
-                "series_per_week": {"type": "integer"},
-                "pick_ban": {
-                    "type": "string",
-                    "description": "e.g. Ban_A|Ban_B|Ban_B|Ban_A|Pick_A|Pick_B",
-                },
-                "discordRole": {"type": "string"},
-            },
-            "required": ["name", "number_weeks"],
-        }

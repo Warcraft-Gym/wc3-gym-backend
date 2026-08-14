@@ -51,17 +51,3 @@ class FantasyBet(APISchema):
             bet_points=fbet.bet_points,
             bet_result=fbet.bet_result,
         )
-
-    @staticmethod
-    def schema():
-        return {
-            "type": "object",
-            "properties": {
-                "series_id": {"type": "integer"},
-                "user_id": {"type": "integer"},
-                "winner_id": {"type": "integer"},
-                "bet_score": {"type": "integer"},
-                "bet_result": {"type": "integer"},
-            },
-            "required": ["series_id", "user_id", "winner_id", "bet_score"],
-        }

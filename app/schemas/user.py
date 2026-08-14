@@ -65,20 +65,3 @@ class User(APISchema):
                 for signup in (user.signup_seasons or [])
             ],
         )
-
-    @staticmethod
-    def schema():
-        return {
-            "type": "object",
-            "properties": {
-                "name": {"type": "string", "description": "User's Name"},
-                "battleTag": {"type": "string", "description": "User's BattleTag"},
-                "discordId": {"type": "string", "description": "User's DiscordId"},
-                "discordTag": {"type": "string", "description": "User's DiscordTag"},
-                "race": {"type": "string", "description": "User's Race"},
-                "mmr": {"type": "integer", "description": "User's MMR"},
-                "country": {"type": "string", "description": "User's Country"},
-                "fantasy_tier": {"type": "integer", "description": "fantasy tier"},
-            },
-            "required": ["name", "battleTag", "discordId", "discordTag"],
-        }

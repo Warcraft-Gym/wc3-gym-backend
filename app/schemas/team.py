@@ -113,15 +113,3 @@ class Team(TeamReduced):
             coaches_by_season=coaches,
             seasons_info=seasons_info,
         )
-
-    @staticmethod
-    def schema():
-        return {
-            "type": "object",
-            "properties": {
-                "name": {"type": "string"},
-                "long_name": {"type": "string"},
-                "discord_role": {"type": "string"},
-            },
-            "required": ["name"],
-        }
