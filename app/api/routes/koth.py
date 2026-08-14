@@ -5,8 +5,13 @@ from fastapi import APIRouter, Body, Depends
 from fastapi.responses import JSONResponse
 
 from app.api.deps import KothServiceDep, require_admin
-from app.schemas.koth_event import KothEvent
-from app.schemas.koth_match import KothMatch
+from app.models.koth_event import KothEventCreate, KothEventPublic, KothEventUpdate
+from app.models.koth_match import (
+    KothMatchCreate,
+    KothMatchCreateRequest,
+    KothMatchPublic,
+    KothMatchUpdate,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -32,16 +37,25 @@ def get_event(event_id: int, service: KothServiceDep):
     return service.get_event(event_id).to_dict()
 
 
-@router.post("/koth/events", status_code=201, dependencies=[Depends(require_admin)])
-def create_event(data: Annotated[dict, Body()], service: KothServiceDep):
+@router.post(
+    "/koth/events",
+    status_code=201,
+    response_model=KothEventPublic,
+    dependencies=[Depends(require_admin)],
+)
+def create_event(data: KothEventCreate, service: KothServiceDep):
     """Create a new King of the Hill event."""
-    return service.create_event(KothEvent(data)).to_dict()
+    return service.create_event(data)
 
 
-@router.put("/koth/events/{event_id}", dependencies=[Depends(require_admin)])
-def update_event(event_id: int, data: Annotated[dict, Body()], service: KothServiceDep):
+@router.put(
+    "/koth/events/{event_id}",
+    response_model=KothEventPublic,
+    dependencies=[Depends(require_admin)],
+)
+def update_event(event_id: int, data: KothEventUpdate, service: KothServiceDep):
     """Update an existing King of the Hill event."""
-    return service.update_event(event_id, KothEvent(data)).to_dict()
+    return service.update_event(event_id, data)
 
 
 @router.post("/koth/events/{event_id}/activate", dependencies=[Depends(require_admin)])
@@ -217,24 +231,34 @@ def get_event_matches(event_id: int, service: KothServiceDep):
     return [m.to_dict() for m in service.get_matches_by_event(event_id)]
 
 
-@router.post("/koth/matches", status_code=201, dependencies=[Depends(require_admin)])
-def create_match(data: Annotated[dict, Body()], service: KothServiceDep):
+@router.post(
+    "/koth/matches",
+    status_code=201,
+    response_model=KothMatchPublic,
+    dependencies=[Depends(require_admin)],
+)
+def create_match(data: KothMatchCreateRequest, service: KothServiceDep):
     """Create a team-based match.
 
     Create a new KOTH match with flexible team configuration. Supports
     uneven teams (e.g., 2v1, 3v1).
     """
     try:
-        participants = data.pop("participants", [])
-        return service.create_match(KothMatch(data), participants).to_dict()
+        participants = [p.model_dump() for p in data.participants]
+        match = KothMatchCreate.model_validate(data, from_attributes=True)
+        return service.create_match(match, participants)
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
 
 
-@router.put("/koth/matches/{match_id}", dependencies=[Depends(require_admin)])
-def update_match(match_id: int, data: Annotated[dict, Body()], service: KothServiceDep):
+@router.put(
+    "/koth/matches/{match_id}",
+    response_model=KothMatchPublic,
+    dependencies=[Depends(require_admin)],
+)
+def update_match(match_id: int, data: KothMatchUpdate, service: KothServiceDep):
     """Update a KOTH match."""
-    return service.update_match(match_id, KothMatch(data)).to_dict()
+    return service.update_match(match_id, data)
 
 
 @router.put("/koth/matches/{match_id}/result", dependencies=[Depends(require_admin)])

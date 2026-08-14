@@ -11,10 +11,6 @@ from app.schemas.base import APISchema
 from app.schemas.draft_series import DraftSeries
 from app.schemas.fantasy_bet import FantasyBet
 from app.schemas.fantasy_team import FantasyTeam
-from app.schemas.koth_event import KothEvent
-from app.schemas.koth_match import KothMatch
-from app.schemas.koth_match_participant import KothMatchParticipant
-from app.schemas.koth_signup import KothSignup
 from app.schemas.match import Match
 from app.schemas.player_career_stats import PlayerCareerStats
 from app.schemas.season import Season
@@ -30,10 +26,6 @@ _season_module.User = User
 _uts_module.TeamReduced = TeamReduced
 
 _ALL_MODELS = [
-    KothSignup,
-    KothMatchParticipant,
-    KothMatch,
-    KothEvent,
     Season,
     UserTeamSeasonStats,
     User,
@@ -55,10 +47,6 @@ __all__ = [
     "DraftSeries",
     "FantasyBet",
     "FantasyTeam",
-    "KothEvent",
-    "KothMatch",
-    "KothMatchParticipant",
-    "KothSignup",
     "Match",
     "PlayerCareerStats",
     "Season",

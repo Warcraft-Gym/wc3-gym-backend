@@ -15,7 +15,7 @@ from datetime import date, datetime
 from app.models.enums import Race
 from app.models.fantasy_bet import DBFantasyBet
 from app.models.fantasy_team import DBFantasyTeam
-from app.models.koth_event import DBKothEvent
+from app.models.koth_event import KothEvent
 from app.models.map import Map
 from app.models.match import DBMatch
 from app.models.player_career_stats import DBPlayerCareerStats
@@ -159,7 +159,7 @@ def seed_league(session):
                 key="score_system", value="standard", description="Scoring system"
             ),
             Settings(key="KOTH_NIGHTBOT_TOKEN", value="test-nightbot-token"),
-            DBKothEvent(
+            KothEvent(
                 name="KOTH 1", event_date=datetime(2026, 1, 10, 20, 0), is_active=True
             ),
         ]

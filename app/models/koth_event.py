@@ -1,20 +1,15 @@
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import Annotated
 
-from sqlmodel import Field, Relationship
+from sqlmodel import Field, Relationship, SQLModel
 
 from app.models.base import DBModel
+from app.models.koth_match import KothMatch, KothMatchPublic
+from app.models.koth_signup import KothSignup, KothSignupPublic
+from app.models.types import IsoDateTime, NoneToList
 
-if TYPE_CHECKING:
-    from app.models.koth_match import DBKothMatch
-    from app.models.koth_signup import DBKothSignup
 
-
-class DBKothEvent(DBModel, table=True):
-    __tablename__ = "koth_events"
-    __table_args__ = {"mysql_charset": "utf8mb4"}
-
-    id: int | None = Field(default=None, primary_key=True)
+class KothEventBase(SQLModel):
     name: str = Field(max_length=100)
     description: str | None = Field(default=None, max_length=500)
     event_date: datetime = Field(default_factory=datetime.utcnow)
@@ -23,12 +18,42 @@ class DBKothEvent(DBModel, table=True):
     bracket_2_threshold: int = 1600  # >= bracket_1 and < this value
     # bracket 3 is >= bracket_2_threshold
 
+
+class KothEvent(KothEventBase, DBModel, table=True):
+    __tablename__ = "koth_events"
+    __table_args__ = {"mysql_charset": "utf8mb4"}
+
+    id: int | None = Field(default=None, primary_key=True)
+
     # Relationships
-    signups: list["DBKothSignup"] = Relationship(
+    signups: list[KothSignup] = Relationship(
         back_populates="event",
         sa_relationship_kwargs={"cascade": "all, delete-orphan"},
     )
-    matches: list["DBKothMatch"] = Relationship(
+    matches: list[KothMatch] = Relationship(
         back_populates="event",
         sa_relationship_kwargs={"cascade": "all, delete-orphan"},
     )
+
+
+class KothEventCreate(KothEventBase):
+    pass
+
+
+class KothEventUpdate(SQLModel):
+    name: str | None = None
+    description: str | None = None
+    event_date: datetime | None = None
+    is_active: bool | None = None
+    bracket_1_threshold: int | None = None
+    bracket_2_threshold: int | None = None
+
+
+class KothEventPublic(KothEventBase):
+    id: int
+    event_date: IsoDateTime | None = None
+    signups: Annotated[list[KothSignupPublic], NoneToList] = []
+    matches: Annotated[list[KothMatchPublic], NoneToList] = []
+
+    def to_dict(self) -> dict:
+        return self.model_dump(mode="json")
