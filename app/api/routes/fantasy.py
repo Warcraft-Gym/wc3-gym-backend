@@ -1,5 +1,4 @@
 import logging
-from typing import Any
 
 from fastapi import APIRouter, Depends
 
@@ -15,6 +14,7 @@ from app.models.fantasy_bet import (
     FantasyBetPublic,
     FantasyBetUpdate,
 )
+from app.models.fantasy_score import FantasyTeamScoreBreakdown
 from app.models.fantasy_team import (
     FantasyTeamCreate,
     FantasyTeamPlayerIds,
@@ -166,7 +166,7 @@ def get_fantasy_team_breakdown(
     season_id: int,
     season_service: SeasonServiceDep,
     fantasy_score_service: FantasyScoreServiceDep,
-) -> dict[str, Any]:
+) -> FantasyTeamScoreBreakdown:
     """Get detailed score breakdown for a fantasy team.
 
     Returns a detailed breakdown showing how each component of the fantasy

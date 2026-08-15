@@ -50,3 +50,27 @@ class SettingsPublic(SettingsBase):
 
     def to_dict(self) -> dict[str, Any]:
         return self.model_dump(mode="json")
+
+
+class SettingsList(SQLModel):
+    settings: list[SettingsPublic]
+
+
+class SettingsUpdated(SQLModel):
+    message: str
+    updated: list[SettingsPublic]
+
+
+class SettingUpdated(SQLModel):
+    message: str
+    setting: SettingsPublic
+
+
+class NightbotToken(SQLModel):
+    token: str | None
+    exists: bool
+
+
+class GeneratedNightbotToken(SQLModel):
+    token: str
+    message: str

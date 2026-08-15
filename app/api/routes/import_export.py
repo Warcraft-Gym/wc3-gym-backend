@@ -20,11 +20,12 @@ from app.api.deps import (
     UserServiceDep,
     require_admin,
 )
-from app.exceptions import NotFoundError
+from app.exceptions import BadRequestError, NotFoundError
 from app.models.fantasy_bet import FantasyBetCreate, FantasyBetUpdate
 from app.models.fantasy_team import FantasyTeamCreate, FantasyTeamUpdate
 from app.models.map import MapCreate, MapUpdate
 from app.models.match import MatchCreate, MatchUpdate
+from app.models.responses import Message
 from app.models.season import SeasonCreate, SeasonUpdate
 from app.models.series import SeriesCreate, SeriesUpdate
 from app.models.team import TeamCreate, TeamUpdate
@@ -565,15 +566,13 @@ def import_season(
     from Excel file.
     """
     if file is None:
-        return JSONResponse({"error": "No file part"}, status_code=400)
+        raise BadRequestError("No file part")
 
     create_new = create_new.lower() == "true"
     background = background.lower() == "true"
 
     if file.filename == "" or not file.filename.endswith((".xlsx", ".xls")):
-        return JSONResponse(
-            {"error": "No selected file or invalid file type"}, status_code=400
-        )
+        raise BadRequestError("No selected file or invalid file type")
 
     # Read file into memory
     file_bytes = file.file.read()
@@ -923,7 +922,7 @@ def export_season(
 
 
 # import export endpoints
-@router.post("/fantasy/import/teams", response_model=None)
+@router.post("/fantasy/import/teams")
 def import_fantasy_teams(
     season_service: SeasonServiceDep,
     user_service: UserServiceDep,
@@ -932,13 +931,13 @@ def import_fantasy_teams(
     file: Annotated[UploadFile | None, File()] = None,
     season_id: str | None = None,
     season_name: str | None = None,
-) -> JSONResponse | dict[str, Any] | None:
+) -> Message:
     """Import a xlsx with the information for a GNL fantasy season.
 
     Updates the database based on the import sheet.
     """
     if file is None:
-        return JSONResponse({"error": "No file part"}, status_code=400)
+        raise BadRequestError("No file part")
 
     season_id = int(season_id) if season_id else None
 
@@ -958,7 +957,7 @@ def import_fantasy_teams(
             )
 
     if file.filename == "":
-        return JSONResponse({"error": "No selected file"}, status_code=400)
+        raise BadRequestError("No selected file")
     if file and file.filename.endswith((".xlsx", ".xls")):
         file_stream = io.BytesIO(file.file.read())
 
@@ -1062,12 +1061,14 @@ def import_fantasy_teams(
             fantasy_team_service.removeFantasyPlayers(fantasy_team.id, removePlayers)
             fantasy_team_service.addFantasyPlayers(fantasy_team.id, players)
 
-        return {"message": "File uploaded successfully and data inserted into database"}
+        return Message(
+            message="File uploaded successfully and data inserted into database"
+        )
     else:
-        return JSONResponse({"error": "File type not allowed"}, status_code=400)
+        raise BadRequestError("File type not allowed")
 
 
-@router.post("/fantasy/import/bets", response_model=None)
+@router.post("/fantasy/import/bets")
 def import_fantasy_bets(
     season_service: SeasonServiceDep,
     user_service: UserServiceDep,
@@ -1077,13 +1078,13 @@ def import_fantasy_bets(
     file: Annotated[UploadFile | None, File()] = None,
     season_id: str | None = None,
     season_name: str | None = None,
-) -> JSONResponse | dict[str, Any] | None:
+) -> Message:
     """Import a xlsx with the information for a GNL fantasy season.
 
     Updates the database based on the import sheet.
     """
     if file is None:
-        return JSONResponse({"error": "No file part"}, status_code=400)
+        raise BadRequestError("No file part")
 
     season_id = int(season_id) if season_id else None
 
@@ -1103,7 +1104,7 @@ def import_fantasy_bets(
             )
 
     if file.filename == "":
-        return JSONResponse({"error": "No selected file"}, status_code=400)
+        raise BadRequestError("No selected file")
     if file and file.filename.endswith((".xlsx", ".xls")):
         file_stream = io.BytesIO(file.file.read())
 
@@ -1237,6 +1238,8 @@ def import_fantasy_bets(
             else:
                 fantasy_bet_service.create_fantasy_bet(FantasyBetCreate(**bet_data))
 
-        return {"message": "File uploaded successfully and data inserted into database"}
+        return Message(
+            message="File uploaded successfully and data inserted into database"
+        )
     else:
-        return JSONResponse({"error": "File type not allowed"}, status_code=400)
+        raise BadRequestError("File type not allowed")
