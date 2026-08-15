@@ -1,5 +1,4 @@
 import logging
-from typing import Any
 
 from fastapi import APIRouter, Depends
 
@@ -44,16 +43,15 @@ def delete_match(match_id: int, service: MatchServiceDep) -> None:
 
 
 @router.get("/matches/{match_id}")
-def get_match(match_id: int, service: MatchServiceDep) -> dict[str, Any] | None:
+def get_match(match_id: int, service: MatchServiceDep) -> MatchPublic:
     """Retrieve a match by its ID."""
-    match = service.get_match(match_id)
-    return match.to_dict() if match else None
+    return service.get_match(match_id)
 
 
 @router.post("/matches/search")
-def search_match(service: MatchServiceDep, query: str = "") -> list[dict[str, Any]]:
+def search_match(service: MatchServiceDep, query: str = "") -> list[MatchPublic]:
     """Search matches by criteria using a custom query format."""
     parsed_query = QueryUtil.parseQuery(query)
     if not parsed_query or not parsed_query.elementA:
         raise Exception(f"No valid query found: {query}")
-    return [match.to_dict() for match in service.search(parsed_query) or []]
+    return service.search(parsed_query) or []

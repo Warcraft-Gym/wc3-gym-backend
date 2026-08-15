@@ -21,21 +21,21 @@ router = APIRouter(tags=["koth"])
 
 # ============ Event Endpoints ============
 @router.get("/koth/events")
-def get_all_events(service: KothServiceDep) -> list[dict[str, Any]]:
+def get_all_events(service: KothServiceDep) -> list[KothEventPublic]:
     """Retrieve all King of the Hill events."""
-    return [e.to_dict() for e in service.get_all_events()]
+    return service.get_all_events()
 
 
 @router.get("/koth/events/active")
-def get_active_event(service: KothServiceDep) -> dict[str, Any]:
+def get_active_event(service: KothServiceDep) -> KothEventPublic:
     """Retrieve the currently active King of the Hill event with all signups and matches."""
-    return service.get_active_event().to_dict()
+    return service.get_active_event()
 
 
 @router.get("/koth/events/{event_id}")
-def get_event(event_id: int, service: KothServiceDep) -> dict[str, Any]:
+def get_event(event_id: int, service: KothServiceDep) -> KothEventPublic:
     """Retrieve a specific King of the Hill event with all signups and matches."""
-    return service.get_event(event_id).to_dict()
+    return service.get_event(event_id)
 
 
 @router.post(
@@ -62,9 +62,9 @@ def update_event(
 
 
 @router.post("/koth/events/{event_id}/activate", dependencies=[Depends(require_admin)])
-def activate_event(event_id: int, service: KothServiceDep) -> dict[str, Any]:
+def activate_event(event_id: int, service: KothServiceDep) -> KothEventPublic:
     """Set a KOTH event as active and deactivate all others."""
-    return service.set_active_event(event_id).to_dict()
+    return service.set_active_event(event_id)
 
 
 @router.delete(
@@ -77,9 +77,9 @@ def delete_event(event_id: int, service: KothServiceDep) -> None:
 
 # ============ Signup Endpoints ============
 @router.get("/koth/events/{event_id}/signups")
-def get_event_signups(event_id: int, service: KothServiceDep) -> list[dict[str, Any]]:
+def get_event_signups(event_id: int, service: KothServiceDep) -> list[KothSignupPublic]:
     """Retrieve all signups for a specific KOTH event."""
-    return [s.to_dict() for s in service.get_signups_by_event(event_id)]
+    return service.get_signups_by_event(event_id)
 
 
 @router.post("/koth/signups", status_code=201, response_model=None)
@@ -211,23 +211,23 @@ def update_signup_bracket(
 
 
 @router.post("/koth/signups/{signup_id}/king", dependencies=[Depends(require_admin)])
-def set_king(signup_id: int, service: KothServiceDep) -> dict[str, Any]:
+def set_king(signup_id: int, service: KothServiceDep) -> KothSignupPublic:
     """Set a player as the king of their bracket (overwrites existing kings)."""
-    return service.set_king(signup_id).to_dict()
+    return service.set_king(signup_id)
 
 
 @router.post(
     "/koth/signups/{signup_id}/add-king", dependencies=[Depends(require_admin)]
 )
-def add_king(signup_id: int, service: KothServiceDep) -> dict[str, Any]:
+def add_king(signup_id: int, service: KothServiceDep) -> KothSignupPublic:
     """Add a player as king of their bracket (keeps existing kings)."""
-    return service.add_king(signup_id).to_dict()
+    return service.add_king(signup_id)
 
 
 @router.delete("/koth/signups/{signup_id}/king", dependencies=[Depends(require_admin)])
-def unset_king(signup_id: int, service: KothServiceDep) -> dict[str, Any]:
+def unset_king(signup_id: int, service: KothServiceDep) -> KothSignupPublic:
     """Remove king status from a player."""
-    return service.unset_king(signup_id).to_dict()
+    return service.unset_king(signup_id)
 
 
 @router.delete(
@@ -240,9 +240,9 @@ def delete_signup(signup_id: int, service: KothServiceDep) -> None:
 
 # ============ Match Endpoints ============
 @router.get("/koth/events/{event_id}/matches")
-def get_event_matches(event_id: int, service: KothServiceDep) -> list[dict[str, Any]]:
+def get_event_matches(event_id: int, service: KothServiceDep) -> list[KothMatchPublic]:
     """Retrieve all matches for a specific KOTH event."""
-    return [m.to_dict() for m in service.get_matches_by_event(event_id)]
+    return service.get_matches_by_event(event_id)
 
 
 @router.post(
@@ -282,11 +282,9 @@ def update_match(
 @router.put("/koth/matches/{match_id}/result", dependencies=[Depends(require_admin)])
 def update_match_result(
     match_id: int, data: Annotated[dict, Body()], service: KothServiceDep
-) -> dict[str, Any]:
+) -> KothMatchPublic:
     """Set the winning team and update all team members as kings."""
-    return service.update_match_result(
-        match_id, data.get("winner_team_number")
-    ).to_dict()
+    return service.update_match_result(match_id, data.get("winner_team_number"))
 
 
 @router.delete(
@@ -303,5 +301,4 @@ def get_bracket_kings(
     event_id: int, service: KothServiceDep
 ) -> dict[int, list[KothSignupPublic]]:
     """Get all kings for each bracket in an event."""
-    kings = service.get_bracket_kings(event_id)
-    return {k: [king.to_dict() for king in v] for k, v in kings.items()}
+    return service.get_bracket_kings(event_id)

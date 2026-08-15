@@ -1,5 +1,4 @@
 import logging
-from typing import Any
 
 from fastapi import APIRouter, Depends
 
@@ -42,29 +41,27 @@ def delete_user(user_id: int, service: UserServiceDep) -> None:
 
 
 @router.get("/users/{user_id}")
-def get_user(user_id: int, service: UserServiceDep) -> dict[str, Any] | None:
+def get_user(user_id: int, service: UserServiceDep) -> UserPublic:
     """Retrieve a user by their ID."""
-    user = service.get_user(user_id)
-    return user.to_dict() if user else None
+    return service.get_user(user_id)
 
 
 @router.get("/users")
-def get_all_users(service: UserServiceDep) -> list[dict[str, Any]]:
+def get_all_users(service: UserServiceDep) -> list[UserPublic]:
     """Retrieve all users."""
-    return [user.to_dict() for user in service.getAll() or []]
+    return service.getAll() or []
 
 
 @router.post("/users/search")
-def search_users(service: UserServiceDep, query: str = "") -> list[dict[str, Any]]:
+def search_users(service: UserServiceDep, query: str = "") -> list[UserPublic]:
     """Search users by criteria using a custom query format."""
     parsed_query = QueryUtil.parseQuery(query)
     if not parsed_query or not parsed_query.elementA:
         raise Exception(f"No valid query found: {query}")
-    return [user.to_dict() for user in service.search(parsed_query) or []]
+    return service.search(parsed_query) or []
 
 
 @router.post("/users/w3c_sync/{user_id}", dependencies=[Depends(require_admin)])
-def sync_w3c_user(user_id: int, service: UserServiceDep) -> dict[str, Any] | None:
+def sync_w3c_user(user_id: int, service: UserServiceDep) -> UserPublic:
     """Sync w3c information for a user_id"""
-    user = service.updateW3CStats_ById(user_id)
-    return user.to_dict() if user else None
+    return service.updateW3CStats_ById(user_id)

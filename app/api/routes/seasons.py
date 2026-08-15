@@ -1,10 +1,11 @@
 import logging
-from typing import Annotated, Any
+from typing import Annotated
 
 from fastapi import APIRouter, Body, Depends
 
 from app.api.deps import SeasonServiceDep, require_admin
 from app.models.season import SeasonCreate, SeasonPublic, SeasonUpdate
+from app.models.user import UserPublic
 from app.utils.query_util import QueryUtil
 
 logger = logging.getLogger(__name__)
@@ -44,61 +45,56 @@ def delete_season(season_id: int, service: SeasonServiceDep) -> None:
 
 
 @router.get("/seasons/{season_id}")
-def get_season(season_id: int, service: SeasonServiceDep) -> dict[str, Any] | None:
+def get_season(season_id: int, service: SeasonServiceDep) -> SeasonPublic:
     """Retrieve a season by its ID."""
-    season = service.get_season(season_id)
-    return season.to_dict() if season else None
+    return service.get_season(season_id)
 
 
 @router.post("/seasons/addTeams/{season_id}", dependencies=[Depends(require_admin)])
 def add_teams(
     season_id: int, data: Annotated[dict, Body()], service: SeasonServiceDep
-) -> dict[str, Any] | None:
+) -> SeasonPublic:
     """Add teams to season by providing a list of team ids."""
-    season = service.addTeams(season_id, data.get("team_ids"))
-    return season.to_dict() if season else None
+    return service.addTeams(season_id, data.get("team_ids"))
 
 
 @router.post("/seasons/removeTeams/{season_id}", dependencies=[Depends(require_admin)])
 def remove_teams(
     season_id: int, data: Annotated[dict, Body()], service: SeasonServiceDep
-) -> dict[str, Any] | None:
+) -> SeasonPublic:
     """Remove teams from season by providing a list of team ids."""
-    season = service.removeTeams(season_id, data.get("team_ids"))
-    return season.to_dict() if season else None
+    return service.removeTeams(season_id, data.get("team_ids"))
 
 
 @router.get("/seasons")
-def get_all(service: SeasonServiceDep) -> list[dict[str, Any]]:
+def get_all(service: SeasonServiceDep) -> list[SeasonPublic]:
     """Return all seasons"""
-    return [season.to_dict() for season in service.getAll() or []]
+    return service.getAll() or []
 
 
 @router.post("/seasons/search")
-def search_seasons(service: SeasonServiceDep, query: str = "") -> list[dict[str, Any]]:
+def search_seasons(service: SeasonServiceDep, query: str = "") -> list[SeasonPublic]:
     """Search seasons by criteria using a custom query format."""
     parsed_query = QueryUtil.parseQuery(query)
     if not parsed_query or not parsed_query.elementA:
         raise Exception(f"No valid query found: {query}")
-    return [season.to_dict() for season in service.search(parsed_query) or []]
+    return service.search(parsed_query) or []
 
 
 @router.post("/seasons/addMaps/{season_id}", dependencies=[Depends(require_admin)])
 def add_maps(
     season_id: int, data: Annotated[dict, Body()], service: SeasonServiceDep
-) -> dict[str, Any] | None:
+) -> SeasonPublic:
     """Add maps to season by providing a list of map ids."""
-    season = service.addMaps(season_id, data.get("map_ids"))
-    return season.to_dict() if season else None
+    return service.addMaps(season_id, data.get("map_ids"))
 
 
 @router.post("/seasons/removeMaps/{season_id}", dependencies=[Depends(require_admin)])
 def remove_maps(
     season_id: int, data: Annotated[dict, Body()], service: SeasonServiceDep
-) -> dict[str, Any] | None:
+) -> SeasonPublic:
     """Remove maps from season by providing a list of map ids."""
-    season = service.removeMaps(season_id, data.get("map_ids"))
-    return season.to_dict() if season else None
+    return service.removeMaps(season_id, data.get("map_ids"))
 
 
 @router.post(
@@ -106,10 +102,9 @@ def remove_maps(
 )
 def add_user_signup(
     season_id: int, data: Annotated[dict, Body()], service: SeasonServiceDep
-) -> dict[str, Any] | None:
+) -> SeasonPublic:
     """Add signup users to season by providing a list of user ids."""
-    season = service.addUserSignup(season_id, data.get("user_ids"))
-    return season.to_dict() if season else None
+    return service.addUserSignup(season_id, data.get("user_ids"))
 
 
 @router.post(
@@ -117,15 +112,12 @@ def add_user_signup(
 )
 def remove_user_signup(
     season_id: int, data: Annotated[dict, Body()], service: SeasonServiceDep
-) -> dict[str, Any] | None:
+) -> SeasonPublic:
     """Remove signup users from season by providing a list of user ids."""
-    season = service.removeUserSignup(season_id, data.get("user_ids"))
-    return season.to_dict() if season else None
+    return service.removeUserSignup(season_id, data.get("user_ids"))
 
 
 @router.get("/seasons/{season_id}/signups")
-def get_season_signups(
-    season_id: int, service: SeasonServiceDep
-) -> list[dict[str, Any]]:
+def get_season_signups(season_id: int, service: SeasonServiceDep) -> list[UserPublic]:
     """Retrieve all users signed up for a specific season."""
-    return [user.to_dict() for user in service.getSignedUpUsers(season_id) or []]
+    return service.getSignedUpUsers(season_id) or []

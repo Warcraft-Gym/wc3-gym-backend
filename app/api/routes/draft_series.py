@@ -1,5 +1,4 @@
 import logging
-from typing import Any
 
 from fastapi import APIRouter, Depends
 
@@ -9,6 +8,7 @@ from app.models.draft_series import (
     DraftSeriesPublic,
     DraftSeriesUpdate,
 )
+from app.models.series import SeriesPublic
 
 logger = logging.getLogger(__name__)
 
@@ -55,21 +55,17 @@ def delete_draft_series(draft_series_id: int, service: DraftSeriesServiceDep) ->
 @router.get("/draft-series/{draft_series_id}")
 def get_draft_series(
     draft_series_id: int, service: DraftSeriesServiceDep
-) -> dict[str, Any] | None:
+) -> DraftSeriesPublic:
     """Retrieve a draft series by its ID."""
-    draft_series = service.get_draft_series(draft_series_id)
-    return draft_series.to_dict() if draft_series else None
+    return service.get_draft_series(draft_series_id)
 
 
 @router.get("/draft-series/match/{match_id}")
 def get_draft_series_by_match(
     match_id: int, service: DraftSeriesServiceDep
-) -> list[dict[str, Any]]:
+) -> list[DraftSeriesPublic]:
     """Return all draft series for a specific match"""
-    return [
-        draft_series.to_dict()
-        for draft_series in service.get_draft_series_by_match(match_id) or []
-    ]
+    return service.get_draft_series_by_match(match_id) or []
 
 
 @router.delete(
@@ -93,7 +89,7 @@ def promote_draft_series(
     draft_series_id: int,
     service: DraftSeriesServiceDep,
     series_service: SeriesServiceDep,
-) -> dict[str, Any] | None:
+) -> SeriesPublic:
     """Convert a draft series to a real published series and delete the draft"""
     # Get the draft series
     draft_series = service.get_draft_series(draft_series_id)
@@ -107,4 +103,4 @@ def promote_draft_series(
     # Delete the draft
     service.delete_draft_series(draft_series_id)
 
-    return created_series.to_dict() if created_series else None
+    return created_series

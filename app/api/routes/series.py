@@ -1,5 +1,4 @@
 import logging
-from typing import Any
 
 from fastapi import APIRouter, Depends
 
@@ -44,53 +43,41 @@ def delete_series(series_id: int, service: SeriesServiceDep) -> None:
 
 
 @router.get("/series/{series_id}")
-def get_series(series_id: int, service: SeriesServiceDep) -> dict[str, Any] | None:
+def get_series(series_id: int, service: SeriesServiceDep) -> SeriesPublic:
     """Retrieve a series by its ID."""
-    series = service.get_series(series_id)
-    return series.to_dict() if series else None
+    return service.get_series(series_id)
 
 
 @router.post("/series/search")
-def search_series(service: SeriesServiceDep, query: str = "") -> list[dict[str, Any]]:
+def search_series(service: SeriesServiceDep, query: str = "") -> list[SeriesPublic]:
     """Search series by criteria using a custom query format."""
     parsed_query = QueryUtil.parseQuery(query)
     if not parsed_query or not parsed_query.elementA:
         raise Exception(f"No valid query found: {query}")
-    return [series.to_dict() for series in service.search(parsed_query) or []]
+    return service.search(parsed_query) or []
 
 
 @router.post("/series/season/{season_id}/playday/{playday}/search")
 def search_series_by_season_and_playday(
     season_id: int, playday: int, service: SeriesServiceDep, query: str = ""
-) -> list[dict[str, Any]]:
+) -> list[SeriesPublic]:
     """Return series matching the search query for a specific season and a specific playday"""
     parsed_query = QueryUtil.parseQuery(query)
-    return [
-        series.to_dict()
-        for series in service.searchForSeasonAndPlayday(
-            season_id, playday, parsed_query
-        )
-        or []
-    ]
+    return service.searchForSeasonAndPlayday(season_id, playday, parsed_query) or []
 
 
 @router.get("/series/season/{season_id}")
 def get_series_by_season(
     season_id: int, service: SeriesServiceDep
-) -> list[dict[str, Any]]:
+) -> list[SeriesPublic]:
     """Return all series for a specific season"""
-    return [
-        series.to_dict() for series in service.searchForSeason(season_id, None) or []
-    ]
+    return service.searchForSeason(season_id, None) or []
 
 
 @router.post("/series/season/{season_id}/search")
 def search_series_by_season(
     season_id: int, service: SeriesServiceDep, query: str = ""
-) -> list[dict[str, Any]]:
+) -> list[SeriesPublic]:
     """Return series matching the search query for a specific season"""
     parsed_query = QueryUtil.parseQuery(query)
-    return [
-        series.to_dict()
-        for series in service.searchForSeason(season_id, parsed_query) or []
-    ]
+    return service.searchForSeason(season_id, parsed_query) or []
