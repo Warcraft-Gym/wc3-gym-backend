@@ -198,16 +198,12 @@ def create_signup_admin(
 @router.put(
     "/koth/signups/{signup_id}/bracket",
     dependencies=[Depends(require_admin)],
-    response_model=None,
 )
 def update_signup_bracket(
     signup_id: int, data: Annotated[dict, Body()], service: KothServiceDep
-) -> JSONResponse | dict[str, Any] | None:
+) -> KothSignupPublic:
     """Manually update a player's bracket assignment."""
-    try:
-        return service.update_signup_bracket(signup_id, data.get("bracket")).to_dict()
-    except ValueError as e:
-        return JSONResponse({"error": str(e)}, status_code=400)
+    return service.update_signup_bracket(signup_id, data.get("bracket"))
 
 
 @router.post("/koth/signups/{signup_id}/king", dependencies=[Depends(require_admin)])
@@ -248,23 +244,19 @@ def get_event_matches(event_id: int, service: KothServiceDep) -> list[KothMatchP
 @router.post(
     "/koth/matches",
     status_code=201,
-    response_model=KothMatchPublic,
     dependencies=[Depends(require_admin)],
 )
 def create_match(
     data: KothMatchCreateRequest, service: KothServiceDep
-) -> JSONResponse | KothMatchPublic | None:
+) -> KothMatchPublic:
     """Create a team-based match.
 
     Create a new KOTH match with flexible team configuration. Supports
     uneven teams (e.g., 2v1, 3v1).
     """
-    try:
-        participants = [p.model_dump() for p in data.participants]
-        match = KothMatchCreate.model_validate(data, from_attributes=True)
-        return service.create_match(match, participants)
-    except ValueError as e:
-        return JSONResponse({"error": str(e)}, status_code=400)
+    participants = [p.model_dump() for p in data.participants]
+    match = KothMatchCreate.model_validate(data, from_attributes=True)
+    return service.create_match(match, participants)
 
 
 @router.put(

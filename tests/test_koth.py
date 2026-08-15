@@ -183,3 +183,53 @@ def test_an_event_update_keeps_the_fields_it_was_not_given(
     assert after["name"] == before["name"]
     assert after["event_date"] == before["event_date"]
     assert after["bracket_1_threshold"] == before["bracket_1_threshold"]
+
+
+def test_bad_koth_input_answers_400(
+    client: Client, auth_headers: dict[str, str], koth: dict[str, Any]
+) -> None:
+    """The rule checks in the service answer 400, not 500."""
+    one, two = koth["signup_ids"]
+
+    resp = client.put(
+        f"/koth/signups/{one}/bracket", headers=auth_headers, json={"bracket": 9}
+    )
+    assert resp.status_code == 400
+    assert "Bracket" in resp.json()["error"]
+
+    resp = client.post(
+        "/koth/matches",
+        headers=auth_headers,
+        json={
+            "event_id": koth["event_id"],
+            "game_mode": "1v1",
+            "num_teams": 2,
+            "participants": [
+                {"signup_id": one, "team_number": 1},
+                {"signup_id": two, "team_number": 1},
+            ],
+        },
+    )
+    assert resp.status_code == 400
+    assert "teams" in resp.json()["error"]
+
+    match = client.post(
+        "/koth/matches",
+        headers=auth_headers,
+        json={
+            "event_id": koth["event_id"],
+            "game_mode": "1v1",
+            "num_teams": 2,
+            "participants": [
+                {"signup_id": one, "team_number": 1},
+                {"signup_id": two, "team_number": 2},
+            ],
+        },
+    ).json()
+    resp = client.put(
+        f"/koth/matches/{match['id']}/result",
+        headers=auth_headers,
+        json={"winner_team_number": 5},
+    )
+    assert resp.status_code == 400
+    assert "Winner team number" in resp.json()["error"]

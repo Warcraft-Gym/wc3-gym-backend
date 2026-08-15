@@ -587,3 +587,17 @@ def test_a_result_with_one_score_missing_is_refused(
         headers=auth_headers,
     )
     assert resp.status_code < 500
+
+
+def test_coaches_are_capped_at_three(
+    client: Client, auth_headers: dict[str, str], league: dict[str, Any]
+) -> None:
+    path = f"/teams/{league['team_a_id']}/seasons/{league['season_id']}/coaches"
+    resp = client.put(
+        path, json={"coach_ids": [league["player_a_id"]]}, headers=auth_headers
+    )
+    assert resp.status_code == 200, resp.text
+
+    resp = client.put(path, json={"coach_ids": [1, 2, 3, 4]}, headers=auth_headers)
+    assert resp.status_code == 400
+    assert "coaches" in resp.json()["error"]

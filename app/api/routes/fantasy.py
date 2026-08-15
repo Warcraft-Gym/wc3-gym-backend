@@ -2,7 +2,6 @@ import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends
-from fastapi.responses import JSONResponse
 
 from app.api.deps import (
     FantasyBetServiceDep,
@@ -110,34 +109,24 @@ def search_teams(
 @router.post(
     "/fantasy/bets",
     status_code=201,
-    response_model=FantasyBetPublic,
     dependencies=[Depends(require_admin)],
 )
 def add_fantasy_bet(
     data: FantasyBetCreate, service: FantasyBetServiceDep
-) -> JSONResponse | FantasyBetPublic | None:
+) -> FantasyBetPublic:
     """Create a new fantasy bet with the provided name."""
-    try:
-        return service.create_fantasy_bet(data)
-    except ValueError as e:
-        logger.error(f"Validation error: {e}")
-        return JSONResponse({"error": str(e)}, status_code=400)
+    return service.create_fantasy_bet(data)
 
 
 @router.put(
     "/fantasy/bets/{bet_id}",
-    response_model=FantasyBetPublic,
     dependencies=[Depends(require_admin)],
 )
 def update_bet(
     bet_id: int, data: FantasyBetUpdate, service: FantasyBetServiceDep
-) -> JSONResponse | FantasyBetPublic | None:
+) -> FantasyBetPublic:
     """Update an existing fantasy bet."""
-    try:
-        return service.update_fantasy_bet(bet_id, data)
-    except ValueError as e:
-        logger.error(f"Validation error: {e}")
-        return JSONResponse({"error": str(e)}, status_code=400)
+    return service.update_fantasy_bet(bet_id, data)
 
 
 @router.delete(

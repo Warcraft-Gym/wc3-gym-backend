@@ -6,6 +6,7 @@ from fastapi import APIRouter, Body, Depends, File, Response, UploadFile
 from fastapi.responses import JSONResponse
 
 from app.api.deps import TeamServiceDep, require_admin, ttl_cache
+from app.exceptions import BadRequestError
 from app.models.team import TeamCreate, TeamPublic, TeamUpdate
 from app.utils.query_util import QueryUtil
 
@@ -114,20 +115,14 @@ def set_coaches(
     season_id: int,
     data: Annotated[dict, Body()],
     service: TeamServiceDep,
-) -> JSONResponse:
+) -> TeamPublic:
     """Set up to 3 coaches for a team in a specific season. Replaces existing coaches."""
     coach_ids = data.get("coach_ids", [])
 
     if len(coach_ids) > 3:
-        return JSONResponse(
-            {"error": "Cannot assign more than 3 coaches per team per season"},
-            status_code=400,
-        )
+        raise BadRequestError("Cannot assign more than 3 coaches per team per season")
 
-    team = service.setCoaches(team_id, season_id, coach_ids)
-    if team:
-        team = team.to_dict()
-    return JSONResponse(team, status_code=200)
+    return service.setCoaches(team_id, season_id, coach_ids)
 
 
 @router.get("/teams")

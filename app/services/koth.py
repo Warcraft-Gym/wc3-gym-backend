@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import delete, select
 from sqlalchemy.orm import joinedload
 
-from app.exceptions import NotFoundError
+from app.exceptions import BadRequestError, NotFoundError
 from app.models.koth_event import (
     KothEvent,
     KothEventCreate,
@@ -193,7 +193,7 @@ class KothService(BaseService):
             preferred_race_lower = preferred_race.lower()
             signup_race = race_map.get(preferred_race_lower)
             if not signup_race:
-                raise ValueError(
+                raise BadRequestError(
                     f"Invalid race '{preferred_race}'. Valid options: orc, human, undead, nightelf, random"
                 )
 
@@ -300,7 +300,7 @@ class KothService(BaseService):
     ) -> KothSignupPublic:
         """Manually update a player's bracket"""
         if new_bracket not in [1, 2, 3]:
-            raise ValueError("Bracket must be 1, 2, or 3")
+            raise BadRequestError("Bracket must be 1, 2, or 3")
 
         signup = self.get_signup(signup_id)
         if not signup:
@@ -415,7 +415,7 @@ class KothService(BaseService):
         if signups:
             first_bracket = signups[0].bracket
             if not all(s.bracket == first_bracket for s in signups):
-                raise ValueError("All participants must be in the same bracket")
+                raise BadRequestError("All participants must be in the same bracket")
             match.bracket = first_bracket
 
         # Validate team configuration - each team must have at least 1 player
@@ -423,13 +423,13 @@ class KothService(BaseService):
         unique_teams = set(team_numbers)
 
         if len(unique_teams) != match.num_teams:
-            raise ValueError(
+            raise BadRequestError(
                 f"Expected {match.num_teams} teams, but participants are assigned to {len(unique_teams)} teams"
             )
 
         for team_num in range(1, match.num_teams + 1):
             if team_num not in unique_teams:
-                raise ValueError(f"Team {team_num} has no participants")
+                raise BadRequestError(f"Team {team_num} has no participants")
 
         # Create match
         created_match = self.add_match(match)
@@ -456,7 +456,7 @@ class KothService(BaseService):
             raise NotFoundError(f"Match not found by Id: {match_id}")
 
         if winner_team_number < 1 or winner_team_number > match.num_teams:
-            raise ValueError(
+            raise BadRequestError(
                 f"Winner team number must be between 1 and {match.num_teams}"
             )
 

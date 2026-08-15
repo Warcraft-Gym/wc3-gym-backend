@@ -18,6 +18,7 @@ from app.api.deps import (
     SettingsServiceDep,
     UserServiceDep,
 )
+from app.exceptions import BadRequestError
 from app.models.fantasy_bet import FantasyBetCreate, FantasyBetUpdate
 from app.models.fantasy_team import FantasyTeamCreate, FantasyTeamUpdate
 from app.models.series import SeriesPublic
@@ -838,7 +839,7 @@ def create_fantasy_bet(
 
         return bet.to_dict() if hasattr(bet, "to_dict") else bet
 
-    except ValueError as e:
+    except (BadRequestError, ValueError) as e:
         logger.error(f"Validation error creating bet: {e}")
         return JSONResponse(
             {"error": "validation_error", "message": str(e)}, status_code=400
@@ -912,7 +913,7 @@ def update_fantasy_bet(
 
         return bet.to_dict() if hasattr(bet, "to_dict") else bet
 
-    except ValueError as e:
+    except (BadRequestError, ValueError) as e:
         logger.error(f"Validation error updating bet: {e}")
         return JSONResponse(
             {"error": "validation_error", "message": str(e)}, status_code=400

@@ -27,7 +27,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.api.deps import AuthError
 from app.api.main import api_router
 from app.core.db import init_engine
-from app.exceptions import NotFoundError
+from app.exceptions import BadRequestError, NotFoundError
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +74,11 @@ def create_app(db_url: str | None = None) -> FastAPI:
     async def not_found(request: Request, exc: NotFoundError) -> JSONResponse:
         logger.error(exc)
         return JSONResponse({"error": str(exc)}, status_code=404)
+
+    @app.exception_handler(BadRequestError)
+    async def bad_request(request: Request, exc: BadRequestError) -> JSONResponse:
+        logger.error(exc)
+        return JSONResponse({"error": str(exc)}, status_code=400)
 
     @app.exception_handler(SQLAlchemyError)
     async def db_error(request: Request, exc: SQLAlchemyError) -> JSONResponse:

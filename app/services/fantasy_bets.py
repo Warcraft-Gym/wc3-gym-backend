@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
-from app.exceptions import NotFoundError
+from app.exceptions import BadRequestError, NotFoundError
 from app.models.fantasy_bet import (
     FantasyBet,
     FantasyBetCreate,
@@ -108,7 +108,9 @@ class FantasyBetService(BaseService):
         if not self.settings_app_service:
             # If no settings service, require bet_points from input
             if bet.bet_points is None or bet.bet_points <= 0:
-                raise ValueError("bet_points is required and must be greater than 0")
+                raise BadRequestError(
+                    "bet_points is required and must be greater than 0"
+                )
             return
 
         try:
@@ -129,7 +131,7 @@ class FantasyBetService(BaseService):
                 if not bet_points_value_setting or not bet_points_value_setting.get(
                     "value"
                 ):
-                    raise ValueError(
+                    raise BadRequestError(
                         "Fixed bet points enabled but fantasy_bet_points_value is not configured"
                     )
 
@@ -137,7 +139,7 @@ class FantasyBetService(BaseService):
             else:
                 # Validate that bet_points were provided from UI
                 if bet.bet_points is None or bet.bet_points <= 0:
-                    raise ValueError(
+                    raise BadRequestError(
                         "bet_points is required when fixed bet points is disabled"
                     )
 
@@ -169,23 +171,25 @@ class FantasyBetService(BaseService):
                 # Only validate if min and max are both defined and different
                 if min_bet is not None and max_bet is not None and min_bet != max_bet:
                     if bet.bet_points < min_bet:
-                        raise ValueError(f"bet_points must be at least {min_bet}")
+                        raise BadRequestError(f"bet_points must be at least {min_bet}")
 
                     if bet.bet_points > max_bet:
-                        raise ValueError(f"bet_points must not exceed {max_bet}")
+                        raise BadRequestError(f"bet_points must not exceed {max_bet}")
                 elif min_bet is not None and max_bet is None:
                     # Only min is defined
                     if bet.bet_points < min_bet:
-                        raise ValueError(f"bet_points must be at least {min_bet}")
+                        raise BadRequestError(f"bet_points must be at least {min_bet}")
                 elif max_bet is not None and min_bet is None:
                     # Only max is defined
                     if bet.bet_points > max_bet:
-                        raise ValueError(f"bet_points must not exceed {max_bet}")
+                        raise BadRequestError(f"bet_points must not exceed {max_bet}")
 
         except NotFoundError:
             # Settings don't exist, require bet_points from input
             if bet.bet_points is None or bet.bet_points <= 0:
-                raise ValueError("bet_points is required and must be greater than 0")
+                raise BadRequestError(
+                    "bet_points is required and must be greater than 0"
+                )
 
     def create_fantasy_bet(self, bet: FantasyBetCreate) -> FantasyBetPublic:
         self._apply_bet_points_logic(bet)
