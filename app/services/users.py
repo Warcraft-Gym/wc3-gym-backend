@@ -5,8 +5,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
 from app.exceptions import NotFoundError
+from app.models.season import Season
+from app.models.team import Team
 from app.models.user import User, UserCreate, UserPublic, UserUpdate
-from app.models.user_team_season_stats import UserTeamSeasonStatsPublic
+from app.models.user_team_season import DBUserTeamSeason, UserTeamSeasonStatsPublic
 from app.models.w3c_stats import W3CStats, W3CStatsCreate, W3CStatsPublic
 from app.services.base import BaseService
 from app.services.w3c import W3CService
@@ -86,8 +88,6 @@ class UserService(BaseService):
 
     def getAll(self) -> list[UserPublic]:
         with self.get_session() as session:
-            from app.models.relationships import DBUserTeamSeason
-
             result = []
             # Eager load related entities, disable nested loading
             users = (
@@ -215,6 +215,25 @@ class UserService(BaseService):
         if not season_stats:
             raise Exception("Seasonstats not defined")
         with self.get_session() as session:
-            stats = User.updateUserTeamSeasonStats(session, season_stats)
-            UserTeamSeasonStatsPublic.from_user_team_season(stats)
+            team = session.get(Team, season_stats.team_id)
+            if not team:
+                raise Exception(f"Team not found by id: {season_stats.team_id}")
+            season = session.get(Season, season_stats.season_id)
+            if not season:
+                raise Exception(f"Season not found by id: {season_stats.season_id}")
+            user = session.get(User, season_stats.user_id)
+            if not user:
+                raise Exception(f"User not found by id: {season_stats.user_id}")
+            uts_obj = session.get(
+                DBUserTeamSeason,
+                {"team_id": team.id, "season_id": season.id, "user_id": user.id},
+            )
+            if uts_obj is None:
+                uts_obj = DBUserTeamSeason(user=user, season=season, team=team)
+                session.add(uts_obj)
+            uts_obj.games = season_stats.games
+            uts_obj.wins = season_stats.wins
+            uts_obj.losses = season_stats.losses
+            uts_obj.matchup_history = season_stats.matchup_history
+            session.flush()
         return self.get_user(season_stats.user_id)

@@ -75,7 +75,7 @@ class Series(SeriesBase, DBModel, table=True):
         """The rows a season report reads off every series."""
         from sqlalchemy.orm import joinedload
 
-        from app.models.relationships import DBUserTeamSeason
+        from app.models.user_team_season import DBUserTeamSeason
 
         return (
             joinedload(cls.match).joinedload(Match.team1),

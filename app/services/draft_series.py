@@ -11,9 +11,9 @@ from app.models.draft_series import (
     DraftSeriesUpdate,
 )
 from app.models.match import Match
-from app.models.relationships import DBUserTeamSeason
 from app.models.series import SeriesCreate
 from app.models.user import User
+from app.models.user_team_season import DBUserTeamSeason
 from app.services.base import BaseService
 
 logger = logging.getLogger(__name__)

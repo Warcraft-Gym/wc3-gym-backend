@@ -4,8 +4,12 @@ from sqlalchemy import select
 from sqlalchemy.orm import joinedload, noload
 
 from app.exceptions import NotFoundError
+from app.models.map import Map
+from app.models.relationships import DBMapSeason, DBUserSeasonSignup
 from app.models.season import Season, SeasonCreate, SeasonPublic, SeasonUpdate
-from app.models.user import UserPublic
+from app.models.team import Team
+from app.models.team_season import DBTeamSeason
+from app.models.user import User, UserPublic
 from app.services.base import BaseService
 from app.utils.query_util import QueryElement, QueryUtil
 
@@ -34,8 +38,6 @@ class SeasonService(BaseService):
 
     def get(self, season_id: int) -> SeasonPublic:
         with self.get_session() as session:
-            from app.models.relationships import DBMapSeason
-
             # Eager load related entities, disable nested loading except for maps
             season = (
                 session.scalars(
@@ -59,8 +61,6 @@ class SeasonService(BaseService):
     def getAll(self) -> list[SeasonPublic]:
         with self.get_session() as session:
             result = []
-            from app.models.relationships import DBMapSeason
-
             # Eager load related entities, disable nested loading except for maps
             seasons = (
                 session.scalars(
@@ -80,14 +80,27 @@ class SeasonService(BaseService):
 
     def addTeams(self, season_id: int, team_ids: list[int]) -> SeasonPublic:
         with self.get_session() as session:
-            season = Season.addTeams(session, season_id, team_ids)
+            season = session.get(Season, season_id)
+            if not season:
+                raise Exception(f"Season not found by id: {season_id}")
+            for team_id in team_ids:
+                team = session.get(Team, team_id)
+                if not team:
+                    raise Exception(f"Team not found by id: {team_id}")
+                already_exists = (
+                    session.get(
+                        DBTeamSeason, {"season_id": season_id, "team_id": team.id}
+                    )
+                    is not None
+                )
+                if not already_exists:
+                    session.add(DBTeamSeason(season=season, team=team))
+            session.flush()
             return SeasonPublic.from_season(season)
 
     def search(self, query: QueryElement | None) -> list[SeasonPublic]:
         with self.get_session() as session:
             result = []
-            from app.models.relationships import DBMapSeason
-
             filter = QueryUtil.convertQueryToDBFilter(Season, query)
             # Eager load related entities, disable nested loading except for maps
             seasons = (
@@ -115,34 +128,104 @@ class SeasonService(BaseService):
 
     def removeTeams(self, season_id: int, team_ids: list[int]) -> SeasonPublic:
         with self.get_session() as session:
-            season = Season.removeTeams(session, season_id, team_ids)
+            season = session.get(Season, season_id)
+            if not season:
+                raise Exception(f"Season not found by id: {season_id}")
+            for team_id in team_ids:
+                team = session.get(Team, team_id)
+                if not team:
+                    raise Exception(f"Team not found by id: {team_id}")
+                team_season = session.get(
+                    DBTeamSeason, {"season_id": season_id, "team_id": team_id}
+                )
+                if not team_season:
+                    raise Exception(
+                        f"Team not part of the season, team id: {team_id}, season id {season_id}"
+                    )
+                session.delete(team_season)
+            session.flush()
             return SeasonPublic.from_season(season)
 
     def addMaps(self, season_id: int, map_ids: list[int]) -> SeasonPublic:
         with self.get_session() as session:
-            season = Season.addMaps(session, season_id, map_ids)
+            season = session.get(Season, season_id)
+            if not season:
+                raise Exception(f"Season not found by id: {season_id}")
+            for map_id in map_ids:
+                map = session.get(Map, map_id)
+                if not map:
+                    raise Exception(f"Map not found by id: {map_id}")
+                already_exists = (
+                    session.get(DBMapSeason, {"season_id": season_id, "map_id": map.id})
+                    is not None
+                )
+                if not already_exists:
+                    session.add(DBMapSeason(season=season, map=map))
+            session.flush()
             return SeasonPublic.from_season(season)
 
     def removeMaps(self, season_id: int, map_ids: list[int]) -> SeasonPublic:
         with self.get_session() as session:
-            season = Season.removeMaps(session, season_id, map_ids)
+            season = session.get(Season, season_id)
+            if not season:
+                raise Exception(f"Season not found by id: {season_id}")
+            for map_id in map_ids:
+                map = session.get(Map, map_id)
+                if not map:
+                    raise Exception(f"Map not found by id: {map_id}")
+                map_season = session.get(
+                    DBMapSeason, {"season_id": season_id, "map_id": map.id}
+                )
+                if not map_season:
+                    raise Exception(
+                        f"Map not part of the season, map id: {map_id}, season id {season_id}"
+                    )
+                session.delete(map_season)
+            session.flush()
             return SeasonPublic.from_season(season)
 
     def addUserSignup(self, season_id: int, user_ids: list[int]) -> SeasonPublic:
         with self.get_session() as session:
-            season = Season.addUserSignup(session, season_id, user_ids)
+            season = session.get(Season, season_id)
+            if not season:
+                raise Exception(f"Season not found by id: {season_id}")
+            for user_id in user_ids:
+                user = session.get(User, user_id)
+                if not user:
+                    raise Exception(f"User not found by id: {user_id}")
+                already_exists = (
+                    session.get(
+                        DBUserSeasonSignup, {"season_id": season_id, "user_id": user.id}
+                    )
+                    is not None
+                )
+                if not already_exists:
+                    session.add(DBUserSeasonSignup(season=season, user=user))
+            session.flush()
             return SeasonPublic.from_season(season)
 
     def removeUserSignup(self, season_id: int, user_ids: list[int]) -> SeasonPublic:
         with self.get_session() as session:
-            season = Season.removeUserSignup(session, season_id, user_ids)
+            season = session.get(Season, season_id)
+            if not season:
+                raise Exception(f"Season not found by id: {season_id}")
+            for user_id in user_ids:
+                user = session.get(User, user_id)
+                if not user:
+                    raise Exception(f"User not found by id: {user_id}")
+                user_season = session.get(
+                    DBUserSeasonSignup, {"season_id": season_id, "user_id": user.id}
+                )
+                if not user_season:
+                    raise Exception(
+                        f"User not signed up for the season, user id: {user_id}, season id {season_id}"
+                    )
+                session.delete(user_season)
+            session.flush()
             return SeasonPublic.from_season(season)
 
     def getSignedUpUsers(self, season_id: int) -> list[UserPublic]:
         with self.get_session() as session:
-            from app.models.relationships import DBUserSeasonSignup
-            from app.models.user import User
-
             # Eager load signup users with their user data and w3c_stats
             season = (
                 session.scalars(

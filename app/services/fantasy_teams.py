@@ -11,6 +11,7 @@ from app.models.fantasy_team import (
     FantasyTeamUpdate,
 )
 from app.models.relationships import DBFantasyTeamPlayer
+from app.models.user import User
 from app.services.base import BaseService
 from app.utils.query_util import QueryElement, QueryUtil
 
@@ -88,13 +89,45 @@ class FantasyTeamService(BaseService):
 
     def addPlayers(self, team_id: int, player_ids: list[int]) -> FantasyTeamPublic:
         with self.get_session() as session:
-            fteam = FantasyTeam.addPlayers(session, team_id, player_ids)
+            fteam = session.get(FantasyTeam, team_id)
+            if not fteam:
+                raise NotFoundError(f"Fantasy Team not found by id: {team_id}")
+            for user_id in player_ids:
+                user = session.get(User, user_id)
+                if not user:
+                    raise NotFoundError(f"User not found by id: {user_id}")
+                already_exists = (
+                    session.get(
+                        DBFantasyTeamPlayer,
+                        {"fantasy_team_id": fteam.id, "user_id": user.id},
+                    )
+                    is not None
+                )
+                if not already_exists:
+                    session.add(DBFantasyTeamPlayer(users=user, fantasy_team=fteam))
+            session.flush()
             return FantasyTeamPublic.from_fantasy_team(fteam)
 
     def removePlayers(self, team_id: int, player_ids: list[int]) -> FantasyTeamPublic:
         with self.get_session() as session:
-            team = FantasyTeam.removePlayers(session, team_id, player_ids)
-            return FantasyTeamPublic.from_fantasy_team(team)
+            fteam = session.get(FantasyTeam, team_id)
+            if not fteam:
+                raise NotFoundError(f"Fantasy Team not found by id: {team_id}")
+            for user_id in player_ids:
+                user = session.get(User, user_id)
+                if not user:
+                    raise NotFoundError(f"User not found by id: {user_id}")
+                user_team = session.get(
+                    DBFantasyTeamPlayer,
+                    {"fantasy_team_id": team_id, "user_id": user.id},
+                )
+                if not user_team:
+                    raise NotFoundError(
+                        f"User not part of the fantasy team, user id: {user_id}"
+                    )
+                session.delete(user_team)
+            session.flush()
+            return FantasyTeamPublic.from_fantasy_team(fteam)
 
     def create_fantasy_team(self, team: FantasyTeamCreate) -> FantasyTeamPublic:
         return self.add(team)

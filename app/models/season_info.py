@@ -11,7 +11,7 @@ from sqlmodel import SQLModel
 from app.models.season import SeasonPublic
 
 if TYPE_CHECKING:
-    from app.models.relationships import DBTeamSeason
+    from app.models.team_season import DBTeamSeason
 
 
 class SeasonInfoBase(SQLModel):

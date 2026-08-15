@@ -6,10 +6,9 @@ from sqlalchemy.orm import joinedload
 
 from app.exceptions import NotFoundError
 from app.models.match import Match
-from app.models.relationships import DBUserTeamSeason
 from app.models.series import Series, SeriesCreate, SeriesPublic, SeriesUpdate
 from app.models.user import User
-from app.models.user_team_season_stats import UserTeamSeasonStatsPublic
+from app.models.user_team_season import DBUserTeamSeason, UserTeamSeasonStatsPublic
 from app.services.base import BaseService
 from app.utils.query_util import QueryElement, QueryUtil
 

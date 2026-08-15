@@ -22,12 +22,14 @@ from app.models.koth_event import KothEvent
 from app.models.map import Map
 from app.models.match import Match
 from app.models.player_career_stats import PlayerCareerStats
-from app.models.relationships import DBMapSeason, DBTeamSeason, DBUserTeamSeason
+from app.models.relationships import DBMapSeason
 from app.models.season import Season
 from app.models.series import Series
 from app.models.settings import Settings
 from app.models.team import Team
+from app.models.team_season import DBTeamSeason
 from app.models.user import User
+from app.models.user_team_season import DBUserTeamSeason
 
 
 def seed_league(session: Session) -> dict[str, Any]:

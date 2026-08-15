@@ -1,19 +1,18 @@
 from typing import TYPE_CHECKING, Annotated, Any, Self
 
-from sqlalchemy.orm import Session
 from sqlmodel import Field, Relationship, SQLModel
 
 from app.models.base import DBModel
 from app.models.enums import Race
-from app.models.relationships import DBUserTeamSeason
 from app.models.season import SeasonPublic
 from app.models.types import NoneToList, NumToStr
-from app.models.user_team_season_stats import UserTeamSeasonStatsPublic
+from app.models.user_team_season import UserTeamSeasonStatsPublic
 from app.models.w3c_stats import W3CStats, W3CStatsPublic
 
 if TYPE_CHECKING:
     from app.models.player_career_stats import PlayerCareerStats
     from app.models.relationships import DBFantasyTeamPlayer, DBUserSeasonSignup
+    from app.models.user_team_season import DBUserTeamSeason
 
 
 class UserBase(SQLModel):
@@ -49,36 +48,6 @@ class User(UserBase, DBModel, table=True):
         back_populates="user", sa_relationship_kwargs={"cascade": "all, delete"}
     )
     career_stats: list["PlayerCareerStats"] = Relationship(back_populates="user")
-
-    @classmethod
-    def updateUserTeamSeasonStats(
-        cls, session: Session, season_stats: "UserTeamSeasonStatsPublic"
-    ) -> "DBUserTeamSeason":
-        from app.models.season import Season
-        from app.models.team import Team
-
-        team = session.get(Team, season_stats.team_id)
-        if not team:
-            raise Exception(f"Team not found by id: {season_stats.team_id}")
-        season = session.get(Season, season_stats.season_id)
-        if not season:
-            raise Exception(f"Season not found by id: {season_stats.season_id}")
-        user = session.get(cls, season_stats.user_id)
-        if not user:
-            raise Exception(f"User not found by id: {season_stats.user_id}")
-        uts_obj = session.get(
-            DBUserTeamSeason,
-            {"team_id": team.id, "season_id": season.id, "user_id": user.id},
-        )
-        if uts_obj is None:
-            uts_obj = DBUserTeamSeason(user=user, season=season, team=team)
-            session.add(uts_obj)
-        uts_obj.games = season_stats.games
-        uts_obj.wins = season_stats.wins
-        uts_obj.losses = season_stats.losses
-        uts_obj.matchup_history = season_stats.matchup_history
-        session.flush()
-        return uts_obj
 
 
 class UserCreate(UserBase):

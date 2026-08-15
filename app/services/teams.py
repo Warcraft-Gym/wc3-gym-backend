@@ -5,7 +5,11 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import joinedload
 
 from app.exceptions import NotFoundError
+from app.models.season import Season
 from app.models.team import Team, TeamCreate, TeamPublic, TeamUpdate
+from app.models.team_season import DBTeamSeason
+from app.models.user import User
+from app.models.user_team_season import DBUserTeamSeason
 from app.services.base import BaseService
 from app.services.users import UserService
 from app.utils.query_util import QueryElement, QueryUtil
@@ -40,21 +44,93 @@ class TeamService(BaseService):
         self, team_id: int, season_id: int, player_ids: list[int]
     ) -> TeamPublic:
         with self.get_session() as session:
-            team = Team.addPlayers(session, team_id, season_id, player_ids)
+            team = session.get(Team, team_id)
+            if not team:
+                raise Exception(f"Team not found by id: {team_id}")
+            season = session.get(Season, season_id)
+            if not season:
+                raise Exception(f"Season not found by id: {season_id}")
+            for user_id in player_ids:
+                user = session.get(User, user_id)
+                if not user:
+                    raise Exception(f"User not found by id: {user_id}")
+                already_exists = (
+                    session.get(
+                        DBUserTeamSeason,
+                        {
+                            "team_id": team.id,
+                            "season_id": season_id,
+                            "user_id": user.id,
+                        },
+                    )
+                    is not None
+                )
+                if not already_exists:
+                    session.add(DBUserTeamSeason(user=user, season=season, team=team))
+            session.flush()
             return TeamPublic.from_team(team)
 
     def removePlayers(
         self, team_id: int, season_id: int, player_ids: list[int]
     ) -> TeamPublic:
         with self.get_session() as session:
-            team = Team.removePlayers(session, team_id, season_id, player_ids)
+            team = session.get(Team, team_id)
+            if not team:
+                raise Exception(f"Team not found by id: {team_id}")
+            season = session.get(Season, season_id)
+            if not season:
+                raise Exception(f"Season not found by id: {season_id}")
+            for user_id in player_ids:
+                user = session.get(User, user_id)
+                if not user:
+                    raise Exception(f"User not found by id: {user_id}")
+                user_team = session.get(
+                    DBUserTeamSeason,
+                    {"team_id": team_id, "season_id": season_id, "user_id": user.id},
+                )
+                if not user_team:
+                    raise Exception(f"User not part of the team, user id: {user_id}")
+                session.delete(user_team)
+            session.flush()
             return TeamPublic.from_team(team)
 
     def setCoaches(
         self, team_id: int, season_id: int, coach_ids: list[int]
     ) -> TeamPublic:
+        """Set coaches for a team in a season (up to 3)."""
         with self.get_session() as session:
-            team = Team.setCoaches(session, team_id, season_id, coach_ids)
+            team = session.get(Team, team_id)
+            if not team:
+                raise Exception(f"Team not found by id: {team_id}")
+            season = session.get(Season, season_id)
+            if not season:
+                raise Exception(f"Season not found by id: {season_id}")
+
+            # Validate coach limit
+            if len(coach_ids) > 3:
+                raise Exception("Cannot assign more than 3 coaches per team per season")
+
+            # Validate all users exist
+            for user_id in coach_ids:
+                user = session.get(User, user_id)
+                if not user:
+                    raise Exception(f"User not found by id: {user_id}")
+
+            # Get or create team_season entry
+            team_season = session.get(
+                DBTeamSeason, {"team_id": team_id, "season_id": season_id}
+            )
+
+            if not team_season:
+                team_season = DBTeamSeason(team_id=team_id, season_id=season_id)
+                session.add(team_season)
+
+            # Set coaches (pad with None if less than 3)
+            team_season.coach_1_id = coach_ids[0] if len(coach_ids) > 0 else None
+            team_season.coach_2_id = coach_ids[1] if len(coach_ids) > 1 else None
+            team_season.coach_3_id = coach_ids[2] if len(coach_ids) > 2 else None
+
+            session.flush()
             return TeamPublic.from_team(team)
 
     def delete(self, team_id: int) -> None:
@@ -63,8 +139,6 @@ class TeamService(BaseService):
 
     def get(self, team_id: int) -> TeamPublic:
         with self.get_session() as session:
-            from app.models.relationships import DBTeamSeason
-
             # Eager load related entities, disable nested loading
             team = (
                 session.scalars(
@@ -86,9 +160,6 @@ class TeamService(BaseService):
 
     def get_with_nested_users(self, team_id: int) -> TeamPublic:
         with self.get_session() as session:
-            from app.models.relationships import DBUserTeamSeason
-            from app.models.user import User
-
             # Eager load user_seasons and their users with w3c_stats and team_seasons (gnl_stats) with season info
             team = (
                 session.scalars(
@@ -118,9 +189,6 @@ class TeamService(BaseService):
     ) -> TeamPublic:
         """Get team with users filtered by specific season at database level"""
         with self.get_session() as session:
-            from app.models.relationships import DBTeamSeason, DBUserTeamSeason
-            from app.models.user import User
-
             # Eager load only user_seasons for the specified season, including w3c_stats and team_seasons (gnl_stats) with season info
             team = (
                 session.scalars(
@@ -256,9 +324,6 @@ class TeamService(BaseService):
 
     def getAll_with_nested_users(self) -> list[TeamPublic]:
         with self.get_session() as session:
-            from app.models.relationships import DBTeamSeason, DBUserTeamSeason
-            from app.models.user import User
-
             result: list[TeamPublic] = []
             # Eager load user_seasons and their users with w3c_stats and team_seasons (gnl_stats) with season info
             # Also eager load coaches from season_info

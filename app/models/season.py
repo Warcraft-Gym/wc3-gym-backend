@@ -1,16 +1,16 @@
 from datetime import date
 from typing import TYPE_CHECKING, Annotated, Any, Self
 
-from sqlalchemy.orm import Session
 from sqlmodel import Field, Relationship, SQLModel
 
 from app.models.base import DBModel
 from app.models.map import MapPublic
-from app.models.relationships import DBMapSeason, DBTeamSeason, DBUserSeasonSignup
 from app.models.types import IsoDate, LenientDate, NoneToList, NumToStr
 
 if TYPE_CHECKING:
-    from app.models.relationships import DBUserTeamSeason
+    from app.models.relationships import DBMapSeason, DBUserSeasonSignup
+    from app.models.team_season import DBTeamSeason
+    from app.models.user_team_season import DBUserTeamSeason
 
 
 class SeasonBase(SQLModel):
@@ -39,141 +39,6 @@ class Season(SeasonBase, DBModel, table=True):
     signup_users: list["DBUserSeasonSignup"] = Relationship(
         back_populates="season", sa_relationship_kwargs={"cascade": "all, delete"}
     )
-
-    @classmethod
-    def addTeams(cls, session: Session, obj_id: int, team_ids: list[int]) -> Self:
-        from app.models.team import Team
-
-        season = session.get(cls, obj_id)
-        if not season:
-            raise Exception(f"Season not found by id: {obj_id}")
-        for team_id in team_ids:
-            team = session.get(Team, team_id)
-            if not team:
-                raise Exception(f"Team not found by id: {team_id}")
-            already_exists = (
-                session.get(DBTeamSeason, {"season_id": obj_id, "team_id": team.id})
-                is not None
-            )
-            if not already_exists:
-                session.add(DBTeamSeason(season=season, team=team))
-
-        session.flush()
-        return season
-
-    @classmethod
-    def removeTeams(cls, session: Session, obj_id: int, team_ids: list[int]) -> Self:
-        from app.models.team import Team
-
-        season = session.get(cls, obj_id)
-        if not season:
-            raise Exception(f"Season not found by id: {obj_id}")
-        for team_id in team_ids:
-            team = session.get(Team, team_id)
-            if not team:
-                raise Exception(f"Team not found by id: {team_id}")
-            team_season = session.get(
-                DBTeamSeason, {"season_id": obj_id, "team_id": team_id}
-            )
-            if not team_season:
-                raise Exception(
-                    f"Team not part of the season, team id: {team_id}, season id {obj_id}"
-                )
-            session.delete(team_season)
-        session.flush()
-        return season
-
-    @classmethod
-    def addMaps(cls, session: Session, obj_id: int, map_ids: list[int]) -> Self:
-        from app.models.map import Map
-
-        season = session.get(cls, obj_id)
-        if not season:
-            raise Exception(f"Season not found by id: {obj_id}")
-        for map_id in map_ids:
-            map = session.get(Map, map_id)
-            if not map:
-                raise Exception(f"Map not found by id: {map_id}")
-            already_exists = (
-                session.get(DBMapSeason, {"season_id": obj_id, "map_id": map.id})
-                is not None
-            )
-            if not already_exists:
-                session.add(DBMapSeason(season=season, map=map))
-
-        session.flush()
-        return season
-
-    @classmethod
-    def removeMaps(cls, session: Session, obj_id: int, map_ids: list[int]) -> Self:
-        from app.models.map import Map
-
-        season = session.get(cls, obj_id)
-        if not season:
-            raise Exception(f"Season not found by id: {obj_id}")
-        for map_id in map_ids:
-            map = session.get(Map, map_id)
-            if not map:
-                raise Exception(f"Map not found by id: {map_id}")
-            map_season = session.get(
-                DBMapSeason, {"season_id": obj_id, "map_id": map.id}
-            )
-            if not map_season:
-                raise Exception(
-                    f"Map not part of the season, map id: {map_id}, season id {obj_id}"
-                )
-            session.delete(map_season)
-
-        session.flush()
-        return season
-
-    @classmethod
-    def addUserSignup(cls, session: Session, obj_id: int, user_ids: list[int]) -> Self:
-        from app.models.user import User
-
-        season = session.get(cls, obj_id)
-        if not season:
-            raise Exception(f"Season not found by id: {obj_id}")
-        for user_id in user_ids:
-            user = session.get(User, user_id)
-            if not user:
-                raise Exception(f"User not found by id: {user_id}")
-            already_exists = (
-                session.get(
-                    DBUserSeasonSignup, {"season_id": obj_id, "user_id": user.id}
-                )
-                is not None
-            )
-            if not already_exists:
-                session.add(DBUserSeasonSignup(season=season, user=user))
-
-        session.flush()
-        return season
-
-    @classmethod
-    def removeUserSignup(
-        cls, session: Session, obj_id: int, user_ids: list[int]
-    ) -> Self:
-        from app.models.user import User
-
-        season = session.get(cls, obj_id)
-        if not season:
-            raise Exception(f"Season not found by id: {obj_id}")
-        for user_id in user_ids:
-            user = session.get(User, user_id)
-            if not user:
-                raise Exception(f"User not found by id: {user_id}")
-            user_season = session.get(
-                DBUserSeasonSignup, {"season_id": obj_id, "user_id": user.id}
-            )
-            if not user_season:
-                raise Exception(
-                    f"User not signed up for the season, user id: {user_id}, season id {obj_id}"
-                )
-            session.delete(user_season)
-
-        session.flush()
-        return season
 
 
 class SeasonCreate(SeasonBase):
