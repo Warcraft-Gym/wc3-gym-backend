@@ -3,7 +3,7 @@ import logging
 from sqlalchemy import delete, select
 from sqlalchemy.orm import joinedload
 
-from app.exceptions import NotFoundException
+from app.exceptions import NotFoundError
 from app.models.draft_series import (
     DraftSeries,
     DraftSeriesCreate,
@@ -35,7 +35,7 @@ class DraftSeriesService(BaseService):
                 **draft_series.model_dump(exclude_unset=True),
             )
             if not draft_series:
-                raise NotFoundException("Draft series not found")
+                raise NotFoundError("Draft series not found")
             return DraftSeriesPublic.from_draft_series(draft_series)
 
     def delete(self, draft_series_id: int) -> None:
@@ -66,7 +66,7 @@ class DraftSeriesService(BaseService):
                 .first()
             )
             if not draft_series:
-                raise NotFoundException("Draft series not found")
+                raise NotFoundError("Draft series not found")
             return DraftSeriesPublic.from_draft_series(draft_series)
 
     def getByMatchId(self, match_id: int) -> list[DraftSeriesPublic]:
@@ -120,7 +120,7 @@ class DraftSeriesService(BaseService):
         """Get a draft series by ID"""
         draft_series_data = self.get(draft_series_id)
         if not draft_series_data:
-            raise NotFoundException(f"Draft series not found by ID: {draft_series_id}")
+            raise NotFoundError(f"Draft series not found by ID: {draft_series_id}")
         return draft_series_data
 
     def get_draft_series_by_match(self, match_id: int) -> list[DraftSeriesPublic]:

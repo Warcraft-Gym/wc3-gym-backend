@@ -21,11 +21,12 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.api.deps import AuthError
 from app.api.main import api_router
 from app.core.db import init_engine
-from app.exceptions import DBException, NotFoundException
+from app.exceptions import NotFoundError
 
 logger = logging.getLogger(__name__)
 
@@ -69,15 +70,18 @@ def create_app(db_url: str | None = None) -> FastAPI:
         allow_headers=["*"],
     )
 
-    @app.exception_handler(NotFoundException)
-    async def not_found(request: Request, exc: NotFoundException) -> JSONResponse:
+    @app.exception_handler(NotFoundError)
+    async def not_found(request: Request, exc: NotFoundError) -> JSONResponse:
         logger.error(exc)
         return JSONResponse({"error": str(exc)}, status_code=404)
 
-    @app.exception_handler(DBException)
-    async def db_error(request: Request, exc: DBException) -> JSONResponse:
-        logger.error(exc)
-        return JSONResponse({"error": str(exc)}, status_code=500)
+    @app.exception_handler(SQLAlchemyError)
+    async def db_error(request: Request, exc: SQLAlchemyError) -> JSONResponse:
+        """The database itself failed. The message is fixed because it
+        goes to the client; what the database said, including the
+        statement, goes to the log."""
+        logger.error("Database error", exc_info=exc)
+        return JSONResponse({"error": "Database error"}, status_code=500)
 
     @app.exception_handler(AuthError)
     async def auth_error(request: Request, exc: AuthError) -> JSONResponse:

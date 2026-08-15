@@ -3,7 +3,7 @@ import logging
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
-from app.exceptions import NotFoundException
+from app.exceptions import NotFoundError
 from app.models.fantasy_team import (
     FantasyTeam,
     FantasyTeamCreate,
@@ -33,7 +33,7 @@ class FantasyTeamService(BaseService):
                 **fantasy_team.model_dump(exclude_unset=True),
             )
             if not fantasy_team:
-                raise NotFoundException("Fantasy Team not found")
+                raise NotFoundError("Fantasy Team not found")
             return FantasyTeamPublic.from_fantasy_team(fantasy_team)
 
     def delete(self, fantasy_team_id: int) -> None:
@@ -44,7 +44,7 @@ class FantasyTeamService(BaseService):
         with self.get_session() as session:
             fteam = session.get(FantasyTeam, fantasy_team_id)
             if not fteam:
-                raise NotFoundException("Fantasy Team not found")
+                raise NotFoundError("Fantasy Team not found")
             return FantasyTeamPublic.from_fantasy_team(fteam)
 
     def getAll(self) -> list[FantasyTeamPublic]:
@@ -110,7 +110,7 @@ class FantasyTeamService(BaseService):
     def get_fantasy_team(self, team_id: int) -> FantasyTeamPublic:
         team_data = self.get(team_id)
         if not team_data:
-            raise NotFoundException(f"Fantasy Team not found by Id: {team_id}")
+            raise NotFoundError(f"Fantasy Team not found by Id: {team_id}")
         return team_data
 
     def getAll_fantasy_teams(self) -> list[FantasyTeamPublic]:

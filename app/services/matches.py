@@ -3,7 +3,7 @@ import logging
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
-from app.exceptions import NotFoundException
+from app.exceptions import NotFoundError
 from app.models.match import Match, MatchCreate, MatchPublic, MatchUpdate
 from app.services.base import BaseService
 from app.utils.query_util import QueryElement, QueryUtil
@@ -24,7 +24,7 @@ class MatchService(BaseService):
             )
             if not match:
                 logger.error("Match could not be updated!")
-                raise NotFoundException("Match not found")
+                raise NotFoundError("Match not found")
             return MatchPublic.from_match(match)
 
     def delete(self, match_id: int) -> None:
@@ -51,7 +51,7 @@ class MatchService(BaseService):
             )
             if not match:
                 logger.error("Match could not be found!")
-                raise NotFoundException("Match not found")
+                raise NotFoundError("Match not found")
             return MatchPublic.from_match(match)
 
     def search(self, query: QueryElement | None) -> list[MatchPublic]:
@@ -94,5 +94,5 @@ class MatchService(BaseService):
     def get_match(self, match_id: int) -> MatchPublic:
         match_data = self.get(match_id)
         if not match_data:
-            raise NotFoundException(f"Match not found by Id: {match_id}")
+            raise NotFoundError(f"Match not found by Id: {match_id}")
         return match_data

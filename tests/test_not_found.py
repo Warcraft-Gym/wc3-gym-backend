@@ -57,5 +57,5 @@ def test_the_body_carries_the_message_without_the_class_name(
     resp = client.get(f"/maps/{MISSING}", headers=auth_headers)
     assert resp.status_code == 404
     error = resp.json()["error"]
-    assert "NotFoundException" not in error
+    assert "NotFound" not in error
     assert "not found" in error.lower()

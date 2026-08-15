@@ -3,6 +3,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.api.deps import (
     MatchServiceDep,
@@ -11,7 +12,7 @@ from app.api.deps import (
     SeriesServiceDep,
     require_admin,
 )
-from app.exceptions import NotFoundException
+from app.exceptions import NotFoundError
 from app.models.match import MatchUpdate
 from app.models.series import SeriesUpdate
 from app.services.matches import MatchService
@@ -174,7 +175,7 @@ def perform_calculation(
 
         return season
 
-    except NotFoundException as e:
+    except NotFoundError as e:
         logger.error(f"Season not found: {e}")
         calculation_progress[season_id]["status"] = "error"
         calculation_progress[season_id]["message"] = f"Error: {e!s}"
@@ -182,5 +183,8 @@ def perform_calculation(
     except Exception as e:
         logger.error(f"Error calculating scores: {e}")
         calculation_progress[season_id]["status"] = "error"
-        calculation_progress[season_id]["message"] = f"Error: {e!s}"
+        # The progress endpoint serves this message, so a database error
+        # keeps the fixed message the client sees everywhere else.
+        message = "Database error" if isinstance(e, SQLAlchemyError) else str(e)
+        calculation_progress[season_id]["message"] = f"Error: {message}"
         raise

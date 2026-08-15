@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import delete, select
 from sqlalchemy.orm import joinedload
 
-from app.exceptions import NotFoundException
+from app.exceptions import NotFoundError
 from app.models.koth_event import (
     KothEvent,
     KothEventCreate,
@@ -57,7 +57,7 @@ class KothService(BaseService):
                 session, event_id, **event.model_dump(exclude_unset=True)
             )
             if not db_event:
-                raise NotFoundException("KOTH Event not found")
+                raise NotFoundError("KOTH Event not found")
             return KothEventPublic.model_validate(db_event)
 
     def delete_event(self, event_id: int) -> None:
@@ -81,7 +81,7 @@ class KothService(BaseService):
                 .first()
             )
             if not event:
-                raise NotFoundException(f"KOTH Event not found by Id: {event_id}")
+                raise NotFoundError(f"KOTH Event not found by Id: {event_id}")
             return KothEventPublic.model_validate(event)
 
     def get_all_events(self) -> list[KothEventPublic]:
@@ -115,7 +115,7 @@ class KothService(BaseService):
                 .first()
             )
             if not event:
-                raise NotFoundException("No active KOTH event found")
+                raise NotFoundError("No active KOTH event found")
             return KothEventPublic.model_validate(event)
 
     def set_active_event(self, event_id: int) -> KothEventPublic:
@@ -139,7 +139,7 @@ class KothService(BaseService):
                 session, signup_id, **signup.model_dump(exclude_unset=True)
             )
             if not db_signup:
-                raise NotFoundException("KOTH Signup not found")
+                raise NotFoundError("KOTH Signup not found")
             return KothSignupPublic.model_validate(db_signup)
 
     def delete_signup(self, signup_id: int) -> None:
@@ -305,7 +305,7 @@ class KothService(BaseService):
 
         signup = self.get_signup(signup_id)
         if not signup:
-            raise NotFoundException(f"Signup not found by Id: {signup_id}")
+            raise NotFoundError(f"Signup not found by Id: {signup_id}")
 
         return self.update_signup(signup_id, KothSignupUpdate(bracket=new_bracket))
 
@@ -313,7 +313,7 @@ class KothService(BaseService):
         """Set a player as king of their bracket (clears other kings in bracket)"""
         signup = self.get_signup(signup_id)
         if not signup:
-            raise NotFoundException(f"Signup not found by Id: {signup_id}")
+            raise NotFoundError(f"Signup not found by Id: {signup_id}")
 
         # Unset any other kings in the same bracket
         event_signups = self.get_signups_by_event(signup.event_id)
@@ -327,7 +327,7 @@ class KothService(BaseService):
         """Add a player as king of their bracket (keeps existing kings)"""
         signup = self.get_signup(signup_id)
         if not signup:
-            raise NotFoundException(f"Signup not found by Id: {signup_id}")
+            raise NotFoundError(f"Signup not found by Id: {signup_id}")
 
         return self.update_signup(signup_id, KothSignupUpdate(is_king=1))
 
@@ -335,7 +335,7 @@ class KothService(BaseService):
         """Remove king status from a player"""
         signup = self.get_signup(signup_id)
         if not signup:
-            raise NotFoundException(f"Signup not found by Id: {signup_id}")
+            raise NotFoundError(f"Signup not found by Id: {signup_id}")
 
         return self.update_signup(signup_id, KothSignupUpdate(is_king=0))
 
@@ -351,7 +351,7 @@ class KothService(BaseService):
                 session, match_id, **match.model_dump(exclude_unset=True)
             )
             if not db_match:
-                raise NotFoundException("KOTH Match not found")
+                raise NotFoundError("KOTH Match not found")
             return KothMatchPublic.model_validate(db_match)
 
     def delete_match(self, match_id: int) -> None:
@@ -407,7 +407,7 @@ class KothService(BaseService):
         for participant in participant_signup_ids:
             signup = self.get_signup(participant["signup_id"])
             if not signup:
-                raise NotFoundException(
+                raise NotFoundError(
                     f"Signup not found by Id: {participant['signup_id']}"
                 )
             signups.append(signup)
@@ -454,7 +454,7 @@ class KothService(BaseService):
         """Update match winner, set all winning team members as kings, and delete losing participant signups"""
         match = self.get_match(match_id)
         if not match:
-            raise NotFoundException(f"Match not found by Id: {match_id}")
+            raise NotFoundError(f"Match not found by Id: {match_id}")
 
         if winner_team_number < 1 or winner_team_number > match.num_teams:
             raise ValueError(

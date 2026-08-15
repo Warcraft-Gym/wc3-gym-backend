@@ -1,6 +1,6 @@
 import logging
 
-from app.exceptions import NotFoundException
+from app.exceptions import NotFoundError
 from app.models.map import Map, MapCreate, MapPublic, MapUpdate
 from app.services.base import BaseService
 from app.utils.query_util import QueryElement, QueryUtil
@@ -18,7 +18,7 @@ class MapService(BaseService):
         with self.get_session() as session:
             updated = Map.update(session, map_id, **map.model_dump())
             if not updated:
-                raise NotFoundException("Map not found")
+                raise NotFoundError("Map not found")
             return MapPublic.model_validate(updated)
 
     def delete(self, map_id: int) -> None:
@@ -57,5 +57,5 @@ class MapService(BaseService):
     def get_map(self, map_id: int) -> MapPublic:
         map_data = self.get(map_id)
         if not map_data:
-            raise NotFoundException(f"Map not found by Id: {map_id}")
+            raise NotFoundError(f"Map not found by Id: {map_id}")
         return map_data

@@ -1,7 +1,7 @@
 import logging
 from typing import Any
 
-from app.exceptions import NotFoundException
+from app.exceptions import NotFoundError
 from app.models.settings import (
     Settings,
     SettingsCreate,
@@ -29,7 +29,7 @@ class SettingsService(BaseService):
                 session, setting_id, **settings.model_dump(exclude_unset=True)
             )
             if not updated_setting:
-                raise NotFoundException("Setting not found")
+                raise NotFoundError("Setting not found")
             return SettingsPublic.model_validate(updated_setting)
 
     def delete(self, setting_id: int | None) -> None:
@@ -42,7 +42,7 @@ class SettingsService(BaseService):
         with self.get_session() as session:
             setting = session.get(Settings, setting_id)
             if not setting:
-                raise NotFoundException(f"Setting with id '{setting_id}' not found")
+                raise NotFoundError(f"Setting with id '{setting_id}' not found")
             return SettingsPublic.model_validate(setting)
 
     def getAll(self) -> list[SettingsPublic]:
@@ -63,7 +63,7 @@ class SettingsService(BaseService):
         with self.get_session() as session:
             setting = Settings.get_by_key(session, key)
             if not setting:
-                raise NotFoundException(f"Setting with key '{key}' not found")
+                raise NotFoundError(f"Setting with key '{key}' not found")
             return SettingsPublic.model_validate(setting)
 
     def get_setting(self, key: str) -> dict[str, Any]:

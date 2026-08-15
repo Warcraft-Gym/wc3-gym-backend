@@ -5,8 +5,6 @@ from sqlalchemy import ColumnExpressionArgument, select
 from sqlalchemy.orm import Session
 from sqlmodel import SQLModel
 
-from app.exceptions import DBException
-
 
 class DBModel(SQLModel):
     """Shared query helpers for the mapped classes. It has no table of its own."""
@@ -52,7 +50,7 @@ class DBModel(SQLModel):
         cls, session: Session, filters: ColumnExpressionArgument[bool] | None
     ) -> Sequence[Self]:
         if filters is None:
-            raise DBException("No search criteria was defined!")
+            raise ValueError("No search criteria was defined!")
         return session.scalars(select(cls).where(filters)).unique().all()
 
     @classmethod

@@ -1,9 +1,10 @@
 import logging
 
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import joinedload
 
-from app.exceptions import NotFoundException
+from app.exceptions import NotFoundError
 from app.models.team import Team, TeamCreate, TeamPublic, TeamUpdate
 from app.services.base import BaseService
 from app.services.users import UserService
@@ -25,14 +26,14 @@ class TeamService(BaseService):
         with self.get_session() as session:
             team = Team.update(session, team_id, **team.model_dump(exclude_unset=True))
             if not team:
-                raise NotFoundException("Team not found")
+                raise NotFoundError("Team not found")
             return TeamPublic.from_team(team)
 
     def update_icon(self, team_id: int, file: bytes) -> TeamPublic:
         with self.get_session() as session:
             team = Team.update_icon(session, team_id, file)
             if not team:
-                raise NotFoundException("Team not found")
+                raise NotFoundError("Team not found")
             return TeamPublic.from_team(team)
 
     def addPlayers(
@@ -80,7 +81,7 @@ class TeamService(BaseService):
                 .first()
             )
             if not team:
-                raise NotFoundException("Team not found")
+                raise NotFoundError("Team not found")
             return TeamPublic.from_team(team)
 
     def get_with_nested_users(self, team_id: int) -> TeamPublic:
@@ -109,7 +110,7 @@ class TeamService(BaseService):
                 .first()
             )
             if not team:
-                raise NotFoundException("Team not found")
+                raise NotFoundError("Team not found")
             return TeamPublic.from_team(team)
 
     def get_with_nested_users_by_season(
@@ -163,14 +164,14 @@ class TeamService(BaseService):
                 .first()
             )
             if not team:
-                raise NotFoundException("Team not found")
+                raise NotFoundError("Team not found")
             return TeamPublic.from_team(team)
 
     def get_icon(self, team_id: int) -> bytes | None:
         with self.get_session() as session:
             team = session.get(Team, team_id)
             if not team:
-                raise NotFoundException("Team not found")
+                raise NotFoundError("Team not found")
             return team.icon
 
     def search(self, query: QueryElement | None) -> list[TeamPublic]:
@@ -299,7 +300,7 @@ class TeamService(BaseService):
     def get_team(self, team_id: int) -> TeamPublic:
         team_data = self.get(team_id)
         if not team_data:
-            raise NotFoundException(f"Team not found by Id: {team_id}")
+            raise NotFoundError(f"Team not found by Id: {team_id}")
         return team_data
 
     def get_team_icon(self, team_id: int) -> bytes | None:
@@ -308,7 +309,7 @@ class TeamService(BaseService):
     def get_team_season(self, team_id: int, season_id: int) -> TeamPublic:
         team_data = self.get_with_nested_users_by_season(team_id, season_id)
         if not team_data:
-            raise NotFoundException(f"Team not found by Id: {team_id}")
+            raise NotFoundError(f"Team not found by Id: {team_id}")
         # Data is already filtered by season at database level
         return team_data
 
@@ -362,8 +363,13 @@ class TeamService(BaseService):
                 try:
                     self.user_app_service.updateW3CStats(u)
                 except Exception as e:
-                    # Log the error but continue syncing other players
-                    error_msg = f"Failed to sync W3C stats for user {u.name} (BattleTag: {u.battleTag}): {e!s}"
+                    # Log the error but continue syncing other players.
+                    # The list goes to the client, so a database error
+                    # keeps the fixed message.
+                    reason = (
+                        "Database error" if isinstance(e, SQLAlchemyError) else str(e)
+                    )
+                    error_msg = f"Failed to sync W3C stats for user {u.name} (BattleTag: {u.battleTag}): {reason}"
                     sync_errors.append(error_msg)
                     print(error_msg)  # Log to console
 

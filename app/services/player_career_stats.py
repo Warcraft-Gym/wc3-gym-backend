@@ -3,9 +3,9 @@ from collections.abc import Iterable
 from typing import Any
 
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session as OrmSession
 
-from app.exceptions import DBException
 from app.models.player_career_stats import (
     PlayerCareerStats,
     PlayerCareerStatsPublic,
@@ -237,12 +237,15 @@ class PlayerCareerStatsService(BaseService):
                 with self.get_session() as session:
                     self._apply_stats_update(session, update_data)
                 updated += 1
-            except (DBException, KeyError) as e:
-                # DBException: database error for this item.
+            except (SQLAlchemyError, KeyError) as e:
+                # SQLAlchemyError: database error for this item. The list
+                # goes to the client, so the message is fixed and what the
+                # database said goes to the log.
                 # KeyError: the item misses a required field.
                 # Any other exception is a bug and must fail the request.
-                logger.error(f"Error updating stats for user {user_id}: {e}")
-                errors.append(f"Error for user {user_id}: {e!s}")
+                message = "Database error" if isinstance(e, SQLAlchemyError) else str(e)
+                logger.exception(f"Error updating stats for user {user_id}")
+                errors.append(f"Error for user {user_id}: {message}")
 
         return {"updated": updated, "errors": errors}
 
@@ -397,7 +400,10 @@ class PlayerCareerStatsService(BaseService):
             except Exception as e:
                 logger.error(f"Error importing {row.get('NAME', 'Unknown')}: {e}")
                 skipped += 1
-                errors.append(f"Error importing {row.get('NAME', 'Unknown')}: {e!s}")
+                message = "Database error" if isinstance(e, SQLAlchemyError) else str(e)
+                errors.append(
+                    f"Error importing {row.get('NAME', 'Unknown')}: {message}"
+                )
 
         return {"imported": imported, "skipped": skipped, "errors": errors}
 

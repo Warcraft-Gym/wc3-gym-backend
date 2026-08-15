@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
-from app.exceptions import NotFoundException
+from app.exceptions import NotFoundError
 from app.models.fantasy_bet import (
     FantasyBet,
     FantasyBetCreate,
@@ -40,7 +40,7 @@ class FantasyBetService(BaseService):
                 **fantasy_bet.model_dump(exclude_unset=True),
             )
             if not fantasy_bet:
-                raise NotFoundException("Fantasy Bet not found")
+                raise NotFoundError("Fantasy Bet not found")
             return FantasyBetPublic.from_fantasy_bet(fantasy_bet)
 
     def delete(self, fantasy_bet_id: int) -> None:
@@ -51,7 +51,7 @@ class FantasyBetService(BaseService):
         with self.get_session() as session:
             fbet = session.get(FantasyBet, fantasy_bet_id)
             if not fbet:
-                raise NotFoundException("Fantasy Bet not found")
+                raise NotFoundError("Fantasy Bet not found")
             return FantasyBetPublic.from_fantasy_bet(fbet)
 
     def getAll(self) -> list[FantasyBetPublic]:
@@ -151,7 +151,7 @@ class FantasyBetService(BaseService):
                         if min_bet_setting and min_bet_setting.get("value")
                         else None
                     )
-                except (NotFoundException, Exception):
+                except (NotFoundError, Exception):
                     min_bet = None
 
                 try:
@@ -163,7 +163,7 @@ class FantasyBetService(BaseService):
                         if max_bet_setting and max_bet_setting.get("value")
                         else None
                     )
-                except (NotFoundException, Exception):
+                except (NotFoundError, Exception):
                     max_bet = None
 
                 # Only validate if min and max are both defined and different
@@ -182,7 +182,7 @@ class FantasyBetService(BaseService):
                     if bet.bet_points > max_bet:
                         raise ValueError(f"bet_points must not exceed {max_bet}")
 
-        except NotFoundException:
+        except NotFoundError:
             # Settings don't exist, require bet_points from input
             if bet.bet_points is None or bet.bet_points <= 0:
                 raise ValueError("bet_points is required and must be greater than 0")
@@ -203,7 +203,7 @@ class FantasyBetService(BaseService):
     def get_fantasy_bet(self, bet_id: int) -> FantasyBetPublic:
         bet_data = self.get(bet_id)
         if not bet_data:
-            raise NotFoundException(f"Fantasy Bet not found by Id: {bet_id}")
+            raise NotFoundError(f"Fantasy Bet not found by Id: {bet_id}")
         return bet_data
 
     def getAll_fantasy_bets(self) -> list[FantasyBetPublic]:

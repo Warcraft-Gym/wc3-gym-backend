@@ -3,7 +3,7 @@ import logging
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload, noload
 
-from app.exceptions import NotFoundException
+from app.exceptions import NotFoundError
 from app.models.season import Season, SeasonCreate, SeasonPublic, SeasonUpdate
 from app.models.user import UserPublic
 from app.services.base import BaseService
@@ -25,7 +25,7 @@ class SeasonService(BaseService):
             )
             # Example usage
             if not season:
-                raise NotFoundException("Season not found")
+                raise NotFoundError("Season not found")
             return SeasonPublic.from_season(season)
 
     def delete(self, season_id: int) -> None:
@@ -53,7 +53,7 @@ class SeasonService(BaseService):
             )
             # Example usage
             if not season:
-                raise NotFoundException("Season not found")
+                raise NotFoundError("Season not found")
             return SeasonPublic.from_season(season)
 
     def getAll(self) -> list[SeasonPublic]:
@@ -164,7 +164,7 @@ class SeasonService(BaseService):
             )
 
             if not season:
-                raise NotFoundException("Season not found")
+                raise NotFoundError("Season not found")
 
             result = []
             if season.signup_users:
@@ -188,5 +188,5 @@ class SeasonService(BaseService):
     def get_season(self, season_id: int) -> SeasonPublic:
         season_data = self.get(season_id)
         if not season_data:
-            raise NotFoundException(f"Season not found by Id: {season_id}")
+            raise NotFoundError(f"Season not found by Id: {season_id}")
         return season_data

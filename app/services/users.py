@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
-from app.exceptions import NotFoundException
+from app.exceptions import NotFoundError
 from app.models.user import User, UserCreate, UserPublic, UserUpdate
 from app.models.user_team_season_stats import UserTeamSeasonStatsPublic
 from app.models.w3c_stats import W3CStats, W3CStatsCreate, W3CStatsPublic
@@ -31,7 +31,7 @@ class UserService(BaseService):
         with self.get_session() as session:
             user = User.update(session, user_id, **user.model_dump(exclude_unset=True))
             if not user:
-                raise NotFoundException("User not found")
+                raise NotFoundError("User not found")
             return UserPublic.from_user(user)
 
     def delete(self, user_id: int) -> None:
@@ -122,7 +122,7 @@ class UserService(BaseService):
                 session, stats_id, **w3c_stats.model_dump(), user_id=user_id
             )
             if not stats:
-                raise NotFoundException("W3CStats not found")
+                raise NotFoundError("W3CStats not found")
             return W3CStatsPublic.model_validate(stats)
 
     def create_user(self, user: UserCreate) -> UserPublic:
@@ -137,7 +137,7 @@ class UserService(BaseService):
     def get_user(self, user_id: int) -> UserPublic:
         user_data = self.get(user_id)
         if not user_data:
-            raise NotFoundException(f"User not found by Id: {user_id}")
+            raise NotFoundError(f"User not found by Id: {user_id}")
         return user_data
 
     def validateBattleTag(self, battle_tag: str) -> bool:

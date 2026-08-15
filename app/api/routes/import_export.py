@@ -20,7 +20,7 @@ from app.api.deps import (
     UserServiceDep,
     require_admin,
 )
-from app.exceptions import NotFoundException
+from app.exceptions import NotFoundError
 from app.models.fantasy_bet import FantasyBetCreate, FantasyBetUpdate
 from app.models.fantasy_team import FantasyTeamCreate, FantasyTeamUpdate
 from app.models.map import MapCreate, MapUpdate
@@ -104,7 +104,7 @@ def _process_import(
                 logger.info(f"Created new season with ID: {season_id}")
             else:
                 original_season_id = int(season_row["ID"])
-                # Check if season exists - handle NotFoundException properly
+                # Check if season exists - handle NotFoundError properly
                 try:
                     season_service.get_season(original_season_id)
                     # Season exists, update it
@@ -113,7 +113,7 @@ def _process_import(
                     )
                     season_id = original_season_id
                     logger.info(f"Updated existing season with ID: {season_id}")
-                except NotFoundException:
+                except NotFoundError:
                     # Season doesn't exist, create it
                     season = season_service.create_season(SeasonCreate(**season_data))
                     season_id = season.id
@@ -646,7 +646,7 @@ def export_season(
     season_id = int(season_id)
     season = season_service.get_season(season_id)
     if not season:
-        raise NotFoundException(f"Season not found by id: {season_id}")
+        raise NotFoundError(f"Season not found by id: {season_id}")
 
     workbook = openpyxl.Workbook()
     workbook.remove(workbook.active)

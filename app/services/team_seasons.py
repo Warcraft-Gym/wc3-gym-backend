@@ -1,6 +1,6 @@
 import logging
 
-from app.exceptions import NotFoundException
+from app.exceptions import NotFoundError
 from app.models.relationships import DBTeamSeason
 from app.models.season_info import SeasonInfoPublic, SeasonInfoUpdate
 from app.services.base import BaseService
@@ -23,7 +23,7 @@ class TeamSeasonService(BaseService):
                 **season_info.model_dump(),
             )
             if not team_season:
-                raise NotFoundException("Team season not found")
+                raise NotFoundError("Team season not found")
             return SeasonInfoPublic.from_team_season(team_season)
 
     def delete(self) -> Exception:

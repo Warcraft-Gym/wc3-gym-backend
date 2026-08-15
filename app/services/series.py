@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
-from app.exceptions import NotFoundException
+from app.exceptions import NotFoundError
 from app.models.match import Match
 from app.models.relationships import DBUserTeamSeason
 from app.models.series import Series, SeriesCreate, SeriesPublic, SeriesUpdate
@@ -38,7 +38,7 @@ class SeriesService(BaseService):
                 session, series_id, **series.model_dump(exclude_unset=True)
             )
             if not series:
-                raise NotFoundException("Series not found")
+                raise NotFoundError("Series not found")
             return SeriesPublic.from_series(series)
 
     def delete(self, series_id: int) -> None:
@@ -69,7 +69,7 @@ class SeriesService(BaseService):
                 .first()
             )
             if not series:
-                raise NotFoundException("Series not found")
+                raise NotFoundError("Series not found")
             return SeriesPublic.from_series(series)
 
     def getAll(self) -> list[SeriesPublic]:
@@ -194,7 +194,7 @@ class SeriesService(BaseService):
     def get_series(self, series_id: int) -> SeriesPublic:
         series_data = self.get(series_id)
         if not series_data:
-            raise NotFoundException(f"Series not found byId: {series_id}")
+            raise NotFoundError(f"Series not found byId: {series_id}")
         return series_data
 
     def updateGNLSeasonStats(self, series: SeriesPublic) -> None:
