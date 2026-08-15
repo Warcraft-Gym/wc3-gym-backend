@@ -51,9 +51,8 @@ def app(db_url: str) -> FastAPI:
 def client(app: FastAPI) -> Client:
     from fastapi.testclient import TestClient
 
-    # follow_redirects off, like the Flask test client, so a 302 is
-    # asserted as a 302. raise_server_exceptions off so a route error is
-    # asserted as the 500 body a real client sees.
+    # follow_redirects off so a 302 is asserted as a 302. raise_server_exceptions
+    # off so a route error is asserted as the 500 body a real client sees.
     return TestClient(app, follow_redirects=False, raise_server_exceptions=False)
 
 

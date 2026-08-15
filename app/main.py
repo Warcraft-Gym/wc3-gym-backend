@@ -31,9 +31,8 @@ from app.exceptions import NotFoundError
 
 logger = logging.getLogger(__name__)
 
-# Production has one CPU core and served one request at a time before the
-# port (one gunicorn sync worker). The routes are sync functions, so this
-# caps the thread pool they run in to keep that behaviour.
+# NOTE (Aug 26): production currently has one CPU core. The routes are sync functions,
+# so this caps the thread pool they run in and the server answers one request at a time.
 MAX_CONCURRENT_REQUESTS = 1
 
 

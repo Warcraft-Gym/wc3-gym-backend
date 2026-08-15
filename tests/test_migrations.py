@@ -1,8 +1,7 @@
 """The migrations and the models must describe the same schema.
 
-Without this, a column added to a model would reach production only
-through create_all, which no longer runs, so the table would be missing
-the column instead.
+`alembic upgrade head` is the only thing that builds the schema, so a column added to
+a model without a migration is missing from the table in production.
 """
 
 from pathlib import Path

@@ -30,10 +30,10 @@ from app.services.users import UserService
 
 
 class AuthError(Exception):
-    """A request without a valid token. The status codes and {"msg": ...}
-    bodies match what flask_jwt_extended sent: 401 for a missing header
-    or an expired token, 422 for a malformed token or the wrong token
-    type, so clients see the same auth errors before and after the port."""
+    """A request without a valid token.
+
+    Clients read the status and the {"msg": ...} body: 401 for a missing header or an
+    expired token, 422 for a malformed token or the wrong token type."""
 
     def __init__(self, message: str, status_code: int = 401) -> None:
         super().__init__(message)
@@ -58,7 +58,7 @@ def _decode(credentials: _Credentials) -> dict[str, Any]:
 
 
 def require_admin(credentials: _Credentials) -> str:
-    """The guard that replaced @jwt_required()."""
+    """Admit a valid access token and answer its subject."""
     claims = _decode(credentials)
     if claims.get("type") != "access":
         raise AuthError("Only non-refresh tokens are allowed", status_code=422)
@@ -66,7 +66,7 @@ def require_admin(credentials: _Credentials) -> str:
 
 
 def require_refresh(credentials: _Credentials) -> str:
-    """The guard that replaced @jwt_required(refresh=True)."""
+    """Admit a valid refresh token and answer its subject."""
     claims = _decode(credentials)
     if claims.get("type") != "refresh":
         raise AuthError("Only refresh tokens are allowed", status_code=422)
@@ -77,9 +77,8 @@ RequireAdmin = Annotated[str, Depends(require_admin)]
 RequireRefresh = Annotated[str, Depends(require_refresh)]
 
 
-# The graph mirrors the wiring the Flask factory had. Score and series
-# need each other — the layer split used to hide that cycle — so score is
-# built first and receives series right after.
+# Score and series need each other, so score is built first and receives series
+# right after.
 settings_service = SettingsService()
 user_service = UserService(settings_app_service=settings_service)
 team_service = TeamService(user_app_service=user_service)
@@ -111,8 +110,8 @@ fantasy_score_service = FantasyScoreService(
 koth_service = KothService(settings_app_service=settings_service)
 stats_service = PlayerCareerStatsService(series_service=series_service)
 
-# 24-hour markers that flask_caching's SimpleCache used to hold, e.g. the
-# per-team W3C sync rate limit. Per process and gone on restart, as before.
+# 24-hour markers, e.g. the per-team W3C sync rate limit. Per process, and gone
+# on restart.
 ttl_cache: dict[str, float] = {}
 
 

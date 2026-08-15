@@ -98,7 +98,7 @@ def promote_draft_series(
     # Get the draft series
     draft_series = service.get_draft_series(draft_series_id)
 
-    # Convert to series DTO
+    # Convert to a SeriesCreate
     series_dto = service.convert_to_series(draft_series)
 
     # Create as real series (this will trigger all calculations)

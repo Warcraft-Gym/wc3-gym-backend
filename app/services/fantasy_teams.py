@@ -62,7 +62,7 @@ class FantasyTeamService(BaseService):
             if filter is None:
                 logger.debug(f"No fantasy team found by searchcriteria: {query}")
                 return result
-            # Eager load only the relations the DTO reads
+            # Eager load only the relations the response model reads
             fteams = (
                 session.scalars(
                     select(FantasyTeam)

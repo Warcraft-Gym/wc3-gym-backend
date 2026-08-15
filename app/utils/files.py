@@ -3,8 +3,8 @@ import re
 import unicodedata
 
 # secure_filename is copied from Werkzeug 3.x (BSD-3-Clause,
-# https://github.com/pallets/werkzeug) so its exact filename behaviour
-# survives without the Flask stack as a dependency.
+# https://github.com/pallets/werkzeug) to keep its exact filename behaviour without
+# taking the dependency.
 
 _filename_ascii_strip_re = re.compile(r"[^A-Za-z0-9_.-]")
 _windows_device_files = {

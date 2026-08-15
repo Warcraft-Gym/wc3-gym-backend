@@ -50,7 +50,7 @@ def test_every_mapping_resolves() -> None:
 
 
 def test_the_metadata_holds_every_table() -> None:
-    """A table missing here is a table create_all does not make."""
+    """A table missing from the metadata is a table autogenerate never sees."""
     import_all_models()
     assert set(SQLModel.metadata.tables) == TABLES
 
@@ -58,8 +58,7 @@ def test_the_metadata_holds_every_table() -> None:
 def test_every_list_field_reads_as_a_list() -> None:
     """A list field answers with a list, empty or not, and never with null.
 
-    The API used to answer null for an empty list on three fields and a
-    list on the other seven; these assertions pin the one rule.
+    One rule for all ten list fields; these assertions pin it.
     """
     from app.models.enums import Race
     from app.models.fantasy_team import FantasyTeamPublic

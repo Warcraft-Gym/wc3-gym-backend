@@ -91,9 +91,8 @@ class KothService(BaseService):
 
     def get_active_event(self) -> KothEventPublic:
         with self.get_session() as session:
-            # Pick the one event id first. A LIMIT on the outer select would
-            # cut the joined signup and match rows, so the limit belongs in a
-            # subquery, which is also what the old Query.first() built.
+            # Pick the one event id first. A LIMIT on the outer select would cut the
+            # joined signup and match rows, so the limit belongs in a subquery.
             active_event_id = (
                 select(KothEvent.id)
                 .where(KothEvent.is_active == True)
@@ -173,7 +172,7 @@ class KothService(BaseService):
         Create a signup from Twitch/Nightbot with automatic W3C validation and bracket assignment.
         Only allows signup if no active signup exists for this twitch username.
         If preferred_race is provided, only considers MMR for that race.
-        Returns the created signup DTO or raises an exception.
+        Returns the created signup or raises an exception.
         """
         # Normalize race input
         race_map = {

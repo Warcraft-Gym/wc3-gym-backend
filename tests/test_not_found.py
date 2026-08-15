@@ -1,8 +1,6 @@
 """A request that names a row which does not exist answers 404.
 
-These routes answered 500 before, because the services signalled a
-missing row with the exception the API maps to a server error. The status
-is part of the contract the frontend and the Discord bot read, so it is
+The status is part of the contract the frontend and the Discord bot read, so it is
 pinned here.
 """
 

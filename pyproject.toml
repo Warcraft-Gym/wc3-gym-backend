@@ -3,7 +3,7 @@
 # the package with no further build config.
 name = "app"
 version = "1.0.0"
-description = "Flask REST API for the GNL (Gym Newbie League) esports platform"
+description = "FastAPI REST API for the GNL (Gym Newbie League) esports platform"
 requires-python = ">=3.13"
 dependencies = [
     "requests",

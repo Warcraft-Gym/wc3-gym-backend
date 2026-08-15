@@ -1,9 +1,7 @@
 """DELETE /config/settings/{key} answers by whether the key exists.
 
-The route answered 404 on every delete before, because it read a success
-flag from a service method that returns nothing. The admin frontend reads
-the status code to decide a delete worked, so both answers are pinned
-here.
+The admin frontend reads the status code to decide a delete worked, so both answers
+are pinned here.
 """
 
 from typing import Any

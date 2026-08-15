@@ -69,10 +69,10 @@ class FantasyBetService(BaseService):
             if filter is None:
                 logger.debug(f"No fantasy bets found by searchcriteria: {query}")
                 return result
-            # Eager load the relations that the DTO and the score service read.
-            # noload('*') stops all other relations from loading, so every
-            # relation that a caller reads must be listed here. The score
-            # breakdown reads series.match.playday.
+            # Eager load the relations that the response model and the score service
+            # read. noload('*') stops all other relations loading, so every relation
+            # that a caller reads must be listed here. The score breakdown reads
+            # series.match.playday.
             fbets = (
                 session.scalars(
                     select(FantasyBet)

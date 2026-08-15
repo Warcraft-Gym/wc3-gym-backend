@@ -1,12 +1,11 @@
 """The scoring math, called directly on the service.
 
-No Flask and no database: the score system comes from a stub settings
-service, and getScoreByMapScore touches nothing else. These tests move
-to any framework unchanged.
+No web framework and no database: the score system comes from a stub settings service,
+and getScoreByMapScore touches nothing else.
 
-The GNL scale: losing scores keep their map score (0 or 1); a winning
-2-x score converts to points from the top of the scale, and the scale
-depends on the score system (standard tops at 3, helpstone at 4).
+The GNL scale: losing scores keep their map score (0 or 1); a winning 2-x score converts
+to points from the top of the scale, and the scale depends on the score system (standard
+tops at 3, helpstone at 4).
 """
 
 import pytest

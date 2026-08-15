@@ -442,7 +442,7 @@ class PlayerCareerStatsService(BaseService):
 
         # Group series by player and collect user info
         series_by_player = {}
-        player_names = {}  # Store player names from series DTOs
+        player_names = {}  # Store player names from the series
 
         for series in all_series:
             player1_id = series.player1_id
@@ -451,7 +451,6 @@ class PlayerCareerStatsService(BaseService):
             if player1_id:
                 if player1_id not in series_by_player:
                     series_by_player[player1_id] = []
-                    # Get player name from series DTO
                     if series.player1:
                         player_names[player1_id] = (
                             series.player1.name or series.player1.w3c_name or "Unknown"
@@ -461,7 +460,6 @@ class PlayerCareerStatsService(BaseService):
             if player2_id:
                 if player2_id not in series_by_player:
                     series_by_player[player2_id] = []
-                    # Get player name from series DTO
                     if series.player2:
                         player_names[player2_id] = (
                             series.player2.name or series.player2.w3c_name or "Unknown"
@@ -884,7 +882,6 @@ class PlayerCareerStatsService(BaseService):
         self, stat_id: int, stat_dto: PlayerCareerStatsPublic
     ) -> PlayerCareerStatsPublic | None:
         """Update career stats (historical values and user link)"""
-        # Use DBModel.update pattern with DTO's to_db_dict()
         with self.get_session() as session:
             updated_stat = PlayerCareerStats.update(
                 session, stat_id, **stat_dto.model_dump(exclude_unset=True)

@@ -132,7 +132,7 @@ class DraftSeriesService(BaseService):
         self.deleteByMatchId(match_id)
 
     def convert_to_series(self, draft_series: DraftSeries) -> SeriesCreate:
-        """Convert a draft series to a real series (DTO only, actual creation handled by SeriesService)"""
+        """Build the SeriesCreate for a draft series. SeriesService writes the row."""
         # Create a Series from the draft data
         series_dto = SeriesCreate(
             match_id=draft_series.match_id,

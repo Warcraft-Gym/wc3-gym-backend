@@ -1,11 +1,8 @@
 """Create the initial schema
 
-The tables this makes are the tables the application used to make itself,
-with create_all, every time it started.
-
-A database that already holds them predates this migration and needs no
-work, so upgrade() answers by recording the revision and creating
-nothing. Running `alembic stamp head` by hand has the same effect.
+On a database that already holds every table, upgrade() records the revision and
+creates nothing; `alembic stamp head` has the same effect. A database holding only
+some of them stops the migration.
 
 Revision ID: 658616cf0c2b
 Revises:

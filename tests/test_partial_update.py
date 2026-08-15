@@ -1,9 +1,7 @@
 """A PUT that carries some fields leaves the others alone.
 
-One schema used to serve create, update and response, so an update wrote
-every column of the row and filled the ones the request left out with
-null. A request naming one field answered 500 when a NOT NULL column was
-among them, and erased the value when the column was nullable.
+The update schemas mark every field optional and the services write only the fields the
+request carries, so a field the body omits keeps its value.
 """
 
 from typing import Any
