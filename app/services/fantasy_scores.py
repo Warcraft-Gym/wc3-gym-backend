@@ -14,18 +14,22 @@ if TYPE_CHECKING:
     from app.models.season import SeasonPublic
     from app.models.series import SeriesPublic
 
-# A player's race arrives as the enum, as its plain value, or not at all,
-# so anything keyed by race carries all three.
+# The response models render a race as its plain value, so a race read
+# off a player or a fantasy team is a string. A race read off an ORM row
+# is the member, and a player without one is None, so a key is any of the
+# three and race_value writes all three the same way.
 type RaceKey = Race | str | None
 type RacePoints = dict[RaceKey, int]
 type RaceStats = dict[RaceKey, dict[str, Any]]
 type RaceWeeklyDetails = dict[RaceKey, list[dict[str, Any]]]
 
 
-def _race_value(race: RaceKey) -> str:
+def _race_value(race: RaceKey) -> str | None:
     """The plain value ("HU"), which is also the frontend's icon id.
     str(member) would answer the repr ("Race.HU")."""
-    return race.value if isinstance(race, Race) else str(race)
+    if isinstance(race, Race):
+        return race.value
+    return race
 
 
 class FantasyScoreService:
@@ -479,6 +483,8 @@ class FantasyScoreService:
         drafted_race = fantasy_team.drafted_race
         race_total_points = race_points.get(drafted_race, 0)
 
+        # JSON keys are strings, and the page matches them against the
+        # value in race_breakdown.race, so both are written the same way.
         race_points_str = {
             _race_value(race): points for race, points in race_points.items()
         }

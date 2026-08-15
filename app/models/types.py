@@ -10,12 +10,15 @@ pages on warcraft-gym.com are generated from it offline.
 Each type says which group it is in.
 """
 
+import difflib
 import enum
 import numbers
 from datetime import date, datetime
 from typing import Annotated, Any
 
 from pydantic import BeforeValidator, PlainSerializer
+
+from app.models.enums import Race
 
 
 def _enum_to_value(value: Any) -> Any:
@@ -65,6 +68,23 @@ def _empty_str_to_none(value: Any) -> Any:
     return None if value == "" else value
 
 
+def _suggest_race(value: Any) -> Any:
+    # The names clients send are near misses of the member they mean:
+    # HUMAN for HU, ORC for OC, Random for RANDOM. Pydantic's own message
+    # lists the five members but does not say which one was meant, so the
+    # near miss is named here before the value reaches it.
+    if not isinstance(value, str):
+        return value
+    members = [member.value for member in Race]
+    if value in members:
+        return value
+    closest = difflib.get_close_matches(value.upper(), members, n=1, cutoff=0.4)
+    known = ", ".join(members)
+    if closest:
+        raise ValueError(f"'{value}' is not a race. Did you mean '{closest[0]}'?")
+    raise ValueError(f"'{value}' is not a race. Valid races are {known}.")
+
+
 def _round_to_int(value: Any) -> Any:
     # The w3champions API sometimes returns fractional numbers for integer
     # columns.
@@ -107,3 +127,5 @@ LenientDate = BeforeValidator(_lenient_date)
 EmptyStrToNone = BeforeValidator(_empty_str_to_none)
 # Input. Integer fields fed by the w3champions API, which sends fractions.
 RoundToInt = BeforeValidator(_round_to_int)
+# Input. Race fields, where a rejected value names the member it resembles.
+SuggestRace = BeforeValidator(_suggest_race)

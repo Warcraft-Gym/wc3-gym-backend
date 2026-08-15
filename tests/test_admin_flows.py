@@ -537,24 +537,27 @@ def test_a_write_without_a_token_is_refused(
     assert resp.status_code == 401
 
 
-# Defects this branch records but does not fix.
+# The race column. The five members are RANDOM, HU, OC, NE and UD, and
+# the input models take a Race, so pydantic answers 422 for anything else.
+# The field used to be Race | str, which let any string through to a
+# column the database reads back as an enum, and one such row made
+# GET /users answer 500 for every caller.
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="UserCreate.race is Race | str, so any string is accepted and "
-    "written; the column is a non-native enum, so the row is only rejected "
-    "when it is read back",
+@pytest.mark.parametrize(
+    "sent,suggested",
+    [
+        ("HUMAN", "HU"),
+        ("ORC", "OC"),
+        ("UNDEAD", "UD"),
+        ("NIGHTELF", "NE"),
+        ("Random", "RANDOM"),
+    ],
 )
-def test_a_player_created_with_an_invalid_race_is_refused(
-    client: Client, auth_headers: dict[str, str]
+def test_a_race_that_misses_names_the_member_it_resembles(
+    client: Client, auth_headers: dict[str, str], sent: str, suggested: str
 ) -> None:
-    """One bad race makes the whole player list unreadable.
-
-    POST /users answers 201 for race "HUMAN". Every later GET /users
-    answers 500, for every caller, until the row is edited in the
-    database, because reading the column raises LookupError.
-    """
+    """The long names are the ones a caller is most likely to send."""
     resp = client.post(
         "/users",
         json={
@@ -562,13 +565,89 @@ def test_a_player_created_with_an_invalid_race_is_refused(
             "battleTag": "Bad#9999",
             "discordTag": "bad",
             "discordId": "9999",
-            "race": "HUMAN",
+            "race": sent,
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 422
+    assert f"Did you mean '{suggested}'?" in resp.json()["error"]
+
+
+def test_a_race_that_resembles_nothing_lists_the_members(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    resp = client.post(
+        "/users",
+        json={
+            "name": "Bad",
+            "battleTag": "Bad#9999",
+            "discordTag": "bad",
+            "discordId": "9999",
+            "race": "zzz",
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 422
+    assert "Valid races are RANDOM, HU, OC, NE, UD." in resp.json()["error"]
+
+
+@pytest.mark.parametrize("race", ["HUMAN", "human", "Random", "", "1"])
+def test_a_player_created_with_an_invalid_race_is_refused(
+    client: Client, auth_headers: dict[str, str], race: str
+) -> None:
+    resp = client.post(
+        "/users",
+        json={
+            "name": "Bad",
+            "battleTag": "Bad#9999",
+            "discordTag": "bad",
+            "discordId": "9999",
+            "race": race,
         },
         headers=auth_headers,
     )
     assert resp.status_code == 422
 
     assert client.get("/users").status_code == 200
+    assert client.get("/users").json() == []
+
+
+@pytest.mark.parametrize("race", ["RANDOM", "HU", "OC", "NE", "UD"])
+def test_a_player_created_with_a_valid_race_reads_back_as_that_string(
+    client: Client, auth_headers: dict[str, str], race: str
+) -> None:
+    """The response carries the plain value, not "Race.HU"."""
+    created = post(
+        client,
+        auth_headers,
+        "/users",
+        {
+            "name": "Good",
+            "battleTag": "Good#1",
+            "discordTag": "good",
+            "discordId": "1",
+            "race": race,
+        },
+    )
+    assert created["race"] == race
+    assert get(client, f"/users/{created['id']}")["race"] == race
+    assert get(client, "/users")[0]["race"] == race
+
+
+def test_a_player_race_update_is_held_to_the_same_values(
+    client: Client, auth_headers: dict[str, str], league: dict[str, Any]
+) -> None:
+    player_id = league["player_a_id"]
+    resp = client.put(
+        f"/users/{player_id}", json={"race": "HUMAN"}, headers=auth_headers
+    )
+    assert resp.status_code == 422
+
+    put(client, auth_headers, f"/users/{player_id}", {"race": "NE"})
+    assert get(client, f"/users/{player_id}")["race"] == "NE"
+
+
+# Defects this branch records but does not fix.
 
 
 @pytest.mark.xfail(

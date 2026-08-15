@@ -6,7 +6,7 @@ from app.models.base import DBModel
 from app.models.enums import Race
 from app.models.season import SeasonPublic
 from app.models.team import Team, TeamPublic
-from app.models.types import NoneToList, NumToStr
+from app.models.types import EnumValue, NoneToList, NumToStr, SuggestRace
 from app.models.user import UserPublic
 
 if TYPE_CHECKING:
@@ -56,9 +56,7 @@ class FantasyTeamPlayerIds(SQLModel):
 
 
 class FantasyTeamCreate(FantasyTeamBase):
-    # A Race member when the value comes from the database, a plain string
-    # when it comes from request JSON.
-    drafted_race: Race | str | None = None
+    drafted_race: Annotated[Race | None, SuggestRace] = None
 
 
 class FantasyTeamUpdate(SQLModel):
@@ -66,7 +64,7 @@ class FantasyTeamUpdate(SQLModel):
     season_id: int | None = None
     captain_id: int | None = None
     drafted_team_id: int | None = None
-    drafted_race: Race | str | None = None
+    drafted_race: Annotated[Race | None, SuggestRace] = None
     player_points: int | None = None
     bench_points: int | None = None
     team_points: int | None = None
@@ -80,7 +78,7 @@ class FantasyTeamPublic(FantasyTeamBase):
     name: Annotated[str | None, NumToStr] = None
     season_id: int | None = None
     captain_id: int | None = None
-    drafted_race: Race | str | None = None
+    drafted_race: Annotated[str | None, EnumValue] = None
     season: SeasonPublic | None = None
     captain: UserPublic | None = None
     drafted_team: TeamPublic | None = None

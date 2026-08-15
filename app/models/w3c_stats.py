@@ -4,7 +4,7 @@ from sqlmodel import Field, Relationship, SQLModel
 
 from app.models.base import DBModel
 from app.models.enums import Race
-from app.models.types import RoundToInt
+from app.models.types import EnumValue, RoundToInt, SuggestRace
 
 if TYPE_CHECKING:
     from app.models.user import User
@@ -31,17 +31,14 @@ class W3CStats(W3CStatsBase, DBModel, table=True):
 
 
 class W3CStatsCreate(W3CStatsBase):
-    # A Race member when the value comes from the w3champions sync, a plain
-    # string when it comes from request JSON. Services compare members, so
-    # the value is not coerced.
-    race: Race | str | None = None
+    race: Annotated[Race | None, SuggestRace] = None
     # user_id is not here: the caller of the sync owns which user the row
     # belongs to, so the service supplies it.
 
 
 class W3CStatsPublic(W3CStatsBase):
     id: int
-    race: Race | str | None = None
+    race: Annotated[str | None, EnumValue] = None
     user_id: int
 
     def to_dict(self) -> dict[str, Any]:

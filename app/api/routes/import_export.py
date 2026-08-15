@@ -21,6 +21,7 @@ from app.api.deps import (
     require_admin,
 )
 from app.exceptions import BadRequestError, NotFoundError
+from app.models.enums import Race
 from app.models.fantasy_bet import FantasyBetCreate, FantasyBetUpdate
 from app.models.fantasy_team import FantasyTeamCreate, FantasyTeamUpdate
 from app.models.map import MapCreate, MapUpdate
@@ -984,7 +985,7 @@ def import_fantasy_teams(
                     "name": row.iloc[1],
                     "battleTag": "Fantasy_User",
                     "discordTag": row.iloc[1],
-                    "race": "Random",
+                    "race": Race.RANDOM,
                 }
                 captain = user_service.create_user(UserCreate(**user_data))
             elif len(users) != 1:

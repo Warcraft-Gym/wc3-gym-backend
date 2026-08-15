@@ -5,7 +5,7 @@ from sqlmodel import Field, Relationship, SQLModel
 from app.models.base import DBModel
 from app.models.enums import Race
 from app.models.season import SeasonPublic
-from app.models.types import NoneToList, NumToStr
+from app.models.types import EnumValue, NoneToList, NumToStr, SuggestRace
 from app.models.user_team_season import UserTeamSeasonStatsPublic
 from app.models.w3c_stats import W3CStats, W3CStatsPublic
 
@@ -51,10 +51,7 @@ class User(UserBase, DBModel, table=True):
 
 
 class UserCreate(UserBase):
-    # A Race member when the value comes from a sync, a plain string when
-    # it comes from request JSON. Services compare members, so the value
-    # is not coerced.
-    race: Race | str
+    race: Annotated[Race, SuggestRace]
 
 
 class UserUpdate(SQLModel):
@@ -62,7 +59,7 @@ class UserUpdate(SQLModel):
     battleTag: Annotated[str | None, NumToStr] = None
     discordTag: Annotated[str | None, NumToStr] = None
     discordId: Annotated[str | None, NumToStr] = None
-    race: Race | str | None = None
+    race: Annotated[Race | None, SuggestRace] = None
     mmr: int | None = None
     country: Annotated[str | None, NumToStr] = None
     fantasy_tier: int | None = None
@@ -76,7 +73,7 @@ class UserPublic(UserBase):
     battleTag: Annotated[str | None, NumToStr] = None
     discordTag: Annotated[str | None, NumToStr] = None
     discordId: Annotated[str | None, NumToStr] = None
-    race: Race | str | None = None
+    race: Annotated[str | None, EnumValue] = None
     w3c_stats: Annotated[list[W3CStatsPublic], NoneToList] = []
     gnl_stats: Annotated[list[UserTeamSeasonStatsPublic], NoneToList] = []
     signup_seasons: Annotated[list[SeasonPublic], NoneToList] = []

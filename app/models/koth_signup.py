@@ -4,7 +4,7 @@ from sqlmodel import Field, Relationship, SQLModel
 
 from app.models.base import DBModel
 from app.models.enums import Race
-from app.models.types import EnumValue
+from app.models.types import EnumValue, SuggestRace
 
 if TYPE_CHECKING:
     from app.models.koth_event import KothEvent
@@ -39,9 +39,7 @@ class KothSignup(KothSignupBase, DBModel, table=True):
 
 
 class KothSignupCreate(KothSignupBase):
-    # A Race member from the w3champions sync, a plain string from a
-    # Nightbot command.
-    race: Race | str
+    race: Annotated[Race, SuggestRace]
 
 
 class KothSignupUpdate(SQLModel):
@@ -49,7 +47,7 @@ class KothSignupUpdate(SQLModel):
     twitch_username: str | None = None
     battle_tag: str | None = None
     w3c_name: str | None = None
-    race: Race | str | None = None
+    race: Annotated[Race | None, SuggestRace] = None
     mmr: int | None = None
     bracket: int | None = None
     is_king: int | None = None
