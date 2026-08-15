@@ -832,52 +832,6 @@ class PlayerCareerStatsService(BaseService):
 
         return int(gnl_rating)
 
-    def _calculate_player_stats_from_series_data(
-        self, user_id: int, series_data: list[dict[str, Any]]
-    ) -> dict[str, Any]:
-        """Calculate stats from a list of series (dict data from DB)."""
-        stats = {
-            "series_won": 0,
-            "series_lost": 0,
-            "games_won": 0,
-            "games_lost": 0,
-            "rating": None,
-        }
-
-        for series in series_data:
-            # Determine if player is player1 or player2
-            is_player1 = series["player1_id"] == user_id
-
-            # Count series win/loss
-            if is_player1:
-                if series["player1_score"] > series["player2_score"]:
-                    stats["series_won"] += 1
-                elif series["player1_score"] < series["player2_score"]:
-                    stats["series_lost"] += 1
-
-                # Games won/lost
-                stats["games_won"] += series["player1_score"] or 0
-                stats["games_lost"] += series["player2_score"] or 0
-
-                # Rating (use most recent)
-                if series["player1_rating_after"] is not None:
-                    stats["rating"] = series["player1_rating_after"]
-            else:
-                if series["player2_score"] > series["player1_score"]:
-                    stats["series_won"] += 1
-                elif series["player2_score"] < series["player1_score"]:
-                    stats["series_lost"] += 1
-
-                # Games won/lost
-                stats["games_won"] += series["player2_score"] or 0
-                stats["games_lost"] += series["player1_score"] or 0
-
-                # Rating (use most recent)
-                if series["player2_rating_after"] is not None:
-                    stats["rating"] = series["player2_rating_after"]
-
-        return stats
-
     def update_career_stats(
         self, stat_id: int, stat_dto: PlayerCareerStatsPublic
     ) -> PlayerCareerStatsPublic | None:
