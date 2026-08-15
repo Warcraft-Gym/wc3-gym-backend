@@ -194,7 +194,10 @@ class FantasyBetService(BaseService):
     def update_fantasy_bet(
         self, bet_id: int, bet: FantasyBetUpdate
     ) -> FantasyBetPublic:
-        self._apply_bet_points_logic(bet)
+        # A partial update only writes the fields it carries, so the
+        # bet-points rules apply only when the update carries bet_points.
+        if "bet_points" in bet.model_fields_set:
+            self._apply_bet_points_logic(bet)
         return self.update(bet_id, bet)
 
     def delete_fantasy_bet(self, bet_id: int) -> None:

@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING, Annotated, Any, Self
 from sqlalchemy.orm import Session
 from sqlmodel import Field, Relationship, SQLModel
 
+from app.exceptions import NotFoundError
 from app.models.base import DBModel
 from app.models.enums import Race
 from app.models.relationships import DBFantasyTeamPlayer
@@ -54,11 +55,11 @@ class FantasyTeam(FantasyTeamBase, DBModel, table=True):
     def addPlayers(cls, session: Session, obj_id: int, user_ids: list[int]) -> Self:
         team = session.get(cls, obj_id)
         if not team:
-            raise Exception(f"Team not found by id: {obj_id}")
+            raise NotFoundError(f"Fantasy Team not found by id: {obj_id}")
         for user_id in user_ids:
             user = session.get(User, user_id)
             if not user:
-                raise Exception(f"User not found by id: {user_id}")
+                raise NotFoundError(f"User not found by id: {user_id}")
             already_exists = (
                 session.get(
                     DBFantasyTeamPlayer,
@@ -76,21 +77,25 @@ class FantasyTeam(FantasyTeamBase, DBModel, table=True):
     def removePlayers(cls, session: Session, obj_id: int, user_ids: list[int]) -> Self:
         team = session.get(cls, obj_id)
         if not team:
-            raise Exception(f"Fantasy Team not found by id: {obj_id}")
+            raise NotFoundError(f"Fantasy Team not found by id: {obj_id}")
         for user_id in user_ids:
             user = session.get(User, user_id)
             if not user:
-                raise Exception(f"User not found by id: {user_id}")
+                raise NotFoundError(f"User not found by id: {user_id}")
             user_team = session.get(
                 DBFantasyTeamPlayer, {"fantasy_team_id": obj_id, "user_id": user.id}
             )
             if not user_team:
-                raise Exception(
+                raise NotFoundError(
                     f"User not part of the fantasy team, user id: {user_id}"
                 )
             session.delete(user_team)
         session.flush()
         return team
+
+
+class FantasyTeamPlayerIds(SQLModel):
+    player_ids: list[int]
 
 
 class FantasyTeamCreate(FantasyTeamBase):

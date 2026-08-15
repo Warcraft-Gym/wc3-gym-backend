@@ -1,7 +1,7 @@
 import logging
-from typing import Annotated, Any
+from typing import Any
 
-from fastapi import APIRouter, Body, Depends
+from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 
 from app.api.deps import (
@@ -18,6 +18,7 @@ from app.models.fantasy_bet import (
 )
 from app.models.fantasy_team import (
     FantasyTeamCreate,
+    FantasyTeamPlayerIds,
     FantasyTeamPublic,
     FantasyTeamUpdate,
 )
@@ -73,10 +74,10 @@ def get_team(team_id: int, service: FantasyTeamServiceDep) -> dict[str, Any] | N
     "/fantasy/teams/addPlayers/{team_id}", dependencies=[Depends(require_admin)]
 )
 def addPlayers(
-    team_id: int, data: Annotated[dict, Body()], service: FantasyTeamServiceDep
+    team_id: int, data: FantasyTeamPlayerIds, service: FantasyTeamServiceDep
 ) -> dict[str, Any] | None:
     """Add players to a fantasy team for a season using their IDs."""
-    team = service.addFantasyPlayers(team_id, data.get("player_ids"))
+    team = service.addFantasyPlayers(team_id, data.player_ids)
     return team.to_dict() if team else None
 
 
@@ -84,10 +85,10 @@ def addPlayers(
     "/fantasy/teams/removePlayers/{team_id}", dependencies=[Depends(require_admin)]
 )
 def removePlayers(
-    team_id: int, data: Annotated[dict, Body()], service: FantasyTeamServiceDep
+    team_id: int, data: FantasyTeamPlayerIds, service: FantasyTeamServiceDep
 ) -> dict[str, Any] | None:
     """Removes players from a fantasy team for a season using their IDs."""
-    team = service.removeFantasyPlayers(team_id, data.get("player_ids"))
+    team = service.removeFantasyPlayers(team_id, data.player_ids)
     return team.to_dict() if team else None
 
 
@@ -172,26 +173,21 @@ def search_bets(service: FantasyBetServiceDep, query: str = "") -> list[dict[str
     return [bet.to_dict() for bet in service.search_fantasy_bets(parsed) or []]
 
 
-@router.get(
-    "/fantasy/teams/{team_id}/season/{season_id}/breakdown", response_model=None
-)
+@router.get("/fantasy/teams/{team_id}/season/{season_id}/breakdown")
 def get_fantasy_team_breakdown(
     team_id: int,
     season_id: int,
     season_service: SeasonServiceDep,
     fantasy_score_service: FantasyScoreServiceDep,
-) -> JSONResponse | dict[str, Any]:
+) -> dict[str, Any]:
     """Get detailed score breakdown for a fantasy team.
 
     Returns a detailed breakdown showing how each component of the fantasy
     team score was calculated.
     """
+    # get_season raises NotFoundError for an unknown id, so a missing
+    # season already answers 404.
     season = season_service.get_season(season_id)
-    if not season:
-        return JSONResponse(
-            {"error": f"Season with id {season_id} not found"}, status_code=404
-        )
-
     return fantasy_score_service.getTeamScoreBreakdown(team_id, season)
 
 
