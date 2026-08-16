@@ -1,11 +1,13 @@
-"""Pin how many statements one series answer costs.
+"""Pin how many statements one series or career stats answer costs.
 
-Series._eager_options and DraftSeries._eager_options decide the count, and
-the count is a constant: it does not grow with the number of w3c_stats,
-team_seasons or season signups a player carries. A lazy load added to the
-serialization raises the count and fails a test here.
+Series._eager_options, DraftSeries._eager_options and
+PlayerCareerStats.eager_options decide the count, and the count is a
+constant: it does not grow with the number of w3c_stats, team_seasons or
+season signups a player carries, nor with the number of career rows. A
+lazy load added to the serialization raises the count and fails a test
+here.
 
-The last test layers raiseload on the paths the options cover, so an
+Two tests layer raiseload on the paths the options cover, so an
 unintended lazy load on those paths raises instead of passing silently.
 """
 
@@ -22,10 +24,15 @@ from app.core.db import Session
 from app.core.query import QueryUtil
 from app.models.draft_series import DraftSeries
 from app.models.enums import Race
+from app.models.player_career_stats import (
+    PlayerCareerStats,
+    PlayerCareerStatsPublic,
+)
 from app.models.relationships import DBUserSeasonSignup
 from app.models.series import Series, SeriesPublic
 from app.models.w3c_stats import W3CStats
 from app.services.draft_series import DraftSeriesService
+from app.services.player_career_stats import PlayerCareerStatsService
 from app.services.series import SeriesService
 
 STATS_PER_PLAYER = 8
@@ -169,3 +176,52 @@ def test_options_cover_the_player_graph(league: dict[str, Any]) -> None:
     assert len(public.player1.w3c_stats) == STATS_PER_PLAYER
     assert len(public.player1.gnl_stats) == 1
     assert len(public.player1.signup_seasons) == 1
+
+
+def test_career_stats_cost_four_statements(league: dict[str, Any]) -> None:
+    """One statement for the rows and their user, one per collection."""
+    service = PlayerCareerStatsService(series_service=None)
+    with count_statements() as tally:
+        career = service.get_all()
+    assert len(career) == 2
+    assert career[0].user.w3c_stats
+    assert tally[0] == 4
+
+
+def test_career_statement_count_holds_when_the_rows_grow(
+    league: dict[str, Any],
+) -> None:
+    """Two more career rows on two more players, the same four statements."""
+    with Session() as session:
+        for index, user_id in enumerate(league["player_ids"][2:]):
+            session.add(
+                PlayerCareerStats(user_id=user_id, player_name=f"Extra {index}")
+            )
+        session.commit()
+
+    service = PlayerCareerStatsService(series_service=None)
+    with count_statements() as tally:
+        career = service.get_all()
+    assert len(career) == 4
+    assert tally[0] == 4
+
+
+def test_career_options_cover_the_player_graph(league: dict[str, Any]) -> None:
+    """raiseload on the user, so a lazy load off it raises.
+
+    The wildcard covers the relationships of a player the options do not
+    name, so dropping any of the four options fails this test.
+    """
+    options = (
+        *PlayerCareerStats.eager_options(),
+        joinedload(PlayerCareerStats.user).raiseload("*"),
+    )
+    with Session() as session:
+        stats = session.scalars(
+            select(PlayerCareerStats).options(*options).order_by(PlayerCareerStats.id)
+        ).first()
+        public = PlayerCareerStatsPublic.from_career_stats(stats)
+
+    assert len(public.user.w3c_stats) == STATS_PER_PLAYER
+    assert len(public.user.gnl_stats) == 1
+    assert len(public.user.signup_seasons) == 1

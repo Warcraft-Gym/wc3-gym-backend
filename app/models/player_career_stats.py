@@ -2,10 +2,14 @@ from decimal import Decimal
 from typing import Any, Self
 
 from sqlalchemy import DECIMAL
+from sqlalchemy.orm import joinedload
+from sqlalchemy.sql.base import ExecutableOption
 from sqlmodel import Field, Relationship, SQLModel
 
 from app.models.base import DBModel
+from app.models.relationships import DBUserSeasonSignup
 from app.models.user import User, UserPublic
+from app.models.user_team_season import DBUserTeamSeason
 
 # The response reads these as floats, and null or zero reads as 0.0.
 _FLOAT_FIELDS = ("series_winrate", "games_winrate", "avg_series_per_season")
@@ -46,6 +50,20 @@ class PlayerCareerStats(PlayerCareerStatsBase, DBModel, table=True):
 
     # Relationships
     user: User | None = Relationship(back_populates="career_stats")
+
+    @classmethod
+    def eager_options(cls) -> tuple[ExecutableOption, ...]:
+        """Every relation the public career row reads."""
+        player = joinedload(cls.user)
+        return (
+            # Collections use selectinload; a joined collection multiplies the rows
+            player.selectinload(User.w3c_stats),
+            player.selectinload(User.team_seasons).joinedload(DBUserTeamSeason.team),
+            player.selectinload(User.team_seasons).joinedload(DBUserTeamSeason.season),
+            player.selectinload(User.signup_seasons).joinedload(
+                DBUserSeasonSignup.season
+            ),
+        )
 
 
 class PlayerCareerStatsCreate(PlayerCareerStatsBase):

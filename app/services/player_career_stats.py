@@ -33,7 +33,9 @@ class PlayerCareerStatsService(BaseService):
     def get(self, stat_id: int) -> PlayerCareerStatsPublic | None:
         """Get career stats by stats record ID (implements abstract method)"""
         with self.get_session() as session:
-            stat = session.get(PlayerCareerStats, stat_id)
+            stat = session.get(
+                PlayerCareerStats, stat_id, options=PlayerCareerStats.eager_options()
+            )
             return PlayerCareerStatsPublic.from_career_stats(stat) if stat else None
 
     def add(self, entity: dict[str, Any]) -> PlayerCareerStatsPublic | None:
@@ -64,7 +66,9 @@ class PlayerCareerStatsService(BaseService):
         with self.get_session() as session:
             stats = (
                 session.scalars(
-                    select(PlayerCareerStats).order_by(PlayerCareerStats.rating.desc())
+                    select(PlayerCareerStats)
+                    .options(*PlayerCareerStats.eager_options())
+                    .order_by(PlayerCareerStats.rating.desc())
                 )
                 .unique()
                 .all()
@@ -76,6 +80,7 @@ class PlayerCareerStatsService(BaseService):
         with self.get_session() as session:
             stat = session.scalars(
                 select(PlayerCareerStats)
+                .options(*PlayerCareerStats.eager_options())
                 .where(PlayerCareerStats.user_id == user_id)
                 .limit(1)
             ).first()
@@ -86,6 +91,7 @@ class PlayerCareerStatsService(BaseService):
         with self.get_session() as session:
             stat = session.scalars(
                 select(PlayerCareerStats)
+                .options(*PlayerCareerStats.eager_options())
                 .where(PlayerCareerStats.player_name == player_name)
                 .limit(1)
             ).first()
