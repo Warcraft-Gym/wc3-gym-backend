@@ -1,17 +1,17 @@
-from typing import TYPE_CHECKING, Annotated, Any, Self
+from typing import Annotated, Any, Self
 
+from sqlalchemy.orm import joinedload
+from sqlalchemy.sql.base import ExecutableOption
 from sqlmodel import Field, Relationship, SQLModel
 
 from app.models.base import DBModel
-from app.models.season import SeasonPublic
-from app.models.series import SeriesPublic
+from app.models.match import Match
+from app.models.relationships import DBMapSeason, DBUserSeasonSignup
+from app.models.season import Season, SeasonPublic
+from app.models.series import Series, SeriesPublic
 from app.models.types import EmptyStrToNone
-from app.models.user import UserPublic
-
-if TYPE_CHECKING:
-    from app.models.season import Season
-    from app.models.series import Series
-    from app.models.user import User
+from app.models.user import User, UserPublic
+from app.models.user_team_season import DBUserTeamSeason
 
 
 class FantasyBetBase(SQLModel):
@@ -40,6 +40,43 @@ class FantasyBet(FantasyBetBase, DBModel, table=True):
     winner: "User" = Relationship(
         sa_relationship_kwargs={"foreign_keys": "[FantasyBet.winner_id]"}
     )
+
+    @classmethod
+    def eager_options(cls) -> tuple[ExecutableOption, ...]:
+        """Every relation the public bet reads."""
+        # A bet holds four users: both sides of the bet and both players
+        players = (
+            joinedload(cls.user),
+            joinedload(cls.winner),
+            joinedload(cls.series).joinedload(Series.player1),
+            joinedload(cls.series).joinedload(Series.player2),
+        )
+        return (
+            # Collections use selectinload; a joined collection multiplies the rows
+            joinedload(cls.season)
+            .selectinload(Season.maps)
+            .joinedload(DBMapSeason.map),
+            joinedload(cls.series).joinedload(Series.match).joinedload(Match.team1),
+            joinedload(cls.series).joinedload(Series.match).joinedload(Match.team2),
+            joinedload(cls.series).joinedload(Series.match).joinedload(Match.season),
+            joinedload(cls.series).joinedload(Series.match).joinedload(Match.fixed_map),
+            *(
+                option
+                for player in players
+                for option in (
+                    player.selectinload(User.w3c_stats),
+                    player.selectinload(User.team_seasons).joinedload(
+                        DBUserTeamSeason.team
+                    ),
+                    player.selectinload(User.team_seasons).joinedload(
+                        DBUserTeamSeason.season
+                    ),
+                    player.selectinload(User.signup_seasons).joinedload(
+                        DBUserSeasonSignup.season
+                    ),
+                )
+            ),
+        )
 
 
 class FantasyBetCreate(FantasyBetBase):

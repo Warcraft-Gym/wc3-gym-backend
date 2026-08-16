@@ -49,7 +49,9 @@ class FantasyBetService(BaseService):
 
     def get(self, fantasy_bet_id: int) -> FantasyBetPublic:
         with self.get_session() as session:
-            fbet = session.get(FantasyBet, fantasy_bet_id)
+            fbet = session.get(
+                FantasyBet, fantasy_bet_id, options=FantasyBet.eager_options()
+            )
             if not fbet:
                 raise NotFoundError("Fantasy Bet not found")
             return FantasyBetPublic.from_fantasy_bet(fbet)
@@ -57,7 +59,11 @@ class FantasyBetService(BaseService):
     def getAll(self) -> list[FantasyBetPublic]:
         with self.get_session() as session:
             result = []
-            fbet = FantasyBet.getAll(session)
+            fbet = (
+                session.scalars(select(FantasyBet).options(*FantasyBet.eager_options()))
+                .unique()
+                .all()
+            )
             for single_fbet in fbet:
                 result.append(FantasyBetPublic.from_fantasy_bet(single_fbet))
             return result
