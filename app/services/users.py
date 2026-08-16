@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
-from app.exceptions import NotFoundError
+from app.core.exceptions import NotFoundError
 from app.models.season import Season
 from app.models.team import Team
 from app.models.user import User, UserCreate, UserPublic, UserUpdate

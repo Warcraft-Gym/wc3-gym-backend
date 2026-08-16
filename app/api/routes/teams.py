@@ -6,7 +6,7 @@ from fastapi import APIRouter, Body, Depends, File, Response, UploadFile
 from fastapi.responses import JSONResponse
 
 from app.api.deps import TeamServiceDep, require_admin, ttl_cache
-from app.exceptions import BadRequestError
+from app.core.exceptions import BadRequestError
 from app.models.team import TeamCreate, TeamPublic, TeamUpdate
 from app.utils.query_util import QueryUtil
 

@@ -3,7 +3,7 @@ import logging
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload, noload
 
-from app.exceptions import NotFoundError
+from app.core.exceptions import NotFoundError
 from app.models.map import Map
 from app.models.relationships import DBMapSeason, DBUserSeasonSignup
 from app.models.season import Season, SeasonCreate, SeasonPublic, SeasonUpdate

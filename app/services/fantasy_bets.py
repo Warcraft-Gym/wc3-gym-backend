@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
-from app.exceptions import BadRequestError, NotFoundError
+from app.core.exceptions import BadRequestError, NotFoundError
 from app.models.fantasy_bet import (
     FantasyBet,
     FantasyBetCreate,

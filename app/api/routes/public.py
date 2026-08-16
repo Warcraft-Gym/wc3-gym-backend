@@ -18,7 +18,7 @@ from app.api.deps import (
     SettingsServiceDep,
     UserServiceDep,
 )
-from app.exceptions import BadRequestError
+from app.core.exceptions import BadRequestError
 from app.models.fantasy_bet import FantasyBetCreate, FantasyBetUpdate
 from app.models.fantasy_team import FantasyTeamCreate, FantasyTeamUpdate
 from app.models.series import SeriesPublic

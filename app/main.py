@@ -27,7 +27,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.api.deps import AuthError
 from app.api.main import api_router
 from app.core.db import init_engine
-from app.exceptions import BadRequestError, NotFoundError
+from app.core.exceptions import BadRequestError, NotFoundError
 
 logger = logging.getLogger(__name__)
 

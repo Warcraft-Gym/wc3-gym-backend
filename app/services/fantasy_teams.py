@@ -3,7 +3,7 @@ import logging
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
-from app.exceptions import NotFoundError
+from app.core.exceptions import NotFoundError
 from app.models.fantasy_team import (
     FantasyTeam,
     FantasyTeamCreate,

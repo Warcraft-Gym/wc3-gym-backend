@@ -12,7 +12,7 @@ from app.api.deps import (
     SeriesServiceDep,
     require_admin,
 )
-from app.exceptions import NotFoundError
+from app.core.exceptions import NotFoundError
 from app.models.match import MatchUpdate
 from app.models.series import SeriesUpdate
 from app.services.matches import MatchService

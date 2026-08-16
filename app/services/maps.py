@@ -1,6 +1,6 @@
 import logging
 
-from app.exceptions import NotFoundError
+from app.core.exceptions import NotFoundError
 from app.models.map import Map, MapCreate, MapPublic, MapUpdate
 from app.services.base import BaseService
 from app.utils.query_util import QueryElement, QueryUtil

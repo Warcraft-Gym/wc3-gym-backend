@@ -20,7 +20,7 @@ from app.api.deps import (
     UserServiceDep,
     require_admin,
 )
-from app.exceptions import BadRequestError, NotFoundError
+from app.core.exceptions import BadRequestError, NotFoundError
 from app.models.enums import Race
 from app.models.fantasy_bet import FantasyBetCreate, FantasyBetUpdate
 from app.models.fantasy_team import FantasyTeamCreate, FantasyTeamUpdate

@@ -1,7 +1,7 @@
 import logging
 from typing import Any
 
-from app.exceptions import NotFoundError
+from app.core.exceptions import NotFoundError
 from app.models.settings import (
     Settings,
     SettingsCreate,

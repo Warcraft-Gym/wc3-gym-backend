@@ -3,7 +3,7 @@ import logging
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
-from app.exceptions import NotFoundError
+from app.core.exceptions import NotFoundError
 from app.models.match import Match, MatchCreate, MatchPublic, MatchUpdate
 from app.services.base import BaseService
 from app.utils.query_util import QueryElement, QueryUtil

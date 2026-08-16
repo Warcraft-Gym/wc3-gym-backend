@@ -5,7 +5,7 @@ from typing import Annotated
 from fastapi import APIRouter, Body, Depends
 
 from app.api.deps import SettingsServiceDep, require_admin
-from app.exceptions import BadRequestError
+from app.core.exceptions import BadRequestError
 from app.models.responses import Message
 from app.models.settings import (
     GeneratedNightbotToken,
