@@ -3,9 +3,9 @@ import logging
 from sqlalchemy import ColumnElement
 
 from app.core.exceptions import NotFoundError
+from app.core.query import QueryElement, QueryUtil
 from app.models.map import Map, MapCreate, MapPublic, MapUpdate
 from app.services.base import BaseService
-from app.utils.query_util import QueryElement, QueryUtil
 
 logger = logging.getLogger(__name__)
 

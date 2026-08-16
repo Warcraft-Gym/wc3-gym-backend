@@ -4,9 +4,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
 from app.core.exceptions import NotFoundError
+from app.core.query import QueryElement, QueryUtil
 from app.models.match import Match, MatchCreate, MatchPublic, MatchUpdate
 from app.services.base import BaseService
-from app.utils.query_util import QueryElement, QueryUtil
 
 logger = logging.getLogger(__name__)
 

@@ -37,3 +37,12 @@ def test_a_bug_answers_a_fixed_body(
     resp = client.get("/maps")
     assert resp.status_code == 500
     assert resp.json() == {"error": "Internal Server Error"}
+
+
+@pytest.mark.parametrize("query", ["", "garbage", "name ~ smith"])
+def test_a_query_the_parser_rejects_answers_400(client: Client, query: str) -> None:
+    """The caller wrote the query, so the fault is the caller's. It used to
+    answer 500, which told the caller nothing."""
+    resp = client.post("/users/search", params={"query": query})
+    assert resp.status_code == 400
+    assert "error" in resp.json()

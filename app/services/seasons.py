@@ -4,6 +4,7 @@ from sqlalchemy import ColumnElement, select
 from sqlalchemy.orm import joinedload, noload
 
 from app.core.exceptions import NotFoundError
+from app.core.query import QueryElement, QueryUtil
 from app.models.map import Map
 from app.models.relationships import DBMapSeason, DBUserSeasonSignup
 from app.models.season import Season, SeasonCreate, SeasonPublic, SeasonUpdate
@@ -11,7 +12,6 @@ from app.models.team import Team
 from app.models.team_season import DBTeamSeason
 from app.models.user import User, UserPublic
 from app.services.base import BaseService
-from app.utils.query_util import QueryElement, QueryUtil
 
 logger = logging.getLogger(__name__)
 

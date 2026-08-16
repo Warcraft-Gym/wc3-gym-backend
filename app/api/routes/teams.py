@@ -7,8 +7,8 @@ from fastapi.responses import JSONResponse
 
 from app.api.deps import TeamServiceDep, require_admin, ttl_cache
 from app.core.exceptions import BadRequestError
+from app.core.query import QueryUtil
 from app.models.team import TeamCreate, TeamPublic, TeamUpdate
-from app.utils.query_util import QueryUtil
 
 logger = logging.getLogger(__name__)
 
@@ -136,7 +136,7 @@ def search_teams(service: TeamServiceDep, query: str = "") -> list[TeamPublic]:
     """Search teams by criteria using a custom query format."""
     parsed_query = QueryUtil.parseQuery(query)
     if not parsed_query or not parsed_query.elementA:
-        raise Exception(f"No valid query found: {query}")
+        raise BadRequestError(f"No valid query found: {query}")
     return service.search(parsed_query) or []
 
 

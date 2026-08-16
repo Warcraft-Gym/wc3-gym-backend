@@ -1,5 +1,6 @@
 from typing import TYPE_CHECKING, Any
 
+from app.core.query import QueryUtil
 from app.models.enums import Race
 from app.models.fantasy_bet import FantasyBetUpdate
 from app.models.fantasy_team import FantasyTeamUpdate
@@ -7,7 +8,6 @@ from app.services.fantasy_bets import FantasyBetService
 from app.services.fantasy_teams import FantasyTeamService
 from app.services.series import SeriesService
 from app.services.teams import TeamService
-from app.utils.query_util import QueryUtil
 
 if TYPE_CHECKING:
     from app.models.fantasy_team import FantasyTeamPublic

@@ -13,13 +13,13 @@ from app.api.deps import (
     require_admin,
 )
 from app.core.exceptions import NotFoundError
+from app.core.query import QueryUtil
 from app.models.match import MatchUpdate
 from app.models.series import SeriesUpdate
 from app.services.matches import MatchService
 from app.services.scores import ScoreService
 from app.services.seasons import SeasonService
 from app.services.series import SeriesService
-from app.utils.query_util import QueryUtil
 
 logger = logging.getLogger(__name__)
 

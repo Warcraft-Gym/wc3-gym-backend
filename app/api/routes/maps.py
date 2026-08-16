@@ -3,8 +3,9 @@ import logging
 from fastapi import APIRouter, Depends
 
 from app.api.deps import MapServiceDep, require_admin
+from app.core.exceptions import BadRequestError
+from app.core.query import QueryUtil
 from app.models.map import MapCreate, MapPublic, MapUpdate
-from app.utils.query_util import QueryUtil
 
 logger = logging.getLogger(__name__)
 
@@ -54,5 +55,5 @@ def search_maps(service: MapServiceDep, query: str = "") -> list[MapPublic]:
     query_param = query
     query = QueryUtil.parseQuery(query_param)
     if not query or not query.elementA:
-        raise Exception(f"No valid query found: {query_param}")
+        raise BadRequestError(f"No valid query found: {query_param}")
     return service.search(query)

@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
 from app.core.exceptions import BadRequestError, NotFoundError
+from app.core.query import QueryElement, QueryUtil
 from app.models.fantasy_bet import (
     FantasyBet,
     FantasyBetCreate,
@@ -13,7 +14,6 @@ from app.models.fantasy_bet import (
 )
 from app.models.series import Series
 from app.services.base import BaseService
-from app.utils.query_util import QueryElement, QueryUtil
 
 if TYPE_CHECKING:
     from app.services.settings import SettingsService

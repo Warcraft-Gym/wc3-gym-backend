@@ -9,10 +9,10 @@ These tests pin the difference.
 import pytest
 from fastapi import FastAPI
 
+from app.core.query import QueryUtil
 from app.models.enums import Race
 from app.models.user import UserCreate
 from app.services.users import UserService
-from app.utils.query_util import QueryUtil
 
 
 @pytest.fixture

@@ -9,6 +9,8 @@ from app.api.deps import (
     SeasonServiceDep,
     require_admin,
 )
+from app.core.exceptions import BadRequestError
+from app.core.query import QueryUtil
 from app.models.fantasy_bet import (
     FantasyBetCreate,
     FantasyBetPublic,
@@ -21,7 +23,6 @@ from app.models.fantasy_team import (
     FantasyTeamPublic,
     FantasyTeamUpdate,
 )
-from app.utils.query_util import QueryUtil
 
 logger = logging.getLogger(__name__)
 
@@ -101,7 +102,7 @@ def search_teams(
     """Search teams by criteria using a custom query format."""
     parsed = QueryUtil.parseQuery(query)
     if not parsed or not parsed.elementA:
-        raise Exception(f"No valid query found: {query}")
+        raise BadRequestError(f"No valid query found: {query}")
     return service.search_fantasy_teams(parsed) or []
 
 
@@ -156,7 +157,7 @@ def search_bets(
     """Search bets by criteria using a custom query format."""
     parsed = QueryUtil.parseQuery(query)
     if not parsed or not parsed.elementA:
-        raise Exception(f"No valid query found: {query}")
+        raise BadRequestError(f"No valid query found: {query}")
     return service.search_fantasy_bets(parsed) or []
 
 

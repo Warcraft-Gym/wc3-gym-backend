@@ -1,5 +1,6 @@
 import os
 
+from app.core.query import QueryUtil
 from app.models.match import MatchPublic, MatchUpdate
 from app.models.season_info import SeasonInfoUpdate
 from app.models.series import SeriesPublic, SeriesUpdate
@@ -11,7 +12,6 @@ from app.services.series import SeriesService
 from app.services.settings import SettingsService
 from app.services.team_seasons import TeamSeasonService
 from app.services.teams import TeamService
-from app.utils.query_util import QueryUtil
 
 
 class ScoreService:

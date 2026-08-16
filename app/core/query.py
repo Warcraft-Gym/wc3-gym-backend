@@ -1,8 +1,17 @@
+"""The query language the /search routes accept, for example
+"season_id == 3 and name ilike smith".
+
+A value reaches the parser as text, so the parser reads " and " and " or "
+inside a value as part of the query. Use the services' find_by_ methods
+for a value the caller supplies; keep this for a query a client wrote.
+"""
+
 import re
 from typing import Self, cast
 
 from sqlalchemy import ColumnElement, and_, or_
 
+from app.core.exceptions import BadRequestError
 from app.models.base import DBModel
 
 
@@ -84,7 +93,7 @@ class QueryUtil:
             elif value and value == "False":
                 value = False
         else:
-            raise Exception(
+            raise BadRequestError(
                 f"Query or subquery could not be parsed into <key operator value> only following operators are allowed (==|!=|>=|<=|>|<|ilike): {query}"
             )
         return QueryCondition(operator, key, value)

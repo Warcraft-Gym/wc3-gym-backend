@@ -3,8 +3,9 @@ import logging
 from fastapi import APIRouter, Depends
 
 from app.api.deps import MatchServiceDep, require_admin
+from app.core.exceptions import BadRequestError
+from app.core.query import QueryUtil
 from app.models.match import MatchCreate, MatchPublic, MatchUpdate
-from app.utils.query_util import QueryUtil
 
 logger = logging.getLogger(__name__)
 
@@ -53,5 +54,5 @@ def search_match(service: MatchServiceDep, query: str = "") -> list[MatchPublic]
     """Search matches by criteria using a custom query format."""
     parsed_query = QueryUtil.parseQuery(query)
     if not parsed_query or not parsed_query.elementA:
-        raise Exception(f"No valid query found: {query}")
+        raise BadRequestError(f"No valid query found: {query}")
     return service.search(parsed_query) or []

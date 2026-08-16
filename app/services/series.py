@@ -5,12 +5,12 @@ from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
 from app.core.exceptions import NotFoundError
+from app.core.query import QueryElement, QueryUtil
 from app.models.match import Match
 from app.models.series import Series, SeriesCreate, SeriesPublic, SeriesUpdate
 from app.models.user import User
 from app.models.user_team_season import DBUserTeamSeason, UserTeamSeasonStatsPublic
 from app.services.base import BaseService
-from app.utils.query_util import QueryElement, QueryUtil
 
 if TYPE_CHECKING:
     from app.services.scores import ScoreService

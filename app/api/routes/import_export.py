@@ -21,6 +21,7 @@ from app.api.deps import (
     require_admin,
 )
 from app.core.exceptions import BadRequestError, NotFoundError
+from app.core.query import QueryUtil
 from app.models.enums import Race
 from app.models.fantasy_bet import FantasyBetCreate, FantasyBetUpdate
 from app.models.fantasy_team import FantasyTeamCreate, FantasyTeamUpdate
@@ -39,7 +40,6 @@ from app.services.seasons import SeasonService
 from app.services.series import SeriesService
 from app.services.teams import TeamService
 from app.services.users import UserService
-from app.utils.query_util import QueryUtil
 
 logger = logging.getLogger(__name__)
 

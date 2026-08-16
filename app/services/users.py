@@ -5,6 +5,7 @@ from sqlalchemy import ColumnElement, or_, select
 from sqlalchemy.orm import joinedload
 
 from app.core.exceptions import NotFoundError
+from app.core.query import QueryElement, QueryUtil
 from app.models.season import Season
 from app.models.team import Team
 from app.models.user import User, UserCreate, UserPublic, UserUpdate
@@ -12,7 +13,6 @@ from app.models.user_team_season import DBUserTeamSeason, UserTeamSeasonStatsPub
 from app.models.w3c_stats import W3CStats, W3CStatsCreate, W3CStatsPublic
 from app.services.base import BaseService
 from app.services.w3c import W3CService
-from app.utils.query_util import QueryElement, QueryUtil
 
 if TYPE_CHECKING:
     from app.services.settings import SettingsService
