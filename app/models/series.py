@@ -55,7 +55,7 @@ class Series(SeriesBase, DBModel, table=True):
         )
         if filters is not None:
             stmt = stmt.where(filters)
-        return session.scalars(stmt).unique().all()
+        return session.scalars(stmt).all()
 
     @classmethod
     def searchForSeason(
@@ -68,7 +68,7 @@ class Series(SeriesBase, DBModel, table=True):
         stmt = stmt.where(cls.match.has(Match.season_id == season_id))
         if filters is not None:
             stmt = stmt.where(filters)
-        return session.scalars(stmt).unique().all()
+        return session.scalars(stmt).all()
 
     @classmethod
     def _eager_options(cls) -> tuple[ExecutableOption, ...]:
@@ -80,14 +80,16 @@ class Series(SeriesBase, DBModel, table=True):
         return (
             joinedload(cls.match).joinedload(Match.team1),
             joinedload(cls.match).joinedload(Match.team2),
-            joinedload(cls.player1).joinedload(User.w3c_stats),
+            joinedload(cls.player1).selectinload(User.w3c_stats),
             joinedload(cls.player1)
-            .joinedload(User.team_seasons)
+            .selectinload(User.team_seasons)
             .joinedload(DBUserTeamSeason.season),
-            joinedload(cls.player2).joinedload(User.w3c_stats),
+            joinedload(cls.player1).selectinload(User.signup_seasons),
+            joinedload(cls.player2).selectinload(User.w3c_stats),
             joinedload(cls.player2)
-            .joinedload(User.team_seasons)
+            .selectinload(User.team_seasons)
             .joinedload(DBUserTeamSeason.season),
+            joinedload(cls.player2).selectinload(User.signup_seasons),
         )
 
 

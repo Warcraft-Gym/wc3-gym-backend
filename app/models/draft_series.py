@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Annotated, Any, Self
 
 from sqlalchemy import TIMESTAMP
+from sqlalchemy.sql.base import ExecutableOption
 from sqlmodel import Field, Relationship, SQLModel
 
 from app.models.base import DBModel
@@ -41,6 +42,30 @@ class DraftSeries(DraftSeriesBase, DBModel, table=True):
     player2: "User" = Relationship(
         sa_relationship_kwargs={"foreign_keys": "[DraftSeries.player2_id]"}
     )
+
+    @classmethod
+    def _eager_options(cls) -> tuple[ExecutableOption, ...]:
+        """The rows a match draft reads off every draft series."""
+        from sqlalchemy.orm import joinedload
+
+        from app.models.match import Match
+        from app.models.user import User
+        from app.models.user_team_season import DBUserTeamSeason
+
+        return (
+            joinedload(cls.match).joinedload(Match.team1),
+            joinedload(cls.match).joinedload(Match.team2),
+            joinedload(cls.player1).selectinload(User.w3c_stats),
+            joinedload(cls.player1)
+            .selectinload(User.team_seasons)
+            .joinedload(DBUserTeamSeason.season),
+            joinedload(cls.player1).selectinload(User.signup_seasons),
+            joinedload(cls.player2).selectinload(User.w3c_stats),
+            joinedload(cls.player2)
+            .selectinload(User.team_seasons)
+            .joinedload(DBUserTeamSeason.season),
+            joinedload(cls.player2).selectinload(User.signup_seasons),
+        )
 
 
 class DraftSeriesCreate(DraftSeriesBase):

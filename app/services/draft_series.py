@@ -1,7 +1,6 @@
 import logging
 
 from sqlalchemy import delete, select
-from sqlalchemy.orm import joinedload
 
 from app.core.exceptions import NotFoundError
 from app.models.draft_series import (
@@ -10,10 +9,7 @@ from app.models.draft_series import (
     DraftSeriesPublic,
     DraftSeriesUpdate,
 )
-from app.models.match import Match
 from app.models.series import SeriesCreate
-from app.models.user import User
-from app.models.user_team_season import DBUserTeamSeason
 from app.services.base import BaseService
 
 logger = logging.getLogger(__name__)
@@ -44,27 +40,11 @@ class DraftSeriesService(BaseService):
 
     def get(self, draft_series_id: int) -> DraftSeriesPublic:
         with self.get_session() as session:
-            # Eager load relationships to avoid N+1 queries
-            draft_series = (
-                session.scalars(
-                    select(DraftSeries)
-                    .options(
-                        joinedload(DraftSeries.match).joinedload(Match.team1),
-                        joinedload(DraftSeries.match).joinedload(Match.team2),
-                        joinedload(DraftSeries.player1).joinedload(User.w3c_stats),
-                        joinedload(DraftSeries.player1)
-                        .joinedload(User.team_seasons)
-                        .joinedload(DBUserTeamSeason.season),
-                        joinedload(DraftSeries.player2).joinedload(User.w3c_stats),
-                        joinedload(DraftSeries.player2)
-                        .joinedload(User.team_seasons)
-                        .joinedload(DBUserTeamSeason.season),
-                    )
-                    .where(DraftSeries.id == draft_series_id)
-                )
-                .unique()
-                .first()
-            )
+            draft_series = session.scalars(
+                select(DraftSeries)
+                .options(*DraftSeries._eager_options())
+                .where(DraftSeries.id == draft_series_id)
+            ).first()
             if not draft_series:
                 raise NotFoundError("Draft series not found")
             return DraftSeriesPublic.from_draft_series(draft_series)
@@ -72,27 +52,11 @@ class DraftSeriesService(BaseService):
     def getByMatchId(self, match_id: int) -> list[DraftSeriesPublic]:
         with self.get_session() as session:
             result = []
-            # Eager load relationships
-            draft_series_list = (
-                session.scalars(
-                    select(DraftSeries)
-                    .options(
-                        joinedload(DraftSeries.match).joinedload(Match.team1),
-                        joinedload(DraftSeries.match).joinedload(Match.team2),
-                        joinedload(DraftSeries.player1).joinedload(User.w3c_stats),
-                        joinedload(DraftSeries.player1)
-                        .joinedload(User.team_seasons)
-                        .joinedload(DBUserTeamSeason.season),
-                        joinedload(DraftSeries.player2).joinedload(User.w3c_stats),
-                        joinedload(DraftSeries.player2)
-                        .joinedload(User.team_seasons)
-                        .joinedload(DBUserTeamSeason.season),
-                    )
-                    .where(DraftSeries.match_id == match_id)
-                )
-                .unique()
-                .all()
-            )
+            draft_series_list = session.scalars(
+                select(DraftSeries)
+                .options(*DraftSeries._eager_options())
+                .where(DraftSeries.match_id == match_id)
+            ).all()
             for single_draft_series in draft_series_list:
                 result.append(DraftSeriesPublic.from_draft_series(single_draft_series))
             return result
@@ -133,8 +97,7 @@ class DraftSeriesService(BaseService):
 
     def convert_to_series(self, draft_series: DraftSeries) -> SeriesCreate:
         """Build the SeriesCreate for a draft series. SeriesService writes the row."""
-        # Create a Series from the draft data
-        series_dto = SeriesCreate(
+        return SeriesCreate(
             match_id=draft_series.match_id,
             date_time=draft_series.date_time,
             caster=draft_series.caster,
@@ -145,4 +108,3 @@ class DraftSeriesService(BaseService):
             host_player_id=draft_series.host_player_id,
             is_fantasy_match=draft_series.is_fantasy_match,
         )
-        return series_dto

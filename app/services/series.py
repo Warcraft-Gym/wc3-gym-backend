@@ -2,14 +2,11 @@ import logging
 from typing import TYPE_CHECKING
 
 from sqlalchemy import select
-from sqlalchemy.orm import joinedload
 
 from app.core.exceptions import NotFoundError
 from app.core.query import QueryElement, QueryUtil
-from app.models.match import Match
 from app.models.series import Series, SeriesCreate, SeriesPublic, SeriesUpdate
-from app.models.user import User
-from app.models.user_team_season import DBUserTeamSeason, UserTeamSeasonStatsPublic
+from app.models.user_team_season import UserTeamSeasonStatsPublic
 from app.services.base import BaseService
 
 if TYPE_CHECKING:
@@ -46,27 +43,11 @@ class SeriesService(BaseService):
 
     def get(self, series_id: int) -> SeriesPublic:
         with self.get_session() as session:
-            # Eager load relationships to avoid N+1 queries, load w3c_stats and team_seasons with season for players
-            series = (
-                session.scalars(
-                    select(Series)
-                    .options(
-                        joinedload(Series.match).joinedload(Match.team1),
-                        joinedload(Series.match).joinedload(Match.team2),
-                        joinedload(Series.player1).joinedload(User.w3c_stats),
-                        joinedload(Series.player1)
-                        .joinedload(User.team_seasons)
-                        .joinedload(DBUserTeamSeason.season),
-                        joinedload(Series.player2).joinedload(User.w3c_stats),
-                        joinedload(Series.player2)
-                        .joinedload(User.team_seasons)
-                        .joinedload(DBUserTeamSeason.season),
-                    )
-                    .where(Series.id == series_id)
-                )
-                .unique()
-                .first()
-            )
+            series = session.scalars(
+                select(Series)
+                .options(*Series._eager_options())
+                .where(Series.id == series_id)
+            ).first()
             if not series:
                 raise NotFoundError("Series not found")
             return SeriesPublic.from_series(series)
@@ -74,25 +55,9 @@ class SeriesService(BaseService):
     def getAll(self) -> list[SeriesPublic]:
         with self.get_session() as session:
             result = []
-            # Eager load relationships, load w3c_stats and team_seasons with season for players
-            series = (
-                session.scalars(
-                    select(Series).options(
-                        joinedload(Series.match).joinedload(Match.team1),
-                        joinedload(Series.match).joinedload(Match.team2),
-                        joinedload(Series.player1).joinedload(User.w3c_stats),
-                        joinedload(Series.player1)
-                        .joinedload(User.team_seasons)
-                        .joinedload(DBUserTeamSeason.season),
-                        joinedload(Series.player2).joinedload(User.w3c_stats),
-                        joinedload(Series.player2)
-                        .joinedload(User.team_seasons)
-                        .joinedload(DBUserTeamSeason.season),
-                    )
-                )
-                .unique()
-                .all()
-            )
+            series = session.scalars(
+                select(Series).options(*Series._eager_options())
+            ).all()
             for single_series in series:
                 result.append(SeriesPublic.from_series(single_series))
             return result
@@ -101,26 +66,10 @@ class SeriesService(BaseService):
         with self.get_session() as session:
             result = []
             filter = QueryUtil.convertQueryToDBFilter(Series, query)
-            # Eager load related entities, load w3c_stats and team_seasons with season for players
             series_list = (
                 session.scalars(
-                    select(Series)
-                    .options(
-                        joinedload(Series.match).joinedload(Match.team1),
-                        joinedload(Series.match).joinedload(Match.team2),
-                        joinedload(Series.player1).joinedload(User.w3c_stats),
-                        joinedload(Series.player1)
-                        .joinedload(User.team_seasons)
-                        .joinedload(DBUserTeamSeason.season),
-                        joinedload(Series.player2).joinedload(User.w3c_stats),
-                        joinedload(Series.player2)
-                        .joinedload(User.team_seasons)
-                        .joinedload(DBUserTeamSeason.season),
-                    )
-                    .where(filter)
-                )
-                .unique()
-                .all()
+                    select(Series).options(*Series._eager_options()).where(filter)
+                ).all()
                 if filter is not None
                 else []
             )
