@@ -19,13 +19,13 @@ from app.api.deps import (
     UserServiceDep,
 )
 from app.core.exceptions import BadRequestError
+from app.core.security import secure_filename
 from app.models.fantasy_bet import FantasyBetCreate, FantasyBetUpdate
 from app.models.fantasy_team import FantasyTeamCreate, FantasyTeamUpdate
 from app.models.series import SeriesPublic
 from app.models.user import UserCreate
 from app.services.series import SeriesService
 from app.services.users import UserService
-from app.utils.files import secure_filename
 from app.utils.query_util import QueryUtil
 
 logger = logging.getLogger(__name__)

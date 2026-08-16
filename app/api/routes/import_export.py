@@ -39,12 +39,18 @@ from app.services.seasons import SeasonService
 from app.services.series import SeriesService
 from app.services.teams import TeamService
 from app.services.users import UserService
-from app.utils.import_util import ImportUtil
 from app.utils.query_util import QueryUtil
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["import export"])
+
+
+def _cell_value[T](value: T) -> T | None:
+    """Read a spreadsheet cell. An empty cell reads as None, not as NaN."""
+    if pd.isna(value):
+        return None
+    return value
 
 
 def _process_import(
@@ -81,8 +87,8 @@ def _process_import(
             "series_per_week": int(season_row["Series Per Week"])
             if not pd.isna(season_row["Series Per Week"])
             else 0,
-            "pick_ban": ImportUtil.isNa(season_row["Pick Ban"]),
-            "discordRole": ImportUtil.isNa(season_row["Discord Role"]),
+            "pick_ban": _cell_value(season_row["Pick Ban"]),
+            "discordRole": _cell_value(season_row["Discord Role"]),
         }
 
         if not pd.isna(season_row["Start Date"]):
@@ -139,7 +145,7 @@ def _process_import(
                 map_data = {
                     "name": row["Name"],
                     "shortname": row["Shortname"],
-                    "image": ImportUtil.isNa(row["Image URL"]),
+                    "image": _cell_value(row["Image URL"]),
                 }
 
                 # Check if map exists by shortname
@@ -166,8 +172,8 @@ def _process_import(
             old_team_id = int(row["ID"]) if not pd.isna(row["ID"]) else None
             team_data = {
                 "name": row["Name"],
-                "long_name": ImportUtil.isNa(row["Long Name"]),
-                "discord_role": ImportUtil.isNa(row["Discord Role"]),
+                "long_name": _cell_value(row["Long Name"]),
+                "discord_role": _cell_value(row["Discord Role"]),
             }
 
             # Check if team exists by name
@@ -274,7 +280,7 @@ def _process_import(
                 "fixed_map_id": map_id_mapping.get(old_fixed_map_id)
                 if old_fixed_map_id
                 else None,
-                "date_frame": ImportUtil.isNa(row["Date Frame"]),
+                "date_frame": _cell_value(row["Date Frame"]),
             }
 
             # Check if match already exists
@@ -349,7 +355,7 @@ def _process_import(
                 "host_player_id": new_host_player_id
                 if new_host_player_id
                 else new_player1_id,
-                "caster": ImportUtil.isNa(row["Caster"]),
+                "caster": _cell_value(row["Caster"]),
                 "is_fantasy_match": bool(row["Is Fantasy Match"])
                 if not pd.isna(row["Is Fantasy Match"])
                 else False,
@@ -414,7 +420,7 @@ def _process_import(
                     "season_id": season_id,
                     "captain_id": new_captain_id,
                     "drafted_team_id": new_drafted_team_id,
-                    "drafted_race": ImportUtil.isNa(row["Drafted Race"]),
+                    "drafted_race": _cell_value(row["Drafted Race"]),
                     "player_points": int(row["Player Points"])
                     if not pd.isna(row["Player Points"])
                     else 0,
@@ -966,9 +972,9 @@ def import_fantasy_teams(
         df_teams = pd.read_excel(file_stream, sheet_name="Formatted Responses")
 
         for index, row in df_teams.iterrows():
-            if not ImportUtil.isNa(row.iloc[0]):
+            if not _cell_value(row.iloc[0]):
                 continue
-            if not ImportUtil.isNa(row.iloc[1]):
+            if not _cell_value(row.iloc[1]):
                 raise Exception(f"Team without captain: {row.iloc[0]}")
             query = QueryUtil.parseQuery("discordTag == " + row.iloc[1])
             if not query or not query.elementA:
@@ -995,7 +1001,7 @@ def import_fantasy_teams(
             else:
                 captain = users[0]
 
-            if not ImportUtil.isNa(row.iloc[10]):
+            if not _cell_value(row.iloc[10]):
                 raise Exception(f"No GNL team defined for team: {row.iloc[0]}")
             query = QueryUtil.parseQuery("name==" + row.iloc[10])
             if not query or not query.elementA:
@@ -1007,7 +1013,7 @@ def import_fantasy_teams(
                 )
             team = found_teams[0]
 
-            if not ImportUtil.isNa(row.iloc[11]):
+            if not _cell_value(row.iloc[11]):
                 raise Exception(f"No Race defined for team: {row.iloc[11]}")
 
             try:
@@ -1016,7 +1022,7 @@ def import_fantasy_teams(
                 raise BadRequestError(str(error)) from error
 
             team_data = {
-                "name": ImportUtil.isNa(row.iloc[0]),
+                "name": _cell_value(row.iloc[0]),
                 "captain_id": captain.id,
                 "season_id": season_id,
                 "drafted_team_id": team.id,
@@ -1116,7 +1122,7 @@ def import_fantasy_bets(
 
         df_bet_match = pd.read_excel(file_stream, sheet_name="Betting Matches")
         for index, row in df_bet_match.iterrows():
-            if not ImportUtil.isNa(row.iloc[0]):
+            if not _cell_value(row.iloc[0]):
                 continue
             week = row.iloc[0]
             q_string = f"playday=={week} and season_id=={season_id}"
@@ -1163,13 +1169,13 @@ def import_fantasy_bets(
         # Load the Google Sheet into a DataFrame
         df_bets = pd.read_excel(file_stream, sheet_name="Bets")
         for index, row in df_bets.iterrows():
-            if not ImportUtil.isNa(row.iloc[0]):
+            if not _cell_value(row.iloc[0]):
                 continue
-            if not ImportUtil.isNa(row.iloc[0]):
+            if not _cell_value(row.iloc[0]):
                 raise Exception(f"Week not defined: {row.iloc[0]}")
             playday = row.iloc[0]
 
-            if not ImportUtil.isNa(row.iloc[1]):
+            if not _cell_value(row.iloc[1]):
                 raise Exception(f"Captain not defined: {row.iloc[1]}")
             query = QueryUtil.parseQuery("discordTag == " + row.iloc[1])
             if not query or not query.elementA:
@@ -1183,7 +1189,7 @@ def import_fantasy_bets(
                 )
             captain = users[0]
 
-            if not ImportUtil.isNa(row.iloc[2]):
+            if not _cell_value(row.iloc[2]):
                 raise Exception(f"Bet Player not defined: {row.iloc[2]}")
 
             query = QueryUtil.parseQuery("name == " + row.iloc[2])
@@ -1218,7 +1224,7 @@ def import_fantasy_bets(
                     f"Could not identfy series for player: {bet_player.name}!"
                 )
 
-            if not ImportUtil.isNa(row.iloc[3]):
+            if not _cell_value(row.iloc[3]):
                 raise Exception(f"Bet Points not defined: {row.iloc[3]}")
 
             bet_data = {
