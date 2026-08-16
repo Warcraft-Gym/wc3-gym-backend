@@ -1010,12 +1010,17 @@ def import_fantasy_teams(
             if not ImportUtil.isNa(row.iloc[11]):
                 raise Exception(f"No Race defined for team: {row.iloc[11]}")
 
+            try:
+                drafted_race = Race.from_text(str(row.iloc[11]))
+            except ValueError as error:
+                raise BadRequestError(str(error)) from error
+
             team_data = {
                 "name": ImportUtil.isNa(row.iloc[0]),
                 "captain_id": captain.id,
                 "season_id": season_id,
                 "drafted_team_id": team.id,
-                "drafted_race": ImportUtil.getRaceEnumString(row.iloc[11]),
+                "drafted_race": drafted_race,
             }
 
             fantasy_team = None
