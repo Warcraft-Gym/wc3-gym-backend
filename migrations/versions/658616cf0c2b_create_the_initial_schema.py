@@ -70,7 +70,7 @@ def upgrade() -> None:
         sa.Column("is_active", sa.Boolean(), nullable=False),
         sa.Column("bracket_1_threshold", sa.Integer(), nullable=False),
         sa.Column("bracket_2_threshold", sa.Integer(), nullable=False),
-        sa.PrimaryKeyConstraint("id"),
+        sa.PrimaryKeyConstraint("id", name=op.f("pk_koth_events")),
         mysql_charset="utf8mb4",
     )
     op.create_table(
@@ -81,7 +81,7 @@ def upgrade() -> None:
             "shortname", sqlmodel.sql.sqltypes.AutoString(length=50), nullable=True
         ),
         sa.Column("image", sqlmodel.sql.sqltypes.AutoString(length=100), nullable=True),
-        sa.PrimaryKeyConstraint("id"),
+        sa.PrimaryKeyConstraint("id", name=op.f("pk_maps")),
     )
     op.create_table(
         "seasons",
@@ -97,7 +97,7 @@ def upgrade() -> None:
         sa.Column(
             "discordRole", sqlmodel.sql.sqltypes.AutoString(length=50), nullable=True
         ),
-        sa.PrimaryKeyConstraint("id"),
+        sa.PrimaryKeyConstraint("id", name=op.f("pk_seasons")),
     )
     op.create_table(
         "settings",
@@ -109,7 +109,7 @@ def upgrade() -> None:
         sa.Column(
             "description", sqlmodel.sql.sqltypes.AutoString(length=500), nullable=True
         ),
-        sa.PrimaryKeyConstraint("id"),
+        sa.PrimaryKeyConstraint("id", name=op.f("pk_settings")),
     )
     op.create_index(op.f("ix_settings_key"), "settings", ["key"], unique=True)
     op.create_table(
@@ -123,7 +123,7 @@ def upgrade() -> None:
         sa.Column(
             "discord_role", sqlmodel.sql.sqltypes.AutoString(length=50), nullable=True
         ),
-        sa.PrimaryKeyConstraint("id"),
+        sa.PrimaryKeyConstraint("id", name=op.f("pk_teams")),
     )
     op.create_table(
         "users",
@@ -146,7 +146,7 @@ def upgrade() -> None:
         sa.Column("mmr", sa.Integer(), nullable=True),
         sa.Column("country", sqlmodel.sql.sqltypes.AutoString(length=2), nullable=True),
         sa.Column("fantasy_tier", sa.Integer(), nullable=True),
-        sa.PrimaryKeyConstraint("id"),
+        sa.PrimaryKeyConstraint("id", name=op.f("pk_users")),
         mysql_charset="utf8mb4",
     )
     op.create_table(
@@ -167,10 +167,25 @@ def upgrade() -> None:
         sa.Column("race_points", sa.Integer(), nullable=True),
         sa.Column("bet_points", sa.Integer(), nullable=True),
         sa.Column("total_points", sa.Integer(), nullable=True),
-        sa.ForeignKeyConstraint(["captain_id"], ["users.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(["drafted_team_id"], ["teams.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(["season_id"], ["seasons.id"], ondelete="CASCADE"),
-        sa.PrimaryKeyConstraint("id"),
+        sa.ForeignKeyConstraint(
+            ["captain_id"],
+            ["users.id"],
+            ondelete="CASCADE",
+            name=op.f("fk_fantasy_teams_captain_id_users"),
+        ),
+        sa.ForeignKeyConstraint(
+            ["drafted_team_id"],
+            ["teams.id"],
+            ondelete="CASCADE",
+            name=op.f("fk_fantasy_teams_drafted_team_id_teams"),
+        ),
+        sa.ForeignKeyConstraint(
+            ["season_id"],
+            ["seasons.id"],
+            ondelete="CASCADE",
+            name=op.f("fk_fantasy_teams_season_id_seasons"),
+        ),
+        sa.PrimaryKeyConstraint("id", name=op.f("pk_fantasy_teams")),
     )
     op.create_table(
         "koth_matches",
@@ -185,8 +200,9 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(
             ["event_id"],
             ["koth_events.id"],
+            name=op.f("fk_koth_matches_event_id_koth_events"),
         ),
-        sa.PrimaryKeyConstraint("id"),
+        sa.PrimaryKeyConstraint("id", name=op.f("pk_koth_matches")),
         mysql_charset="utf8mb4",
     )
     op.create_table(
@@ -216,8 +232,9 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(
             ["event_id"],
             ["koth_events.id"],
+            name=op.f("fk_koth_signups_event_id_koth_events"),
         ),
-        sa.PrimaryKeyConstraint("id"),
+        sa.PrimaryKeyConstraint("id", name=op.f("pk_koth_signups")),
         mysql_charset="utf8mb4",
     )
     op.create_table(
@@ -225,14 +242,12 @@ def upgrade() -> None:
         sa.Column("map_id", sa.Integer(), nullable=False),
         sa.Column("season_id", sa.Integer(), nullable=False),
         sa.ForeignKeyConstraint(
-            ["map_id"],
-            ["maps.id"],
+            ["map_id"], ["maps.id"], name=op.f("fk_map_season_map_id_maps")
         ),
         sa.ForeignKeyConstraint(
-            ["season_id"],
-            ["seasons.id"],
+            ["season_id"], ["seasons.id"], name=op.f("fk_map_season_season_id_seasons")
         ),
-        sa.PrimaryKeyConstraint("map_id", "season_id"),
+        sa.PrimaryKeyConstraint("map_id", "season_id", name=op.f("pk_map_season")),
     )
     op.create_table(
         "matches",
@@ -248,13 +263,27 @@ def upgrade() -> None:
             "date_frame", sqlmodel.sql.sqltypes.AutoString(length=50), nullable=True
         ),
         sa.ForeignKeyConstraint(
-            ["fixed_map_id"],
-            ["maps.id"],
+            ["fixed_map_id"], ["maps.id"], name=op.f("fk_matches_fixed_map_id_maps")
         ),
-        sa.ForeignKeyConstraint(["season_id"], ["seasons.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(["team1_id"], ["teams.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(["team2_id"], ["teams.id"], ondelete="CASCADE"),
-        sa.PrimaryKeyConstraint("id"),
+        sa.ForeignKeyConstraint(
+            ["season_id"],
+            ["seasons.id"],
+            ondelete="CASCADE",
+            name=op.f("fk_matches_season_id_seasons"),
+        ),
+        sa.ForeignKeyConstraint(
+            ["team1_id"],
+            ["teams.id"],
+            ondelete="CASCADE",
+            name=op.f("fk_matches_team1_id_teams"),
+        ),
+        sa.ForeignKeyConstraint(
+            ["team2_id"],
+            ["teams.id"],
+            ondelete="CASCADE",
+            name=op.f("fk_matches_team2_id_teams"),
+        ),
+        sa.PrimaryKeyConstraint("id", name=op.f("pk_matches")),
     )
     op.create_table(
         "player_career_stats",
@@ -280,9 +309,16 @@ def upgrade() -> None:
         sa.Column(
             "avg_series_per_season", sa.DECIMAL(precision=5, scale=2), nullable=True
         ),
-        sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="SET NULL"),
-        sa.PrimaryKeyConstraint("id"),
-        sa.UniqueConstraint("player_name"),
+        sa.ForeignKeyConstraint(
+            ["user_id"],
+            ["users.id"],
+            ondelete="SET NULL",
+            name=op.f("fk_player_career_stats_user_id_users"),
+        ),
+        sa.PrimaryKeyConstraint("id", name=op.f("pk_player_career_stats")),
+        sa.UniqueConstraint(
+            "player_name", name=op.f("uq_player_career_stats_player_name")
+        ),
     )
     op.create_table(
         "team_season",
@@ -297,26 +333,21 @@ def upgrade() -> None:
         sa.Column("maps_won", sa.Integer(), nullable=True),
         sa.Column("maps_lost", sa.Integer(), nullable=True),
         sa.ForeignKeyConstraint(
-            ["coach_1_id"],
-            ["users.id"],
+            ["coach_1_id"], ["users.id"], name=op.f("fk_team_season_coach_1_id_users")
         ),
         sa.ForeignKeyConstraint(
-            ["coach_2_id"],
-            ["users.id"],
+            ["coach_2_id"], ["users.id"], name=op.f("fk_team_season_coach_2_id_users")
         ),
         sa.ForeignKeyConstraint(
-            ["coach_3_id"],
-            ["users.id"],
+            ["coach_3_id"], ["users.id"], name=op.f("fk_team_season_coach_3_id_users")
         ),
         sa.ForeignKeyConstraint(
-            ["season_id"],
-            ["seasons.id"],
+            ["season_id"], ["seasons.id"], name=op.f("fk_team_season_season_id_seasons")
         ),
         sa.ForeignKeyConstraint(
-            ["team_id"],
-            ["teams.id"],
+            ["team_id"], ["teams.id"], name=op.f("fk_team_season_team_id_teams")
         ),
-        sa.PrimaryKeyConstraint("team_id", "season_id"),
+        sa.PrimaryKeyConstraint("team_id", "season_id", name=op.f("pk_team_season")),
     )
     op.create_table(
         "user_season_signup",
@@ -325,12 +356,14 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(
             ["season_id"],
             ["seasons.id"],
+            name=op.f("fk_user_season_signup_season_id_seasons"),
         ),
         sa.ForeignKeyConstraint(
-            ["user_id"],
-            ["users.id"],
+            ["user_id"], ["users.id"], name=op.f("fk_user_season_signup_user_id_users")
         ),
-        sa.PrimaryKeyConstraint("user_id", "season_id"),
+        sa.PrimaryKeyConstraint(
+            "user_id", "season_id", name=op.f("pk_user_season_signup")
+        ),
     )
     op.create_table(
         "user_team_season",
@@ -344,16 +377,17 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(
             ["season_id"],
             ["seasons.id"],
+            name=op.f("fk_user_team_season_season_id_seasons"),
         ),
         sa.ForeignKeyConstraint(
-            ["team_id"],
-            ["teams.id"],
+            ["team_id"], ["teams.id"], name=op.f("fk_user_team_season_team_id_teams")
         ),
         sa.ForeignKeyConstraint(
-            ["user_id"],
-            ["users.id"],
+            ["user_id"], ["users.id"], name=op.f("fk_user_team_season_user_id_users")
         ),
-        sa.PrimaryKeyConstraint("user_id", "team_id", "season_id"),
+        sa.PrimaryKeyConstraint(
+            "user_id", "team_id", "season_id", name=op.f("pk_user_team_season")
+        ),
     )
     op.create_table(
         "w3cstats",
@@ -372,10 +406,9 @@ def upgrade() -> None:
         sa.Column("league", sa.Integer(), nullable=True),
         sa.Column("user_id", sa.Integer(), nullable=False),
         sa.ForeignKeyConstraint(
-            ["user_id"],
-            ["users.id"],
+            ["user_id"], ["users.id"], name=op.f("fk_w3cstats_user_id_users")
         ),
-        sa.PrimaryKeyConstraint("id"),
+        sa.PrimaryKeyConstraint("id", name=op.f("pk_w3cstats")),
     )
     op.create_table(
         "draft_series",
@@ -391,18 +424,15 @@ def upgrade() -> None:
         sa.Column("is_fantasy_match", sa.Boolean(), nullable=True),
         sa.Column("created_at", sa.TIMESTAMP(), nullable=True),
         sa.ForeignKeyConstraint(
-            ["match_id"],
-            ["matches.id"],
+            ["match_id"], ["matches.id"], name=op.f("fk_draft_series_match_id_matches")
         ),
         sa.ForeignKeyConstraint(
-            ["player1_id"],
-            ["users.id"],
+            ["player1_id"], ["users.id"], name=op.f("fk_draft_series_player1_id_users")
         ),
         sa.ForeignKeyConstraint(
-            ["player2_id"],
-            ["users.id"],
+            ["player2_id"], ["users.id"], name=op.f("fk_draft_series_player2_id_users")
         ),
-        sa.PrimaryKeyConstraint("id"),
+        sa.PrimaryKeyConstraint("id", name=op.f("pk_draft_series")),
     )
     op.create_table(
         "fantasy_team_player",
@@ -411,12 +441,14 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(
             ["fantasy_team_id"],
             ["fantasy_teams.id"],
+            name=op.f("fk_fantasy_team_player_fantasy_team_id_fantasy_teams"),
         ),
         sa.ForeignKeyConstraint(
-            ["user_id"],
-            ["users.id"],
+            ["user_id"], ["users.id"], name=op.f("fk_fantasy_team_player_user_id_users")
         ),
-        sa.PrimaryKeyConstraint("fantasy_team_id", "user_id"),
+        sa.PrimaryKeyConstraint(
+            "fantasy_team_id", "user_id", name=op.f("pk_fantasy_team_player")
+        ),
     )
     op.create_table(
         "koth_match_participants",
@@ -427,12 +459,14 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(
             ["match_id"],
             ["koth_matches.id"],
+            name=op.f("fk_koth_match_participants_match_id_koth_matches"),
         ),
         sa.ForeignKeyConstraint(
             ["signup_id"],
             ["koth_signups.id"],
+            name=op.f("fk_koth_match_participants_signup_id_koth_signups"),
         ),
-        sa.PrimaryKeyConstraint("id"),
+        sa.PrimaryKeyConstraint("id", name=op.f("pk_koth_match_participants")),
         mysql_charset="utf8mb4",
     )
     op.create_table(
@@ -449,10 +483,25 @@ def upgrade() -> None:
         sa.Column("player2_points", sa.Integer(), nullable=True),
         sa.Column("host_player_id", sa.Integer(), nullable=False),
         sa.Column("is_fantasy_match", sa.Boolean(), nullable=True),
-        sa.ForeignKeyConstraint(["match_id"], ["matches.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(["player1_id"], ["users.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(["player2_id"], ["users.id"], ondelete="CASCADE"),
-        sa.PrimaryKeyConstraint("id"),
+        sa.ForeignKeyConstraint(
+            ["match_id"],
+            ["matches.id"],
+            ondelete="CASCADE",
+            name=op.f("fk_series_match_id_matches"),
+        ),
+        sa.ForeignKeyConstraint(
+            ["player1_id"],
+            ["users.id"],
+            ondelete="CASCADE",
+            name=op.f("fk_series_player1_id_users"),
+        ),
+        sa.ForeignKeyConstraint(
+            ["player2_id"],
+            ["users.id"],
+            ondelete="CASCADE",
+            name=op.f("fk_series_player2_id_users"),
+        ),
+        sa.PrimaryKeyConstraint("id", name=op.f("pk_series")),
     )
     op.create_table(
         "fantasy_bets",
@@ -463,11 +512,31 @@ def upgrade() -> None:
         sa.Column("winner_id", sa.Integer(), nullable=False),
         sa.Column("bet_points", sa.Integer(), nullable=False),
         sa.Column("bet_result", sa.Integer(), nullable=True),
-        sa.ForeignKeyConstraint(["season_id"], ["seasons.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(["series_id"], ["series.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE"),
-        sa.ForeignKeyConstraint(["winner_id"], ["users.id"], ondelete="CASCADE"),
-        sa.PrimaryKeyConstraint("id"),
+        sa.ForeignKeyConstraint(
+            ["season_id"],
+            ["seasons.id"],
+            ondelete="CASCADE",
+            name=op.f("fk_fantasy_bets_season_id_seasons"),
+        ),
+        sa.ForeignKeyConstraint(
+            ["series_id"],
+            ["series.id"],
+            ondelete="CASCADE",
+            name=op.f("fk_fantasy_bets_series_id_series"),
+        ),
+        sa.ForeignKeyConstraint(
+            ["user_id"],
+            ["users.id"],
+            ondelete="CASCADE",
+            name=op.f("fk_fantasy_bets_user_id_users"),
+        ),
+        sa.ForeignKeyConstraint(
+            ["winner_id"],
+            ["users.id"],
+            ondelete="CASCADE",
+            name=op.f("fk_fantasy_bets_winner_id_users"),
+        ),
+        sa.PrimaryKeyConstraint("id", name=op.f("pk_fantasy_bets")),
     )
     # ### end Alembic commands ###
 
