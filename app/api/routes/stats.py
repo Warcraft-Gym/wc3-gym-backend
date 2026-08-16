@@ -36,8 +36,8 @@ def update_career_stats(
     stat_id: int, data: Annotated[dict, Body()], service: StatsServiceDep
 ) -> JSONResponse:
     """Update historical baseline values and user link for career stats."""
-    stat_dto = PlayerCareerStatsUpdate(**data)
-    stat = service.update_career_stats(stat_id, stat_dto)
+    update = PlayerCareerStatsUpdate(**data)
+    stat = service.update_career_stats(stat_id, update)
     if stat:
         return JSONResponse(stat.to_dict(), status_code=200)
     return JSONResponse({"error": "Stats not found"}, status_code=404)

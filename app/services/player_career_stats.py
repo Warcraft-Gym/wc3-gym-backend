@@ -10,10 +10,9 @@ from app.models.player_career_stats import (
     PlayerCareerStats,
     PlayerCareerStatsPublic,
 )
-from app.models.series import SeriesPublic
 from app.models.user import User
 from app.services.base import BaseService
-from app.services.series import SeriesService
+from app.services.series import CareerSeriesRow, SeriesService
 
 logger = logging.getLogger(__name__)
 
@@ -43,13 +42,11 @@ class PlayerCareerStatsService(BaseService):
             new_stat = PlayerCareerStats.add(session, entity)
             return PlayerCareerStatsPublic.from_career_stats(new_stat)
 
-    def update(
-        self, stat_dto: PlayerCareerStatsPublic
-    ) -> PlayerCareerStatsPublic | None:
+    def update(self, stats: PlayerCareerStatsPublic) -> PlayerCareerStatsPublic | None:
         """Update career stats record (implements abstract method)"""
         with self.get_session() as session:
             updated_stat = PlayerCareerStats.update(
-                session, stat_dto.id, **stat_dto.model_dump(exclude_unset=True)
+                session, stats.id, **stats.model_dump(exclude_unset=True)
             )
             return PlayerCareerStatsPublic.from_career_stats(updated_stat)
 
@@ -422,14 +419,14 @@ class PlayerCareerStatsService(BaseService):
         Always uses all stored series to ensure accurate career totals.
         Returns summary of updated players.
         """
-        # Get all series from series service (returns list of Series objects)
-        all_series = self.series_service.getAll()
+        # Ids, scores, season and player names, one row per series
+        all_series = self.series_service.career_stats_rows()
 
         # Get all unique seasons in the system (for proper decay calculation)
         all_system_seasons = set()
         for series in all_series:
-            if series.match and series.match.season_id:
-                all_system_seasons.add(series.match.season_id)
+            if series.season_id:
+                all_system_seasons.add(series.season_id)
         all_system_seasons = sorted(all_system_seasons)  # Sort in ascending order
 
         # Group series by player and collect user info
@@ -443,19 +440,15 @@ class PlayerCareerStatsService(BaseService):
             if player1_id:
                 if player1_id not in series_by_player:
                     series_by_player[player1_id] = []
-                    if series.player1:
-                        player_names[player1_id] = (
-                            series.player1.name or series.player1.w3c_name or "Unknown"
-                        )
+                    if series.player1_name:
+                        player_names[player1_id] = series.player1_name
                 series_by_player[player1_id].append(series)
 
             if player2_id:
                 if player2_id not in series_by_player:
                     series_by_player[player2_id] = []
-                    if series.player2:
-                        player_names[player2_id] = (
-                            series.player2.name or series.player2.w3c_name or "Unknown"
-                        )
+                    if series.player2_name:
+                        player_names[player2_id] = series.player2_name
                 series_by_player[player2_id].append(series)
 
         # Prepare updates list
@@ -550,13 +543,7 @@ class PlayerCareerStatsService(BaseService):
             )
 
             # Get unique seasons played
-            seasons_in_data = len(
-                {
-                    s.match.season_id
-                    for s in user_series
-                    if s.match and s.match.season_id
-                }
-            )
+            seasons_in_data = len({s.season_id for s in user_series if s.season_id})
             total_seasons = historical_baseline["seasons_played"] + seasons_in_data
 
             # Calculate avg series per season
@@ -679,9 +666,9 @@ class PlayerCareerStatsService(BaseService):
         return result
 
     def _calculate_player_stats_from_series(
-        self, user_id: int, series_list: list[SeriesPublic]
+        self, user_id: int, series_list: list[CareerSeriesRow]
     ) -> dict[str, Any]:
-        """Calculate stats for a player from their series records (Series objects)"""
+        """Calculate stats for a player from their series records"""
         series_won = 0
         series_lost = 0
         games_won = 0
@@ -719,7 +706,7 @@ class PlayerCareerStatsService(BaseService):
     def _calculate_gnl_rating(
         self,
         user_id: int,
-        series_list: list[SeriesPublic],
+        series_list: list[CareerSeriesRow],
         historical_rating: float = 0,
         all_system_seasons: list[int] | None = None,
     ) -> int:
@@ -731,7 +718,7 @@ class PlayerCareerStatsService(BaseService):
 
         Args:
             user_id: Player's user ID
-            series_list: List of Series objects for this player
+            series_list: The series rows of this player
             historical_rating: Historical baseline rating (already multiplied by 100)
             all_system_seasons: List of all season IDs in the system (sorted)
 
@@ -750,8 +737,8 @@ class PlayerCareerStatsService(BaseService):
         # Group series by season
         series_by_season = {}
         for series in series_list:
-            if series.match and series.match.season_id:
-                season_id = series.match.season_id
+            if series.season_id:
+                season_id = series.season_id
                 if season_id not in series_by_season:
                     series_by_season[season_id] = []
                 series_by_season[season_id].append(series)
@@ -818,12 +805,12 @@ class PlayerCareerStatsService(BaseService):
         return int(gnl_rating)
 
     def update_career_stats(
-        self, stat_id: int, stat_dto: PlayerCareerStatsPublic
+        self, stat_id: int, stats: PlayerCareerStatsPublic
     ) -> PlayerCareerStatsPublic | None:
         """Update career stats (historical values and user link)"""
         with self.get_session() as session:
             updated_stat = PlayerCareerStats.update(
-                session, stat_id, **stat_dto.model_dump(exclude_unset=True)
+                session, stat_id, **stats.model_dump(exclude_unset=True)
             )
             if not updated_stat:
                 return None

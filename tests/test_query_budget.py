@@ -101,6 +101,27 @@ def test_search_for_season_costs_seven_statements(league: dict[str, Any]) -> Non
     assert tally[0] == 7
 
 
+def test_career_stats_rows_cost_one_statement(league: dict[str, Any]) -> None:
+    """The career recalculation input is one row per series, not the answer."""
+    service = SeriesService(score_app_service=None, user_app_service=None)
+    with count_statements() as tally:
+        rows = service.career_stats_rows()
+    assert len(rows) == 2
+    assert rows[0].season_id == league["season_id"]
+    assert tally[0] == 1
+
+
+def test_user_season_stats_cost_two_statements(league: dict[str, Any]) -> None:
+    """One statement for the counts and one for the matchup history."""
+    service = SeriesService(score_app_service=None, user_app_service=None)
+    with count_statements() as tally:
+        stats = service.calculateUserSeasonStats(
+            league["player_ids"][0], league["season_id"], league["team_a_id"]
+        )
+    assert stats.games == 1
+    assert tally[0] == 2
+
+
 def test_draft_series_by_match_costs_seven_statements(league: dict[str, Any]) -> None:
     service = DraftSeriesService()
     with count_statements() as tally:
