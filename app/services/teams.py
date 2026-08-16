@@ -1,6 +1,6 @@
 import logging
 
-from sqlalchemy import select
+from sqlalchemy import ColumnElement, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import joinedload
 
@@ -243,9 +243,14 @@ class TeamService(BaseService):
             return team.icon
 
     def search(self, query: QueryElement | None) -> list[TeamPublic]:
+        return self._where(QueryUtil.convertQueryToDBFilter(Team, query))
+
+    def find_by_name(self, name: str) -> list[TeamPublic]:
+        return self._where(Team.name == name)
+
+    def _where(self, filter: ColumnElement[bool] | None) -> list[TeamPublic]:
         with self.get_session() as session:
             result: list[TeamPublic] = []
-            filter = QueryUtil.convertQueryToDBFilter(Team, query)
             # Eager load related entities, disable nested loading
             teams = (
                 session.scalars(
@@ -262,7 +267,7 @@ class TeamService(BaseService):
                 else []
             )
             if not teams:
-                logger.debug(f"No teams found by searchcriteria: {query}")
+                logger.debug(f"No teams found by searchcriteria: {filter}")
                 return result
             for team in teams:
                 result.append(TeamPublic.from_team(team))

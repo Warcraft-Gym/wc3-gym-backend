@@ -1,5 +1,7 @@
 import logging
 
+from sqlalchemy import ColumnElement
+
 from app.core.exceptions import NotFoundError
 from app.models.map import Map, MapCreate, MapPublic, MapUpdate
 from app.services.base import BaseService
@@ -33,11 +35,16 @@ class MapService(BaseService):
             return MapPublic.model_validate(map)
 
     def search(self, query: QueryElement | None) -> list[MapPublic]:
+        return self._where(QueryUtil.convertQueryToDBFilter(Map, query))
+
+    def find_by_shortname(self, shortname: str) -> list[MapPublic]:
+        return self._where(Map.shortname == shortname)
+
+    def _where(self, filter: ColumnElement[bool] | None) -> list[MapPublic]:
         with self.get_session() as session:
-            filter = QueryUtil.convertQueryToDBFilter(Map, query)
             maps = Map.search(session, filter)
             if not maps:
-                logger.debug(f"No maps found by searchcriteria: {query}")
+                logger.debug(f"No maps found by searchcriteria: {filter}")
                 return []
             return [MapPublic.model_validate(map) for map in maps]
 

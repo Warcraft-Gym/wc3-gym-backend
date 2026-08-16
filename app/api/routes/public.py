@@ -276,10 +276,9 @@ def public_create_user(
         )
 
     # Check for existing user by discord id or tag
-    query = QueryUtil.parseQuery(
-        f"discordId == {entry.get('discord_id')} or discordTag == {entry.get('discord_tag')}"
+    existing_users = user_service.find_by_discord_id_or_tag(
+        str(entry.get("discord_id")), str(entry.get("discord_tag"))
     )
-    existing_users = user_service.search(query)
 
     if existing_users and len(existing_users) > 0:
         # update first matched user
@@ -337,8 +336,7 @@ def get_player_series(
         return JSONResponse({"error": "invalid_token_type"}, status_code=400)
 
     # Find the user by discord_id
-    query = QueryUtil.parseQuery(f"discordId == {entry.get('discord_id')}")
-    users = user_service.search(query)
+    users = user_service.find_by_discord_id(str(entry.get("discord_id")))
     if not users:
         return JSONResponse({"error": "player_not_found"}, status_code=404)
     user = users[0]
@@ -435,8 +433,7 @@ def _update_player_series(
         return JSONResponse({"error": "invalid_token_type"}, status_code=400)
 
     # Find the user by discord_id
-    query = QueryUtil.parseQuery(f"discordId == {entry.get('discord_id')}")
-    users = user_service.search(query)
+    users = user_service.find_by_discord_id(str(entry.get("discord_id")))
     if not users:
         return JSONResponse({"error": "player_not_found"}, status_code=404)
     user = users[0]
@@ -640,8 +637,7 @@ def get_user_info(
         return JSONResponse({"error": "token_not_found_or_expired"}, status_code=404)
 
     # Find the user by discord_id
-    query = QueryUtil.parseQuery(f"discordId == {entry.get('discord_id')}")
-    users = user_service.search(query)
+    users = user_service.find_by_discord_id(str(entry.get("discord_id")))
 
     if not users or len(users) == 0:
         # User doesn't exist yet
@@ -704,8 +700,7 @@ def create_fantasy_team(
         return JSONResponse({"error": "missing required fields"}, status_code=400)
 
     # Find or create user
-    query = QueryUtil.parseQuery(f"discordId == {entry.get('discord_id')}")
-    users = user_service.search(query)
+    users = user_service.find_by_discord_id(str(entry.get("discord_id")))
 
     if not users or len(users) == 0:
         # Create minimal user without battle tag validation (not a player)
@@ -805,8 +800,9 @@ def create_fantasy_bet(
 
         user = None
         try:
-            query = QueryUtil.parseQuery(f"discordId == {entry.get('discord_id')}")
-            existing_users = user_service.search(query)
+            existing_users = user_service.find_by_discord_id(
+                str(entry.get("discord_id"))
+            )
             if existing_users and len(existing_users) > 0:
                 user = existing_users[0]
         except Exception as e:
@@ -868,8 +864,9 @@ def update_fantasy_bet(
 
         user = None
         try:
-            query = QueryUtil.parseQuery(f"discordId == {entry.get('discord_id')}")
-            existing_users = user_service.search(query)
+            existing_users = user_service.find_by_discord_id(
+                str(entry.get("discord_id"))
+            )
             if existing_users and len(existing_users) > 0:
                 user = existing_users[0]
         except Exception as e:
@@ -936,8 +933,7 @@ def delete_fantasy_bet(
 
     user = None
     try:
-        query = QueryUtil.parseQuery(f"discordId == {entry.get('discord_id')}")
-        existing_users = user_service.search(query)
+        existing_users = user_service.find_by_discord_id(str(entry.get("discord_id")))
         if existing_users and len(existing_users) > 0:
             user = existing_users[0]
     except Exception as e:

@@ -1,0 +1,54 @@
+"""The finders read a column. The query language reads a string.
+
+A value is free text: a player may be called "Fire or Ice", and a Discord
+id arrives in the body of a public request. Put such a value into a query
+string and the parser reads it as part of the query, not as the value.
+These tests pin the difference.
+"""
+
+import pytest
+from fastapi import FastAPI
+
+from app.models.enums import Race
+from app.models.user import UserCreate
+from app.services.users import UserService
+from app.utils.query_util import QueryUtil
+
+
+@pytest.fixture
+def users(app: FastAPI) -> UserService:
+    service = UserService()
+    for name in ["Fire or Ice", "Grubby"]:
+        service.create_user(
+            UserCreate(
+                name=name,
+                battleTag=f"{name}#1234",
+                discordTag=name,
+                discordId=f"id-{name}",
+                race=Race.RANDOM,
+            )
+        )
+    return service
+
+
+def test_find_by_name_accepts_a_name_holding_or(users: UserService) -> None:
+    found = users.find_by_name("Fire or Ice")
+
+    assert [user.name for user in found] == ["Fire or Ice"]
+
+
+def test_the_query_language_cannot_carry_that_name(users: UserService) -> None:
+    """Why find_by_name exists. The parser splits the value at " or "."""
+    with pytest.raises(Exception, match="could not be parsed"):
+        QueryUtil.parseQuery("name == Fire or Ice")
+
+
+def test_find_by_discord_id_treats_the_value_as_a_value(users: UserService) -> None:
+    """A crafted id matches nothing. Through the query language the same
+    text used to widen the search to every row."""
+    crafted = "id-Grubby or id >= 1"
+
+    assert users.find_by_discord_id(crafted) == []
+
+    widened = QueryUtil.parseQuery(f"discordId == {crafted}")
+    assert len(users.search(widened)) == 2

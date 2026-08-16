@@ -1,6 +1,6 @@
 import logging
 
-from sqlalchemy import select
+from sqlalchemy import ColumnElement, select
 from sqlalchemy.orm import joinedload, noload
 
 from app.core.exceptions import NotFoundError
@@ -99,9 +99,14 @@ class SeasonService(BaseService):
             return SeasonPublic.from_season(season)
 
     def search(self, query: QueryElement | None) -> list[SeasonPublic]:
+        return self._where(QueryUtil.convertQueryToDBFilter(Season, query))
+
+    def find_by_name(self, name: str) -> list[SeasonPublic]:
+        return self._where(Season.name == name)
+
+    def _where(self, filter: ColumnElement[bool] | None) -> list[SeasonPublic]:
         with self.get_session() as session:
             result = []
-            filter = QueryUtil.convertQueryToDBFilter(Season, query)
             # Eager load related entities, disable nested loading except for maps
             seasons = (
                 session.scalars(
@@ -120,7 +125,7 @@ class SeasonService(BaseService):
                 else []
             )
             if not seasons:
-                logger.debug(f"No seasons found by searchcriteria: {query}")
+                logger.debug(f"No seasons found by searchcriteria: {filter}")
                 return result
             for season in seasons:
                 result.append(SeasonPublic.from_season(season))

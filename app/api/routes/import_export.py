@@ -149,18 +149,16 @@ def _process_import(
                 }
 
                 # Check if map exists by shortname
-                query = QueryUtil.parseQuery(f"shortname == {map_data['shortname']}")
-                if query and query.elementA:
-                    existing_maps = map_service.search(query)
-                    if existing_maps:
-                        map_obj = existing_maps[0]
-                        map_service.update_map(map_obj.id, MapUpdate(**map_data))
-                    else:
-                        map_obj = map_service.create_map(MapCreate(**map_data))
+                existing_maps = map_service.find_by_shortname(map_data["shortname"])
+                if existing_maps:
+                    map_obj = existing_maps[0]
+                    map_service.update_map(map_obj.id, MapUpdate(**map_data))
+                else:
+                    map_obj = map_service.create_map(MapCreate(**map_data))
 
-                    if old_map_id:
-                        map_id_mapping[old_map_id] = map_obj.id
-                    season_service.addMaps(season_id, [map_obj.id])
+                if old_map_id:
+                    map_id_mapping[old_map_id] = map_obj.id
+                season_service.addMaps(season_id, [map_obj.id])
         except Exception as e:
             logger.warning(f"Maps sheet not found or error: {e}")
 
@@ -177,17 +175,15 @@ def _process_import(
             }
 
             # Check if team exists by name
-            query = QueryUtil.parseQuery(f"name == {team_data['name']}")
-            if query and query.elementA:
-                existing_teams = team_service.search(query)
-                if existing_teams:
-                    team = existing_teams[0]
-                    team_service.update_team(team.id, TeamUpdate(**team_data))
-                else:
-                    team = team_service.create_team(TeamCreate(**team_data))
+            existing_teams = team_service.find_by_name(team_data["name"])
+            if existing_teams:
+                team = existing_teams[0]
+                team_service.update_team(team.id, TeamUpdate(**team_data))
+            else:
+                team = team_service.create_team(TeamCreate(**team_data))
 
-                if old_team_id:
-                    team_id_mapping[old_team_id] = team.id
+            if old_team_id:
+                team_id_mapping[old_team_id] = team.id
 
         # Add teams to season
         season_service.addTeams(season_id, list(team_id_mapping.values()))
@@ -219,22 +215,18 @@ def _process_import(
                 user_data["fantasy_tier"] = int(row["Fantasy Tier"])
 
             # Check if user exists by battleTag
-            query = QueryUtil.parseQuery(f"battleTag == {user_data['battleTag']}")
-            if query and query.elementA:
-                existing_users = user_service.search(query)
-                if existing_users:
-                    # User already exists - reuse existing user without updating
-                    user = existing_users[0]
-                    logger.info(
-                        f"Reusing existing user: {user.battleTag} (ID: {user.id})"
-                    )
-                else:
-                    # User doesn't exist - create new user
-                    user = user_service.create_user(UserCreate(**user_data))
-                    logger.info(f"Created new user: {user.battleTag} (ID: {user.id})")
+            existing_users = user_service.find_by_battle_tag(user_data["battleTag"])
+            if existing_users:
+                # User already exists - reuse existing user without updating
+                user = existing_users[0]
+                logger.info(f"Reusing existing user: {user.battleTag} (ID: {user.id})")
+            else:
+                # User doesn't exist - create new user
+                user = user_service.create_user(UserCreate(**user_data))
+                logger.info(f"Created new user: {user.battleTag} (ID: {user.id})")
 
-                if old_user_id:
-                    user_id_mapping[old_user_id] = user.id
+            if old_user_id:
+                user_id_mapping[old_user_id] = user.id
 
                 # Add player to team for this season
                 if old_team_id and old_team_id in team_id_mapping:
@@ -620,10 +612,8 @@ def import_season(
     # Get season ID (either from Excel or newly created)
     if pd.isna(season_row["ID"]):
         # New season was created, get it by name
-        query = QueryUtil.parseQuery(f"name == {season_name}")
-        if query and query.elementA:
-            seasons = season_service.search(query)
-            season_id = seasons[0].id if seasons else None
+        seasons = season_service.find_by_name(season_name)
+        season_id = seasons[0].id if seasons else None
     else:
         season_id = int(season_row["ID"])
 
@@ -950,10 +940,7 @@ def import_fantasy_teams(
 
     if not season_id:
         if season_name:
-            query = QueryUtil.parseQuery("name == " + season_name)
-            if not query or not query.elementA:
-                raise Exception(f"No valid query found: {'name == ' + season_name}")
-            found_seasons = season_service.search(query)
+            found_seasons = season_service.find_by_name(season_name)
             if not found_seasons:
                 raise Exception(f"Season could not be found by name: {season_name}")
             else:
@@ -976,12 +963,7 @@ def import_fantasy_teams(
                 continue
             if not _cell_value(row.iloc[1]):
                 raise Exception(f"Team without captain: {row.iloc[0]}")
-            query = QueryUtil.parseQuery("discordTag == " + row.iloc[1])
-            if not query or not query.elementA:
-                raise Exception(
-                    f"No valid query found: {'discordTag == ' + row.iloc[1]}"
-                )
-            users = user_service.search(query)
+            users = user_service.find_by_discord_tag(row.iloc[1])
             captain = None
             if not users:
                 logger.debug(
@@ -1003,10 +985,7 @@ def import_fantasy_teams(
 
             if not _cell_value(row.iloc[10]):
                 raise Exception(f"No GNL team defined for team: {row.iloc[0]}")
-            query = QueryUtil.parseQuery("name==" + row.iloc[10])
-            if not query or not query.elementA:
-                raise Exception(f"No valid query found: {'name == ' + row.iloc[10]}")
-            found_teams = team_service.search(query)
+            found_teams = team_service.find_by_name(row.iloc[10])
             if not found_teams or len(found_teams) != 1:
                 raise Exception(
                     f"No or multiple teams found for gnl team name[{row.iloc[10]} ]: {found_teams}"
@@ -1032,7 +1011,7 @@ def import_fantasy_teams(
             fantasy_team = None
             fteam_q_string = f"season_id=={season_id} and captain_id=={captain.id}"
             fteam_query = QueryUtil.parseQuery(fteam_q_string)
-            if not query or not query.elementA:
+            if not fteam_query or not fteam_query.elementA:
                 raise Exception(f"No valid query found: {fteam_q_string}")
             found_teams = fantasy_team_service.search_fantasy_teams(fteam_query)
             if found_teams and len(found_teams) == 1:
@@ -1056,10 +1035,7 @@ def import_fantasy_teams(
                 if found_player_id:
                     players.append(found_player_id)
                 else:
-                    query = QueryUtil.parseQuery("name == " + player)
-                    if not query or not query.elementA:
-                        raise Exception(f"No valid query found: {'name == ' + player}")
-                    users = user_service.search(query)
+                    users = user_service.find_by_name(player)
                     if not users or len(users) != 1:
                         raise Exception(f"Could not find player by name: {player}")
                     found_player = users[0]
@@ -1102,10 +1078,7 @@ def import_fantasy_bets(
 
     if not season_id:
         if season_name:
-            query = QueryUtil.parseQuery("name == " + season_name)
-            if not query or not query.elementA:
-                raise Exception(f"No valid query found: {'name == ' + season_name}")
-            found_seasons = season_service.search(query)
+            found_seasons = season_service.find_by_name(season_name)
             if not found_seasons:
                 raise Exception(f"Season could not be found by name: {season_name}")
             else:
@@ -1130,19 +1103,13 @@ def import_fantasy_bets(
             if not query or not query.elementA:
                 raise Exception(f"No valid query found: {q_string}")
             matches = match_service.search(query)
-            query = QueryUtil.parseQuery("name == " + row.iloc[1])
-            if not query or not query.elementA:
-                raise Exception(f"No valid query found: {'name == ' + row.iloc[1]}")
-            users = user_service.search(query)
+            users = user_service.find_by_name(row.iloc[1])
             if not users or len(users) != 1:
                 raise Exception(
                     f"No or multiple users found for bet player[{row.iloc[1]}]: {users}"
                 )
             player1 = users[0]
-            query = QueryUtil.parseQuery("name == " + row.iloc[2])
-            if not query or not query.elementA:
-                raise Exception(f"No valid query found: {'name == ' + row.iloc[2]}")
-            users = user_service.search(query)
+            users = user_service.find_by_name(row.iloc[2])
             if not users or len(users) != 1:
                 raise Exception(
                     f"No or multiple users found for bet player[{row.iloc[1]}]: {users}"
@@ -1177,12 +1144,7 @@ def import_fantasy_bets(
 
             if not _cell_value(row.iloc[1]):
                 raise Exception(f"Captain not defined: {row.iloc[1]}")
-            query = QueryUtil.parseQuery("discordTag == " + row.iloc[1])
-            if not query or not query.elementA:
-                raise Exception(
-                    f"No valid query found: {'discordTag == ' + row.iloc[1]}"
-                )
-            users = user_service.search(query)
+            users = user_service.find_by_discord_tag(row.iloc[1])
             if not users or len(users) != 1:
                 raise Exception(
                     f"No or multiple users found for captain[{row.iloc[1]}]: {users}"
@@ -1192,10 +1154,7 @@ def import_fantasy_bets(
             if not _cell_value(row.iloc[2]):
                 raise Exception(f"Bet Player not defined: {row.iloc[2]}")
 
-            query = QueryUtil.parseQuery("name == " + row.iloc[2])
-            if not query or not query.elementA:
-                raise Exception(f"No valid query found: {'name == ' + row.iloc[2]}")
-            users = user_service.search(query)
+            users = user_service.find_by_name(row.iloc[2])
             if not users or len(users) != 1:
                 raise Exception(
                     f"No or multiple users found for bet player[{row.iloc[2]}]: {users}"

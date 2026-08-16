@@ -1,7 +1,7 @@
 import logging
 from typing import TYPE_CHECKING
 
-from sqlalchemy import select
+from sqlalchemy import ColumnElement, or_, select
 from sqlalchemy.orm import joinedload
 
 from app.core.exceptions import NotFoundError
@@ -60,9 +60,30 @@ class UserService(BaseService):
             return UserPublic.from_user(user)
 
     def search(self, query: QueryElement | None) -> list[UserPublic]:
+        return self._where(QueryUtil.convertQueryToDBFilter(User, query))
+
+    def find_by_name(self, name: str) -> list[UserPublic]:
+        return self._where(User.name == name)
+
+    def find_by_battle_tag(self, battle_tag: str) -> list[UserPublic]:
+        return self._where(User.battleTag == battle_tag)
+
+    def find_by_discord_tag(self, discord_tag: str) -> list[UserPublic]:
+        return self._where(User.discordTag == discord_tag)
+
+    def find_by_discord_id(self, discord_id: str) -> list[UserPublic]:
+        return self._where(User.discordId == discord_id)
+
+    def find_by_discord_id_or_tag(
+        self, discord_id: str, discord_tag: str
+    ) -> list[UserPublic]:
+        return self._where(
+            or_(User.discordId == discord_id, User.discordTag == discord_tag)
+        )
+
+    def _where(self, filter: ColumnElement[bool] | None) -> list[UserPublic]:
         with self.get_session() as session:
             result = []
-            filter = QueryUtil.convertQueryToDBFilter(User, query)
             # Eager load related entities, disable nested loading
             users = (
                 session.scalars(
@@ -79,7 +100,7 @@ class UserService(BaseService):
                 else []
             )
             if not users:
-                logger.debug(f"No users found by searchcriteria: {query}")
+                logger.debug(f"No users found by searchcriteria: {filter}")
                 return result
 
             for user in users:
