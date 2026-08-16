@@ -27,6 +27,8 @@ up:
     if docker container inspect gnl-mysql >/dev/null 2>&1; then
         docker start gnl-mysql
     else
+        # The slow-log arguments apply only when Docker creates the container.
+        # An existing gnl-mysql keeps its old arguments until it is removed.
         docker run -d --name gnl-mysql --network gnl-net \
             -e MYSQL_ROOT_PASSWORD=root_password \
             -e MYSQL_DATABASE=GYM_BACKEND \
@@ -34,7 +36,10 @@ up:
             -e MYSQL_PASSWORD=gym_user \
             -p 3306:3306 \
             -v gnl-mysql-data:/var/lib/mysql \
-            mysql:5.7.41
+            mysql:5.7.41 \
+            --slow_query_log=ON \
+            --long_query_time=0.2 \
+            --slow_query_log_file=/var/lib/mysql/slow.log
     fi
 
     echo "Waiting for MySQL..."
@@ -48,6 +53,7 @@ up:
     docker build -t {{image}} {{justfile_directory()}}
     docker rm -f gnl-backend >/dev/null 2>&1 || true
     docker run -d --name gnl-backend --network gnl-net -p 5002:5002 \
+        --log-opt max-size=10m --log-opt max-file=5 \
         -e DB_URL="{{container_db_url}}" \
         -e ADMIN_TOKEN=devtoken \
         -e JWT_SECRET_KEY=devsecret \
@@ -59,8 +65,24 @@ up:
         -e FRONTEND_URL=http://localhost:5003 \
         {{image}}
 
+    # The container runs the migration before uvicorn binds, so one answered
+    # route means the schema step also succeeded.
+    # /health runs a query, so an answer also proves the database link.
+    echo "Waiting for the backend..."
+    for try in $(seq 1 45); do
+        if curl -fsS -o /dev/null http://localhost:5002/health 2>/dev/null; then
+            break
+        fi
+        if [ "$try" -eq 45 ]; then
+            echo "The backend did not answer on 5002. Log tail:" >&2
+            docker logs --tail 20 gnl-backend >&2
+            exit 1
+        fi
+        sleep 2
+    done
+
     echo
-    echo "Backend: http://localhost:5002/docs (ready in ~30s, admin token: devtoken)"
+    echo "Backend: http://localhost:5002/docs (admin token: devtoken)"
 
 # Start the stopped containers again, MySQL first. Use after Docker Desktop restarts.
 restart:
@@ -70,6 +92,10 @@ restart:
 # Follow the backend log, where the migration and the server both write.
 logs *args:
     docker logs --follow --tail 50 {{args}} gnl-backend
+
+# Show the MySQL slow query log: every query slower than 0.2 seconds.
+slow-log:
+    docker exec gnl-mysql cat /var/lib/mysql/slow.log
 
 # Bring a database up to date by hand. The backend container does this at every start.
 migrate db_url=host_db_url:
