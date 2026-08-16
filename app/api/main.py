@@ -4,6 +4,7 @@ from app.api.routes import (
     config,
     draft_series,
     fantasy,
+    health,
     import_export,
     koth,
     login,
@@ -34,3 +35,4 @@ api_router.include_router(fantasy.router)
 api_router.include_router(config.router)
 api_router.include_router(koth.router)
 api_router.include_router(stats.router)
+api_router.include_router(health.router)
