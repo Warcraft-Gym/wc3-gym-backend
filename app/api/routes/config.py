@@ -93,7 +93,6 @@ def generate_nightbot_token(service: SettingsServiceDep) -> GeneratedNightbotTok
 @router.get("/config/koth/nightbot-token", dependencies=[Depends(require_admin)])
 def get_nightbot_token(service: SettingsServiceDep) -> NightbotToken:
     """Get the current KOTH Nightbot token"""
-    # get_setting raises NotFoundError for a missing token, so a missing
-    # token answers 404.
+    # get_setting raises NotFoundError, which answers 404
     setting = service.get_setting("KOTH_NIGHTBOT_TOKEN")
     return NightbotToken(token=setting.get("value"), exists=True)

@@ -190,8 +190,7 @@ class UserService(BaseService):
                 )
 
         for s in all_stats:
-            # Match by both race AND season to correctly distinguish
-            # per-season records
+            # Records are per race and per season
             existing = [
                 u_s
                 for u_s in user.w3c_stats

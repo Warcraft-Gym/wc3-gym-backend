@@ -1,9 +1,7 @@
 [project]
-# The name matches the app/ directory, so hatchling ships that directory as
-# the package with no further build config.
 name = "app"
 version = "1.0.0"
-description = "FastAPI REST API for the GNL (Gym Newbie League) esports platform"
+description = "FastAPI backend for the GNL (Gym Newbie League) esports platform"
 requires-python = ">=3.13"
 dependencies = [
     "requests",
@@ -37,13 +35,9 @@ dev = [
 ]
 
 [tool.ruff.lint]
-# Every function annotates its arguments and its return type. ruff reads
-# requires-python above, so it accepts the syntax of that version and asks
-# for nothing older.
-extend-select = ["ANN"]
+extend-select = ["ANN"]  # flake8-annotations
 
-# Findings in existing code, suppressed rather than fixed in the ruff
-# rollout. To burn down: fix a rule's findings, then remove it from this list.
+# Raised lint errors in legacy code that were suppressed rather than addressed.
 ignore = [
     "BLE001",  # blind `except Exception`
     "DTZ001",  # naive datetimes match the DATETIME columns
@@ -55,14 +49,5 @@ ignore = [
     "TRY401",  # redundant exception object in logging.exception
 ]
 
-[tool.ruff.lint.per-file-ignores]
-# The validators here run before pydantic has checked anything, so the
-# value they take really is arbitrary: a request body, or a cell from the
-# xlsx import. Any is the honest annotation for it.
-"app/models/types.py" = ["ANN401"]
-
 [tool.pytest]
-# Collect from tests/ only. A non-empty table here also anchors pytest's
-# rootdir to this file, so a nested worktree never inherits the config of a
-# checkout above it.
 testpaths = ["tests"]

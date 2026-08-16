@@ -69,10 +69,7 @@ class FantasyBetService(BaseService):
             if filter is None:
                 logger.debug(f"No fantasy bets found by searchcriteria: {query}")
                 return result
-            # Eager load the relations that the response model and the score service
-            # read. noload('*') stops all other relations loading, so every relation
-            # that a caller reads must be listed here. The score breakdown reads
-            # series.match.playday.
+            # noload('*') hides every relation not listed here
             fbets = (
                 session.scalars(
                     select(FantasyBet)
@@ -198,8 +195,7 @@ class FantasyBetService(BaseService):
     def update_fantasy_bet(
         self, bet_id: int, bet: FantasyBetUpdate
     ) -> FantasyBetPublic:
-        # A partial update only writes the fields it carries, so the
-        # bet-points rules apply only when the update carries bet_points.
+        # model_fields_set separates an absent field from an explicit null
         if "bet_points" in bet.model_fields_set:
             self._apply_bet_points_logic(bet)
         return self.update(bet_id, bet)

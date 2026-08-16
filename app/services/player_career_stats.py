@@ -238,11 +238,7 @@ class PlayerCareerStatsService(BaseService):
                     self._apply_stats_update(session, update_data)
                 updated += 1
             except (SQLAlchemyError, KeyError) as e:
-                # SQLAlchemyError: database error for this item. The list
-                # goes to the client, so the message is fixed and what the
-                # database said goes to the log.
-                # KeyError: the item misses a required field.
-                # Any other exception is a bug and must fail the request.
+                # The error list goes to the client, so database errors stay fixed
                 message = "Database error" if isinstance(e, SQLAlchemyError) else str(e)
                 logger.exception(f"Error updating stats for user {user_id}")
                 errors.append(f"Error for user {user_id}: {message}")
@@ -256,8 +252,7 @@ class PlayerCareerStatsService(BaseService):
         user_id = update_data["user_id"]
         player_name = update_data["player_name"]
 
-        # Query for both potential records separately to handle merging
-        # Only query by user_id if it's not None (unmapped records have user_id=None)
+        # Unmapped records have user_id=None
         record_by_user_id = None
         if user_id is not None:
             record_by_user_id = session.scalars(
@@ -305,13 +300,11 @@ class PlayerCareerStatsService(BaseService):
             session.delete(record_by_name)
 
         elif record_by_user_id:
-            # Only user_id record exists - update stats only
-            # Don't change player_name (historical data should not change)
+            # Keep the historical player_name
             stats_record = record_by_user_id
 
         elif record_by_name:
-            # Only name-based record exists (historical) - link it to user_id
-            # Don't change player_name (preserve historical name)
+            # Link the historical record to the user, keep its name
             stats_record = record_by_name
             stats_record.user_id = user_id
 
@@ -379,8 +372,7 @@ class PlayerCareerStatsService(BaseService):
                 )
                 avg_series = self._parse_avg_series(row.get("AVG NUM Series", "0"))
 
-                # The update resolves the user by player name and runs each
-                # row as one short transaction.
+                # Each row runs as one short transaction
                 self.update_historical_baseline(
                     player_name=player_name,
                     rating=rating,
@@ -570,8 +562,7 @@ class PlayerCareerStatsService(BaseService):
             # Calculate avg series per season
             avg_series = total_series / total_seasons if total_seasons > 0 else 0.0
 
-            # Rating: calculate GNL rating from series (includes historical with decay)
-            # Pass all system seasons to ensure proper decay even for inactive players
+            # All system seasons are passed so inactive players still decay
             final_rating = self._calculate_gnl_rating(
                 user_id, user_series, historical_baseline["rating"], all_system_seasons
             )
@@ -595,8 +586,7 @@ class PlayerCareerStatsService(BaseService):
                 }
             )
 
-        # Process remaining historical-only players (not processed above)
-        # These are stats records that weren't matched to any player with series
+        # Historical-only players: stats records with no matching series
         for historical_stat in all_existing_stats:
             # Skip if we already processed this stat record
             if historical_stat.id in processed_stat_ids:
@@ -632,8 +622,7 @@ class PlayerCareerStatsService(BaseService):
             if not has_historical_data:
                 continue
 
-            # This player has historical data but no current series
-            # Apply decay through all system seasons
+            # Historical data and no current series, so decay only
             decayed_rating = self._calculate_gnl_rating(
                 user_id=historical_stat.user_id,
                 series_list=[],  # No series played
@@ -770,8 +759,7 @@ class PlayerCareerStatsService(BaseService):
         # Calculate rating per season (only for seasons with series)
         rating_by_season = {}
         if series_by_season:
-            # Get all seasons and sort them in ascending order (oldest to newest)
-            # Season IDs increment, so sorting ensures proper decay calculation
+            # Season ids increment, so sorting them gives the decay order
             seasons = sorted(series_by_season.keys())
 
             for season_id in seasons:
@@ -804,18 +792,15 @@ class PlayerCareerStatsService(BaseService):
 
                 rating_by_season[season_id] = season_rating
 
-        # Apply decay and sum up, starting with historical rating
-        # Historical rating is already multiplied by 100, so divide it first to match raw points scale
+        # The stored historical rating is scaled, so divide it back to raw points
         gnl_rating = (
             historical_rating / GNL_RATING_FLAT_MULTIPLIER
             if historical_rating > 0
             else 0
         )
 
-        # Iterate through ALL seasons in the system (not just seasons player participated in)
-        # This ensures decay happens every season for everyone, including historical-only players
+        # Every season decays every player, including historical-only ones
         for season_id in all_system_seasons:
-            # Decay rating from previous seasons (happens every season for all players)
             gnl_rating *= 1.0 - GNL_RATING_DECAY_RATE_PER_SEASON
 
             # Add this season's rating if player participated

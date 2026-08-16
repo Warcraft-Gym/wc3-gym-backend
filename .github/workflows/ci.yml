@@ -1,9 +1,5 @@
 name: CI
 
-# The steps below call the justfile, so the recipes and the checks are one
-# thing rather than two lists that drift apart. `just` comes from the dev
-# dependency group, which is why the sync must not pass --no-dev.
-
 on:
   push:
     branches: [main]

@@ -172,8 +172,7 @@ def get_fantasy_team_breakdown(
     Returns a detailed breakdown showing how each component of the fantasy
     team score was calculated.
     """
-    # get_season raises NotFoundError for an unknown id, so a missing
-    # season already answers 404.
+    # get_season raises NotFoundError, which answers 404
     season = season_service.get_season(season_id)
     return fantasy_score_service.getTeamScoreBreakdown(team_id, season)
 

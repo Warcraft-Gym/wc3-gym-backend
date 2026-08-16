@@ -91,8 +91,7 @@ class KothService(BaseService):
 
     def get_active_event(self) -> KothEventPublic:
         with self.get_session() as session:
-            # Pick the one event id first. A LIMIT on the outer select would cut the
-            # joined signup and match rows, so the limit belongs in a subquery.
+            # A LIMIT on the outer select would cut the joined rows
             active_event_id = (
                 select(KothEvent.id)
                 .where(KothEvent.is_active == True)
@@ -602,9 +601,7 @@ class KothService(BaseService):
 
         return stats
 
-    # Required abstract methods
-    # BaseService asks for these four. This service works through the
-    # add_event/add_signup/add_match methods above, so they stay empty.
+    # BaseService requires these four; this service uses add_event/add_signup/add_match
     def get(self, obj_id: object) -> None:
         pass
 

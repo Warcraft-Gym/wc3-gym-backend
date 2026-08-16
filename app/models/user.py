@@ -16,8 +16,7 @@ if TYPE_CHECKING:
 
 
 class UserBase(SQLModel):
-    # These fields receive raw numeric cells from the xlsx import, and
-    # discordId also receives numeric snowflakes from JSON bodies.
+    # The xlsx import sends numeric cells, and discordId numeric snowflakes
     name: Annotated[str, NumToStr] = Field(max_length=50)
     battleTag: Annotated[str, NumToStr] = Field(max_length=50)
     discordTag: Annotated[str, NumToStr] = Field(max_length=50)
@@ -67,8 +66,7 @@ class UserUpdate(SQLModel):
 
 class UserPublic(UserBase):
     id: int | None = None
-    # A user reached through another object can be built from a row that
-    # holds only some of these, so the response keeps them all optional.
+    # A user reached through another object may hold only some of these
     name: Annotated[str | None, NumToStr] = None
     battleTag: Annotated[str | None, NumToStr] = None
     discordTag: Annotated[str | None, NumToStr] = None

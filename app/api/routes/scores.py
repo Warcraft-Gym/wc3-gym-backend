@@ -183,8 +183,7 @@ def perform_calculation(
     except Exception as e:
         logger.error(f"Error calculating scores: {e}")
         calculation_progress[season_id]["status"] = "error"
-        # The progress endpoint serves this message, so a database error
-        # keeps the fixed message the client sees everywhere else.
+        # The progress endpoint serves this message to the client
         message = "Database error" if isinstance(e, SQLAlchemyError) else str(e)
         calculation_progress[season_id]["message"] = f"Error: {message}"
         raise

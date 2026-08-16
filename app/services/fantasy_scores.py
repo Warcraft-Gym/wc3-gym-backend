@@ -14,10 +14,7 @@ if TYPE_CHECKING:
     from app.models.season import SeasonPublic
     from app.models.series import SeriesPublic
 
-# The response models render a race as its plain value, so a race read
-# off a player or a fantasy team is a string. A race read off an ORM row
-# is the member, and a player without one is None, so a key is any of the
-# three and race_value writes all three the same way.
+# A race is an enum member on an ORM row, a string in a response model, None if unset
 type RaceKey = Race | str | None
 type RacePoints = dict[RaceKey, int]
 type RaceStats = dict[RaceKey, dict[str, Any]]
@@ -57,8 +54,7 @@ class FantasyScoreService:
             for week in range(1, season.number_weeks + 1)
         }
 
-    # The flag also changes the result: the totals alone, or the totals
-    # with the per-week detail beside them.
+    # include_weekly_details also changes the return type
     def _calculate_race_points(
         self,
         season: "SeasonPublic",
@@ -223,8 +219,7 @@ class FantasyScoreService:
             "race_points": 0,
             "bet_points": 0,
             "total_points": 0,
-            # (bet id, points won or lost) per decided bet, so the caller
-            # can store the results without evaluating the bets again.
+            # (bet id, points) per decided bet, so the caller does not evaluate again
             "bet_results": [],
         }
 
@@ -408,9 +403,7 @@ class FantasyScoreService:
                     fteam, season, race_points, series_by_week, include_breakdown=False
                 )
 
-                # Store through the Update models. The bet update skips
-                # bet-points validation on purpose: it writes a result,
-                # it does not place a bet.
+                # The bet update writes a result, so it skips bet-points validation
                 for bet_id, bet_result in scores["bet_results"]:
                     self.fantasy_bet_service.update(
                         bet_id, FantasyBetUpdate(bet_result=bet_result)
@@ -483,8 +476,7 @@ class FantasyScoreService:
         drafted_race = fantasy_team.drafted_race
         race_total_points = race_points.get(drafted_race, 0)
 
-        # JSON keys are strings, and the page matches them against the
-        # value in race_breakdown.race, so both are written the same way.
+        # JSON keys are strings, and the page matches them against race_breakdown.race
         race_points_str = {
             _race_value(race): points for race, points in race_points.items()
         }

@@ -14,18 +14,18 @@ import difflib
 import enum
 import numbers
 from datetime import date, datetime
-from typing import Annotated, Any
+from typing import Annotated
 
 from pydantic import BeforeValidator, PlainSerializer
 
 from app.models.enums import Race
 
 
-def _enum_to_value(value: Any) -> Any:
+def _enum_to_value[T](value: T) -> str | T:
     return value.value if isinstance(value, enum.Enum) else value
 
 
-def _none_to_list(value: Any) -> Any:
+def _none_to_list[T](value: T) -> list | T:
     if value is None:
         return []
     if isinstance(value, list):
@@ -33,24 +33,20 @@ def _none_to_list(value: Any) -> Any:
     return value
 
 
-def _num_to_str(value: Any) -> Any:
-    # numbers.Integral and numbers.Real also match numpy scalars, which the
-    # xlsx import passes for numeric cells (pandas reads a column as int64,
-    # or as float64 when the column has blank cells).
+def _num_to_str[T](value: T) -> str | T:
+    # These ABCs also match the numpy scalars the xlsx import passes.
     if isinstance(value, bool):
         return value
     if isinstance(value, numbers.Integral):
         return str(int(value))
     if isinstance(value, numbers.Real):
-        value = float(value)
-        return str(int(value)) if value.is_integer() else str(value)
+        number = float(value)
+        return str(int(number)) if number.is_integer() else str(number)
     return value
 
 
-def _lenient_date(value: Any) -> Any:
-    # An empty string means no value, and a datetime is truncated the way
-    # the DATE column truncates it. Both run before pydantic's strict date
-    # parsing.
+def _lenient_date[T](value: T) -> date | None | T:
+    # Runs before pydantic's strict date parsing.
     if value == "":
         return None
     if isinstance(value, datetime):
@@ -64,15 +60,12 @@ def _lenient_date(value: Any) -> Any:
     return value
 
 
-def _empty_str_to_none(value: Any) -> Any:
+def _empty_str_to_none[T](value: T) -> T | None:
     return None if value == "" else value
 
 
-def _suggest_race(value: Any) -> Any:
-    # The names clients send are near misses of the member they mean:
-    # HUMAN for HU, ORC for OC, Random for RANDOM. Pydantic's own message
-    # lists the five members but does not say which one was meant, so the
-    # near miss is named here before the value reaches it.
+def _suggest_race[T](value: T) -> T:
+    # Clients send near misses: HUMAN for HU, ORC for OC, Random for RANDOM.
     if not isinstance(value, str):
         return value
     members = [member.value for member in Race]
@@ -85,18 +78,14 @@ def _suggest_race(value: Any) -> Any:
     raise ValueError(f"'{value}' is not a race. Valid races are {known}.")
 
 
-def _round_to_int(value: Any) -> Any:
-    # The w3champions API sometimes returns fractional numbers for integer
-    # columns.
+def _round_to_int[T](value: T) -> int | T:
+    # The w3champions API returns fractions for integer columns.
     if isinstance(value, float) and not value.is_integer():
         return round(value)
     return value
 
 
-# Output. Dates serialize as isoformat() writes them, which ends a
-# timezone-aware value with '+00:00' where pydantic's default writes 'Z'.
-# In python mode the objects pass through, so the database layer receives
-# real date and datetime values.
+# Output. isoformat() ends an aware value with '+00:00' where pydantic writes 'Z'.
 IsoDateTime = Annotated[
     datetime,
     PlainSerializer(
@@ -110,20 +99,16 @@ IsoDate = Annotated[
     ),
 ]
 
-# Output. A Race column holds an enum member when read through the ORM;
-# the API has always sent the plain value.
+# Output. The ORM holds an enum member; the API sends the plain value.
 EnumValue = BeforeValidator(_enum_to_value)
 # Output. Null reads as an empty list.
 NoneToList = BeforeValidator(_none_to_list)
 
-# Input. String columns that also receive numbers: Discord role ids and
-# the cells of the xlsx import.
+# Input. String columns that also receive numbers: role ids, xlsx cells.
 NumToStr = BeforeValidator(_num_to_str)
-# Input. Date fields that arrive as an empty string or as a full ISO
-# datetime string from the frontend.
+# Input. Date fields that arrive empty or as a full ISO datetime string.
 LenientDate = BeforeValidator(_lenient_date)
-# Input. Number fields where a cleared form field arrives as an empty
-# string.
+# Input. Number fields where a cleared form field arrives as an empty string.
 EmptyStrToNone = BeforeValidator(_empty_str_to_none)
 # Input. Integer fields fed by the w3champions API, which sends fractions.
 RoundToInt = BeforeValidator(_round_to_int)

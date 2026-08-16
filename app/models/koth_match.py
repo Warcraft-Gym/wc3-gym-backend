@@ -36,8 +36,7 @@ class KothMatch(KothMatchBase, DBModel, table=True):
 
 
 class KothMatchCreate(KothMatchBase):
-    # The bracket comes from the participants, so the caller does not send
-    # it. create_match fills it in before the row is written.
+    # create_match derives this from the participants
     bracket: int | None = None
 
 

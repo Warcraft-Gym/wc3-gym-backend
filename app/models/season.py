@@ -57,15 +57,13 @@ class SeasonUpdate(SQLModel):
 
 class SeasonPublic(SeasonBase):
     id: int | None = None
-    # The short form of a season carries the name and nothing else, so the
-    # counts and the dates read null there.
+    # The short form of a season carries only the name, so these read null
     number_weeks: int | None = None
     series_per_week: int | None = None
     start_date: Annotated[IsoDate | None, LenientDate] = None
     end_date: Annotated[IsoDate | None, LenientDate] = None
     maps: Annotated[list[MapPublic], NoneToList] = []
-    # Nothing fills this. It is part of the response shape that the public
-    # pages read, so the field stays and always reads as an empty list.
+    # Always empty; the public pages read this field
     user_signup: Annotated[list[Any], NoneToList] = []
 
     @classmethod

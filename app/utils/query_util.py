@@ -20,8 +20,7 @@ class ConcatenationType:
             instance = super().__new__(cls, *args, **kwargs)
             instance.value = value
             cls._instances[value] = instance
-        # The cache is shared by the whole class tree, so the entry is only
-        # a cls instance because nothing subclasses this.
+        # The shared cache holds a cls only because nothing subclasses this
         return cast(Self, cls._instances[value])
 
     def __repr__(self) -> str:
@@ -127,8 +126,7 @@ class QueryUtil:
     ) -> ColumnElement[bool] | None:
         if not query:
             return None
-        # find_and_split builds the tree: a QUERY node holds one condition,
-        # and an AND/OR node holds a QueryElement on each side.
+        # QUERY nodes hold a condition, AND/OR nodes hold two QueryElements
         if query.type == ConcatenationType.QUERY:
             return QueryUtil.createClassQuery(cls, cast(QueryCondition, query.elementA))
         queryA = QueryUtil.convertQueryToDBFilter_Rec(

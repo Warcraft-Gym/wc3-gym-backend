@@ -2,9 +2,8 @@ import os
 import re
 import unicodedata
 
-# secure_filename is copied from Werkzeug 3.x (BSD-3-Clause,
-# https://github.com/pallets/werkzeug) to keep its exact filename behaviour without
-# taking the dependency.
+# secure_filename is copied from Werkzeug 3.x, BSD-3-Clause
+# https://github.com/pallets/werkzeug
 
 _filename_ascii_strip_re = re.compile(r"[^A-Za-z0-9_.-]")
 _windows_device_files = {

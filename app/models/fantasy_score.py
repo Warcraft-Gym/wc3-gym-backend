@@ -81,8 +81,7 @@ class FantasyTeamScoreBreakdown(SQLModel):
     season_name: str | None
     player_breakdown: list[FantasyPlayerBreakdown]
     bench_breakdown: list[FantasyBenchAward]
-    # An empty dict when the team drafted no GNL team, so the field
-    # stays a dict instead of an all-optional model.
+    # An empty dict when the team drafted no GNL team
     team_breakdown: dict[str, Any]
     race_breakdown: FantasyRaceBreakdown
     bet_breakdown: list[FantasyBetOutcome]

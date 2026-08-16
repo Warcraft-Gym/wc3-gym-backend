@@ -12,8 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 class TeamSeasonService(BaseService):
-    # add, delete and get build an exception and hand it back as the
-    # result. They are typed as they behave; see the pull request.
+    # add, delete and get return an exception instead of raising it
     def add(self) -> Exception:
         return Exception("Method not available")
 

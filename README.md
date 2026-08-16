@@ -63,7 +63,7 @@ Dependencies live in `pyproject.toml`: runtime packages under `[project] depende
 
 ### 3. Know the environment variables
 
-The backend reads its configuration from the environment. `just up` and the debug configuration both pass development-only values, so nothing here needs setting by hand to run the project locally. Read this table before deploying, and when a container starts but behaves oddly.
+The backend reads its configuration from the environment. `just up` passes development-only values, so nothing here needs setting by hand to run the project locally. Read this table before deploying, and when a container starts but behaves oddly.
 
 `.env` is committed and holds the values that are not secret: `TOKEN_TIME`, `REFRESH_TOKEN_TIME`, `CURRENT_WC3_SEASON` and `W3C_URL`. `create_app` calls `load_dotenv`, so those arrive on their own. The rest are passed in.
 
@@ -127,14 +127,6 @@ The image is tagged `gnl-backend:local`. The tag means what it says: `just up` b
 The container starts with development-only values (`ADMIN_TOKEN=devtoken`, `JWT_SECRET_KEY=devsecret`). Log in with `devtoken`. Do not use these values outside local development. The backend accepts connections about 30 seconds after `up` returns.
 
 If `just` is installed system-wide, the `uv run` prefix is optional.
-
-### Debugging in VS Code
-
-`.vscode/launch.json` holds one configuration, **Debug the backend**. Start MySQL with `uv run just up`, then open the **Run and Debug** panel (Ctrl+Shift+D), pick it and press F5.
-
-It runs uvicorn on port 5002 on your machine, under the debugger, against the MySQL container. Breakpoints work because the code runs on the host rather than in a container, and `--reload` picks up an edit without a restart. Stop the backend container first, or both will want port 5002.
-
-Debugging the code *inside* the container is not set up. That needs `debugpy` in the image, and the image installs with `--no-dev`, so the dependency would have to ship to production or the image would need a separate debug target. Neither exists today.
 
 ### Accessing the Application
 
@@ -255,7 +247,7 @@ uv sync
 
 ### Port 5002 Already in Use
 
-**Solution:** Stop whatever holds the port. The usual cause is the backend container and the debug configuration both wanting 5002: run `uv run just down`, or change the port in `.vscode/launch.json`.
+**Solution:** Stop whatever holds the port. The usual cause is the backend container: run `uv run just down`.
 ```bash
 # Find process using port
 netstat -ano | findstr :5002
@@ -273,9 +265,6 @@ backend/
 ├── Dockerfile             # Docker image definition
 ├── justfile               # The everyday commands
 ├── .env                   # Committed configuration that is not secret
-├── .vscode/
-│   └── launch.json        # VS Code debug configuration
-├── db_scripts/            # Hand-run SQL. Alembic owns the schema, not this
 ├── tests/                 # pytest suite
 ├── app/
 │   ├── main.py            # The application factory, create_app
@@ -300,10 +289,9 @@ The server calls the factory, so nothing builds an application at import:
 ## Development Workflow
 
 1. Make code changes
-2. Press F5 to rebuild and run in Docker
+2. Rebuild and restart with `uv run just up`
 3. Test endpoints at http://localhost:5002/docs
-4. Check logs in VS Code Debug Console
-5. Set breakpoints for debugging
+4. Read the log with `uv run just logs`
 
 ## Tests
 
@@ -315,9 +303,3 @@ The tests run against a temporary SQLite file and need no database server
 and no environment variables. The suite builds that file with
 `alembic upgrade head`, the way a deployment does, so every run checks the
 migrations as well. See `tests/conftest.py` for the design rules.
-
-## Additional Resources
-
-- [Backend Architecture Guide](.github/copilot-instructions.md)
-- [Database Migration Guide](db_scripts/DOCKER_IMPORT_GUIDE.md)
-- [Stats Workflow](STATS_WORKFLOW.md)

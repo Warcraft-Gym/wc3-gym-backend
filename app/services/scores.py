@@ -88,8 +88,7 @@ class ScoreService:
     def updateTeamScore(
         self, team: TeamPublic | TeamReduced, seasonId: int
     ) -> TeamPublic | TeamReduced:
-        # A match carries reduced team objects without seasons_info;
-        # fetch the full team data in that case
+        # A match carries reduced team objects without seasons_info
         if not getattr(team, "seasons_info", None):
             team = self.team_service.get(team.id)
 

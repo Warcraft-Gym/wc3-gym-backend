@@ -32,8 +32,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["public"])
 
-# Simple in-memory token store: token -> {discord_id, discord_tag, season_id, expires_at, access_type}
-# access_type can be 'signup' or 'dashboard'
+# token -> {discord_id, discord_tag, season_id, expires_at, access_type}
 _token_store: dict[str, dict[str, Any]] = {}
 
 
@@ -403,9 +402,7 @@ async def update_player_series(
     else:
         data = await request.json() or {}
 
-    # Only the request parsing above needs the event loop; the rest of the
-    # handler blocks on the DB and the Discord webhook, so it runs in the
-    # thread pool like every sync route, bounded by the same limiter.
+    # Only the request parsing above needs the event loop
     return await run_in_threadpool(
         _update_player_series,
         series_id,
@@ -555,8 +552,7 @@ def _update_player_series(
     if data.get("date_time"):
         if isinstance(data["date_time"], str):
             try:
-                # Frontend sends datetime in ET format (YYYY-MM-DD HH:MM:SS)
-                # Parse and store directly as naive datetime (no timezone conversion needed)
+                # The frontend sends ET, stored naive to match the DATETIME column
                 series.date_time = datetime.fromisoformat(
                     data["date_time"].replace(" ", "T")
                 )

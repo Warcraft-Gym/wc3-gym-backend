@@ -29,11 +29,6 @@ USER appuser
 # The project environment on PATH lets the server run without uv at runtime
 ENV PATH="/app/.venv/bin:$PATH"
 
-# The migrations run one time per container, before the server, so the
-# application itself never changes the database structure. That holds for
-# any number of workers in this container, and for one container per
-# database. See the migration section of README.md to serve from more.
-#
-# During debugging, this entry point will be overridden. uvicorn has no
-# worker timeout, so the long import/export requests need no --timeout.
+# One container per database: two starting together race on the migration.
+# README.md, "Database Migrations", has the split for more containers.
 CMD ["sh", "-c", "alembic upgrade head && exec uvicorn --factory app.main:create_app --host 0.0.0.0 --port 5002"]

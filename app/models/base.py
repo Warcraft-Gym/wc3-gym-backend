@@ -59,9 +59,7 @@ class DBModel(SQLModel):
 
     @classmethod
     def getById(cls, session: Session, id: int | None) -> Self | None:
-        # A request can leave the id out of the body. No row has a null
-        # primary key, so answer with no object instead of asking the
-        # database, which warns about a fully null primary key.
+        # No row has a null primary key, and session.get warns on one
         if id is None:
             return None
         return session.get(cls, id)

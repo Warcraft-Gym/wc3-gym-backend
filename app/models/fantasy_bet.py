@@ -43,9 +43,7 @@ class FantasyBet(FantasyBetBase, DBModel, table=True):
 
 
 class FantasyBetCreate(FantasyBetBase):
-    # bet_points is NOT NULL, and it is still optional here: with fixed bet
-    # points enabled the service fills it in from the settings, and a
-    # cleared input from the UI arrives as an empty string.
+    # NOT NULL in the database; the service fills it in for fixed bet points
     bet_points: Annotated[int | None, EmptyStrToNone] = None
 
 

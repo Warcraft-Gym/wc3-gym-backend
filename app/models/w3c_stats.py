@@ -32,8 +32,7 @@ class W3CStats(W3CStatsBase, DBModel, table=True):
 
 class W3CStatsCreate(W3CStatsBase):
     race: Annotated[Race | None, SuggestRace] = None
-    # user_id is not here: the caller of the sync owns which user the row
-    # belongs to, so the service supplies it.
+    # user_id is not here: the sync service supplies it
 
 
 class W3CStatsPublic(W3CStatsBase):

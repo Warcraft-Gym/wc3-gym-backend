@@ -165,11 +165,8 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 
-
-# visual studio code. launch.json is shared: it holds the debug
-# configuration the README documents. The rest is per developer.
-.vscode/*
-!.vscode/launch.json
+# VSCode
+.vscode/
 
 # Docker
 docker-compose*

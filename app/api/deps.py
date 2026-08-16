@@ -77,8 +77,6 @@ RequireAdmin = Annotated[str, Depends(require_admin)]
 RequireRefresh = Annotated[str, Depends(require_refresh)]
 
 
-# Score and series need each other, so score is built first and receives series
-# right after.
 settings_service = SettingsService()
 user_service = UserService(settings_app_service=settings_service)
 team_service = TeamService(user_app_service=user_service)
@@ -96,7 +94,7 @@ score_service = ScoreService(
 series_service = SeriesService(
     score_app_service=score_service, user_app_service=user_service
 )
-score_service.serires_service = series_service
+score_service.serires_service = series_service  # score and series need each other
 draft_series_service = DraftSeriesService()
 map_service = MapService()
 fantasy_bet_service = FantasyBetService(settings_app_service=settings_service)
@@ -110,8 +108,7 @@ fantasy_score_service = FantasyScoreService(
 koth_service = KothService(settings_app_service=settings_service)
 stats_service = PlayerCareerStatsService(series_service=series_service)
 
-# 24-hour markers, e.g. the per-team W3C sync rate limit. Per process, and gone
-# on restart.
+# 24-hour markers per process, e.g. the per-team W3C sync rate limit
 ttl_cache: dict[str, float] = {}
 
 

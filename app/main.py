@@ -31,8 +31,7 @@ from app.exceptions import BadRequestError, NotFoundError
 
 logger = logging.getLogger(__name__)
 
-# NOTE (Aug 26): production currently has one CPU core. The routes are sync functions,
-# so this caps the thread pool they run in and the server answers one request at a time.
+# Production has one CPU core, and the sync routes run in this thread pool
 MAX_CONCURRENT_REQUESTS = 1
 
 

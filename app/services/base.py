@@ -23,8 +23,7 @@ class BaseService(ABC):
         with Session.begin() as session:
             yield session
 
-    # Each service names and types these four for its own entity, so the
-    # arguments and the result stay open here.
+    # Each service types these four for its own entity
     @abstractmethod
     def add(self, **kwargs: object) -> object:
         pass

@@ -10,8 +10,7 @@ if TYPE_CHECKING:
 
 
 class MapBase(SQLModel):
-    # The xlsx import passes these cells straight through, so a numeric
-    # map name or shortname arrives as a number.
+    # The xlsx import passes cells through, so a numeric name arrives as a number
     name: Annotated[str | None, NumToStr] = Field(default=None, max_length=50)
     shortname: Annotated[str | None, NumToStr] = Field(default=None, max_length=50)
     image: Annotated[str | None, NumToStr] = Field(default=None, max_length=100)

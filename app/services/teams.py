@@ -325,8 +325,6 @@ class TeamService(BaseService):
     def getAll_with_nested_users(self) -> list[TeamPublic]:
         with self.get_session() as session:
             result: list[TeamPublic] = []
-            # Eager load user_seasons and their users with w3c_stats and team_seasons (gnl_stats) with season info
-            # Also eager load coaches from season_info
             teams = (
                 session.scalars(
                     select(Team).options(
@@ -428,9 +426,7 @@ class TeamService(BaseService):
                 try:
                     self.user_app_service.updateW3CStats(u)
                 except Exception as e:
-                    # Log the error but continue syncing other players.
-                    # The list goes to the client, so a database error
-                    # keeps the fixed message.
+                    # The error list goes to the client, so it stays fixed
                     reason = (
                         "Database error" if isinstance(e, SQLAlchemyError) else str(e)
                     )

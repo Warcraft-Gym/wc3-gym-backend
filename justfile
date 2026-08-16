@@ -84,6 +84,11 @@ db-status db_url=host_db_url:
     DB_URL="{{db_url}}" uv run alembic current
     DB_URL="{{db_url}}" uv run alembic history
 
+# Drop every table, then build the schema again. Deletes all data.
+db-reset db_url=host_db_url:
+    DB_URL="{{db_url}}" uv run alembic downgrade base
+    DB_URL="{{db_url}}" uv run alembic upgrade head
+
 # Stop the backend and MySQL, keeping the data. A missing container is not an error.
 down:
     docker stop gnl-backend gnl-mysql 2>/dev/null || true

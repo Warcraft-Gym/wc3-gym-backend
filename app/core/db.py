@@ -14,8 +14,7 @@ import os
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import sessionmaker
 
-# Unbound until init_engine runs. The database services import this name at
-# import time, so the object has to exist before the engine does.
+# Unbound until init_engine runs; the services import this name at import time
 Session = sessionmaker()
 
 
