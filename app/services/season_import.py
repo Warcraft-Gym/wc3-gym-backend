@@ -518,35 +518,4 @@ def process_import(
     except Exception as e:
         logger.warning(f"Fantasy Bets sheet not found or error: {e}")
 
-    logger.info(f"Background import completed for season: {season_data['name']}")
-
-
-def process_import_in_thread(
-    file_bytes: bytes,
-    create_new: bool,
-    season_service: SeasonService,
-    map_service: MapService,
-    team_service: TeamService,
-    user_service: UserService,
-    match_service: MatchService,
-    series_service: SeriesService,
-    fantasy_team_service: FantasyTeamService,
-    fantasy_bet_service: FantasyBetService,
-) -> None:
-    """Run the import in a thread. The route has already answered 202,
-    so a failure can only reach the log."""
-    try:
-        process_import(
-            file_bytes,
-            create_new,
-            season_service,
-            map_service,
-            team_service,
-            user_service,
-            match_service,
-            series_service,
-            fantasy_team_service,
-            fantasy_bet_service,
-        )
-    except Exception:
-        logger.exception("Background import error")
+    logger.info(f"Import completed for season: {season_data['name']}")

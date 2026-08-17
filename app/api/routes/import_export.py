@@ -1,13 +1,11 @@
 import io
 import logging
-import threading
 from io import BytesIO
 from typing import Annotated, Any
 
 import openpyxl
 import pandas as pd
 from fastapi import APIRouter, Depends, File, Response, UploadFile
-from fastapi.responses import JSONResponse
 
 from app.api.deps import (
     FantasyBetServiceDep,
@@ -28,11 +26,7 @@ from app.models.fantasy_team import FantasyTeamCreate, FantasyTeamUpdate
 from app.models.responses import Message
 from app.models.series import SeriesUpdate
 from app.models.user import UserCreate
-from app.services.season_import import (
-    cell_value,
-    process_import,
-    process_import_in_thread,
-)
+from app.services.season_import import cell_value, process_import
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +34,7 @@ router = APIRouter(tags=["import export"])
 
 
 # import export endpoints
-@router.post("/import", dependencies=[Depends(require_admin)], response_model=None)
+@router.post("/import", dependencies=[Depends(require_admin)])
 def import_season(
     season_service: SeasonServiceDep,
     map_service: MapServiceDep,
@@ -52,8 +46,7 @@ def import_season(
     fantasy_bet_service: FantasyBetServiceDep,
     file: Annotated[UploadFile | None, File()] = None,
     create_new: str = "false",
-    background: str = "false",
-) -> JSONResponse | dict[str, Any]:
+) -> dict[str, Any]:
     """Import complete season data from Excel.
 
     Imports ALL season data (season, maps, teams, players, matches, series)
@@ -63,7 +56,6 @@ def import_season(
         raise BadRequestError("No file part")
 
     create_new = create_new.lower() == "true"
-    background = background.lower() == "true"
 
     if file.filename == "" or not file.filename.endswith((".xlsx", ".xls")):
         raise BadRequestError("No selected file or invalid file type")
@@ -71,7 +63,9 @@ def import_season(
     # Read file into memory
     file_bytes = file.file.read()
 
-    services = (
+    process_import(
+        file_bytes,
+        create_new,
         season_service,
         map_service,
         team_service,
@@ -81,22 +75,6 @@ def import_season(
         fantasy_team_service,
         fantasy_bet_service,
     )
-
-    # If background mode, spawn thread and return immediately
-    if background:
-        thread = threading.Thread(
-            target=process_import_in_thread,
-            args=(file_bytes, create_new, *services),
-            daemon=True,
-        )
-        thread.start()
-        logger.info("Import started in background thread")
-        return JSONResponse(
-            {"message": "Import started in background"}, status_code=202
-        )
-
-    # Otherwise, process synchronously
-    process_import(file_bytes, create_new, *services)
 
     # Read season name for response
     temp_stream = io.BytesIO(file_bytes)

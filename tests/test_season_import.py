@@ -1,9 +1,7 @@
 """POST /import writes a whole season from one workbook.
 
-The pipeline used to log every failure and return None, so the route
-answered "Season imported successfully" over a season it had not
-written. The synchronous path now raises, and the caller reads the error
-envelope.
+The route runs the pipeline synchronously. It answers the season it
+wrote, or an error envelope when the pipeline raises.
 """
 
 import io
@@ -138,23 +136,20 @@ def test_a_synchronous_import_that_fails_answers_an_error(
     assert response.json() == {"error": "Internal Server Error"}
 
 
-def test_a_background_import_still_answers_202(
+def test_an_old_background_parameter_runs_the_import(
     client: Client, auth_headers: dict[str, str]
 ) -> None:
-    """The thread logs its own failure, so the answer stays the same. The
-    workbook has no Season sheet, so the thread writes no row."""
+    """The route has no background parameter, so an old caller gets the
+    synchronous answer."""
     response = client.post(
         "/import",
         params={"background": "true"},
-        files={
-            "file": (
-                "season.xlsx",
-                _workbook(without="Season"),
-                "application/vnd.ms-excel",
-            )
-        },
+        files={"file": ("season.xlsx", _workbook(), "application/vnd.ms-excel")},
         headers=auth_headers,
     )
 
-    assert response.status_code == 202, response.text
-    assert response.json() == {"message": "Import started in background"}
+    assert response.status_code == 200, response.text
+    assert response.json()["message"] == "Season imported successfully"
+
+    with Session() as session:
+        assert session.scalars(select(Season).where(Season.name == "Season 9")).one()
