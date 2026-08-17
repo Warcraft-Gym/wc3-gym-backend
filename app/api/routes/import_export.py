@@ -919,7 +919,7 @@ def export_season(
 
 
 # import export endpoints
-@router.post("/fantasy/import/teams")
+@router.post("/fantasy/import/teams", dependencies=[Depends(require_admin)])
 def import_fantasy_teams(
     season_service: SeasonServiceDep,
     user_service: UserServiceDep,
@@ -1056,7 +1056,7 @@ def import_fantasy_teams(
         raise BadRequestError("File type not allowed")
 
 
-@router.post("/fantasy/import/bets")
+@router.post("/fantasy/import/bets", dependencies=[Depends(require_admin)])
 def import_fantasy_bets(
     season_service: SeasonServiceDep,
     user_service: UserServiceDep,

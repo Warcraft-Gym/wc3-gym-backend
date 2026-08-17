@@ -53,6 +53,28 @@ def test_team_w3c_sync_needs_a_token(client: Client, seeded: dict[str, Any]) -> 
     assert resp.status_code == 401
 
 
+def test_fantasy_team_import_needs_a_token(
+    client: Client, seeded: dict[str, Any]
+) -> None:
+    resp = client.post(
+        "/fantasy/import/teams",
+        params={"season_id": str(seeded["season_id"])},
+        files={"file": ("teams.xlsx", b"", "application/vnd.ms-excel")},
+    )
+    assert resp.status_code == 401
+
+
+def test_fantasy_bet_import_needs_a_token(
+    client: Client, seeded: dict[str, Any]
+) -> None:
+    resp = client.post(
+        "/fantasy/import/bets",
+        params={"season_id": str(seeded["season_id"])},
+        files={"file": ("bets.xlsx", b"", "application/vnd.ms-excel")},
+    )
+    assert resp.status_code == 401
+
+
 def test_team_image_upload_needs_a_token(
     client: Client, seeded: dict[str, Any]
 ) -> None:

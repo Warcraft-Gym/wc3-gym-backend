@@ -14,6 +14,7 @@ from starlette.testclient import TestClient as Client
 
 from app.core.db import Session
 from app.models.enums import Race
+from app.models.fantasy_bet import FantasyBet
 from app.models.fantasy_team import FantasyTeam
 
 
@@ -55,8 +56,22 @@ def _teams_sheet(rows: list[list[Any]]) -> io.BytesIO:
     return stream
 
 
+def _bets_sheets(matches: list[list[Any]], bets: list[list[Any]]) -> io.BytesIO:
+    """A "Betting Matches" and a "Bets" sheet. Columns read by position."""
+    stream = io.BytesIO()
+    with pd.ExcelWriter(stream) as writer:
+        pd.DataFrame(matches, columns=[f"c{i}" for i in range(3)]).to_excel(
+            writer, sheet_name="Betting Matches", index=False
+        )
+        pd.DataFrame(bets, columns=[f"c{i}" for i in range(4)]).to_excel(
+            writer, sheet_name="Bets", index=False
+        )
+    stream.seek(0)
+    return stream
+
+
 def test_import_fantasy_teams_reads_the_race(
-    client: Client, seeded: dict[str, Any]
+    client: Client, seeded: dict[str, Any], auth_headers: dict[str, str]
 ) -> None:
     row: list[Any] = ["Night Owls", "p1", *DRAFTED, "Alpha", "Night Elf"]
     sheet = _teams_sheet([row])
@@ -65,6 +80,7 @@ def test_import_fantasy_teams_reads_the_race(
         "/fantasy/import/teams",
         params={"season_id": str(seeded["season_id"])},
         files={"file": ("teams.xlsx", sheet, "application/vnd.ms-excel")},
+        headers=auth_headers,
     )
 
     assert response.status_code == 200, response.text
@@ -77,7 +93,7 @@ def test_import_fantasy_teams_reads_the_race(
 
 
 def test_import_fantasy_teams_rejects_an_unknown_race(
-    client: Client, seeded: dict[str, Any]
+    client: Client, seeded: dict[str, Any], auth_headers: dict[str, str]
 ) -> None:
     row: list[Any] = ["Night Owls", "p1", *[None] * 8, "Alpha", "Elf"]
     sheet = _teams_sheet([row])
@@ -86,7 +102,31 @@ def test_import_fantasy_teams_rejects_an_unknown_race(
         "/fantasy/import/teams",
         params={"season_id": str(seeded["season_id"])},
         files={"file": ("teams.xlsx", sheet, "application/vnd.ms-excel")},
+        headers=auth_headers,
     )
 
     assert response.status_code == 400
     assert response.json() == {"error": "Unknown race: Elf"}
+
+
+def test_import_fantasy_bets_stores_a_bet(
+    client: Client, seeded: dict[str, Any], auth_headers: dict[str, str]
+) -> None:
+    sheet = _bets_sheets([[1, "P1", "P3"]], [[1, "p2", "P1", 7]])
+
+    response = client.post(
+        "/fantasy/import/bets",
+        params={"season_id": str(seeded["season_id"])},
+        files={"file": ("bets.xlsx", sheet, "application/vnd.ms-excel")},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200, response.text
+
+    with Session() as session:
+        bet = session.scalars(
+            select(FantasyBet).where(FantasyBet.user_id == seeded["player_ids"][1])
+        ).one()
+        assert bet.series_id == seeded["series_played_id"]
+        assert bet.winner_id == seeded["player_ids"][0]
+        assert bet.bet_points == 7
