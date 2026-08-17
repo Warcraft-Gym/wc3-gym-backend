@@ -28,7 +28,11 @@ from app.models.fantasy_team import FantasyTeamCreate, FantasyTeamUpdate
 from app.models.responses import Message
 from app.models.series import SeriesUpdate
 from app.models.user import UserCreate
-from app.services.season_import import cell_value, process_import
+from app.services.season_import import (
+    cell_value,
+    process_import,
+    process_import_in_thread,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -81,7 +85,7 @@ def import_season(
     # If background mode, spawn thread and return immediately
     if background:
         thread = threading.Thread(
-            target=process_import,
+            target=process_import_in_thread,
             args=(file_bytes, create_new, *services),
             daemon=True,
         )
