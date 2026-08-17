@@ -258,9 +258,9 @@ class SeasonService(BaseService):
             if season.signup_users:
                 for signup in season.signup_users:
                     if signup.user:
-                        user_dto = UserPublic.from_user(signup.user)
-                        if user_dto:
-                            result.append(user_dto)
+                        user_public = UserPublic.from_user(signup.user)
+                        if user_public:
+                            result.append(user_public)
 
             return result
 
