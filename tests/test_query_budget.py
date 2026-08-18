@@ -1,6 +1,7 @@
-"""Pin how many statements one series or career stats answer costs.
+"""Pin how many statements one series, bets or career stats answer costs.
 
-Series._eager_options, DraftSeries._eager_options and
+Series._eager_options, DraftSeries._eager_options,
+FantasyBet.list_eager_options and
 PlayerCareerStats.eager_options decide the count, and the count is a
 constant: it does not grow with the number of w3c_stats, team_seasons or
 season signups a player carries, nor with the number of career rows. A
@@ -32,6 +33,7 @@ from app.models.relationships import DBUserSeasonSignup
 from app.models.series import Series, SeriesPublic
 from app.models.w3c_stats import W3CStats
 from app.services.draft_series import DraftSeriesService
+from app.services.fantasy_bets import FantasyBetService
 from app.services.player_career_stats import PlayerCareerStatsService
 from app.services.series import SeriesService
 
@@ -176,6 +178,17 @@ def test_options_cover_the_player_graph(league: dict[str, Any]) -> None:
     assert len(public.player1.w3c_stats) == STATS_PER_PLAYER
     assert len(public.player1.gnl_stats) == 1
     assert len(public.player1.signup_seasons) == 1
+
+
+def test_fantasy_bets_list_costs_one_statement(league: dict[str, Any]) -> None:
+    """The list carries no collection, so it needs no second statement."""
+    service = FantasyBetService()
+    with count_statements() as tally:
+        bets, total = service.getAll()
+    assert len(bets) == 1
+    assert total is None
+    assert bets[0].user.w3c_stats == []
+    assert tally[0] == 1
 
 
 def test_career_stats_cost_four_statements(league: dict[str, Any]) -> None:

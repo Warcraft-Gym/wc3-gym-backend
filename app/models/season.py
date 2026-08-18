@@ -96,5 +96,22 @@ class SeasonPublic(SeasonBase):
 
         return cls(id=season.id, name=season.name)
 
+    @classmethod
+    def from_season_without_maps(cls, season: Season | None) -> Self | None:
+        """Every scalar field of the season, without the map pool."""
+        if not season:
+            return None
+
+        return cls(
+            id=season.id,
+            name=season.name,
+            number_weeks=season.number_weeks,
+            series_per_week=season.series_per_week,
+            pick_ban=season.pick_ban,
+            start_date=season.start_date,
+            end_date=season.end_date,
+            discordRole=season.discordRole,
+        )
+
     def to_dict(self) -> dict[str, Any]:
         return self.model_dump(mode="json")

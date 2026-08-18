@@ -145,5 +145,33 @@ class SeriesPublic(SeriesBase):
             is_fantasy_match=series.is_fantasy_match,
         )
 
+    @classmethod
+    def from_series_reduced(cls, series: Series | None) -> Self | None:
+        """The series with reduced players, so no player collection loads."""
+        if not series:
+            return None
+
+        return cls(
+            id=series.id,
+            match_id=series.match_id,
+            match=MatchPublic.from_match(series.match) if series.match else None,
+            date_time=series.date_time,
+            caster=series.caster,
+            player1_id=series.player1_id,
+            player1=UserPublic.from_user_reduced(series.player1)
+            if series.player1
+            else None,
+            player2_id=series.player2_id,
+            player2=UserPublic.from_user_reduced(series.player2)
+            if series.player2
+            else None,
+            player1_score=series.player1_score,
+            player2_score=series.player2_score,
+            player1_points=series.player1_points,
+            player2_points=series.player2_points,
+            host_player_id=series.host_player_id,
+            is_fantasy_match=series.is_fantasy_match,
+        )
+
     def to_dict(self) -> dict[str, Any]:
         return self.model_dump(mode="json")

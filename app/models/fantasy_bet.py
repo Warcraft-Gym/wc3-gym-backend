@@ -78,6 +78,21 @@ class FantasyBet(FantasyBetBase, DBModel, table=True):
             ),
         )
 
+    @classmethod
+    def list_eager_options(cls) -> tuple[ExecutableOption, ...]:
+        """The to-one relations the reduced public bet reads."""
+        return (
+            joinedload(cls.season),
+            joinedload(cls.user),
+            joinedload(cls.winner),
+            joinedload(cls.series).joinedload(Series.player1),
+            joinedload(cls.series).joinedload(Series.player2),
+            joinedload(cls.series).joinedload(Series.match).joinedload(Match.team1),
+            joinedload(cls.series).joinedload(Series.match).joinedload(Match.team2),
+            joinedload(cls.series).joinedload(Series.match).joinedload(Match.season),
+            joinedload(cls.series).joinedload(Series.match).joinedload(Match.fixed_map),
+        )
+
 
 class FantasyBetCreate(FantasyBetBase):
     # NOT NULL in the database; the service fills it in for fixed bet points
@@ -120,6 +135,30 @@ class FantasyBetPublic(FantasyBetBase):
             user=UserPublic.from_user(fbet.user) if fbet.user else None,
             winner_id=fbet.winner_id,
             winner=UserPublic.from_user(fbet.winner) if fbet.winner else None,
+            bet_points=fbet.bet_points,
+            bet_result=fbet.bet_result,
+        )
+
+    @classmethod
+    def from_fantasy_bet_reduced(cls, fbet: FantasyBet | None) -> Self | None:
+        """Every field of the bet, with the nested collections empty."""
+        if not fbet:
+            return None
+
+        return cls(
+            id=fbet.id,
+            series_id=fbet.series_id,
+            season_id=fbet.season_id,
+            season=SeasonPublic.from_season_without_maps(fbet.season)
+            if fbet.season
+            else None,
+            series=SeriesPublic.from_series_reduced(fbet.series)
+            if fbet.series
+            else None,
+            user_id=fbet.user_id,
+            user=UserPublic.from_user_reduced(fbet.user) if fbet.user else None,
+            winner_id=fbet.winner_id,
+            winner=UserPublic.from_user_reduced(fbet.winner) if fbet.winner else None,
             bet_points=fbet.bet_points,
             bet_result=fbet.bet_result,
         )

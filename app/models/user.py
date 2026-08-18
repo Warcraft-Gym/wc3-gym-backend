@@ -104,5 +104,23 @@ class UserPublic(UserBase):
             ],
         )
 
+    @classmethod
+    def from_user_reduced(cls, user: User | None) -> Self | None:
+        """The scalar fields of the user. The collections stay empty."""
+        if not user:
+            return None
+
+        return cls(
+            id=user.id,
+            name=user.name,
+            battleTag=user.battleTag,
+            discordTag=user.discordTag,
+            discordId=user.discordId,
+            race=user.race,
+            mmr=user.mmr,
+            country=user.country,
+            fantasy_tier=user.fantasy_tier,
+        )
+
     def to_dict(self) -> dict[str, Any]:
         return self.model_dump(mode="json")

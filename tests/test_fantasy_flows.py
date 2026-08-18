@@ -165,3 +165,43 @@ def test_calculate_twice_is_stable(
     assert client.post(path, headers=auth_headers).status_code == 204
     second = get_json(client, f"/fantasy/teams/{seeded['fantasy_team_id']}")
     assert first == second
+
+
+def test_bets_list_pages_by_id_and_reports_the_total(
+    client: Client, seeded: dict[str, Any]
+) -> None:
+    """limit and offset page the list by id; the header carries the total."""
+    from app.core.db import Session
+    from app.models.fantasy_bet import FantasyBet
+
+    with Session() as session:
+        for _ in range(4):
+            session.add(
+                FantasyBet(
+                    season_id=seeded["season_id"],
+                    series_id=seeded["series_played_id"],
+                    user_id=seeded["player_ids"][1],
+                    winner_id=seeded["player_ids"][0],
+                    bet_points=10,
+                )
+            )
+        session.commit()
+
+    everything = client.get("/fantasy/bets")
+    assert "X-Total-Count" not in everything.headers
+    ids = [bet["id"] for bet in everything.json()]
+    assert len(ids) == 5
+
+    paged = []
+    for offset in (0, 2, 4):
+        resp = client.get(f"/fantasy/bets?limit=2&offset={offset}")
+        assert resp.status_code == 200
+        assert resp.headers["X-Total-Count"] == "5"
+        paged += [bet["id"] for bet in resp.json()]
+    assert paged == sorted(ids)
+
+
+def test_bets_list_rejects_a_bad_page(client: Client, seeded: dict[str, Any]) -> None:
+    """limit under 1 and offset under 0 answer 422."""
+    assert client.get("/fantasy/bets?limit=0").status_code == 422
+    assert client.get("/fantasy/bets?offset=-1").status_code == 422

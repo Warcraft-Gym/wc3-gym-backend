@@ -10,6 +10,25 @@ from typing import Any
 
 from httpx2 import Client
 
+from app.core.db import Session
+from app.models.enums import Race
+from app.models.relationships import DBUserSeasonSignup
+from app.models.w3c_stats import W3CStats
+
+BET_KEYS = {
+    "id",
+    "season_id",
+    "series_id",
+    "user_id",
+    "winner_id",
+    "bet_points",
+    "bet_result",
+    "season",
+    "series",
+    "user",
+    "winner",
+}
+
 
 def get_json(client: Client, path: str) -> Any:  # noqa: ANN401  # a JSON body
     resp = client.get(path)
@@ -91,6 +110,75 @@ def test_fantasy_bets(client: Client, seeded: dict[str, Any]) -> None:
     assert bet["bet_points"] == 10
     assert bet["bet_result"] is None
     assert bet["series"]["id"] == seeded["series_played_id"]
+
+
+def test_fantasy_bets_list_keeps_every_key_with_empty_collections(
+    client: Client, seeded: dict[str, Any]
+) -> None:
+    """The list answers the whole bet shape and empty nested collections."""
+    with Session() as session:
+        for user_id in seeded["player_ids"]:
+            session.add(
+                W3CStats(user_id=user_id, wc3_season=20, race=Race.HU, mmr=1500)
+            )
+            session.add(
+                DBUserSeasonSignup(user_id=user_id, season_id=seeded["season_id"])
+            )
+        session.commit()
+
+    bet = get_json(client, "/fantasy/bets")[0]
+    assert set(bet) == BET_KEYS
+
+    # The admin bets table reads these fields.
+    assert bet["bet_points"] == 10
+    assert bet["winner_id"] == seeded["player_ids"][0]
+    assert bet["user"]["name"] == "P1"
+    assert bet["series"]["player1"]["name"] == "P1"
+    assert bet["series"]["player2"]["name"] == "P3"
+    assert bet["series"]["player1_id"] == seeded["player_ids"][0]
+    assert bet["series"]["player2_id"] == seeded["player_ids"][2]
+    assert bet["series"]["player1_score"] == 2
+    assert bet["series"]["player2_score"] == 1
+
+    # The scalars of the embedded models stay.
+    assert bet["season"]["name"] == "Season 1"
+    assert bet["season"]["number_weeks"] == 4
+    assert bet["season"]["start_date"] == "2026-01-05"
+    assert bet["series"]["match"]["playday"] == 1
+    assert bet["series"]["match"]["team1"]["name"] == "Alpha"
+
+    # The collections inside the embedded models are empty.
+    assert bet["season"]["maps"] == []
+    assert bet["season"]["user_signup"] == []
+    for user in (
+        bet["user"],
+        bet["winner"],
+        bet["series"]["player1"],
+        bet["series"]["player2"],
+    ):
+        assert user["w3c_stats"] == []
+        assert user["gnl_stats"] == []
+        assert user["signup_seasons"] == []
+
+
+def test_fantasy_bet_by_id_keeps_the_full_graph(
+    client: Client, seeded: dict[str, Any]
+) -> None:
+    """The single-bet route still answers the nested collections."""
+    with Session() as session:
+        session.add(
+            W3CStats(
+                user_id=seeded["player_ids"][0], wc3_season=20, race=Race.HU, mmr=1500
+            )
+        )
+        session.commit()
+
+    bet_id = get_json(client, "/fantasy/bets")[0]["id"]
+    bet = get_json(client, f"/fantasy/bets/{bet_id}")
+    assert set(bet) == BET_KEYS
+    assert len(bet["user"]["w3c_stats"]) == 1
+    assert len(bet["user"]["gnl_stats"]) == 1
+    assert [m["shortname"] for m in bet["season"]["maps"]] == ["CH"]
 
 
 def test_fantasy_teams(client: Client, seeded: dict[str, Any]) -> None:

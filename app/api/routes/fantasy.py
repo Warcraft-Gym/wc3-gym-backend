@@ -1,6 +1,7 @@
 import logging
+from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query, Response
 
 from app.api.deps import (
     FantasyBetServiceDep,
@@ -145,9 +146,17 @@ def get_bet(bet_id: int, service: FantasyBetServiceDep) -> FantasyBetPublic:
 
 
 @router.get("/fantasy/bets")
-def get_all_bets(service: FantasyBetServiceDep) -> list[FantasyBetPublic]:
-    """Retrieve all fantasy bets."""
-    return service.getAll_fantasy_bets() or []
+def get_all_bets(
+    service: FantasyBetServiceDep,
+    response: Response,
+    limit: Annotated[int | None, Query(ge=1)] = None,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> list[FantasyBetPublic]:
+    """Retrieve all fantasy bets, or one page when limit or offset is set."""
+    bets, total = service.getAll_fantasy_bets(limit=limit, offset=offset)
+    if total is not None:
+        response.headers["X-Total-Count"] = str(total)
+    return bets or []
 
 
 @router.post("/fantasy/bets/search")

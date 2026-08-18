@@ -1,7 +1,7 @@
 import logging
 from typing import TYPE_CHECKING
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import joinedload
 
 from app.core.exceptions import BadRequestError, NotFoundError
@@ -56,17 +56,24 @@ class FantasyBetService(BaseService):
                 raise NotFoundError("Fantasy Bet not found")
             return FantasyBetPublic.from_fantasy_bet(fbet)
 
-    def getAll(self) -> list[FantasyBetPublic]:
+    def getAll(
+        self, limit: int | None = None, offset: int = 0
+    ) -> tuple[list[FantasyBetPublic], int | None]:
+        """The bets and, when a page is asked for, the total count."""
         with self.get_session() as session:
+            statement = select(FantasyBet).options(*FantasyBet.list_eager_options())
+            total = None
+            if limit is not None or offset:
+                # Offset paging is deterministic only with a fixed order
+                total = session.scalar(select(func.count()).select_from(FantasyBet))
+                statement = statement.order_by(FantasyBet.id).offset(offset)
+                if limit is not None:
+                    statement = statement.limit(limit)
             result = []
-            fbet = (
-                session.scalars(select(FantasyBet).options(*FantasyBet.eager_options()))
-                .unique()
-                .all()
-            )
+            fbet = session.scalars(statement).unique().all()
             for single_fbet in fbet:
-                result.append(FantasyBetPublic.from_fantasy_bet(single_fbet))
-            return result
+                result.append(FantasyBetPublic.from_fantasy_bet_reduced(single_fbet))
+            return result, total
 
     def search(self, query: QueryElement | None) -> list[FantasyBetPublic]:
         with self.get_session() as session:
@@ -215,8 +222,10 @@ class FantasyBetService(BaseService):
             raise NotFoundError(f"Fantasy Bet not found by Id: {bet_id}")
         return bet_data
 
-    def getAll_fantasy_bets(self) -> list[FantasyBetPublic]:
-        return self.getAll()
+    def getAll_fantasy_bets(
+        self, limit: int | None = None, offset: int = 0
+    ) -> tuple[list[FantasyBetPublic], int | None]:
+        return self.getAll(limit=limit, offset=offset)
 
     def search_fantasy_bets(self, query: QueryElement | None) -> list[FantasyBetPublic]:
         return self.search(query)
