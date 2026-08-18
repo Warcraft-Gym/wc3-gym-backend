@@ -60,8 +60,9 @@ def test_bets_list_peak_stays_in_budget(crowded: dict[str, Any]) -> None:
     """The list answer keeps its peak under the pinned budget."""
     service = FantasyBetService()
     tracemalloc.start()
-    bets = service.getAll()
+    bets, total = service.getAll()
     _, peak = tracemalloc.get_traced_memory()
     tracemalloc.stop()
     assert len(bets) == BETS + 1
+    assert total is None
     assert peak < BUDGET_BYTES, f"peak {peak / 1024 / 1024:.1f} MB"
