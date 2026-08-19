@@ -278,7 +278,6 @@ class TeamService(BaseService):
                         noload(DBTeamSeason.coach_1),
                         noload(DBTeamSeason.coach_2),
                         noload(DBTeamSeason.coach_3),
-                        noload(DBTeamSeason.season),
                     ),
                 )
                 .where(filter)
@@ -310,7 +309,6 @@ class TeamService(BaseService):
                     noload(DBTeamSeason.coach_1),
                     noload(DBTeamSeason.coach_2),
                     noload(DBTeamSeason.coach_3),
-                    noload(DBTeamSeason.season),
                 ),
             )
             if limit is not None or offset:

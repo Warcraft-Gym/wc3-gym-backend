@@ -228,6 +228,13 @@ def test_teams_season_carries_the_standings_and_roster_fields(
         assert "final_score" in info
         assert "points_available" in info
         assert "points_against" in info
+        # No shortcode reads a season off the entry; the route sends season_id.
+        assert set(info) == {
+            "season_id",
+            "final_score",
+            "points_available",
+            "points_against",
+        }
         # Season 2 pays 36 and holds no series, so equality proves the season row.
         assert (
             info["final_score"],

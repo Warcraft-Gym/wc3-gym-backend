@@ -9,8 +9,6 @@ from typing import TYPE_CHECKING, Any, Self
 
 from sqlmodel import SQLModel
 
-from app.models.season import SeasonPublic
-
 if TYPE_CHECKING:
     from app.models.team_season import DBTeamSeason
 
@@ -20,19 +18,13 @@ class SeasonInfoPublic(SQLModel):
     final_score: int | None = None
     points_available: int | None = None
     points_against: int | None = None
-    season: SeasonPublic | None = None
 
     @classmethod
     def from_team_season(cls, season_info: "DBTeamSeason | None") -> Self | None:
         if not season_info:
             return None
 
-        return cls(
-            season_id=season_info.season_id,
-            season=SeasonPublic.from_season(season_info.season)
-            if season_info.season
-            else None,
-        )
+        return cls(season_id=season_info.season_id)
 
     def to_dict(self) -> dict[str, Any]:
         return self.model_dump(mode="json")

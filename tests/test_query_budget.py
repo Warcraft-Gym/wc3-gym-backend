@@ -383,27 +383,27 @@ def add_teams_to_the_season(season_id: int, count: int) -> None:
         session.commit()
 
 
-def test_the_teams_of_a_season_cost_seven_statements(league: dict[str, Any]) -> None:
-    """Five for the teams and their people, two for the standings."""
+def test_the_teams_of_a_season_cost_five_statements(league: dict[str, Any]) -> None:
+    """Three for the teams and their people, two for the standings."""
     service = TeamService(user_app_service=None)
     with count_statements() as tally:
         teams = service.get_teams_season(league["season_id"])
     assert len(teams) == 2
     assert teams[0].seasons_info[0].final_score is not None
-    assert tally[0] == 7
+    assert tally[0] == 5
 
 
 def test_the_standings_count_holds_when_the_teams_grow(
     league: dict[str, Any],
 ) -> None:
-    """Four more teams in the season, the same seven statements."""
+    """Four more teams in the season, the same five statements."""
     add_teams_to_the_season(league["season_id"], 4)
 
     service = TeamService(user_app_service=None)
     with count_statements() as tally:
         teams = service.get_teams_season(league["season_id"])
     assert len(teams) == 6
-    assert tally[0] == 7
+    assert tally[0] == 5
 
 
 def test_career_options_cover_the_player_graph(league: dict[str, Any]) -> None:
