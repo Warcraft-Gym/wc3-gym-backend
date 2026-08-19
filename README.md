@@ -303,3 +303,9 @@ The tests run against a temporary SQLite file and need no database server
 and no environment variables. The suite builds that file with
 `alembic upgrade head`, the way a deployment does, so every run checks the
 migrations as well. See `tests/conftest.py` for the design rules.
+
+## List routes and paging
+
+`GET /fantasy/bets` and `POST /fantasy/bets/search` take optional `limit` (>= 1) and `offset` (>= 0) query parameters. Without them the routes answer every row, unchanged. A paged answer is ordered by `id` and carries the total match count in an `X-Total-Count` response header, which CORS exposes to browsers.
+
+The list routes answer reduced payloads: every JSON key stays, and the collections nested inside embedded objects answer `[]`. The single-row routes keep the full graph. `tests/test_memory_budget.py` pins the peak memory of the bets list, and `tests/test_query_budget.py` pins the statement counts of the list queries.
