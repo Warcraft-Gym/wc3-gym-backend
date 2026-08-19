@@ -5,9 +5,7 @@ from sqlalchemy.sql.base import ExecutableOption
 from sqlmodel import Field, Relationship, SQLModel
 
 from app.models.base import DBModel
-from app.models.relationships import DBUserSeasonSignup
-from app.models.user import User, UserPublic
-from app.models.user_team_season import DBUserTeamSeason
+from app.models.user import User, UserReduced
 
 # The response reads these as floats, and null or zero reads as 0.0.
 _FLOAT_FIELDS = ("series_winrate", "games_winrate", "avg_series_per_season")
@@ -41,16 +39,7 @@ class PlayerCareerStats(PlayerCareerStatsBase, DBModel, table=True):
     @classmethod
     def eager_options(cls) -> tuple[ExecutableOption, ...]:
         """Every relation the public career row reads."""
-        player = joinedload(cls.user)
-        return (
-            # Collections use selectinload; a joined collection multiplies the rows
-            player.selectinload(User.w3c_stats),
-            player.selectinload(User.team_seasons).joinedload(DBUserTeamSeason.team),
-            player.selectinload(User.team_seasons).joinedload(DBUserTeamSeason.season),
-            player.selectinload(User.signup_seasons).joinedload(
-                DBUserSeasonSignup.season
-            ),
-        )
+        return (joinedload(cls.user),)
 
 
 class PlayerCareerStatsCreate(PlayerCareerStatsBase):
@@ -78,7 +67,8 @@ class PlayerCareerStatsPublic(PlayerCareerStatsBase):
     seasons_played: int | None = 0
     id: int | None = None
     player_name: str | None = None
-    user: UserPublic | None = None
+    # The career table reads the name and the id, so the collections stay out
+    user: UserReduced | None = None
     series_winrate: float | None = None
     games_winrate: float | None = None
     avg_series_per_season: float | None = None
@@ -92,7 +82,7 @@ class PlayerCareerStatsPublic(PlayerCareerStatsBase):
             id=stats.id,
             user_id=stats.user_id,
             player_name=stats.player_name,
-            user=UserPublic.from_user(stats.user) if stats.user else None,
+            user=UserReduced.from_user_reduced(stats.user),
             historical_rating=stats.historical_rating,
             historical_series_won=stats.historical_series_won,
             historical_series_lost=stats.historical_series_lost,

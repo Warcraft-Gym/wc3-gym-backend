@@ -29,7 +29,7 @@ from collections.abc import Iterable
 from typing import NamedTuple
 
 from sqlalchemy import case, func, or_, select, union_all
-from sqlalchemy.orm import Session, aliased, selectinload
+from sqlalchemy.orm import Session, aliased
 
 from app.core import career, fantasy
 from app.core.scoring import DEFAULT_SYSTEM, max_points, points, points_case
@@ -37,12 +37,10 @@ from app.models.fantasy_bet import FantasyBet, FantasyBetPublic
 from app.models.fantasy_team import FantasyTeamPublic
 from app.models.match import Match, MatchPublic
 from app.models.player_career_stats import PlayerCareerStatsPublic
-from app.models.relationships import DBUserSeasonSignup
 from app.models.season import Season
 from app.models.series import Series, SeriesPublic
 from app.models.team import TeamPublic
-from app.models.user import User, UserPublic
-from app.models.user_team_season import DBUserTeamSeason
+from app.models.user import User, UserReduced
 
 type MatchScores = dict[int, tuple[int, int]]
 # score system, series per week and number of weeks, per season
@@ -296,24 +294,10 @@ def _system_seasons(session: Session) -> list[int]:
 
 
 def _career_users(session: Session, user_ids: set[int]) -> dict[int, User]:
-    """The players a career row must carry, with the collections the answer reads."""
+    """The players a career row must carry. The row reads their scalars only."""
     if not user_ids:
         return {}
-    users = (
-        session.scalars(
-            select(User)
-            .options(
-                # Collections use selectinload; a joined collection multiplies the rows
-                selectinload(User.w3c_stats),
-                selectinload(User.team_seasons).joinedload(DBUserTeamSeason.team),
-                selectinload(User.team_seasons).joinedload(DBUserTeamSeason.season),
-                selectinload(User.signup_seasons).joinedload(DBUserSeasonSignup.season),
-            )
-            .where(User.id.in_(user_ids))
-        )
-        .unique()
-        .all()
-    )
+    users = session.scalars(select(User).where(User.id.in_(user_ids))).all()
     return {user.id: user for user in users}
 
 
@@ -430,7 +414,7 @@ def career_rows(
         row = PlayerCareerStatsPublic(
             user_id=user_id,
             player_name=user.name,
-            user=UserPublic.from_user(user),
+            user=UserReduced.from_user_reduced(user),
             historical_rating=None,
             historical_series_won=None,
             historical_series_lost=None,

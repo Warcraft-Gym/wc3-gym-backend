@@ -19,7 +19,7 @@ A team answer derives its standings the same way, and the two statements it
 adds do not grow with the number of teams in the answer.
 
 A career answer derives its nine totals from two more statements, and loads
-the players who hold no stored row from four. Neither part grows with the
+the players who hold no stored row from one. Neither part grows with the
 number of players or of rows in the answer.
 
 A fantasy team answer derives its six score fields from four more statements:
@@ -293,22 +293,22 @@ def test_the_fantasy_team_search_costs_five_statements(league: dict[str, Any]) -
     assert tally[0] == 5
 
 
-def test_career_stats_cost_ten_statements(league: dict[str, Any]) -> None:
-    """Four for the stored rows and their players, two for the derived totals,
-    four for the players who hold no row."""
+def test_career_stats_cost_four_statements(league: dict[str, Any]) -> None:
+    """One for the stored rows and their players, two for the derived totals,
+    one for the players who hold no row."""
     service = PlayerCareerStatsService()
     with count_statements() as tally:
         career, total = service.get_all()
     assert len(career) == 3
     assert total == 3
-    assert career[0].user.w3c_stats
-    assert tally[0] == 10
+    assert career[0].user.name
+    assert tally[0] == 4
 
 
 def test_career_statement_count_holds_when_the_players_grow(
     league: dict[str, Any],
 ) -> None:
-    """Two more players in a played series and no row for either, the same ten
+    """Two more players in a played series and no row for either, the same four
     statements."""
     with Session() as session:
         players = [
@@ -340,10 +340,10 @@ def test_career_statement_count_holds_when_the_players_grow(
         career, total = service.get_all()
     assert len(career) == 5
     assert total == 5
-    assert tally[0] == 10
+    assert tally[0] == 4
 
 
-def test_career_stats_cost_six_statements_when_every_player_holds_a_row(
+def test_career_stats_cost_three_statements_when_every_player_holds_a_row(
     league: dict[str, Any],
 ) -> None:
     """No player is left without a row, so the players statement falls away."""
@@ -359,16 +359,16 @@ def test_career_stats_cost_six_statements_when_every_player_holds_a_row(
         career, total = service.get_all()
     assert len(career) == 4
     assert total == 4
-    assert tally[0] == 6
+    assert tally[0] == 3
 
 
-def test_one_career_row_costs_six_statements(league: dict[str, Any]) -> None:
+def test_one_career_row_costs_three_statements(league: dict[str, Any]) -> None:
     """One row and its player, and the two statements of the derived totals."""
     service = PlayerCareerStatsService()
     with count_statements() as tally:
         stats = service.get_by_user_id(league["player_ids"][0])
     assert stats.series_won == 1
-    assert tally[0] == 6
+    assert tally[0] == 3
 
 
 def add_teams_to_the_season(season_id: int, count: int) -> None:
@@ -411,8 +411,8 @@ def test_the_standings_count_holds_when_the_teams_grow(
 def test_career_options_cover_the_player_graph(league: dict[str, Any]) -> None:
     """raiseload on the user, so a lazy load off it raises.
 
-    The wildcard covers the relationships of a player the options do not
-    name, so dropping any of the four options fails this test.
+    The wildcard covers every relationship of a player, so a career row that
+    reads one fails this test.
     """
     options = (
         *PlayerCareerStats.eager_options(),
@@ -424,6 +424,6 @@ def test_career_options_cover_the_player_graph(league: dict[str, Any]) -> None:
         ).first()
         public = PlayerCareerStatsPublic.from_career_stats(stats)
 
-    assert len(public.user.w3c_stats) == STATS_PER_PLAYER
-    assert len(public.user.gnl_stats) == 1
-    assert len(public.user.signup_seasons) == 1
+    assert public.user.name
+    assert public.user.race
+    assert not hasattr(public.user, "w3c_stats")

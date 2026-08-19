@@ -44,7 +44,7 @@ PLAYERS = ("Alpha", "Bravo", "Charlie", "Delta", "Echo")
 
 
 def player_block(name: str) -> dict[str, Any]:
-    """The user object a career row carries."""
+    """The user object a career row carries. It holds no collection."""
     number = PLAYERS.index(name)
     return {
         "name": name,
@@ -56,9 +56,6 @@ def player_block(name: str) -> dict[str, Any]:
         "fantasy_tier": None,
         "id": number + 1,
         "race": "HU",
-        "w3c_stats": [],
-        "gnl_stats": [],
-        "signup_seasons": [],
     }
 
 
@@ -288,6 +285,27 @@ def test_the_field_order_is_unchanged(client: Client, league: dict[str, int]) ->
     """The response keys, in order, so a model edit cannot reshuffle them."""
     rows = client.get("/stats/career").json()
     assert list(rows[0]) == list(EXPECTED[0])
+
+
+def test_the_row_player_carries_no_collection(
+    client: Client, league: dict[str, int]
+) -> None:
+    """The exact key set of the user object, so no collection returns unseen."""
+    rows = client.get("/stats/career").json()
+    for row in rows:
+        if row["user"] is None:
+            continue
+        assert set(row["user"]) == {
+            "id",
+            "name",
+            "battleTag",
+            "discordTag",
+            "discordId",
+            "race",
+            "mmr",
+            "country",
+            "fantasy_tier",
+        }
 
 
 def test_the_recalculate_route_is_gone(
