@@ -244,3 +244,17 @@ def test_fantasy_teams_list_keeps_every_key_with_empty_collections(
     assert team["season"]["maps"] == []
     assert team["drafted_team"]["player_by_season"] == {}
     assert team["drafted_team"]["seasons_info"] == []
+
+
+def test_teams_list_keeps_scalars_and_standings(
+    client: Client, seeded: dict[str, Any]
+) -> None:
+    """The plain teams list answers scalars and standings, no rosters."""
+    team = get_json(client, "/teams")[0]
+    assert team["name"]
+    assert "long_name" in team
+    assert "discord_role" in team
+    assert isinstance(team["seasons_info"], list) and team["seasons_info"]
+    assert "final_score" in team["seasons_info"][0]
+    assert team["player_by_season"] == {}
+    assert team["coaches_by_season"] == {}

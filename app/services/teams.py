@@ -256,8 +256,14 @@ class TeamService(BaseService):
                 session.scalars(
                     select(Team)
                     .options(
-                        joinedload(Team.user_seasons).noload("*"),
-                        joinedload(Team.season_info).noload("*"),
+                        # noload alone; a joined link table multiplies the rows
+                        noload(Team.user_seasons),
+                        selectinload(Team.season_info).options(
+                            noload(DBTeamSeason.coach_1),
+                            noload(DBTeamSeason.coach_2),
+                            noload(DBTeamSeason.coach_3),
+                            noload(DBTeamSeason.season),
+                        ),
                     )
                     .where(filter)
                 )
@@ -280,8 +286,14 @@ class TeamService(BaseService):
             teams = (
                 session.scalars(
                     select(Team).options(
-                        joinedload(Team.user_seasons).noload("*"),
-                        joinedload(Team.season_info).noload("*"),
+                        # noload alone; a joined link table multiplies the rows
+                        noload(Team.user_seasons),
+                        selectinload(Team.season_info).options(
+                            noload(DBTeamSeason.coach_1),
+                            noload(DBTeamSeason.coach_2),
+                            noload(DBTeamSeason.coach_3),
+                            noload(DBTeamSeason.season),
+                        ),
                     )
                 )
                 .unique()
