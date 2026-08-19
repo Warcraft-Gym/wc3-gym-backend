@@ -1,6 +1,6 @@
 import logging
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import joinedload
 
 from app.core.exceptions import NotFoundError
@@ -66,18 +66,24 @@ class FantasyTeamService(BaseService):
         .noload("*"),
     )
 
-    def getAll(self) -> list[FantasyTeamPublic]:
+    def getAll(
+        self, limit: int | None = None, offset: int = 0
+    ) -> tuple[list[FantasyTeamPublic], int]:
+        """The teams, or one page of them, and the total row count."""
         with self.get_session() as session:
+            total = session.scalar(select(func.count()).select_from(FantasyTeam)) or 0
             result = []
-            fteams = (
-                session.scalars(select(FantasyTeam).options(*self._reduced_options))
-                .unique()
-                .all()
-            )
+            statement = select(FantasyTeam).options(*self._reduced_options)
+            if limit is not None or offset:
+                # Offset paging is deterministic only with a fixed order
+                statement = statement.order_by(FantasyTeam.id).offset(offset)
+                if limit is not None:
+                    statement = statement.limit(limit)
+            fteams = session.scalars(statement).unique().all()
             for fteam in fteams:
                 result.append(FantasyTeamPublic.from_fantasy_team(fteam))
             derived.fill_fantasy_teams(session, result)
-            return result
+            return result, total
 
     def search(
         self, query: QueryElement | None, limit: int | None = None, offset: int = 0
@@ -169,8 +175,10 @@ class FantasyTeamService(BaseService):
             raise NotFoundError(f"Fantasy Team not found by Id: {team_id}")
         return team_data
 
-    def getAll_fantasy_teams(self) -> list[FantasyTeamPublic]:
-        return self.getAll()
+    def getAll_fantasy_teams(
+        self, limit: int | None = None, offset: int = 0
+    ) -> tuple[list[FantasyTeamPublic], int]:
+        return self.getAll(limit=limit, offset=offset)
 
     def search_fantasy_teams(
         self, query: QueryElement | None, limit: int | None = None, offset: int = 0

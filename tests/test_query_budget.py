@@ -257,26 +257,28 @@ def add_fantasy_teams(seeded: dict[str, Any], count: int) -> None:
         session.commit()
 
 
-def test_the_fantasy_team_list_costs_five_statements(league: dict[str, Any]) -> None:
-    """One for the teams, two for the standings, one for the season's series
-    and one for the captains' bets."""
+def test_the_fantasy_team_list_costs_six_statements(league: dict[str, Any]) -> None:
+    """One count, one for the teams, two for the standings, one for the season's
+    series and one for the captains' bets."""
     service = FantasyTeamService()
     with count_statements() as tally:
-        teams = service.getAll()
+        teams, total = service.getAll()
     assert len(teams) == 1
+    assert total == 1
     assert teams[0].total_points == 30
-    assert tally[0] == 5
+    assert tally[0] == 6
 
 
 def test_the_fantasy_count_holds_when_the_teams_grow(league: dict[str, Any]) -> None:
-    """Four more fantasy teams, the same five statements."""
+    """Four more fantasy teams, the same six statements."""
     add_fantasy_teams(league, 4)
 
     service = FantasyTeamService()
     with count_statements() as tally:
-        teams = service.getAll()
+        teams, total = service.getAll()
     assert len(teams) == 5
-    assert tally[0] == 5
+    assert total == 5
+    assert tally[0] == 6
 
 
 def test_the_fantasy_team_search_costs_five_statements(league: dict[str, Any]) -> None:

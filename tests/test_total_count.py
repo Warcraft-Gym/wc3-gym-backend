@@ -1,10 +1,10 @@
-"""The three admin list routes report the total row count in a header.
+"""The four admin list routes report the total row count in a header.
 
-GET /users and GET /stats/career stay unpaged by default, because the
-admin views still read the full list. Both take limit and offset, and
-both answer X-Total-Count with the count of all rows, not with the
-length of the page. GET /player-series pages already; it now answers
-X-Total-Count with the number of series of that one player.
+GET /users, GET /stats/career and GET /fantasy/teams stay unpaged by
+default, because the admin views still read the full list. All three take
+limit and offset, and all three answer X-Total-Count with the count of all
+rows, not with the length of the page. GET /player-series pages already;
+it now answers X-Total-Count with the number of series of that one player.
 """
 
 from collections.abc import Callable, Iterator
@@ -30,6 +30,26 @@ def add_series_for_player(
                     player1_id=player_id,
                     player2_id=opponent_id,
                     host_player_id=player_id,
+                )
+            )
+        session.commit()
+
+
+def add_fantasy_teams(seeded: dict[str, Any], count: int) -> None:
+    """Put count more fantasy teams in the seeded season."""
+    from app.core.db import Session
+    from app.models.enums import Race
+    from app.models.fantasy_team import FantasyTeam
+
+    with Session() as session:
+        for index in range(count):
+            session.add(
+                FantasyTeam(
+                    name=f"Extra {index}",
+                    season_id=seeded["season_id"],
+                    captain_id=seeded["player_ids"][index % 4],
+                    drafted_team_id=seeded["team_a_id"],
+                    drafted_race=Race.HU,
                 )
             )
         session.commit()
@@ -128,6 +148,46 @@ def test_career_stats_reject_a_bad_page(client: Client, seeded: dict[str, Any]) 
     assert client.get("/stats/career?limit=0").status_code == 422
     assert client.get("/stats/career?limit=501").status_code == 422
     assert client.get("/stats/career?offset=-1").status_code == 422
+
+
+def test_fantasy_teams_report_the_total_without_paging(
+    client: Client, seeded: dict[str, Any]
+) -> None:
+    """A request without limit holds all four teams and counts them."""
+    add_fantasy_teams(seeded, 3)
+
+    resp = client.get("/fantasy/teams")
+    assert resp.status_code == 200
+    assert resp.headers["X-Total-Count"] == "4"
+    assert len(resp.json()) == 4
+
+
+def test_fantasy_teams_report_the_same_total_on_every_page(
+    client: Client, seeded: dict[str, Any]
+) -> None:
+    """Two pages of two teams carry the four ids, and the total stays 4."""
+    add_fantasy_teams(seeded, 3)
+    everything = client.get("/fantasy/teams")
+    ids = sorted(team["id"] for team in everything.json())
+
+    paged = []
+    for offset in (0, 2):
+        resp = client.get(f"/fantasy/teams?limit=2&offset={offset}")
+        assert resp.status_code == 200
+        assert resp.headers["X-Total-Count"] == "4"
+        page = resp.json()
+        assert len(page) == 2
+        paged += [team["id"] for team in page]
+    assert paged == ids
+
+
+def test_fantasy_teams_reject_a_bad_page(
+    client: Client, seeded: dict[str, Any]
+) -> None:
+    """limit 0, limit 501 and offset -1 answer 422."""
+    assert client.get("/fantasy/teams?limit=0").status_code == 422
+    assert client.get("/fantasy/teams?limit=501").status_code == 422
+    assert client.get("/fantasy/teams?offset=-1").status_code == 422
 
 
 def test_player_series_report_the_total_of_that_player(

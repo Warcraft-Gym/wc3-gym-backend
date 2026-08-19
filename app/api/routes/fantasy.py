@@ -91,9 +91,17 @@ def removePlayers(
 
 
 @router.get("/fantasy/teams")
-def get_all_teams(service: FantasyTeamServiceDep) -> list[FantasyTeamPublic]:
-    """Retrieve all fantasy teams."""
-    return service.getAll_fantasy_teams() or []
+def get_all_teams(
+    service: FantasyTeamServiceDep,
+    response: Response,
+    limit: Annotated[int | None, Query(ge=1, le=500)] = None,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> list[FantasyTeamPublic]:
+    """Retrieve all fantasy teams, or one page of them when limit is given."""
+    # The list is unpaged by default because the admin views read all teams
+    teams, total = service.getAll_fantasy_teams(limit=limit, offset=offset)
+    response.headers["X-Total-Count"] = str(total)
+    return teams or []
 
 
 @router.post("/fantasy/teams/search")
