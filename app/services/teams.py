@@ -2,7 +2,7 @@ import logging
 
 from sqlalchemy import ColumnElement, select
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import joinedload, noload, selectinload
 
 from app.core.exceptions import NotFoundError
 from app.core.query import QueryElement, QueryUtil
@@ -327,32 +327,6 @@ class TeamService(BaseService):
                 result.append(TeamPublic.from_team(team))
             return result
 
-    def getAll_with_nested_users(self) -> list[TeamPublic]:
-        with self.get_session() as session:
-            result: list[TeamPublic] = []
-            teams = (
-                session.scalars(
-                    select(Team).options(
-                        joinedload(Team.user_seasons)
-                        .joinedload(DBUserTeamSeason.user)
-                        .joinedload(User.w3c_stats),
-                        joinedload(Team.user_seasons)
-                        .joinedload(DBUserTeamSeason.user)
-                        .joinedload(User.team_seasons)
-                        .joinedload(DBUserTeamSeason.season),
-                        joinedload(Team.user_seasons).noload(DBUserTeamSeason.team),
-                        joinedload(Team.season_info).joinedload(DBTeamSeason.coach_1),
-                        joinedload(Team.season_info).joinedload(DBTeamSeason.coach_2),
-                        joinedload(Team.season_info).joinedload(DBTeamSeason.coach_3),
-                    )
-                )
-                .unique()
-                .all()
-            )
-            for team in teams:
-                result.append(TeamPublic.from_team(team))
-            return result
-
     def create_team(self, team: TeamCreate) -> TeamPublic:
         return self.add(team)
 
@@ -382,29 +356,54 @@ class TeamService(BaseService):
         return team_data
 
     def get_teams_season(self, season_id: int) -> list[TeamPublic]:
-        teams_data = self.getAll_with_nested_users()
-        result: list[TeamPublic] = []
-        if teams_data:
-            for team_data in teams_data:
-                # filter users and season info based on season id
-                season_info = [
-                    s_inf
-                    for s_inf in team_data.seasons_info
-                    if s_inf.season_id == season_id
-                ]
-                if not season_info:
-                    # team not part of the requested season
-                    continue
-                team_data.seasons_info = season_info
-                season_player = team_data.player_by_season.get(season_id)
-                team_data.player_by_season = {season_id: season_player}
-                team_data.seasons_info = [
-                    seasons_info
-                    for seasons_info in team_data.seasons_info
-                    if seasons_info.season_id == season_id
-                ]
-                result.append(team_data)
-        return result
+        """The season's teams with the season's rosters and coaches.
+
+        The season sits in the query, so only that season's link rows
+        load. Roster and coach users answer empty signup_seasons, and
+        coaches empty gnl_stats; no consumer reads them on this route.
+        """
+        with self.get_session() as session:
+            result: list[TeamPublic] = []
+            roster = Team.user_seasons.and_(DBUserTeamSeason.season_id == season_id)
+            info = Team.season_info.and_(DBTeamSeason.season_id == season_id)
+            coach_loads = (
+                joinedload(info)
+                .joinedload(coach)
+                .options(
+                    selectinload(User.w3c_stats),
+                    noload(User.team_seasons),
+                    noload(User.signup_seasons),
+                )
+                for coach in (
+                    DBTeamSeason.coach_1,
+                    DBTeamSeason.coach_2,
+                    DBTeamSeason.coach_3,
+                )
+            )
+            teams = (
+                session.scalars(
+                    select(Team)
+                    .where(Team.season_info.any(DBTeamSeason.season_id == season_id))
+                    .options(
+                        joinedload(roster)
+                        .joinedload(DBUserTeamSeason.user)
+                        .options(
+                            selectinload(User.w3c_stats),
+                            selectinload(User.team_seasons).joinedload(
+                                DBUserTeamSeason.season
+                            ),
+                            noload(User.signup_seasons),
+                        ),
+                        joinedload(roster).noload(DBUserTeamSeason.team),
+                        *coach_loads,
+                    )
+                )
+                .unique()
+                .all()
+            )
+            for team in teams:
+                result.append(TeamPublic.from_team(team))
+            return result
 
     def get_teams_season_basic(self, season_id: int) -> list[TeamPublic]:
         """Get teams for a season with season_info but without users (for list views)"""

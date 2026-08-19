@@ -450,3 +450,28 @@ def test_fantasy_teams_search_carries_the_draft_fields(
     # A team that drafted nobody reads as an empty list, never as null.
     empty = next(t for t in teams if t["id"] == public_seed["empty_fantasy_team_id"])
     assert empty["drafted_players"] == []
+
+
+def test_teams_season_roster_users_carry_no_signup_seasons(
+    client: Client, public_seed: dict[str, Any]
+) -> None:
+    """The season roster keeps its stats; the free collections answer empty."""
+    season_id = public_seed["season_id"]
+    teams = get_json(client, f"/teams/season/{season_id}")
+    players = [
+        player
+        for team in teams
+        for player in team["player_by_season"].get(str(season_id), [])
+    ]
+    assert players
+    for player in players:
+        # The site person row reads these
+        assert "w3c_stats" in player
+        assert "name" in player
+        # No consumer reads these on this route
+        assert player["signup_seasons"] == []
+    for team in teams:
+        for coaches in team["coaches_by_season"].values():
+            for coach in coaches:
+                assert coach["gnl_stats"] == []
+                assert coach["signup_seasons"] == []
