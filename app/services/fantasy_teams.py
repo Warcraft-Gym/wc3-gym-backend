@@ -1,7 +1,7 @@
 import logging
 
 from sqlalchemy import select
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import joinedload, noload
 
 from app.core.exceptions import NotFoundError
 from app.core.query import QueryElement, QueryUtil
@@ -12,6 +12,8 @@ from app.models.fantasy_team import (
     FantasyTeamUpdate,
 )
 from app.models.relationships import DBFantasyTeamPlayer
+from app.models.team import Team
+from app.models.team_season import DBTeamSeason
 from app.models.user import User
 from app.services.base import BaseService
 
@@ -48,10 +50,54 @@ class FantasyTeamService(BaseService):
                 raise NotFoundError("Fantasy Team not found")
             return FantasyTeamPublic.from_fantasy_team(fteam)
 
+    # Every relation the list answer reads; the sub-collections stay empty
+    _reduced_options = (
+        joinedload(FantasyTeam.season).noload("*"),
+        joinedload(FantasyTeam.drafted_team).noload("*"),
+        joinedload(FantasyTeam.captain).noload("*"),
+        joinedload(FantasyTeam.drafted_players)
+        .joinedload(DBFantasyTeamPlayer.users)
+        .noload("*"),
+    )
+
     def getAll(self) -> list[FantasyTeamPublic]:
         with self.get_session() as session:
             result = []
-            fteams = FantasyTeam.getAll(session)
+            fteams = (
+                session.scalars(select(FantasyTeam).options(*self._reduced_options))
+                .unique()
+                .all()
+            )
+            for fteam in fteams:
+                result.append(FantasyTeamPublic.from_fantasy_team(fteam))
+            return result
+
+    def getAll_for_scoring(self) -> list[FantasyTeamPublic]:
+        """The score recalculation reads the drafted team's seasons_info."""
+        with self.get_session() as session:
+            result = []
+            fteams = (
+                session.scalars(
+                    select(FantasyTeam).options(
+                        joinedload(FantasyTeam.season).noload("*"),
+                        joinedload(FantasyTeam.captain).noload("*"),
+                        joinedload(FantasyTeam.drafted_players)
+                        .joinedload(DBFantasyTeamPlayer.users)
+                        .noload("*"),
+                        joinedload(FantasyTeam.drafted_team).noload(Team.user_seasons),
+                        joinedload(FantasyTeam.drafted_team)
+                        .selectinload(Team.season_info)
+                        .options(
+                            noload(DBTeamSeason.coach_1),
+                            noload(DBTeamSeason.coach_2),
+                            noload(DBTeamSeason.coach_3),
+                            noload(DBTeamSeason.season),
+                        ),
+                    )
+                )
+                .unique()
+                .all()
+            )
             for fteam in fteams:
                 result.append(FantasyTeamPublic.from_fantasy_team(fteam))
             return result
@@ -66,16 +112,7 @@ class FantasyTeamService(BaseService):
             # Eager load only the relations the response model reads
             fteams = (
                 session.scalars(
-                    select(FantasyTeam)
-                    .options(
-                        joinedload(FantasyTeam.season).noload("*"),
-                        joinedload(FantasyTeam.drafted_team).noload("*"),
-                        joinedload(FantasyTeam.captain).noload("*"),
-                        joinedload(FantasyTeam.drafted_players)
-                        .joinedload(DBFantasyTeamPlayer.users)
-                        .noload("*"),
-                    )
-                    .where(filter)
+                    select(FantasyTeam).options(*self._reduced_options).where(filter)
                 )
                 .unique()
                 .all()

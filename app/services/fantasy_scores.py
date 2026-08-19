@@ -396,7 +396,7 @@ class FantasyScoreService:
             season, series_by_week, include_weekly_details=False
         )
 
-        fteams = self.fantasy_team_service.getAll_fantasy_teams()
+        fteams = self.fantasy_team_service.getAll_for_scoring()
         if fteams:
             for fteam in fteams:
                 scores = self._calculate_fantasy_team_scores(

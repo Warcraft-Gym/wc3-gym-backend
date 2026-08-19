@@ -230,3 +230,17 @@ def test_series_by_id_keeps_the_full_graph(
 
     series = get_json(client, f"/series/{seeded['series_played_id']}")
     assert len(series["player1"]["w3c_stats"]) == 1
+
+
+def test_fantasy_teams_list_keeps_every_key_with_empty_collections(
+    client: Client, seeded: dict[str, Any]
+) -> None:
+    """The list keeps the nested objects; their sub-collections are empty."""
+    team = get_json(client, "/fantasy/teams")[0]
+    assert team["captain"]["name"]
+    assert team["season"]["name"]
+    assert team["drafted_team"]["name"]
+    assert team["captain"]["signup_seasons"] == []
+    assert team["season"]["maps"] == []
+    assert team["drafted_team"]["player_by_season"] == {}
+    assert team["drafted_team"]["seasons_info"] == []
