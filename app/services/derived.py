@@ -1,5 +1,5 @@
-"""Series points, match scores, team standings and career totals, computed
-from the map scores at read time.
+"""Series points, match scores, team standings, career totals and fantasy
+scores, computed from the map scores at read time.
 
 Every number here comes from the map scores of the series and the score system
 of the season that holds them, through app.core.scoring and app.core.career.
@@ -16,6 +16,12 @@ player by season, one names the seasons the league has played. Both are
 constant, and a list of career rows also loads the players who have played
 and hold no row of their own.
 
+A fantasy answer costs two more statements on top of the standings pair: one
+loads the series of every season in the answer, one loads the bets of its
+captains. Every fantasy team scores against the season it names, so a mixed
+answer pays each row by its own season. A bet result needs no statement at all,
+because the map scores of the series already ride in the response.
+
 A team with no played series stands at zero, not at null.
 """
 
@@ -25,8 +31,10 @@ from typing import NamedTuple
 from sqlalchemy import case, func, or_, select, union_all
 from sqlalchemy.orm import Session, aliased, selectinload
 
-from app.core import career
+from app.core import career, fantasy
 from app.core.scoring import DEFAULT_SYSTEM, max_points, points, points_case
+from app.models.fantasy_bet import FantasyBet, FantasyBetPublic
+from app.models.fantasy_team import FantasyTeamPublic
 from app.models.match import Match, MatchPublic
 from app.models.player_career_stats import PlayerCareerStatsPublic
 from app.models.relationships import DBUserSeasonSignup
@@ -436,3 +444,244 @@ def career_rows(
     # A row with no id sorts last of its rating, because no id orders it
     rows.sort(key=lambda stat: (-stat.rating, stat.id is None, stat.id or 0))
     return rows
+
+
+def fantasy_series(
+    session: Session, season_ids: set[int]
+) -> dict[int, dict[int | None, list[fantasy.Series]]]:
+    """The series of every named season, by season and by week, in one statement.
+
+    The fantasy rules read the map scores and the two races, so the players join
+    in as columns rather than load as objects.
+    """
+    if not season_ids:
+        return {}
+
+    player1, player2 = aliased(User), aliased(User)
+    rows = session.execute(
+        select(
+            Match.season_id,
+            Match.playday,
+            Series.player1_id,
+            player1.name,
+            player1.race,
+            Series.player2_id,
+            player2.name,
+            player2.race,
+            Series.player1_score,
+            Series.player2_score,
+        )
+        .join(Match, Match.id == Series.match_id)
+        .join(player1, player1.id == Series.player1_id, isouter=True)
+        .join(player2, player2.id == Series.player2_id, isouter=True)
+        .where(Match.season_id.in_(season_ids))
+    ).all()
+
+    by_season: dict[int, dict[int | None, list[fantasy.Series]]] = {}
+    for (
+        season_id,
+        week,
+        one_id,
+        one_name,
+        one_race,
+        two_id,
+        two_name,
+        two_race,
+        one_score,
+        two_score,
+    ) in rows:
+        weeks = by_season.setdefault(season_id, {})
+        weeks.setdefault(week, []).append(
+            fantasy.Series(
+                week=week,
+                player1=fantasy.Player(one_id, one_name, fantasy.race_value(one_race)),
+                player2=fantasy.Player(two_id, two_name, fantasy.race_value(two_race)),
+                player1_score=one_score,
+                player2_score=two_score,
+            )
+        )
+    return by_season
+
+
+def _fantasy_bets(
+    session: Session, captains: set[int], season_ids: set[int]
+) -> dict[tuple[int, int], list[fantasy.Bet]]:
+    """The bets of every named captain in every named season, in one statement.
+
+    One statement covers the whole cross product, and a pair that holds no bet
+    simply finds none.
+    """
+    if not captains or not season_ids:
+        return {}
+
+    winner, player1, player2 = aliased(User), aliased(User), aliased(User)
+    rows = session.execute(
+        select(
+            FantasyBet.user_id,
+            FantasyBet.season_id,
+            FantasyBet.id,
+            FantasyBet.bet_points,
+            FantasyBet.winner_id,
+            winner.name,
+            Match.playday,
+            Series.player1_id,
+            player1.name,
+            Series.player2_id,
+            player2.name,
+            Series.player1_score,
+            Series.player2_score,
+        )
+        .join(Series, Series.id == FantasyBet.series_id)
+        .join(Match, Match.id == Series.match_id, isouter=True)
+        .join(winner, winner.id == FantasyBet.winner_id, isouter=True)
+        .join(player1, player1.id == Series.player1_id, isouter=True)
+        .join(player2, player2.id == Series.player2_id, isouter=True)
+        .where(FantasyBet.user_id.in_(captains), FantasyBet.season_id.in_(season_ids))
+    ).all()
+
+    by_captain: dict[tuple[int, int], list[fantasy.Bet]] = {}
+    for (
+        user_id,
+        season_id,
+        bet_id,
+        bet_points,
+        winner_id,
+        winner_name,
+        week,
+        one_id,
+        one_name,
+        two_id,
+        two_name,
+        one_score,
+        two_score,
+    ) in rows:
+        by_captain.setdefault((user_id, season_id), []).append(
+            fantasy.Bet(
+                id=bet_id,
+                points=bet_points,
+                winner_id=winner_id,
+                winner_name=winner_name,
+                series=fantasy.Series(
+                    week=week,
+                    player1=fantasy.Player(one_id, one_name, None),
+                    player2=fantasy.Player(two_id, two_name, None),
+                    player1_score=one_score,
+                    player2_score=two_score,
+                ),
+            )
+        )
+    return by_captain
+
+
+def public_series(series: SeriesPublic | None) -> fantasy.Series | None:
+    """One answered series, as the fantasy rules read it."""
+    if series is None:
+        return None
+    return fantasy.Series(
+        week=series.match.playday if series.match else None,
+        player1=fantasy.Player(
+            series.player1_id,
+            series.player1.name if series.player1 else None,
+            fantasy.race_value(series.player1.race) if series.player1 else None,
+        ),
+        player2=fantasy.Player(
+            series.player2_id,
+            series.player2.name if series.player2 else None,
+            fantasy.race_value(series.player2.race) if series.player2 else None,
+        ),
+        player1_score=series.player1_score,
+        player2_score=series.player2_score,
+    )
+
+
+def public_bet(bet: FantasyBetPublic) -> fantasy.Bet:
+    """One answered bet, as the fantasy rules read it."""
+    return fantasy.Bet(
+        id=bet.id,
+        points=bet.bet_points,
+        winner_id=bet.winner_id,
+        winner_name=bet.winner.name if bet.winner else None,
+        series=public_series(bet.series),
+    )
+
+
+def _season_weeks(rules: SeasonRules, season_id: int | None) -> int | None:
+    """How many weeks the season is played over."""
+    return rules.get(season_id, (DEFAULT_SYSTEM, None, None))[2]
+
+
+def _drafted_standing(
+    rules: SeasonRules, sums: TeamSums, team_id: int | None, season_id: int | None
+) -> fantasy.Standing | None:
+    """What the drafted team stands at in the season of the fantasy team.
+
+    The list answer carries no team name, and only the breakdown reads one.
+    """
+    if team_id is None or season_id is None:
+        return None
+    system, per_week, weeks = rules.get(season_id, (DEFAULT_SYSTEM, None, None))
+    final, against = sums.get((team_id, season_id), [0, 0])
+    available = (
+        per_week * weeks * max_points(system) - final - against
+        if per_week is not None and weeks is not None
+        else 0
+    )
+    return fantasy.Standing(team_id, None, final, against, available)
+
+
+def fill_fantasy_teams(
+    session: Session, teams: Iterable[FantasyTeamPublic | None]
+) -> None:
+    """Fill the six score fields of every fantasy team, each against the season
+    it names."""
+    rows = [team for team in teams if team is not None]
+    if not rows:
+        return
+
+    season_ids = {team.season_id for team in rows if team.season_id is not None}
+    rules = _rules_by_season(session, season_ids)
+    sums = _sums_by_team(session, rules)
+    series = fantasy_series(session, season_ids)
+    captains = {team.captain_id for team in rows if team.captain_id is not None}
+    bets = _fantasy_bets(session, captains, season_ids)
+    races = {
+        season_id: fantasy.race_points(
+            _season_weeks(rules, season_id), series.get(season_id, {})
+        )
+        for season_id in season_ids
+    }
+
+    for team in rows:
+        season_id = team.season_id
+        scores = fantasy.team_scores(
+            drafted_players=[
+                fantasy.Player(player.id, player.name, fantasy.race_value(player.race))
+                for player in team.drafted_players
+            ],
+            drafted_race=fantasy.race_value(team.drafted_race),
+            standing=_drafted_standing(rules, sums, team.drafted_team_id, season_id),
+            bets=bets.get((team.captain_id, season_id), []),
+            race_points=races.get(season_id, {}),
+            series_by_week=series.get(season_id, {}),
+            number_weeks=_season_weeks(rules, season_id),
+        )
+        team.player_points = scores["player_points"]
+        team.bench_points = scores["bench_points"]
+        team.team_points = scores["team_points"]
+        team.race_points = scores["race_points"]
+        team.bet_points = scores["bet_points"]
+        team.total_points = scores["total_points"]
+
+
+def fill_bet_results(bets: Iterable[FantasyBetPublic | None]) -> None:
+    """Fill the result of every bet. This one costs no statement: the map scores
+    of the series already ride in the answer."""
+    for bet in bets:
+        if bet is None:
+            continue
+        series = public_series(bet.series)
+        bet.bet_result = (
+            fantasy.bet_result(bet.bet_points, bet.winner_id, series)
+            if series is not None
+            else None
+        )

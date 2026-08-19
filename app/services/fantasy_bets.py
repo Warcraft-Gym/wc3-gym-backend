@@ -61,6 +61,7 @@ class FantasyBetService(BaseService):
                 raise NotFoundError("Fantasy Bet not found")
             public = FantasyBetPublic.from_fantasy_bet(fbet)
             derived.fill_series(session, [public.series])
+            derived.fill_bet_results([public])
             return public
 
     def getAll(
@@ -81,6 +82,7 @@ class FantasyBetService(BaseService):
             for single_fbet in fbet:
                 result.append(FantasyBetPublic.from_fantasy_bet_reduced(single_fbet))
             derived.fill_series(session, [bet.series for bet in result])
+            derived.fill_bet_results(result)
             return result, total
 
     def search(
@@ -129,6 +131,7 @@ class FantasyBetService(BaseService):
             for fbet in fbets:
                 result.append(FantasyBetPublic.from_fantasy_bet(fbet))
             derived.fill_series(session, [bet.series for bet in result])
+            derived.fill_bet_results(result)
             return result, total
 
     def _apply_bet_points_logic(self, bet: FantasyBetCreate | FantasyBetUpdate) -> None:

@@ -109,7 +109,8 @@ def test_fantasy_bets(client: Client, seeded: dict[str, Any]) -> None:
     assert len(bets) == 1
     bet = bets[0]
     assert bet["bet_points"] == 10
-    assert bet["bet_result"] is None
+    # P1 called himself and won the series 2-1, so the bet pays its stake
+    assert bet["bet_result"] == 10
     assert bet["series"]["id"] == seeded["series_played_id"]
 
 

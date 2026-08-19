@@ -21,6 +21,12 @@ adds do not grow with the number of teams in the answer.
 A career answer derives its nine totals from two more statements, and loads
 the players who hold no stored row from four. Neither part grows with the
 number of players or of rows in the answer.
+
+A fantasy team answer derives its six score fields from four more statements:
+the standings pair, one for the series of every season in the answer and one
+for the bets of its captains. None of the four grows with the number of teams.
+A bet result costs nothing, because the map scores of its series already ride
+in the answer.
 """
 
 from collections.abc import Iterator
@@ -46,6 +52,7 @@ from app.models.user import User
 from app.models.w3c_stats import W3CStats
 from app.services.draft_series import DraftSeriesService
 from app.services.fantasy_bets import FantasyBetService
+from app.services.fantasy_teams import FantasyTeamService
 from app.services.player_career_stats import PlayerCareerStatsService
 from app.services.series import SeriesService
 from app.services.teams import TeamService
@@ -187,14 +194,101 @@ def test_options_cover_the_player_graph(league: dict[str, Any]) -> None:
 
 
 def test_fantasy_bets_list_costs_three_statements(league: dict[str, Any]) -> None:
-    """The list carries no collection, so only the derived points add to it."""
+    """The list carries no collection, so only the derived points add to it.
+
+    The bet result reads the map scores of the series the answer already
+    carries, so it adds no statement of its own.
+    """
     service = FantasyBetService()
     with count_statements() as tally:
         bets, total = service.getAll()
     assert len(bets) == 1
     assert total is None
+    assert bets[0].bet_result == 10
     assert bets[0].user.w3c_stats == []
     assert tally[0] == 3
+
+
+def add_bets_to_the_season(seeded: dict[str, Any], count: int) -> None:
+    """More bets in the season, so a per-bet fill would be visible."""
+    from app.models.fantasy_bet import FantasyBet
+
+    with Session() as session:
+        for _ in range(count):
+            session.add(
+                FantasyBet(
+                    season_id=seeded["season_id"],
+                    series_id=seeded["series_played_id"],
+                    user_id=seeded["player_ids"][1],
+                    winner_id=seeded["player_ids"][0],
+                    bet_points=10,
+                )
+            )
+        session.commit()
+
+
+def test_the_bets_count_holds_when_the_bets_grow(league: dict[str, Any]) -> None:
+    """Four more bets, the same three statements."""
+    add_bets_to_the_season(league, 4)
+
+    service = FantasyBetService()
+    with count_statements() as tally:
+        bets, _ = service.getAll()
+    assert len(bets) == 5
+    assert all(bet.bet_result == 10 for bet in bets)
+    assert tally[0] == 3
+
+
+def add_fantasy_teams(seeded: dict[str, Any], count: int) -> None:
+    """More fantasy teams in the season, so a per-team fill would be visible."""
+    from app.models.fantasy_team import FantasyTeam
+
+    with Session() as session:
+        for index in range(count):
+            session.add(
+                FantasyTeam(
+                    name=f"Extra {index}",
+                    season_id=seeded["season_id"],
+                    captain_id=seeded["player_ids"][index % 4],
+                    drafted_team_id=seeded["team_a_id"],
+                    drafted_race=Race.HU,
+                )
+            )
+        session.commit()
+
+
+def test_the_fantasy_team_list_costs_five_statements(league: dict[str, Any]) -> None:
+    """One for the teams, two for the standings, one for the season's series
+    and one for the captains' bets."""
+    service = FantasyTeamService()
+    with count_statements() as tally:
+        teams = service.getAll()
+    assert len(teams) == 1
+    assert teams[0].total_points == 30
+    assert tally[0] == 5
+
+
+def test_the_fantasy_count_holds_when_the_teams_grow(league: dict[str, Any]) -> None:
+    """Four more fantasy teams, the same five statements."""
+    add_fantasy_teams(league, 4)
+
+    service = FantasyTeamService()
+    with count_statements() as tally:
+        teams = service.getAll()
+    assert len(teams) == 5
+    assert tally[0] == 5
+
+
+def test_the_fantasy_team_search_costs_five_statements(league: dict[str, Any]) -> None:
+    """The season-scoped search the leaderboards call pays the same five."""
+    add_fantasy_teams(league, 4)
+
+    service = FantasyTeamService()
+    query = QueryUtil.parseQuery(f"season_id == {league['season_id']}")
+    with count_statements() as tally:
+        teams = service.search(query)
+    assert len(teams) == 5
+    assert tally[0] == 5
 
 
 def test_career_stats_cost_ten_statements(league: dict[str, Any]) -> None:

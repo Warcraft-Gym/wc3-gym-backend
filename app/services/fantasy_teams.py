@@ -51,6 +51,7 @@ class FantasyTeamService(BaseService):
                 raise NotFoundError("Fantasy Team not found")
             public = FantasyTeamPublic.from_fantasy_team(fteam)
             derived.fill_standings(session, [public.drafted_team])
+            derived.fill_fantasy_teams(session, [public])
             return public
 
     # Every relation the list answer reads; the sub-collections stay empty
@@ -73,6 +74,7 @@ class FantasyTeamService(BaseService):
             )
             for fteam in fteams:
                 result.append(FantasyTeamPublic.from_fantasy_team(fteam))
+            derived.fill_fantasy_teams(session, result)
             return result
 
     def getAll_for_scoring(self) -> list[FantasyTeamPublic]:
@@ -130,6 +132,7 @@ class FantasyTeamService(BaseService):
                 return result
             for fteam in fteams:
                 result.append(FantasyTeamPublic.from_fantasy_team(fteam))
+            derived.fill_fantasy_teams(session, result)
             return result
 
     def addPlayers(self, team_id: int, player_ids: list[int]) -> FantasyTeamPublic:

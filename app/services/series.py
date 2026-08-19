@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import aliased
 
+from app.core import fantasy
 from app.core.exceptions import NotFoundError
 from app.core.query import QueryElement, QueryUtil
 from app.models.match import Match
@@ -102,6 +103,13 @@ class SeriesService(BaseService):
             if filter is not None:
                 statement = statement.where(filter)
             return session.scalar(statement) or 0
+
+    def fantasy_series_by_week(
+        self, season_id: int
+    ) -> dict[int | None, list[fantasy.Series]]:
+        """Every series of the season, by week, in one statement."""
+        with self.get_session() as session:
+            return derived.fantasy_series(session, {season_id}).get(season_id, {})
 
     def searchForSeasonAndPlayday(
         self,
