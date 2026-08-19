@@ -517,6 +517,18 @@ def test_the_recalculation_fills_standings_left_empty(
     assert (final_b, against_b) == (1, 2)
 
 
+def test_the_recalculation_keeps_the_series_points(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """The seeded series is a 2-1, which is 2 points against 1."""
+    season_id = seeded["season_id"]
+    resp = client.post(f"/season/{season_id}/calculate/", headers=auth_headers)
+    assert resp.status_code == 200
+
+    series = get(client, f"/series/{seeded['series_played_id']}")
+    assert (series["player1_points"], series["player2_points"]) == (2, 1)
+
+
 def test_the_recalculation_reports_that_it_finished(
     client: Client, auth_headers: dict[str, str], league: dict[str, Any]
 ) -> None:

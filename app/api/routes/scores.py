@@ -141,7 +141,8 @@ def perform_calculation(
                         str(e) + " for series with id " + str(singleSeries.id)
                     )
 
-                series_service.update_series(
+                # update(), because update_series() recalculates from map scores
+                series_service.update(
                     calculatedSeries.id,
                     SeriesUpdate(
                         player1_points=calculatedSeries.player1_points,
