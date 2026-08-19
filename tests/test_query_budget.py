@@ -20,7 +20,8 @@ adds do not grow with the number of teams in the answer.
 
 A career answer derives its nine totals from two more statements, and loads
 the players who hold no stored row from one. Neither part grows with the
-number of players or of rows in the answer.
+number of players or of rows in the answer, and a search over those rows
+adds none.
 
 A fantasy team answer derives its six score fields from four more statements:
 the standings pair, one for the series of every season in the answer and one
@@ -302,6 +303,18 @@ def test_career_stats_cost_four_statements(league: dict[str, Any]) -> None:
     assert len(career) == 3
     assert total == 3
     assert career[0].user.name
+    assert tally[0] == 4
+
+
+def test_a_searched_career_answer_costs_the_same_four_statements(
+    league: dict[str, Any],
+) -> None:
+    """The search runs on the rows already in hand, so it adds no statement."""
+    service = PlayerCareerStatsService()
+    with count_statements() as tally:
+        career, total = service.get_all(search="p1")
+    assert [row.player_name for row in career] == ["P1"]
+    assert total == 1
     assert tally[0] == 4
 
 

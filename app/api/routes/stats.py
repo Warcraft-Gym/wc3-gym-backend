@@ -22,10 +22,17 @@ def get_all_career_stats(
     response: Response,
     limit: Annotated[int | None, Query(ge=1, le=500)] = None,
     offset: Annotated[int, Query(ge=0)] = 0,
+    search: str = "",
 ) -> list[dict[str, Any]]:
-    """Retrieve career statistics by rating, or one page of them when limit is given."""
-    # The list is unpaged by default because the admin views read all rows
-    stats, total = service.get_all_career_stats(limit=limit, offset=offset)
+    """Retrieve career statistics by rating, or one page of them when limit is given.
+
+    search keeps the rows whose player name or user name holds it, without
+    case. The header counts the kept rows.
+    """
+    # The list is unpaged by default because the public shortcode reads all rows
+    stats, total = service.get_all_career_stats(
+        limit=limit, offset=offset, search=search
+    )
     response.headers["X-Total-Count"] = str(total)
     return [stat.to_dict() for stat in stats]
 

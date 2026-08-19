@@ -272,6 +272,95 @@ def test_the_derived_page_answers_its_slice(
     assert resp.json() == EXPECTED[2:4]
 
 
+def test_the_search_keeps_the_rows_that_hold_it(
+    client: Client, league: dict[str, int]
+) -> None:
+    """Four of the five names hold an "a", and the header counts those four."""
+    resp = client.get("/stats/career?search=a")
+    assert resp.status_code == 200
+    assert resp.headers["X-Total-Count"] == "4"
+    assert resp.json() == [EXPECTED[0], EXPECTED[2], EXPECTED[3], EXPECTED[4]]
+
+
+def test_the_search_matches_without_case(
+    client: Client, league: dict[str, int]
+) -> None:
+    """Three spellings of one name answer the same single row."""
+    bodies = [
+        client.get(f"/stats/career?search={term}").json()
+        for term in ("alpha", "ALPHA", "AlPh")
+    ]
+    assert bodies == [[EXPECTED[0]]] * 3
+
+
+def test_the_search_finds_a_player_who_holds_no_stored_row(
+    client: Client, league: dict[str, int]
+) -> None:
+    """Charlie stands in the list from his series alone, and the search finds
+    him."""
+    resp = client.get("/stats/career?search=charl")
+    assert resp.status_code == 200
+    assert resp.headers["X-Total-Count"] == "1"
+    assert resp.json() == [EXPECTED[3]]
+    assert resp.json()[0]["id"] is None
+
+
+def test_the_search_matches_the_user_name_of_a_stored_row(
+    client: Client, league: dict[str, int]
+) -> None:
+    """A row whose player name is an old alias answers to the user name."""
+    with Session() as session:
+        player = User(
+            name="Foxtrot",
+            battleTag="Foxtrot#1000",
+            discordTag="foxtrot",
+            discordId="5",
+            race=Race.HU,
+            mmr=1500,
+        )
+        session.add(player)
+        session.flush()
+        session.add(PlayerCareerStats(user_id=player.id, player_name="Old Fox"))
+        session.commit()
+
+    resp = client.get("/stats/career?search=foxtrot")
+    assert resp.status_code == 200
+    assert resp.headers["X-Total-Count"] == "1"
+    rows = resp.json()
+    assert len(rows) == 1
+    assert rows[0]["player_name"] == "Old Fox"
+    assert rows[0]["user"]["name"] == "Foxtrot"
+
+
+def test_the_search_pages_the_rows_it_keeps(
+    client: Client, league: dict[str, int]
+) -> None:
+    """One row of the four kept, and the header still counts the four."""
+    resp = client.get("/stats/career?search=a&limit=1&offset=1")
+    assert resp.status_code == 200
+    assert resp.headers["X-Total-Count"] == "4"
+    assert resp.json() == [EXPECTED[2]]
+
+
+def test_the_search_that_matches_nothing_answers_an_empty_list(
+    client: Client, league: dict[str, int]
+) -> None:
+    resp = client.get("/stats/career?search=zulu")
+    assert resp.status_code == 200
+    assert resp.headers["X-Total-Count"] == "0"
+    assert resp.json() == []
+
+
+def test_an_empty_search_answers_the_whole_list(
+    client: Client, league: dict[str, int]
+) -> None:
+    """The empty parameter answers the same bytes as no parameter at all."""
+    plain = client.get("/stats/career")
+    empty = client.get("/stats/career?search=")
+    assert empty.content == plain.content
+    assert empty.headers["X-Total-Count"] == plain.headers["X-Total-Count"] == "5"
+
+
 def test_the_derived_player_answers_the_same_row(
     client: Client, league: dict[str, int]
 ) -> None:

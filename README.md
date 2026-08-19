@@ -308,8 +308,19 @@ migrations as well. See `tests/conftest.py` for the design rules.
 
 The list routes take `limit` (1 to 500, default 500) and `offset` (>= 0, default 0) query parameters. A limit outside that range answers 422. The page is ordered by `id`, and both values go into the SQL statement, so a large table never becomes a large answer. `tests/test_paging.py` names every paged route.
 
-`GET /fantasy/bets` and `POST /fantasy/bets/search` also carry the total match count in an `X-Total-Count` response header, which CORS exposes to browsers.
+Six routes carry the total row count in an `X-Total-Count` response header, which CORS exposes to browsers. A client reads the header, then walks the pages with `limit` and `offset`. The count holds for the whole set the route answers, not for the page.
 
-`GET /users`, `GET /stats/career`, `GET /fantasy/teams`, `GET /koth/events`, `/config/settings`, the export and import routes and `routes/scores.py` answer full lists: their clients read the whole set.
+| Route | Default page size |
+| --- | --- |
+| `GET /users` | 500 |
+| `GET /fantasy/teams` | 500 |
+| `GET /fantasy/bets` | 500 |
+| `POST /fantasy/bets/search` | 500 |
+| `GET /player-series` | 500 |
+| `GET /stats/career` | unpaged, the whole list |
+
+`GET /stats/career` stays unpaged by default because the public WordPress shortcode reads the whole list. It takes `limit` and `offset` all the same, and it takes an optional `search` string that keeps the rows whose player name or user name holds it, without case. The header counts the kept rows.
+
+`GET /koth/events`, `/config/settings`, the export and import routes and `routes/scores.py` answer full lists: their clients read the whole set.
 
 The list routes answer reduced payloads: every JSON key stays, and the collections nested inside embedded objects answer `[]`. The single-row routes keep the full graph. `tests/test_memory_budget.py` pins the peak memory of the bets list, and `tests/test_query_budget.py` pins the statement counts of the list queries.

@@ -94,11 +94,10 @@ def removePlayers(
 def get_all_teams(
     service: FantasyTeamServiceDep,
     response: Response,
-    limit: Annotated[int | None, Query(ge=1, le=500)] = None,
+    limit: Annotated[int, Query(ge=1, le=500)] = 500,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[FantasyTeamPublic]:
-    """Retrieve all fantasy teams, or one page of them when limit is given."""
-    # The list is unpaged by default because the admin views read all teams
+    """Retrieve one page of fantasy teams, at most 500, ordered by id."""
     teams, total = service.getAll_fantasy_teams(limit=limit, offset=offset)
     response.headers["X-Total-Count"] = str(total)
     return teams or []

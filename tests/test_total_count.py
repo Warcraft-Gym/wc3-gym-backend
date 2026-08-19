@@ -1,10 +1,12 @@
 """The four admin list routes report the total row count in a header.
 
-GET /users, GET /stats/career and GET /fantasy/teams stay unpaged by
-default, because the admin views still read the full list. All three take
-limit and offset, and all three answer X-Total-Count with the count of all
-rows, not with the length of the page. GET /player-series pages already;
-it now answers X-Total-Count with the number of series of that one player.
+GET /users and GET /fantasy/teams answer at most 500 rows by default,
+because their clients walk the pages by the header. GET /stats/career
+stays unpaged by default, because the public shortcode reads the whole
+list. All three take limit and offset, and all three answer X-Total-Count
+with the count of all rows, not with the length of the page.
+GET /player-series pages already; it now answers X-Total-Count with the
+number of series of that one player.
 """
 
 from collections.abc import Callable, Iterator
@@ -79,10 +81,10 @@ def dashboard_token() -> Iterator[Callable[..., str]]:
         _token_store.pop(token, None)
 
 
-def test_users_report_the_total_without_paging(
+def test_users_report_the_total_without_parameters(
     client: Client, seeded: dict[str, Any]
 ) -> None:
-    """The unpaged list holds the four seeded users and counts them."""
+    """The default page holds the four seeded users and counts them."""
     resp = client.get("/users")
     assert resp.status_code == 200
     assert resp.headers["X-Total-Count"] == "4"
@@ -112,6 +114,30 @@ def test_users_reject_a_bad_page(client: Client, seeded: dict[str, Any]) -> None
     assert client.get("/users?limit=0").status_code == 422
     assert client.get("/users?limit=501").status_code == 422
     assert client.get("/users?offset=-1").status_code == 422
+
+
+def limit_parameter(schema: dict[str, Any], path: str) -> dict[str, Any]:
+    """The limit parameter of one GET route, out of the OpenAPI schema."""
+    parameters = schema["paths"][path]["get"]["parameters"]
+    return next(param for param in parameters if param["name"] == "limit")
+
+
+def test_the_capped_routes_declare_a_default_of_500(client: Client) -> None:
+    """The schema pins the cap, which no seeded set of 501 rows could show."""
+    schema = client.get("/openapi.json").json()
+    for path in ("/users", "/fantasy/teams"):
+        limit = limit_parameter(schema, path)
+        assert limit["schema"]["default"] == 500
+        assert limit["schema"]["maximum"] == 500
+        assert limit["schema"]["minimum"] == 1
+
+
+def test_the_career_route_declares_no_default_limit(client: Client) -> None:
+    """The public shortcode reads the whole list, so the cap stays off."""
+    schema = client.get("/openapi.json").json()
+    limit = limit_parameter(schema, "/stats/career")
+    assert limit["schema"].get("default") is None
+    assert not limit["required"]
 
 
 def test_career_stats_report_the_total_without_paging(
@@ -150,10 +176,10 @@ def test_career_stats_reject_a_bad_page(client: Client, seeded: dict[str, Any]) 
     assert client.get("/stats/career?offset=-1").status_code == 422
 
 
-def test_fantasy_teams_report_the_total_without_paging(
+def test_fantasy_teams_report_the_total_without_parameters(
     client: Client, seeded: dict[str, Any]
 ) -> None:
-    """A request without limit holds all four teams and counts them."""
+    """The default page holds the four seeded teams and counts them."""
     add_fantasy_teams(seeded, 3)
 
     resp = client.get("/fantasy/teams")

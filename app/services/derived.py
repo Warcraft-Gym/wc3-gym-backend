@@ -394,14 +394,24 @@ def fill_career(
         _fill_rows(session, rows)
 
 
+def _career_holds(row: PlayerCareerStatsPublic, needle: str) -> bool:
+    """True when the player name or the user name of the row holds needle."""
+    names = (row.player_name, row.user.name if row.user else None)
+    return any(name and needle in name.casefold() for name in names)
+
+
 def career_rows(
-    session: Session, stored: list[PlayerCareerStatsPublic]
+    session: Session, stored: list[PlayerCareerStatsPublic], search: str = ""
 ) -> list[PlayerCareerStatsPublic]:
     """Every career row of the league, by rating.
 
     A player who has played and holds no stored row stands in the list too,
     with a null id and no historical baseline, so a new player counts from his
     first result.
+
+    search keeps the rows whose player name or user name holds it, and it
+    matches without case. It runs before the sort, so the caller pages and
+    counts the kept rows.
     """
     tallies, unclaimed, system_seasons = _fill_rows(session, stored)
     played = {
@@ -424,6 +434,10 @@ def career_rows(
         )
         _fill_row(row, tallies[user_id], system_seasons)
         rows.append(row)
+
+    if search:
+        needle = search.casefold()
+        rows = [row for row in rows if _career_holds(row, needle)]
 
     # A row with no id sorts last of its rating, because no id orders it
     rows.sort(key=lambda stat: (-stat.rating, stat.id is None, stat.id or 0))

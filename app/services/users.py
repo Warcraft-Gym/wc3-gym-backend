@@ -130,11 +130,10 @@ class UserService(BaseService):
                 joinedload(User.team_seasons).joinedload(DBUserTeamSeason.season),
                 joinedload(User.w3c_stats),
             )
-            if limit is not None or offset:
-                # Offset paging is deterministic only with a fixed order
-                statement = statement.order_by(User.id).offset(offset)
-                if limit is not None:
-                    statement = statement.limit(limit)
+            # Offset paging is deterministic only with a fixed order
+            statement = statement.order_by(User.id).offset(offset)
+            if limit is not None:
+                statement = statement.limit(limit)
             users = session.scalars(statement).unique().all()
 
             for user in users:

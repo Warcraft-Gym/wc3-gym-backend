@@ -74,11 +74,10 @@ class FantasyTeamService(BaseService):
             total = session.scalar(select(func.count()).select_from(FantasyTeam)) or 0
             result = []
             statement = select(FantasyTeam).options(*self._reduced_options)
-            if limit is not None or offset:
-                # Offset paging is deterministic only with a fixed order
-                statement = statement.order_by(FantasyTeam.id).offset(offset)
-                if limit is not None:
-                    statement = statement.limit(limit)
+            # Offset paging is deterministic only with a fixed order
+            statement = statement.order_by(FantasyTeam.id).offset(offset)
+            if limit is not None:
+                statement = statement.limit(limit)
             fteams = session.scalars(statement).unique().all()
             for fteam in fteams:
                 result.append(FantasyTeamPublic.from_fantasy_team(fteam))

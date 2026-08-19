@@ -67,15 +67,16 @@ class PlayerCareerStatsService(BaseService):
         return [PlayerCareerStatsPublic.from_career_stats(stat) for stat in stats]
 
     def get_all(
-        self, limit: int | None = None, offset: int = 0
+        self, limit: int | None = None, offset: int = 0, search: str = ""
     ) -> tuple[list[PlayerCareerStatsPublic], int]:
         """The career stats by rating, or one page of them, and the total count
 
         The rating orders the rows and the id breaks a tie, so offset paging
-        walks a fixed order.
+        walks a fixed order. search keeps the rows whose player name or user
+        name holds it, so the page and the count hold to the kept rows.
         """
         with self.get_session() as session:
-            rows = derived.career_rows(session, self._stored_rows(session))
+            rows = derived.career_rows(session, self._stored_rows(session), search)
             end = None if limit is None else offset + limit
             return rows[offset:end], len(rows)
 
@@ -186,10 +187,10 @@ class PlayerCareerStatsService(BaseService):
                 session.add(stats)
 
     def get_all_career_stats(
-        self, limit: int | None = None, offset: int = 0
+        self, limit: int | None = None, offset: int = 0, search: str = ""
     ) -> tuple[list[PlayerCareerStatsPublic], int]:
         """Get all player career stats ordered by rating, and the total count"""
-        return self.get_all(limit=limit, offset=offset)
+        return self.get_all(limit=limit, offset=offset, search=search)
 
     def get_career_stats_by_user(self, user_id: int) -> PlayerCareerStatsPublic | None:
         """Get career stats for a specific user"""

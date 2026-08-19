@@ -52,11 +52,10 @@ def get_user(user_id: int, service: UserServiceDep) -> UserPublic:
 def get_all_users(
     service: UserServiceDep,
     response: Response,
-    limit: Annotated[int | None, Query(ge=1, le=500)] = None,
+    limit: Annotated[int, Query(ge=1, le=500)] = 500,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[UserPublic]:
-    """Retrieve all users, or one page of them when limit is given."""
-    # The list is unpaged by default because the admin views read all users
+    """Retrieve one page of users, at most 500, ordered by id."""
     users, total = service.getAll(limit=limit, offset=offset)
     response.headers["X-Total-Count"] = str(total)
     return users or []
