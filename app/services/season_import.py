@@ -506,7 +506,7 @@ def process_import(
             q_string = f"series_id=={new_series_id} and user_id=={new_user_id} and winner_id=={new_winner_id}"
             query = QueryUtil.parseQuery(q_string)
             if query and query.elementA:
-                existing_bets = fantasy_bet_service.search_fantasy_bets(query)
+                existing_bets, _ = fantasy_bet_service.search_fantasy_bets(query)
                 if existing_bets:
                     fantasy_bet_service.update_fantasy_bet(
                         existing_bets[0].id, FantasyBetUpdate(**fbet_data)

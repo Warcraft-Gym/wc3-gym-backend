@@ -75,43 +75,52 @@ class FantasyBetService(BaseService):
                 result.append(FantasyBetPublic.from_fantasy_bet_reduced(single_fbet))
             return result, total
 
-    def search(self, query: QueryElement | None) -> list[FantasyBetPublic]:
+    def search(
+        self,
+        query: QueryElement | None,
+        limit: int | None = None,
+        offset: int = 0,
+    ) -> tuple[list[FantasyBetPublic], int | None]:
+        """The matching bets and, when a page is asked for, the total count."""
         with self.get_session() as session:
             result = []
             filter = QueryUtil.convertQueryToDBFilter(FantasyBet, query)
             if filter is None:
                 logger.debug(f"No fantasy bets found by searchcriteria: {query}")
-                return result
-            # noload('*') hides every relation not listed here
-            fbets = (
-                session.scalars(
-                    select(FantasyBet)
-                    .options(
-                        joinedload(FantasyBet.season).noload("*"),
-                        joinedload(FantasyBet.user).noload("*"),
-                        joinedload(FantasyBet.winner).noload("*"),
-                        joinedload(FantasyBet.series).noload("*"),
-                        joinedload(FantasyBet.series)
-                        .joinedload(Series.player1)
-                        .noload("*"),
-                        joinedload(FantasyBet.series)
-                        .joinedload(Series.player2)
-                        .noload("*"),
-                        joinedload(FantasyBet.series)
-                        .joinedload(Series.match)
-                        .noload("*"),
-                    )
-                    .where(filter)
+                return result, None
+            total = None
+            statement = (
+                select(FantasyBet)
+                .options(
+                    joinedload(FantasyBet.season).noload("*"),
+                    joinedload(FantasyBet.user).noload("*"),
+                    joinedload(FantasyBet.winner).noload("*"),
+                    joinedload(FantasyBet.series).noload("*"),
+                    joinedload(FantasyBet.series)
+                    .joinedload(Series.player1)
+                    .noload("*"),
+                    joinedload(FantasyBet.series)
+                    .joinedload(Series.player2)
+                    .noload("*"),
+                    joinedload(FantasyBet.series).joinedload(Series.match).noload("*"),
                 )
-                .unique()
-                .all()
+                .where(filter)
             )
+            if limit is not None or offset:
+                # Offset paging is deterministic only with a fixed order
+                total = session.scalar(
+                    select(func.count()).select_from(FantasyBet).where(filter)
+                )
+                statement = statement.order_by(FantasyBet.id).offset(offset)
+                if limit is not None:
+                    statement = statement.limit(limit)
+            fbets = session.scalars(statement).unique().all()
             if not fbets:
                 logger.debug(f"No fantasy bets found by searchcriteria: {query}")
-                return result
+                return result, total
             for fbet in fbets:
                 result.append(FantasyBetPublic.from_fantasy_bet(fbet))
-            return result
+            return result, total
 
     def _apply_bet_points_logic(self, bet: FantasyBetCreate | FantasyBetUpdate) -> None:
         """Apply bet points based on settings: use fixed points or validate user input."""
@@ -227,5 +236,10 @@ class FantasyBetService(BaseService):
     ) -> tuple[list[FantasyBetPublic], int | None]:
         return self.getAll(limit=limit, offset=offset)
 
-    def search_fantasy_bets(self, query: QueryElement | None) -> list[FantasyBetPublic]:
-        return self.search(query)
+    def search_fantasy_bets(
+        self,
+        query: QueryElement | None,
+        limit: int | None = None,
+        offset: int = 0,
+    ) -> tuple[list[FantasyBetPublic], int | None]:
+        return self.search(query, limit=limit, offset=offset)

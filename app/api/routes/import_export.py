@@ -365,7 +365,7 @@ def export_season(
         ]
     )
     if query and query.elementA:
-        fantasy_bets = fantasy_bet_service.search_fantasy_bets(query)
+        fantasy_bets, _ = fantasy_bet_service.search_fantasy_bets(query)
         for fbet in fantasy_bets:
             fantasy_bets_sheet.append(
                 [
@@ -671,7 +671,7 @@ def import_fantasy_bets(
             bet_query = QueryUtil.parseQuery(bet_q_string)
             if not query or not query.elementA:
                 raise Exception(f"No valid query found: {bet_q_string}")
-            found_bets = fantasy_bet_service.search_fantasy_bets(bet_query)
+            found_bets, _ = fantasy_bet_service.search_fantasy_bets(bet_query)
             if found_bets and len(found_bets) == 1:
                 bet = found_bets[0]
                 fantasy_bet_service.update_fantasy_bet(

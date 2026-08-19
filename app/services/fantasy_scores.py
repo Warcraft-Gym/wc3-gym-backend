@@ -346,7 +346,7 @@ class FantasyScoreService:
             f"user_id=={fantasy_team.captain.id} and season_id=={season.id}"
         )
         series_query = QueryUtil.parseQuery(series_q_string)
-        player_bets = self.fantasy_bet_service.search_fantasy_bets(series_query)
+        player_bets, _ = self.fantasy_bet_service.search_fantasy_bets(series_query)
 
         if include_breakdown:
             result["bet_breakdown"] = []

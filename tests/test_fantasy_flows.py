@@ -205,3 +205,40 @@ def test_bets_list_rejects_a_bad_page(client: Client, seeded: dict[str, Any]) ->
     """limit under 1 and offset under 0 answer 422."""
     assert client.get("/fantasy/bets?limit=0").status_code == 422
     assert client.get("/fantasy/bets?offset=-1").status_code == 422
+
+
+def test_bets_search_pages_by_id_and_counts_the_filtered_set(
+    client: Client, seeded: dict[str, Any]
+) -> None:
+    """limit and offset page the search; the total counts the filter matches."""
+    from app.core.db import Session
+    from app.models.fantasy_bet import FantasyBet
+
+    with Session() as session:
+        for _ in range(4):
+            session.add(
+                FantasyBet(
+                    season_id=seeded["season_id"],
+                    series_id=seeded["series_played_id"],
+                    user_id=seeded["player_ids"][1],
+                    winner_id=seeded["player_ids"][0],
+                    bet_points=10,
+                )
+            )
+        session.commit()
+
+    query = f"user_id == {seeded['player_ids'][1]}"
+    everything = client.post(f"/fantasy/bets/search?query={query}")
+    assert "X-Total-Count" not in everything.headers
+    ids = [bet["id"] for bet in everything.json()]
+    assert len(ids) == 4
+
+    paged = []
+    for offset in (0, 3):
+        resp = client.post(
+            f"/fantasy/bets/search?query={query}&limit=3&offset={offset}"
+        )
+        assert resp.status_code == 200
+        assert resp.headers["X-Total-Count"] == "4"
+        paged += [bet["id"] for bet in resp.json()]
+    assert paged == sorted(ids)

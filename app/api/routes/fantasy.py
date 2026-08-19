@@ -161,13 +161,20 @@ def get_all_bets(
 
 @router.post("/fantasy/bets/search")
 def search_bets(
-    service: FantasyBetServiceDep, query: str = ""
+    service: FantasyBetServiceDep,
+    response: Response,
+    query: str = "",
+    limit: Annotated[int | None, Query(ge=1)] = None,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[FantasyBetPublic]:
-    """Search bets by criteria using a custom query format."""
+    """Search bets by criteria, or one page of them when limit or offset is set."""
     parsed = QueryUtil.parseQuery(query)
     if not parsed or not parsed.elementA:
         raise BadRequestError(f"No valid query found: {query}")
-    return service.search_fantasy_bets(parsed) or []
+    bets, total = service.search_fantasy_bets(parsed, limit=limit, offset=offset)
+    if total is not None:
+        response.headers["X-Total-Count"] = str(total)
+    return bets or []
 
 
 @router.get("/fantasy/teams/{team_id}/season/{season_id}/breakdown")
