@@ -21,8 +21,6 @@ class SeriesBase(SQLModel):
     player2_id: int = Field(foreign_key="users.id", ondelete="CASCADE")
     player1_score: int | None = None
     player2_score: int | None = None
-    player1_points: int | None = None
-    player2_points: int | None = None
     host_player_id: int
     is_fantasy_match: bool | None = None
 
@@ -133,8 +131,6 @@ class SeriesUpdate(SQLModel):
     player2_id: int | None = None
     player1_score: int | None = None
     player2_score: int | None = None
-    player1_points: int | None = None
-    player2_points: int | None = None
     host_player_id: int | None = None
     is_fantasy_match: bool | None = None
 
@@ -149,6 +145,9 @@ class SeriesPublic(SeriesBase):
     match: MatchPublic | None = None
     player1: UserPublic | None = None
     player2: UserPublic | None = None
+    # app.services.derived fills the points from the map scores
+    player1_points: int | None = None
+    player2_points: int | None = None
 
     @classmethod
     def from_series(cls, series: Series | None) -> Self | None:
@@ -167,8 +166,6 @@ class SeriesPublic(SeriesBase):
             player2=UserPublic.from_user(series.player2) if series.player2 else None,
             player1_score=series.player1_score,
             player2_score=series.player2_score,
-            player1_points=series.player1_points,
-            player2_points=series.player2_points,
             host_player_id=series.host_player_id,
             is_fantasy_match=series.is_fantasy_match,
         )
@@ -195,8 +192,6 @@ class SeriesPublic(SeriesBase):
             else None,
             player1_score=series.player1_score,
             player2_score=series.player2_score,
-            player1_points=series.player1_points,
-            player2_points=series.player2_points,
             host_player_id=series.host_player_id,
             is_fantasy_match=series.is_fantasy_match,
         )

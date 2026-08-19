@@ -1,6 +1,6 @@
 """One team's run through one season: the team_season table.
 
-The row links a team and a season and carries the score columns and the
+The row links a team and a season and carries the map counts and the
 coaches. season_info.py holds the shape the API sends for it.
 """
 
@@ -25,9 +25,6 @@ class DBTeamSeason(DBModel, table=True):
     coach_2_id: int | None = Field(default=None, foreign_key="users.id")
     coach_3_id: int | None = Field(default=None, foreign_key="users.id")
     # Additional columns
-    final_score: int | None = None
-    points_available: int | None = None
-    points_against: int | None = None
     maps_won: int | None = None
     maps_lost: int | None = None
     # Relationships

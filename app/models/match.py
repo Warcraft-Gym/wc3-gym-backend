@@ -18,8 +18,6 @@ class MatchBase(SQLModel):
     team2_id: int = Field(foreign_key="teams.id", ondelete="CASCADE")
     season_id: int = Field(foreign_key="seasons.id", ondelete="CASCADE")
     playday: int
-    team1_score: int | None = None
-    team2_score: int | None = None
     fixed_map_id: int | None = Field(default=None, foreign_key="maps.id")
     # date_frame receives numeric cells from the xlsx import.
     date_frame: Annotated[str | None, NumToStr] = Field(default=None, max_length=50)
@@ -52,8 +50,6 @@ class MatchUpdate(SQLModel):
     team2_id: int | None = None
     season_id: int | None = None
     playday: int | None = None
-    team1_score: int | None = None
-    team2_score: int | None = None
     fixed_map_id: int | None = None
     date_frame: Annotated[str | None, NumToStr] = None
 
@@ -68,6 +64,9 @@ class MatchPublic(MatchBase):
     team2: TeamReduced | None = None
     season: SeasonPublic | None = None
     fixed_map: MapPublic | None = None
+    # app.services.derived sums the two team scores from the series
+    team1_score: int | None = None
+    team2_score: int | None = None
 
     @classmethod
     def from_match(cls, match: Match | None) -> Self | None:
@@ -90,8 +89,6 @@ class MatchPublic(MatchBase):
             fixed_map=MapPublic.model_validate(match.fixed_map)
             if match.fixed_map
             else None,
-            team1_score=match.team1_score,
-            team2_score=match.team2_score,
         )
 
     def to_dict(self) -> dict[str, Any]:

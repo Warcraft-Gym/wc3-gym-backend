@@ -11,7 +11,6 @@ from app.api.routes import (
     maps,
     matches,
     public,
-    scores,
     seasons,
     series,
     stats,
@@ -30,7 +29,6 @@ api_router.include_router(public.router)
 api_router.include_router(series.router)
 api_router.include_router(draft_series.router)
 api_router.include_router(maps.router)
-api_router.include_router(scores.router)
 api_router.include_router(fantasy.router)
 api_router.include_router(config.router)
 api_router.include_router(koth.router)

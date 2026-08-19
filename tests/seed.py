@@ -121,8 +121,6 @@ def seed_league(session: Session) -> dict[str, Any]:
         player2_id=players[2].id,
         player1_score=2,
         player2_score=1,
-        player1_points=2,
-        player2_points=1,
         host_player_id=players[0].id,
     )
     series_open = Series(

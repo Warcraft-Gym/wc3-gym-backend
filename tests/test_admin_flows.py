@@ -4,15 +4,12 @@ The league is built the way an administrator builds it: create the players and t
 teams, put the teams in a season, fill the rosters, create the match and the series,
 then enter a result.
 
-Entering a result cascades. PUT /series/{id} converts the map score to points, rewrites
-the per-player season stats, adds the series points into the match score, and rewrites
-final_score, points_against and points_available on both team season rows. The
-assertions walk that chain one step at a time.
+Entering a result writes the map scores and the per-player season stats. The series
+points, the match score and the three standings numbers are sums the response takes
+from the map scores at read time, so they follow a result with no write of their own.
+The assertions walk that chain one step at a time.
 
-The standings a response carries are summed from the series at read time, so they
-follow the map scores whether or not the write path ran.
-
-Two tests are xfail(strict=True) on defects they pin. A fix turns them XPASS and fails
+One test is xfail(strict=True) on the defect it pins. A fix turns it XPASS and fails
 the run, so the marker goes with the fix.
 """
 
@@ -42,7 +39,6 @@ GUARDED_WRITES = [
     ("POST", "/series"),
     ("PUT", "/series/1"),
     ("DELETE", "/series/1"),
-    ("POST", "/season/1/calculate/"),
 ]
 
 
@@ -364,6 +360,22 @@ def test_a_recorded_result_sets_the_series_points(
     assert series["player2_points"] == 1
 
 
+def test_a_result_that_carries_points_is_still_accepted(
+    client: Client, auth_headers: dict[str, str], league: dict[str, Any]
+) -> None:
+    """A client that still sends the points gets a 200, and the map scores
+    price the series."""
+    put(
+        client,
+        auth_headers,
+        f"/series/{league['series_id']}",
+        {"player1_score": 2, "player2_score": 1, "player1_points": 9},
+    )
+
+    series = get(client, f"/series/{league['series_id']}")
+    assert series["player1_points"] == 2
+
+
 def test_a_recorded_sweep_is_worth_three_points(
     client: Client, auth_headers: dict[str, str], league: dict[str, Any]
 ) -> None:
@@ -477,64 +489,20 @@ def test_a_deleted_series_takes_its_points_back(
     assert standings(client, league["team_a_id"], league["season_id"]) == (0, 0, 3)
 
 
-# The recalculation endpoint. The season page calls it, and it rewrites the
-# stored score columns. The standings a response carries are summed from the
-# series, so they are already right before it runs.
+# Rows an import writes. They carry map scores and nothing else, and the
+# standings a response carries are summed from those map scores.
 
 
-def test_the_recalculation_leaves_a_correct_season_alone(
-    client: Client, auth_headers: dict[str, str], league: dict[str, Any]
-) -> None:
-    put(
-        client,
-        auth_headers,
-        f"/series/{league['series_id']}",
-        {"player1_score": 2, "player2_score": 1},
-    )
-    before = standings(client, league["team_a_id"], league["season_id"])
-
-    resp = client.post(
-        f"/season/{league['season_id']}/calculate/", headers=auth_headers
-    )
-    assert resp.status_code == 200
-
-    assert standings(client, league["team_a_id"], league["season_id"]) == before
-
-
-def test_imported_rows_read_their_standings_with_no_recalculation(
+def test_imported_rows_read_their_standings(
     client: Client, seeded: dict[str, Any]
 ) -> None:
     """The seeded league writes its rows through the Session, the shape an
-    import leaves, and its score columns stay empty. The standings still read
-    correct, because the response sums the series it finds."""
+    import leaves. The standings read correct, because the response sums the
+    series it finds."""
     season_id = seeded["season_id"]
     # 4 weeks * 2 series * 3 points is 24 available, less the 2-1 series played
     assert standings(client, seeded["team_a_id"], season_id) == (2, 1, 21)
     assert standings(client, seeded["team_b_id"], season_id) == (1, 2, 21)
-
-
-def test_the_recalculation_keeps_the_series_points(
-    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
-) -> None:
-    """The seeded series is a 2-1, which is 2 points against 1."""
-    season_id = seeded["season_id"]
-    resp = client.post(f"/season/{season_id}/calculate/", headers=auth_headers)
-    assert resp.status_code == 200
-
-    series = get(client, f"/series/{seeded['series_played_id']}")
-    assert (series["player1_points"], series["player2_points"]) == (2, 1)
-
-
-def test_the_recalculation_reports_that_it_finished(
-    client: Client, auth_headers: dict[str, str], league: dict[str, Any]
-) -> None:
-    season_id = league["season_id"]
-    resp = client.post(f"/season/{season_id}/calculate/", headers=auth_headers)
-    assert resp.status_code == 200
-
-    status = get(client, f"/season/{season_id}/calculate/status")
-    assert status["status"] == "completed"
-    assert status["progress"] == 100
 
 
 @pytest.mark.parametrize("method,path", GUARDED_WRITES)
@@ -660,9 +628,8 @@ def test_a_player_race_update_is_held_to_the_same_values(
 
 @pytest.mark.xfail(
     strict=True,
-    reason="update_series scores the request body instead of the stored row, "
-    "so a missing second score reaches getScoreByMapScore as None and its "
-    "bare Exception becomes a 500",
+    reason="a series with one score missing reaches points() as a half result, "
+    "and the ValueError it raises becomes a 500",
 )
 def test_a_result_with_one_score_missing_is_refused(
     client: Client, auth_headers: dict[str, str], league: dict[str, Any]

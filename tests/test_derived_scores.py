@@ -1,14 +1,10 @@
-"""The series points and the match scores come from the map scores.
+"""The series points, the match scores and the standings come from the map scores.
 
-The write path still fills player1_points, player2_points, team1_score and
-team2_score, so a response equals a direct read of those columns whenever the
-two paths run on the same score system. That equality is the proof the derived
-rule is the stored rule.
+Nothing stores them, so every number in a response is a sum the read path takes
+off the map scores and the score system of the season that holds them.
 
-The systems part ways on purpose: the read path takes the system off the season
-and the write path off the global score_system setting, so a helpstone season
-under a standard setting reads 4 points for a sweep and stores 3. The last two
-tests pin that, and the write path is the one that is wrong.
+Every test sets the score_system setting as well, and the seasons still pay by
+their own system. That proves the setting feeds no path any more.
 """
 
 from typing import Any
@@ -17,8 +13,6 @@ import pytest
 from httpx2 import Client
 
 from app.core.db import Session
-from app.models.match import Match
-from app.models.series import Series
 from app.models.settings import Settings
 
 # The five results a series can carry, as (player1_score, player2_score).
@@ -40,7 +34,7 @@ def get(client: Client, path: str) -> Any:  # noqa: ANN401  # a JSON body
 
 
 def set_score_system(system: str) -> None:
-    """The setting the write path reads."""
+    """The setting no path reads any more."""
     with Session() as session:
         session.add(Settings(key="score_system", value=system))
         session.commit()
@@ -126,26 +120,19 @@ def build_season(
     }
 
 
-def stored_series_points(series_id: int) -> tuple[int | None, int | None]:
-    with Session() as session:
-        series = session.get(Series, series_id)
-        return series.player1_points, series.player2_points
+def expected_points(sweep: int, close: int) -> list[tuple[int | None, int | None]]:
+    """What the five results of RESULTS pay, on a scale that tops at sweep."""
+    return [(sweep, 0), (close, 1), (1, close), (0, sweep), (None, None)]
 
 
-def stored_match_score(match_id: int) -> tuple[int | None, int | None]:
-    with Session() as session:
-        match = session.get(Match, match_id)
-        return match.team1_score, match.team2_score
-
-
-# Parity. The season and the setting name the same system, so the two paths
-# compute the same numbers and every response equals the stored column.
+# The scale. A season pays a sweep the top of its own system and a 2-1 one less,
+# and a loser keeps its map score.
 
 
 @pytest.mark.parametrize(
     "system,sweep,close", [("standard", 3, 2), ("helpstone", 4, 3)]
 )
-def test_the_answered_series_points_equal_the_stored_points(
+def test_the_answered_series_points_price_every_result(
     client: Client,
     auth_headers: dict[str, str],
     system: str,
@@ -155,42 +142,49 @@ def test_the_answered_series_points_equal_the_stored_points(
     set_score_system(system)
     league = build_season(client, auth_headers, "Parity", system)
 
-    expected = [(sweep, 0), (close, 1), (1, close), (0, sweep), (None, None)]
+    expected = expected_points(sweep, close)
     for series_id, points in zip(league["series_ids"], expected, strict=True):
         series = get(client, f"/series/{series_id}")
-        answered = (series["player1_points"], series["player2_points"])
-        assert answered == points
-        assert answered == stored_series_points(series_id)
+        assert (series["player1_points"], series["player2_points"]) == points
 
 
-@pytest.mark.parametrize("system", ["standard", "helpstone"])
-def test_the_answered_match_score_equals_the_stored_score(
-    client: Client, auth_headers: dict[str, str], system: str
+@pytest.mark.parametrize(
+    "system,total", [("standard", 3 + 2 + 1 + 0), ("helpstone", 4 + 3 + 1 + 0)]
+)
+def test_the_answered_match_score_sums_its_series(
+    client: Client, auth_headers: dict[str, str], system: str, total: int
 ) -> None:
     set_score_system(system)
     league = build_season(client, auth_headers, "Parity", system)
 
     match = get(client, f"/matches/{league['match_id']}")
-    answered = (match["team1_score"], match["team2_score"])
-    assert answered == stored_match_score(league["match_id"])
     # The five series pay the same total to both sides on either system.
-    assert answered[0] == answered[1]
+    assert (match["team1_score"], match["team2_score"]) == (total, total)
 
 
-@pytest.mark.parametrize("system", ["standard", "helpstone"])
+@pytest.mark.parametrize(
+    "system,sweep,close,total",
+    [("standard", 3, 2, 6), ("helpstone", 4, 3, 8)],
+)
 def test_the_series_list_answers_the_points_of_every_row(
-    client: Client, auth_headers: dict[str, str], system: str
+    client: Client,
+    auth_headers: dict[str, str],
+    system: str,
+    sweep: int,
+    close: int,
+    total: int,
 ) -> None:
     set_score_system(system)
     league = build_season(client, auth_headers, "Parity", system)
 
     rows = get(client, f"/series/season/{league['season_id']}")
     assert len(rows) == len(RESULTS)
+    by_id = dict(zip(league["series_ids"], expected_points(sweep, close), strict=True))
     for row in rows:
-        answered = (row["player1_points"], row["player2_points"])
-        assert answered == stored_series_points(row["id"])
+        assert (row["player1_points"], row["player2_points"]) == by_id[row["id"]]
         assert (row["match"]["team1_score"], row["match"]["team2_score"]) == (
-            stored_match_score(league["match_id"])
+            total,
+            total,
         )
 
 
@@ -206,8 +200,7 @@ def test_an_unplayed_series_answers_no_points(
     assert series["player2_points"] is None
 
 
-# Two seasons on different systems. The setting is standard, so the read path
-# and the write path agree on the first season and part ways on the second.
+# Two seasons on different systems, under one standard setting.
 
 
 @pytest.fixture
@@ -238,11 +231,10 @@ def test_a_search_over_two_seasons_pays_each_row_by_its_own_season(
 def test_a_season_pays_by_its_own_system_and_not_by_the_setting(
     client: Client, two_seasons: dict[str, Any]
 ) -> None:
-    """The write path is still on the setting, so the stored column says 3."""
+    """The setting says standard, and the helpstone sweep still pays 4."""
     series_id = two_seasons["helpstone"]["series_ids"][0]
 
     assert get(client, f"/series/{series_id}")["player1_points"] == 4
-    assert stored_series_points(series_id)[0] == 3
 
 
 # Standings. A team stands at the sum of its derived series points, and the

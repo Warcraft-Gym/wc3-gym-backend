@@ -2,9 +2,9 @@
 scores at read time.
 
 Every number here comes from the map scores of the series and the score system
-of the season that holds them, through app.core.scoring. The stored
+of the season that holds them, through app.core.scoring. Nothing stores
 player1_points, player2_points, team1_score, team2_score, final_score,
-points_against and points_available columns are not read.
+points_against or points_available.
 
 Two statements answer a whole response: one resolves the score system of every
 match or season in it, and one sums the series on that system. points_case

@@ -248,12 +248,6 @@ def process_import(
             "team2_id": new_team2_id,
             "season_id": season_id,
             "playday": int(row["Playday"]),
-            "team1_score": int(row["Team1 Score"])
-            if not pd.isna(row["Team1 Score"])
-            else None,
-            "team2_score": int(row["Team2 Score"])
-            if not pd.isna(row["Team2 Score"])
-            else None,
             "fixed_map_id": map_id_mapping.get(old_fixed_map_id)
             if old_fixed_map_id
             else None,
@@ -320,12 +314,6 @@ def process_import(
             else None,
             "player2_score": int(row["Player2 Score"])
             if not pd.isna(row["Player2 Score"])
-            else None,
-            "player1_points": int(row["Player1 Points"])
-            if not pd.isna(row["Player1 Points"])
-            else None,
-            "player2_points": int(row["Player2 Points"])
-            if not pd.isna(row["Player2 Points"])
             else None,
             "host_player_id": new_host_player_id
             if new_host_player_id

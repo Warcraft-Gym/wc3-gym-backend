@@ -25,7 +25,7 @@ from app.services.series import SeriesService
 
 @pytest.fixture
 def service() -> SeriesService:
-    return SeriesService(score_app_service=None, user_app_service=None)
+    return SeriesService(user_app_service=None)
 
 
 def add_series(**values: object) -> int:

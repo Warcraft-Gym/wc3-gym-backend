@@ -102,7 +102,7 @@ def league(app: FastAPI, seeded: dict[str, Any]) -> dict[str, Any]:
 
 
 def test_get_series_costs_nine_statements(league: dict[str, Any]) -> None:
-    service = SeriesService(score_app_service=None, user_app_service=None)
+    service = SeriesService(user_app_service=None)
     with count_statements() as tally:
         series = service.get(league["series_played_id"])
     assert series.player1.w3c_stats
@@ -111,7 +111,7 @@ def test_get_series_costs_nine_statements(league: dict[str, Any]) -> None:
 
 def test_search_for_season_costs_three_statements(league: dict[str, Any]) -> None:
     """The season list is reduced, so it needs no collection statements."""
-    service = SeriesService(score_app_service=None, user_app_service=None)
+    service = SeriesService(user_app_service=None)
     query = QueryUtil.parseQuery("player1_id > 0")
     with count_statements() as tally:
         series_list = service.searchForSeason(league["season_id"], query)
@@ -123,7 +123,7 @@ def test_search_for_season_costs_three_statements(league: dict[str, Any]) -> Non
 
 def test_career_stats_rows_cost_one_statement(league: dict[str, Any]) -> None:
     """The career recalculation input is one row per series, not the answer."""
-    service = SeriesService(score_app_service=None, user_app_service=None)
+    service = SeriesService(user_app_service=None)
     with count_statements() as tally:
         rows = service.career_stats_rows()
     assert len(rows) == 2
@@ -133,7 +133,7 @@ def test_career_stats_rows_cost_one_statement(league: dict[str, Any]) -> None:
 
 def test_user_season_stats_cost_two_statements(league: dict[str, Any]) -> None:
     """One statement for the counts and one for the matchup history."""
-    service = SeriesService(score_app_service=None, user_app_service=None)
+    service = SeriesService(user_app_service=None)
     with count_statements() as tally:
         stats = service.calculateUserSeasonStats(
             league["player_ids"][0], league["season_id"], league["team_a_id"]
@@ -160,7 +160,7 @@ def test_statement_count_holds_when_the_collections_grow(
                 session.add(W3CStats(user_id=user_id, wc3_season=season, race=Race.HU))
         session.commit()
 
-    service = SeriesService(score_app_service=None, user_app_service=None)
+    service = SeriesService(user_app_service=None)
     with count_statements() as tally:
         series = service.get(league["series_played_id"])
     assert len(series.player1.w3c_stats) == 4 * STATS_PER_PLAYER

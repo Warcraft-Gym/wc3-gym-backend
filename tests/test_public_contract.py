@@ -45,7 +45,6 @@ def public_seed(app: FastAPI) -> dict[str, Any]:
     from app.core.db import Session
     from app.models.enums import Race
     from app.models.fantasy_team import FantasyTeam
-    from app.models.match import Match
     from app.models.player_career_stats import PlayerCareerStats
     from app.models.relationships import DBFantasyTeamPlayer
     from app.models.season import Season
@@ -127,10 +126,6 @@ def public_seed(app: FastAPI) -> dict[str, Any]:
                 Settings(key="current_wc3_season", value=str(WC3_SEASON)),
             ]
         )
-
-        match = session.get(Match, ids["match_id"])
-        match.team1_score = 2
-        match.team2_score = 1
 
         fantasy_team = session.get(FantasyTeam, ids["fantasy_team_id"])
         fantasy_team.player_points = 40

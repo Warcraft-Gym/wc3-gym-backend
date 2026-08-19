@@ -20,11 +20,9 @@ from app.services.koth import KothService
 from app.services.maps import MapService
 from app.services.matches import MatchService
 from app.services.player_career_stats import PlayerCareerStatsService
-from app.services.scores import ScoreService
 from app.services.seasons import SeasonService
 from app.services.series import SeriesService
 from app.services.settings import SettingsService
-from app.services.team_seasons import TeamSeasonService
 from app.services.teams import TeamService
 from app.services.users import UserService
 
@@ -82,19 +80,7 @@ user_service = UserService(settings_app_service=settings_service)
 team_service = TeamService(user_app_service=user_service)
 match_service = MatchService()
 season_service = SeasonService()
-team_season_service = TeamSeasonService()
-score_service = ScoreService(
-    match_service=match_service,
-    serires_service=None,
-    team_service=team_service,
-    team_season_service=team_season_service,
-    season_service=season_service,
-    settings_service=settings_service,
-)
-series_service = SeriesService(
-    score_app_service=score_service, user_app_service=user_service
-)
-score_service.serires_service = series_service  # score and series need each other
+series_service = SeriesService(user_app_service=user_service)
 draft_series_service = DraftSeriesService()
 map_service = MapService()
 fantasy_bet_service = FantasyBetService(settings_app_service=settings_service)
@@ -130,10 +116,6 @@ def get_match_service() -> MatchService:
 
 def get_season_service() -> SeasonService:
     return season_service
-
-
-def get_score_service() -> ScoreService:
-    return score_service
 
 
 def get_series_service() -> SeriesService:
@@ -173,7 +155,6 @@ UserServiceDep = Annotated[UserService, Depends(get_user_service)]
 TeamServiceDep = Annotated[TeamService, Depends(get_team_service)]
 MatchServiceDep = Annotated[MatchService, Depends(get_match_service)]
 SeasonServiceDep = Annotated[SeasonService, Depends(get_season_service)]
-ScoreServiceDep = Annotated[ScoreService, Depends(get_score_service)]
 SeriesServiceDep = Annotated[SeriesService, Depends(get_series_service)]
 DraftSeriesServiceDep = Annotated[DraftSeriesService, Depends(get_draft_series_service)]
 MapServiceDep = Annotated[MapService, Depends(get_map_service)]

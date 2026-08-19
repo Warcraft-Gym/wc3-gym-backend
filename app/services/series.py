@@ -14,7 +14,6 @@ from app.services import derived
 from app.services.base import BaseService
 
 if TYPE_CHECKING:
-    from app.services.scores import ScoreService
     from app.services.users import UserService
 
 logger = logging.getLogger(__name__)
@@ -37,10 +36,7 @@ class CareerSeriesRow(NamedTuple):
 
 
 class SeriesService(BaseService):
-    def __init__(
-        self, score_app_service: "ScoreService", user_app_service: "UserService"
-    ) -> None:
-        self.score_app_service = score_app_service
+    def __init__(self, user_app_service: "UserService") -> None:
         self.user_app_service = user_app_service
 
     def add(self, series: SeriesCreate) -> SeriesPublic:
@@ -194,33 +190,19 @@ class SeriesService(BaseService):
             return result
 
     def create_series(self, series: SeriesCreate) -> SeriesPublic:
-        series = self.score_app_service.calculateSeriesScore(series)
         series = self.add(series)
         self.updateGNLSeasonStats(series)
-        if not series.player1_points and not series.player2_points:
-            return series
-        series.match = self.score_app_service.updateMatchScore(series.match_id)
-
         return series
 
     def update_series(self, series_id: int, series: SeriesUpdate) -> SeriesPublic:
-        series = self.score_app_service.calculateSeriesScore(series)
         series = self.update(series_id, series)
         self.updateGNLSeasonStats(series)
-        if not series.player1_points and not series.player2_points:
-            return series
-
-        series.match = self.score_app_service.updateMatchScore(series.match_id)
-
         return series
 
     def delete_series(self, series_id: int) -> None:
         series = self.get_series(series_id=series_id)
         self.delete(series_id)
         self.updateGNLSeasonStats(series)
-        if not series.player1_points and not series.player2_points:
-            return
-        self.score_app_service.updateMatchScore(series.match_id)
 
     def get_series(self, series_id: int) -> SeriesPublic:
         series_data = self.get(series_id)
