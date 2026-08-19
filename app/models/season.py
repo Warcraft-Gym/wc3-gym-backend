@@ -21,6 +21,12 @@ class SeasonBase(SQLModel):
     start_date: Annotated[date | None, LenientDate] = None
     end_date: Annotated[date | None, LenientDate] = None
     discordRole: Annotated[str | None, NumToStr] = Field(default=None, max_length=50)
+    # The scale the series points use: "standard" or "helpstone"
+    score_system: str = Field(
+        default="standard",
+        max_length=20,
+        sa_column_kwargs={"server_default": "standard"},
+    )
 
 
 class Season(SeasonBase, DBModel, table=True):
@@ -53,6 +59,7 @@ class SeasonUpdate(SQLModel):
     start_date: Annotated[date | None, LenientDate] = None
     end_date: Annotated[date | None, LenientDate] = None
     discordRole: Annotated[str | None, NumToStr] = None
+    score_system: str | None = None
 
 
 class SeasonPublic(SeasonBase):
@@ -60,6 +67,7 @@ class SeasonPublic(SeasonBase):
     # The short form of a season carries only the name, so these read null
     number_weeks: int | None = None
     series_per_week: int | None = None
+    score_system: str | None = None
     start_date: Annotated[IsoDate | None, LenientDate] = None
     end_date: Annotated[IsoDate | None, LenientDate] = None
     maps: Annotated[list[MapPublic], NoneToList] = []
@@ -85,6 +93,7 @@ class SeasonPublic(SeasonBase):
                 if map_season and map_season.map
             ],
             discordRole=season.discordRole,
+            score_system=season.score_system,
         )
 
     @classmethod
@@ -111,6 +120,7 @@ class SeasonPublic(SeasonBase):
             start_date=season.start_date,
             end_date=season.end_date,
             discordRole=season.discordRole,
+            score_system=season.score_system,
         )
 
     def to_dict(self) -> dict[str, Any]:
