@@ -40,6 +40,8 @@ def decode_token(token: str) -> dict[str, Any]:
         token,
         os.getenv("JWT_SECRET_KEY"),
         algorithms=[os.getenv("JWT_ALGORITHM", "HS256")],
+        # A token minted this second must not read as from the future
+        leeway=5,
     )
 
 
