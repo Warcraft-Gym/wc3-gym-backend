@@ -472,7 +472,7 @@ class PlayerCareerStatsService(BaseService):
         updates = []
 
         # Get all existing stats records upfront (more efficient than querying per player)
-        all_existing_stats = self.get_all()
+        all_existing_stats, _ = self.get_all()
 
         # Create lookup dictionaries for fast access
         stats_by_user_id = {
