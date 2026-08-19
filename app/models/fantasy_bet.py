@@ -19,7 +19,6 @@ class FantasyBetBase(SQLModel):
     series_id: int = Field(foreign_key="series.id", ondelete="CASCADE")
     user_id: int = Field(foreign_key="users.id", ondelete="CASCADE")
     winner_id: int = Field(foreign_key="users.id", ondelete="CASCADE")
-    bet_result: int | None = None
 
 
 class FantasyBet(FantasyBetBase, DBModel, table=True):
@@ -105,10 +104,11 @@ class FantasyBetUpdate(SQLModel):
     user_id: int | None = None
     winner_id: int | None = None
     bet_points: Annotated[int | None, EmptyStrToNone] = None
-    bet_result: int | None = None
 
 
 class FantasyBetPublic(FantasyBetBase):
+    # app.services.derived.fill_bet_results answers this one; no column holds it
+    bet_result: int | None = None
     id: int | None = None
     season_id: int | None = None
     series_id: int | None = None
@@ -136,7 +136,6 @@ class FantasyBetPublic(FantasyBetBase):
             winner_id=fbet.winner_id,
             winner=UserPublic.from_user(fbet.winner) if fbet.winner else None,
             bet_points=fbet.bet_points,
-            bet_result=fbet.bet_result,
         )
 
     @classmethod
@@ -160,7 +159,6 @@ class FantasyBetPublic(FantasyBetBase):
             winner_id=fbet.winner_id,
             winner=UserPublic.from_user_reduced(fbet.winner) if fbet.winner else None,
             bet_points=fbet.bet_points,
-            bet_result=fbet.bet_result,
         )
 
     def to_dict(self) -> dict[str, Any]:

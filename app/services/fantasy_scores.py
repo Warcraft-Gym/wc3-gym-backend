@@ -2,8 +2,6 @@ from typing import TYPE_CHECKING, Any
 
 from app.core import fantasy
 from app.core.query import QueryUtil
-from app.models.fantasy_bet import FantasyBetUpdate
-from app.models.fantasy_team import FantasyTeamUpdate
 from app.services import derived
 from app.services.fantasy_bets import FantasyBetService
 from app.services.fantasy_teams import FantasyTeamService
@@ -96,37 +94,6 @@ class FantasyScoreService:
             number_weeks=season.number_weeks,
             include_breakdown=include_breakdown,
         )
-
-    def calculateTeamScores(self, season: "SeasonPublic") -> None:
-        series_by_week = self._season_series_by_week(season)
-        race_points = self._calculate_race_points(
-            season, series_by_week, include_weekly_details=False
-        )
-
-        fteams = self.fantasy_team_service.getAll_for_scoring()
-        if fteams:
-            for fteam in fteams:
-                scores = self._calculate_fantasy_team_scores(
-                    fteam, season, race_points, series_by_week, include_breakdown=False
-                )
-
-                # The bet update writes a result, so it skips bet-points validation
-                for bet_id, bet_result in scores["bet_results"]:
-                    self.fantasy_bet_service.update(
-                        bet_id, FantasyBetUpdate(bet_result=bet_result)
-                    )
-
-                self.fantasy_team_service.update(
-                    fteam.id,
-                    FantasyTeamUpdate(
-                        player_points=scores["player_points"],
-                        bench_points=scores["bench_points"],
-                        team_points=scores["team_points"],
-                        race_points=scores["race_points"],
-                        bet_points=scores["bet_points"],
-                        total_points=scores["total_points"],
-                    ),
-                )
 
     def getTeamScoreBreakdown(
         self, fantasy_team_id: int, season: "SeasonPublic"

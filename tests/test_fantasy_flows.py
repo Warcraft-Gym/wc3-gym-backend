@@ -1,4 +1,4 @@
-"""The fantasy write flows: score calculation, bets, team players.
+"""The fantasy flows: the team scores, the bets and the team players.
 
 The seeded league has one fantasy team with no drafted players. Its
 captain P1 won the only played series 2-1 with a 10-point bet on
@@ -17,14 +17,9 @@ def get_json(client: Client, path: str) -> Any:  # noqa: ANN401  # a JSON body
     return resp.json()
 
 
-def test_calculate_writes_totals_and_bet_results(
-    client: Client, seeded: dict[str, Any], auth_headers: dict[str, str]
+def test_a_team_answers_its_totals_and_its_bet_results(
+    client: Client, seeded: dict[str, Any]
 ) -> None:
-    resp = client.post(
-        f"/fantasy/season/{seeded['season_id']}/calculate/", headers=auth_headers
-    )
-    assert resp.status_code == 204
-
     team = get_json(client, f"/fantasy/teams/{seeded['fantasy_team_id']}")
     assert team["player_points"] == 0
     assert team["bench_points"] == 0
@@ -38,7 +33,7 @@ def test_calculate_writes_totals_and_bet_results(
     assert bets[0]["bet_result"] == 10
 
 
-def test_calculate_scores_drafted_players(
+def test_a_drafted_player_scores_for_his_team(
     client: Client, seeded: dict[str, Any], auth_headers: dict[str, str]
 ) -> None:
     """A drafted player earns series points for played weeks and bench
@@ -51,11 +46,6 @@ def test_calculate_scores_drafted_players(
         headers=auth_headers,
     )
     assert resp.status_code == 200
-
-    resp = client.post(
-        f"/fantasy/season/{seeded['season_id']}/calculate/", headers=auth_headers
-    )
-    assert resp.status_code == 204
 
     team = get_json(client, f"/fantasy/teams/{team_id}")
     # Week 1: won 2-1 = 8 points. Weeks 2-4: no series = 3 * 5 bench points.
@@ -156,17 +146,6 @@ def test_player_management_rejects_bad_input(
         resp = client.post(path, json=body, headers=auth_headers)
         assert resp.status_code == 404, path
         assert "error" in resp.json()
-
-
-def test_calculate_twice_is_stable(
-    client: Client, seeded: dict[str, Any], auth_headers: dict[str, str]
-) -> None:
-    path = f"/fantasy/season/{seeded['season_id']}/calculate/"
-    assert client.post(path, headers=auth_headers).status_code == 204
-    first = get_json(client, f"/fantasy/teams/{seeded['fantasy_team_id']}")
-    assert client.post(path, headers=auth_headers).status_code == 204
-    second = get_json(client, f"/fantasy/teams/{seeded['fantasy_team_id']}")
-    assert first == second
 
 
 def test_bets_list_pages_by_id_and_reports_the_total(

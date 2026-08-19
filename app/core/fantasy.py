@@ -282,8 +282,6 @@ def team_scores(
         "race_points": 0,
         "bet_points": 0,
         "total_points": 0,
-        # (bet id, points) per decided bet, so the caller does not evaluate again
-        "bet_results": [],
     }
 
     if include_breakdown:
@@ -405,7 +403,6 @@ def team_scores(
         series_winner = bet.series.winner()
         won_bet = bet.winner_id == series_winner.id
         result["bet_points"] += points
-        result["bet_results"].append((bet.id, points))
 
         if include_breakdown:
             result["bet_breakdown"].append(

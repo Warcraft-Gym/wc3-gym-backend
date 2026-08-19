@@ -1,21 +1,18 @@
 """The fantasy scores come from the map scores at read time.
 
-Two things are proven here. First that the read path answers what the stored
-recalculation wrote: the whole body of every fantasy read matches, byte for
-byte, the same body with the six stored columns pasted back in. Second that
-every fantasy team now scores against the season it names, which the stored
-path could not do.
+No column holds them, so these tests pin the answer: the six score fields of
+every fantasy team and the result of every bet, on every route that answers
+one, plus the key order of both shapes. A second league proves that every
+fantasy team scores against the season it names.
 
 The seeded leagues are built through the models, so no test setup depends on
 the write API.
 """
 
-import json
 from typing import Any
 
 import pytest
 from httpx2 import Client
-from sqlalchemy import select
 
 from app.core.db import Session
 from app.models.enums import Race
@@ -49,28 +46,38 @@ def player(name: str, race: Race) -> User:
     )
 
 
-def stored_team_scores() -> dict[int, dict[str, int | None]]:
-    """The six columns the recalculation writes, straight off the table."""
-    with Session() as session:
-        rows = session.execute(
-            select(
-                FantasyTeam.id,
-                FantasyTeam.player_points,
-                FantasyTeam.bench_points,
-                FantasyTeam.team_points,
-                FantasyTeam.race_points,
-                FantasyTeam.bet_points,
-                FantasyTeam.total_points,
-            )
-        ).all()
-    return {row[0]: dict(zip(SCORE_FIELDS, row[1:], strict=True)) for row in rows}
+TEAM_KEYS = [
+    "name",
+    "season_id",
+    "captain_id",
+    "drafted_team_id",
+    "player_points",
+    "bench_points",
+    "team_points",
+    "race_points",
+    "bet_points",
+    "total_points",
+    "id",
+    "drafted_race",
+    "season",
+    "captain",
+    "drafted_team",
+    "drafted_players",
+]
 
-
-def stored_bet_results() -> dict[int, int | None]:
-    """The bet_result column, straight off the table."""
-    with Session() as session:
-        rows = session.execute(select(FantasyBet.id, FantasyBet.bet_result)).all()
-    return dict(rows)
+BET_KEYS = [
+    "season_id",
+    "series_id",
+    "user_id",
+    "winner_id",
+    "bet_result",
+    "id",
+    "bet_points",
+    "season",
+    "series",
+    "user",
+    "winner",
+]
 
 
 def get(client: Client, path: str) -> Any:  # noqa: ANN401  # a JSON body
@@ -190,108 +197,136 @@ def league(client: Client) -> dict[str, Any]:
         return {"season_id": season.id, "team_ids": [first.id, second.id]}
 
 
-# Parity. The recalculation writes the six columns, and the read path answers
-# the same numbers without reading them.
+# Every route that answers a fantasy team or a bet pins the same numbers.
+
+# D1 swept week 1 for 10 and lost week 2 for 4; D2's series has no result.
+# D2 stands in a week 1 series and in none in week 2, so he benches once for 5.
+# Team One took 3 off the sweep and 1 off the close loss. HU tops week 1 and NE
+# tops week 2, so each takes 18. The right call pays 10, the wrong one costs 4,
+# and the call on the open series pays nothing.
+FIRST = (14, 5, 4, 18, 6, 47)
+# Second drafts D3, who lost week 1 and won week 2, and never benches. Team Two
+# took 2, OC tops no week, and its captain's only bet sits on the open series.
+SECOND = (8, 0, 2, 0, 0, 10)
+# The right call pays its stake, the wrong one costs it, the open series pays
+# nothing at all
+BET_RESULTS = [10, -4, None]
 
 
-@pytest.fixture
-def calculated(
+def scores(team: dict[str, Any]) -> tuple[int, ...]:
+    return tuple(team[field] for field in SCORE_FIELDS)
+
+
+def test_the_team_list_pays_every_team(client: Client, league: dict[str, Any]) -> None:
+    teams = {team["name"]: team for team in get(client, "/fantasy/teams")}
+    assert len(teams) == 2
+    assert scores(teams["First"]) == FIRST
+    assert scores(teams["Second"]) == SECOND
+
+
+def test_the_team_search_pays_the_same_numbers(
+    client: Client, league: dict[str, Any]
+) -> None:
+    found = post(
+        client, f"/fantasy/teams/search?query=season_id == {league['season_id']}"
+    )
+    teams = {team["name"]: team for team in found}
+    assert len(teams) == 2
+    assert scores(teams["First"]) == FIRST
+    assert scores(teams["Second"]) == SECOND
+
+
+def test_the_paged_team_search_pays_the_same_numbers(
+    client: Client, league: dict[str, Any]
+) -> None:
+    found = post(
+        client,
+        f"/fantasy/teams/search?query=season_id == {league['season_id']}"
+        "&limit=1&offset=0",
+    )
+    assert len(found) == 1
+    assert scores(found[0]) == FIRST
+
+
+def test_one_team_pays_the_same_numbers(client: Client, league: dict[str, Any]) -> None:
+    team = get(client, f"/fantasy/teams/{league['team_ids'][0]}")
+    assert scores(team) == FIRST
+
+
+def test_the_bets_answer_their_results(client: Client, league: dict[str, Any]) -> None:
+    bets = get(client, "/fantasy/bets")
+    assert [bet["bet_result"] for bet in bets] == BET_RESULTS
+
+    found = post(
+        client, f"/fantasy/bets/search?query=season_id == {league['season_id']}"
+    )
+    assert [bet["bet_result"] for bet in found] == BET_RESULTS
+
+    one = get(client, f"/fantasy/bets/{bets[0]['id']}")
+    assert one["bet_result"] == BET_RESULTS[0]
+
+
+def test_the_field_order_is_unchanged(client: Client, league: dict[str, Any]) -> None:
+    """The response keys, in order, so a model edit cannot reshuffle them."""
+    assert list(get(client, "/fantasy/teams")[0]) == TEAM_KEYS
+    assert list(get(client, "/fantasy/bets")[0]) == BET_KEYS
+
+
+def test_the_calculate_route_is_gone(
     client: Client, auth_headers: dict[str, str], league: dict[str, Any]
-) -> dict[str, Any]:
+) -> None:
+    """No write refreshes the fantasy scores, because the reads compute them."""
     resp = client.post(
         f"/fantasy/season/{league['season_id']}/calculate/", headers=auth_headers
     )
-    assert resp.status_code == 204, resp.text
-    return league
+    assert resp.status_code == 404
+    paths = client.get("/openapi.json").json()["paths"]
+    assert "/fantasy/season/{season_id}/calculate/" not in paths
 
 
-def with_stored_scores(teams: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """The same rows, with the six derived fields replaced by the columns.
-
-    Replacing a key keeps its place, so the two bodies differ in nothing but
-    the six values.
-    """
-    stored = stored_team_scores()
-    return [{**team, **stored[team["id"]]} for team in teams]
-
-
-def with_stored_results(bets: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """The same rows, with bet_result replaced by the column."""
-    stored = stored_bet_results()
-    return [{**bet, "bet_result": stored[bet["id"]]} for bet in bets]
-
-
-def test_the_team_list_answers_the_stored_numbers(
-    client: Client, calculated: dict[str, Any]
+def test_a_team_write_that_still_sends_the_scores_is_accepted(
+    client: Client, auth_headers: dict[str, str], league: dict[str, Any]
 ) -> None:
-    teams = get(client, "/fantasy/teams")
-    assert len(teams) == 2
-    assert json.dumps(teams) == json.dumps(with_stored_scores(teams))
-
-
-def test_the_team_search_answers_the_stored_numbers(
-    client: Client, calculated: dict[str, Any]
-) -> None:
-    teams = post(
-        client,
-        f"/fantasy/teams/search?query=season_id == {calculated['season_id']}",
+    """An old client sends the dropped fields, and the answer ignores them."""
+    resp = client.put(
+        f"/fantasy/teams/{league['team_ids'][0]}",
+        json={
+            "name": "Renamed",
+            "player_points": 9999,
+            "bench_points": 9999,
+            "team_points": 9999,
+            "race_points": 9999,
+            "bet_points": 9999,
+            "total_points": 9999,
+        },
+        headers=auth_headers,
     )
-    assert len(teams) == 2
-    assert json.dumps(teams) == json.dumps(with_stored_scores(teams))
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["name"] == "Renamed"
+    assert scores(body) == FIRST
 
 
-def test_the_paged_team_search_answers_the_stored_numbers(
-    client: Client, calculated: dict[str, Any]
+def test_a_bet_write_that_still_sends_the_result_is_accepted(
+    client: Client, auth_headers: dict[str, str], league: dict[str, Any]
 ) -> None:
-    teams = post(
-        client,
-        f"/fantasy/teams/search?query=season_id == {calculated['season_id']}"
-        "&limit=1&offset=0",
+    """The admin page sends bet_result: null on every bet it creates."""
+    bet = get(client, "/fantasy/bets")[0]
+    resp = client.post(
+        "/fantasy/bets",
+        json={
+            "season_id": bet["season_id"],
+            "series_id": bet["series_id"],
+            "user_id": bet["winner_id"],
+            "winner_id": bet["winner_id"],
+            "bet_points": 3,
+            "bet_result": None,
+        },
+        headers=auth_headers,
     )
-    assert len(teams) == 1
-    assert json.dumps(teams) == json.dumps(with_stored_scores(teams))
-
-
-def test_one_team_answers_the_stored_numbers(
-    client: Client, calculated: dict[str, Any]
-) -> None:
-    team = get(client, f"/fantasy/teams/{calculated['team_ids'][0]}")
-    assert json.dumps([team]) == json.dumps(with_stored_scores([team]))
-
-
-def test_the_bets_answer_the_stored_results(
-    client: Client, calculated: dict[str, Any]
-) -> None:
-    bets = get(client, "/fantasy/bets")
-    assert len(bets) == 3
-    assert json.dumps(bets) == json.dumps(with_stored_results(bets))
-
-    found = post(
-        client, f"/fantasy/bets/search?query=season_id == {calculated['season_id']}"
-    )
-    assert len(found) == 3
-    assert json.dumps(found) == json.dumps(with_stored_results(found))
-
-
-def test_the_read_path_needs_no_recalculation(
-    client: Client, league: dict[str, Any]
-) -> None:
-    """Nothing has run the calculate route, and the answer already stands."""
-    with Session() as session:
-        assert session.scalars(select(FantasyTeam.total_points)).all() == [None, None]
-
-    teams = {team["name"]: team for team in get(client, "/fantasy/teams")}
-    # D1 swept week 1 for 10 and lost week 2 for 4, D2's series has no result
-    assert teams["First"]["player_points"] == 14
-    # D2 stands in a week 1 series and in none in week 2, so he benches once
-    assert teams["First"]["bench_points"] == 5
-    # Team One took 3 off the sweep and 1 off the close loss
-    assert teams["First"]["team_points"] == 4
-    # HU tops week 1 and NE tops week 2, so each takes 18
-    assert teams["First"]["race_points"] == 18
-    # The right call pays 10, the wrong one costs 4, the open series pays nothing
-    assert teams["First"]["bet_points"] == 6
-    assert teams["First"]["total_points"] == 14 + 5 + 4 + 18 + 6
+    assert resp.status_code == 201, resp.text
+    # The call is right, so the new bet pays its stake straight away
+    assert resp.json()["bet_result"] == 3
 
 
 # Two seasons. Every fantasy team scores against the season it names.
@@ -388,11 +423,7 @@ def two_seasons(client: Client) -> dict[str, Any]:
             ]
         )
         session.commit()
-        return {
-            "season_a": season_a.id,
-            "season_b": season_b.id,
-            "fantasy_b": fantasy_b.id,
-        }
+        return {"season_a": season_a.id, "season_b": season_b.id}
 
 
 # Fantasy A over season A: a 2-0 pays 10, week 2 sits on the bench for 5,
@@ -403,16 +434,12 @@ FANTASY_A = (10, 5, 3, 18, 10, 46)
 FANTASY_B = (8, 0, 2, 18, -7, 21)
 
 
-def scores(team: dict[str, Any]) -> tuple[int, ...]:
-    return tuple(team[field] for field in SCORE_FIELDS)
-
-
 def test_one_answer_pays_each_team_by_its_own_season(
     client: Client, two_seasons: dict[str, Any]
 ) -> None:
     """One list holds both seasons, and each row reads the season it names.
 
-    The stored path could not do this: calculateTeamScores took one season and
+    The deleted calculate route could not do this: it took one season and
     scored every fantasy team of the league against it, so calculating season A
     stamped season-A weeks, season-A race table and season-A standings onto the
     teams of season B.
@@ -432,21 +459,3 @@ def test_a_season_scoped_search_pays_the_same_numbers(
         found = post(client, f"/fantasy/teams/search?query=season_id == {season}")
         assert len(found) == 1
         assert scores(found[0]) == expected
-
-
-def test_calculating_one_season_does_not_move_the_other(
-    client: Client, auth_headers: dict[str, str], two_seasons: dict[str, Any]
-) -> None:
-    """The recalculation of season A writes season-A numbers onto the team of
-    season B, and the read path still answers season B."""
-    resp = client.post(
-        f"/fantasy/season/{two_seasons['season_a']}/calculate/", headers=auth_headers
-    )
-    assert resp.status_code == 204
-
-    stored = stored_team_scores()[two_seasons["fantasy_b"]]
-    # Two weeks on the bench for the one player, and nothing else pays
-    assert tuple(stored[field] for field in SCORE_FIELDS) == (0, 10, 0, 0, 0, 10)
-
-    team = get(client, f"/fantasy/teams/{two_seasons['fantasy_b']}")
-    assert scores(team) == FANTASY_B

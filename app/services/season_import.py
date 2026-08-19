@@ -384,24 +384,6 @@ def process_import(
                 "captain_id": new_captain_id,
                 "drafted_team_id": new_drafted_team_id,
                 "drafted_race": cell_value(row["Drafted Race"]),
-                "player_points": int(row["Player Points"])
-                if not pd.isna(row["Player Points"])
-                else 0,
-                "bench_points": int(row["Bench Points"])
-                if not pd.isna(row["Bench Points"])
-                else 0,
-                "team_points": int(row["Team Points"])
-                if not pd.isna(row["Team Points"])
-                else 0,
-                "race_points": int(row["Race Points"])
-                if not pd.isna(row["Race Points"])
-                else 0,
-                "bet_points": int(row["Bet Points"])
-                if not pd.isna(row["Bet Points"])
-                else 0,
-                "total_points": int(row["Total Points"])
-                if not pd.isna(row["Total Points"])
-                else 0,
             }
 
             # Check if fantasy team exists
@@ -485,9 +467,6 @@ def process_import(
                 "bet_points": int(row["Bet Points"])
                 if not pd.isna(row["Bet Points"])
                 else 0,
-                "bet_result": int(row["Bet Result"])
-                if not pd.isna(row["Bet Result"])
-                else None,
             }
 
             # Check if bet exists

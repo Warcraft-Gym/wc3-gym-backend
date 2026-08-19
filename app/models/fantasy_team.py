@@ -22,12 +22,6 @@ class FantasyTeamBase(SQLModel):
     drafted_team_id: int | None = Field(
         default=None, foreign_key="teams.id", ondelete="CASCADE"
     )
-    player_points: int | None = None
-    bench_points: int | None = None
-    team_points: int | None = None
-    race_points: int | None = None
-    bet_points: int | None = None
-    total_points: int | None = None
 
 
 class FantasyTeam(FantasyTeamBase, DBModel, table=True):
@@ -65,15 +59,16 @@ class FantasyTeamUpdate(SQLModel):
     captain_id: int | None = None
     drafted_team_id: int | None = None
     drafted_race: Annotated[Race | None, SuggestRace] = None
+
+
+class FantasyTeamPublic(FantasyTeamBase):
+    # app.services.derived.fill_fantasy_teams answers these six; no column holds them
     player_points: int | None = None
     bench_points: int | None = None
     team_points: int | None = None
     race_points: int | None = None
     bet_points: int | None = None
     total_points: int | None = None
-
-
-class FantasyTeamPublic(FantasyTeamBase):
     id: int | None = None
     name: Annotated[str | None, NumToStr] = None
     season_id: int | None = None
@@ -109,12 +104,6 @@ class FantasyTeamPublic(FantasyTeamBase):
             else None,
             drafted_race=fteam.drafted_race,
             drafted_players=drafted_players,
-            player_points=fteam.player_points,
-            bench_points=fteam.bench_points,
-            team_points=fteam.team_points,
-            race_points=fteam.race_points,
-            bet_points=fteam.bet_points,
-            total_points=fteam.total_points,
         )
 
     def to_dict(self) -> dict[str, Any]:

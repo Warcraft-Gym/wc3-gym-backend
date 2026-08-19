@@ -126,13 +126,6 @@ def public_seed(app: FastAPI) -> dict[str, Any]:
             ]
         )
 
-        fantasy_team = session.get(FantasyTeam, ids["fantasy_team_id"])
-        fantasy_team.player_points = 40
-        fantasy_team.bench_points = 5
-        fantasy_team.team_points = 12
-        fantasy_team.race_points = 8
-        fantasy_team.bet_points = 10
-        fantasy_team.total_points = 75
         session.add_all(
             [
                 DBFantasyTeamPlayer(
@@ -149,12 +142,6 @@ def public_seed(app: FastAPI) -> dict[str, Any]:
             captain_id=ids["player_ids"][2],
             drafted_team_id=ids["team_b_id"],
             drafted_race=Race.NE,
-            player_points=0,
-            bench_points=0,
-            team_points=0,
-            race_points=0,
-            bet_points=0,
-            total_points=0,
         )
         session.add(empty_team)
         session.flush()

@@ -1,7 +1,7 @@
 import logging
 
 from sqlalchemy import select
-from sqlalchemy.orm import joinedload, noload
+from sqlalchemy.orm import joinedload
 
 from app.core.exceptions import NotFoundError
 from app.core.query import QueryElement, QueryUtil
@@ -12,8 +12,6 @@ from app.models.fantasy_team import (
     FantasyTeamUpdate,
 )
 from app.models.relationships import DBFantasyTeamPlayer
-from app.models.team import Team
-from app.models.team_season import DBTeamSeason
 from app.models.user import User
 from app.services import derived
 from app.services.base import BaseService
@@ -25,7 +23,9 @@ class FantasyTeamService(BaseService):
     def add(self, fantasy_team: FantasyTeamCreate) -> FantasyTeamPublic:
         with self.get_session() as session:
             fantasy_team = FantasyTeam.add(session, fantasy_team.model_dump())
-            return FantasyTeamPublic.from_fantasy_team(fantasy_team)
+            public = FantasyTeamPublic.from_fantasy_team(fantasy_team)
+            derived.fill_fantasy_teams(session, [public])
+            return public
 
     def update(
         self, fantasy_team_id: int, fantasy_team: FantasyTeamUpdate
@@ -38,7 +38,9 @@ class FantasyTeamService(BaseService):
             )
             if not fantasy_team:
                 raise NotFoundError("Fantasy Team not found")
-            return FantasyTeamPublic.from_fantasy_team(fantasy_team)
+            public = FantasyTeamPublic.from_fantasy_team(fantasy_team)
+            derived.fill_fantasy_teams(session, [public])
+            return public
 
     def delete(self, fantasy_team_id: int) -> None:
         with self.get_session() as session:
@@ -75,37 +77,6 @@ class FantasyTeamService(BaseService):
             for fteam in fteams:
                 result.append(FantasyTeamPublic.from_fantasy_team(fteam))
             derived.fill_fantasy_teams(session, result)
-            return result
-
-    def getAll_for_scoring(self) -> list[FantasyTeamPublic]:
-        """The score recalculation reads the drafted team's seasons_info."""
-        with self.get_session() as session:
-            result = []
-            fteams = (
-                session.scalars(
-                    select(FantasyTeam).options(
-                        joinedload(FantasyTeam.season).noload("*"),
-                        joinedload(FantasyTeam.captain).noload("*"),
-                        joinedload(FantasyTeam.drafted_players)
-                        .joinedload(DBFantasyTeamPlayer.users)
-                        .noload("*"),
-                        joinedload(FantasyTeam.drafted_team).noload(Team.user_seasons),
-                        joinedload(FantasyTeam.drafted_team)
-                        .selectinload(Team.season_info)
-                        .options(
-                            noload(DBTeamSeason.coach_1),
-                            noload(DBTeamSeason.coach_2),
-                            noload(DBTeamSeason.coach_3),
-                            noload(DBTeamSeason.season),
-                        ),
-                    )
-                )
-                .unique()
-                .all()
-            )
-            for fteam in fteams:
-                result.append(FantasyTeamPublic.from_fantasy_team(fteam))
-            derived.fill_standings(session, [f.drafted_team for f in result])
             return result
 
     def search(
@@ -154,7 +125,9 @@ class FantasyTeamService(BaseService):
                 if not already_exists:
                     session.add(DBFantasyTeamPlayer(users=user, fantasy_team=fteam))
             session.flush()
-            return FantasyTeamPublic.from_fantasy_team(fteam)
+            public = FantasyTeamPublic.from_fantasy_team(fteam)
+            derived.fill_fantasy_teams(session, [public])
+            return public
 
     def removePlayers(self, team_id: int, player_ids: list[int]) -> FantasyTeamPublic:
         with self.get_session() as session:
@@ -175,7 +148,9 @@ class FantasyTeamService(BaseService):
                     )
                 session.delete(user_team)
             session.flush()
-            return FantasyTeamPublic.from_fantasy_team(fteam)
+            public = FantasyTeamPublic.from_fantasy_team(fteam)
+            derived.fill_fantasy_teams(session, [public])
+            return public
 
     def create_fantasy_team(self, team: FantasyTeamCreate) -> FantasyTeamPublic:
         return self.add(team)

@@ -195,18 +195,3 @@ def get_fantasy_team_breakdown(
     # get_season raises NotFoundError, which answers 404
     season = season_service.get_season(season_id)
     return fantasy_score_service.getTeamScoreBreakdown(team_id, season)
-
-
-@router.post(
-    "/fantasy/season/{season_id}/calculate/",
-    status_code=204,
-    dependencies=[Depends(require_admin)],
-)
-def calc_fantasy_score(
-    season_id: int,
-    season_service: SeasonServiceDep,
-    fantasy_score_service: FantasyScoreServiceDep,
-) -> None:
-    """Calculate the fantasy scores of a given season."""
-    season = season_service.get_season(season_id)
-    fantasy_score_service.calculateTeamScores(season)

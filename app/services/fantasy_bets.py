@@ -31,6 +31,7 @@ class FantasyBetService(BaseService):
             fbet = FantasyBet.add(session, fantasy_bet.model_dump())
             public = FantasyBetPublic.from_fantasy_bet(fbet)
             derived.fill_series(session, [public.series])
+            derived.fill_bet_results([public])
             return public
 
     def update(
@@ -46,6 +47,7 @@ class FantasyBetService(BaseService):
                 raise NotFoundError("Fantasy Bet not found")
             public = FantasyBetPublic.from_fantasy_bet(fantasy_bet)
             derived.fill_series(session, [public.series])
+            derived.fill_bet_results([public])
             return public
 
     def delete(self, fantasy_bet_id: int) -> None:
