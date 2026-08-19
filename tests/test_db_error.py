@@ -18,7 +18,7 @@ from app.models.map import Map
 def test_a_database_error_answers_a_fixed_message(
     client: Client, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    def broken(session: Session) -> Never:
+    def broken(session: Session, **kwargs: object) -> Never:
         raise OperationalError("SELECT secret FROM maps", {}, Exception("boom"))
 
     monkeypatch.setattr(Map, "getAll", broken)

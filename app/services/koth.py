@@ -151,17 +151,21 @@ class KothService(BaseService):
                 return None
             return KothSignupPublic.model_validate(signup)
 
-    def get_signups_by_event(self, event_id: int) -> list[KothSignupPublic]:
+    def get_signups_by_event(
+        self, event_id: int, limit: int | None = None, offset: int = 0
+    ) -> list[KothSignupPublic]:
         with self.get_session() as session:
-            signups = (
-                session.scalars(
-                    select(KothSignup)
-                    .where(KothSignup.event_id == event_id)
-                    .order_by(KothSignup.bracket, KothSignup.mmr.desc())
-                )
-                .unique()
-                .all()
+            statement = (
+                select(KothSignup)
+                .where(KothSignup.event_id == event_id)
+                .order_by(KothSignup.bracket, KothSignup.mmr.desc())
             )
+            if limit is not None or offset:
+                # The id breaks the ties the bracket and mmr order leaves
+                statement = statement.order_by(KothSignup.id).offset(offset)
+                if limit is not None:
+                    statement = statement.limit(limit)
+            signups = session.scalars(statement).unique().all()
             return [KothSignupPublic.model_validate(s) for s in signups]
 
     def create_signup_from_twitch(
@@ -375,22 +379,25 @@ class KothService(BaseService):
                 return None
             return KothMatchPublic.model_validate(match)
 
-    def get_matches_by_event(self, event_id: int) -> list[KothMatchPublic]:
+    def get_matches_by_event(
+        self, event_id: int, limit: int | None = None, offset: int = 0
+    ) -> list[KothMatchPublic]:
         with self.get_session() as session:
-            matches = (
-                session.scalars(
-                    select(KothMatch)
-                    .options(
-                        joinedload(KothMatch.participants).joinedload(
-                            KothMatchParticipant.signup
-                        )
+            statement = (
+                select(KothMatch)
+                .options(
+                    joinedload(KothMatch.participants).joinedload(
+                        KothMatchParticipant.signup
                     )
-                    .where(KothMatch.event_id == event_id)
-                    .order_by(KothMatch.bracket, KothMatch.id)
                 )
-                .unique()
-                .all()
+                .where(KothMatch.event_id == event_id)
+                .order_by(KothMatch.bracket, KothMatch.id)
             )
+            if limit is not None or offset:
+                statement = statement.offset(offset)
+                if limit is not None:
+                    statement = statement.limit(limit)
+            matches = session.scalars(statement).unique().all()
             return [KothMatchPublic.model_validate(m) for m in matches]
 
     def create_match(

@@ -102,7 +102,9 @@ class FantasyTeamService(BaseService):
                 result.append(FantasyTeamPublic.from_fantasy_team(fteam))
             return result
 
-    def search(self, query: QueryElement | None) -> list[FantasyTeamPublic]:
+    def search(
+        self, query: QueryElement | None, limit: int | None = None, offset: int = 0
+    ) -> list[FantasyTeamPublic]:
         with self.get_session() as session:
             result = []
             filter = QueryUtil.convertQueryToDBFilter(FantasyTeam, query)
@@ -110,13 +112,15 @@ class FantasyTeamService(BaseService):
                 logger.debug(f"No fantasy team found by searchcriteria: {query}")
                 return result
             # Eager load only the relations the response model reads
-            fteams = (
-                session.scalars(
-                    select(FantasyTeam).options(*self._reduced_options).where(filter)
-                )
-                .unique()
-                .all()
+            statement = (
+                select(FantasyTeam).options(*self._reduced_options).where(filter)
             )
+            if limit is not None or offset:
+                # Offset paging is deterministic only with a fixed order
+                statement = statement.order_by(FantasyTeam.id).offset(offset)
+                if limit is not None:
+                    statement = statement.limit(limit)
+            fteams = session.scalars(statement).unique().all()
             if not fteams:
                 logger.debug(f"No fantasy team found by searchcriteria: {query}")
                 return result
@@ -187,9 +191,9 @@ class FantasyTeamService(BaseService):
         return self.getAll()
 
     def search_fantasy_teams(
-        self, query: QueryElement | None
+        self, query: QueryElement | None, limit: int | None = None, offset: int = 0
     ) -> list[FantasyTeamPublic]:
-        return self.search(query)
+        return self.search(query, limit=limit, offset=offset)
 
     def addFantasyPlayers(self, team_id: int, players: list[int]) -> FantasyTeamPublic:
         return self.addPlayers(team_id, players)

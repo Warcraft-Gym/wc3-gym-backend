@@ -1,6 +1,7 @@
 import logging
+from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from app.api.deps import SeriesServiceDep, require_admin
 from app.core.exceptions import BadRequestError
@@ -50,35 +51,60 @@ def get_series(series_id: int, service: SeriesServiceDep) -> SeriesPublic:
 
 
 @router.post("/series/search")
-def search_series(service: SeriesServiceDep, query: str = "") -> list[SeriesPublic]:
+def search_series(
+    service: SeriesServiceDep,
+    query: str = "",
+    limit: Annotated[int, Query(ge=1, le=500)] = 500,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> list[SeriesPublic]:
     """Search series by criteria using a custom query format."""
     parsed_query = QueryUtil.parseQuery(query)
     if not parsed_query or not parsed_query.elementA:
         raise BadRequestError(f"No valid query found: {query}")
-    return service.search(parsed_query) or []
+    return service.search(parsed_query, limit=limit, offset=offset) or []
 
 
 @router.post("/series/season/{season_id}/playday/{playday}/search")
 def search_series_by_season_and_playday(
-    season_id: int, playday: int, service: SeriesServiceDep, query: str = ""
+    season_id: int,
+    playday: int,
+    service: SeriesServiceDep,
+    query: str = "",
+    limit: Annotated[int, Query(ge=1, le=500)] = 500,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[SeriesPublic]:
     """Return series matching the search query for a specific season and a specific playday"""
     parsed_query = QueryUtil.parseQuery(query)
-    return service.searchForSeasonAndPlayday(season_id, playday, parsed_query) or []
+    return (
+        service.searchForSeasonAndPlayday(
+            season_id, playday, parsed_query, limit=limit, offset=offset
+        )
+        or []
+    )
 
 
 @router.get("/series/season/{season_id}")
 def get_series_by_season(
-    season_id: int, service: SeriesServiceDep
+    season_id: int,
+    service: SeriesServiceDep,
+    limit: Annotated[int, Query(ge=1, le=500)] = 500,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[SeriesPublic]:
-    """Return all series for a specific season"""
-    return service.searchForSeason(season_id, None) or []
+    """Return one page of the series of a season, at most 500."""
+    return service.searchForSeason(season_id, None, limit=limit, offset=offset) or []
 
 
 @router.post("/series/season/{season_id}/search")
 def search_series_by_season(
-    season_id: int, service: SeriesServiceDep, query: str = ""
+    season_id: int,
+    service: SeriesServiceDep,
+    query: str = "",
+    limit: Annotated[int, Query(ge=1, le=500)] = 500,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[SeriesPublic]:
     """Return series matching the search query for a specific season"""
     parsed_query = QueryUtil.parseQuery(query)
-    return service.searchForSeason(season_id, parsed_query) or []
+    return (
+        service.searchForSeason(season_id, parsed_query, limit=limit, offset=offset)
+        or []
+    )

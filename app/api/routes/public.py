@@ -4,7 +4,7 @@ import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Body, Request
+from fastapi import APIRouter, Body, Query, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 
@@ -226,8 +226,10 @@ def get_player_series(
     user_service: UserServiceDep,
     series_service: SeriesServiceDep,
     token: str | None = None,
+    limit: Annotated[int, Query(ge=1, le=500)] = 500,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> JSONResponse | dict[str, Any]:
-    """Get player's series for dashboard view using a one-time token."""
+    """Get one page of a player's series for the dashboard view, at most 500."""
     if not token:
         return JSONResponse({"error": "missing token"}, status_code=400)
 
@@ -251,13 +253,15 @@ def get_player_series(
         query = QueryUtil.parseQuery(
             f"player1_id == {user.id} or player2_id == {user.id}"
         )
-        series = series_service.searchForSeason(entry.get("season_id"), query)
+        series = series_service.searchForSeason(
+            entry.get("season_id"), query, limit=limit, offset=offset
+        )
     else:
         # Search all series for this user
         query = QueryUtil.parseQuery(
             f"player1_id == {user.id} or player2_id == {user.id}"
         )
-        series = series_service.search(query)
+        series = series_service.search(query, limit=limit, offset=offset)
 
     # Convert to dict format
     series_data = []

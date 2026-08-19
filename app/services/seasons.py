@@ -59,23 +59,23 @@ class SeasonService(BaseService):
                 raise NotFoundError("Season not found")
             return SeasonPublic.from_season(season)
 
-    def getAll(self) -> list[SeasonPublic]:
+    def getAll(self, limit: int | None = None, offset: int = 0) -> list[SeasonPublic]:
         with self.get_session() as session:
             result = []
             # Eager load related entities, disable nested loading except for maps
-            seasons = (
-                session.scalars(
-                    select(Season).options(
-                        # noload alone; a joined link table multiplies the rows
-                        noload(Season.user_teams),
-                        noload(Season.teams),
-                        selectinload(Season.maps).joinedload(DBMapSeason.map),
-                        noload(Season.signup_users),
-                    )
-                )
-                .unique()
-                .all()
+            statement = select(Season).options(
+                # noload alone; a joined link table multiplies the rows
+                noload(Season.user_teams),
+                noload(Season.teams),
+                selectinload(Season.maps).joinedload(DBMapSeason.map),
+                noload(Season.signup_users),
             )
+            if limit is not None or offset:
+                # Offset paging is deterministic only with a fixed order
+                statement = statement.order_by(Season.id).offset(offset)
+                if limit is not None:
+                    statement = statement.limit(limit)
+            seasons = session.scalars(statement).unique().all()
             for season in seasons:
                 result.append(SeasonPublic.from_season(season))
             return result
@@ -100,32 +100,43 @@ class SeasonService(BaseService):
             session.flush()
             return SeasonPublic.from_season(season)
 
-    def search(self, query: QueryElement | None) -> list[SeasonPublic]:
-        return self._where(QueryUtil.convertQueryToDBFilter(Season, query))
+    def search(
+        self, query: QueryElement | None, limit: int | None = None, offset: int = 0
+    ) -> list[SeasonPublic]:
+        return self._where(
+            QueryUtil.convertQueryToDBFilter(Season, query), limit=limit, offset=offset
+        )
 
     def find_by_name(self, name: str) -> list[SeasonPublic]:
         return self._where(Season.name == name)
 
-    def _where(self, filter: ColumnElement[bool] | None) -> list[SeasonPublic]:
+    def _where(
+        self,
+        filter: ColumnElement[bool] | None,
+        limit: int | None = None,
+        offset: int = 0,
+    ) -> list[SeasonPublic]:
         with self.get_session() as session:
             result = []
             # Eager load related entities, disable nested loading except for maps
-            seasons = (
-                session.scalars(
-                    select(Season)
-                    .options(
-                        # noload alone; a joined link table multiplies the rows
-                        noload(Season.user_teams),
-                        noload(Season.teams),
-                        selectinload(Season.maps).joinedload(DBMapSeason.map),
-                        noload(Season.signup_users),
-                    )
-                    .where(filter)
+            statement = (
+                select(Season)
+                .options(
+                    # noload alone; a joined link table multiplies the rows
+                    noload(Season.user_teams),
+                    noload(Season.teams),
+                    selectinload(Season.maps).joinedload(DBMapSeason.map),
+                    noload(Season.signup_users),
                 )
-                .unique()
-                .all()
-                if filter is not None
-                else []
+                .where(filter)
+            )
+            if limit is not None or offset:
+                # Offset paging is deterministic only with a fixed order
+                statement = statement.order_by(Season.id).offset(offset)
+                if limit is not None:
+                    statement = statement.limit(limit)
+            seasons = (
+                session.scalars(statement).unique().all() if filter is not None else []
             )
             if not seasons:
                 logger.debug(f"No seasons found by searchcriteria: {filter}")
@@ -232,38 +243,40 @@ class SeasonService(BaseService):
             session.flush()
             return SeasonPublic.from_season(season)
 
-    def getSignedUpUsers(self, season_id: int) -> list[UserPublic]:
+    def getSignedUpUsers(
+        self, season_id: int, limit: int | None = None, offset: int = 0
+    ) -> list[UserPublic]:
         with self.get_session() as session:
-            # Eager load signup users with their user data and w3c_stats
-            season = (
-                session.scalars(
-                    select(Season)
-                    .options(
-                        joinedload(Season.signup_users)
-                        .joinedload(DBUserSeasonSignup.user)
-                        .joinedload(User.w3c_stats)
-                        .noload("*"),
-                        joinedload(Season.signup_users)
-                        .joinedload(DBUserSeasonSignup.user)
-                        .joinedload(User.team_seasons)
-                        .noload("*"),
-                    )
-                    .where(Season.id == season_id)
-                )
-                .unique()
-                .first()
-            )
-
-            if not season:
+            if session.scalar(select(Season.id).where(Season.id == season_id)) is None:
                 raise NotFoundError("Season not found")
 
+            # Eager load the signed up users with their w3c_stats
+            statement = (
+                select(DBUserSeasonSignup)
+                .options(
+                    joinedload(DBUserSeasonSignup.user)
+                    .joinedload(User.w3c_stats)
+                    .noload("*"),
+                    joinedload(DBUserSeasonSignup.user)
+                    .joinedload(User.team_seasons)
+                    .noload("*"),
+                )
+                .where(DBUserSeasonSignup.season_id == season_id)
+            )
+            if limit is not None or offset:
+                # Offset paging is deterministic only with a fixed order
+                statement = statement.order_by(DBUserSeasonSignup.user_id).offset(
+                    offset
+                )
+                if limit is not None:
+                    statement = statement.limit(limit)
+
             result = []
-            if season.signup_users:
-                for signup in season.signup_users:
-                    if signup.user:
-                        user_public = UserPublic.from_user(signup.user)
-                        if user_public:
-                            result.append(user_public)
+            for signup in session.scalars(statement).unique().all():
+                if signup.user:
+                    user_public = UserPublic.from_user(signup.user)
+                    if user_public:
+                        result.append(user_public)
 
             return result
 

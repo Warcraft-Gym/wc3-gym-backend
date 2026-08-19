@@ -1,6 +1,7 @@
 import logging
+from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from app.api.deps import DraftSeriesServiceDep, SeriesServiceDep, require_admin
 from app.models.draft_series import (
@@ -62,10 +63,13 @@ def get_draft_series(
 
 @router.get("/draft-series/match/{match_id}")
 def get_draft_series_by_match(
-    match_id: int, service: DraftSeriesServiceDep
+    match_id: int,
+    service: DraftSeriesServiceDep,
+    limit: Annotated[int, Query(ge=1, le=500)] = 500,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[DraftSeriesPublic]:
-    """Return all draft series for a specific match"""
-    return service.get_draft_series_by_match(match_id) or []
+    """Return one page of the draft series of a match, at most 500."""
+    return service.get_draft_series_by_match(match_id, limit=limit, offset=offset) or []
 
 
 @router.delete(

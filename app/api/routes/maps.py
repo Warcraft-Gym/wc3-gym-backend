@@ -1,6 +1,7 @@
 import logging
+from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from app.api.deps import MapServiceDep, require_admin
 from app.core.exceptions import BadRequestError
@@ -44,16 +45,25 @@ def get_map(map_id: int, service: MapServiceDep) -> MapPublic:
 
 
 @router.get("/maps", response_model=list[MapPublic])
-def get_all_maps(service: MapServiceDep) -> list[MapPublic]:
-    """Retrieve all maps."""
-    return service.getAll()
+def get_all_maps(
+    service: MapServiceDep,
+    limit: Annotated[int, Query(ge=1, le=500)] = 500,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> list[MapPublic]:
+    """Retrieve one page of maps, at most 500."""
+    return service.getAll(limit=limit, offset=offset)
 
 
 @router.post("/maps/search", response_model=list[MapPublic])
-def search_maps(service: MapServiceDep, query: str = "") -> list[MapPublic]:
+def search_maps(
+    service: MapServiceDep,
+    query: str = "",
+    limit: Annotated[int, Query(ge=1, le=500)] = 500,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> list[MapPublic]:
     """Search maps by criteria using a custom query format."""
     query_param = query
     query = QueryUtil.parseQuery(query_param)
     if not query or not query.elementA:
         raise BadRequestError(f"No valid query found: {query_param}")
-    return service.search(query)
+    return service.search(query, limit=limit, offset=offset)

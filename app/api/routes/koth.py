@@ -1,7 +1,7 @@
 import logging
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Body, Depends
+from fastapi import APIRouter, Body, Depends, Query
 from fastapi.responses import JSONResponse
 
 from app.api.deps import KothServiceDep, require_admin
@@ -77,9 +77,14 @@ def delete_event(event_id: int, service: KothServiceDep) -> None:
 
 # ============ Signup Endpoints ============
 @router.get("/koth/events/{event_id}/signups")
-def get_event_signups(event_id: int, service: KothServiceDep) -> list[KothSignupPublic]:
-    """Retrieve all signups for a specific KOTH event."""
-    return service.get_signups_by_event(event_id)
+def get_event_signups(
+    event_id: int,
+    service: KothServiceDep,
+    limit: Annotated[int, Query(ge=1, le=500)] = 500,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> list[KothSignupPublic]:
+    """Retrieve one page of the signups of a KOTH event, at most 500."""
+    return service.get_signups_by_event(event_id, limit=limit, offset=offset)
 
 
 @router.post("/koth/signups", status_code=201, response_model=None)
@@ -236,9 +241,14 @@ def delete_signup(signup_id: int, service: KothServiceDep) -> None:
 
 # ============ Match Endpoints ============
 @router.get("/koth/events/{event_id}/matches")
-def get_event_matches(event_id: int, service: KothServiceDep) -> list[KothMatchPublic]:
-    """Retrieve all matches for a specific KOTH event."""
-    return service.get_matches_by_event(event_id)
+def get_event_matches(
+    event_id: int,
+    service: KothServiceDep,
+    limit: Annotated[int, Query(ge=1, le=500)] = 500,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> list[KothMatchPublic]:
+    """Retrieve one page of the matches of a KOTH event, at most 500."""
+    return service.get_matches_by_event(event_id, limit=limit, offset=offset)
 
 
 @router.post(

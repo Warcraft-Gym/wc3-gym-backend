@@ -54,26 +54,30 @@ class MatchService(BaseService):
                 raise NotFoundError("Match not found")
             return MatchPublic.from_match(match)
 
-    def search(self, query: QueryElement | None) -> list[MatchPublic]:
+    def search(
+        self, query: QueryElement | None, limit: int | None = None, offset: int = 0
+    ) -> list[MatchPublic]:
         with self.get_session() as session:
             result: list[MatchPublic] = []
             filter = QueryUtil.convertQueryToDBFilter(Match, query)
             # Eager load only what we need, explicitly disable other relationships
-            matches = (
-                session.scalars(
-                    select(Match)
-                    .options(
-                        joinedload(Match.team1).noload("*"),
-                        joinedload(Match.team2).noload("*"),
-                        joinedload(Match.season).noload("*"),
-                        joinedload(Match.fixed_map),
-                    )
-                    .where(filter)
+            statement = (
+                select(Match)
+                .options(
+                    joinedload(Match.team1).noload("*"),
+                    joinedload(Match.team2).noload("*"),
+                    joinedload(Match.season).noload("*"),
+                    joinedload(Match.fixed_map),
                 )
-                .unique()
-                .all()
-                if filter is not None
-                else []
+                .where(filter)
+            )
+            if limit is not None or offset:
+                # Offset paging is deterministic only with a fixed order
+                statement = statement.order_by(Match.id).offset(offset)
+                if limit is not None:
+                    statement = statement.limit(limit)
+            matches = (
+                session.scalars(statement).unique().all() if filter is not None else []
             )
             if not matches:
                 logger.debug(f"No matches found by searchcriteria: {query}")

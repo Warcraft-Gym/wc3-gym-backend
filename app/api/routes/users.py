@@ -1,6 +1,7 @@
 import logging
+from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from app.api.deps import UserServiceDep, require_admin
 from app.core.exceptions import BadRequestError
@@ -54,12 +55,17 @@ def get_all_users(service: UserServiceDep) -> list[UserPublic]:
 
 
 @router.post("/users/search")
-def search_users(service: UserServiceDep, query: str = "") -> list[UserPublic]:
+def search_users(
+    service: UserServiceDep,
+    query: str = "",
+    limit: Annotated[int, Query(ge=1, le=500)] = 500,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> list[UserPublic]:
     """Search users by criteria using a custom query format."""
     parsed_query = QueryUtil.parseQuery(query)
     if not parsed_query or not parsed_query.elementA:
         raise BadRequestError(f"No valid query found: {query}")
-    return service.search(parsed_query) or []
+    return service.search(parsed_query, limit=limit, offset=offset) or []
 
 
 @router.post("/users/w3c_sync/{user_id}", dependencies=[Depends(require_admin)])

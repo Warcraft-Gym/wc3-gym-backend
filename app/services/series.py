@@ -98,17 +98,21 @@ class SeriesService(BaseService):
             ).all()
             return [CareerSeriesRow(*row) for row in rows]
 
-    def search(self, query: QueryElement | None) -> list[SeriesPublic]:
+    def search(
+        self, query: QueryElement | None, limit: int | None = None, offset: int = 0
+    ) -> list[SeriesPublic]:
         with self.get_session() as session:
             result = []
             filter = QueryUtil.convertQueryToDBFilter(Series, query)
-            series_list = (
-                session.scalars(
-                    select(Series).options(*Series._list_eager_options()).where(filter)
-                ).all()
-                if filter is not None
-                else []
+            statement = (
+                select(Series).options(*Series._list_eager_options()).where(filter)
             )
+            if limit is not None or offset:
+                # Offset paging is deterministic only with a fixed order
+                statement = statement.order_by(Series.id).offset(offset)
+                if limit is not None:
+                    statement = statement.limit(limit)
+            series_list = session.scalars(statement).all() if filter is not None else []
             if not series_list:
                 logger.debug(f"No series found by searchcriteria: {query}")
                 return result
@@ -117,13 +121,18 @@ class SeriesService(BaseService):
             return result
 
     def searchForSeasonAndPlayday(
-        self, season_id: int, playday: int, query: QueryElement | None
+        self,
+        season_id: int,
+        playday: int,
+        query: QueryElement | None,
+        limit: int | None = None,
+        offset: int = 0,
     ) -> list[SeriesPublic]:
         with self.get_session() as session:
             result = []
             filter = QueryUtil.convertQueryToDBFilter(Series, query)
             series_list = Series.searchForSeasonAndPlayday(
-                session, season_id, playday, filter
+                session, season_id, playday, filter, limit=limit, offset=offset
             )
             if not series_list:
                 logger.debug(f"No series found by searchcriteria: {query}")
@@ -133,12 +142,18 @@ class SeriesService(BaseService):
             return result
 
     def searchForSeason(
-        self, season_id: int, query: QueryElement | None
+        self,
+        season_id: int,
+        query: QueryElement | None,
+        limit: int | None = None,
+        offset: int = 0,
     ) -> list[SeriesPublic]:
         with self.get_session() as session:
             result = []
             filter = QueryUtil.convertQueryToDBFilter(Series, query)
-            series_list = Series.searchForSeason(session, season_id, filter)
+            series_list = Series.searchForSeason(
+                session, season_id, filter, limit=limit, offset=offset
+            )
             if not series_list:
                 logger.debug(f"No series found by searchcriteria: {query}")
                 return result

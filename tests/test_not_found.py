@@ -18,6 +18,7 @@ ROUTES = [
     ("GET", "/matches/{id}", None),
     ("PUT", "/matches/{id}", {"playday": 1}),
     ("GET", "/seasons/{id}", None),
+    ("GET", "/seasons/{id}/signups", None),
     ("PUT", "/seasons/{id}", {"name": "Nowhere"}),
     ("GET", "/teams/{id}", None),
     ("PUT", "/teams/{id}", {"name": "Nowhere"}),

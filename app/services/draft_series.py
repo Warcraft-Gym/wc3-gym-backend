@@ -49,14 +49,22 @@ class DraftSeriesService(BaseService):
                 raise NotFoundError("Draft series not found")
             return DraftSeriesPublic.from_draft_series(draft_series)
 
-    def getByMatchId(self, match_id: int) -> list[DraftSeriesPublic]:
+    def getByMatchId(
+        self, match_id: int, limit: int | None = None, offset: int = 0
+    ) -> list[DraftSeriesPublic]:
         with self.get_session() as session:
             result = []
-            draft_series_list = session.scalars(
+            statement = (
                 select(DraftSeries)
                 .options(*DraftSeries._eager_options())
                 .where(DraftSeries.match_id == match_id)
-            ).all()
+            )
+            if limit is not None or offset:
+                # Offset paging is deterministic only with a fixed order
+                statement = statement.order_by(DraftSeries.id).offset(offset)
+                if limit is not None:
+                    statement = statement.limit(limit)
+            draft_series_list = session.scalars(statement).all()
             for single_draft_series in draft_series_list:
                 result.append(DraftSeriesPublic.from_draft_series(single_draft_series))
             return result
@@ -87,9 +95,11 @@ class DraftSeriesService(BaseService):
             raise NotFoundError(f"Draft series not found by ID: {draft_series_id}")
         return draft_series_data
 
-    def get_draft_series_by_match(self, match_id: int) -> list[DraftSeriesPublic]:
+    def get_draft_series_by_match(
+        self, match_id: int, limit: int | None = None, offset: int = 0
+    ) -> list[DraftSeriesPublic]:
         """Get all draft series for a match"""
-        return self.getByMatchId(match_id)
+        return self.getByMatchId(match_id, limit=limit, offset=offset)
 
     def delete_all_drafts_for_match(self, match_id: int) -> None:
         """Delete all draft series for a match"""

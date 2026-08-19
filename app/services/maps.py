@@ -34,23 +34,33 @@ class MapService(BaseService):
                 return None
             return MapPublic.model_validate(map)
 
-    def search(self, query: QueryElement | None) -> list[MapPublic]:
-        return self._where(QueryUtil.convertQueryToDBFilter(Map, query))
+    def search(
+        self, query: QueryElement | None, limit: int | None = None, offset: int = 0
+    ) -> list[MapPublic]:
+        return self._where(
+            QueryUtil.convertQueryToDBFilter(Map, query), limit=limit, offset=offset
+        )
 
     def find_by_shortname(self, shortname: str) -> list[MapPublic]:
         return self._where(Map.shortname == shortname)
 
-    def _where(self, filter: ColumnElement[bool] | None) -> list[MapPublic]:
+    def _where(
+        self,
+        filter: ColumnElement[bool] | None,
+        limit: int | None = None,
+        offset: int = 0,
+    ) -> list[MapPublic]:
         with self.get_session() as session:
-            maps = Map.search(session, filter)
+            maps = Map.search(session, filter, limit=limit, offset=offset)
             if not maps:
                 logger.debug(f"No maps found by searchcriteria: {filter}")
                 return []
             return [MapPublic.model_validate(map) for map in maps]
 
-    def getAll(self) -> list[MapPublic]:
+    def getAll(self, limit: int | None = None, offset: int = 0) -> list[MapPublic]:
         with self.get_session() as session:
-            return [MapPublic.model_validate(map) for map in Map.getAll(session)]
+            maps = Map.getAll(session, limit=limit, offset=offset)
+            return [MapPublic.model_validate(map) for map in maps]
 
     def create_map(self, map: MapCreate) -> MapPublic:
         return self.add(map)

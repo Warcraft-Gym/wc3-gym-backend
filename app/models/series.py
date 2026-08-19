@@ -48,6 +48,8 @@ class Series(SeriesBase, DBModel, table=True):
         season_id: int,
         playday: int,
         filters: ColumnExpressionArgument[bool] | None,
+        limit: int | None = None,
+        offset: int = 0,
     ) -> Sequence[Self]:
         stmt = select(cls).options(*cls._list_eager_options())
         stmt = stmt.where(
@@ -55,6 +57,11 @@ class Series(SeriesBase, DBModel, table=True):
         )
         if filters is not None:
             stmt = stmt.where(filters)
+        if limit is not None or offset:
+            # Offset paging is deterministic only with a fixed order
+            stmt = stmt.order_by(cls.id).offset(offset)
+            if limit is not None:
+                stmt = stmt.limit(limit)
         return session.scalars(stmt).all()
 
     @classmethod
@@ -63,11 +70,18 @@ class Series(SeriesBase, DBModel, table=True):
         session: Session,
         season_id: int,
         filters: ColumnExpressionArgument[bool] | None,
+        limit: int | None = None,
+        offset: int = 0,
     ) -> Sequence[Self]:
         stmt = select(cls).options(*cls._list_eager_options())
         stmt = stmt.where(cls.match.has(Match.season_id == season_id))
         if filters is not None:
             stmt = stmt.where(filters)
+        if limit is not None or offset:
+            # Offset paging is deterministic only with a fixed order
+            stmt = stmt.order_by(cls.id).offset(offset)
+            if limit is not None:
+                stmt = stmt.limit(limit)
         return session.scalars(stmt).all()
 
     @classmethod

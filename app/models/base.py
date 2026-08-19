@@ -47,15 +47,33 @@ class DBModel(SQLModel):
 
     @classmethod
     def search(
-        cls, session: Session, filters: ColumnExpressionArgument[bool] | None
+        cls,
+        session: Session,
+        filters: ColumnExpressionArgument[bool] | None,
+        limit: int | None = None,
+        offset: int = 0,
     ) -> Sequence[Self]:
         if filters is None:
             raise ValueError("No search criteria was defined!")
-        return session.scalars(select(cls).where(filters)).unique().all()
+        statement = select(cls).where(filters)
+        if limit is not None or offset:
+            # Offset paging is deterministic only with a fixed order
+            statement = statement.order_by(*cls.__table__.primary_key).offset(offset)
+            if limit is not None:
+                statement = statement.limit(limit)
+        return session.scalars(statement).unique().all()
 
     @classmethod
-    def getAll(cls, session: Session) -> Sequence[Self]:
-        return session.scalars(select(cls)).unique().all()
+    def getAll(
+        cls, session: Session, limit: int | None = None, offset: int = 0
+    ) -> Sequence[Self]:
+        statement = select(cls)
+        if limit is not None or offset:
+            # Offset paging is deterministic only with a fixed order
+            statement = statement.order_by(*cls.__table__.primary_key).offset(offset)
+            if limit is not None:
+                statement = statement.limit(limit)
+        return session.scalars(statement).unique().all()
 
     @classmethod
     def getById(cls, session: Session, id: int | None) -> Self | None:

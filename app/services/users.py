@@ -59,8 +59,12 @@ class UserService(BaseService):
                 return None
             return UserPublic.from_user(user)
 
-    def search(self, query: QueryElement | None) -> list[UserPublic]:
-        return self._where(QueryUtil.convertQueryToDBFilter(User, query))
+    def search(
+        self, query: QueryElement | None, limit: int | None = None, offset: int = 0
+    ) -> list[UserPublic]:
+        return self._where(
+            QueryUtil.convertQueryToDBFilter(User, query), limit=limit, offset=offset
+        )
 
     def find_by_name(self, name: str) -> list[UserPublic]:
         return self._where(User.name == name)
@@ -81,23 +85,30 @@ class UserService(BaseService):
             or_(User.discordId == discord_id, User.discordTag == discord_tag)
         )
 
-    def _where(self, filter: ColumnElement[bool] | None) -> list[UserPublic]:
+    def _where(
+        self,
+        filter: ColumnElement[bool] | None,
+        limit: int | None = None,
+        offset: int = 0,
+    ) -> list[UserPublic]:
         with self.get_session() as session:
             result = []
             # Eager load related entities, disable nested loading
-            users = (
-                session.scalars(
-                    select(User)
-                    .options(
-                        joinedload(User.team_seasons).noload("*"),
-                        joinedload(User.w3c_stats),
-                    )
-                    .where(filter)
+            statement = (
+                select(User)
+                .options(
+                    joinedload(User.team_seasons).noload("*"),
+                    joinedload(User.w3c_stats),
                 )
-                .unique()
-                .all()
-                if filter is not None
-                else []
+                .where(filter)
+            )
+            if limit is not None or offset:
+                # Offset paging is deterministic only with a fixed order
+                statement = statement.order_by(User.id).offset(offset)
+                if limit is not None:
+                    statement = statement.limit(limit)
+            users = (
+                session.scalars(statement).unique().all() if filter is not None else []
             )
             if not users:
                 logger.debug(f"No users found by searchcriteria: {filter}")

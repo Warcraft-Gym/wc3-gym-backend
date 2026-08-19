@@ -188,7 +188,7 @@ def test_bets_list_pages_by_id_and_reports_the_total(
         session.commit()
 
     everything = client.get("/fantasy/bets")
-    assert "X-Total-Count" not in everything.headers
+    assert everything.headers["X-Total-Count"] == "5"
     ids = [bet["id"] for bet in everything.json()]
     assert len(ids) == 5
 
@@ -229,7 +229,7 @@ def test_bets_search_pages_by_id_and_counts_the_filtered_set(
 
     query = f"user_id == {seeded['player_ids'][1]}"
     everything = client.post(f"/fantasy/bets/search?query={query}")
-    assert "X-Total-Count" not in everything.headers
+    assert everything.headers["X-Total-Count"] == "4"
     ids = [bet["id"] for bet in everything.json()]
     assert len(ids) == 4
 

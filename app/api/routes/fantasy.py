@@ -98,13 +98,16 @@ def get_all_teams(service: FantasyTeamServiceDep) -> list[FantasyTeamPublic]:
 
 @router.post("/fantasy/teams/search")
 def search_teams(
-    service: FantasyTeamServiceDep, query: str = ""
+    service: FantasyTeamServiceDep,
+    query: str = "",
+    limit: Annotated[int, Query(ge=1, le=500)] = 500,
+    offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[FantasyTeamPublic]:
     """Search teams by criteria using a custom query format."""
     parsed = QueryUtil.parseQuery(query)
     if not parsed or not parsed.elementA:
         raise BadRequestError(f"No valid query found: {query}")
-    return service.search_fantasy_teams(parsed) or []
+    return service.search_fantasy_teams(parsed, limit=limit, offset=offset) or []
 
 
 # Bet endpoints
@@ -149,10 +152,10 @@ def get_bet(bet_id: int, service: FantasyBetServiceDep) -> FantasyBetPublic:
 def get_all_bets(
     service: FantasyBetServiceDep,
     response: Response,
-    limit: Annotated[int | None, Query(ge=1)] = None,
+    limit: Annotated[int, Query(ge=1, le=500)] = 500,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[FantasyBetPublic]:
-    """Retrieve all fantasy bets, or one page when limit or offset is set."""
+    """Retrieve one page of fantasy bets, at most 500."""
     bets, total = service.getAll_fantasy_bets(limit=limit, offset=offset)
     if total is not None:
         response.headers["X-Total-Count"] = str(total)
@@ -164,10 +167,10 @@ def search_bets(
     service: FantasyBetServiceDep,
     response: Response,
     query: str = "",
-    limit: Annotated[int | None, Query(ge=1)] = None,
+    limit: Annotated[int, Query(ge=1, le=500)] = 500,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[FantasyBetPublic]:
-    """Search bets by criteria, or one page of them when limit or offset is set."""
+    """Search bets by criteria, one page at a time, at most 500."""
     parsed = QueryUtil.parseQuery(query)
     if not parsed or not parsed.elementA:
         raise BadRequestError(f"No valid query found: {query}")

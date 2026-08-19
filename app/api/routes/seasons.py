@@ -1,7 +1,7 @@
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Body, Depends
+from fastapi import APIRouter, Body, Depends, Query
 
 from app.api.deps import SeasonServiceDep, require_admin
 from app.core.exceptions import BadRequestError
@@ -68,18 +68,27 @@ def remove_teams(
 
 
 @router.get("/seasons")
-def get_all(service: SeasonServiceDep) -> list[SeasonPublic]:
-    """Return all seasons"""
-    return service.getAll() or []
+def get_all(
+    service: SeasonServiceDep,
+    limit: Annotated[int, Query(ge=1, le=500)] = 500,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> list[SeasonPublic]:
+    """Return one page of seasons, at most 500."""
+    return service.getAll(limit=limit, offset=offset) or []
 
 
 @router.post("/seasons/search")
-def search_seasons(service: SeasonServiceDep, query: str = "") -> list[SeasonPublic]:
+def search_seasons(
+    service: SeasonServiceDep,
+    query: str = "",
+    limit: Annotated[int, Query(ge=1, le=500)] = 500,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> list[SeasonPublic]:
     """Search seasons by criteria using a custom query format."""
     parsed_query = QueryUtil.parseQuery(query)
     if not parsed_query or not parsed_query.elementA:
         raise BadRequestError(f"No valid query found: {query}")
-    return service.search(parsed_query) or []
+    return service.search(parsed_query, limit=limit, offset=offset) or []
 
 
 @router.post("/seasons/addMaps/{season_id}", dependencies=[Depends(require_admin)])
@@ -119,6 +128,11 @@ def remove_user_signup(
 
 
 @router.get("/seasons/{season_id}/signups")
-def get_season_signups(season_id: int, service: SeasonServiceDep) -> list[UserPublic]:
-    """Retrieve all users signed up for a specific season."""
-    return service.getSignedUpUsers(season_id) or []
+def get_season_signups(
+    season_id: int,
+    service: SeasonServiceDep,
+    limit: Annotated[int, Query(ge=1, le=500)] = 500,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> list[UserPublic]:
+    """Retrieve one page of the users signed up for a season, at most 500."""
+    return service.getSignedUpUsers(season_id, limit=limit, offset=offset) or []
