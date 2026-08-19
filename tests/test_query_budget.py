@@ -14,6 +14,9 @@ unintended lazy load on those paths raises instead of passing silently.
 A series or bet answer also derives its points and its match score, which
 costs two more statements: one for the score system of every match in the
 answer, one for the sum of the series on that system. Both are constant.
+
+A team answer derives its standings the same way, and the two statements it
+adds do not grow with the number of teams in the answer.
 """
 
 from collections.abc import Iterator
@@ -40,6 +43,7 @@ from app.services.draft_series import DraftSeriesService
 from app.services.fantasy_bets import FantasyBetService
 from app.services.player_career_stats import PlayerCareerStatsService
 from app.services.series import SeriesService
+from app.services.teams import TeamService
 
 STATS_PER_PLAYER = 8
 
@@ -226,6 +230,43 @@ def test_career_statement_count_holds_when_the_rows_grow(
     assert len(career) == 4
     assert total == 4
     assert tally[0] == 5
+
+
+def add_teams_to_the_season(season_id: int, count: int) -> None:
+    """More teams in the season, so a per-team fill would be visible."""
+    from app.models.team import Team
+    from app.models.team_season import DBTeamSeason
+
+    with Session() as session:
+        for index in range(count):
+            team = Team(name=f"Extra {index}")
+            session.add(team)
+            session.flush()
+            session.add(DBTeamSeason(team_id=team.id, season_id=season_id))
+        session.commit()
+
+
+def test_the_teams_of_a_season_cost_seven_statements(league: dict[str, Any]) -> None:
+    """Five for the teams and their people, two for the standings."""
+    service = TeamService(user_app_service=None)
+    with count_statements() as tally:
+        teams = service.get_teams_season(league["season_id"])
+    assert len(teams) == 2
+    assert teams[0].seasons_info[0].final_score is not None
+    assert tally[0] == 7
+
+
+def test_the_standings_count_holds_when_the_teams_grow(
+    league: dict[str, Any],
+) -> None:
+    """Four more teams in the season, the same seven statements."""
+    add_teams_to_the_season(league["season_id"], 4)
+
+    service = TeamService(user_app_service=None)
+    with count_statements() as tally:
+        teams = service.get_teams_season(league["season_id"])
+    assert len(teams) == 6
+    assert tally[0] == 7
 
 
 def test_career_options_cover_the_player_graph(league: dict[str, Any]) -> None:

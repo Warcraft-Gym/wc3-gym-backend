@@ -9,6 +9,9 @@ the per-player season stats, adds the series points into the match score, and re
 final_score, points_against and points_available on both team season rows. The
 assertions walk that chain one step at a time.
 
+The standings a response carries are summed from the series at read time, so they
+follow the map scores whether or not the write path ran.
+
 Two tests are xfail(strict=True) on defects they pin. A fix turns them XPASS and fails
 the run, so the marker goes with the fix.
 """
@@ -326,19 +329,16 @@ def test_a_created_series_carries_both_players(
     assert series["match_id"] == league["match_id"]
 
 
-def test_a_season_with_no_result_stands_at_nothing(
+def test_a_season_with_no_result_stands_at_zero(
     client: Client, league: dict[str, Any]
 ) -> None:
-    """A team season row starts empty, not at zero."""
+    """Standings are sums, so a team with no played series reads zero, not null."""
     series = get(client, f"/series/{league['series_id']}")
     assert series["player1_score"] is None
     assert series["player1_points"] is None
 
-    assert standings(client, league["team_a_id"], league["season_id"]) == (
-        None,
-        None,
-        None,
-    )
+    # The only series of the season is unplayed, so all three points stay available
+    assert standings(client, league["team_a_id"], league["season_id"]) == (0, 0, 3)
 
 
 # Recording a result. On the standard scale a 2-0 win is worth 3 points, a
@@ -473,12 +473,13 @@ def test_a_deleted_series_takes_its_points_back(
     match = get(client, f"/matches/{league['match_id']}")
     assert match["team1_score"] == 0
     assert match["team2_score"] == 0
+    # The sum drops the deleted series, so the points go back with no write
     assert standings(client, league["team_a_id"], league["season_id"]) == (0, 0, 3)
 
 
-# The recalculation endpoint. The season page calls it, and it is the only
-# thing that fills the standings after an import writes rows through the
-# Session instead of through the API.
+# The recalculation endpoint. The season page calls it, and it rewrites the
+# stored score columns. The standings a response carries are summed from the
+# series, so they are already right before it runs.
 
 
 def test_the_recalculation_leaves_a_correct_season_alone(
@@ -500,21 +501,16 @@ def test_the_recalculation_leaves_a_correct_season_alone(
     assert standings(client, league["team_a_id"], league["season_id"]) == before
 
 
-def test_the_recalculation_fills_standings_left_empty(
-    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+def test_imported_rows_read_their_standings_with_no_recalculation(
+    client: Client, seeded: dict[str, Any]
 ) -> None:
-    """The seeded league holds a played 2-1 series and empty standings,
-    which is the state an import leaves behind."""
+    """The seeded league writes its rows through the Session, the shape an
+    import leaves, and its score columns stay empty. The standings still read
+    correct, because the response sums the series it finds."""
     season_id = seeded["season_id"]
-    assert standings(client, seeded["team_a_id"], season_id) == (None, None, None)
-
-    resp = client.post(f"/season/{season_id}/calculate/", headers=auth_headers)
-    assert resp.status_code == 200
-
-    final_a, against_a, _ = standings(client, seeded["team_a_id"], season_id)
-    final_b, against_b, _ = standings(client, seeded["team_b_id"], season_id)
-    assert (final_a, against_a) == (2, 1)
-    assert (final_b, against_b) == (1, 2)
+    # 4 weeks * 2 series * 3 points is 24 available, less the 2-1 series played
+    assert standings(client, seeded["team_a_id"], season_id) == (2, 1, 21)
+    assert standings(client, seeded["team_b_id"], season_id) == (1, 2, 21)
 
 
 def test_the_recalculation_keeps_the_series_points(

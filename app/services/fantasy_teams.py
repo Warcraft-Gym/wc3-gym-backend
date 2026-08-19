@@ -15,6 +15,7 @@ from app.models.relationships import DBFantasyTeamPlayer
 from app.models.team import Team
 from app.models.team_season import DBTeamSeason
 from app.models.user import User
+from app.services import derived
 from app.services.base import BaseService
 
 logger = logging.getLogger(__name__)
@@ -48,7 +49,9 @@ class FantasyTeamService(BaseService):
             fteam = session.get(FantasyTeam, fantasy_team_id)
             if not fteam:
                 raise NotFoundError("Fantasy Team not found")
-            return FantasyTeamPublic.from_fantasy_team(fteam)
+            public = FantasyTeamPublic.from_fantasy_team(fteam)
+            derived.fill_standings(session, [public.drafted_team])
+            return public
 
     # Every relation the list answer reads; the sub-collections stay empty
     _reduced_options = (
@@ -100,6 +103,7 @@ class FantasyTeamService(BaseService):
             )
             for fteam in fteams:
                 result.append(FantasyTeamPublic.from_fantasy_team(fteam))
+            derived.fill_standings(session, [f.drafted_team for f in result])
             return result
 
     def search(

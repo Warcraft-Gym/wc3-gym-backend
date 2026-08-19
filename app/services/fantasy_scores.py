@@ -322,7 +322,7 @@ class FantasyScoreService:
                     player_data["total"] = player_total
                     result["player_breakdown"].append(player_data)
 
-        # Team points
+        # Team points. seasons_info arrives derived, so final_score is a sum of series
         drafted_team = fantasy_team.drafted_team
         if drafted_team and drafted_team.seasons_info:
             for season_info in drafted_team.seasons_info:

@@ -28,10 +28,11 @@ def test_calculate_writes_totals_and_bet_results(
     team = get_json(client, f"/fantasy/teams/{seeded['fantasy_team_id']}")
     assert team["player_points"] == 0
     assert team["bench_points"] == 0
-    assert team["team_points"] == 0
+    # The drafted team stands at 2, the sum of its series, not at null
+    assert team["team_points"] == 2
     assert team["race_points"] == 18
     assert team["bet_points"] == 10
-    assert team["total_points"] == 28
+    assert team["total_points"] == 30
 
     bets = get_json(client, "/fantasy/bets")
     assert bets[0]["bet_result"] == 10
@@ -60,7 +61,8 @@ def test_calculate_scores_drafted_players(
     # Week 1: won 2-1 = 8 points. Weeks 2-4: no series = 3 * 5 bench points.
     assert team["player_points"] == 8
     assert team["bench_points"] == 15
-    assert team["total_points"] == 8 + 15 + 18 + 10
+    # The drafted team adds 2, the sum of its series, not at null
+    assert team["total_points"] == 8 + 15 + 2 + 18 + 10
 
 
 def test_breakdown_answers_the_race_value(

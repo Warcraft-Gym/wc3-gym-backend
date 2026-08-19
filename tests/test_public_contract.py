@@ -80,16 +80,9 @@ def public_seed(app: FastAPI) -> dict[str, Any]:
         session.add_all([season_2, coach])
         session.flush()
 
-        # Alpha plays two seasons; Beta plays one.
-        session.add(
-            DBTeamSeason(
-                team_id=ids["team_a_id"],
-                season_id=season_2.id,
-                final_score=3,
-                points_available=12,
-                points_against=9,
-            )
-        )
+        # Alpha plays two seasons; Beta plays one. The score columns stay
+        # empty, because the standings are summed from the series.
+        session.add(DBTeamSeason(team_id=ids["team_a_id"], season_id=season_2.id))
         session.add(
             DBUserTeamSeason(
                 user_id=ids["player_ids"][3],
@@ -100,9 +93,6 @@ def public_seed(app: FastAPI) -> dict[str, Any]:
 
         for team_id in (ids["team_a_id"], ids["team_b_id"]):
             team_season = session.get(DBTeamSeason, (team_id, ids["season_id"]))
-            team_season.final_score = 6
-            team_season.points_available = 12
-            team_season.points_against = 4
             team_season.coach_1_id = coach.id
 
         session.get(Team, ids["team_a_id"]).icon = TEAM_ICON
@@ -251,6 +241,9 @@ def test_teams_season_carries_the_standings_and_roster_fields(
     season_id = public_seed["season_id"]
     teams = get_json(client, f"/teams/season/{season_id}")
     assert len(teams) == 2
+    # The standings are summed from the one played series, a 2-1 for Alpha.
+    # Season 1 pays 4 weeks * 2 series * 3 points, so 24 less what both took.
+    expected = {"Alpha": (2, 1, 21), "Beta": (1, 2, 21)}
     for team in teams:
         assert "id" in team
         assert "name" in team
@@ -261,10 +254,12 @@ def test_teams_season_carries_the_standings_and_roster_fields(
         assert "final_score" in info
         assert "points_available" in info
         assert "points_against" in info
-        # The values differ per season, so equality also proves the season row.
-        assert info["final_score"] == 6
-        assert info["points_available"] == 12
-        assert info["points_against"] == 4
+        # Season 2 pays 36 and holds no series, so equality proves the season row.
+        assert (
+            info["final_score"],
+            info["points_against"],
+            info["points_available"],
+        ) == expected[team["name"]]
         # Both maps are keyed by season id, not by position.
         assert isinstance(team["player_by_season"], dict)
         assert isinstance(team["coaches_by_season"], dict)

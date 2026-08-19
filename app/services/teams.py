@@ -2,7 +2,7 @@ import logging
 
 from sqlalchemy import ColumnElement, select
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import joinedload, noload, selectinload
+from sqlalchemy.orm import Session, joinedload, noload, selectinload
 
 from app.core.exceptions import NotFoundError
 from app.core.query import QueryElement, QueryUtil
@@ -11,10 +11,18 @@ from app.models.team import Team, TeamCreate, TeamPublic, TeamUpdate
 from app.models.team_season import DBTeamSeason
 from app.models.user import User
 from app.models.user_team_season import DBUserTeamSeason
+from app.services import derived
 from app.services.base import BaseService
 from app.services.users import UserService
 
 logger = logging.getLogger(__name__)
+
+
+def _public(session: Session, team: Team) -> TeamPublic:
+    """One team, with its standings derived from the series it played."""
+    public = TeamPublic.from_team(team)
+    derived.fill_standings(session, [public])
+    return public
 
 
 class TeamService(BaseService):
@@ -24,21 +32,21 @@ class TeamService(BaseService):
     def add(self, team: TeamCreate) -> TeamPublic:
         with self.get_session() as session:
             new_team = Team.add(session, team.model_dump())
-            return TeamPublic.from_team(new_team)
+            return _public(session, new_team)
 
     def update(self, team_id: int, team: TeamUpdate) -> TeamPublic:
         with self.get_session() as session:
             team = Team.update(session, team_id, **team.model_dump(exclude_unset=True))
             if not team:
                 raise NotFoundError("Team not found")
-            return TeamPublic.from_team(team)
+            return _public(session, team)
 
     def update_icon(self, team_id: int, file: bytes) -> TeamPublic:
         with self.get_session() as session:
             team = Team.update_icon(session, team_id, file)
             if not team:
                 raise NotFoundError("Team not found")
-            return TeamPublic.from_team(team)
+            return _public(session, team)
 
     def addPlayers(
         self, team_id: int, season_id: int, player_ids: list[int]
@@ -68,7 +76,7 @@ class TeamService(BaseService):
                 if not already_exists:
                     session.add(DBUserTeamSeason(user=user, season=season, team=team))
             session.flush()
-            return TeamPublic.from_team(team)
+            return _public(session, team)
 
     def removePlayers(
         self, team_id: int, season_id: int, player_ids: list[int]
@@ -92,7 +100,7 @@ class TeamService(BaseService):
                     raise Exception(f"User not part of the team, user id: {user_id}")
                 session.delete(user_team)
             session.flush()
-            return TeamPublic.from_team(team)
+            return _public(session, team)
 
     def setCoaches(
         self, team_id: int, season_id: int, coach_ids: list[int]
@@ -131,7 +139,7 @@ class TeamService(BaseService):
             team_season.coach_3_id = coach_ids[2] if len(coach_ids) > 2 else None
 
             session.flush()
-            return TeamPublic.from_team(team)
+            return _public(session, team)
 
     def delete(self, team_id: int) -> None:
         with self.get_session() as session:
@@ -156,7 +164,7 @@ class TeamService(BaseService):
             )
             if not team:
                 raise NotFoundError("Team not found")
-            return TeamPublic.from_team(team)
+            return _public(session, team)
 
     def get_with_nested_users(self, team_id: int) -> TeamPublic:
         with self.get_session() as session:
@@ -182,7 +190,7 @@ class TeamService(BaseService):
             )
             if not team:
                 raise NotFoundError("Team not found")
-            return TeamPublic.from_team(team)
+            return _public(session, team)
 
     def get_with_nested_users_by_season(
         self, team_id: int, season_id: int
@@ -233,7 +241,7 @@ class TeamService(BaseService):
             )
             if not team:
                 raise NotFoundError("Team not found")
-            return TeamPublic.from_team(team)
+            return _public(session, team)
 
     def get_icon(self, team_id: int) -> bytes | None:
         with self.get_session() as session:
@@ -288,6 +296,7 @@ class TeamService(BaseService):
                 return result
             for team in teams:
                 result.append(TeamPublic.from_team(team))
+            derived.fill_standings(session, result)
             return result
 
     def getAll(self, limit: int | None = None, offset: int = 0) -> list[TeamPublic]:
@@ -312,6 +321,7 @@ class TeamService(BaseService):
             teams = session.scalars(statement).unique().all()
             for team in teams:
                 result.append(TeamPublic.from_team(team))
+            derived.fill_standings(session, result)
             return result
 
     def getAll_basic(
@@ -332,6 +342,7 @@ class TeamService(BaseService):
             teams = session.scalars(statement).unique().all()
             for team in teams:
                 result.append(TeamPublic.from_team(team))
+            derived.fill_standings(session, result)
             return result
 
     def getAll_by_season(
@@ -359,6 +370,7 @@ class TeamService(BaseService):
             teams = session.scalars(statement).unique().all()
             for team in teams:
                 result.append(TeamPublic.from_team(team))
+            derived.fill_standings(session, result)
             return result
 
     def create_team(self, team: TeamCreate) -> TeamPublic:
@@ -441,6 +453,7 @@ class TeamService(BaseService):
             teams = session.scalars(statement).unique().all()
             for team in teams:
                 result.append(TeamPublic.from_team(team))
+            derived.fill_standings(session, result)
             return result
 
     def get_teams_season_basic(

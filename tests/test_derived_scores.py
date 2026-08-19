@@ -243,3 +243,57 @@ def test_a_season_pays_by_its_own_system_and_not_by_the_setting(
 
     assert get(client, f"/series/{series_id}")["player1_points"] == 4
     assert stored_series_points(series_id)[0] == 3
+
+
+# Standings. A team stands at the sum of its derived series points, and the
+# season pays series_per_week * number_weeks * the top of its own scale.
+
+
+def standings(team: dict[str, Any], season_id: int) -> tuple[int, int, int]:
+    """final_score, points_against and points_available of one season row."""
+    info = next(i for i in team["seasons_info"] if i["season_id"] == season_id)
+    return info["final_score"], info["points_against"], info["points_available"]
+
+
+def test_a_season_with_no_match_stands_every_team_at_zero(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    season = post(
+        client,
+        auth_headers,
+        "/seasons",
+        {"name": "Empty", "number_weeks": 3, "series_per_week": 4},
+    )
+    teams = [
+        post(client, auth_headers, "/teams", {"name": f"Empty {index}"})
+        for index in (1, 2, 3)
+    ]
+    post(
+        client,
+        auth_headers,
+        f"/seasons/addTeams/{season['id']}",
+        {"team_ids": [team["id"] for team in teams]},
+    )
+
+    rows = get(client, f"/teams/season/{season['id']}")
+    assert len(rows) == 3
+    # 3 weeks * 4 series * 3 points, and no team has taken any of it
+    for team in rows:
+        assert standings(team, season["id"]) == (0, 0, 36)
+
+
+def test_a_season_stands_on_the_scale_of_its_own_system(
+    client: Client, two_seasons: dict[str, Any]
+) -> None:
+    """The setting is standard, so only the helpstone season pays 4 a sweep.
+
+    The five series pay 3+2+1+0 to each side on the standard scale and
+    4+3+1+0 on the helpstone one, off 2 weeks * 5 series * the top of that
+    scale.
+    """
+    for system, expected in (("standard", (6, 6, 18)), ("helpstone", (8, 8, 24))):
+        season_id = two_seasons[system]["season_id"]
+        rows = get(client, f"/teams/season/{season_id}")
+        assert len(rows) == 2
+        for team in rows:
+            assert standings(team, season_id) == expected
