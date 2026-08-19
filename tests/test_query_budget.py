@@ -194,20 +194,21 @@ def test_fantasy_bets_list_costs_one_statement(league: dict[str, Any]) -> None:
     assert tally[0] == 1
 
 
-def test_career_stats_cost_four_statements(league: dict[str, Any]) -> None:
-    """One statement for the rows and their user, one per collection."""
+def test_career_stats_cost_five_statements(league: dict[str, Any]) -> None:
+    """One count, one for the rows and their user, one per collection."""
     service = PlayerCareerStatsService(series_service=None)
     with count_statements() as tally:
-        career = service.get_all()
+        career, total = service.get_all()
     assert len(career) == 2
+    assert total == 2
     assert career[0].user.w3c_stats
-    assert tally[0] == 4
+    assert tally[0] == 5
 
 
 def test_career_statement_count_holds_when_the_rows_grow(
     league: dict[str, Any],
 ) -> None:
-    """Two more career rows on two more players, the same four statements."""
+    """Two more career rows on two more players, the same five statements."""
     with Session() as session:
         for index, user_id in enumerate(league["player_ids"][2:]):
             session.add(
@@ -217,9 +218,10 @@ def test_career_statement_count_holds_when_the_rows_grow(
 
     service = PlayerCareerStatsService(series_service=None)
     with count_statements() as tally:
-        career = service.get_all()
+        career, total = service.get_all()
     assert len(career) == 4
-    assert tally[0] == 4
+    assert total == 4
+    assert tally[0] == 5
 
 
 def test_career_options_cover_the_player_graph(league: dict[str, Any]) -> None:

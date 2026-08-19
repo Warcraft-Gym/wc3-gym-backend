@@ -1,7 +1,7 @@
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 
 from app.api.deps import UserServiceDep, require_admin
 from app.core.exceptions import BadRequestError
@@ -49,9 +49,17 @@ def get_user(user_id: int, service: UserServiceDep) -> UserPublic:
 
 
 @router.get("/users")
-def get_all_users(service: UserServiceDep) -> list[UserPublic]:
-    """Retrieve all users."""
-    return service.getAll() or []
+def get_all_users(
+    service: UserServiceDep,
+    response: Response,
+    limit: Annotated[int | None, Query(ge=1, le=500)] = None,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> list[UserPublic]:
+    """Retrieve all users, or one page of them when limit is given."""
+    # The list is unpaged by default because the admin views read all users
+    users, total = service.getAll(limit=limit, offset=offset)
+    response.headers["X-Total-Count"] = str(total)
+    return users or []
 
 
 @router.post("/users/search")

@@ -120,6 +120,28 @@ class SeriesService(BaseService):
                 result.append(SeriesPublic.from_series_reduced(series))
             return result
 
+    def count(self, query: QueryElement | None) -> int:
+        """The number of series that match the query."""
+        with self.get_session() as session:
+            filter = QueryUtil.convertQueryToDBFilter(Series, query)
+            if filter is None:
+                return 0
+            statement = select(func.count()).select_from(Series).where(filter)
+            return session.scalar(statement) or 0
+
+    def countForSeason(self, season_id: int, query: QueryElement | None) -> int:
+        """The number of series in one season that match the query."""
+        with self.get_session() as session:
+            filter = QueryUtil.convertQueryToDBFilter(Series, query)
+            statement = (
+                select(func.count())
+                .select_from(Series)
+                .where(Series.match.has(Match.season_id == season_id))
+            )
+            if filter is not None:
+                statement = statement.where(filter)
+            return session.scalar(statement) or 0
+
     def searchForSeasonAndPlayday(
         self,
         season_id: int,

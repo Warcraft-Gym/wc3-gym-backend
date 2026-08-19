@@ -4,7 +4,7 @@ import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Body, Query, Request
+from fastapi import APIRouter, Body, Query, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 
@@ -225,6 +225,7 @@ def public_create_user(
 def get_player_series(
     user_service: UserServiceDep,
     series_service: SeriesServiceDep,
+    response: Response,
     token: str | None = None,
     limit: Annotated[int, Query(ge=1, le=500)] = 500,
     offset: Annotated[int, Query(ge=0)] = 0,
@@ -256,12 +257,16 @@ def get_player_series(
         series = series_service.searchForSeason(
             entry.get("season_id"), query, limit=limit, offset=offset
         )
+        total = series_service.countForSeason(entry.get("season_id"), query)
     else:
         # Search all series for this user
         query = QueryUtil.parseQuery(
             f"player1_id == {user.id} or player2_id == {user.id}"
         )
         series = series_service.search(query, limit=limit, offset=offset)
+        total = series_service.count(query)
+
+    response.headers["X-Total-Count"] = str(total)
 
     # Convert to dict format
     series_data = []

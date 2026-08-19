@@ -3,7 +3,7 @@ import io
 import logging
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Body, Depends, File, UploadFile
+from fastapi import APIRouter, Body, Depends, File, Query, Response, UploadFile
 from fastapi.responses import JSONResponse
 
 from app.api.deps import StatsServiceDep, require_admin
@@ -17,9 +17,17 @@ router = APIRouter(tags=["stats"])
 
 
 @router.get("/stats/career")
-def get_all_career_stats(service: StatsServiceDep) -> list[dict[str, Any]]:
-    """Retrieve career statistics for all players, ordered by rating."""
-    return [stat.to_dict() for stat in service.get_all_career_stats() or []]
+def get_all_career_stats(
+    service: StatsServiceDep,
+    response: Response,
+    limit: Annotated[int | None, Query(ge=1, le=500)] = None,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> list[dict[str, Any]]:
+    """Retrieve career statistics by rating, or one page of them when limit is given."""
+    # The list is unpaged by default because the admin views read all rows
+    stats, total = service.get_all_career_stats(limit=limit, offset=offset)
+    response.headers["X-Total-Count"] = str(total)
+    return [stat.to_dict() for stat in stats]
 
 
 @router.get("/stats/career/{stat_id}")

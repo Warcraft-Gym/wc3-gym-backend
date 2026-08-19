@@ -1,7 +1,7 @@
 import logging
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ColumnElement, or_, select
+from sqlalchemy import ColumnElement, func, or_, select
 from sqlalchemy.orm import joinedload
 
 from app.core.exceptions import NotFoundError
@@ -118,26 +118,28 @@ class UserService(BaseService):
                 result.append(UserPublic.from_user(user))
             return result
 
-    def getAll(self) -> list[UserPublic]:
+    def getAll(
+        self, limit: int | None = None, offset: int = 0
+    ) -> tuple[list[UserPublic], int]:
+        """The users, or one page of them, and the total row count."""
         with self.get_session() as session:
+            total = session.scalar(select(func.count()).select_from(User)) or 0
             result = []
             # Eager load related entities, disable nested loading
-            users = (
-                session.scalars(
-                    select(User).options(
-                        joinedload(User.team_seasons).joinedload(
-                            DBUserTeamSeason.season
-                        ),
-                        joinedload(User.w3c_stats),
-                    )
-                )
-                .unique()
-                .all()
+            statement = select(User).options(
+                joinedload(User.team_seasons).joinedload(DBUserTeamSeason.season),
+                joinedload(User.w3c_stats),
             )
+            if limit is not None or offset:
+                # Offset paging is deterministic only with a fixed order
+                statement = statement.order_by(User.id).offset(offset)
+                if limit is not None:
+                    statement = statement.limit(limit)
+            users = session.scalars(statement).unique().all()
 
             for user in users:
                 result.append(UserPublic.from_user(user))
-            return result
+            return result, total
 
     def createW3CStats(self, w3c_stats: W3CStatsCreate, user_id: int) -> W3CStatsPublic:
         with self.get_session() as session:

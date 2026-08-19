@@ -2,7 +2,7 @@ import logging
 from collections.abc import Iterable
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session as OrmSession
 
@@ -61,19 +61,28 @@ class PlayerCareerStatsService(BaseService):
                 return True
             return False
 
-    def get_all(self) -> list[PlayerCareerStatsPublic]:
-        """Get all player career stats ordered by rating"""
+    def get_all(
+        self, limit: int | None = None, offset: int = 0
+    ) -> tuple[list[PlayerCareerStatsPublic], int]:
+        """The career stats by rating, or one page of them, and the total count"""
         with self.get_session() as session:
-            stats = (
-                session.scalars(
-                    select(PlayerCareerStats)
-                    .options(*PlayerCareerStats.eager_options())
-                    .order_by(PlayerCareerStats.rating.desc())
-                )
-                .unique()
-                .all()
+            total = (
+                session.scalar(select(func.count()).select_from(PlayerCareerStats)) or 0
             )
-            return [PlayerCareerStatsPublic.from_career_stats(stat) for stat in stats]
+            statement = (
+                select(PlayerCareerStats)
+                .options(*PlayerCareerStats.eager_options())
+                .order_by(PlayerCareerStats.rating.desc())
+            )
+            if limit is not None or offset:
+                # Two rows of equal rating need the id to keep a fixed order
+                statement = statement.order_by(PlayerCareerStats.id).offset(offset)
+                if limit is not None:
+                    statement = statement.limit(limit)
+            stats = session.scalars(statement).unique().all()
+            return [
+                PlayerCareerStatsPublic.from_career_stats(stat) for stat in stats
+            ], total
 
     def get_by_user_id(self, user_id: int) -> PlayerCareerStatsPublic | None:
         """Get career stats for a specific user"""
@@ -327,9 +336,11 @@ class PlayerCareerStatsService(BaseService):
         stats_record.seasons_played = update_data["seasons_played"]
         stats_record.avg_series_per_season = update_data["avg_series_per_season"]
 
-    def get_all_career_stats(self) -> list[PlayerCareerStatsPublic]:
-        """Get all player career stats ordered by rating"""
-        return self.get_all()
+    def get_all_career_stats(
+        self, limit: int | None = None, offset: int = 0
+    ) -> tuple[list[PlayerCareerStatsPublic], int]:
+        """Get all player career stats ordered by rating, and the total count"""
+        return self.get_all(limit=limit, offset=offset)
 
     def get_career_stats_by_user(self, user_id: int) -> PlayerCareerStatsPublic | None:
         """Get career stats for a specific user"""
