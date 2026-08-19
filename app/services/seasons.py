@@ -1,7 +1,7 @@
 import logging
 
 from sqlalchemy import ColumnElement, select
-from sqlalchemy.orm import joinedload, noload
+from sqlalchemy.orm import joinedload, noload, selectinload
 
 from app.core.exceptions import NotFoundError
 from app.core.query import QueryElement, QueryUtil
@@ -43,9 +43,10 @@ class SeasonService(BaseService):
                 session.scalars(
                     select(Season)
                     .options(
-                        joinedload(Season.user_teams).noload("*"),
-                        joinedload(Season.teams).noload("*"),
-                        joinedload(Season.maps).joinedload(DBMapSeason.map),
+                        # noload alone; a joined link table multiplies the rows
+                        noload(Season.user_teams),
+                        noload(Season.teams),
+                        selectinload(Season.maps).joinedload(DBMapSeason.map),
                         noload(Season.signup_users),
                     )
                     .where(Season.id == season_id)
@@ -65,9 +66,10 @@ class SeasonService(BaseService):
             seasons = (
                 session.scalars(
                     select(Season).options(
-                        joinedload(Season.user_teams).noload("*"),
-                        joinedload(Season.teams).noload("*"),
-                        joinedload(Season.maps).joinedload(DBMapSeason.map),
+                        # noload alone; a joined link table multiplies the rows
+                        noload(Season.user_teams),
+                        noload(Season.teams),
+                        selectinload(Season.maps).joinedload(DBMapSeason.map),
                         noload(Season.signup_users),
                     )
                 )
@@ -112,9 +114,10 @@ class SeasonService(BaseService):
                 session.scalars(
                     select(Season)
                     .options(
-                        joinedload(Season.user_teams).noload("*"),
-                        joinedload(Season.teams).noload("*"),
-                        joinedload(Season.maps).joinedload(DBMapSeason.map),
+                        # noload alone; a joined link table multiplies the rows
+                        noload(Season.user_teams),
+                        noload(Season.teams),
+                        selectinload(Season.maps).joinedload(DBMapSeason.map),
                         noload(Season.signup_users),
                     )
                     .where(filter)
