@@ -104,7 +104,7 @@ class SeriesService(BaseService):
             filter = QueryUtil.convertQueryToDBFilter(Series, query)
             series_list = (
                 session.scalars(
-                    select(Series).options(*Series._eager_options()).where(filter)
+                    select(Series).options(*Series._list_eager_options()).where(filter)
                 ).all()
                 if filter is not None
                 else []
@@ -113,7 +113,7 @@ class SeriesService(BaseService):
                 logger.debug(f"No series found by searchcriteria: {query}")
                 return result
             for series in series_list:
-                result.append(SeriesPublic.from_series(series))
+                result.append(SeriesPublic.from_series_reduced(series))
             return result
 
     def searchForSeasonAndPlayday(
@@ -129,7 +129,7 @@ class SeriesService(BaseService):
                 logger.debug(f"No series found by searchcriteria: {query}")
                 return result
             for series in series_list:
-                result.append(SeriesPublic.from_series(series))
+                result.append(SeriesPublic.from_series_reduced(series))
             return result
 
     def searchForSeason(
@@ -143,7 +143,7 @@ class SeriesService(BaseService):
                 logger.debug(f"No series found by searchcriteria: {query}")
                 return result
             for series in series_list:
-                result.append(SeriesPublic.from_series(series))
+                result.append(SeriesPublic.from_series_reduced(series))
             return result
 
     def create_series(self, series: SeriesCreate) -> SeriesPublic:

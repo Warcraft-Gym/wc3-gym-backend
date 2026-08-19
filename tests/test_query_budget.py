@@ -101,13 +101,16 @@ def test_get_series_costs_seven_statements(league: dict[str, Any]) -> None:
     assert tally[0] == 7
 
 
-def test_search_for_season_costs_seven_statements(league: dict[str, Any]) -> None:
+def test_search_for_season_costs_one_statement(league: dict[str, Any]) -> None:
+    """The season list is reduced, so it needs no collection statements."""
     service = SeriesService(score_app_service=None, user_app_service=None)
     query = QueryUtil.parseQuery("player1_id > 0")
     with count_statements() as tally:
         series_list = service.searchForSeason(league["season_id"], query)
     assert len(series_list) == 2
-    assert tally[0] == 7
+    assert series_list[0].player1.name
+    assert series_list[0].player1.w3c_stats == []
+    assert tally[0] == 1
 
 
 def test_career_stats_rows_cost_one_statement(league: dict[str, Any]) -> None:

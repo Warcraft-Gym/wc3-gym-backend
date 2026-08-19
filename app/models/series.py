@@ -49,7 +49,7 @@ class Series(SeriesBase, DBModel, table=True):
         playday: int,
         filters: ColumnExpressionArgument[bool] | None,
     ) -> Sequence[Self]:
-        stmt = select(cls).options(*cls._eager_options())
+        stmt = select(cls).options(*cls._list_eager_options())
         stmt = stmt.where(
             cls.match.has(and_(Match.season_id == season_id, Match.playday == playday))
         )
@@ -64,11 +64,25 @@ class Series(SeriesBase, DBModel, table=True):
         season_id: int,
         filters: ColumnExpressionArgument[bool] | None,
     ) -> Sequence[Self]:
-        stmt = select(cls).options(*cls._eager_options())
+        stmt = select(cls).options(*cls._list_eager_options())
         stmt = stmt.where(cls.match.has(Match.season_id == season_id))
         if filters is not None:
             stmt = stmt.where(filters)
         return session.scalars(stmt).all()
+
+    @classmethod
+    def _list_eager_options(cls) -> tuple[ExecutableOption, ...]:
+        """The to-one relations the reduced public series reads."""
+        from sqlalchemy.orm import joinedload
+
+        return (
+            joinedload(cls.match).joinedload(Match.team1),
+            joinedload(cls.match).joinedload(Match.team2),
+            joinedload(cls.match).joinedload(Match.season),
+            joinedload(cls.match).joinedload(Match.fixed_map),
+            joinedload(cls.player1),
+            joinedload(cls.player2),
+        )
 
     @classmethod
     def _eager_options(cls) -> tuple[ExecutableOption, ...]:

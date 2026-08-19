@@ -193,3 +193,40 @@ def test_fantasy_teams(client: Client, seeded: dict[str, Any]) -> None:
 def test_empty_database_returns_empty_lists(client: Client) -> None:
     for path in ["/users", "/seasons", "/maps", "/stats/career"]:
         assert get_json(client, path) == []
+
+
+def test_series_season_list_keeps_every_key_with_empty_collections(
+    client: Client, seeded: dict[str, Any]
+) -> None:
+    """The season series list answers reduced players; the scalars stay."""
+    with Session() as session:
+        for user_id in seeded["player_ids"]:
+            session.add(
+                W3CStats(user_id=user_id, wc3_season=20, race=Race.HU, mmr=1500)
+            )
+        session.commit()
+
+    series = get_json(client, f"/series/season/{seeded['season_id']}")[0]
+    assert series["player1"]["name"]
+    assert series["player1"]["race"]
+    assert series["match"]["team1"]["name"]
+    for player in (series["player1"], series["player2"]):
+        assert player["w3c_stats"] == []
+        assert player["gnl_stats"] == []
+        assert player["signup_seasons"] == []
+
+
+def test_series_by_id_keeps_the_full_graph(
+    client: Client, seeded: dict[str, Any]
+) -> None:
+    """The single-series route still answers the nested collections."""
+    with Session() as session:
+        session.add(
+            W3CStats(
+                user_id=seeded["player_ids"][0], wc3_season=20, race=Race.HU, mmr=1500
+            )
+        )
+        session.commit()
+
+    series = get_json(client, f"/series/{seeded['series_played_id']}")
+    assert len(series["player1"]["w3c_stats"]) == 1
