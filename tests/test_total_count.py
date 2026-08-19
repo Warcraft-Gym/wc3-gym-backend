@@ -97,29 +97,30 @@ def test_users_reject_a_bad_page(client: Client, seeded: dict[str, Any]) -> None
 def test_career_stats_report_the_total_without_paging(
     client: Client, seeded: dict[str, Any]
 ) -> None:
-    """The unpaged list holds the two seeded stats rows and counts them."""
+    """The unpaged list holds the two seeded rows and the player who holds
+    none, and counts all three."""
     resp = client.get("/stats/career")
     assert resp.status_code == 200
-    assert resp.headers["X-Total-Count"] == "2"
-    assert len(resp.json()) == 2
+    assert resp.headers["X-Total-Count"] == "3"
+    assert len(resp.json()) == 3
 
 
 def test_career_stats_report_the_same_total_on_every_page(
     client: Client, seeded: dict[str, Any]
 ) -> None:
-    """Two pages of one row carry the two ids, and the total stays 2."""
+    """Three pages of one row carry the three players, and the total stays 3."""
     everything = client.get("/stats/career")
-    ids = [stat["id"] for stat in everything.json()]
+    names = [stat["player_name"] for stat in everything.json()]
 
     paged = []
-    for offset in (0, 1):
+    for offset in (0, 1, 2):
         resp = client.get(f"/stats/career?limit=1&offset={offset}")
         assert resp.status_code == 200
-        assert resp.headers["X-Total-Count"] == "2"
+        assert resp.headers["X-Total-Count"] == "3"
         page = resp.json()
         assert len(page) == 1
-        paged += [stat["id"] for stat in page]
-    assert sorted(paged) == sorted(ids)
+        paged += [stat["player_name"] for stat in page]
+    assert paged == names
 
 
 def test_career_stats_reject_a_bad_page(client: Client, seeded: dict[str, Any]) -> None:

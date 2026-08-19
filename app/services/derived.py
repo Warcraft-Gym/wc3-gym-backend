@@ -1,29 +1,40 @@
-"""Series points, match scores and team standings, computed from the map
-scores at read time.
+"""Series points, match scores, team standings and career totals, computed
+from the map scores at read time.
 
 Every number here comes from the map scores of the series and the score system
-of the season that holds them, through app.core.scoring. Nothing stores
-player1_points, player2_points, team1_score, team2_score, final_score,
-points_against or points_available.
+of the season that holds them, through app.core.scoring and app.core.career.
+Nothing stores player1_points, player2_points, team1_score, team2_score,
+final_score, points_against or points_available.
 
 Two statements answer a whole response: one resolves the score system of every
 match or season in it, and one sums the series on that system. points_case
 reads the system and not the season, so seasons that share a system share a
 statement, and there are two systems.
 
+A career answer costs two more statements: one groups the series of every
+player by season, one names the seasons the league has played. Both are
+constant, and a list of career rows also loads the players who have played
+and hold no row of their own.
+
 A team with no played series stands at zero, not at null.
 """
 
 from collections.abc import Iterable
+from typing import NamedTuple
 
-from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy import case, func, or_, select, union_all
+from sqlalchemy.orm import Session, aliased, selectinload
 
+from app.core import career
 from app.core.scoring import DEFAULT_SYSTEM, max_points, points, points_case
 from app.models.match import Match, MatchPublic
+from app.models.player_career_stats import PlayerCareerStatsPublic
+from app.models.relationships import DBUserSeasonSignup
 from app.models.season import Season
 from app.models.series import Series, SeriesPublic
 from app.models.team import TeamPublic
+from app.models.user import User, UserPublic
+from app.models.user_team_season import DBUserTeamSeason
 
 type MatchScores = dict[int, tuple[int, int]]
 # score system, series per week and number of weeks, per season
@@ -189,3 +200,239 @@ def fill_standings(session: Session, teams: Iterable[TeamPublic | None]) -> None
             if per_week is not None and weeks is not None
             else None
         )
+
+
+class CareerTally(NamedTuple):
+    """What one player took from one season: series he took part in, series
+    won and lost, and maps won and lost. A drawn series is neither won nor
+    lost."""
+
+    played: int
+    won: int
+    lost: int
+    games_won: int
+    games_lost: int
+
+
+class CareerPlayer(NamedTuple):
+    """One player of the league, and his tally of every season he stood in."""
+
+    name: str | None
+    seasons: dict[int | None, CareerTally]
+
+
+def _career_tallies(session: Session) -> dict[int, CareerPlayer]:
+    """The season tally of every player who stands in a series, in one statement.
+
+    A series counts for both of its players, so the two sides union before the
+    grouping. A series with no map score still names the season the player
+    stood in, and pays nothing.
+    """
+    player1, player2 = aliased(User), aliased(User)
+    sides = union_all(
+        select(
+            Series.player1_id.label("user_id"),
+            player1.name.label("player_name"),
+            Match.season_id.label("season_id"),
+            func.coalesce(Series.player1_score, 0).label("own"),
+            func.coalesce(Series.player2_score, 0).label("opp"),
+        )
+        .join(Match, Match.id == Series.match_id, isouter=True)
+        .join(player1, player1.id == Series.player1_id, isouter=True),
+        select(
+            Series.player2_id,
+            player2.name,
+            Match.season_id,
+            func.coalesce(Series.player2_score, 0),
+            func.coalesce(Series.player1_score, 0),
+        )
+        .join(Match, Match.id == Series.match_id, isouter=True)
+        .join(player2, player2.id == Series.player2_id, isouter=True),
+    ).subquery()
+
+    own, opp = sides.c.own, sides.c.opp
+    rows = session.execute(
+        select(
+            sides.c.user_id,
+            sides.c.player_name,
+            sides.c.season_id,
+            func.sum(case((or_(own != 0, opp != 0), 1), else_=0)),
+            func.sum(case((own > opp, 1), else_=0)),
+            func.sum(case((opp > own, 1), else_=0)),
+            func.sum(own),
+            func.sum(opp),
+        )
+        .where(sides.c.user_id.is_not(None))
+        .group_by(sides.c.user_id, sides.c.player_name, sides.c.season_id)
+    ).all()
+
+    players: dict[int, CareerPlayer] = {}
+    for user_id, name, season_id, played, won, lost, games_won, games_lost in rows:
+        player = players.setdefault(user_id, CareerPlayer(name, {}))
+        player.seasons[season_id] = CareerTally(
+            int(played or 0),
+            int(won or 0),
+            int(lost or 0),
+            int(games_won or 0),
+            int(games_lost or 0),
+        )
+    return players
+
+
+def _system_seasons(session: Session) -> list[int]:
+    """The seasons the league has played, in the order the decay applies."""
+    season_ids = session.scalars(
+        select(Match.season_id).join(Series, Series.match_id == Match.id).distinct()
+    ).all()
+    return sorted(season_id for season_id in season_ids if season_id is not None)
+
+
+def _career_users(session: Session, user_ids: set[int]) -> dict[int, User]:
+    """The players a career row must carry, with the collections the answer reads."""
+    if not user_ids:
+        return {}
+    users = (
+        session.scalars(
+            select(User)
+            .options(
+                # Collections use selectinload; a joined collection multiplies the rows
+                selectinload(User.w3c_stats),
+                selectinload(User.team_seasons).joinedload(DBUserTeamSeason.team),
+                selectinload(User.team_seasons).joinedload(DBUserTeamSeason.season),
+                selectinload(User.signup_seasons).joinedload(DBUserSeasonSignup.season),
+            )
+            .where(User.id.in_(user_ids))
+        )
+        .unique()
+        .all()
+    )
+    return {user.id: user for user in users}
+
+
+def _match_players(
+    rows: list[PlayerCareerStatsPublic], tallies: dict[int, CareerPlayer]
+) -> tuple[list[CareerPlayer | None], set[int]]:
+    """The player every row stands for, and the players that hold no row.
+
+    A row finds its player by user id. A historical row that holds no user id
+    finds him by the name it carries, unless another row already stands for
+    him.
+    """
+    claimed = {row.user_id for row in rows if row.user_id in tallies}
+    by_name = {
+        player.name: user_id
+        for user_id, player in tallies.items()
+        if player.name is not None
+    }
+
+    players: list[CareerPlayer | None] = []
+    for row in rows:
+        if row.user_id in tallies:
+            players.append(tallies[row.user_id])
+            continue
+        user_id = by_name.get(row.player_name)
+        if user_id is None or user_id in claimed:
+            players.append(None)
+            continue
+        claimed.add(user_id)
+        players.append(tallies[user_id])
+    return players, set(tallies) - claimed
+
+
+def _fill_row(
+    row: PlayerCareerStatsPublic,
+    player: CareerPlayer | None,
+    system_seasons: list[int],
+) -> None:
+    """Fill the nine totals of one row from its historical baseline and its
+    series."""
+    seasons = player.seasons if player else {}
+    series_won = (row.historical_series_won or 0) + sum(
+        tally.won for tally in seasons.values()
+    )
+    series_lost = (row.historical_series_lost or 0) + sum(
+        tally.lost for tally in seasons.values()
+    )
+    games_won = (row.historical_games_won or 0) + sum(
+        tally.games_won for tally in seasons.values()
+    )
+    games_lost = (row.historical_games_lost or 0) + sum(
+        tally.games_lost for tally in seasons.values()
+    )
+    seasons_played = (row.historical_seasons_played or 0) + sum(
+        1 for season_id in seasons if season_id is not None
+    )
+    points = {
+        season_id: career.season_points(tally.won, tally.played)
+        for season_id, tally in seasons.items()
+        if season_id is not None
+    }
+
+    row.rating = career.rating(row.historical_rating, points, system_seasons)
+    row.series_won = series_won
+    row.series_lost = series_lost
+    row.games_won = games_won
+    row.games_lost = games_lost
+    row.seasons_played = seasons_played
+    row.series_winrate = career.winrate(series_won, series_lost)
+    row.games_winrate = career.winrate(games_won, games_lost)
+    row.avg_series_per_season = career.per_season(
+        series_won + series_lost, seasons_played
+    )
+
+
+def _fill_rows(
+    session: Session, rows: list[PlayerCareerStatsPublic]
+) -> tuple[dict[int, CareerPlayer], set[int], list[int]]:
+    """Fill every row, and report the players that hold none."""
+    tallies = _career_tallies(session)
+    system_seasons = _system_seasons(session)
+    players, unclaimed = _match_players(rows, tallies)
+    for row, player in zip(rows, players, strict=True):
+        _fill_row(row, player, system_seasons)
+    return tallies, unclaimed, system_seasons
+
+
+def fill_career(
+    session: Session, stats: Iterable[PlayerCareerStatsPublic | None]
+) -> None:
+    """Fill the nine career totals of every row."""
+    rows = [row for row in stats if row is not None]
+    if rows:
+        _fill_rows(session, rows)
+
+
+def career_rows(
+    session: Session, stored: list[PlayerCareerStatsPublic]
+) -> list[PlayerCareerStatsPublic]:
+    """Every career row of the league, by rating.
+
+    A player who has played and holds no stored row stands in the list too,
+    with a null id and no historical baseline, so a new player counts from his
+    first result.
+    """
+    tallies, unclaimed, system_seasons = _fill_rows(session, stored)
+    played = {
+        user_id
+        for user_id in unclaimed
+        if any(tally.played for tally in tallies[user_id].seasons.values())
+    }
+    rows = list(stored)
+    for user_id, user in _career_users(session, played).items():
+        row = PlayerCareerStatsPublic(
+            user_id=user_id,
+            player_name=user.name,
+            user=UserPublic.from_user(user),
+            historical_rating=None,
+            historical_series_won=None,
+            historical_series_lost=None,
+            historical_games_won=None,
+            historical_games_lost=None,
+            historical_seasons_played=None,
+        )
+        _fill_row(row, tallies[user_id], system_seasons)
+        rows.append(row)
+
+    # A row with no id sorts last of its rating, because no id orders it
+    rows.sort(key=lambda stat: (-stat.rating, stat.id is None, stat.id or 0))
+    return rows

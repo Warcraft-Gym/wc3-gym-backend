@@ -2,28 +2,27 @@ import logging
 from collections.abc import Iterable
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session as OrmSession
 
+from app.core.career import (
+    GNL_RATING_DECAY_RATE_PER_SEASON,
+    GNL_RATING_FLAT_MULTIPLIER,
+    GNL_RATING_MATCH_LOSS_VALUE,
+    GNL_RATING_MATCH_WIN_VALUE,
+    GNL_RATING_SEASON_PLAYED_VALUE,
+)
 from app.models.player_career_stats import (
     PlayerCareerStats,
     PlayerCareerStatsPublic,
 )
 from app.models.user import User
+from app.services import derived
 from app.services.base import BaseService
 from app.services.series import CareerSeriesRow, SeriesService
 
 logger = logging.getLogger(__name__)
-
-# GNL Rating calculation constants
-GNL_RATING_MATCH_WIN_VALUE = 1.0
-GNL_RATING_MATCH_LOSS_VALUE = 0.5
-GNL_RATING_SEASON_PLAYED_VALUE = 1.0
-GNL_RATING_DECAY_RATE_PER_SEASON = (
-    0.15  # Every season remove 15% of each players' points
-)
-GNL_RATING_FLAT_MULTIPLIER = 100.0  # Creates separation between scores
 
 
 class PlayerCareerStatsService(BaseService):
@@ -36,7 +35,11 @@ class PlayerCareerStatsService(BaseService):
             stat = session.get(
                 PlayerCareerStats, stat_id, options=PlayerCareerStats.eager_options()
             )
-            return PlayerCareerStatsPublic.from_career_stats(stat) if stat else None
+            if not stat:
+                return None
+            public = PlayerCareerStatsPublic.from_career_stats(stat)
+            derived.fill_career(session, [public])
+            return public
 
     def add(self, entity: dict[str, Any]) -> PlayerCareerStatsPublic | None:
         """Add new career stats record (implements abstract method)"""
@@ -61,28 +64,31 @@ class PlayerCareerStatsService(BaseService):
                 return True
             return False
 
+    def _stored_rows(self, session: OrmSession) -> list[PlayerCareerStatsPublic]:
+        """Every stored career row, by id, with the player it carries."""
+        stats = (
+            session.scalars(
+                select(PlayerCareerStats)
+                .options(*PlayerCareerStats.eager_options())
+                .order_by(PlayerCareerStats.id)
+            )
+            .unique()
+            .all()
+        )
+        return [PlayerCareerStatsPublic.from_career_stats(stat) for stat in stats]
+
     def get_all(
         self, limit: int | None = None, offset: int = 0
     ) -> tuple[list[PlayerCareerStatsPublic], int]:
-        """The career stats by rating, or one page of them, and the total count"""
+        """The career stats by rating, or one page of them, and the total count
+
+        The rating orders the rows and the id breaks a tie, so offset paging
+        walks a fixed order.
+        """
         with self.get_session() as session:
-            total = (
-                session.scalar(select(func.count()).select_from(PlayerCareerStats)) or 0
-            )
-            statement = (
-                select(PlayerCareerStats)
-                .options(*PlayerCareerStats.eager_options())
-                .order_by(PlayerCareerStats.rating.desc())
-            )
-            if limit is not None or offset:
-                # Two rows of equal rating need the id to keep a fixed order
-                statement = statement.order_by(PlayerCareerStats.id).offset(offset)
-                if limit is not None:
-                    statement = statement.limit(limit)
-            stats = session.scalars(statement).unique().all()
-            return [
-                PlayerCareerStatsPublic.from_career_stats(stat) for stat in stats
-            ], total
+            rows = derived.career_rows(session, self._stored_rows(session))
+            end = None if limit is None else offset + limit
+            return rows[offset:end], len(rows)
 
     def get_by_user_id(self, user_id: int) -> PlayerCareerStatsPublic | None:
         """Get career stats for a specific user"""
@@ -93,7 +99,11 @@ class PlayerCareerStatsService(BaseService):
                 .where(PlayerCareerStats.user_id == user_id)
                 .limit(1)
             ).first()
-            return PlayerCareerStatsPublic.from_career_stats(stat) if stat else None
+            if not stat:
+                return None
+            public = PlayerCareerStatsPublic.from_career_stats(stat)
+            derived.fill_career(session, [public])
+            return public
 
     def get_by_player_name(self, player_name: str) -> PlayerCareerStatsPublic | None:
         """Get career stats by player name (for unmapped historical records)"""
@@ -104,7 +114,11 @@ class PlayerCareerStatsService(BaseService):
                 .where(PlayerCareerStats.player_name == player_name)
                 .limit(1)
             ).first()
-            return PlayerCareerStatsPublic.from_career_stats(stat) if stat else None
+            if not stat:
+                return None
+            public = PlayerCareerStatsPublic.from_career_stats(stat)
+            derived.fill_career(session, [public])
+            return public
 
     def get_or_create(self, user_id: int) -> PlayerCareerStatsPublic | None:
         """Get existing stats or create new record for user"""
@@ -472,7 +486,8 @@ class PlayerCareerStatsService(BaseService):
         updates = []
 
         # Get all existing stats records upfront (more efficient than querying per player)
-        all_existing_stats, _ = self.get_all()
+        with self.get_session() as session:
+            all_existing_stats = self._stored_rows(session)
 
         # Create lookup dictionaries for fast access
         stats_by_user_id = {
@@ -832,7 +847,9 @@ class PlayerCareerStatsService(BaseService):
             if not updated_stat:
                 return None
 
-            return PlayerCareerStatsPublic.from_career_stats(updated_stat)
+            public = PlayerCareerStatsPublic.from_career_stats(updated_stat)
+            derived.fill_career(session, [public])
+            return public
 
     def delete_career_stats(self, stat_id: int) -> bool:
         """Delete career stats record"""

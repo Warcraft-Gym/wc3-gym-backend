@@ -88,8 +88,9 @@ def test_series_for_season(client: Client, seeded: dict[str, Any]) -> None:
 
 
 def test_career_stats(client: Client, seeded: dict[str, Any]) -> None:
+    # Two stored rows, and P3 who played a series and holds none
     stats = get_json(client, "/stats/career")
-    assert len(stats) == 2
+    assert len(stats) == 3
     p1 = next(s for s in stats if s["player_name"] == "P1")
     assert p1["series_won"] == 1
     assert p1["games_won"] == 2
