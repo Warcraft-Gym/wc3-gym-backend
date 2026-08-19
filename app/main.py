@@ -67,6 +67,8 @@ def create_app(db_url: str | None = None) -> FastAPI:
         allow_origins=["*"],
         allow_methods=["*"],
         allow_headers=["*"],
+        # Browsers hide custom response headers unless CORS exposes them
+        expose_headers=["X-Total-Count"],
     )
 
     @app.exception_handler(NotFoundError)
