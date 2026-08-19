@@ -6,6 +6,7 @@ from sqlalchemy.orm import joinedload
 from app.core.exceptions import NotFoundError
 from app.core.query import QueryElement, QueryUtil
 from app.models.match import Match, MatchCreate, MatchPublic, MatchUpdate
+from app.services import derived
 from app.services.base import BaseService
 
 logger = logging.getLogger(__name__)
@@ -15,7 +16,9 @@ class MatchService(BaseService):
     def add(self, match: MatchCreate) -> MatchPublic:
         with self.get_session() as session:
             match = Match.add(session, match.model_dump())
-            return MatchPublic.from_match(match)
+            public = MatchPublic.from_match(match)
+            derived.fill_matches(session, [public])
+            return public
 
     def update(self, match_id: int, match: MatchUpdate) -> MatchPublic:
         with self.get_session() as session:
@@ -25,7 +28,9 @@ class MatchService(BaseService):
             if not match:
                 logger.error("Match could not be updated!")
                 raise NotFoundError("Match not found")
-            return MatchPublic.from_match(match)
+            public = MatchPublic.from_match(match)
+            derived.fill_matches(session, [public])
+            return public
 
     def delete(self, match_id: int) -> None:
         with self.get_session() as session:
@@ -52,7 +57,9 @@ class MatchService(BaseService):
             if not match:
                 logger.error("Match could not be found!")
                 raise NotFoundError("Match not found")
-            return MatchPublic.from_match(match)
+            public = MatchPublic.from_match(match)
+            derived.fill_matches(session, [public])
+            return public
 
     def search(
         self, query: QueryElement | None, limit: int | None = None, offset: int = 0
@@ -84,6 +91,7 @@ class MatchService(BaseService):
                 return result
             for match in matches:
                 result.append(MatchPublic.from_match(match))
+            derived.fill_matches(session, result)
             return result
 
     def create_match(self, match: MatchCreate) -> MatchPublic:

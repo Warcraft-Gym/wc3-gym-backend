@@ -10,6 +10,10 @@ here.
 
 Two tests layer raiseload on the paths the options cover, so an
 unintended lazy load on those paths raises instead of passing silently.
+
+A series or bet answer also derives its points and its match score, which
+costs two more statements: one for the score system of every match in the
+answer, one for the sum of the series on that system. Both are constant.
 """
 
 from collections.abc import Iterator
@@ -93,15 +97,15 @@ def league(app: FastAPI, seeded: dict[str, Any]) -> dict[str, Any]:
     return seeded
 
 
-def test_get_series_costs_seven_statements(league: dict[str, Any]) -> None:
+def test_get_series_costs_nine_statements(league: dict[str, Any]) -> None:
     service = SeriesService(score_app_service=None, user_app_service=None)
     with count_statements() as tally:
         series = service.get(league["series_played_id"])
     assert series.player1.w3c_stats
-    assert tally[0] == 7
+    assert tally[0] == 9
 
 
-def test_search_for_season_costs_one_statement(league: dict[str, Any]) -> None:
+def test_search_for_season_costs_three_statements(league: dict[str, Any]) -> None:
     """The season list is reduced, so it needs no collection statements."""
     service = SeriesService(score_app_service=None, user_app_service=None)
     query = QueryUtil.parseQuery("player1_id > 0")
@@ -110,7 +114,7 @@ def test_search_for_season_costs_one_statement(league: dict[str, Any]) -> None:
     assert len(series_list) == 2
     assert series_list[0].player1.name
     assert series_list[0].player1.w3c_stats == []
-    assert tally[0] == 1
+    assert tally[0] == 3
 
 
 def test_career_stats_rows_cost_one_statement(league: dict[str, Any]) -> None:
@@ -156,7 +160,7 @@ def test_statement_count_holds_when_the_collections_grow(
     with count_statements() as tally:
         series = service.get(league["series_played_id"])
     assert len(series.player1.w3c_stats) == 4 * STATS_PER_PLAYER
-    assert tally[0] == 7
+    assert tally[0] == 9
 
 
 def test_options_cover_the_player_graph(league: dict[str, Any]) -> None:
@@ -183,15 +187,15 @@ def test_options_cover_the_player_graph(league: dict[str, Any]) -> None:
     assert len(public.player1.signup_seasons) == 1
 
 
-def test_fantasy_bets_list_costs_one_statement(league: dict[str, Any]) -> None:
-    """The list carries no collection, so it needs no second statement."""
+def test_fantasy_bets_list_costs_three_statements(league: dict[str, Any]) -> None:
+    """The list carries no collection, so only the derived points add to it."""
     service = FantasyBetService()
     with count_statements() as tally:
         bets, total = service.getAll()
     assert len(bets) == 1
     assert total is None
     assert bets[0].user.w3c_stats == []
-    assert tally[0] == 1
+    assert tally[0] == 3
 
 
 def test_career_stats_cost_five_statements(league: dict[str, Any]) -> None:

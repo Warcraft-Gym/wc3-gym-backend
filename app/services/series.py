@@ -10,6 +10,7 @@ from app.models.match import Match
 from app.models.series import Series, SeriesCreate, SeriesPublic, SeriesUpdate
 from app.models.user import User
 from app.models.user_team_season import UserTeamSeasonStatsPublic
+from app.services import derived
 from app.services.base import BaseService
 
 if TYPE_CHECKING:
@@ -45,7 +46,9 @@ class SeriesService(BaseService):
     def add(self, series: SeriesCreate) -> SeriesPublic:
         with self.get_session() as session:
             series = Series.add(session, series.model_dump())
-            return SeriesPublic.from_series(series)
+            public = SeriesPublic.from_series(series)
+            derived.fill_series(session, [public])
+            return public
 
     def update(self, series_id: int, series: SeriesUpdate) -> SeriesPublic:
         with self.get_session() as session:
@@ -54,7 +57,9 @@ class SeriesService(BaseService):
             )
             if not series:
                 raise NotFoundError("Series not found")
-            return SeriesPublic.from_series(series)
+            public = SeriesPublic.from_series(series)
+            derived.fill_series(session, [public])
+            return public
 
     def delete(self, series_id: int) -> None:
         with self.get_session() as session:
@@ -69,7 +74,9 @@ class SeriesService(BaseService):
             ).first()
             if not series:
                 raise NotFoundError("Series not found")
-            return SeriesPublic.from_series(series)
+            public = SeriesPublic.from_series(series)
+            derived.fill_series(session, [public])
+            return public
 
     def career_stats_rows(self) -> list[CareerSeriesRow]:
         """Every series, as the columns a career total needs.
@@ -118,6 +125,7 @@ class SeriesService(BaseService):
                 return result
             for series in series_list:
                 result.append(SeriesPublic.from_series_reduced(series))
+            derived.fill_series(session, result)
             return result
 
     def count(self, query: QueryElement | None) -> int:
@@ -161,6 +169,7 @@ class SeriesService(BaseService):
                 return result
             for series in series_list:
                 result.append(SeriesPublic.from_series_reduced(series))
+            derived.fill_series(session, result)
             return result
 
     def searchForSeason(
@@ -181,6 +190,7 @@ class SeriesService(BaseService):
                 return result
             for series in series_list:
                 result.append(SeriesPublic.from_series_reduced(series))
+            derived.fill_series(session, result)
             return result
 
     def create_series(self, series: SeriesCreate) -> SeriesPublic:

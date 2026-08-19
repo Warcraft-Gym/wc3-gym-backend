@@ -13,6 +13,7 @@ from app.models.fantasy_bet import (
     FantasyBetUpdate,
 )
 from app.models.series import Series
+from app.services import derived
 from app.services.base import BaseService
 
 if TYPE_CHECKING:
@@ -28,7 +29,9 @@ class FantasyBetService(BaseService):
     def add(self, fantasy_bet: FantasyBetCreate) -> FantasyBetPublic:
         with self.get_session() as session:
             fbet = FantasyBet.add(session, fantasy_bet.model_dump())
-            return FantasyBetPublic.from_fantasy_bet(fbet)
+            public = FantasyBetPublic.from_fantasy_bet(fbet)
+            derived.fill_series(session, [public.series])
+            return public
 
     def update(
         self, fantasy_bet_id: int, fantasy_bet: FantasyBetUpdate
@@ -41,7 +44,9 @@ class FantasyBetService(BaseService):
             )
             if not fantasy_bet:
                 raise NotFoundError("Fantasy Bet not found")
-            return FantasyBetPublic.from_fantasy_bet(fantasy_bet)
+            public = FantasyBetPublic.from_fantasy_bet(fantasy_bet)
+            derived.fill_series(session, [public.series])
+            return public
 
     def delete(self, fantasy_bet_id: int) -> None:
         with self.get_session() as session:
@@ -54,7 +59,9 @@ class FantasyBetService(BaseService):
             )
             if not fbet:
                 raise NotFoundError("Fantasy Bet not found")
-            return FantasyBetPublic.from_fantasy_bet(fbet)
+            public = FantasyBetPublic.from_fantasy_bet(fbet)
+            derived.fill_series(session, [public.series])
+            return public
 
     def getAll(
         self, limit: int | None = None, offset: int = 0
@@ -73,6 +80,7 @@ class FantasyBetService(BaseService):
             fbet = session.scalars(statement).unique().all()
             for single_fbet in fbet:
                 result.append(FantasyBetPublic.from_fantasy_bet_reduced(single_fbet))
+            derived.fill_series(session, [bet.series for bet in result])
             return result, total
 
     def search(
@@ -120,6 +128,7 @@ class FantasyBetService(BaseService):
                 return result, total
             for fbet in fbets:
                 result.append(FantasyBetPublic.from_fantasy_bet(fbet))
+            derived.fill_series(session, [bet.series for bet in result])
             return result, total
 
     def _apply_bet_points_logic(self, bet: FantasyBetCreate | FantasyBetUpdate) -> None:
