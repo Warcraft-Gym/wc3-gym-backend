@@ -126,16 +126,6 @@ def test_search_for_season_costs_three_statements(league: dict[str, Any]) -> Non
     assert tally[0] == 3
 
 
-def test_career_stats_rows_cost_one_statement(league: dict[str, Any]) -> None:
-    """The career recalculation input is one row per series, not the answer."""
-    service = SeriesService(user_app_service=None)
-    with count_statements() as tally:
-        rows = service.career_stats_rows()
-    assert len(rows) == 2
-    assert rows[0].season_id == league["season_id"]
-    assert tally[0] == 1
-
-
 def test_user_season_stats_cost_two_statements(league: dict[str, Any]) -> None:
     """One statement for the counts and one for the matchup history."""
     service = SeriesService(user_app_service=None)
@@ -210,7 +200,7 @@ def test_fantasy_bets_list_costs_three_statements(league: dict[str, Any]) -> Non
 def test_career_stats_cost_ten_statements(league: dict[str, Any]) -> None:
     """Four for the stored rows and their players, two for the derived totals,
     four for the players who hold no row."""
-    service = PlayerCareerStatsService(series_service=None)
+    service = PlayerCareerStatsService()
     with count_statements() as tally:
         career, total = service.get_all()
     assert len(career) == 3
@@ -249,7 +239,7 @@ def test_career_statement_count_holds_when_the_players_grow(
         )
         session.commit()
 
-    service = PlayerCareerStatsService(series_service=None)
+    service = PlayerCareerStatsService()
     with count_statements() as tally:
         career, total = service.get_all()
     assert len(career) == 5
@@ -268,7 +258,7 @@ def test_career_stats_cost_six_statements_when_every_player_holds_a_row(
             )
         session.commit()
 
-    service = PlayerCareerStatsService(series_service=None)
+    service = PlayerCareerStatsService()
     with count_statements() as tally:
         career, total = service.get_all()
     assert len(career) == 4
@@ -278,7 +268,7 @@ def test_career_stats_cost_six_statements_when_every_player_holds_a_row(
 
 def test_one_career_row_costs_six_statements(league: dict[str, Any]) -> None:
     """One row and its player, and the two statements of the derived totals."""
-    service = PlayerCareerStatsService(series_service=None)
+    service = PlayerCareerStatsService()
     with count_statements() as tally:
         stats = service.get_by_user_id(league["player_ids"][0])
     assert stats.series_won == 1

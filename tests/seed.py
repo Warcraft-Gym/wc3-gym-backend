@@ -150,13 +150,7 @@ def seed_league(session: Session) -> dict[str, Any]:
                 winner_id=players[0].id,
                 bet_points=10,
             ),
-            PlayerCareerStats(
-                user_id=players[0].id,
-                player_name="P1",
-                series_won=1,
-                games_won=2,
-                games_lost=1,
-            ),
+            PlayerCareerStats(user_id=players[0].id, player_name="P1"),
             PlayerCareerStats(user_id=players[1].id, player_name="P2"),
             Settings(
                 key="score_system", value="standard", description="Scoring system"

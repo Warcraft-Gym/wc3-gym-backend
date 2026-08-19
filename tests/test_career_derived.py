@@ -1,29 +1,23 @@
 """The career totals come from the historical baseline and the map scores.
 
-The stored recalculation and the derived read answer the same numbers, so
-these tests run the recalculation first and then compare the answer of the
-read path with the stored columns it no longer reads. Both paths run in the
-same test, over the same database.
+No column holds them, so these tests pin the whole answer: every field of
+every row of the seeded league, in the order the rating puts them.
 
 A player who has played and holds no stored row stands in the list as well,
-which the stored path could only do after someone pressed the button.
+which the stored path could only do after someone pressed the recalculate
+button.
 """
 
-import json
 from datetime import date, datetime
 from typing import Any
 
 import pytest
 from httpx2 import Client
-from sqlalchemy import select
 
 from app.core.db import Session
 from app.models.enums import Race
 from app.models.match import Match
-from app.models.player_career_stats import (
-    PlayerCareerStats,
-    PlayerCareerStatsPublic,
-)
+from app.models.player_career_stats import PlayerCareerStats
 from app.models.season import Season
 from app.models.series import Series
 from app.models.team import Team
@@ -46,6 +40,139 @@ BASELINES = [
     ("Echo", 1000, 20, 2, 45, 10, 4),
 ]
 
+PLAYERS = ("Alpha", "Bravo", "Charlie", "Delta", "Echo")
+
+
+def player_block(name: str) -> dict[str, Any]:
+    """The user object a career row carries."""
+    number = PLAYERS.index(name)
+    return {
+        "name": name,
+        "battleTag": f"{name}#1000",
+        "discordTag": name.lower(),
+        "discordId": str(number),
+        "mmr": 1500,
+        "country": None,
+        "fantasy_tier": None,
+        "id": number + 1,
+        "race": "HU",
+        "w3c_stats": [],
+        "gnl_stats": [],
+        "signup_seasons": [],
+    }
+
+
+# Every field of every row, by rating, with the id as the tie-break
+EXPECTED = [
+    {
+        "user_id": 1,
+        "player_name": "Alpha",
+        "historical_rating": 500,
+        "historical_series_won": 10,
+        "historical_series_lost": 5,
+        "historical_games_won": 25,
+        "historical_games_lost": 15,
+        "historical_seasons_played": 3,
+        "rating": 731,
+        "series_won": 12,
+        "series_lost": 5,
+        "games_won": 29,
+        "games_lost": 16,
+        "seasons_played": 5,
+        "id": 1,
+        "user": player_block("Alpha"),
+        "series_winrate": 70.59,
+        "games_winrate": 64.44,
+        "avg_series_per_season": 3.4,
+    },
+    {
+        "user_id": 5,
+        "player_name": "Echo",
+        "historical_rating": 1000,
+        "historical_series_won": 20,
+        "historical_series_lost": 2,
+        "historical_games_won": 45,
+        "historical_games_lost": 10,
+        "historical_seasons_played": 4,
+        "rating": 722,
+        "series_won": 20,
+        "series_lost": 2,
+        "games_won": 45,
+        "games_lost": 10,
+        "seasons_played": 4,
+        "id": 3,
+        "user": player_block("Echo"),
+        "series_winrate": 90.91,
+        "games_winrate": 81.82,
+        "avg_series_per_season": 5.5,
+    },
+    {
+        # Bravo's row names no user, so only his player name links him
+        "user_id": None,
+        "player_name": "Bravo",
+        "historical_rating": 300,
+        "historical_series_won": 6,
+        "historical_series_lost": 6,
+        "historical_games_won": 15,
+        "historical_games_lost": 15,
+        "historical_seasons_played": 2,
+        "rating": 494,
+        "series_won": 6,
+        "series_lost": 8,
+        "games_won": 16,
+        "games_lost": 19,
+        "seasons_played": 4,
+        "id": 2,
+        "user": None,
+        "series_winrate": 42.86,
+        "games_winrate": 45.71,
+        "avg_series_per_season": 3.5,
+    },
+    {
+        # Charlie holds no stored row, so the list derives one with a null id
+        "user_id": 3,
+        "player_name": "Charlie",
+        "historical_rating": None,
+        "historical_series_won": None,
+        "historical_series_lost": None,
+        "historical_games_won": None,
+        "historical_games_lost": None,
+        "historical_seasons_played": None,
+        "rating": 327,
+        "series_won": 1,
+        "series_lost": 1,
+        "games_won": 2,
+        "games_lost": 2,
+        "seasons_played": 2,
+        "id": None,
+        "user": player_block("Charlie"),
+        "series_winrate": 50.0,
+        "games_winrate": 50.0,
+        "avg_series_per_season": 1.0,
+    },
+    {
+        "user_id": 4,
+        "player_name": "Delta",
+        "historical_rating": None,
+        "historical_series_won": None,
+        "historical_series_lost": None,
+        "historical_games_won": None,
+        "historical_games_lost": None,
+        "historical_seasons_played": None,
+        "rating": 320,
+        "series_won": 1,
+        "series_lost": 1,
+        "games_won": 3,
+        "games_lost": 3,
+        "seasons_played": 2,
+        "id": None,
+        "user": player_block("Delta"),
+        "series_winrate": 50.0,
+        "games_winrate": 50.0,
+        "avg_series_per_season": 1.0,
+    },
+]
+
 
 @pytest.fixture
 def league(client: Client) -> dict[str, Any]:
@@ -65,9 +192,7 @@ def league(client: Client) -> dict[str, Any]:
                 race=Race.HU,
                 mmr=1500,
             )
-            for number, name in enumerate(
-                ("Alpha", "Bravo", "Charlie", "Delta", "Echo")
-            )
+            for number, name in enumerate(PLAYERS)
         }
         seasons = [
             Season(
@@ -127,78 +252,86 @@ def league(client: Client) -> dict[str, Any]:
         return {name: player.id for name, player in players.items()}
 
 
-def stored_page(limit: int | None = None, offset: int = 0) -> tuple[str, int]:
-    """The answer the stored columns give, as the read path built it.
-
-    The rating orders the rows and the id breaks a tie.
-    """
-    with Session() as session:
-        stats = (
-            session.scalars(
-                select(PlayerCareerStats)
-                .options(*PlayerCareerStats.eager_options())
-                .order_by(PlayerCareerStats.rating.desc(), PlayerCareerStats.id)
-            )
-            .unique()
-            .all()
-        )
-        rows = [
-            PlayerCareerStatsPublic.from_career_stats(stat).to_dict() for stat in stats
-        ]
-    end = None if limit is None else offset + limit
-    return json.dumps(rows[offset:end]), len(rows)
-
-
-def recalculate(client: Client, headers: dict[str, str]) -> None:
-    resp = client.post("/stats/career/recalculate", headers=headers)
-    assert resp.status_code == 200, resp.text
-
-
-def test_the_derived_list_equals_the_stored_one(
-    client: Client, auth_headers: dict[str, str], league: dict[str, int]
+def test_the_derived_list_answers_every_field(
+    client: Client, league: dict[str, int]
 ) -> None:
-    """The full list, byte for byte, over both code paths."""
-    recalculate(client, auth_headers)
-    stored, total = stored_page()
-
+    """The full list, field for field, and the total the header carries."""
     resp = client.get("/stats/career")
     assert resp.status_code == 200
-    assert resp.headers["X-Total-Count"] == str(total)
-    assert json.dumps(resp.json()) == stored
+    assert resp.headers["X-Total-Count"] == "5"
+    assert resp.json() == EXPECTED
 
     ratings = [row["rating"] for row in resp.json()]
     assert len(set(ratings)) == len(ratings), "the order must not rest on a tie"
-    assert len(ratings) == 5
 
 
-def test_the_derived_page_equals_the_stored_one(
-    client: Client, auth_headers: dict[str, str], league: dict[str, int]
+def test_the_derived_page_answers_its_slice(
+    client: Client, league: dict[str, int]
 ) -> None:
-    """One page of two rows, and the total the header carries."""
-    recalculate(client, auth_headers)
-    stored, total = stored_page(limit=2, offset=2)
-
+    """One page of two rows walks the same order as the full list."""
     resp = client.get("/stats/career?limit=2&offset=2")
     assert resp.status_code == 200
-    assert resp.headers["X-Total-Count"] == str(total)
-    assert json.dumps(resp.json()) == stored
+    assert resp.headers["X-Total-Count"] == "5"
+    assert resp.json() == EXPECTED[2:4]
 
 
-def test_the_derived_player_equals_the_stored_one(
-    client: Client, auth_headers: dict[str, str], league: dict[str, int]
+def test_the_derived_player_answers_the_same_row(
+    client: Client, league: dict[str, int]
 ) -> None:
-    """One player, read by his user id."""
-    recalculate(client, auth_headers)
-    stored, _ = stored_page()
-    alpha = next(row for row in json.loads(stored) if row["player_name"] == "Alpha")
-
+    """One player, read by his user id, matches his row in the list."""
     resp = client.get(f"/stats/career/{league['Alpha']}")
     assert resp.status_code == 200
-    assert json.dumps(resp.json()) == json.dumps(alpha)
+    assert resp.json() == EXPECTED[0]
+
+
+def test_the_field_order_is_unchanged(client: Client, league: dict[str, int]) -> None:
+    """The response keys, in order, so a model edit cannot reshuffle them."""
+    rows = client.get("/stats/career").json()
+    assert list(rows[0]) == list(EXPECTED[0])
+
+
+def test_the_recalculate_route_is_gone(
+    client: Client, auth_headers: dict[str, str], league: dict[str, int]
+) -> None:
+    """No write refreshes the career totals, because the reads compute them."""
+    resp = client.post("/stats/career/recalculate", headers=auth_headers)
+    # 405, not 404: the path still matches /stats/career/{stat_id}, which has
+    # no POST
+    assert resp.status_code == 405
+    assert (
+        "/stats/career/recalculate" not in client.get("/openapi.json").json()["paths"]
+    )
+
+
+def test_a_write_that_still_sends_the_totals_is_accepted(
+    client: Client, auth_headers: dict[str, str], league: dict[str, int]
+) -> None:
+    """An old client sends the dropped fields, and the answer ignores them."""
+    resp = client.put(
+        "/stats/career/1",
+        json={
+            "historical_rating": 600,
+            "rating": 9999,
+            "series_won": 99,
+            "series_lost": 99,
+            "games_won": 99,
+            "games_lost": 99,
+            "seasons_played": 99,
+            "series_winrate": 99.0,
+            "games_winrate": 99.0,
+            "avg_series_per_season": 99.0,
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["historical_rating"] == 600
+    assert body["series_won"] == 12
+    assert body["rating"] != 9999
 
 
 def test_the_unmapped_historical_row_takes_the_series_of_its_name(
-    client: Client, auth_headers: dict[str, str], league: dict[str, int]
+    client: Client, league: dict[str, int]
 ) -> None:
     """Bravo's row names no user, and still counts the series he played."""
     rows = client.get("/stats/career").json()

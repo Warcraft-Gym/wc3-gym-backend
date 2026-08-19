@@ -1,5 +1,5 @@
 import logging
-from typing import TYPE_CHECKING, NamedTuple
+from typing import TYPE_CHECKING
 
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import aliased
@@ -17,22 +17,6 @@ if TYPE_CHECKING:
     from app.services.users import UserService
 
 logger = logging.getLogger(__name__)
-
-
-class CareerSeriesRow(NamedTuple):
-    """The seven values a career total reads off one series.
-
-    player1_name and player2_name are the raw user names, null when the
-    series points at a user row that is not there.
-    """
-
-    player1_id: int | None
-    player2_id: int | None
-    player1_score: int | None
-    player2_score: int | None
-    season_id: int | None
-    player1_name: str | None
-    player2_name: str | None
 
 
 class SeriesService(BaseService):
@@ -73,33 +57,6 @@ class SeriesService(BaseService):
             public = SeriesPublic.from_series(series)
             derived.fill_series(session, [public])
             return public
-
-    def career_stats_rows(self) -> list[CareerSeriesRow]:
-        """Every series, as the columns a career total needs.
-
-        One statement and one row per series: the career recalculation
-        reads ids, scores, the season and the two player names, so it
-        never builds the nested series answer.
-        """
-        player1 = aliased(User)
-        player2 = aliased(User)
-        with self.get_session() as session:
-            # Outer joins, so a series with no match or no player row stays
-            rows = session.execute(
-                select(
-                    Series.player1_id,
-                    Series.player2_id,
-                    Series.player1_score,
-                    Series.player2_score,
-                    Match.season_id,
-                    player1.name,
-                    player2.name,
-                )
-                .join(Match, Match.id == Series.match_id, isouter=True)
-                .join(player1, player1.id == Series.player1_id, isouter=True)
-                .join(player2, player2.id == Series.player2_id, isouter=True)
-            ).all()
-            return [CareerSeriesRow(*row) for row in rows]
 
     def search(
         self, query: QueryElement | None, limit: int | None = None, offset: int = 0

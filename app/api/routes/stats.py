@@ -67,8 +67,7 @@ def import_historical_csv(
     """One-time import of historical stats.
 
     Requires CSV file upload with columns: NAME, RATING, WON Series, LOST
-    Series, WINRATE (x2), WON Games, LOST Games, Seasons PLAYED, AVG NUM
-    Series
+    Series, WON Games, LOST Games, Seasons PLAYED
     """
     if file is None:
         return JSONResponse({"error": "No file provided"}, status_code=400)
@@ -101,14 +100,3 @@ def import_historical_csv(
         },
         status_code=200,
     )
-
-
-@router.post("/stats/career/recalculate", dependencies=[Depends(require_admin)])
-def recalculate_stats(service: StatsServiceDep) -> dict[str, Any]:
-    """Combines historical baseline with ALL series data in the database to
-    update player stats. Always uses complete series history for accurate
-    career totals. Run this after importing data or to refresh stats.
-    """
-    result = service.recalculate_all_stats()
-
-    return {"success": True, "updated": result["updated"], "errors": result["errors"]}

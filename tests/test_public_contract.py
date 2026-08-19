@@ -45,7 +45,6 @@ def public_seed(app: FastAPI) -> dict[str, Any]:
     from app.core.db import Session
     from app.models.enums import Race
     from app.models.fantasy_team import FantasyTeam
-    from app.models.player_career_stats import PlayerCareerStats
     from app.models.relationships import DBFantasyTeamPlayer
     from app.models.season import Season
     from app.models.settings import Settings
@@ -159,13 +158,6 @@ def public_seed(app: FastAPI) -> dict[str, Any]:
         )
         session.add(empty_team)
         session.flush()
-
-        stats = session.query(PlayerCareerStats).all()
-        for rating, stat in enumerate(stats, start=1):
-            stat.rating = 1200 + rating
-            stat.series_lost = 1
-            stat.series_winrate = 50.00
-            stat.seasons_played = 1
 
         ids["season_2_id"] = season_2.id
         ids["coach_id"] = coach.id

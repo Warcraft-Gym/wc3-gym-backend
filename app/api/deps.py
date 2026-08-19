@@ -92,7 +92,7 @@ fantasy_score_service = FantasyScoreService(
     team_app_service=team_service,
 )
 koth_service = KothService(settings_app_service=settings_service)
-stats_service = PlayerCareerStatsService(series_service=series_service)
+stats_service = PlayerCareerStatsService()
 
 # 24-hour markers per process, e.g. the per-team W3C sync rate limit
 ttl_cache: dict[str, float] = {}

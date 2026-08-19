@@ -1,7 +1,5 @@
-from decimal import Decimal
 from typing import Any, Self
 
-from sqlalchemy import DECIMAL
 from sqlalchemy.orm import joinedload
 from sqlalchemy.sql.base import ExecutableOption
 from sqlmodel import Field, Relationship, SQLModel
@@ -29,14 +27,6 @@ class PlayerCareerStatsBase(SQLModel):
     historical_games_lost: int | None = 0
     historical_seasons_played: int | None = 0
 
-    # Combined totals (historical + calculated, for display)
-    rating: int | None = 0
-    series_won: int | None = 0
-    series_lost: int | None = 0
-    games_won: int | None = 0
-    games_lost: int | None = 0
-    seasons_played: int | None = 0
-
 
 class PlayerCareerStats(PlayerCareerStatsBase, DBModel, table=True):
     __tablename__ = "player_career_stats"
@@ -44,9 +34,6 @@ class PlayerCareerStats(PlayerCareerStatsBase, DBModel, table=True):
     id: int | None = Field(
         default=None, primary_key=True, sa_column_kwargs={"autoincrement": True}
     )
-    series_winrate: Decimal | None = Field(default=0.00, sa_type=DECIMAL(5, 2))
-    games_winrate: Decimal | None = Field(default=0.00, sa_type=DECIMAL(5, 2))
-    avg_series_per_season: Decimal | None = Field(default=0.00, sa_type=DECIMAL(5, 2))
 
     # Relationships
     user: User | None = Relationship(back_populates="career_stats")
@@ -67,9 +54,7 @@ class PlayerCareerStats(PlayerCareerStatsBase, DBModel, table=True):
 
 
 class PlayerCareerStatsCreate(PlayerCareerStatsBase):
-    series_winrate: float | None = None
-    games_winrate: float | None = None
-    avg_series_per_season: float | None = None
+    """The columns a career row stores: the player and his historical baseline."""
 
 
 class PlayerCareerStatsUpdate(SQLModel):
@@ -81,18 +66,16 @@ class PlayerCareerStatsUpdate(SQLModel):
     historical_games_won: int | None = None
     historical_games_lost: int | None = None
     historical_seasons_played: int | None = None
-    rating: int | None = None
-    series_won: int | None = None
-    series_lost: int | None = None
-    series_winrate: float | None = None
-    games_won: int | None = None
-    games_lost: int | None = None
-    games_winrate: float | None = None
-    seasons_played: int | None = None
-    avg_series_per_season: float | None = None
 
 
 class PlayerCareerStatsPublic(PlayerCareerStatsBase):
+    # app.services.derived.fill_career answers these nine; no column holds them
+    rating: int | None = 0
+    series_won: int | None = 0
+    series_lost: int | None = 0
+    games_won: int | None = 0
+    games_lost: int | None = 0
+    seasons_played: int | None = 0
     id: int | None = None
     player_name: str | None = None
     user: UserPublic | None = None
@@ -116,15 +99,6 @@ class PlayerCareerStatsPublic(PlayerCareerStatsBase):
             historical_games_won=stats.historical_games_won,
             historical_games_lost=stats.historical_games_lost,
             historical_seasons_played=stats.historical_seasons_played,
-            rating=stats.rating,
-            series_won=stats.series_won,
-            series_lost=stats.series_lost,
-            series_winrate=stats.series_winrate,
-            games_won=stats.games_won,
-            games_lost=stats.games_lost,
-            games_winrate=stats.games_winrate,
-            seasons_played=stats.seasons_played,
-            avg_series_per_season=stats.avg_series_per_season,
         )
 
     def to_dict(self) -> dict[str, Any]:

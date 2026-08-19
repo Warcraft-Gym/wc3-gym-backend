@@ -655,14 +655,3 @@ def test_coaches_are_capped_at_three(
     resp = client.put(path, json={"coach_ids": [1, 2, 3, 4]}, headers=auth_headers)
     assert resp.status_code == 400
     assert "coaches" in resp.json()["error"]
-
-
-def test_career_stats_recalculate_covers_the_played_series(
-    client: Client, auth_headers: dict[str, str], league: dict[str, Any]
-) -> None:
-    """The recalculation reads the stored rows through get_all() and answers 200."""
-    resp = client.post("/stats/career/recalculate", headers=auth_headers)
-    assert resp.status_code == 200, resp.text
-
-    stats = client.get("/stats/career").json()
-    assert stats, "a played series produces at least one career stat row"
