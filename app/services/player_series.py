@@ -8,7 +8,7 @@ import requests
 from fastapi.responses import JSONResponse
 
 from app.core.security import secure_filename
-from app.models.series import SeriesPublic
+from app.models.series import SeriesPublic, SeriesUpdate
 from app.services.series import SeriesService
 from app.services.users import UserService
 
@@ -230,15 +230,16 @@ def update_player_series(
             )
 
     # Update allowed fields (players can only update date_time and scores)
+    changes: dict[str, Any] = {}
     if data.get("date_time"):
         if isinstance(data["date_time"], str):
             try:
                 # The frontend sends ET, stored naive to match the DATETIME column
-                series.date_time = datetime.fromisoformat(
+                changes["date_time"] = datetime.fromisoformat(
                     data["date_time"].replace(" ", "T")
                 )
 
-                logger.info(f"Storing ET datetime: {series.date_time}")
+                logger.info(f"Storing ET datetime: {changes['date_time']}")
             except ValueError as e:
                 logger.error(
                     f"Invalid datetime format: {data['date_time']}, error: {e}"
@@ -250,25 +251,25 @@ def update_player_series(
                     status_code=400,
                 )
         else:
-            series.date_time = data["date_time"]
+            changes["date_time"] = data["date_time"]
     if "player1_score" in data and data["player1_score"] is not None:
-        series.player1_score = int(data["player1_score"])
+        changes["player1_score"] = int(data["player1_score"])
     if "player2_score" in data and data["player2_score"] is not None:
-        series.player2_score = int(data["player2_score"])
+        changes["player2_score"] = int(data["player2_score"])
 
-    # Update the series
-    updated_series = series_service.update_series(series_id, series)
+    # Only the fields this editor changes, so a concurrent edit stands
+    updated_series = series_service.update_series(series_id, SeriesUpdate(**changes))
 
     # Determine notification action based on what was updated
     player_name = user.name if hasattr(user, "name") else discord_tag
 
     # Check if scores were updated
-    scores_updated = (original_p1_score != series.player1_score) or (
-        original_p2_score != series.player2_score
+    scores_updated = (original_p1_score != updated_series.player1_score) or (
+        original_p2_score != updated_series.player2_score
     )
 
     # Check if date/time was updated
-    datetime_updated = original_datetime != series.date_time
+    datetime_updated = original_datetime != updated_series.date_time
 
     # Prepare notification data - convert to dict for Discord serialization
     notification_data = (
