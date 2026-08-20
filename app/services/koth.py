@@ -1,10 +1,13 @@
 import logging
 from typing import TYPE_CHECKING
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session as OrmSession
 from sqlalchemy.orm import joinedload
 
 from app.core.exceptions import BadRequestError, NotFoundError
+from app.models.enums import Race
 from app.models.koth_event import (
     KothEvent,
     KothEventCreate,
@@ -118,9 +121,22 @@ class KothService(BaseService):
 
     def set_active_event(self, event_id: int) -> KothEventPublic:
         """Set an event as active and deactivate all others"""
-        all_events = self.get_all_events()
-        for e in all_events:
-            self.update_event(e.id, KothEventUpdate(is_active=e.id == event_id))
+        with self.get_session() as session:
+            if not session.get(KothEvent, event_id):
+                raise NotFoundError(f"KOTH Event not found by Id: {event_id}")
+            # One transaction, so no other request reads the table between the two
+            session.execute(
+                update(KothEvent)
+                .where(KothEvent.is_active == True)
+                .values(is_active=False),
+                execution_options={"synchronize_session": False},
+            )
+            session.execute(
+                update(KothEvent)
+                .where(KothEvent.id == event_id)
+                .values(is_active=True),
+                execution_options={"synchronize_session": False},
+            )
         return self.get_event(event_id)
 
     # ============ Signup Methods ============
@@ -203,20 +219,11 @@ class KothService(BaseService):
         # Get active event
         event = self.get_active_event()
 
-        # Check if player already has an active signup with the same race
-        existing_signups = self.get_signups_by_event(event.id)
-        for signup in existing_signups:
-            if signup.is_active == 1 and signup.twitch_username == twitch_username:
-                # If a race is specified, only prevent duplicate if it's the same race
-                if signup_race and signup.race == signup_race:
-                    raise Exception(
-                        f"Player {twitch_username} already has an active signup with race {signup_race}"
-                    )
-                # If no race specified, check if they have any active signup (to prevent auto-picking duplicate)
-                elif not signup_race:
-                    raise Exception(
-                        f"Player {twitch_username} already has an active signup. Specify a race to signup with a different race."
-                    )
+        # The W3C calls below take seconds, so the insert checks this again
+        with self.get_session() as session:
+            self._check_duplicate_signup(
+                session, event.id, twitch_username, signup_race
+            )
 
         # Validate and get W3C stats
         w3c_service = W3CService(settings_app_service=self.settings_app_service)
@@ -296,7 +303,18 @@ class KothService(BaseService):
             is_active=1,
         )
 
-        return self.add_signup(signup)
+        with self.get_session() as session:
+            self._check_duplicate_signup(
+                session, event.id, twitch_username, signup_race
+            )
+            try:
+                db_signup = KothSignup.add(session, signup.model_dump())
+            except IntegrityError as error:
+                # The unique index holds where the check cannot: two signups at once
+                raise Exception(
+                    f"Player {twitch_username} already has an active signup with race {final_race}"
+                ) from error
+            return KothSignupPublic.model_validate(db_signup)
 
     def update_signup_bracket(
         self, signup_id: int, new_bracket: int
@@ -535,6 +553,36 @@ class KothService(BaseService):
         return kings
 
     # ============ Helper Methods ============
+    def _check_duplicate_signup(
+        self,
+        session: OrmSession,
+        event_id: int,
+        twitch_username: str,
+        race: str | None,
+    ) -> None:
+        """Raise when the player already has an active signup for this race.
+
+        Without a race the player may hold one active signup only, because
+        the race the W3C stats pick would repeat the signup they have.
+        """
+        active = session.scalars(
+            select(KothSignup).where(
+                KothSignup.event_id == event_id,
+                KothSignup.twitch_username == twitch_username,
+                KothSignup.is_active == 1,
+            )
+        ).all()
+        if not active:
+            return
+        if not race:
+            raise Exception(
+                f"Player {twitch_username} already has an active signup. Specify a race to signup with a different race."
+            )
+        if any(signup.race == Race(race) for signup in active):
+            raise Exception(
+                f"Player {twitch_username} already has an active signup with race {race}"
+            )
+
     def _determine_bracket(self, mmr: int, event: KothEventPublic) -> int:
         """Determine bracket based on MMR thresholds"""
         if mmr < event.bracket_1_threshold:

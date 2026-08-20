@@ -1,10 +1,16 @@
 from typing import TYPE_CHECKING, Annotated, Any
 
-from sqlmodel import Field, Relationship, SQLModel
+from sqlalchemy import Column, Computed, Index
+from sqlmodel import AutoString, Field, Relationship, SQLModel
 
 from app.models.base import DBModel
 from app.models.enums import Race
 from app.models.types import EnumValue, SuggestRace
+
+# The name of an active signup, NULL for the rest; a unique index skips NULLs
+ACTIVE_TWITCH_USERNAME = (
+    "CASE WHEN is_active = 1 AND twitch_username <> '' THEN twitch_username END"
+)
 
 if TYPE_CHECKING:
     from app.models.koth_event import KothEvent
@@ -25,10 +31,28 @@ class KothSignupBase(SQLModel):
 
 class KothSignup(KothSignupBase, DBModel, table=True):
     __tablename__ = "koth_signups"
-    __table_args__ = {"mysql_charset": "utf8mb4"}
+    __table_args__ = (
+        Index(
+            "uq_koth_signups_active_twitch_username_race",
+            "event_id",
+            "active_twitch_username",
+            "race",
+            unique=True,
+        ),
+        {"mysql_charset": "utf8mb4"},
+    )
 
     id: int | None = Field(default=None, primary_key=True)
     race: Race
+    # The database computes this column; the application never writes it
+    active_twitch_username: str | None = Field(
+        default=None,
+        sa_column=Column(
+            AutoString(length=50),
+            Computed(ACTIVE_TWITCH_USERNAME, persisted=False),
+            nullable=True,
+        ),
+    )
 
     # Relationships
     event: "KothEvent" = Relationship(back_populates="signups")

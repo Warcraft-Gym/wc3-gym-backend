@@ -45,6 +45,29 @@ def koth(app: FastAPI, seeded: dict[str, Any]) -> dict[str, Any]:
         return {"event_id": event.id, "signup_ids": [one.id, two.id]}
 
 
+@pytest.fixture
+def w3c_mmr(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The signup path with the two w3champions calls answered from memory."""
+    from app.models.enums import Race
+    from app.models.w3c_stats import W3CStatsCreate
+    from app.services.koth import KothService
+    from app.services.w3c import W3CService
+
+    monkeypatch.setattr(KothService, "_get_current_w3c_season", lambda self: 20)
+    monkeypatch.setattr(
+        KothService,
+        "_get_w3c_stats_for_season",
+        lambda self, service, battle_tag, season: [
+            W3CStatsCreate(wc3_season=season, mmr=1400, race=Race.HU)
+        ],
+    )
+    monkeypatch.setattr(
+        W3CService,
+        "send_request",
+        lambda *args, **kwargs: pytest.fail("the signup reached w3champions"),
+    )
+
+
 def test_the_event_carries_its_signups(client: Client, koth: dict[str, Any]) -> None:
     event = client.get(f"/koth/events/{koth['event_id']}").json()
     assert len(event["signups"]) == 2
@@ -183,6 +206,83 @@ def test_an_event_update_keeps_the_fields_it_was_not_given(
     assert after["name"] == before["name"]
     assert after["event_date"] == before["event_date"]
     assert after["bracket_1_threshold"] == before["bracket_1_threshold"]
+
+
+def test_a_second_signup_of_the_same_race_adds_no_row(
+    app: FastAPI, koth: dict[str, Any], w3c_mmr: None
+) -> None:
+    """The second of two signups that arrive together answers the duplicate."""
+    from app.services.koth import KothService
+
+    service = KothService()
+    first = service.create_signup_from_twitch("player_three", "P3#3333", "human")
+    assert first.race == "HU"
+
+    with pytest.raises(Exception, match="already has an active signup"):
+        service.create_signup_from_twitch("player_three", "P3#3333", "human")
+
+    signups = service.get_signups_by_event(koth["event_id"])
+    assert [s.twitch_username for s in signups].count("player_three") == 1
+
+
+def test_the_database_holds_one_active_signup_per_name_and_race(
+    app: FastAPI, koth: dict[str, Any]
+) -> None:
+    """The unique index, not the service, is what two requests at once meet."""
+    from sqlalchemy.exc import IntegrityError
+
+    from app.core.db import Session
+    from app.models.enums import Race
+    from app.models.koth_signup import KothSignup
+
+    def signup(race: Race) -> KothSignup:
+        return KothSignup(
+            event_id=koth["event_id"],
+            twitch_username="player_one",
+            battle_tag="P1#1111",
+            w3c_name="P1",
+            mmr=1400,
+            bracket=1,
+            race=race,
+        )
+
+    with Session() as session, pytest.raises(IntegrityError):
+        session.add(signup(Race.HU))
+        session.commit()
+
+    # Another race, and the same race once the first signup retires, both fit
+    with Session() as session:
+        session.add(signup(Race.NE))
+        session.commit()
+        session.query(KothSignup).filter_by(race=Race.HU).update({"is_active": 0})
+        session.add(signup(Race.HU))
+        session.commit()
+
+    with Session() as session:
+        assert session.query(KothSignup).count() == 4
+
+
+def test_one_event_is_active_after_an_activation(
+    client: Client, auth_headers: dict[str, str], koth: dict[str, Any]
+) -> None:
+    second = client.post(
+        "/koth/events", headers=auth_headers, json={"name": "KOTH 2"}
+    ).json()
+
+    def active_ids() -> list[int]:
+        return [e["id"] for e in client.get("/koth/events").json() if e["is_active"]]
+
+    for event_id in (koth["event_id"], second["id"]):
+        resp = client.post(f"/koth/events/{event_id}/activate", headers=auth_headers)
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["is_active"] is True
+        assert active_ids() == [event_id]
+
+    assert (
+        client.post("/koth/events/9999/activate", headers=auth_headers).status_code
+        == 404
+    )
+    assert active_ids() == [second["id"]]
 
 
 def test_bad_koth_input_answers_400(
