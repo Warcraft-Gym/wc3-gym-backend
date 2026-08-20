@@ -17,9 +17,11 @@ from app.api.deps import (
     UserServiceDep,
 )
 from app.core.exceptions import BadRequestError
+from app.core.ordering import SortOrder
 from app.core.query import QueryUtil
 from app.models.fantasy_bet import FantasyBetCreate, FantasyBetUpdate
 from app.models.fantasy_team import FantasyTeamCreate, FantasyTeamUpdate
+from app.models.series import SeriesSort
 from app.models.user import UserCreate
 from app.services import player_series
 
@@ -228,8 +230,13 @@ def get_player_series(
     token: str | None = None,
     limit: Annotated[int, Query(ge=1, le=500)] = 500,
     offset: Annotated[int, Query(ge=0)] = 0,
+    sort: SeriesSort | None = None,
+    order: SortOrder = "asc",
 ) -> JSONResponse | dict[str, Any]:
-    """Get one page of a player's series for the dashboard view, at most 500."""
+    """Get one page of a player's series for the dashboard view, at most 500.
+
+    sort names the field the page is ordered by, and the series id breaks its ties.
+    """
     if not token:
         return JSONResponse({"error": "missing token"}, status_code=400)
 
@@ -254,7 +261,12 @@ def get_player_series(
             f"player1_id == {user.id} or player2_id == {user.id}"
         )
         series = series_service.searchForSeason(
-            entry.get("season_id"), query, limit=limit, offset=offset
+            entry.get("season_id"),
+            query,
+            limit=limit,
+            offset=offset,
+            sort=sort,
+            order=order,
         )
         total = series_service.countForSeason(entry.get("season_id"), query)
     else:
@@ -262,7 +274,9 @@ def get_player_series(
         query = QueryUtil.parseQuery(
             f"player1_id == {user.id} or player2_id == {user.id}"
         )
-        series = series_service.search(query, limit=limit, offset=offset)
+        series = series_service.search(
+            query, limit=limit, offset=offset, sort=sort, order=order
+        )
         total = series_service.count(query)
 
     response.headers["X-Total-Count"] = str(total)

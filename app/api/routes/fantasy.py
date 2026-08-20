@@ -11,6 +11,7 @@ from app.api.deps import (
     require_admin,
 )
 from app.core.exceptions import BadRequestError
+from app.core.ordering import SortOrder
 from app.core.query import QueryUtil
 from app.models.fantasy_bet import (
     FantasyBetCreate,
@@ -24,6 +25,7 @@ from app.models.fantasy_team import (
     FantasyTeamPublic,
     FantasyTeamUpdate,
 )
+from app.services.fantasy_bets import BetSort
 
 logger = logging.getLogger(__name__)
 
@@ -176,12 +178,19 @@ def search_bets(
     query: str = "",
     limit: Annotated[int, Query(ge=1, le=500)] = 500,
     offset: Annotated[int, Query(ge=0)] = 0,
+    sort: BetSort | None = None,
+    order: SortOrder = "asc",
 ) -> list[FantasyBetPublic]:
-    """Search bets by criteria, one page at a time, at most 500."""
+    """Search bets by criteria, one page at a time, at most 500.
+
+    sort names the field the page is ordered by, and the bet id breaks its ties.
+    """
     parsed = QueryUtil.parseQuery(query)
     if not parsed or not parsed.elementA:
         raise BadRequestError(f"No valid query found: {query}")
-    bets, total = service.search_fantasy_bets(parsed, limit=limit, offset=offset)
+    bets, total = service.search_fantasy_bets(
+        parsed, limit=limit, offset=offset, sort=sort, order=order
+    )
     if total is not None:
         response.headers["X-Total-Count"] = str(total)
     return bets or []

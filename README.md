@@ -321,6 +321,14 @@ Six routes carry the total row count in an `X-Total-Count` response header, whic
 
 `GET /stats/career` stays unpaged by default because the public WordPress shortcode reads the whole list. It takes `limit` and `offset` all the same, and it takes an optional `search` string that keeps the rows whose player name or user name holds it, without case. The header counts the kept rows.
 
+Three routes also take `sort` and `order`, both optional. `sort` names one field of the table below and `order` is `asc` (the default) or `desc`. A name outside the table answers 422, and so does any other order. `order` turns the named field around alone: the `id` after it stays ascending, so two requests with the same parameters answer the same pages. Without `sort` the route keeps the order it has always answered, which `tests/test_paging.py` pins per route.
+
+| Route | Sort names |
+| --- | --- |
+| `POST /fantasy/bets/search` | `id`, `bet_points`, `captain`, `series_id` |
+| `GET /player-series` | `date_time`, `week`, `id` |
+| `GET /stats/career` | `name`, `mapped`, `rating`, `series_won`, `series_lost`, `series_winrate`, `games_won`, `games_lost`, `games_winrate`, `seasons_played` |
+
 `GET /koth/events`, `/config/settings`, the export and import routes and `routes/scores.py` answer full lists: their clients read the whole set.
 
 The list routes answer reduced payloads: every JSON key stays, and the collections nested inside embedded objects answer `[]`. The single-row routes keep the full graph. `tests/test_memory_budget.py` pins the peak memory of the bets list, and `tests/test_query_budget.py` pins the statement counts of the list queries.

@@ -25,13 +25,14 @@ because the map scores of the series already ride in the response.
 A team with no played series stands at zero, not at null.
 """
 
-from collections.abc import Iterable
-from typing import NamedTuple
+from collections.abc import Callable, Iterable
+from typing import Any, Literal, NamedTuple
 
 from sqlalchemy import case, func, or_, select, union_all
 from sqlalchemy.orm import Session, aliased
 
 from app.core import career, fantasy
+from app.core.ordering import SortOrder
 from app.core.scoring import DEFAULT_SYSTEM, max_points, points, points_case
 from app.models.fantasy_bet import FantasyBet, FantasyBetPublic
 from app.models.fantasy_team import FantasyTeamPublic
@@ -394,6 +395,37 @@ def fill_career(
         _fill_rows(session, rows)
 
 
+CareerSort = Literal[
+    "name",
+    "mapped",
+    "rating",
+    "series_won",
+    "series_lost",
+    "series_winrate",
+    "games_won",
+    "games_lost",
+    "games_winrate",
+    "seasons_played",
+]
+
+# The names a career list sorts by, and the key each one reads from a row.
+# _fill_row sets the nine totals on every row, so no key answers None.
+CAREER_SORTS: dict[CareerSort, Callable[[PlayerCareerStatsPublic], Any]] = {
+    "name": lambda row: (
+        (row.user.name if row.user else row.player_name) or ""
+    ).casefold(),
+    "mapped": lambda row: row.user_id is not None,
+    "rating": lambda row: row.rating,
+    "series_won": lambda row: row.series_won,
+    "series_lost": lambda row: row.series_lost,
+    "series_winrate": lambda row: row.series_winrate,
+    "games_won": lambda row: row.games_won,
+    "games_lost": lambda row: row.games_lost,
+    "games_winrate": lambda row: row.games_winrate,
+    "seasons_played": lambda row: row.seasons_played,
+}
+
+
 def _career_holds(row: PlayerCareerStatsPublic, needle: str) -> bool:
     """True when the player name or the user name of the row holds needle."""
     names = (row.player_name, row.user.name if row.user else None)
@@ -401,9 +433,14 @@ def _career_holds(row: PlayerCareerStatsPublic, needle: str) -> bool:
 
 
 def career_rows(
-    session: Session, stored: list[PlayerCareerStatsPublic], search: str = ""
+    session: Session,
+    stored: list[PlayerCareerStatsPublic],
+    search: str = "",
+    *,
+    sort: CareerSort | None = None,
+    order: SortOrder = "asc",
 ) -> list[PlayerCareerStatsPublic]:
-    """Every career row of the league, by rating.
+    """Every career row of the league, by rating or by the named key.
 
     A player who has played and holds no stored row stands in the list too,
     with a null id and no historical baseline, so a new player counts from his
@@ -412,6 +449,9 @@ def career_rows(
     search keeps the rows whose player name or user name holds it, and it
     matches without case. It runs before the sort, so the caller pages and
     counts the kept rows.
+
+    sort names a key of CAREER_SORTS and order turns that key alone around.
+    The id tiebreak stays ascending, so both directions page the same rows.
     """
     tallies, unclaimed, system_seasons = _fill_rows(session, stored)
     played = {
@@ -440,7 +480,12 @@ def career_rows(
         rows = [row for row in rows if _career_holds(row, needle)]
 
     # A row with no id sorts last of its rating, because no id orders it
-    rows.sort(key=lambda stat: (-stat.rating, stat.id is None, stat.id or 0))
+    if sort is None:
+        rows.sort(key=lambda stat: (-stat.rating, stat.id is None, stat.id or 0))
+    else:
+        # The id pass runs first, so a stable sort leaves it as the tiebreak
+        rows.sort(key=lambda stat: (stat.id is None, stat.id or 0))
+        rows.sort(key=CAREER_SORTS[sort], reverse=order == "desc")
     return rows
 
 

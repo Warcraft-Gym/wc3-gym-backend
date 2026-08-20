@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session as OrmSession
 
+from app.core.ordering import SortOrder
 from app.models.player_career_stats import (
     PlayerCareerStats,
     PlayerCareerStatsPublic,
@@ -13,6 +14,7 @@ from app.models.player_career_stats import (
 from app.models.user import User
 from app.services import derived
 from app.services.base import BaseService
+from app.services.derived import CareerSort
 
 logger = logging.getLogger(__name__)
 
@@ -67,16 +69,26 @@ class PlayerCareerStatsService(BaseService):
         return [PlayerCareerStatsPublic.from_career_stats(stat) for stat in stats]
 
     def get_all(
-        self, limit: int | None = None, offset: int = 0, search: str = ""
+        self,
+        limit: int | None = None,
+        offset: int = 0,
+        search: str = "",
+        *,
+        sort: CareerSort | None = None,
+        order: SortOrder = "asc",
     ) -> tuple[list[PlayerCareerStatsPublic], int]:
         """The career stats by rating, or one page of them, and the total count
 
         The rating orders the rows and the id breaks a tie, so offset paging
         walks a fixed order. search keeps the rows whose player name or user
         name holds it, so the page and the count hold to the kept rows.
+
+        sort names a key of derived.CAREER_SORTS and orders the rows by it.
         """
         with self.get_session() as session:
-            rows = derived.career_rows(session, self._stored_rows(session), search)
+            rows = derived.career_rows(
+                session, self._stored_rows(session), search, sort=sort, order=order
+            )
             end = None if limit is None else offset + limit
             return rows[offset:end], len(rows)
 
@@ -187,10 +199,18 @@ class PlayerCareerStatsService(BaseService):
                 session.add(stats)
 
     def get_all_career_stats(
-        self, limit: int | None = None, offset: int = 0, search: str = ""
+        self,
+        limit: int | None = None,
+        offset: int = 0,
+        search: str = "",
+        *,
+        sort: CareerSort | None = None,
+        order: SortOrder = "asc",
     ) -> tuple[list[PlayerCareerStatsPublic], int]:
         """Get all player career stats ordered by rating, and the total count"""
-        return self.get_all(limit=limit, offset=offset, search=search)
+        return self.get_all(
+            limit=limit, offset=offset, search=search, sort=sort, order=order
+        )
 
     def get_career_stats_by_user(self, user_id: int) -> PlayerCareerStatsPublic | None:
         """Get career stats for a specific user"""

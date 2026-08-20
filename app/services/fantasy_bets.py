@@ -1,10 +1,11 @@
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Literal
 
-from sqlalchemy import func, select
+from sqlalchemy import ColumnElement, func, select
 from sqlalchemy.orm import joinedload
 
 from app.core.exceptions import BadRequestError, NotFoundError
+from app.core.ordering import SortOrder, ordered
 from app.core.query import QueryElement, QueryUtil
 from app.models.fantasy_bet import (
     FantasyBet,
@@ -13,6 +14,7 @@ from app.models.fantasy_bet import (
     FantasyBetUpdate,
 )
 from app.models.series import Series
+from app.models.user import User
 from app.services import derived
 from app.services.base import BaseService
 
@@ -20,6 +22,16 @@ if TYPE_CHECKING:
     from app.services.settings import SettingsService
 
 logger = logging.getLogger(__name__)
+
+BetSort = Literal["id", "bet_points", "captain", "series_id"]
+
+# The names a bet list sorts by, and the column each one orders
+BET_SORTS: dict[BetSort, ColumnElement[Any]] = {
+    "id": FantasyBet.id,
+    "bet_points": FantasyBet.bet_points,
+    "captain": User.name,
+    "series_id": FantasyBet.series_id,
+}
 
 
 class FantasyBetService(BaseService):
@@ -92,8 +104,14 @@ class FantasyBetService(BaseService):
         query: QueryElement | None,
         limit: int | None = None,
         offset: int = 0,
+        *,
+        sort: BetSort | None = None,
+        order: SortOrder = "asc",
     ) -> tuple[list[FantasyBetPublic], int | None]:
-        """The matching bets and, when a page is asked for, the total count."""
+        """The matching bets and, when a page is asked for, the total count.
+
+        sort names a column of BET_SORTS and the bet id breaks its ties.
+        """
         with self.get_session() as session:
             result = []
             filter = QueryUtil.convertQueryToDBFilter(FantasyBet, query)
@@ -123,7 +141,12 @@ class FantasyBetService(BaseService):
                 total = session.scalar(
                     select(func.count()).select_from(FantasyBet).where(filter)
                 )
-                statement = statement.order_by(FantasyBet.id).offset(offset)
+                if sort == "captain":
+                    # A bet links to users twice, so the join names its own condition
+                    statement = statement.join(User, User.id == FantasyBet.user_id)
+                statement = ordered(
+                    statement, BET_SORTS, sort, order, FantasyBet.id
+                ).offset(offset)
                 if limit is not None:
                     statement = statement.limit(limit)
             fbets = session.scalars(statement).unique().all()
@@ -255,5 +278,8 @@ class FantasyBetService(BaseService):
         query: QueryElement | None,
         limit: int | None = None,
         offset: int = 0,
+        *,
+        sort: BetSort | None = None,
+        order: SortOrder = "asc",
     ) -> tuple[list[FantasyBetPublic], int | None]:
-        return self.search(query, limit=limit, offset=offset)
+        return self.search(query, limit=limit, offset=offset, sort=sort, order=order)

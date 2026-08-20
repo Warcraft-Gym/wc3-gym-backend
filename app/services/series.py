@@ -6,9 +6,17 @@ from sqlalchemy.orm import aliased
 
 from app.core import fantasy
 from app.core.exceptions import NotFoundError
+from app.core.ordering import SortOrder, ordered
 from app.core.query import QueryElement, QueryUtil
 from app.models.match import Match
-from app.models.series import Series, SeriesCreate, SeriesPublic, SeriesUpdate
+from app.models.series import (
+    SERIES_SORTS,
+    Series,
+    SeriesCreate,
+    SeriesPublic,
+    SeriesSort,
+    SeriesUpdate,
+)
 from app.models.user import User
 from app.models.user_team_season import UserTeamSeasonStatsPublic
 from app.services import derived
@@ -60,8 +68,18 @@ class SeriesService(BaseService):
             return public
 
     def search(
-        self, query: QueryElement | None, limit: int | None = None, offset: int = 0
+        self,
+        query: QueryElement | None,
+        limit: int | None = None,
+        offset: int = 0,
+        *,
+        sort: SeriesSort | None = None,
+        order: SortOrder = "asc",
     ) -> list[SeriesPublic]:
+        """The matching series, one page at a time.
+
+        sort names a column of SERIES_SORTS and the series id breaks its ties.
+        """
         with self.get_session() as session:
             result = []
             filter = QueryUtil.convertQueryToDBFilter(Series, query)
@@ -70,7 +88,11 @@ class SeriesService(BaseService):
             )
             if limit is not None or offset:
                 # Offset paging is deterministic only with a fixed order
-                statement = statement.order_by(Series.id).offset(offset)
+                if sort == "week":
+                    statement = statement.join(Match, Match.id == Series.match_id)
+                statement = ordered(
+                    statement, SERIES_SORTS, sort, order, Series.id
+                ).offset(offset)
                 if limit is not None:
                     statement = statement.limit(limit)
             series_list = session.scalars(statement).all() if filter is not None else []
@@ -139,12 +161,25 @@ class SeriesService(BaseService):
         query: QueryElement | None,
         limit: int | None = None,
         offset: int = 0,
+        *,
+        sort: SeriesSort | None = None,
+        order: SortOrder = "asc",
     ) -> list[SeriesPublic]:
+        """The matching series of one season, one page at a time.
+
+        sort names a column of SERIES_SORTS and the series id breaks its ties.
+        """
         with self.get_session() as session:
             result = []
             filter = QueryUtil.convertQueryToDBFilter(Series, query)
             series_list = Series.searchForSeason(
-                session, season_id, filter, limit=limit, offset=offset
+                session,
+                season_id,
+                filter,
+                limit=limit,
+                offset=offset,
+                sort=sort,
+                order=order,
             )
             if not series_list:
                 logger.debug(f"No series found by searchcriteria: {query}")

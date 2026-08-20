@@ -1,16 +1,19 @@
 from collections.abc import Sequence
 from datetime import datetime
-from typing import Annotated, Any, Self
+from typing import Annotated, Any, Literal, Self
 
-from sqlalchemy import ColumnExpressionArgument, and_, select
+from sqlalchemy import ColumnElement, ColumnExpressionArgument, and_, select
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.base import ExecutableOption
 from sqlmodel import Field, Relationship, SQLModel
 
+from app.core.ordering import SortOrder, ordered
 from app.models.base import DBModel
 from app.models.match import Match, MatchPublic
 from app.models.types import IsoDateTime, NumToStr
 from app.models.user import User, UserPublic
+
+SeriesSort = Literal["date_time", "week", "id"]
 
 
 class SeriesBase(SQLModel):
@@ -70,6 +73,9 @@ class Series(SeriesBase, DBModel, table=True):
         filters: ColumnExpressionArgument[bool] | None,
         limit: int | None = None,
         offset: int = 0,
+        *,
+        sort: SeriesSort | None = None,
+        order: SortOrder = "asc",
     ) -> Sequence[Self]:
         stmt = select(cls).options(*cls._list_eager_options())
         stmt = stmt.where(cls.match.has(Match.season_id == season_id))
@@ -77,7 +83,9 @@ class Series(SeriesBase, DBModel, table=True):
             stmt = stmt.where(filters)
         if limit is not None or offset:
             # Offset paging is deterministic only with a fixed order
-            stmt = stmt.order_by(cls.id).offset(offset)
+            if sort == "week":
+                stmt = stmt.join(Match, Match.id == cls.match_id)
+            stmt = ordered(stmt, SERIES_SORTS, sort, order, cls.id).offset(offset)
             if limit is not None:
                 stmt = stmt.limit(limit)
         return session.scalars(stmt).all()
@@ -117,6 +125,14 @@ class Series(SeriesBase, DBModel, table=True):
             .joinedload(DBUserTeamSeason.season),
             joinedload(cls.player2).selectinload(User.signup_seasons),
         )
+
+
+# The names a series list sorts by, and the column each one orders
+SERIES_SORTS: dict[SeriesSort, ColumnElement[Any]] = {
+    "date_time": Series.date_time,
+    "week": Match.playday,
+    "id": Series.id,
+}
 
 
 class SeriesCreate(SeriesBase):
