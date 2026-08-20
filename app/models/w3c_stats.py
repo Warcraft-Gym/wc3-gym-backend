@@ -1,5 +1,6 @@
 from typing import TYPE_CHECKING, Annotated, Any
 
+from sqlalchemy import Index
 from sqlmodel import Field, Relationship, SQLModel
 
 from app.models.base import DBModel
@@ -23,6 +24,16 @@ class W3CStatsBase(SQLModel):
 
 class W3CStats(W3CStatsBase, DBModel, table=True):
     __tablename__ = "w3cstats"
+    # The w3champions API sends one record per race per season
+    __table_args__ = (
+        Index(
+            "uq_w3cstats_user_id_race_wc3_season",
+            "user_id",
+            "race",
+            "wc3_season",
+            unique=True,
+        ),
+    )
 
     id: int | None = Field(default=None, primary_key=True)
     race: Race | None = None

@@ -1,7 +1,9 @@
 import logging
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ColumnElement, func, or_, select
+from sqlalchemy import ColumnElement, Select, func, or_, select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session as OrmSession
 from sqlalchemy.orm import joinedload
 
 from app.core.exceptions import NotFoundError
@@ -10,7 +12,7 @@ from app.models.season import Season
 from app.models.team import Team
 from app.models.user import User, UserCreate, UserPublic, UserUpdate
 from app.models.user_team_season import DBUserTeamSeason, UserTeamSeasonStatsPublic
-from app.models.w3c_stats import W3CStats, W3CStatsCreate, W3CStatsPublic
+from app.models.w3c_stats import W3CStats, W3CStatsCreate
 from app.services.base import BaseService
 from app.services.w3c import W3CService
 
@@ -140,24 +142,6 @@ class UserService(BaseService):
                 result.append(UserPublic.from_user(user))
             return result, total
 
-    def createW3CStats(self, w3c_stats: W3CStatsCreate, user_id: int) -> W3CStatsPublic:
-        with self.get_session() as session:
-            stats = W3CStats.add(
-                session, {**w3c_stats.model_dump(), "user_id": user_id}
-            )
-            return W3CStatsPublic.model_validate(stats)
-
-    def replaceW3CStats(
-        self, stats_id: int, user_id: int, w3c_stats: W3CStatsCreate
-    ) -> W3CStatsPublic:
-        with self.get_session() as session:
-            stats = W3CStats.update(
-                session, stats_id, **w3c_stats.model_dump(), user_id=user_id
-            )
-            if not stats:
-                raise NotFoundError("W3CStats not found")
-            return W3CStatsPublic.model_validate(stats)
-
     def create_user(self, user: UserCreate) -> UserPublic:
         return self.add(user)
 
@@ -222,17 +206,45 @@ class UserService(BaseService):
                     f"Failed to fetch previous season W3C stats for {user.battleTag}: {e}"
                 )
 
-        for s in all_stats:
-            # Records are per race and per season
-            existing = [
-                u_s
-                for u_s in user.w3c_stats
-                if u_s.race == s.race and u_s.wc3_season == s.wc3_season
-            ]
-            for u_s in existing:
-                self.replaceW3CStats(u_s.id, u_s.user_id, s)
-            if not existing:
-                self.createW3CStats(s, user.id)
+        # One transaction reads and writes the rows of this player, so no
+        # other sync can insert between the read and the write.
+        with self.get_session() as session:
+            for s in all_stats:
+                self._writeW3CStats(session, user.id, s)
+
+    def _writeW3CStats(
+        self, session: OrmSession, user_id: int, w3c_stats: W3CStatsCreate
+    ) -> None:
+        """Update the row of this race and season, or insert it."""
+        values = {**w3c_stats.model_dump(), "user_id": user_id}
+        existing = session.scalars(self._w3c_stats_key(user_id, w3c_stats)).all()
+        if existing:
+            for row in existing:
+                W3CStats.updateObject(session, row, **values)
+            return
+        try:
+            # A savepoint, so a lost race rolls back the insert alone
+            with session.begin_nested():
+                W3CStats.add(session, values)
+        except IntegrityError:
+            # Another sync inserted the row first, so update that row
+            row = session.scalars(
+                self._w3c_stats_key(user_id, w3c_stats).with_for_update()
+            ).first()
+            if row is None:
+                raise
+            W3CStats.updateObject(session, row, **values)
+
+    @staticmethod
+    def _w3c_stats_key(
+        user_id: int, w3c_stats: W3CStatsCreate
+    ) -> Select[tuple[W3CStats]]:
+        """The rows the unique index holds to one: user, race and season."""
+        return select(W3CStats).where(
+            W3CStats.user_id == user_id,
+            W3CStats.race == w3c_stats.race,
+            W3CStats.wc3_season == w3c_stats.wc3_season,
+        )
 
     def updateW3CStats_ById(self, user_id: int) -> UserPublic:
         user = self.get(user_id)
@@ -256,13 +268,20 @@ class UserService(BaseService):
             user = session.get(User, season_stats.user_id)
             if not user:
                 raise Exception(f"User not found by id: {season_stats.user_id}")
-            uts_obj = session.get(
-                DBUserTeamSeason,
-                {"team_id": team.id, "season_id": season.id, "user_id": user.id},
-            )
+            key = {"team_id": team.id, "season_id": season.id, "user_id": user.id}
+            uts_obj = session.get(DBUserTeamSeason, key)
             if uts_obj is None:
-                uts_obj = DBUserTeamSeason(user=user, season=season, team=team)
-                session.add(uts_obj)
+                try:
+                    # A savepoint, so a lost race rolls back the insert alone
+                    with session.begin_nested():
+                        uts_obj = DBUserTeamSeason(user=user, season=season, team=team)
+                        session.add(uts_obj)
+                        session.flush()
+                except IntegrityError:
+                    # Another writer inserted the row first, so update that row
+                    uts_obj = session.get(DBUserTeamSeason, key, with_for_update=True)
+                    if uts_obj is None:
+                        raise
             uts_obj.games = season_stats.games
             uts_obj.wins = season_stats.wins
             uts_obj.losses = season_stats.losses
