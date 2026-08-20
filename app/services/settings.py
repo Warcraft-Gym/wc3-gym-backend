@@ -1,6 +1,8 @@
 import logging
 from typing import Any
 
+from sqlalchemy.exc import IntegrityError
+
 from app.core.exceptions import NotFoundError
 from app.models.settings import (
     Settings,
@@ -80,19 +82,21 @@ class SettingsService(BaseService):
     ) -> dict[str, Any]:
         """Update or create a single setting"""
         try:
-            # Try to get existing setting by key
             existing = self.get_by_key(key)
-            updated = self.update(
-                existing.id,
-                SettingsUpdate(key=key, value=value, description=description),
-            )
-            return updated.to_dict()
-        except Exception:
-            # If not found, create new setting
-            created = self.add(
-                SettingsCreate(key=key, value=value, description=description)
-            )
-            return created.to_dict()
+        except NotFoundError:
+            try:
+                created = self.add(
+                    SettingsCreate(key=key, value=value, description=description)
+                )
+                return created.to_dict()
+            except IntegrityError:
+                # The unique key says another request added it first
+                existing = self.get_by_key(key)
+        updated = self.update(
+            existing.id,
+            SettingsUpdate(key=key, value=value, description=description),
+        )
+        return updated.to_dict()
 
     def update_settings(self, settings_dict: dict[str, object]) -> list[dict[str, Any]]:
         """Update multiple settings"""

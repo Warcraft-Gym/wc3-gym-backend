@@ -1,6 +1,7 @@
 import logging
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
 
 from app.core.exceptions import NotFoundError
@@ -120,15 +121,12 @@ class FantasyTeamService(BaseService):
                 user = session.get(User, user_id)
                 if not user:
                     raise NotFoundError(f"User not found by id: {user_id}")
-                already_exists = (
-                    session.get(
-                        DBFantasyTeamPlayer,
-                        {"fantasy_team_id": fteam.id, "user_id": user.id},
-                    )
-                    is not None
-                )
-                if not already_exists:
-                    session.add(DBFantasyTeamPlayer(users=user, fantasy_team=fteam))
+                try:
+                    # The primary key decides: a duplicate link is already there
+                    with session.begin_nested():
+                        session.add(DBFantasyTeamPlayer(users=user, fantasy_team=fteam))
+                except IntegrityError:
+                    logger.debug(f"User {user_id} is already in fantasy team {team_id}")
             session.flush()
             public = FantasyTeamPublic.from_fantasy_team(fteam)
             derived.fill_fantasy_teams(session, [public])

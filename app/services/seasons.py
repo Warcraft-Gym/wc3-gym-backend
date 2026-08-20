@@ -1,6 +1,7 @@
 import logging
 
 from sqlalchemy import ColumnElement, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload, noload, selectinload
 
 from app.core.exceptions import NotFoundError
@@ -89,14 +90,12 @@ class SeasonService(BaseService):
                 team = session.get(Team, team_id)
                 if not team:
                     raise Exception(f"Team not found by id: {team_id}")
-                already_exists = (
-                    session.get(
-                        DBTeamSeason, {"season_id": season_id, "team_id": team.id}
-                    )
-                    is not None
-                )
-                if not already_exists:
-                    session.add(DBTeamSeason(season=season, team=team))
+                try:
+                    # The primary key decides: a duplicate link is already there
+                    with session.begin_nested():
+                        session.add(DBTeamSeason(season=season, team=team))
+                except IntegrityError:
+                    logger.debug(f"Team {team_id} is already in season {season_id}")
             session.flush()
             return SeasonPublic.from_season(season)
 
@@ -174,12 +173,12 @@ class SeasonService(BaseService):
                 map = session.get(Map, map_id)
                 if not map:
                     raise Exception(f"Map not found by id: {map_id}")
-                already_exists = (
-                    session.get(DBMapSeason, {"season_id": season_id, "map_id": map.id})
-                    is not None
-                )
-                if not already_exists:
-                    session.add(DBMapSeason(season=season, map=map))
+                try:
+                    # The primary key decides: a duplicate link is already there
+                    with session.begin_nested():
+                        session.add(DBMapSeason(season=season, map=map))
+                except IntegrityError:
+                    logger.debug(f"Map {map_id} is already in season {season_id}")
             session.flush()
             return SeasonPublic.from_season(season)
 
@@ -212,14 +211,12 @@ class SeasonService(BaseService):
                 user = session.get(User, user_id)
                 if not user:
                     raise Exception(f"User not found by id: {user_id}")
-                already_exists = (
-                    session.get(
-                        DBUserSeasonSignup, {"season_id": season_id, "user_id": user.id}
-                    )
-                    is not None
-                )
-                if not already_exists:
-                    session.add(DBUserSeasonSignup(season=season, user=user))
+                try:
+                    # The primary key decides: a duplicate link is already there
+                    with session.begin_nested():
+                        session.add(DBUserSeasonSignup(season=season, user=user))
+                except IntegrityError:
+                    logger.debug(f"User {user_id} is already signed up to {season_id}")
             session.flush()
             return SeasonPublic.from_season(season)
 

@@ -1,7 +1,7 @@
 import logging
 
 from sqlalchemy import ColumnElement, select
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session, joinedload, noload, selectinload
 
 from app.core.exceptions import NotFoundError
@@ -62,19 +62,14 @@ class TeamService(BaseService):
                 user = session.get(User, user_id)
                 if not user:
                     raise Exception(f"User not found by id: {user_id}")
-                already_exists = (
-                    session.get(
-                        DBUserTeamSeason,
-                        {
-                            "team_id": team.id,
-                            "season_id": season_id,
-                            "user_id": user.id,
-                        },
-                    )
-                    is not None
-                )
-                if not already_exists:
-                    session.add(DBUserTeamSeason(user=user, season=season, team=team))
+                try:
+                    # The primary key decides: a duplicate link is already there
+                    with session.begin_nested():
+                        session.add(
+                            DBUserTeamSeason(user=user, season=season, team=team)
+                        )
+                except IntegrityError:
+                    logger.debug(f"User {user_id} is already in team {team_id}")
             session.flush()
             return _public(session, team)
 
