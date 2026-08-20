@@ -12,10 +12,7 @@ import.
 
 import logging
 import os
-from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
 
-import anyio.to_thread
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -30,16 +27,6 @@ from app.core.db import init_engine
 from app.core.exceptions import BadRequestError, NotFoundError
 
 logger = logging.getLogger(__name__)
-
-# Production has one CPU core, and the sync routes run in this thread pool
-MAX_CONCURRENT_REQUESTS = 1
-
-
-@asynccontextmanager
-async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
-    limiter = anyio.to_thread.current_default_thread_limiter()
-    limiter.total_tokens = MAX_CONCURRENT_REQUESTS
-    yield
 
 
 def create_app(db_url: str | None = None) -> FastAPI:
@@ -60,7 +47,6 @@ def create_app(db_url: str | None = None) -> FastAPI:
         title="GNL Backend API",
         description="API for Gym Newbie League Backend Data",
         version="1.0.0",
-        lifespan=_lifespan,
     )
     app.add_middleware(
         CORSMiddleware,

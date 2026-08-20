@@ -1,7 +1,7 @@
 """The one-time token store, under parallel requests.
 
 The store is a plain dict that the public routes share. The application
-answers one request at a time today, but the limit goes away, so the
+answers requests in parallel, so the
 cleanup must tolerate a token that another request removes, and the
 signup route must let only one of two parallel requests create the user.
 """
