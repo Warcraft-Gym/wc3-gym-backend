@@ -13,6 +13,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Seconds a w3champions call can hold the thread before it fails.
+REQUEST_TIMEOUT = 10
+
 
 class W3CService:
     def __init__(self, settings_app_service: "SettingsService | None" = None) -> None:
@@ -139,7 +142,12 @@ class W3CService:
         try:
             # Send the request
             response = requests.request(
-                method, url, json=data, headers=headers, params=params
+                method,
+                url,
+                json=data,
+                headers=headers,
+                params=params,
+                timeout=REQUEST_TIMEOUT,
             )
 
             # Check the status code
