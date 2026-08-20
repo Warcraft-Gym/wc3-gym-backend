@@ -18,6 +18,9 @@ from typing import Any
 import pytest
 from httpx2 import Client
 
+from app.api.deps import ttl_cache
+from app.services.teams import TeamService
+
 # The admin routes a season passes through, for the auth guard test.
 GUARDED_WRITES = [
     ("POST", "/users"),
@@ -511,6 +514,33 @@ def test_a_write_without_a_token_is_refused(
 ) -> None:
     resp = client.request(method, path)
     assert resp.status_code == 401
+
+
+# The W3C sync. It reads an external service once for each player of the
+# team, so one request must run it one time.
+
+
+def test_a_w3c_sync_request_runs_the_sync_one_time(
+    client: Client,
+    auth_headers: dict[str, str],
+    seeded: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = 0
+
+    def counted(self: TeamService, team_id: int, season_id: int) -> None:
+        nonlocal calls
+        calls += 1
+
+    monkeypatch.setattr(TeamService, "syncW3CStatsTeam", counted)
+    ttl_cache.clear()  # The rate limit marker lives for the whole process
+
+    resp = client.post(
+        f"/teams/w3c_sync/{seeded['team_a_id']}/seasons/{seeded['season_id']}",
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    assert calls == 1
 
 
 # The race column. The five members are RANDOM, HU, OC, NE and UD, and

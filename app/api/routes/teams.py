@@ -178,12 +178,9 @@ def sync_w3c_users_season(
         )
 
     team = service.syncW3CStatsTeam(team_id, season_id)
-    if team:
-        team = team.to_dict()
 
     ttl_cache[cache_key] = time.time() + 86400  # One sync per team and season per day
 
-    team = service.syncW3CStatsTeam(team_id, season_id)
     return team.to_dict() if team else None
 
 
