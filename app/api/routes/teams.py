@@ -177,9 +177,12 @@ def sync_w3c_users_season(
             "Sync already performed today", status_code=429, media_type="text/html"
         )
 
-    team = service.syncW3CStatsTeam(team_id, season_id)
-
     ttl_cache[cache_key] = time.time() + 86400  # One sync per team and season per day
+    try:
+        team = service.syncW3CStatsTeam(team_id, season_id)
+    except Exception:
+        ttl_cache.pop(cache_key, None)  # A failed sync may run again
+        raise
 
     return team.to_dict() if team else None
 
