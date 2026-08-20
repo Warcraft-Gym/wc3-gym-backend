@@ -34,9 +34,10 @@ _token_store: dict[str, dict[str, Any]] = {}
 def _cleanup_expired() -> None:
     # use timezone-aware UTC now
     now = datetime.now(UTC)
-    expired = [t for t, v in _token_store.items() if v["expires_at"] <= now]
+    # a snapshot and a pop, because a parallel request can drop a token
+    expired = [t for t, v in list(_token_store.items()) if v["expires_at"] <= now]
     for t in expired:
-        del _token_store[t]
+        _token_store.pop(t, None)
 
 
 @router.post("/public-access-helper", response_model=None)
@@ -113,8 +114,8 @@ def get_public_token(token: str) -> JSONResponse | dict[str, Any]:
 @router.delete("/public-token/{token}", response_model=None)
 def delete_public_token(token: str) -> JSONResponse | dict[str, Any]:
     """Remove a token after it has been used."""
-    if token in _token_store:
-        del _token_store[token]
+    # a pop, because two parallel deletes must not both find the token
+    if _token_store.pop(token, None) is not None:
         return {"status": "deleted"}
     return JSONResponse({"error": "not_found"}, status_code=404)
 
@@ -179,6 +180,10 @@ def public_create_user(
             status_code=400,
         )
 
+    # take the token here, because a pop lets only one parallel request continue
+    if _token_store.pop(token, None) is None:
+        return JSONResponse({"error": "token_not_found_or_expired"}, status_code=404)
+
     # Check for existing user by discord id or tag
     existing_users = user_service.find_by_discord_id_or_tag(
         str(entry.get("discord_id")), str(entry.get("discord_tag"))
@@ -204,12 +209,6 @@ def public_create_user(
         logger.info(f"W3C sync triggered for user {user.id} after signup")
     except Exception as we:
         logger.warning(f"W3C sync failed after signup for user {user.id}: {we}")
-
-    # consume the token
-    try:
-        _token_store.pop(token, None)
-    except Exception:
-        logger.exception("Failed to delete token after signup")
 
     # return created user
     if user:
