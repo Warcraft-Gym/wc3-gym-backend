@@ -1,7 +1,7 @@
 """One team's run through one season: the team_season table.
 
-The row links a team and a season and carries the map counts and the
-coaches. season_info.py holds the shape the API sends for it.
+The row links a team and a season and carries the coaches.
+season_info.py holds the shape the API sends for it.
 """
 
 from typing import TYPE_CHECKING
@@ -24,9 +24,6 @@ class DBTeamSeason(DBModel, table=True):
     coach_1_id: int | None = Field(default=None, foreign_key="users.id")
     coach_2_id: int | None = Field(default=None, foreign_key="users.id")
     coach_3_id: int | None = Field(default=None, foreign_key="users.id")
-    # Additional columns
-    maps_won: int | None = None
-    maps_lost: int | None = None
     # Relationships
     team: "Team" = Relationship(back_populates="season_info")
     season: "Season" = Relationship(back_populates="teams")
