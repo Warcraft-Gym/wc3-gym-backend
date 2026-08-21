@@ -1,13 +1,12 @@
 """The admin list routes report the total row count in a header.
 
-GET /users and GET /fantasy/teams answer at most 500 rows by default,
-because their clients walk the pages by the header. GET /stats/career
-stays unpaged by default, because the public shortcode reads the whole
-list. All three take limit and offset, and all three answer X-Total-Count
-with the count of all rows, not with the length of the page.
-GET /player-series pages already; it now answers X-Total-Count with the
-number of series of that one player. POST /fantasy/teams/search answers it
-too, because the two public shortcodes walk that route by the header.
+GET /users, GET /fantasy/teams and GET /stats/career answer at most 500
+rows by default, because their clients walk the pages by the header. All
+three take limit and offset, and all three answer X-Total-Count with the
+count of all rows, not with the length of the page. GET /player-series
+pages already; it now answers X-Total-Count with the number of series of
+that one player. POST /fantasy/teams/search answers it too, because the
+two public shortcodes walk that route by the header.
 """
 
 from collections.abc import Callable, Iterator
@@ -126,25 +125,18 @@ def limit_parameter(schema: dict[str, Any], path: str) -> dict[str, Any]:
 def test_the_capped_routes_declare_a_default_of_500(client: Client) -> None:
     """The schema pins the cap, which no seeded set of 501 rows could show."""
     schema = client.get("/openapi.json").json()
-    for path in ("/users", "/fantasy/teams"):
+    for path in ("/users", "/fantasy/teams", "/stats/career"):
         limit = limit_parameter(schema, path)
         assert limit["schema"]["default"] == 500
         assert limit["schema"]["maximum"] == 500
         assert limit["schema"]["minimum"] == 1
+        assert not limit["required"]
 
 
-def test_the_career_route_declares_no_default_limit(client: Client) -> None:
-    """The public shortcode reads the whole list, so the cap stays off."""
-    schema = client.get("/openapi.json").json()
-    limit = limit_parameter(schema, "/stats/career")
-    assert limit["schema"].get("default") is None
-    assert not limit["required"]
-
-
-def test_career_stats_report_the_total_without_paging(
+def test_career_stats_report_the_total_without_parameters(
     client: Client, seeded: dict[str, Any]
 ) -> None:
-    """The unpaged list holds the two seeded rows and the player who holds
+    """The default page holds the two seeded rows and the player who holds
     none, and counts all three."""
     resp = client.get("/stats/career")
     assert resp.status_code == 200

@@ -317,9 +317,9 @@ Six routes carry the total row count in an `X-Total-Count` response header, whic
 | `GET /fantasy/bets` | 500 |
 | `POST /fantasy/bets/search` | 500 |
 | `GET /player-series` | 500 |
-| `GET /stats/career` | unpaged, the whole list |
+| `GET /stats/career` | 500 |
 
-`GET /stats/career` stays unpaged by default because the public WordPress shortcode reads the whole list. It takes `limit` and `offset` all the same, and it takes an optional `search` string that keeps the rows whose player name or user name holds it, without case. The header counts the kept rows.
+`GET /stats/career` takes an optional `search` string as well, which keeps the rows whose player name or user name holds it, without case. The header counts the kept rows.
 
 Three routes also take `sort` and `order`, both optional. `sort` names one field of the table below and `order` is `asc` (the default) or `desc`. A name outside the table answers 422, and so does any other order. `order` turns the named field around alone: the `id` after it stays ascending, so two requests with the same parameters answer the same pages. Without `sort` the route keeps the order it has always answered, which `tests/test_paging.py` pins per route.
 
