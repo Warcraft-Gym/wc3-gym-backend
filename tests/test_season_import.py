@@ -82,16 +82,33 @@ SHEETS: dict[str, tuple[list[str], list[list[Any]]]] = {
         ],
         [[1, 1, 1, 2, 2, 1, 2, 1, 1, None, None, False]],
     ),
+    "Fantasy Bets": (
+        [
+            "ID",
+            "Season ID",
+            "Series ID",
+            "User ID",
+            "Winner ID",
+            "Bet Points",
+            "Bet Result",
+        ],
+        [[1, 1, 1, 1, 1, 10, None], [2, 1, 1, 2, 2, 20, None]],
+    ),
 }
 
 
-def _workbook(*, without: str | None = None) -> io.BytesIO:
-    """A season export. `without` drops one sheet the pipeline reads."""
+def _workbook(
+    *, without: str | None = None, season_id: int | None = None
+) -> io.BytesIO:
+    """A season export. `without` drops one sheet the pipeline reads, and
+    `season_id` names the season it writes into instead of a new one."""
     stream = io.BytesIO()
     with pd.ExcelWriter(stream) as writer:
         for name, (columns, rows) in SHEETS.items():
             if name == without:
                 continue
+            if name == "Season" and season_id is not None:
+                rows = [[season_id, *rows[0][1:]]]
             pd.DataFrame(rows, columns=columns).to_excel(
                 writer, sheet_name=name, index=False
             )
@@ -153,3 +170,24 @@ def test_an_old_background_parameter_runs_the_import(
 
     with Session() as session:
         assert session.scalars(select(Season).where(Season.name == "Season 9")).one()
+
+
+def test_a_second_import_updates_the_bets_instead_of_adding_them(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """The pipeline finds the stored bets in its one lookup, so importing the
+    same workbook twice leaves two bets, not four."""
+    from app.models.fantasy_bet import FantasyBet
+
+    first = _post(client, _workbook(), auth_headers)
+    assert first.status_code == 200, first.text
+    season_id = first.json()["season_id"]
+
+    second = _post(client, _workbook(season_id=season_id), auth_headers)
+    assert second.status_code == 200, second.text
+    assert second.json()["season_id"] == season_id
+
+    with Session() as session:
+        bets = session.scalars(select(FantasyBet)).all()
+    assert len(bets) == 2
+    assert sorted(bet.bet_points for bet in bets) == [10, 20]

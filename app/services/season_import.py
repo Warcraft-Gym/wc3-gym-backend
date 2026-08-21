@@ -58,10 +58,11 @@ def process_import(
         file_bytes: Raw bytes of the Excel file
         create_new: Boolean flag to create new season vs update existing
     """
-    file_stream = io.BytesIO(file_bytes)
+    # sheet_name=None reads every sheet, so the workbook is parsed once
+    sheets = pd.read_excel(io.BytesIO(file_bytes), sheet_name=None)
 
     # ===== Step 1: Read Season Metadata =====
-    df_season = pd.read_excel(file_stream, sheet_name="Season")
+    df_season = sheets["Season"]
     season_row = df_season.iloc[0]
 
     season_data = {
@@ -122,7 +123,7 @@ def process_import(
 
     # ===== Step 2: Import Maps =====
     try:
-        df_maps = pd.read_excel(file_stream, sheet_name="Maps")
+        df_maps = sheets["Maps"]
         for _, row in df_maps.iterrows():
             if pd.isna(row["Name"]):
                 continue
@@ -148,7 +149,7 @@ def process_import(
         logger.warning(f"Maps sheet not found or error: {e}")
 
     # ===== Step 3: Import Teams =====
-    df_teams = pd.read_excel(file_stream, sheet_name="Teams")
+    df_teams = sheets["Teams"]
     for _, row in df_teams.iterrows():
         if pd.isna(row["Name"]):
             continue
@@ -174,7 +175,7 @@ def process_import(
     season_service.addTeams(season_id, list(team_id_mapping.values()))
 
     # ===== Step 4: Import Players =====
-    df_players = pd.read_excel(file_stream, sheet_name="Players")
+    df_players = sheets["Players"]
     for _, row in df_players.iterrows():
         if pd.isna(row["Battle Tag"]):
             continue
@@ -219,7 +220,7 @@ def process_import(
                 team_service.addPlayers(new_team_id, season_id, [user.id])
 
     # ===== Step 5: Import Matches =====
-    df_matches = pd.read_excel(file_stream, sheet_name="Matches")
+    df_matches = sheets["Matches"]
     for _, row in df_matches.iterrows():
         if (
             pd.isna(row["Team1 ID"])
@@ -269,8 +270,10 @@ def process_import(
                 match_id_mapping[old_match_id] = match.id
 
     # ===== Step 6: Import Series =====
-    df_series = pd.read_excel(file_stream, sheet_name="Series")
+    df_series = sheets["Series"]
     series_id_mapping = {}  # old_id -> new_id
+    # One statement for the series already stored, so the loop needs none
+    stored_series = series_service.series_ids_of_matches(match_id_mapping.values())
     for _, row in df_series.iterrows():
         if (
             pd.isna(row["Match ID"])
@@ -331,26 +334,22 @@ def process_import(
             except Exception:
                 pass
 
-        # Check if series already exists
-        q_string = f"match_id=={new_match_id} and player1_id=={new_player1_id} and player2_id=={new_player2_id}"
-        query = QueryUtil.parseQuery(q_string)
-        if query and query.elementA:
-            existing_series = series_service.search(query)
-            if existing_series:
-                series_service.update_series(
-                    existing_series[0].id, SeriesUpdate(**series_data)
-                )
-                if old_series_id:
-                    series_id_mapping[old_series_id] = existing_series[0].id
-            else:
-                series = series_service.create_series(SeriesCreate(**series_data))
-                if old_series_id:
-                    series_id_mapping[old_series_id] = series.id
+        key = (new_match_id, new_player1_id, new_player2_id)
+        stored = stored_series.get(key)
+        if stored:
+            new_series_id = stored[0]
+            series_service.update_series(new_series_id, SeriesUpdate(**series_data))
+        else:
+            new_series_id = series_service.create_series(SeriesCreate(**series_data)).id
+            # A later row of the same file must find the series this one made
+            stored_series[key] = [new_series_id]
+        if old_series_id:
+            series_id_mapping[old_series_id] = new_series_id
 
     # ===== Step 7: Import Fantasy Teams =====
     fantasy_team_id_mapping = {}  # old_id -> new_id
     try:
-        df_fantasy_teams = pd.read_excel(file_stream, sheet_name="Fantasy Teams")
+        df_fantasy_teams = sheets["Fantasy Teams"]
         for _, row in df_fantasy_teams.iterrows():
             if pd.isna(row["Name"]) or pd.isna(row["Captain ID"]):
                 continue
@@ -408,9 +407,7 @@ def process_import(
 
     # ===== Step 8: Import Fantasy Team Players =====
     try:
-        df_fantasy_players = pd.read_excel(
-            file_stream, sheet_name="Fantasy Team Players"
-        )
+        df_fantasy_players = sheets["Fantasy Team Players"]
         # Group players by fantasy team
         fantasy_team_players = {}
         for _, row in df_fantasy_players.iterrows():
@@ -436,7 +433,9 @@ def process_import(
 
     # ===== Step 9: Import Fantasy Bets =====
     try:
-        df_fantasy_bets = pd.read_excel(file_stream, sheet_name="Fantasy Bets")
+        df_fantasy_bets = sheets["Fantasy Bets"]
+        # One statement for the bets already stored, so the loop needs none
+        stored_bets = fantasy_bet_service.bet_ids_of_season(season_id)
         for _, row in df_fantasy_bets.iterrows():
             if (
                 pd.isna(row["Series ID"])
@@ -469,19 +468,18 @@ def process_import(
                 else 0,
             }
 
-            # Check if bet exists
-            q_string = f"series_id=={new_series_id} and user_id=={new_user_id} and winner_id=={new_winner_id}"
-            query = QueryUtil.parseQuery(q_string)
-            if query and query.elementA:
-                existing_bets, _ = fantasy_bet_service.search_fantasy_bets(query)
-                if existing_bets:
-                    fantasy_bet_service.update_fantasy_bet(
-                        existing_bets[0].id, FantasyBetUpdate(**fbet_data)
-                    )
-                else:
-                    fantasy_bet_service.create_fantasy_bet(
-                        FantasyBetCreate(**fbet_data)
-                    )
+            key = (new_series_id, new_user_id, new_winner_id)
+            stored = stored_bets.get(key)
+            if stored:
+                fantasy_bet_service.update_fantasy_bet(
+                    stored[0], FantasyBetUpdate(**fbet_data)
+                )
+            else:
+                bet = fantasy_bet_service.create_fantasy_bet(
+                    FantasyBetCreate(**fbet_data)
+                )
+                # A later row of the same file must find the bet this one made
+                stored_bets[key] = [bet.id]
     except Exception as e:
         logger.warning(f"Fantasy Bets sheet not found or error: {e}")
 

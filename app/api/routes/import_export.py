@@ -32,6 +32,8 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["import export"])
 
+BET_PAGE = 500  # how many bets the export reads per statement
+
 
 # import export endpoints
 @router.post("/import", dependencies=[Depends(require_admin)])
@@ -115,8 +117,8 @@ def export_season(
     # get_season raises NotFoundError, which answers 404
     season = season_service.get_season(season_id)
 
-    workbook = openpyxl.Workbook()
-    workbook.remove(workbook.active)
+    # write_only keeps one row in memory at a time instead of the whole sheet
+    workbook = openpyxl.Workbook(write_only=True)
 
     # ===== Sheet 1: Season Metadata =====
     season_sheet = workbook.create_sheet(title="Season")
@@ -363,19 +365,27 @@ def export_season(
         ]
     )
     if query and query.elementA:
-        fantasy_bets, _ = fantasy_bet_service.search_fantasy_bets(query)
-        for fbet in fantasy_bets:
-            fantasy_bets_sheet.append(
-                [
-                    fbet.id,
-                    fbet.season_id,
-                    fbet.series_id,
-                    fbet.user_id,
-                    fbet.winner_id,
-                    fbet.bet_points,
-                    fbet.bet_result if fbet.bet_result else "",
-                ]
+        # A season holds the most bets of anything here, so it is read by page
+        offset = 0
+        while True:
+            page, _ = fantasy_bet_service.search_fantasy_bets(
+                query, limit=BET_PAGE, offset=offset
             )
+            for fbet in page:
+                fantasy_bets_sheet.append(
+                    [
+                        fbet.id,
+                        fbet.season_id,
+                        fbet.series_id,
+                        fbet.user_id,
+                        fbet.winner_id,
+                        fbet.bet_points,
+                        fbet.bet_result if fbet.bet_result else "",
+                    ]
+                )
+            if len(page) < BET_PAGE:
+                break
+            offset += BET_PAGE
 
     excel_stream = BytesIO()
     workbook.save(excel_stream)
@@ -562,9 +572,10 @@ def import_fantasy_bets(
     if file.filename == "":
         raise BadRequestError("No selected file")
     if file and file.filename.endswith((".xlsx", ".xls")):
-        file_stream = io.BytesIO(file.file.read())
+        # sheet_name=None reads both sheets, so the workbook is parsed once
+        sheets = pd.read_excel(io.BytesIO(file.file.read()), sheet_name=None)
 
-        df_bet_match = pd.read_excel(file_stream, sheet_name="Betting Matches")
+        df_bet_match = sheets["Betting Matches"]
         for index, row in df_bet_match.iterrows():
             if not cell_value(row.iloc[0]):
                 continue
@@ -604,8 +615,9 @@ def import_fantasy_bets(
                     )
             series_service.update_series(series.id, SeriesUpdate(is_fantasy_match=True))
 
-        # Load the Google Sheet into a DataFrame
-        df_bets = pd.read_excel(file_stream, sheet_name="Bets")
+        df_bets = sheets["Bets"]
+        # One statement for the bets already stored, so the loop needs none
+        stored_bets = fantasy_bet_service.bet_ids_of_season(season_id)
         for index, row in df_bets.iterrows():
             if not cell_value(row.iloc[0]):
                 continue
@@ -665,20 +677,20 @@ def import_fantasy_bets(
                 "bet_points": row.iloc[3],
             }
 
-            bet_q_string = f"series_id=={series.id} and user_id=={captain.id} and winner_id=={bet_player.id}"
-            bet_query = QueryUtil.parseQuery(bet_q_string)
-            if not query or not query.elementA:
-                raise Exception(f"No valid query found: {bet_q_string}")
-            found_bets, _ = fantasy_bet_service.search_fantasy_bets(bet_query)
-            if found_bets and len(found_bets) == 1:
-                bet = found_bets[0]
+            key = (series.id, captain.id, bet_player.id)
+            stored = stored_bets.get(key, [])
+            if len(stored) == 1:
                 fantasy_bet_service.update_fantasy_bet(
-                    bet.id, FantasyBetUpdate(**bet_data)
+                    stored[0], FantasyBetUpdate(**bet_data)
                 )
-            elif len(found_bets) > 1:
-                raise Exception(f"More than one bet found by search: {bet_q_string}")
+            elif len(stored) > 1:
+                raise Exception(f"More than one bet found by search: {key}")
             else:
-                fantasy_bet_service.create_fantasy_bet(FantasyBetCreate(**bet_data))
+                bet = fantasy_bet_service.create_fantasy_bet(
+                    FantasyBetCreate(**bet_data)
+                )
+                # A later row of the same file must find the bet this one made
+                stored_bets[key] = [bet.id]
 
         return Message(
             message="File uploaded successfully and data inserted into database"

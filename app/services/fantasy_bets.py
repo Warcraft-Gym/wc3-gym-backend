@@ -159,6 +159,27 @@ class FantasyBetService(BaseService):
             derived.fill_bet_results(result)
             return result, total
 
+    def bet_ids_of_season(
+        self, season_id: int
+    ) -> dict[tuple[int, int, int], list[int]]:
+        """The bet ids of one season, keyed by series, bettor and pick.
+
+        The import reads this once, so it needs no statement per row.
+        """
+        with self.get_session() as session:
+            rows = session.execute(
+                select(
+                    FantasyBet.series_id,
+                    FantasyBet.user_id,
+                    FantasyBet.winner_id,
+                    FantasyBet.id,
+                ).where(FantasyBet.season_id == season_id)
+            ).all()
+        by_key: dict[tuple[int, int, int], list[int]] = {}
+        for series_id, user_id, winner_id, bet_id in rows:
+            by_key.setdefault((series_id, user_id, winner_id), []).append(bet_id)
+        return by_key
+
     def _apply_bet_points_logic(self, bet: FantasyBetCreate | FantasyBetUpdate) -> None:
         """Apply bet points based on settings: use fixed points or validate user input."""
         if not self.settings_app_service:

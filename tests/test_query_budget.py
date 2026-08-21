@@ -78,6 +78,34 @@ def count_statements() -> Iterator[list[int]]:
         event.remove(engine, "before_cursor_execute", on_execute)
 
 
+def add_bets(seeded: dict[str, Any], count: int) -> None:
+    """Put count more bets of one captain in the seeded season, each on its
+    own series so the keys stay distinct."""
+    from app.models.fantasy_bet import FantasyBet
+    from app.models.series import Series
+
+    with Session() as session:
+        for _ in range(count):
+            series = Series(
+                match_id=seeded["match_id"],
+                player1_id=seeded["player_ids"][0],
+                player2_id=seeded["player_ids"][2],
+                host_player_id=seeded["player_ids"][0],
+            )
+            session.add(series)
+            session.flush()
+            session.add(
+                FantasyBet(
+                    season_id=seeded["season_id"],
+                    series_id=series.id,
+                    user_id=seeded["player_ids"][0],
+                    winner_id=seeded["player_ids"][0],
+                    bet_points=10,
+                )
+            )
+        session.commit()
+
+
 @pytest.fixture
 def league(app: FastAPI, seeded: dict[str, Any]) -> dict[str, Any]:
     """The seeded league, with the collections a series answer reads filled.
@@ -293,6 +321,27 @@ def test_the_fantasy_team_search_costs_five_statements(league: dict[str, Any]) -
     assert len(teams) == 5
     assert total is None
     assert tally[0] == 5
+
+
+def test_the_bet_lookup_costs_one_statement(league: dict[str, Any]) -> None:
+    """The import reads the stored bets of a season in one statement, so it
+    needs none per row of the workbook."""
+    service = FantasyBetService()
+    with count_statements() as tally:
+        stored = service.bet_ids_of_season(league["season_id"])
+    assert len(stored) == 1
+    assert tally[0] == 1
+
+
+def test_the_bet_lookup_holds_when_the_bets_grow(league: dict[str, Any]) -> None:
+    """Twenty more bets, the same one statement."""
+    add_bets(league, 20)
+
+    service = FantasyBetService()
+    with count_statements() as tally:
+        stored = service.bet_ids_of_season(league["season_id"])
+    assert len(stored) == 21
+    assert tally[0] == 1
 
 
 def test_career_stats_cost_four_statements(league: dict[str, Any]) -> None:
