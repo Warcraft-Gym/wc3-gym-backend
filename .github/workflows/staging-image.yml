@@ -15,5 +15,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
-      - run: docker build -t ghcr.io/tanghyd/gnl-backend:staging .
-      - run: docker push ghcr.io/tanghyd/gnl-backend:staging
+      - name: Build and push
+        run: |
+          image=ghcr.io/tanghyd/gnl-backend
+          sha=$(echo "${{ github.sha }}" | cut -c1-8)
+          docker build -t "$image:staging" -t "$image:sha-$sha" .
+          docker push "$image:staging"
+          docker push "$image:sha-$sha"
