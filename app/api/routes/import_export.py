@@ -18,7 +18,7 @@ from app.api.deps import (
     UserServiceDep,
     require_admin,
 )
-from app.core.exceptions import BadRequestError, NotFoundError
+from app.core.exceptions import BadRequestError
 from app.core.query import QueryUtil
 from app.models.enums import Race
 from app.models.fantasy_bet import FantasyBetCreate, FantasyBetUpdate
@@ -105,17 +105,15 @@ def export_season(
     series_service: SeriesServiceDep,
     fantasy_team_service: FantasyTeamServiceDep,
     fantasy_bet_service: FantasyBetServiceDep,
-    season_id: str | None = None,
+    season_id: int,
 ) -> Response:
-    """Export complete season data for migration.
+    """Export one season as an Excel workbook of nine sheets.
 
-    Export an Excel file with ALL season data (season, maps, teams, players,
-    matches, series).
+    The workbook holds the season row, its maps, teams, rostered players,
+    matches, series, fantasy teams, fantasy team players and fantasy bets.
     """
-    season_id = int(season_id)
+    # get_season raises NotFoundError, which answers 404
     season = season_service.get_season(season_id)
-    if not season:
-        raise NotFoundError(f"Season not found by id: {season_id}")
 
     workbook = openpyxl.Workbook()
     workbook.remove(workbook.active)
