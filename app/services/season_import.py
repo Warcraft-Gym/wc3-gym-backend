@@ -390,7 +390,7 @@ def process_import(
             q_string = f"season_id=={season_id} and captain_id=={new_captain_id}"
             query = QueryUtil.parseQuery(q_string)
             if query and query.elementA:
-                existing_fteams = fantasy_team_service.search_fantasy_teams(query)
+                existing_fteams, _ = fantasy_team_service.search_fantasy_teams(query)
                 if existing_fteams:
                     fteam = existing_fteams[0]
                     fantasy_team_service.update_fantasy_team(

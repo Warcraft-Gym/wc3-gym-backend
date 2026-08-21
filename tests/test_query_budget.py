@@ -289,8 +289,9 @@ def test_the_fantasy_team_search_costs_five_statements(league: dict[str, Any]) -
     service = FantasyTeamService()
     query = QueryUtil.parseQuery(f"season_id == {league['season_id']}")
     with count_statements() as tally:
-        teams = service.search(query)
+        teams, total = service.search(query)
     assert len(teams) == 5
+    assert total is None
     assert tally[0] == 5
 
 

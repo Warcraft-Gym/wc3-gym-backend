@@ -1,4 +1,4 @@
-"""The four admin list routes report the total row count in a header.
+"""The admin list routes report the total row count in a header.
 
 GET /users and GET /fantasy/teams answer at most 500 rows by default,
 because their clients walk the pages by the header. GET /stats/career
@@ -6,7 +6,8 @@ stays unpaged by default, because the public shortcode reads the whole
 list. All three take limit and offset, and all three answer X-Total-Count
 with the count of all rows, not with the length of the page.
 GET /player-series pages already; it now answers X-Total-Count with the
-number of series of that one player.
+number of series of that one player. POST /fantasy/teams/search answers it
+too, because the two public shortcodes walk that route by the header.
 """
 
 from collections.abc import Callable, Iterator
@@ -214,6 +215,41 @@ def test_fantasy_teams_reject_a_bad_page(
     assert client.get("/fantasy/teams?limit=0").status_code == 422
     assert client.get("/fantasy/teams?limit=501").status_code == 422
     assert client.get("/fantasy/teams?offset=-1").status_code == 422
+
+
+def test_fantasy_team_search_reports_the_total(
+    client: Client, seeded: dict[str, Any]
+) -> None:
+    """The search page counts every match, not the rows of the page."""
+    add_fantasy_teams(seeded, 3)
+    season_id = seeded["season_id"]
+
+    resp = client.post(f"/fantasy/teams/search?query=season_id=={season_id}")
+    assert resp.status_code == 200
+    assert resp.headers["X-Total-Count"] == "4"
+    assert len(resp.json()) == 4
+
+
+def test_fantasy_team_search_reports_the_same_total_on_every_page(
+    client: Client, seeded: dict[str, Any]
+) -> None:
+    """Two pages of two teams carry the four ids, and the total stays 4."""
+    add_fantasy_teams(seeded, 3)
+    season_id = seeded["season_id"]
+    everything = client.post(f"/fantasy/teams/search?query=season_id=={season_id}")
+    ids = sorted(team["id"] for team in everything.json())
+
+    paged = []
+    for offset in (0, 2):
+        resp = client.post(
+            f"/fantasy/teams/search?query=season_id=={season_id}&limit=2&offset={offset}"
+        )
+        assert resp.status_code == 200
+        assert resp.headers["X-Total-Count"] == "4"
+        page = resp.json()
+        assert len(page) == 2
+        paged += [team["id"] for team in page]
+    assert paged == ids
 
 
 def test_player_series_report_the_total_of_that_player(

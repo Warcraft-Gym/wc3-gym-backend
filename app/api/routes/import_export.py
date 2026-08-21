@@ -319,7 +319,7 @@ def export_season(
     q_string = f"season_id=={season_id}"
     query = QueryUtil.parseQuery(q_string)
     if query and query.elementA:
-        fantasy_teams = fantasy_team_service.search_fantasy_teams(query)
+        fantasy_teams, _ = fantasy_team_service.search_fantasy_teams(query)
         for fteam in fantasy_teams:
             drafted_race_value = (
                 fteam.drafted_race.value
@@ -486,7 +486,7 @@ def import_fantasy_teams(
             fteam_query = QueryUtil.parseQuery(fteam_q_string)
             if not fteam_query or not fteam_query.elementA:
                 raise Exception(f"No valid query found: {fteam_q_string}")
-            found_teams = fantasy_team_service.search_fantasy_teams(fteam_query)
+            found_teams, _ = fantasy_team_service.search_fantasy_teams(fteam_query)
             if found_teams and len(found_teams) == 1:
                 team = found_teams[0]
                 fantasy_team = fantasy_team_service.update_fantasy_team(

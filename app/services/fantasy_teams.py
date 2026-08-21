@@ -87,30 +87,35 @@ class FantasyTeamService(BaseService):
 
     def search(
         self, query: QueryElement | None, limit: int | None = None, offset: int = 0
-    ) -> list[FantasyTeamPublic]:
+    ) -> tuple[list[FantasyTeamPublic], int | None]:
+        """The matching teams and, when a page is asked for, the total count."""
         with self.get_session() as session:
             result = []
             filter = QueryUtil.convertQueryToDBFilter(FantasyTeam, query)
             if filter is None:
                 logger.debug(f"No fantasy team found by searchcriteria: {query}")
-                return result
+                return result, None
             # Eager load only the relations the response model reads
             statement = (
                 select(FantasyTeam).options(*self._reduced_options).where(filter)
             )
+            total = None
             if limit is not None or offset:
                 # Offset paging is deterministic only with a fixed order
+                total = session.scalar(
+                    select(func.count()).select_from(FantasyTeam).where(filter)
+                )
                 statement = statement.order_by(FantasyTeam.id).offset(offset)
                 if limit is not None:
                     statement = statement.limit(limit)
             fteams = session.scalars(statement).unique().all()
             if not fteams:
                 logger.debug(f"No fantasy team found by searchcriteria: {query}")
-                return result
+                return result, total
             for fteam in fteams:
                 result.append(FantasyTeamPublic.from_fantasy_team(fteam))
             derived.fill_fantasy_teams(session, result)
-            return result
+            return result, total
 
     def addPlayers(self, team_id: int, player_ids: list[int]) -> FantasyTeamPublic:
         with self.get_session() as session:
@@ -179,7 +184,7 @@ class FantasyTeamService(BaseService):
 
     def search_fantasy_teams(
         self, query: QueryElement | None, limit: int | None = None, offset: int = 0
-    ) -> list[FantasyTeamPublic]:
+    ) -> tuple[list[FantasyTeamPublic], int | None]:
         return self.search(query, limit=limit, offset=offset)
 
     def addFantasyPlayers(self, team_id: int, players: list[int]) -> FantasyTeamPublic:

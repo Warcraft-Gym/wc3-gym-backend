@@ -453,7 +453,7 @@ def create_fantasy_team(
     team_query = QueryUtil.parseQuery(
         f"captain_id == {user.id} and season_id == {season_id}"
     )
-    existing_teams = fantasy_team_service.search_fantasy_teams(team_query)
+    existing_teams, _ = fantasy_team_service.search_fantasy_teams(team_query)
 
     team_data = {
         "name": data.get(

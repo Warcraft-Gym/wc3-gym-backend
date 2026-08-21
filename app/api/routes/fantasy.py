@@ -108,15 +108,19 @@ def get_all_teams(
 @router.post("/fantasy/teams/search")
 def search_teams(
     service: FantasyTeamServiceDep,
+    response: Response,
     query: str = "",
     limit: Annotated[int, Query(ge=1, le=500)] = 500,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[FantasyTeamPublic]:
-    """Search teams by criteria using a custom query format."""
+    """Search teams by criteria, one page at a time, at most 500."""
     parsed = QueryUtil.parseQuery(query)
     if not parsed or not parsed.elementA:
         raise BadRequestError(f"No valid query found: {query}")
-    return service.search_fantasy_teams(parsed, limit=limit, offset=offset) or []
+    teams, total = service.search_fantasy_teams(parsed, limit=limit, offset=offset)
+    if total is not None:
+        response.headers["X-Total-Count"] = str(total)
+    return teams or []
 
 
 # Bet endpoints
