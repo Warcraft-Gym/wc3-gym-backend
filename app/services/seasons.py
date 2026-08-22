@@ -4,7 +4,7 @@ from sqlalchemy import ColumnElement, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload, noload, selectinload
 
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import BadRequestError, NotFoundError
 from app.core.query import QueryElement, QueryUtil
 from app.models.map import Map
 from app.models.relationships import DBMapSeason, DBUserSeasonSignup
@@ -85,11 +85,11 @@ class SeasonService(BaseService):
         with self.get_session() as session:
             season = session.get(Season, season_id)
             if not season:
-                raise Exception(f"Season not found by id: {season_id}")
+                raise NotFoundError(f"Season not found by id: {season_id}")
             for team_id in team_ids:
                 team = session.get(Team, team_id)
                 if not team:
-                    raise Exception(f"Team not found by id: {team_id}")
+                    raise NotFoundError(f"Team not found by id: {team_id}")
                 try:
                     # The primary key decides: a duplicate link is already there
                     with session.begin_nested():
@@ -148,16 +148,16 @@ class SeasonService(BaseService):
         with self.get_session() as session:
             season = session.get(Season, season_id)
             if not season:
-                raise Exception(f"Season not found by id: {season_id}")
+                raise NotFoundError(f"Season not found by id: {season_id}")
             for team_id in team_ids:
                 team = session.get(Team, team_id)
                 if not team:
-                    raise Exception(f"Team not found by id: {team_id}")
+                    raise NotFoundError(f"Team not found by id: {team_id}")
                 team_season = session.get(
                     DBTeamSeason, {"season_id": season_id, "team_id": team_id}
                 )
                 if not team_season:
-                    raise Exception(
+                    raise BadRequestError(
                         f"Team not part of the season, team id: {team_id}, season id {season_id}"
                     )
                 session.delete(team_season)
@@ -168,11 +168,11 @@ class SeasonService(BaseService):
         with self.get_session() as session:
             season = session.get(Season, season_id)
             if not season:
-                raise Exception(f"Season not found by id: {season_id}")
+                raise NotFoundError(f"Season not found by id: {season_id}")
             for map_id in map_ids:
                 map = session.get(Map, map_id)
                 if not map:
-                    raise Exception(f"Map not found by id: {map_id}")
+                    raise NotFoundError(f"Map not found by id: {map_id}")
                 try:
                     # The primary key decides: a duplicate link is already there
                     with session.begin_nested():
@@ -186,16 +186,16 @@ class SeasonService(BaseService):
         with self.get_session() as session:
             season = session.get(Season, season_id)
             if not season:
-                raise Exception(f"Season not found by id: {season_id}")
+                raise NotFoundError(f"Season not found by id: {season_id}")
             for map_id in map_ids:
                 map = session.get(Map, map_id)
                 if not map:
-                    raise Exception(f"Map not found by id: {map_id}")
+                    raise NotFoundError(f"Map not found by id: {map_id}")
                 map_season = session.get(
                     DBMapSeason, {"season_id": season_id, "map_id": map.id}
                 )
                 if not map_season:
-                    raise Exception(
+                    raise BadRequestError(
                         f"Map not part of the season, map id: {map_id}, season id {season_id}"
                     )
                 session.delete(map_season)
@@ -206,11 +206,11 @@ class SeasonService(BaseService):
         with self.get_session() as session:
             season = session.get(Season, season_id)
             if not season:
-                raise Exception(f"Season not found by id: {season_id}")
+                raise NotFoundError(f"Season not found by id: {season_id}")
             for user_id in user_ids:
                 user = session.get(User, user_id)
                 if not user:
-                    raise Exception(f"User not found by id: {user_id}")
+                    raise NotFoundError(f"User not found by id: {user_id}")
                 try:
                     # The primary key decides: a duplicate link is already there
                     with session.begin_nested():
@@ -224,16 +224,16 @@ class SeasonService(BaseService):
         with self.get_session() as session:
             season = session.get(Season, season_id)
             if not season:
-                raise Exception(f"Season not found by id: {season_id}")
+                raise NotFoundError(f"Season not found by id: {season_id}")
             for user_id in user_ids:
                 user = session.get(User, user_id)
                 if not user:
-                    raise Exception(f"User not found by id: {user_id}")
+                    raise NotFoundError(f"User not found by id: {user_id}")
                 user_season = session.get(
                     DBUserSeasonSignup, {"season_id": season_id, "user_id": user.id}
                 )
                 if not user_season:
-                    raise Exception(
+                    raise BadRequestError(
                         f"User not signed up for the season, user id: {user_id}, season id {season_id}"
                     )
                 session.delete(user_season)

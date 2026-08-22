@@ -18,6 +18,8 @@ answer the same numbers from the same rule.
 from collections.abc import Mapping, Sequence
 from typing import Any, NamedTuple
 
+from app.core.exceptions import BadRequestError
+
 # Points the first three ranks of a week pay to a race
 RACE_RANK_POINTS = {1: 18, 2: 12, 3: 6}
 # Points a week without a series pays a drafted player
@@ -94,12 +96,12 @@ def series_points(own: int, opp: int) -> int:
         elif opp == 1:
             return 8
         else:
-            raise Exception(f"Invalid result score1: {own} - score2: {opp}")
+            raise BadRequestError(f"Invalid result score1: {own} - score2: {opp}")
     elif own == 1:
         if opp == 2:
             return 4
         else:
-            raise Exception(f"Invalid result score1: {own} - score2: {opp}")
+            raise BadRequestError(f"Invalid result score1: {own} - score2: {opp}")
     else:
         return 0
 

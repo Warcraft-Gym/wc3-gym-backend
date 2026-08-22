@@ -77,7 +77,7 @@ def create_app(db_url: str | None = None) -> FastAPI:
 
     @app.exception_handler(AuthError)
     async def auth_error(request: Request, exc: AuthError) -> JSONResponse:
-        return JSONResponse({"msg": exc.message}, status_code=exc.status_code)
+        return JSONResponse({"error": exc.message}, status_code=exc.status_code)
 
     @app.exception_handler(RequestValidationError)
     async def invalid_request(

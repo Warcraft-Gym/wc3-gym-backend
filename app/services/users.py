@@ -6,7 +6,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as OrmSession
 from sqlalchemy.orm import joinedload
 
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import BadRequestError, NotFoundError
 from app.core.query import QueryElement, QueryUtil
 from app.models.season import Season
 from app.models.team import Team
@@ -249,7 +249,7 @@ class UserService(BaseService):
     def updateW3CStats_ById(self, user_id: int) -> UserPublic:
         user = self.get(user_id)
         if not user:
-            raise Exception(f"User could not be found by id: {user_id}")
+            raise NotFoundError(f"User could not be found by id: {user_id}")
         self.updateW3CStats(user)
         return self.get_user(user_id)
 
@@ -257,17 +257,17 @@ class UserService(BaseService):
         self, season_stats: UserTeamSeasonStatsPublic
     ) -> UserPublic:
         if not season_stats:
-            raise Exception("Seasonstats not defined")
+            raise BadRequestError("Seasonstats not defined")
         with self.get_session() as session:
             team = session.get(Team, season_stats.team_id)
             if not team:
-                raise Exception(f"Team not found by id: {season_stats.team_id}")
+                raise NotFoundError(f"Team not found by id: {season_stats.team_id}")
             season = session.get(Season, season_stats.season_id)
             if not season:
-                raise Exception(f"Season not found by id: {season_stats.season_id}")
+                raise NotFoundError(f"Season not found by id: {season_stats.season_id}")
             user = session.get(User, season_stats.user_id)
             if not user:
-                raise Exception(f"User not found by id: {season_stats.user_id}")
+                raise NotFoundError(f"User not found by id: {season_stats.user_id}")
             key = {"team_id": team.id, "season_id": season.id, "user_id": user.id}
             uts_obj = session.get(DBUserTeamSeason, key)
             if uts_obj is None:

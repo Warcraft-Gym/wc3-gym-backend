@@ -23,11 +23,13 @@ def test_login_with_admin_token(client: Client) -> None:
 def test_login_with_bad_token(client: Client) -> None:
     resp = client.post("/login", json={"token": "wrong"})
     assert resp.status_code == 401
+    assert resp.json() == {"error": "Bad admin token"}
 
 
 def test_guarded_route_without_token(client: Client) -> None:
     resp = client.get("/config/koth/nightbot-token")
     assert resp.status_code == 401
+    assert resp.json() == {"error": "Missing Authorization Header"}
 
 
 def test_guarded_route_with_token(

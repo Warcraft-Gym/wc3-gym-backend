@@ -130,3 +130,21 @@ def test_import_fantasy_bets_stores_a_bet(
         assert bet.series_id == seeded["series_played_id"]
         assert bet.winner_id == seeded["player_ids"][0]
         assert bet.bet_points == 7
+
+
+def test_import_fantasy_teams_names_the_row_it_rejects(
+    client: Client, seeded: dict[str, Any], auth_headers: dict[str, str]
+) -> None:
+    """A sheet the import cannot read answers 400 and names the team."""
+    row: list[Any] = ["Night Owls", None, *DRAFTED, "Alpha", "Night Elf"]
+    sheet = _teams_sheet([row])
+
+    response = client.post(
+        "/fantasy/import/teams",
+        params={"season_id": str(seeded["season_id"])},
+        files={"file": ("teams.xlsx", sheet, "application/vnd.ms-excel")},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 400, response.text
+    assert response.json() == {"error": "Team without captain: Night Owls"}

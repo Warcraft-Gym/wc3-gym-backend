@@ -32,7 +32,7 @@ def login(data: Annotated[dict, Body()]) -> JSONResponse:
             {"access_token": access_token, "refresh_token": refresh_token},
             status_code=200,
         )
-    return JSONResponse({"msg": "Bad admin token"}, status_code=401)
+    return JSONResponse({"error": "Bad admin token"}, status_code=401)
 
 
 @router.post("/refresh")

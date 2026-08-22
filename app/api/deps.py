@@ -30,7 +30,7 @@ from app.services.users import UserService
 class AuthError(Exception):
     """A request without a valid token.
 
-    Clients read the status and the {"msg": ...} body: 401 for a missing header or an
+    Clients read the status and the {"error": ...} body: 401 for a missing header or an
     expired token, 422 for a malformed token or the wrong token type."""
 
     def __init__(self, message: str, status_code: int = 401) -> None:

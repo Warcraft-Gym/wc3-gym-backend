@@ -18,7 +18,7 @@ from app.api.deps import (
     UserServiceDep,
     require_admin,
 )
-from app.core.exceptions import BadRequestError
+from app.core.exceptions import BadRequestError, NotFoundError
 from app.core.query import QueryUtil
 from app.models.enums import Race
 from app.models.fantasy_bet import FantasyBetCreate, FantasyBetUpdate
@@ -423,11 +423,11 @@ def import_fantasy_teams(
         if season_name:
             found_seasons = season_service.find_by_name(season_name)
             if not found_seasons:
-                raise Exception(f"Season could not be found by name: {season_name}")
+                raise NotFoundError(f"Season could not be found by name: {season_name}")
             else:
                 season_id = found_seasons[0].id
         else:
-            raise Exception(
+            raise BadRequestError(
                 "Missing Season parameter, either season_id or season name is required"
             )
 
@@ -443,7 +443,7 @@ def import_fantasy_teams(
             if not cell_value(row.iloc[0]):
                 continue
             if not cell_value(row.iloc[1]):
-                raise Exception(f"Team without captain: {row.iloc[0]}")
+                raise BadRequestError(f"Team without captain: {row.iloc[0]}")
             users = user_service.find_by_discord_tag(row.iloc[1])
             captain = None
             if not users:
@@ -458,23 +458,23 @@ def import_fantasy_teams(
                 }
                 captain = user_service.create_user(UserCreate(**user_data))
             elif len(users) != 1:
-                raise Exception(
+                raise BadRequestError(
                     f"No or multiple users found for captain[{row.iloc[1]}]: {users}"
                 )
             else:
                 captain = users[0]
 
             if not cell_value(row.iloc[10]):
-                raise Exception(f"No GNL team defined for team: {row.iloc[0]}")
+                raise BadRequestError(f"No GNL team defined for team: {row.iloc[0]}")
             found_teams = team_service.find_by_name(row.iloc[10])
             if not found_teams or len(found_teams) != 1:
-                raise Exception(
+                raise BadRequestError(
                     f"No or multiple teams found for gnl team name[{row.iloc[10]} ]: {found_teams}"
                 )
             team = found_teams[0]
 
             if not cell_value(row.iloc[11]):
-                raise Exception(f"No Race defined for team: {row.iloc[11]}")
+                raise BadRequestError(f"No Race defined for team: {row.iloc[11]}")
 
             try:
                 drafted_race = Race.from_text(str(row.iloc[11]))
@@ -493,7 +493,7 @@ def import_fantasy_teams(
             fteam_q_string = f"season_id=={season_id} and captain_id=={captain.id}"
             fteam_query = QueryUtil.parseQuery(fteam_q_string)
             if not fteam_query or not fteam_query.elementA:
-                raise Exception(f"No valid query found: {fteam_q_string}")
+                raise BadRequestError(f"No valid query found: {fteam_q_string}")
             found_teams, _ = fantasy_team_service.search_fantasy_teams(fteam_query)
             if found_teams and len(found_teams) == 1:
                 team = found_teams[0]
@@ -501,7 +501,9 @@ def import_fantasy_teams(
                     team.id, FantasyTeamUpdate(**team_data)
                 )
             elif len(found_teams) > 1:
-                raise Exception(f"More than one bet found by search: {fteam_q_string}")
+                raise BadRequestError(
+                    f"More than one bet found by search: {fteam_q_string}"
+                )
             else:
                 fantasy_team = fantasy_team_service.create_fantasy_team(
                     FantasyTeamCreate(**team_data)
@@ -511,14 +513,16 @@ def import_fantasy_teams(
             found_players = {}
             for player in row[2:10]:
                 if not player:
-                    raise Exception(f"Player missing for team: {row.iloc[0]}")
+                    raise BadRequestError(f"Player missing for team: {row.iloc[0]}")
                 found_player_id = found_players.get(player)
                 if found_player_id:
                     players.append(found_player_id)
                 else:
                     users = user_service.find_by_name(player)
                     if not users or len(users) != 1:
-                        raise Exception(f"Could not find player by name: {player}")
+                        raise BadRequestError(
+                            f"Could not find player by name: {player}"
+                        )
                     found_player = users[0]
                     found_players[found_player.name] = found_player.id
                     players.append(found_player.id)
@@ -561,11 +565,11 @@ def import_fantasy_bets(
         if season_name:
             found_seasons = season_service.find_by_name(season_name)
             if not found_seasons:
-                raise Exception(f"Season could not be found by name: {season_name}")
+                raise NotFoundError(f"Season could not be found by name: {season_name}")
             else:
                 season_id = found_seasons[0].id
         else:
-            raise Exception(
+            raise BadRequestError(
                 "Missing Season parameter, either season_id or season name is required"
             )
 
@@ -583,17 +587,17 @@ def import_fantasy_bets(
             q_string = f"playday=={week} and season_id=={season_id}"
             query = QueryUtil.parseQuery(q_string)
             if not query or not query.elementA:
-                raise Exception(f"No valid query found: {q_string}")
+                raise BadRequestError(f"No valid query found: {q_string}")
             matches = match_service.search(query)
             users = user_service.find_by_name(row.iloc[1])
             if not users or len(users) != 1:
-                raise Exception(
+                raise BadRequestError(
                     f"No or multiple users found for bet player[{row.iloc[1]}]: {users}"
                 )
             player1 = users[0]
             users = user_service.find_by_name(row.iloc[2])
             if not users or len(users) != 1:
-                raise Exception(
+                raise BadRequestError(
                     f"No or multiple users found for bet player[{row.iloc[1]}]: {users}"
                 )
             player2 = users[0]
@@ -603,14 +607,16 @@ def import_fantasy_bets(
                     series_q_string = f"player1_id == {player1.id} and player2_id == {player2.id} and match_id == {match.id} or player1_id == {player2.id} and player2_id == {player1.id} and match_id == {match.id}"
                     series_query = QueryUtil.parseQuery(series_q_string)
                     if not query or not query.elementA:
-                        raise Exception(f"No valid query found: {series_q_string}")
+                        raise BadRequestError(
+                            f"No valid query found: {series_q_string}"
+                        )
                     found_series = series_service.search(series_query)
                     if not found_series or len(found_series) != 1:
                         continue
                     series = found_series[0]
                     break
                 if not series:
-                    raise Exception(
+                    raise BadRequestError(
                         f"Could not identfy series for player: {row.iloc[1]}!"
                     )
             series_service.update_series(series.id, SeriesUpdate(is_fantasy_match=True))
@@ -622,24 +628,24 @@ def import_fantasy_bets(
             if not cell_value(row.iloc[0]):
                 continue
             if not cell_value(row.iloc[0]):
-                raise Exception(f"Week not defined: {row.iloc[0]}")
+                raise BadRequestError(f"Week not defined: {row.iloc[0]}")
             playday = row.iloc[0]
 
             if not cell_value(row.iloc[1]):
-                raise Exception(f"Captain not defined: {row.iloc[1]}")
+                raise BadRequestError(f"Captain not defined: {row.iloc[1]}")
             users = user_service.find_by_discord_tag(row.iloc[1])
             if not users or len(users) != 1:
-                raise Exception(
+                raise BadRequestError(
                     f"No or multiple users found for captain[{row.iloc[1]}]: {users}"
                 )
             captain = users[0]
 
             if not cell_value(row.iloc[2]):
-                raise Exception(f"Bet Player not defined: {row.iloc[2]}")
+                raise BadRequestError(f"Bet Player not defined: {row.iloc[2]}")
 
             users = user_service.find_by_name(row.iloc[2])
             if not users or len(users) != 1:
-                raise Exception(
+                raise BadRequestError(
                     f"No or multiple users found for bet player[{row.iloc[2]}]: {users}"
                 )
             bet_player = users[0]
@@ -647,7 +653,7 @@ def import_fantasy_bets(
             q_string = f"playday=={playday} and season_id=={season_id}"
             query = QueryUtil.parseQuery(q_string)
             if not query or not query.elementA:
-                raise Exception(f"No valid query found: {q_string}")
+                raise BadRequestError(f"No valid query found: {q_string}")
             matches = match_service.search(query)
             series = None
             if matches:
@@ -655,19 +661,21 @@ def import_fantasy_bets(
                     series_q_string = f"player1_id == {bet_player.id} and is_fantasy_match == True and match_id == {match.id} or player2_id == {bet_player.id} and is_fantasy_match == True and match_id == {match.id}"
                     series_query = QueryUtil.parseQuery(series_q_string)
                     if not query or not query.elementA:
-                        raise Exception(f"No valid query found: {series_q_string}")
+                        raise BadRequestError(
+                            f"No valid query found: {series_q_string}"
+                        )
                     found_series = series_service.search(series_query)
                     if not found_series or len(found_series) != 1:
                         continue
                     series = found_series[0]
                     break
             if not series:
-                raise Exception(
+                raise BadRequestError(
                     f"Could not identfy series for player: {bet_player.name}!"
                 )
 
             if not cell_value(row.iloc[3]):
-                raise Exception(f"Bet Points not defined: {row.iloc[3]}")
+                raise BadRequestError(f"Bet Points not defined: {row.iloc[3]}")
 
             bet_data = {
                 "season_id": season_id,
@@ -684,7 +692,7 @@ def import_fantasy_bets(
                     stored[0], FantasyBetUpdate(**bet_data)
                 )
             elif len(stored) > 1:
-                raise Exception(f"More than one bet found by search: {key}")
+                raise BadRequestError(f"More than one bet found by search: {key}")
             else:
                 bet = fantasy_bet_service.create_fantasy_bet(
                     FantasyBetCreate(**bet_data)

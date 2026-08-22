@@ -232,46 +232,44 @@ class KothService(BaseService):
         race_mmr_data = {}  # {race: mmr} for the found season
         w3c_name = battle_tag
 
-        try:
-            current_season = self._get_current_w3c_season()
-            for season_offset in range(2):
-                season = current_season - season_offset
-                try:
-                    stats = self._get_w3c_stats_for_season(
-                        w3c_service, battle_tag, season
-                    )
-                    if stats:
-                        for stat in stats:
-                            if stat.mmr and stat.mmr > 0:
-                                # Race is an object, get the value string
-                                race_mmr_data[stat.race.value] = stat.mmr
+        current_season = self._get_current_w3c_season()
+        w3c_url = self._get_w3c_url()
+        for season_offset in range(2):
+            season = current_season - season_offset
+            try:
+                stats = self._get_w3c_stats_for_season(
+                    w3c_service, w3c_url, battle_tag, season
+                )
+                if stats:
+                    for stat in stats:
+                        if stat.mmr and stat.mmr > 0:
+                            # Race is an object, get the value string
+                            race_mmr_data[stat.race.value] = stat.mmr
 
-                        # Stop checking older seasons if we found the required stats
-                        if signup_race:
-                            # If a specific race was requested, only stop if we found that race
-                            if signup_race in race_mmr_data:
-                                logger.debug(
-                                    f"Found W3C stats for {battle_tag} with race {signup_race} in season {season}"
-                                )
-                                break
-                        else:
-                            # If no race specified, stop as soon as we find any stats
-                            if race_mmr_data:
-                                logger.debug(
-                                    f"Found W3C stats for {battle_tag} in season {season}"
-                                )
-                                break
-                except Exception as e:
-                    logger.debug(f"No stats for {battle_tag} in season {season}: {e}")
-                    continue
-        except Exception as e:
-            raise Exception(f"Failed to validate W3C stats for {battle_tag}: {e!s}")
+                    # Stop checking older seasons if we found the required stats
+                    if signup_race:
+                        # If a specific race was requested, only stop if we found that race
+                        if signup_race in race_mmr_data:
+                            logger.debug(
+                                f"Found W3C stats for {battle_tag} with race {signup_race} in season {season}"
+                            )
+                            break
+                    else:
+                        # If no race specified, stop as soon as we find any stats
+                        if race_mmr_data:
+                            logger.debug(
+                                f"Found W3C stats for {battle_tag} in season {season}"
+                            )
+                            break
+            except Exception as e:
+                logger.debug(f"No stats for {battle_tag} in season {season}: {e}")
+                continue
 
         # Determine final race and MMR
         if signup_race:
             # Race was specified (including RANDOM)
             if signup_race not in race_mmr_data:
-                raise Exception(
+                raise BadRequestError(
                     f"No W3Champions statistics found for {battle_tag} with race {signup_race} in the last 3 seasons"
                 )
             avg_mmr = race_mmr_data[signup_race]
@@ -279,7 +277,7 @@ class KothService(BaseService):
         else:
             # No race specified - find race with highest MMR
             if not race_mmr_data:
-                raise Exception(
+                raise BadRequestError(
                     f"No valid MMR data found for {battle_tag} in the last 3 seasons"
                 )
 
@@ -311,7 +309,7 @@ class KothService(BaseService):
                 db_signup = KothSignup.add(session, signup.model_dump())
             except IntegrityError as error:
                 # The unique index holds where the check cannot: two signups at once
-                raise Exception(
+                raise BadRequestError(
                     f"Player {twitch_username} already has an active signup with race {final_race}"
                 ) from error
             return KothSignupPublic.model_validate(db_signup)
@@ -575,11 +573,11 @@ class KothService(BaseService):
         if not active:
             return
         if not race:
-            raise Exception(
+            raise BadRequestError(
                 f"Player {twitch_username} already has an active signup. Specify a race to signup with a different race."
             )
         if any(signup.race == Race(race) for signup in active):
-            raise Exception(
+            raise BadRequestError(
                 f"Player {twitch_username} already has an active signup with race {race}"
             )
 
@@ -595,9 +593,11 @@ class KothService(BaseService):
     def _get_current_w3c_season(self) -> int:
         """Get current W3C season from settings or environment"""
         if self.settings_app_service:
-            season_setting = self.settings_app_service.get_setting("current_wc3_season")
-            if season_setting:
-                return int(season_setting.get("value"))
+            try:
+                setting = self.settings_app_service.get_setting("current_wc3_season")
+                return int(setting.get("value"))
+            except NotFoundError:
+                pass
 
         import os
 
@@ -605,25 +605,31 @@ class KothService(BaseService):
         if season:
             return int(season)
 
-        raise ValueError("Current W3C season not configured")
+        raise BadRequestError("Current W3C season not configured")
 
-    def _get_w3c_stats_for_season(
-        self, w3c_service: W3CService, battle_tag: str, season: int
-    ) -> list["W3CStatsCreate"]:
-        """Get W3C stats for a specific season"""
+    def _get_w3c_url(self) -> str:
+        """Get the W3C players API base from settings or environment"""
         import os
-        import urllib.parse
 
         w3c_url = None
         if self.settings_app_service:
-            w3c_url_setting = self.settings_app_service.get_setting("w3c_url")
-            w3c_url = w3c_url_setting.get("value") if w3c_url_setting else None
+            try:
+                w3c_url = self.settings_app_service.get_setting("w3c_url").get("value")
+            except NotFoundError:
+                pass
 
         if not w3c_url:
             w3c_url = os.getenv("W3C_URL")
 
         if not w3c_url:
-            raise ValueError("W3C URL not configured")
+            raise BadRequestError("W3C URL not configured")
+        return w3c_url
+
+    def _get_w3c_stats_for_season(
+        self, w3c_service: W3CService, w3c_url: str, battle_tag: str, season: int
+    ) -> list["W3CStatsCreate"]:
+        """Get W3C stats for a specific season"""
+        import urllib.parse
 
         param = {"gateWay": 20, "season": season}
 

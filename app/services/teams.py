@@ -4,7 +4,7 @@ from sqlalchemy import ColumnElement, select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session, joinedload, noload, selectinload
 
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import BadRequestError, NotFoundError
 from app.core.query import QueryElement, QueryUtil
 from app.models.season import Season
 from app.models.team import Team, TeamCreate, TeamPublic, TeamUpdate
@@ -54,14 +54,14 @@ class TeamService(BaseService):
         with self.get_session() as session:
             team = session.get(Team, team_id)
             if not team:
-                raise Exception(f"Team not found by id: {team_id}")
+                raise NotFoundError(f"Team not found by id: {team_id}")
             season = session.get(Season, season_id)
             if not season:
-                raise Exception(f"Season not found by id: {season_id}")
+                raise NotFoundError(f"Season not found by id: {season_id}")
             for user_id in player_ids:
                 user = session.get(User, user_id)
                 if not user:
-                    raise Exception(f"User not found by id: {user_id}")
+                    raise NotFoundError(f"User not found by id: {user_id}")
                 try:
                     # The primary key decides: a duplicate link is already there
                     with session.begin_nested():
@@ -79,20 +79,22 @@ class TeamService(BaseService):
         with self.get_session() as session:
             team = session.get(Team, team_id)
             if not team:
-                raise Exception(f"Team not found by id: {team_id}")
+                raise NotFoundError(f"Team not found by id: {team_id}")
             season = session.get(Season, season_id)
             if not season:
-                raise Exception(f"Season not found by id: {season_id}")
+                raise NotFoundError(f"Season not found by id: {season_id}")
             for user_id in player_ids:
                 user = session.get(User, user_id)
                 if not user:
-                    raise Exception(f"User not found by id: {user_id}")
+                    raise NotFoundError(f"User not found by id: {user_id}")
                 user_team = session.get(
                     DBUserTeamSeason,
                     {"team_id": team_id, "season_id": season_id, "user_id": user.id},
                 )
                 if not user_team:
-                    raise Exception(f"User not part of the team, user id: {user_id}")
+                    raise BadRequestError(
+                        f"User not part of the team, user id: {user_id}"
+                    )
                 session.delete(user_team)
             session.flush()
             return _public(session, team)
@@ -104,20 +106,22 @@ class TeamService(BaseService):
         with self.get_session() as session:
             team = session.get(Team, team_id)
             if not team:
-                raise Exception(f"Team not found by id: {team_id}")
+                raise NotFoundError(f"Team not found by id: {team_id}")
             season = session.get(Season, season_id)
             if not season:
-                raise Exception(f"Season not found by id: {season_id}")
+                raise NotFoundError(f"Season not found by id: {season_id}")
 
             # Validate coach limit
             if len(coach_ids) > 3:
-                raise Exception("Cannot assign more than 3 coaches per team per season")
+                raise BadRequestError(
+                    "Cannot assign more than 3 coaches per team per season"
+                )
 
             # Validate all users exist
             for user_id in coach_ids:
                 user = session.get(User, user_id)
                 if not user:
-                    raise Exception(f"User not found by id: {user_id}")
+                    raise NotFoundError(f"User not found by id: {user_id}")
 
             # Get or create team_season entry
             team_season = session.get(

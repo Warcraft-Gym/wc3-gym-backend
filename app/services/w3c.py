@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any
 
 import requests
 
+from app.core.exceptions import BadRequestError
 from app.models.enums import Race
 from app.models.w3c_stats import W3CStatsCreate
 
@@ -106,7 +107,7 @@ class W3CService:
         )
         if not result:
             logger.debug(f"no stats found for player {bnet_name} on w3c")
-            raise Exception(f"No stats found for player {bnet_name} on W3C")
+            raise BadRequestError(f"No stats found for player {bnet_name} on W3C")
         stats: list[W3CStatsCreate] = []
         for gmode_stats in result:
             if gmode_stats.get("gameMode") and gmode_stats.get("gameMode") == 1:

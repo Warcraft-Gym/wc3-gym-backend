@@ -5,6 +5,7 @@ from fastapi import APIRouter, Body, Depends, Query
 from fastapi.responses import JSONResponse
 
 from app.api.deps import KothServiceDep, require_admin
+from app.core.exceptions import BadRequestError
 from app.models.koth_event import KothEventCreate, KothEventPublic, KothEventUpdate
 from app.models.koth_match import (
     KothMatchCreate,
@@ -96,30 +97,27 @@ def create_signup(
     Create a KOTH signup with automatic W3C MMR validation and bracket
     assignment. Requires KOTH_NIGHTBOT_TOKEN for authentication.
     """
-    try:
-        # Verify KOTH_NIGHTBOT_TOKEN from settings
-        client_token = data.get("client_token")
-        setting = service.settings_app_service.get_setting("KOTH_NIGHTBOT_TOKEN")
-        expected = setting.get("value") if setting else None
+    # Verify KOTH_NIGHTBOT_TOKEN from settings
+    client_token = data.get("client_token")
+    setting = service.settings_app_service.get_setting("KOTH_NIGHTBOT_TOKEN")
+    expected = setting.get("value") if setting else None
 
-        if not expected or str(client_token) != str(expected):
-            return JSONResponse(
-                {"error": "Unauthorized - invalid client token"}, status_code=401
-            )
-
-        twitch_username = data.get("twitch_username")
-        battle_tag = data.get("battle_tag")
-        race = data.get("race")  # Optional
-
-        if not twitch_username or not battle_tag:
-            return JSONResponse({"error": "Missing required fields"}, status_code=400)
-
-        signup = service.create_signup_from_twitch(
-            twitch_username=twitch_username, battle_tag=battle_tag, preferred_race=race
+    if not expected or str(client_token) != str(expected):
+        return JSONResponse(
+            {"error": "Unauthorized - invalid client token"}, status_code=401
         )
-        return signup.to_dict()
-    except ValueError as e:
-        return JSONResponse({"error": str(e)}, status_code=400)
+
+    twitch_username = data.get("twitch_username")
+    battle_tag = data.get("battle_tag")
+    race = data.get("race")  # Optional
+
+    if not twitch_username or not battle_tag:
+        raise BadRequestError("Missing required fields")
+
+    signup = service.create_signup_from_twitch(
+        twitch_username=twitch_username, battle_tag=battle_tag, preferred_race=race
+    )
+    return signup.to_dict()
 
 
 @router.get("/koth/signup", response_model=None)
@@ -137,37 +135,31 @@ def create_signup_nightbot(
     KOTH_NIGHTBOT_TOKEN for authentication.
     Usage: GET /koth/signup?token=KOTH_TOKEN&twitch=username&battletag=Name%231234
     """
-    try:
-        client_token = token
-        twitch_username = twitch
-        battle_tag = battletag
+    client_token = token
+    twitch_username = twitch
+    battle_tag = battletag
 
-        # Verify KOTH_NIGHTBOT_TOKEN from settings
-        setting = service.settings_app_service.get_setting("KOTH_NIGHTBOT_TOKEN")
-        expected = setting.get("value") if setting else None
+    # Verify KOTH_NIGHTBOT_TOKEN from settings
+    setting = service.settings_app_service.get_setting("KOTH_NIGHTBOT_TOKEN")
+    expected = setting.get("value") if setting else None
 
-        if not expected or str(client_token) != str(expected):
-            return JSONResponse(
-                {"error": "Unauthorized - invalid client token"}, status_code=401
-            )
-
-        if not twitch_username or not battle_tag:
-            return JSONResponse(
-                {"error": "Missing required parameters: token, twitch, battletag"},
-                status_code=400,
-            )
-
-        signup = service.create_signup_from_twitch(
-            twitch_username=twitch_username, battle_tag=battle_tag, preferred_race=race
+    if not expected or str(client_token) != str(expected):
+        return JSONResponse(
+            {"error": "Unauthorized - invalid client token"}, status_code=401
         )
 
-        # Return simple success message for chat display
-        return {
-            "success": True,
-            "message": f"{twitch_username} signed up for Bracket {signup.bracket} ({signup.mmr} MMR)",
-        }
-    except ValueError as e:
-        return JSONResponse({"error": str(e)}, status_code=400)
+    if not twitch_username or not battle_tag:
+        raise BadRequestError("Missing required parameters: token, twitch, battletag")
+
+    signup = service.create_signup_from_twitch(
+        twitch_username=twitch_username, battle_tag=battle_tag, preferred_race=race
+    )
+
+    # Return simple success message for chat display
+    return {
+        "success": True,
+        "message": f"{twitch_username} signed up for Bracket {signup.bracket} ({signup.mmr} MMR)",
+    }
 
 
 @router.post(
@@ -184,20 +176,17 @@ def create_signup_admin(
     Manually create a KOTH signup with automatic W3C MMR validation and
     bracket assignment. For admin UI use.
     """
-    try:
-        twitch_username = data.get("twitch_username", "")
-        battle_tag = data.get("battle_tag")
-        race = data.get("race")
+    twitch_username = data.get("twitch_username", "")
+    battle_tag = data.get("battle_tag")
+    race = data.get("race")
 
-        if not battle_tag:
-            return JSONResponse({"error": "BattleTag is required"}, status_code=400)
+    if not battle_tag:
+        raise BadRequestError("BattleTag is required")
 
-        signup = service.create_signup_from_twitch(
-            twitch_username=twitch_username, battle_tag=battle_tag, preferred_race=race
-        )
-        return signup.to_dict()
-    except ValueError as e:
-        return JSONResponse({"error": str(e)}, status_code=400)
+    signup = service.create_signup_from_twitch(
+        twitch_username=twitch_username, battle_tag=battle_tag, preferred_race=race
+    )
+    return signup.to_dict()
 
 
 @router.put(

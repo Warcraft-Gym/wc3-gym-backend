@@ -731,4 +731,6 @@ def test_coaches_are_capped_at_three(
 
     resp = client.put(path, json={"coach_ids": [1, 2, 3, 4]}, headers=auth_headers)
     assert resp.status_code == 400
-    assert "coaches" in resp.json()["error"]
+    assert resp.json() == {
+        "error": "Cannot assign more than 3 coaches per team per season"
+    }
