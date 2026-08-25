@@ -1,5 +1,4 @@
 import logging
-from datetime import timedelta
 from typing import Any
 
 from sqlalchemy import ColumnElement, select
@@ -16,13 +15,9 @@ from app.models.user_team_season import DBUserTeamSeason
 from app.models.w3c_stats import W3CSyncResult
 from app.services import derived
 from app.services.base import BaseService
-from app.services.users import UserService
+from app.services.users import SYNC_MAX_AGE, UserService
 
 logger = logging.getLogger(__name__)
-
-# A button absorbs a double click and a second admin, and still refreshes
-# a team before its match.
-SYNC_MAX_AGE = timedelta(minutes=10)
 
 
 def _public(session: Session, team: Team) -> TeamPublic:

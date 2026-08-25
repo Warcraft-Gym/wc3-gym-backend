@@ -865,6 +865,84 @@ def test_a_throttle_stops_the_pool_and_names_the_players_it_left(
     assert [stamped_at(p.id) for p in players[1:]] == [None] * 7
 
 
+# The season sync. One request covers every player signed up for the season,
+# where the assign view used to send one request per player from the browser.
+
+
+def sign_up(
+    client: Client, headers: dict[str, str], season_id: int, user_ids: list[int]
+) -> None:
+    post(client, headers, f"/seasons/addUserSignup/{season_id}", {"user_ids": user_ids})
+
+
+def test_a_season_sync_reports_every_player_signed_up(
+    client: Client,
+    auth_headers: dict[str, str],
+    seeded: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The signups of the season, not the roster of one team."""
+    answer_no_stats(monkeypatch)
+    signed_up = seeded["player_ids"][:3]
+    sign_up(client, auth_headers, seeded["season_id"], signed_up)
+
+    resp = client.post(f"/seasons/{seeded['season_id']}/w3c_sync", headers=auth_headers)
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert sorted(body["synced"]) == sorted(signed_up)
+    assert body["skipped"] == []
+    assert body["failed"] == []
+
+
+def test_a_season_nobody_signed_up_for_syncs_nothing(
+    client: Client,
+    auth_headers: dict[str, str],
+    seeded: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An empty report, not an error, so the button reads the same either way."""
+    answer_no_stats(monkeypatch)
+
+    resp = client.post(f"/seasons/{seeded['season_id']}/w3c_sync", headers=auth_headers)
+
+    assert resp.status_code == 200
+    assert resp.json() == {"synced": [], "skipped": [], "failed": []}
+
+
+def test_a_season_sync_of_an_unknown_season_answers_404(
+    client: Client,
+    auth_headers: dict[str, str],
+    seeded: dict[str, Any],
+) -> None:
+    resp = client.post("/seasons/9999/w3c_sync", headers=auth_headers)
+
+    assert resp.status_code == 404
+    assert resp.json() == {"error": "Season not found"}
+
+
+def test_a_second_season_sync_skips_the_players_the_first_stamped(
+    client: Client,
+    auth_headers: dict[str, str],
+    seeded: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A double click costs no w3champions call."""
+    answer_no_stats(monkeypatch)
+    signed_up = seeded["player_ids"][:3]
+    sign_up(client, auth_headers, seeded["season_id"], signed_up)
+    url = f"/seasons/{seeded['season_id']}/w3c_sync"
+    assert client.post(url, headers=auth_headers).status_code == 200
+
+    resp = client.post(url, headers=auth_headers)
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["synced"] == []
+    assert sorted(body["skipped"]) == sorted(signed_up)
+    assert body["failed"] == []
+
+
 # The race column. The five members are RANDOM, HU, OC, NE and UD, and
 # the input models take a Race, so pydantic answers 422 for anything else.
 # The field used to be Race | str, which let any string through to a

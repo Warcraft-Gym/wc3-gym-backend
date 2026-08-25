@@ -12,12 +12,17 @@ from app.models.season import Season, SeasonCreate, SeasonPublic, SeasonUpdate
 from app.models.team import Team
 from app.models.team_season import DBTeamSeason
 from app.models.user import User, UserListPublic
+from app.models.w3c_stats import W3CSyncResult
 from app.services.base import BaseService
+from app.services.users import SYNC_MAX_AGE, UserService
 
 logger = logging.getLogger(__name__)
 
 
 class SeasonService(BaseService):
+    def __init__(self, user_app_service: UserService) -> None:
+        self.user_app_service = user_app_service
+
     def add(self, season: SeasonCreate) -> SeasonPublic:
         with self.get_session() as session:
             new_season = Season.add(session, season.model_dump())
@@ -274,6 +279,11 @@ class SeasonService(BaseService):
                         result.append(user_public)
 
             return result
+
+    def syncW3CStatsSeason(self, season_id: int) -> W3CSyncResult:
+        """Sync every player signed up for the season and report each one."""
+        users = self.getSignedUpUsers(season_id)
+        return self.user_app_service.syncW3CStatsUsers(users, SYNC_MAX_AGE)
 
     def create_season(self, season: SeasonCreate) -> SeasonPublic:
         return self.add(season)

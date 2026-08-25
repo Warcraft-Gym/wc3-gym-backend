@@ -8,6 +8,7 @@ from app.core.exceptions import BadRequestError
 from app.core.query import QueryUtil
 from app.models.season import SeasonCreate, SeasonPublic, SeasonUpdate
 from app.models.user import UserListPublic
+from app.models.w3c_stats import W3CSyncResult
 
 logger = logging.getLogger(__name__)
 
@@ -136,3 +137,9 @@ def get_season_signups(
 ) -> list[UserListPublic]:
     """Retrieve one page of the users signed up for a season, at most 500."""
     return service.getSignedUpUsers(season_id, limit=limit, offset=offset) or []
+
+
+@router.post("/seasons/{season_id}/w3c_sync", dependencies=[Depends(require_admin)])
+def sync_w3c_season_signups(season_id: int, service: SeasonServiceDep) -> W3CSyncResult:
+    """Sync w3c information for every player signed up for the season."""
+    return service.syncW3CStatsSeason(season_id)

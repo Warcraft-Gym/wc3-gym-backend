@@ -32,6 +32,10 @@ logger = logging.getLogger(__name__)
 # of them cost no CPU and keep a team of 18 players under five seconds.
 W3C_SYNC_WORKERS = 4
 
+# A button absorbs a double click and a second admin, and still refreshes
+# a roster before its match.
+SYNC_MAX_AGE = timedelta(minutes=10)
+
 
 def _now() -> datetime:
     """UTC without a zone, the shape the DATETIME columns hold."""
