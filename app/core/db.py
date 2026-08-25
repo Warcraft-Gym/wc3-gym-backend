@@ -21,8 +21,8 @@ Session = sessionmaker()
 def init_engine(db_url: str | None = None) -> Engine:
     """Build the engine and bind the session factory to it.
 
-    Reads DB_URL when the caller passes no url. Both engine settings are for
-    MySQL, which drops a connection that stays idle.
+    Reads DB_URL when the caller passes no url. The two pool settings replace
+    a connection the server or a connection pooler dropped while it sat idle.
     """
     db_url = db_url or os.getenv("DB_URL")
     if not db_url:

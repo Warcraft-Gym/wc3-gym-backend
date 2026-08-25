@@ -7,6 +7,7 @@ for a value the caller supplies; keep this for a query a client wrote.
 """
 
 import re
+from datetime import date, datetime
 from typing import Self, cast
 
 from sqlalchemy import ColumnElement, and_, or_
@@ -99,26 +100,50 @@ class QueryUtil:
         return QueryCondition(operator, key, value)
 
     @staticmethod
+    def readValue(column: ColumnElement[object], key: str, value: str | bool) -> object:
+        """The value as the column's Python type. The query arrives as text
+        and Postgres does not compare a number column with text."""
+        if isinstance(value, bool):
+            return value
+        try:
+            python_type = column.type.python_type
+        except NotImplementedError:
+            return value
+        try:
+            if python_type is bool:
+                return {"1": True, "true": True, "0": False, "false": False}[
+                    value.lower()
+                ]
+            if python_type in (int, float):
+                return python_type(value)
+            if python_type in (datetime, date):
+                return python_type.fromisoformat(value)
+        except (KeyError, ValueError):
+            raise BadRequestError(f"{key} does not take {value!r}") from None
+        return value
+
+    @staticmethod
     def createClassQuery(
         cls: type[DBModel], query: QueryCondition
     ) -> ColumnElement[bool] | None:
         filter = None
         column = getattr(cls, query.key, None)
         if column is not None:
+            if query.operator == "ilike":
+                return column.ilike(f"%{query.value}%")
+            value = QueryUtil.readValue(column, query.key, query.value)
             if query.operator == "==":
-                filter = column == query.value
+                filter = column == value
             elif query.operator == "!=":
-                filter = column != query.value
+                filter = column != value
             elif query.operator == ">":
-                filter = column > query.value
+                filter = column > value
             elif query.operator == ">=":
-                filter = column >= query.value
+                filter = column >= value
             elif query.operator == "<":
-                filter = column < query.value
+                filter = column < value
             elif query.operator == "<=":
-                filter = column <= query.value
-            elif query.operator == "ilike":
-                filter = column.ilike(f"%{query.value}%")
+                filter = column <= value
         return filter
 
     @staticmethod

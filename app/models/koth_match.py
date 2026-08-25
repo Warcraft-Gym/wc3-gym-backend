@@ -23,7 +23,6 @@ class KothMatchBase(SQLModel):
 
 class KothMatch(KothMatchBase, DBModel, table=True):
     __tablename__ = "koth_matches"
-    __table_args__ = {"mysql_charset": "utf8mb4"}
 
     id: int | None = Field(default=None, primary_key=True)
 

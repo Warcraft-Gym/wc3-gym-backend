@@ -57,7 +57,7 @@ def upgrade() -> None:
         sa.Column(
             "active_twitch_username",
             sqlmodel.sql.sqltypes.AutoString(length=50),
-            sa.Computed(ACTIVE_TWITCH_USERNAME, persisted=False),
+            sa.Computed(ACTIVE_TWITCH_USERNAME),
             nullable=True,
         ),
     )

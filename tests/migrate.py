@@ -36,3 +36,25 @@ def upgrade_to(db_url: str, revision: str) -> None:
 
 def upgrade_to_head(db_url: str) -> None:
     upgrade_to(db_url, "head")
+
+
+def fresh_database(directory: Path, name: str) -> str:
+    """The url of an empty database.
+
+    A SQLite file in the directory by default. With TEST_DB_URL set, a
+    database called `name` on that server instead, dropped and created
+    again, so the same suite runs against Postgres.
+    """
+    server = os.environ.get("TEST_DB_URL")
+    if not server:
+        return f"sqlite:///{directory / name}.sqlite"
+
+    from sqlalchemy import create_engine, make_url, text
+
+    url = make_url(server)
+    engine = create_engine(url, isolation_level="AUTOCOMMIT")
+    with engine.connect() as connection:
+        connection.execute(text(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)'))
+        connection.execute(text(f'CREATE DATABASE "{name}"'))
+    engine.dispose()
+    return url.set(database=name).render_as_string(hide_password=False)

@@ -21,7 +21,6 @@ class KothEventBase(SQLModel):
 
 class KothEvent(KothEventBase, DBModel, table=True):
     __tablename__ = "koth_events"
-    __table_args__ = {"mysql_charset": "utf8mb4"}
 
     id: int | None = Field(default=None, primary_key=True)
 
