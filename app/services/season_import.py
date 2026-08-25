@@ -11,6 +11,7 @@ import pandas as pd
 
 from app.core.exceptions import NotFoundError
 from app.core.query import QueryUtil
+from app.models.enums import Race
 from app.models.fantasy_bet import FantasyBetCreate, FantasyBetUpdate
 from app.models.fantasy_team import FantasyTeamCreate, FantasyTeamUpdate
 from app.models.map import MapCreate, MapUpdate
@@ -346,7 +347,41 @@ def process_import(
         if old_series_id:
             series_id_mapping[old_series_id] = new_series_id
 
-    # ===== Step 7: Import Fantasy Teams =====
+    # ===== Step 7: Import Fantasy Users =====
+    # Captains and bettors on no roster, mapped before the sheets that name them
+    df_fantasy_users = sheets.get("Fantasy Users")
+    if df_fantasy_users is not None:
+        for _, row in df_fantasy_users.iterrows():
+            if pd.isna(row["ID"]) or pd.isna(row["Battle Tag"]):
+                continue
+            old_user_id = int(row["ID"])
+            if old_user_id in user_id_mapping:
+                continue
+
+            battle_tag = row["Battle Tag"]
+            existing_users = user_service.find_by_battle_tag(battle_tag)
+            if existing_users:
+                user = existing_users[0]
+                logger.info(f"Reusing existing user: {user.battleTag} (ID: {user.id})")
+            else:
+                user_data = {
+                    "battleTag": battle_tag,
+                    # A fantasy user plays no series, and the sheet carries no race
+                    "race": Race.RANDOM,
+                    "name": cell_value(row["Name"]) or battle_tag,
+                    "discordTag": cell_value(row["Discord Tag"]) or "",
+                    "discordId": str(row["Discord ID"])
+                    if not pd.isna(row["Discord ID"])
+                    else "",
+                }
+                user = user_service.create_user(UserCreate(**user_data))
+                logger.info(
+                    f"Created new fantasy user: {user.battleTag} (ID: {user.id})"
+                )
+
+            user_id_mapping[old_user_id] = user.id
+
+    # ===== Step 8: Import Fantasy Teams =====
     fantasy_team_id_mapping = {}  # old_id -> new_id
     try:
         df_fantasy_teams = sheets["Fantasy Teams"]
@@ -405,7 +440,7 @@ def process_import(
     except Exception as e:
         logger.warning(f"Fantasy Teams sheet not found or error: {e}")
 
-    # ===== Step 8: Import Fantasy Team Players =====
+    # ===== Step 9: Import Fantasy Team Players =====
     try:
         df_fantasy_players = sheets["Fantasy Team Players"]
         # Group players by fantasy team
@@ -431,7 +466,7 @@ def process_import(
     except Exception as e:
         logger.warning(f"Fantasy Team Players sheet not found or error: {e}")
 
-    # ===== Step 9: Import Fantasy Bets =====
+    # ===== Step 10: Import Fantasy Bets =====
     try:
         df_fantasy_bets = sheets["Fantasy Bets"]
         # One statement for the bets already stored, so the loop needs none

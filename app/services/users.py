@@ -1,4 +1,5 @@
 import logging
+from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
@@ -93,6 +94,13 @@ class UserService(BaseService):
 
     def find_by_battle_tag(self, battle_tag: str) -> list[UserListPublic]:
         return self._where(User.battleTag == battle_tag)
+
+    def find_by_ids(self, user_ids: Iterable[int | None]) -> list[UserListPublic]:
+        """The users of those ids, read in one statement."""
+        ids = [user_id for user_id in user_ids if user_id is not None]
+        if not ids:
+            return []
+        return self._where(User.id.in_(ids))
 
     def find_by_discord_tag(self, discord_tag: str) -> list[UserListPublic]:
         return self._where(User.discordTag == discord_tag)

@@ -97,14 +97,34 @@ SHEETS: dict[str, tuple[list[str], list[list[Any]]]] = {
 }
 
 
+FANTASY_SHEETS: dict[str, tuple[list[str], list[list[Any]]]] = {
+    "Fantasy Users": (
+        ["ID", "Name", "Battle Tag", "Discord Tag", "Discord ID"],
+        [
+            [1, "P1", "P1#1111", "p1", 1],
+            [7, "Cap", "Cap#7777", "cap", 7],
+            [8, "Newcomer", "New#8888", "new", 8],
+        ],
+    ),
+    "Fantasy Teams": (
+        ["ID", "Name", "Season ID", "Captain ID", "Drafted Team ID", "Drafted Race"],
+        [[1, "The Outsiders", 1, 7, 1, "HU"], [2, "The Newcomers", 1, 8, 2, "OC"]],
+    ),
+}
+
+
 def _workbook(
-    *, without: str | None = None, season_id: int | None = None
+    *,
+    without: str | None = None,
+    season_id: int | None = None,
+    extra: dict[str, tuple[list[str], list[list[Any]]]] | None = None,
 ) -> io.BytesIO:
-    """A season export. `without` drops one sheet the pipeline reads, and
-    `season_id` names the season it writes into instead of a new one."""
+    """A season export. `without` drops one sheet the pipeline reads,
+    `season_id` names the season it writes into instead of a new one, and
+    `extra` adds sheets the default workbook does not carry."""
     stream = io.BytesIO()
     with pd.ExcelWriter(stream) as writer:
-        for name, (columns, rows) in SHEETS.items():
+        for name, (columns, rows) in {**SHEETS, **(extra or {})}.items():
             if name == without:
                 continue
             if name == "Season" and season_id is not None:
@@ -191,3 +211,70 @@ def test_a_second_import_updates_the_bets_instead_of_adding_them(
         bets = session.scalars(select(FantasyBet)).all()
     assert len(bets) == 2
     assert sorted(bet.bet_points for bet in bets) == [10, 20]
+
+
+def _add_captain() -> None:
+    """A user who is on no roster, so only the Fantasy Users sheet names him."""
+    from app.models.enums import Race
+
+    with Session() as session:
+        session.add(
+            User(
+                name="Cap",
+                battleTag="Cap#7777",
+                discordTag="cap",
+                discordId="7",
+                race=Race.NE,
+            )
+        )
+        session.commit()
+
+
+def test_the_fantasy_users_sheet_maps_a_captain_and_creates_a_missing_one(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """Both fantasy teams get their captain: one from the database, one
+    created from the sheet."""
+    from app.models.fantasy_team import FantasyTeam
+
+    _add_captain()
+
+    response = _post(client, _workbook(extra=FANTASY_SHEETS), auth_headers)
+    assert response.status_code == 200, response.text
+
+    with Session() as session:
+        captain = session.scalars(
+            select(User).where(User.battleTag == "Cap#7777")
+        ).one()
+        created = session.scalars(
+            select(User).where(User.battleTag == "New#8888")
+        ).one()
+        teams = session.scalars(select(FantasyTeam)).all()
+        assert len(session.scalars(select(User)).all()) == 4
+
+    assert created.name == "Newcomer"
+    assert created.discordTag == "new"
+    assert created.discordId == "8"
+    assert sorted(team.captain_id for team in teams) == sorted([captain.id, created.id])
+
+
+def test_an_import_without_the_fantasy_users_sheet_still_writes_the_season(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """An older export has no such sheet, so its unmapped captains are
+    skipped and the season is written all the same."""
+    from app.models.fantasy_team import FantasyTeam
+
+    _add_captain()
+
+    response = _post(
+        client,
+        _workbook(extra=FANTASY_SHEETS, without="Fantasy Users"),
+        auth_headers,
+    )
+    assert response.status_code == 200, response.text
+
+    with Session() as session:
+        assert session.scalars(select(Season).where(Season.name == "Season 9")).one()
+        assert session.scalars(select(FantasyTeam)).all() == []
+        assert len(session.scalars(select(User)).all()) == 3

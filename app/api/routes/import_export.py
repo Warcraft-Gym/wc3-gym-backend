@@ -103,16 +103,18 @@ def import_season(
 def export_season(
     season_service: SeasonServiceDep,
     team_service: TeamServiceDep,
+    user_service: UserServiceDep,
     match_service: MatchServiceDep,
     series_service: SeriesServiceDep,
     fantasy_team_service: FantasyTeamServiceDep,
     fantasy_bet_service: FantasyBetServiceDep,
     season_id: int,
 ) -> Response:
-    """Export one season as an Excel workbook of nine sheets.
+    """Export one season as an Excel workbook of ten sheets.
 
     The workbook holds the season row, its maps, teams, rostered players,
-    matches, series, fantasy teams, fantasy team players and fantasy bets.
+    matches, series, fantasy teams, fantasy team players, fantasy bets and
+    the fantasy users who are on no roster.
     """
     # get_season raises NotFoundError, which answers 404
     season = season_service.get_season(season_id)
@@ -192,9 +194,11 @@ def export_season(
             "Team ID",
         ]
     )
+    roster_user_ids = set()
     for team in season_teams:
         players = team.player_by_season.get(season_id, [])
         for user in players:
+            roster_user_ids.add(user.id)
             race_value = user.race.value if hasattr(user.race, "value") else user.race
             country_value = (
                 user.country.value if hasattr(user.country, "value") else user.country
@@ -298,6 +302,9 @@ def export_season(
                     ]
                 )
 
+    # The captains and bettors, for the Fantasy Users sheet below
+    fantasy_user_ids: set[int | None] = set()
+
     # ===== Sheet 7: Fantasy Teams =====
     fantasy_teams_sheet = workbook.create_sheet(title="Fantasy Teams")
     fantasy_teams_sheet.append(
@@ -321,6 +328,7 @@ def export_season(
     if query and query.elementA:
         fantasy_teams, _ = fantasy_team_service.search_fantasy_teams(query)
         for fteam in fantasy_teams:
+            fantasy_user_ids.add(fteam.captain_id)
             drafted_race_value = (
                 fteam.drafted_race.value
                 if hasattr(fteam.drafted_race, "value")
@@ -372,6 +380,8 @@ def export_season(
                 query, limit=BET_PAGE, offset=offset
             )
             for fbet in page:
+                fantasy_user_ids.add(fbet.user_id)
+                fantasy_user_ids.add(fbet.winner_id)
                 fantasy_bets_sheet.append(
                     [
                         fbet.id,
@@ -386,6 +396,23 @@ def export_season(
             if len(page) < BET_PAGE:
                 break
             offset += BET_PAGE
+
+    # ===== Sheet 10: Fantasy Users =====
+    # The users of the sheets above who are on no roster, so not in Players
+    fantasy_users_sheet = workbook.create_sheet(title="Fantasy Users")
+    fantasy_users_sheet.append(
+        ["ID", "Name", "Battle Tag", "Discord Tag", "Discord ID"]
+    )
+    for user in user_service.find_by_ids(fantasy_user_ids - roster_user_ids):
+        fantasy_users_sheet.append(
+            [
+                user.id,
+                user.name if user.name else "",
+                user.battleTag,
+                user.discordTag if user.discordTag else "",
+                user.discordId if user.discordId else "",
+            ]
+        )
 
     excel_stream = BytesIO()
     workbook.save(excel_stream)
