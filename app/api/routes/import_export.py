@@ -10,7 +10,6 @@ from fastapi import APIRouter, Depends, File, Response, UploadFile
 from app.api.deps import (
     FantasyBetServiceDep,
     FantasyTeamServiceDep,
-    MapServiceDep,
     MatchServiceDep,
     SeasonServiceDep,
     SeriesServiceDep,
@@ -26,7 +25,7 @@ from app.models.fantasy_team import FantasyTeamCreate, FantasyTeamUpdate
 from app.models.responses import Message
 from app.models.series import SeriesUpdate
 from app.models.user import UserCreate
-from app.services.season_import import cell_value, process_import
+from app.services.season_import import cell_value, import_season_workbook
 
 logger = logging.getLogger(__name__)
 
@@ -38,14 +37,6 @@ BET_PAGE = 500  # how many bets the export reads per statement
 # import export endpoints
 @router.post("/import", dependencies=[Depends(require_admin)])
 def import_season(
-    season_service: SeasonServiceDep,
-    map_service: MapServiceDep,
-    team_service: TeamServiceDep,
-    user_service: UserServiceDep,
-    match_service: MatchServiceDep,
-    series_service: SeriesServiceDep,
-    fantasy_team_service: FantasyTeamServiceDep,
-    fantasy_bet_service: FantasyBetServiceDep,
     file: Annotated[UploadFile | None, File()] = None,
     create_new: str = "false",
 ) -> dict[str, Any]:
@@ -57,45 +48,15 @@ def import_season(
     if file is None:
         raise BadRequestError("No file part")
 
-    create_new = create_new.lower() == "true"
-
     if file.filename == "" or not file.filename.endswith((".xlsx", ".xls")):
         raise BadRequestError("No selected file or invalid file type")
 
-    # Read file into memory
-    file_bytes = file.file.read()
-
-    process_import(
-        file_bytes,
-        create_new,
-        season_service,
-        map_service,
-        team_service,
-        user_service,
-        match_service,
-        series_service,
-        fantasy_team_service,
-        fantasy_bet_service,
-    )
-
-    # Read season name for response
-    temp_stream = io.BytesIO(file_bytes)
-    df_season = pd.read_excel(temp_stream, sheet_name="Season")
-    season_row = df_season.iloc[0]
-    season_name = season_row["Name"]
-
-    # Get season ID (either from Excel or newly created)
-    if pd.isna(season_row["ID"]):
-        # New season was created, get it by name
-        seasons = season_service.find_by_name(season_name)
-        season_id = seasons[0].id if seasons else None
-    else:
-        season_id = int(season_row["ID"])
+    imported = import_season_workbook(file.file.read(), create_new.lower() == "true")
 
     return {
         "message": "Season imported successfully",
-        "season_id": season_id,
-        "season_name": season_name,
+        "season_id": imported.id,
+        "season_name": imported.name,
     }
 
 

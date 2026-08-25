@@ -92,9 +92,6 @@ class UserService(BaseService):
     def find_by_name(self, name: str) -> list[UserListPublic]:
         return self._where(User.name == name)
 
-    def find_by_battle_tag(self, battle_tag: str) -> list[UserListPublic]:
-        return self._where(User.battleTag == battle_tag)
-
     def find_by_ids(self, user_ids: Iterable[int | None]) -> list[UserListPublic]:
         """The users of those ids, read in one statement."""
         ids = [user_id for user_id in user_ids if user_id is not None]

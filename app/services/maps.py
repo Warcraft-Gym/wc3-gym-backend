@@ -41,9 +41,6 @@ class MapService(BaseService):
             QueryUtil.convertQueryToDBFilter(Map, query), limit=limit, offset=offset
         )
 
-    def find_by_shortname(self, shortname: str) -> list[MapPublic]:
-        return self._where(Map.shortname == shortname)
-
     def _where(
         self,
         filter: ColumnElement[bool] | None,

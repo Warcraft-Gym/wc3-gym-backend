@@ -9,12 +9,13 @@ from typing import Any
 
 import pandas as pd
 from httpx2 import Client, Response
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.core.db import Session
 from app.models.season import Season
 from app.models.team import Team
 from app.models.user import User
+from tests.test_query_budget import count_statements
 
 SHEETS: dict[str, tuple[list[str], list[list[Any]]]] = {
     "Season": (
@@ -278,3 +279,71 @@ def test_an_import_without_the_fantasy_users_sheet_still_writes_the_season(
         assert session.scalars(select(Season).where(Season.name == "Season 9")).one()
         assert session.scalars(select(FantasyTeam)).all() == []
         assert len(session.scalars(select(User)).all()) == 3
+
+
+# One transaction of bulk statements, not one transaction per row, so the
+# cost of an import does not grow with the rows a sheet holds.
+
+# The workbook below costs 25: one lookup per sheet and the writes it needs
+IMPORT_STATEMENTS = 40
+
+
+def _row_counts() -> dict[str, int]:
+    """How many rows every table holds."""
+    from sqlmodel import SQLModel
+
+    with Session() as session:
+        return {
+            table.name: session.execute(
+                select(func.count()).select_from(table)
+            ).scalar_one()
+            for table in SQLModel.metadata.sorted_tables
+        }
+
+
+def test_an_import_costs_a_bounded_number_of_statements(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """A whole workbook costs a fixed number of statements, whatever its
+    row count."""
+    with count_statements() as tally:
+        response = _post(client, _workbook(extra=FANTASY_SHEETS), auth_headers)
+
+    assert response.status_code == 200, response.text
+    assert tally[0] <= IMPORT_STATEMENTS, tally[0]
+
+
+def test_a_workbook_the_pipeline_cannot_read_writes_nothing(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """The Series sheet names a player the Players sheet does not carry, so
+    the transaction rolls back and no season, team or player is left."""
+    columns, _ = SHEETS["Series"]
+    broken = {"Series": (columns, [[1, 1, 1, 9, 2, 1, 2, 1, 1, None, None, False]])}
+
+    response = _post(client, _workbook(extra=broken), auth_headers)
+
+    assert response.status_code == 400, response.text
+    assert response.json() == {
+        "error": "Series 1 names a match or a player the workbook lacks"
+    }
+
+    with Session() as session:
+        assert session.scalars(select(Season)).all() == []
+        assert session.scalars(select(Team)).all() == []
+        assert session.scalars(select(User)).all() == []
+
+
+def test_importing_the_same_workbook_twice_adds_no_row(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """Every sheet matches what the first import wrote, so the second one
+    updates those rows and writes none."""
+    first = _post(client, _workbook(extra=FANTASY_SHEETS), auth_headers)
+    assert first.status_code == 200, first.text
+    after_first = _row_counts()
+
+    second = _post(client, _workbook(extra=FANTASY_SHEETS), auth_headers)
+    assert second.status_code == 200, second.text
+    assert second.json()["season_id"] == first.json()["season_id"]
+    assert _row_counts() == after_first
