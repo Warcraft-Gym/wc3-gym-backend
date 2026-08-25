@@ -232,8 +232,8 @@ class KothService(BaseService):
         race_mmr_data = {}  # {race: mmr} for the found season
         w3c_name = battle_tag
 
-        current_season = self._get_current_w3c_season()
-        w3c_url = self._get_w3c_url()
+        current_season = w3c_service.current_season()
+        w3c_url = w3c_service.base_url()
         for season_offset in range(2):
             season = current_season - season_offset
             try:
@@ -590,41 +590,6 @@ class KothService(BaseService):
         else:
             return 3
 
-    def _get_current_w3c_season(self) -> int:
-        """Get current W3C season from settings or environment"""
-        if self.settings_app_service:
-            try:
-                setting = self.settings_app_service.get_setting("current_wc3_season")
-                return int(setting.get("value"))
-            except NotFoundError:
-                pass
-
-        import os
-
-        season = os.getenv("CURRENT_WC3_SEASON")
-        if season:
-            return int(season)
-
-        raise BadRequestError("Current W3C season not configured")
-
-    def _get_w3c_url(self) -> str:
-        """Get the W3C players API base from settings or environment"""
-        import os
-
-        w3c_url = None
-        if self.settings_app_service:
-            try:
-                w3c_url = self.settings_app_service.get_setting("w3c_url").get("value")
-            except NotFoundError:
-                pass
-
-        if not w3c_url:
-            w3c_url = os.getenv("W3C_URL")
-
-        if not w3c_url:
-            raise BadRequestError("W3C URL not configured")
-        return w3c_url
-
     def _get_w3c_stats_for_season(
         self, w3c_service: W3CService, w3c_url: str, battle_tag: str, season: int
     ) -> list["W3CStatsCreate"]:
@@ -635,7 +600,7 @@ class KothService(BaseService):
 
         result = w3c_service.send_request(
             method=w3c_service.GET,
-            url=f"{w3c_url}/{urllib.parse.quote(battle_tag)}/game-mode-stats",
+            url=f"{w3c_url}/players/{urllib.parse.quote(battle_tag)}/game-mode-stats",
             params=param,
         )
 

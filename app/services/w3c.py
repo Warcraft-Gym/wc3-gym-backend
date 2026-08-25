@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any
 
 import requests
 
-from app.core.exceptions import BadRequestError
+from app.core.exceptions import BadRequestError, NotFoundError
 from app.models.enums import Race
 from app.models.w3c_stats import W3CStatsCreate
 
@@ -16,6 +16,9 @@ logger = logging.getLogger(__name__)
 
 # Seconds a w3champions call can hold the thread before it fails.
 REQUEST_TIMEOUT = 10
+
+# The w3champions API base, used when neither the setting nor the environment names one.
+DEFAULT_BASE_URL = "https://website-backend.w3champions.com/api"
 
 
 class W3CService:
@@ -30,33 +33,47 @@ class W3CService:
     HEAD = "HEAD"
     OPTIONS = "OPTIONS"
 
+    def _setting(self, key: str) -> str | None:
+        """A settings value, or None when the row is absent."""
+        if not self.settings_app_service:
+            return None
+        try:
+            setting = self.settings_app_service.get_setting(key)
+        except NotFoundError:
+            return None
+        return setting.get("value") if setting else None
+
+    def base_url(self) -> str:
+        """The w3champions API base: the setting, then the environment, then the default."""
+        url = self._setting("w3c_url") or os.getenv("W3C_URL") or DEFAULT_BASE_URL
+        # Configuration written before the base URL split stored the players endpoint.
+        return url.rstrip("/").removesuffix("/players")
+
+    def latest_season(self) -> int:
+        """The newest season w3champions lists."""
+        seasons = self.send_request(
+            method=self.GET, url=f"{self.base_url()}/ladder/seasons"
+        )
+        return max(int(season["id"]) for season in seasons)
+
+    def current_season(self) -> int:
+        """The configured season, or the newest one w3champions lists."""
+        season = self._setting("current_wc3_season")
+        return int(season) if season else self.latest_season()
+
     def validatePlayer(self, bnet_name: str) -> bool:
         """
         Validate that a player exists on W3Champions.
-        Uses the /api/players endpoint which is simpler and doesn't require season info.
+        Uses the /players endpoint which is simpler and doesn't require season info.
         Returns True if player exists, False otherwise.
         """
         if not isinstance(bnet_name, str):
             raise ValueError("bnet_name must be a string")
 
-        # Get W3C URL from database or environment
-        w3c_url = None
-        if self.settings_app_service:
-            w3c_url_setting = self.settings_app_service.get_setting("w3c_url")
-            w3c_url = w3c_url_setting.get("value") if w3c_url_setting else None
-
-        # Fallback to environment variable if setting not available
-        if not w3c_url:
-            w3c_url = os.getenv("W3C_URL")
-
-        if not w3c_url:
-            raise ValueError(
-                "w3c_url is required (not found in database or environment)"
-            )
-
         try:
             result = self.send_request(
-                method=self.GET, url=f"{w3c_url}/{urllib.parse.quote(bnet_name)}"
+                method=self.GET,
+                url=f"{self.base_url()}/players/{urllib.parse.quote(bnet_name)}",
             )
             # If we get a successful response, the player exists
             return result is not None
@@ -70,39 +87,14 @@ class W3CService:
         if not isinstance(bnet_name, str):
             raise ValueError("bnet_name must be a string")
 
-        # Get W3C configuration from database
-        w3c_season = None
-        w3c_url = None
-        if self.settings_app_service:
-            w3c_season_setting = self.settings_app_service.get_setting(
-                "current_wc3_season"
-            )
-            w3c_url_setting = self.settings_app_service.get_setting("w3c_url")
-            w3c_season = w3c_season_setting.get("value") if w3c_season_setting else None
-            w3c_url = w3c_url_setting.get("value") if w3c_url_setting else None
-
-        # Fallback to environment variables if settings not available
-        if not w3c_season:
-            w3c_season = os.getenv("CURRENT_WC3_SEASON")
-        if not w3c_url:
-            w3c_url = os.getenv("W3C_URL")
-
-        if not w3c_season:
-            raise ValueError(
-                "w3c_season is required (not found in database or environment)"
-            )
-        if not w3c_url:
-            raise ValueError(
-                "w3c_url is required (not found in database or environment)"
-            )
-
-        # Use the override season if provided, otherwise use the configured current season
-        season_to_fetch = season_override if season_override is not None else w3c_season
+        season_to_fetch = (
+            season_override if season_override is not None else self.current_season()
+        )
 
         param = {"gateWay": 20, "season": season_to_fetch}
         result = self.send_request(
             method=self.GET,
-            url=f"{w3c_url}/{urllib.parse.quote(bnet_name)}/game-mode-stats",
+            url=f"{self.base_url()}/players/{urllib.parse.quote(bnet_name)}/game-mode-stats",
             params=param,
         )
         if not result:

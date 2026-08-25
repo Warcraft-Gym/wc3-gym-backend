@@ -14,7 +14,9 @@ from app.models.settings import (
     SettingsPublic,
     SettingsUpdated,
     SettingUpdated,
+    W3CConfig,
 )
+from app.services.w3c import W3CService
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +27,18 @@ router = APIRouter(tags=["config"])
 def get_settings(service: SettingsServiceDep) -> SettingsList:
     """Retrieve all configuration settings from database."""
     return SettingsList(settings=service.get_all_settings())
+
+
+@router.get("/config/w3c")
+def get_w3c_config(service: SettingsServiceDep) -> W3CConfig:
+    """The w3champions base URL and season in use, so the config page can show them."""
+    w3c = W3CService(settings_app_service=service)
+    try:
+        current_season = w3c.current_season()
+    except Exception as e:
+        logger.debug(f"w3champions gave no season: {e!s}")
+        current_season = None
+    return W3CConfig(w3c_url=w3c.base_url(), current_season=current_season)
 
 
 @router.get("/config/settings/{key}")

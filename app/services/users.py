@@ -174,36 +174,25 @@ class UserService(BaseService):
     def updateW3CStats(self, user: UserPublic) -> None:
         w3c_service = W3CService(settings_app_service=self.settings_app_service)
 
-        # Resolve the current W3C season so we can also fetch the previous season
-        current_season = None
-        if self.settings_app_service:
-            season_setting = self.settings_app_service.get_setting("current_wc3_season")
-            current_season = season_setting.get("value") if season_setting else None
+        # Resolve the season once, so both fetches agree and w3champions is
+        # asked for the season list at most once per player.
+        try:
+            current_season = w3c_service.current_season()
+        except Exception as e:
+            logger.warning(f"No W3C season to sync {user.battleTag} against: {e}")
+            return
 
         all_stats = []
-
-        # Fetch current season stats
-        try:
-            stats = w3c_service.getPlayerStats(user.battleTag)
-            if stats:
-                all_stats.extend(stats)
-        except Exception as e:
-            logging.getLogger(__name__).warning(
-                f"Failed to fetch current season W3C stats for {user.battleTag}: {e}"
-            )
-
-        # Fetch previous season stats
-        if current_season:
+        for season in (current_season, current_season - 1):
             try:
-                prev_season = int(current_season) - 1
-                prev_stats = w3c_service.getPlayerStats(
-                    user.battleTag, season_override=prev_season
+                stats = w3c_service.getPlayerStats(
+                    user.battleTag, season_override=season
                 )
-                if prev_stats:
-                    all_stats.extend(prev_stats)
+                if stats:
+                    all_stats.extend(stats)
             except Exception as e:
-                logging.getLogger(__name__).warning(
-                    f"Failed to fetch previous season W3C stats for {user.battleTag}: {e}"
+                logger.warning(
+                    f"Failed to fetch season {season} W3C stats for {user.battleTag}: {e}"
                 )
 
         # One transaction reads and writes the rows of this player, so no

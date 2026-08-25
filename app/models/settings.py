@@ -56,6 +56,12 @@ class SettingsList(SQLModel):
     settings: list[SettingsPublic]
 
 
+class W3CConfig(SQLModel):
+    w3c_url: str
+    # None when w3champions is unreachable and no season is configured.
+    current_season: int | None
+
+
 class SettingsUpdated(SQLModel):
     message: str
     updated: list[SettingsPublic]

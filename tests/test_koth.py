@@ -53,7 +53,7 @@ def w3c_mmr(monkeypatch: pytest.MonkeyPatch) -> None:
     from app.services.koth import KothService
     from app.services.w3c import W3CService
 
-    monkeypatch.setattr(KothService, "_get_current_w3c_season", lambda self: 20)
+    monkeypatch.setattr(W3CService, "current_season", lambda self: 20)
     monkeypatch.setattr(
         KothService,
         "_get_w3c_stats_for_season",
@@ -335,40 +335,49 @@ def test_bad_koth_input_answers_400(
     assert "Winner team number" in resp.json()["error"]
 
 
-def test_an_admin_signup_without_the_w3c_season_answers_400(
+def test_an_admin_signup_needs_no_w3c_configuration(
     client: Client,
     auth_headers: dict[str, str],
     koth: dict[str, Any],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Neither the setting row nor the environment names the season, so the
-    admin reads what is missing instead of Internal Server Error."""
-    monkeypatch.delenv("CURRENT_WC3_SEASON", raising=False)
+    """Nothing names the season or the API, so the signup takes the default
+    base URL and the season w3champions reports."""
+    from app.models.enums import Race
+    from app.models.w3c_stats import W3CStatsCreate
+    from app.services.koth import KothService
+    from app.services.w3c import DEFAULT_BASE_URL, W3CService
 
-    resp = client.post(
-        "/koth/signups/admin",
-        headers=auth_headers,
-        json={"twitch_username": "player_three", "battle_tag": "P3#3333"},
-    )
-    assert resp.status_code == 400, resp.text
-    assert resp.json()["error"] == "Current W3C season not configured"
-
-
-def test_an_admin_signup_without_the_w3c_url_answers_400(
-    client: Client,
-    auth_headers: dict[str, str],
-    koth: dict[str, Any],
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """The season is known but nothing names the W3C API, so the admin reads
-    that instead of a stats-not-found message."""
-    monkeypatch.setenv("CURRENT_WC3_SEASON", "25")
     monkeypatch.delenv("W3C_URL", raising=False)
+    asked: dict[str, Any] = {}
+
+    def fake_send_request(
+        self: W3CService, method: str, url: str, **kwargs: object
+    ) -> list[dict[str, int]]:
+        asked["seasons_url"] = url
+        return [{"id": 25}, {"id": 24}]
+
+    def fake_stats(
+        self: KothService,
+        service: W3CService,
+        w3c_url: str,
+        battle_tag: str,
+        season: int,
+    ) -> list[W3CStatsCreate]:
+        asked["stats_base"] = w3c_url
+        asked["season"] = season
+        return [W3CStatsCreate(wc3_season=season, mmr=1400, race=Race.HU)]
+
+    monkeypatch.setattr(W3CService, "send_request", fake_send_request)
+    monkeypatch.setattr(KothService, "_get_w3c_stats_for_season", fake_stats)
 
     resp = client.post(
         "/koth/signups/admin",
         headers=auth_headers,
         json={"twitch_username": "player_three", "battle_tag": "P3#3333"},
     )
-    assert resp.status_code == 400, resp.text
-    assert resp.json()["error"] == "W3C URL not configured"
+
+    assert resp.status_code == 201, resp.text
+    assert asked["seasons_url"] == f"{DEFAULT_BASE_URL}/ladder/seasons"
+    assert asked["stats_base"] == DEFAULT_BASE_URL
+    assert asked["season"] == 25
