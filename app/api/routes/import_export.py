@@ -39,11 +39,12 @@ BET_PAGE = 500  # how many bets the export reads per statement
 def import_season(
     file: Annotated[UploadFile | None, File()] = None,
     create_new: str = "false",
+    score_system: str | None = None,
 ) -> dict[str, Any]:
     """Import complete season data from Excel.
 
     Imports ALL season data (season, maps, teams, players, matches, series)
-    from Excel file.
+    from Excel file. score_system overrides the one the workbook carries.
     """
     if file is None:
         raise BadRequestError("No file part")
@@ -51,7 +52,9 @@ def import_season(
     if file.filename == "" or not file.filename.endswith((".xlsx", ".xls")):
         raise BadRequestError("No selected file or invalid file type")
 
-    imported = import_season_workbook(file.file.read(), create_new.lower() == "true")
+    imported = import_season_workbook(
+        file.file.read(), create_new.lower() == "true", score_system
+    )
 
     return {
         "message": "Season imported successfully",
@@ -95,6 +98,7 @@ def export_season(
             "Start Date",
             "End Date",
             "Discord Role",
+            "Score System",
         ]
     )
     season_sheet.append(
@@ -107,6 +111,7 @@ def export_season(
             season.start_date.strftime("%Y-%m-%d") if season.start_date else "",
             season.end_date.strftime("%Y-%m-%d") if season.end_date else "",
             season.discordRole if season.discordRole else "",
+            season.score_system,
         ]
     )
 
@@ -263,7 +268,7 @@ def export_season(
                     ]
                 )
 
-    # The captains and bettors, for the Fantasy Users sheet below
+    # The captains, drafted players and bettors, for the Fantasy Users sheet below
     fantasy_user_ids: set[int | None] = set()
 
     # ===== Sheet 7: Fantasy Teams =====
@@ -318,6 +323,7 @@ def export_season(
     for fteam in fantasy_teams if "fantasy_teams" in locals() else []:
         if fteam.drafted_players:
             for player in fteam.drafted_players:
+                fantasy_user_ids.add(player.id)
                 fantasy_players_sheet.append([fteam.id, player.id])
 
     # ===== Sheet 9: Fantasy Bets =====

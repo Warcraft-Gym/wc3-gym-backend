@@ -17,6 +17,7 @@ from sqlmodel import SQLModel
 
 from app.core.db import Session
 from app.core.exceptions import BadRequestError
+from app.core.scoring import DEFAULT_SYSTEM, MAX_POINTS
 from app.models.enums import Race
 from app.models.fantasy_bet import FantasyBet, FantasyBetCreate
 from app.models.fantasy_team import FantasyTeam, FantasyTeamCreate
@@ -65,12 +66,14 @@ def whole_number(value: object) -> int | None:
     return int(float(value)) if isinstance(value, str) else int(value)
 
 
-def import_season_workbook(file_bytes: bytes, create_new: bool) -> ImportedSeason:
+def import_season_workbook(
+    file_bytes: bytes, create_new: bool, score_system: str | None = None
+) -> ImportedSeason:
     """Read the workbook and write the season it holds."""
     # sheet_name=None reads every sheet, so the workbook is parsed once
     sheets = pd.read_excel(io.BytesIO(file_bytes), sheet_name=None)
     with Session.begin() as session:
-        return _write(session, sheets, create_new)
+        return _write(session, sheets, create_new, score_system)
 
 
 def _rows(frame: pd.DataFrame | None, required: list[str]) -> list[pd.Series]:
@@ -87,9 +90,11 @@ def _apply(obj: SQLModel, values: SQLModel) -> None:
         setattr(obj, name, value)
 
 
-def _write(session: OrmSession, sheets: Sheets, create_new: bool) -> ImportedSeason:
+def _write(
+    session: OrmSession, sheets: Sheets, create_new: bool, score_system: str | None
+) -> ImportedSeason:
     """Write every sheet of the workbook through one session."""
-    season = _season(session, sheets, create_new)
+    season = _season(session, sheets, create_new, _score_system(sheets, score_system))
     maps = _maps(session, sheets, season)
     teams = _teams(session, sheets, season)
     users = _players(session, sheets, season, teams)
@@ -103,7 +108,55 @@ def _write(session: OrmSession, sheets: Sheets, create_new: bool) -> ImportedSea
     return ImportedSeason(id=season.id, name=season.name)
 
 
-def _season(session: OrmSession, sheets: Sheets, create_new: bool) -> Season:
+def _known_system(system: str) -> str:
+    """A score system the scoring rule knows."""
+    if system not in MAX_POINTS:
+        raise BadRequestError(f"Unknown score system: {system}")
+    return system
+
+
+def _detected_system(sheets: Sheets) -> str:
+    """The score system the played series imply. A series pays 3 points
+    across both sides under standard and 4 under helpstone."""
+    frame = sheets.get("Series")
+    columns = ["Player1 Points", "Player2 Points"]
+    if frame is None or not all(column in frame.columns for column in columns):
+        logger.info(f"Score system {DEFAULT_SYSTEM}: the workbook carries no points")
+        return DEFAULT_SYSTEM
+
+    # A losing side writes an empty cell, so a played row carries one value
+    played = frame[columns].apply(pd.to_numeric, errors="coerce").dropna(how="all")
+    if played.empty:
+        logger.info(f"Score system {DEFAULT_SYSTEM}: the workbook has no played series")
+        return DEFAULT_SYSTEM
+
+    mean = float(played.fillna(0).sum(axis=1).mean())
+    system = "helpstone" if mean >= 3.5 else DEFAULT_SYSTEM
+    logger.info(
+        f"Score system {system}: {len(played)} played series mean {mean:.2f} points"
+    )
+    return system
+
+
+def _score_system(sheets: Sheets, override: str | None) -> str:
+    """The score system of the import: the request, then the Season sheet,
+    then what the played series imply."""
+    if override is not None:
+        logger.info(f"Score system {override}: named by the request")
+        return _known_system(override)
+
+    row = sheets["Season"].iloc[0]
+    if "Score System" in row.index and cell_value(row["Score System"]) is not None:
+        system = str(row["Score System"])
+        logger.info(f"Score system {system}: named by the Season sheet")
+        return _known_system(system)
+
+    return _detected_system(sheets)
+
+
+def _season(
+    session: OrmSession, sheets: Sheets, create_new: bool, score_system: str
+) -> Season:
     """The season row. Its name matches it, because the id the file carries
     belongs to the database the file was exported from."""
     row = sheets["Season"].iloc[0]
@@ -113,6 +166,7 @@ def _season(session: OrmSession, sheets: Sheets, create_new: bool) -> Season:
         "series_per_week": whole_number(row["Series Per Week"]) or 0,
         "pick_ban": cell_value(row["Pick Ban"]),
         "discordRole": cell_value(row["Discord Role"]),
+        "score_system": score_system,
     }
     for name, column in (("start_date", "Start Date"), ("end_date", "End Date")):
         if cell_value(row[column]) is not None:
