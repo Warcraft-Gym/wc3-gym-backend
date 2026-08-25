@@ -1,4 +1,5 @@
 import logging
+from typing import Any
 
 from sqlalchemy import ColumnElement, select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
@@ -23,6 +24,34 @@ def _public(session: Session, team: Team) -> TeamPublic:
     public = TeamPublic.from_team(team)
     derived.fill_standings(session, [public])
     return public
+
+
+def _season_loads(season_id: int) -> list[Any]:
+    """Loader options for one season of a team: roster, coaches and stats."""
+    roster = Team.user_seasons.and_(DBUserTeamSeason.season_id == season_id)
+    info = Team.season_info.and_(DBTeamSeason.season_id == season_id)
+    stats = User.team_seasons.and_(DBUserTeamSeason.season_id == season_id)
+    coach_loads = (
+        joinedload(info)
+        .joinedload(coach)
+        .options(
+            selectinload(User.w3c_stats),
+            noload(User.team_seasons),
+            noload(User.signup_seasons),
+        )
+        for coach in (DBTeamSeason.coach_1, DBTeamSeason.coach_2, DBTeamSeason.coach_3)
+    )
+    return [
+        joinedload(roster)
+        .joinedload(DBUserTeamSeason.user)
+        .options(
+            selectinload(User.w3c_stats),
+            selectinload(stats).joinedload(DBUserTeamSeason.season),
+            noload(User.signup_seasons),
+        ),
+        joinedload(roster).noload(DBUserTeamSeason.team),
+        *coach_loads,
+    ]
 
 
 class TeamService(BaseService):
@@ -194,46 +223,13 @@ class TeamService(BaseService):
     def get_with_nested_users_by_season(
         self, team_id: int, season_id: int
     ) -> TeamPublic:
-        """Get team with users filtered by specific season at database level"""
+        """One team with the season's roster, coaches and stats."""
         with self.get_session() as session:
-            # Eager load only user_seasons for the specified season, including w3c_stats and team_seasons (gnl_stats) with season info
             team = (
                 session.scalars(
                     select(Team)
-                    .options(
-                        joinedload(
-                            Team.user_seasons.and_(
-                                DBUserTeamSeason.season_id == season_id
-                            )
-                        )
-                        .joinedload(DBUserTeamSeason.user)
-                        .joinedload(User.w3c_stats),
-                        joinedload(
-                            Team.user_seasons.and_(
-                                DBUserTeamSeason.season_id == season_id
-                            )
-                        )
-                        .joinedload(DBUserTeamSeason.user)
-                        .joinedload(User.team_seasons)
-                        .joinedload(DBUserTeamSeason.season),
-                        joinedload(Team.user_seasons).noload(DBUserTeamSeason.team),
-                        joinedload(
-                            Team.season_info.and_(
-                                Team.season_info.any(season_id=season_id)
-                            )
-                        ).joinedload(DBTeamSeason.coach_1),
-                        joinedload(
-                            Team.season_info.and_(
-                                Team.season_info.any(season_id=season_id)
-                            )
-                        ).joinedload(DBTeamSeason.coach_2),
-                        joinedload(
-                            Team.season_info.and_(
-                                Team.season_info.any(season_id=season_id)
-                            )
-                        ).joinedload(DBTeamSeason.coach_3),
-                    )
                     .where(Team.id == team_id)
+                    .options(*_season_loads(season_id))
                 )
                 .unique()
                 .first()
@@ -409,38 +405,10 @@ class TeamService(BaseService):
         """
         with self.get_session() as session:
             result: list[TeamPublic] = []
-            roster = Team.user_seasons.and_(DBUserTeamSeason.season_id == season_id)
-            info = Team.season_info.and_(DBTeamSeason.season_id == season_id)
-            coach_loads = (
-                joinedload(info)
-                .joinedload(coach)
-                .options(
-                    selectinload(User.w3c_stats),
-                    noload(User.team_seasons),
-                    noload(User.signup_seasons),
-                )
-                for coach in (
-                    DBTeamSeason.coach_1,
-                    DBTeamSeason.coach_2,
-                    DBTeamSeason.coach_3,
-                )
-            )
             statement = (
                 select(Team)
                 .where(Team.season_info.any(DBTeamSeason.season_id == season_id))
-                .options(
-                    joinedload(roster)
-                    .joinedload(DBUserTeamSeason.user)
-                    .options(
-                        selectinload(User.w3c_stats),
-                        selectinload(User.team_seasons).joinedload(
-                            DBUserTeamSeason.season
-                        ),
-                        noload(User.signup_seasons),
-                    ),
-                    joinedload(roster).noload(DBUserTeamSeason.team),
-                    *coach_loads,
-                )
+                .options(*_season_loads(season_id))
             )
             if limit is not None or offset:
                 # Offset paging is deterministic only with a fixed order
