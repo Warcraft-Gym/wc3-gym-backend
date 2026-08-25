@@ -34,6 +34,51 @@ BET_SORTS: dict[BetSort, ColumnElement[Any]] = {
 }
 
 
+FIXED_POINTS = "fantasy_fixed_bet_points"
+POINTS_VALUE = "fantasy_bet_points_value"
+MIN_POINTS = "fantasy_min_bet_points"
+MAX_POINTS = "fantasy_max_bet_points"
+
+
+def resolve_bet_points(settings: dict[str, str | None], points: int | None) -> int:
+    """The points a bet is worth: the fixed value the settings name, or the
+    value the caller sent inside the range they allow."""
+    fixed = (settings.get(FIXED_POINTS) or "").lower() == "true"
+    if fixed and POINTS_VALUE in settings:
+        value = settings[POINTS_VALUE]
+        if not value:
+            raise BadRequestError(
+                "Fixed bet points enabled but fantasy_bet_points_value is not configured"
+            )
+        return int(value)
+
+    if FIXED_POINTS not in settings or fixed:
+        # The settings name no points, so the value the caller sent stands
+        if points is None or points <= 0:
+            raise BadRequestError("bet_points is required and must be greater than 0")
+        return points
+
+    if points is None or points <= 0:
+        raise BadRequestError(
+            "bet_points is required when fixed bet points is disabled"
+        )
+    minimum = _points_setting(settings, MIN_POINTS)
+    maximum = _points_setting(settings, MAX_POINTS)
+    if minimum == maximum:
+        return points
+    if minimum is not None and points < minimum:
+        raise BadRequestError(f"bet_points must be at least {minimum}")
+    if maximum is not None and points > maximum:
+        raise BadRequestError(f"bet_points must not exceed {maximum}")
+    return points
+
+
+def _points_setting(settings: dict[str, str | None], key: str) -> int | None:
+    """A bound on the points of a bet, or None when the settings hold none."""
+    value = settings.get(key)
+    return int(value) if value else None
+
+
 class FantasyBetService(BaseService):
     def __init__(self, settings_app_service: "SettingsService | None" = None) -> None:
         self.settings_app_service = settings_app_service
@@ -159,114 +204,14 @@ class FantasyBetService(BaseService):
             derived.fill_bet_results(result)
             return result, total
 
-    def bet_ids_of_season(
-        self, season_id: int
-    ) -> dict[tuple[int, int, int], list[int]]:
-        """The bet ids of one season, keyed by series, bettor and pick.
-
-        The import reads this once, so it needs no statement per row.
-        """
-        with self.get_session() as session:
-            rows = session.execute(
-                select(
-                    FantasyBet.series_id,
-                    FantasyBet.user_id,
-                    FantasyBet.winner_id,
-                    FantasyBet.id,
-                ).where(FantasyBet.season_id == season_id)
-            ).all()
-        by_key: dict[tuple[int, int, int], list[int]] = {}
-        for series_id, user_id, winner_id, bet_id in rows:
-            by_key.setdefault((series_id, user_id, winner_id), []).append(bet_id)
-        return by_key
-
     def _apply_bet_points_logic(self, bet: FantasyBetCreate | FantasyBetUpdate) -> None:
-        """Apply bet points based on settings: use fixed points or validate user input."""
-        if not self.settings_app_service:
-            # If no settings service, require bet_points from input
-            if bet.bet_points is None or bet.bet_points <= 0:
-                raise BadRequestError(
-                    "bet_points is required and must be greater than 0"
-                )
-            return
-
-        try:
-            # Check if fixed bet points are enabled
-            fixed_bet_points_setting = self.settings_app_service.get_setting(
-                "fantasy_fixed_bet_points"
-            )
-            use_fixed_points = (
-                fixed_bet_points_setting
-                and fixed_bet_points_setting.get("value", "").lower() == "true"
-            )
-
-            if use_fixed_points:
-                # Use the fixed bet points value from settings
-                bet_points_value_setting = self.settings_app_service.get_setting(
-                    "fantasy_bet_points_value"
-                )
-                if not bet_points_value_setting or not bet_points_value_setting.get(
-                    "value"
-                ):
-                    raise BadRequestError(
-                        "Fixed bet points enabled but fantasy_bet_points_value is not configured"
-                    )
-
-                bet.bet_points = int(bet_points_value_setting.get("value"))
-            else:
-                # Validate that bet_points were provided from UI
-                if bet.bet_points is None or bet.bet_points <= 0:
-                    raise BadRequestError(
-                        "bet_points is required when fixed bet points is disabled"
-                    )
-
-                # Validate min/max bet points only if they are defined and different
-                try:
-                    min_bet_setting = self.settings_app_service.get_setting(
-                        "fantasy_min_bet_points"
-                    )
-                    min_bet = (
-                        int(min_bet_setting.get("value"))
-                        if min_bet_setting and min_bet_setting.get("value")
-                        else None
-                    )
-                except (NotFoundError, Exception):
-                    min_bet = None
-
-                try:
-                    max_bet_setting = self.settings_app_service.get_setting(
-                        "fantasy_max_bet_points"
-                    )
-                    max_bet = (
-                        int(max_bet_setting.get("value"))
-                        if max_bet_setting and max_bet_setting.get("value")
-                        else None
-                    )
-                except (NotFoundError, Exception):
-                    max_bet = None
-
-                # Only validate if min and max are both defined and different
-                if min_bet is not None and max_bet is not None and min_bet != max_bet:
-                    if bet.bet_points < min_bet:
-                        raise BadRequestError(f"bet_points must be at least {min_bet}")
-
-                    if bet.bet_points > max_bet:
-                        raise BadRequestError(f"bet_points must not exceed {max_bet}")
-                elif min_bet is not None and max_bet is None:
-                    # Only min is defined
-                    if bet.bet_points < min_bet:
-                        raise BadRequestError(f"bet_points must be at least {min_bet}")
-                elif max_bet is not None and min_bet is None:
-                    # Only max is defined
-                    if bet.bet_points > max_bet:
-                        raise BadRequestError(f"bet_points must not exceed {max_bet}")
-
-        except NotFoundError:
-            # Settings don't exist, require bet_points from input
-            if bet.bet_points is None or bet.bet_points <= 0:
-                raise BadRequestError(
-                    "bet_points is required and must be greater than 0"
-                )
+        """Fill in the points the settings decide."""
+        settings = (
+            self.settings_app_service.get_settings_dict()
+            if self.settings_app_service
+            else {}
+        )
+        bet.bet_points = resolve_bet_points(settings, bet.bet_points)
 
     def create_fantasy_bet(self, bet: FantasyBetCreate) -> FantasyBetPublic:
         self._apply_bet_points_logic(bet)

@@ -252,9 +252,6 @@ class TeamService(BaseService):
             QueryUtil.convertQueryToDBFilter(Team, query), limit=limit, offset=offset
         )
 
-    def find_by_name(self, name: str) -> list[TeamPublic]:
-        return self._where(Team.name == name)
-
     def _where(
         self,
         filter: ColumnElement[bool] | None,

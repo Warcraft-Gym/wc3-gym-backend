@@ -1,10 +1,8 @@
-import io
 import logging
 from io import BytesIO
 from typing import Annotated, Any
 
 import openpyxl
-import pandas as pd
 from fastapi import APIRouter, Depends, File, Response, UploadFile
 
 from app.api.deps import (
@@ -17,15 +15,14 @@ from app.api.deps import (
     UserServiceDep,
     require_admin,
 )
-from app.core.exceptions import BadRequestError, NotFoundError
+from app.core.exceptions import BadRequestError
 from app.core.query import QueryUtil
-from app.models.enums import Race
-from app.models.fantasy_bet import FantasyBetCreate, FantasyBetUpdate
-from app.models.fantasy_team import FantasyTeamCreate, FantasyTeamUpdate
 from app.models.responses import Message
-from app.models.series import SeriesUpdate
-from app.models.user import UserCreate
-from app.services.season_import import cell_value, import_season_workbook
+from app.services.fantasy_import import (
+    import_fantasy_bets_workbook,
+    import_fantasy_teams_workbook,
+)
+from app.services.season_import import import_season_workbook
 
 logger = logging.getLogger(__name__)
 
@@ -393,13 +390,19 @@ def export_season(
     )
 
 
-# import export endpoints
+def _workbook_bytes(file: UploadFile | None) -> bytes:
+    """The bytes of an uploaded workbook."""
+    if file is None:
+        raise BadRequestError("No file part")
+    if file.filename == "":
+        raise BadRequestError("No selected file")
+    if not file.filename.endswith((".xlsx", ".xls")):
+        raise BadRequestError("File type not allowed")
+    return file.file.read()
+
+
 @router.post("/fantasy/import/teams", dependencies=[Depends(require_admin)])
 def import_fantasy_teams(
-    season_service: SeasonServiceDep,
-    user_service: UserServiceDep,
-    team_service: TeamServiceDep,
-    fantasy_team_service: FantasyTeamServiceDep,
     file: Annotated[UploadFile | None, File()] = None,
     season_id: str | None = None,
     season_name: str | None = None,
@@ -408,140 +411,14 @@ def import_fantasy_teams(
 
     Updates the database based on the import sheet.
     """
-    if file is None:
-        raise BadRequestError("No file part")
-
-    season_id = int(season_id) if season_id else None
-
-    if not season_id:
-        if season_name:
-            found_seasons = season_service.find_by_name(season_name)
-            if not found_seasons:
-                raise NotFoundError(f"Season could not be found by name: {season_name}")
-            else:
-                season_id = found_seasons[0].id
-        else:
-            raise BadRequestError(
-                "Missing Season parameter, either season_id or season name is required"
-            )
-
-    if file.filename == "":
-        raise BadRequestError("No selected file")
-    if file and file.filename.endswith((".xlsx", ".xls")):
-        file_stream = io.BytesIO(file.file.read())
-
-        # Load the Google Sheet into a DataFrame
-        df_teams = pd.read_excel(file_stream, sheet_name="Formatted Responses")
-
-        for index, row in df_teams.iterrows():
-            if not cell_value(row.iloc[0]):
-                continue
-            if not cell_value(row.iloc[1]):
-                raise BadRequestError(f"Team without captain: {row.iloc[0]}")
-            users = user_service.find_by_discord_tag(row.iloc[1])
-            captain = None
-            if not users:
-                logger.debug(
-                    f"No user found for discordTag {row.iloc[1]}: create dummy user for fantasy league"
-                )
-                user_data = {
-                    "name": row.iloc[1],
-                    "battleTag": "Fantasy_User",
-                    "discordTag": row.iloc[1],
-                    "race": Race.RANDOM,
-                }
-                captain = user_service.create_user(UserCreate(**user_data))
-            elif len(users) != 1:
-                raise BadRequestError(
-                    f"No or multiple users found for captain[{row.iloc[1]}]: {users}"
-                )
-            else:
-                captain = users[0]
-
-            if not cell_value(row.iloc[10]):
-                raise BadRequestError(f"No GNL team defined for team: {row.iloc[0]}")
-            found_teams = team_service.find_by_name(row.iloc[10])
-            if not found_teams or len(found_teams) != 1:
-                raise BadRequestError(
-                    f"No or multiple teams found for gnl team name[{row.iloc[10]} ]: {found_teams}"
-                )
-            team = found_teams[0]
-
-            if not cell_value(row.iloc[11]):
-                raise BadRequestError(f"No Race defined for team: {row.iloc[11]}")
-
-            try:
-                drafted_race = Race.from_text(str(row.iloc[11]))
-            except ValueError as error:
-                raise BadRequestError(str(error)) from error
-
-            team_data = {
-                "name": cell_value(row.iloc[0]),
-                "captain_id": captain.id,
-                "season_id": season_id,
-                "drafted_team_id": team.id,
-                "drafted_race": drafted_race,
-            }
-
-            fantasy_team = None
-            fteam_q_string = f"season_id=={season_id} and captain_id=={captain.id}"
-            fteam_query = QueryUtil.parseQuery(fteam_q_string)
-            if not fteam_query or not fteam_query.elementA:
-                raise BadRequestError(f"No valid query found: {fteam_q_string}")
-            found_teams, _ = fantasy_team_service.search_fantasy_teams(fteam_query)
-            if found_teams and len(found_teams) == 1:
-                team = found_teams[0]
-                fantasy_team = fantasy_team_service.update_fantasy_team(
-                    team.id, FantasyTeamUpdate(**team_data)
-                )
-            elif len(found_teams) > 1:
-                raise BadRequestError(
-                    f"More than one bet found by search: {fteam_q_string}"
-                )
-            else:
-                fantasy_team = fantasy_team_service.create_fantasy_team(
-                    FantasyTeamCreate(**team_data)
-                )
-
-            players = []
-            found_players = {}
-            for player in row[2:10]:
-                if not player:
-                    raise BadRequestError(f"Player missing for team: {row.iloc[0]}")
-                found_player_id = found_players.get(player)
-                if found_player_id:
-                    players.append(found_player_id)
-                else:
-                    users = user_service.find_by_name(player)
-                    if not users or len(users) != 1:
-                        raise BadRequestError(
-                            f"Could not find player by name: {player}"
-                        )
-                    found_player = users[0]
-                    found_players[found_player.name] = found_player.id
-                    players.append(found_player.id)
-            removePlayers = []
-            for existingPlayer in fantasy_team.drafted_players:
-                if not existingPlayer.id in players:
-                    removePlayers.append(existingPlayer.id)
-
-            fantasy_team_service.removeFantasyPlayers(fantasy_team.id, removePlayers)
-            fantasy_team_service.addFantasyPlayers(fantasy_team.id, players)
-
-        return Message(
-            message="File uploaded successfully and data inserted into database"
-        )
-    else:
-        raise BadRequestError("File type not allowed")
+    import_fantasy_teams_workbook(
+        _workbook_bytes(file), int(season_id) if season_id else None, season_name
+    )
+    return Message(message="File uploaded successfully and data inserted into database")
 
 
 @router.post("/fantasy/import/bets", dependencies=[Depends(require_admin)])
 def import_fantasy_bets(
-    season_service: SeasonServiceDep,
-    user_service: UserServiceDep,
-    match_service: MatchServiceDep,
-    series_service: SeriesServiceDep,
-    fantasy_bet_service: FantasyBetServiceDep,
     file: Annotated[UploadFile | None, File()] = None,
     season_id: str | None = None,
     season_name: str | None = None,
@@ -550,152 +427,7 @@ def import_fantasy_bets(
 
     Updates the database based on the import sheet.
     """
-    if file is None:
-        raise BadRequestError("No file part")
-
-    season_id = int(season_id) if season_id else None
-
-    if not season_id:
-        if season_name:
-            found_seasons = season_service.find_by_name(season_name)
-            if not found_seasons:
-                raise NotFoundError(f"Season could not be found by name: {season_name}")
-            else:
-                season_id = found_seasons[0].id
-        else:
-            raise BadRequestError(
-                "Missing Season parameter, either season_id or season name is required"
-            )
-
-    if file.filename == "":
-        raise BadRequestError("No selected file")
-    if file and file.filename.endswith((".xlsx", ".xls")):
-        # sheet_name=None reads both sheets, so the workbook is parsed once
-        sheets = pd.read_excel(io.BytesIO(file.file.read()), sheet_name=None)
-
-        df_bet_match = sheets["Betting Matches"]
-        for index, row in df_bet_match.iterrows():
-            if not cell_value(row.iloc[0]):
-                continue
-            week = row.iloc[0]
-            q_string = f"playday=={week} and season_id=={season_id}"
-            query = QueryUtil.parseQuery(q_string)
-            if not query or not query.elementA:
-                raise BadRequestError(f"No valid query found: {q_string}")
-            matches = match_service.search(query)
-            users = user_service.find_by_name(row.iloc[1])
-            if not users or len(users) != 1:
-                raise BadRequestError(
-                    f"No or multiple users found for bet player[{row.iloc[1]}]: {users}"
-                )
-            player1 = users[0]
-            users = user_service.find_by_name(row.iloc[2])
-            if not users or len(users) != 1:
-                raise BadRequestError(
-                    f"No or multiple users found for bet player[{row.iloc[1]}]: {users}"
-                )
-            player2 = users[0]
-            series = None
-            if matches:
-                for match in matches:
-                    series_q_string = f"player1_id == {player1.id} and player2_id == {player2.id} and match_id == {match.id} or player1_id == {player2.id} and player2_id == {player1.id} and match_id == {match.id}"
-                    series_query = QueryUtil.parseQuery(series_q_string)
-                    if not query or not query.elementA:
-                        raise BadRequestError(
-                            f"No valid query found: {series_q_string}"
-                        )
-                    found_series = series_service.search(series_query)
-                    if not found_series or len(found_series) != 1:
-                        continue
-                    series = found_series[0]
-                    break
-                if not series:
-                    raise BadRequestError(
-                        f"Could not identfy series for player: {row.iloc[1]}!"
-                    )
-            series_service.update_series(series.id, SeriesUpdate(is_fantasy_match=True))
-
-        df_bets = sheets["Bets"]
-        # One statement for the bets already stored, so the loop needs none
-        stored_bets = fantasy_bet_service.bet_ids_of_season(season_id)
-        for index, row in df_bets.iterrows():
-            if not cell_value(row.iloc[0]):
-                continue
-            if not cell_value(row.iloc[0]):
-                raise BadRequestError(f"Week not defined: {row.iloc[0]}")
-            playday = row.iloc[0]
-
-            if not cell_value(row.iloc[1]):
-                raise BadRequestError(f"Captain not defined: {row.iloc[1]}")
-            users = user_service.find_by_discord_tag(row.iloc[1])
-            if not users or len(users) != 1:
-                raise BadRequestError(
-                    f"No or multiple users found for captain[{row.iloc[1]}]: {users}"
-                )
-            captain = users[0]
-
-            if not cell_value(row.iloc[2]):
-                raise BadRequestError(f"Bet Player not defined: {row.iloc[2]}")
-
-            users = user_service.find_by_name(row.iloc[2])
-            if not users or len(users) != 1:
-                raise BadRequestError(
-                    f"No or multiple users found for bet player[{row.iloc[2]}]: {users}"
-                )
-            bet_player = users[0]
-
-            q_string = f"playday=={playday} and season_id=={season_id}"
-            query = QueryUtil.parseQuery(q_string)
-            if not query or not query.elementA:
-                raise BadRequestError(f"No valid query found: {q_string}")
-            matches = match_service.search(query)
-            series = None
-            if matches:
-                for match in matches:
-                    series_q_string = f"player1_id == {bet_player.id} and is_fantasy_match == True and match_id == {match.id} or player2_id == {bet_player.id} and is_fantasy_match == True and match_id == {match.id}"
-                    series_query = QueryUtil.parseQuery(series_q_string)
-                    if not query or not query.elementA:
-                        raise BadRequestError(
-                            f"No valid query found: {series_q_string}"
-                        )
-                    found_series = series_service.search(series_query)
-                    if not found_series or len(found_series) != 1:
-                        continue
-                    series = found_series[0]
-                    break
-            if not series:
-                raise BadRequestError(
-                    f"Could not identfy series for player: {bet_player.name}!"
-                )
-
-            if not cell_value(row.iloc[3]):
-                raise BadRequestError(f"Bet Points not defined: {row.iloc[3]}")
-
-            bet_data = {
-                "season_id": season_id,
-                "series_id": series.id,
-                "user_id": captain.id,
-                "winner_id": bet_player.id,
-                "bet_points": row.iloc[3],
-            }
-
-            key = (series.id, captain.id, bet_player.id)
-            stored = stored_bets.get(key, [])
-            if len(stored) == 1:
-                fantasy_bet_service.update_fantasy_bet(
-                    stored[0], FantasyBetUpdate(**bet_data)
-                )
-            elif len(stored) > 1:
-                raise BadRequestError(f"More than one bet found by search: {key}")
-            else:
-                bet = fantasy_bet_service.create_fantasy_bet(
-                    FantasyBetCreate(**bet_data)
-                )
-                # A later row of the same file must find the bet this one made
-                stored_bets[key] = [bet.id]
-
-        return Message(
-            message="File uploaded successfully and data inserted into database"
-        )
-    else:
-        raise BadRequestError("File type not allowed")
+    import_fantasy_bets_workbook(
+        _workbook_bytes(file), int(season_id) if season_id else None, season_name
+    )
+    return Message(message="File uploaded successfully and data inserted into database")

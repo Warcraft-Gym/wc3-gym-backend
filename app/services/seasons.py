@@ -111,9 +111,6 @@ class SeasonService(BaseService):
             QueryUtil.convertQueryToDBFilter(Season, query), limit=limit, offset=offset
         )
 
-    def find_by_name(self, name: str) -> list[SeasonPublic]:
-        return self._where(Season.name == name)
-
     def _where(
         self,
         filter: ColumnElement[bool] | None,

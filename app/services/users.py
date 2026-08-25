@@ -99,9 +99,6 @@ class UserService(BaseService):
             return []
         return self._where(User.id.in_(ids))
 
-    def find_by_discord_tag(self, discord_tag: str) -> list[UserListPublic]:
-        return self._where(User.discordTag == discord_tag)
-
     def find_by_discord_id(self, discord_id: str) -> list[UserListPublic]:
         return self._where(User.discordId == discord_id)
 
