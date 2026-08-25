@@ -18,7 +18,7 @@ class MapService(BaseService):
 
     def update(self, map_id: int, map: MapUpdate) -> MapPublic:
         with self.get_session() as session:
-            updated = Map.update(session, map_id, **map.model_dump())
+            updated = Map.update(session, map_id, **map.model_dump(exclude_unset=True))
             if not updated:
                 raise NotFoundError("Map not found")
             return MapPublic.model_validate(updated)
@@ -40,9 +40,6 @@ class MapService(BaseService):
         return self._where(
             QueryUtil.convertQueryToDBFilter(Map, query), limit=limit, offset=offset
         )
-
-    def find_by_shortname(self, shortname: str) -> list[MapPublic]:
-        return self._where(Map.shortname == shortname)
 
     def _where(
         self,

@@ -1,5 +1,4 @@
 import logging
-from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
 from sqlalchemy import case, func, select
@@ -133,30 +132,6 @@ class SeriesService(BaseService):
         """Every series of the season, by week, in one statement."""
         with self.get_session() as session:
             return derived.fantasy_series(session, {season_id}).get(season_id, {})
-
-    def series_ids_of_matches(
-        self, match_ids: Iterable[int]
-    ) -> dict[tuple[int, int, int], list[int]]:
-        """The series ids of those matches, keyed by match and the two players.
-
-        The import reads this once, so it needs no statement per row.
-        """
-        ids = [match_id for match_id in match_ids if match_id is not None]
-        if not ids:
-            return {}
-        with self.get_session() as session:
-            rows = session.execute(
-                select(
-                    Series.match_id,
-                    Series.player1_id,
-                    Series.player2_id,
-                    Series.id,
-                ).where(Series.match_id.in_(ids))
-            ).all()
-        by_key: dict[tuple[int, int, int], list[int]] = {}
-        for match_id, player1_id, player2_id, series_id in rows:
-            by_key.setdefault((match_id, player1_id, player2_id), []).append(series_id)
-        return by_key
 
     def searchForSeasonAndPlayday(
         self,

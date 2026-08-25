@@ -9,12 +9,13 @@ from typing import Any
 
 import pandas as pd
 from httpx2 import Client, Response
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.core.db import Session
 from app.models.season import Season
 from app.models.team import Team
 from app.models.user import User
+from tests.test_query_budget import count_statements
 
 SHEETS: dict[str, tuple[list[str], list[list[Any]]]] = {
     "Season": (
@@ -97,14 +98,34 @@ SHEETS: dict[str, tuple[list[str], list[list[Any]]]] = {
 }
 
 
+FANTASY_SHEETS: dict[str, tuple[list[str], list[list[Any]]]] = {
+    "Fantasy Users": (
+        ["ID", "Name", "Battle Tag", "Discord Tag", "Discord ID"],
+        [
+            [1, "P1", "P1#1111", "p1", 1],
+            [7, "Cap", "Cap#7777", "cap", 7],
+            [8, "Newcomer", "New#8888", "new", 8],
+        ],
+    ),
+    "Fantasy Teams": (
+        ["ID", "Name", "Season ID", "Captain ID", "Drafted Team ID", "Drafted Race"],
+        [[1, "The Outsiders", 1, 7, 1, "HU"], [2, "The Newcomers", 1, 8, 2, "OC"]],
+    ),
+}
+
+
 def _workbook(
-    *, without: str | None = None, season_id: int | None = None
+    *,
+    without: str | None = None,
+    season_id: int | None = None,
+    extra: dict[str, tuple[list[str], list[list[Any]]]] | None = None,
 ) -> io.BytesIO:
-    """A season export. `without` drops one sheet the pipeline reads, and
-    `season_id` names the season it writes into instead of a new one."""
+    """A season export. `without` drops one sheet the pipeline reads,
+    `season_id` names the season it writes into instead of a new one, and
+    `extra` adds sheets the default workbook does not carry."""
     stream = io.BytesIO()
     with pd.ExcelWriter(stream) as writer:
-        for name, (columns, rows) in SHEETS.items():
+        for name, (columns, rows) in {**SHEETS, **(extra or {})}.items():
             if name == without:
                 continue
             if name == "Season" and season_id is not None:
@@ -191,3 +212,138 @@ def test_a_second_import_updates_the_bets_instead_of_adding_them(
         bets = session.scalars(select(FantasyBet)).all()
     assert len(bets) == 2
     assert sorted(bet.bet_points for bet in bets) == [10, 20]
+
+
+def _add_captain() -> None:
+    """A user who is on no roster, so only the Fantasy Users sheet names him."""
+    from app.models.enums import Race
+
+    with Session() as session:
+        session.add(
+            User(
+                name="Cap",
+                battleTag="Cap#7777",
+                discordTag="cap",
+                discordId="7",
+                race=Race.NE,
+            )
+        )
+        session.commit()
+
+
+def test_the_fantasy_users_sheet_maps_a_captain_and_creates_a_missing_one(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """Both fantasy teams get their captain: one from the database, one
+    created from the sheet."""
+    from app.models.fantasy_team import FantasyTeam
+
+    _add_captain()
+
+    response = _post(client, _workbook(extra=FANTASY_SHEETS), auth_headers)
+    assert response.status_code == 200, response.text
+
+    with Session() as session:
+        captain = session.scalars(
+            select(User).where(User.battleTag == "Cap#7777")
+        ).one()
+        created = session.scalars(
+            select(User).where(User.battleTag == "New#8888")
+        ).one()
+        teams = session.scalars(select(FantasyTeam)).all()
+        assert len(session.scalars(select(User)).all()) == 4
+
+    assert created.name == "Newcomer"
+    assert created.discordTag == "new"
+    assert created.discordId == "8"
+    assert sorted(team.captain_id for team in teams) == sorted([captain.id, created.id])
+
+
+def test_an_import_without_the_fantasy_users_sheet_still_writes_the_season(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """An older export has no such sheet, so its unmapped captains are
+    skipped and the season is written all the same."""
+    from app.models.fantasy_team import FantasyTeam
+
+    _add_captain()
+
+    response = _post(
+        client,
+        _workbook(extra=FANTASY_SHEETS, without="Fantasy Users"),
+        auth_headers,
+    )
+    assert response.status_code == 200, response.text
+
+    with Session() as session:
+        assert session.scalars(select(Season).where(Season.name == "Season 9")).one()
+        assert session.scalars(select(FantasyTeam)).all() == []
+        assert len(session.scalars(select(User)).all()) == 3
+
+
+# One transaction of bulk statements, not one transaction per row, so the
+# cost of an import does not grow with the rows a sheet holds.
+
+# The workbook below costs 25: one lookup per sheet and the writes it needs
+IMPORT_STATEMENTS = 40
+
+
+def _row_counts() -> dict[str, int]:
+    """How many rows every table holds."""
+    from sqlmodel import SQLModel
+
+    with Session() as session:
+        return {
+            table.name: session.execute(
+                select(func.count()).select_from(table)
+            ).scalar_one()
+            for table in SQLModel.metadata.sorted_tables
+        }
+
+
+def test_an_import_costs_a_bounded_number_of_statements(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """A whole workbook costs a fixed number of statements, whatever its
+    row count."""
+    with count_statements() as tally:
+        response = _post(client, _workbook(extra=FANTASY_SHEETS), auth_headers)
+
+    assert response.status_code == 200, response.text
+    assert tally[0] <= IMPORT_STATEMENTS, tally[0]
+
+
+def test_a_workbook_the_pipeline_cannot_read_writes_nothing(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """The Series sheet names a player the Players sheet does not carry, so
+    the transaction rolls back and no season, team or player is left."""
+    columns, _ = SHEETS["Series"]
+    broken = {"Series": (columns, [[1, 1, 1, 9, 2, 1, 2, 1, 1, None, None, False]])}
+
+    response = _post(client, _workbook(extra=broken), auth_headers)
+
+    assert response.status_code == 400, response.text
+    assert response.json() == {
+        "error": "Series 1 names a match or a player the workbook lacks"
+    }
+
+    with Session() as session:
+        assert session.scalars(select(Season)).all() == []
+        assert session.scalars(select(Team)).all() == []
+        assert session.scalars(select(User)).all() == []
+
+
+def test_importing_the_same_workbook_twice_adds_no_row(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """Every sheet matches what the first import wrote, so the second one
+    updates those rows and writes none."""
+    first = _post(client, _workbook(extra=FANTASY_SHEETS), auth_headers)
+    assert first.status_code == 200, first.text
+    after_first = _row_counts()
+
+    second = _post(client, _workbook(extra=FANTASY_SHEETS), auth_headers)
+    assert second.status_code == 200, second.text
+    assert second.json()["season_id"] == first.json()["season_id"]
+    assert _row_counts() == after_first
