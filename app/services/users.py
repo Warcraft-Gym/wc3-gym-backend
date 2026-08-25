@@ -1,8 +1,10 @@
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ColumnElement, Select, func, or_, select
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy import ColumnElement, Select, func, or_, select, update
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session as OrmSession
 from sqlalchemy.orm import joinedload, noload
 
@@ -12,14 +14,28 @@ from app.models.season import Season
 from app.models.team import Team
 from app.models.user import User, UserCreate, UserListPublic, UserPublic, UserUpdate
 from app.models.user_team_season import DBUserTeamSeason, UserTeamSeasonStatsPublic
-from app.models.w3c_stats import W3CStats, W3CStatsCreate
+from app.models.w3c_stats import (
+    W3CStats,
+    W3CStatsCreate,
+    W3CSyncFailure,
+    W3CSyncResult,
+)
 from app.services.base import BaseService
-from app.services.w3c import W3CService
+from app.services.w3c import THROTTLED_MESSAGE, W3CService
 
 if TYPE_CHECKING:
     from app.services.settings import SettingsService
 
 logger = logging.getLogger(__name__)
+
+# Threads that call w3champions at once. The work is network wait, so four
+# of them cost no CPU and keep a team of 18 players under five seconds.
+W3C_SYNC_WORKERS = 4
+
+
+def _now() -> datetime:
+    """UTC without a zone, the shape the DATETIME columns hold."""
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 class UserService(BaseService):
@@ -210,6 +226,85 @@ class UserService(BaseService):
         with self.get_session() as session:
             for s in all_stats:
                 self._writeW3CStats(session, user.id, s)
+            # The stamp says when the app last asked, not that stats were found
+            session.execute(
+                update(User).where(User.id == user.id).values(w3c_synced_at=_now())
+            )
+
+    def syncW3CStatsUsers(
+        self, users: list[UserListPublic], max_age: timedelta
+    ) -> W3CSyncResult:
+        """Sync these players in parallel and report every one of them.
+
+        A player synced more recently than max_age is skipped untouched; a
+        max_age of zero syncs everyone.
+        """
+        result = W3CSyncResult()
+        fresh_since = _now() - max_age
+        pending = []
+        for user in users:
+            if user.w3c_synced_at and user.w3c_synced_at > fresh_since:
+                result.skipped.append(user.id)
+            else:
+                pending.append(user)
+        if not pending:
+            return result
+
+        synced: set[int] = set()
+        failures: dict[int, str] = {}
+        throttled = False
+
+        # Each worker opens its own session; the threads share the engine only
+        with ThreadPoolExecutor(W3C_SYNC_WORKERS) as pool:
+            futures = {pool.submit(self.updateW3CStats, u): u for u in pending}
+            for future in as_completed(futures):
+                if future.cancelled():
+                    continue
+                user = futures[future]
+                try:
+                    future.result()
+                except W3CThrottledError:
+                    throttled = True
+                    for other in futures:
+                        other.cancel()
+                except Exception as e:
+                    # The reason reaches the client, so it names no statement
+                    reason = (
+                        "Database error" if isinstance(e, SQLAlchemyError) else str(e)
+                    )
+                    failures[user.id] = reason
+                    logger.warning(
+                        f"Failed to sync W3C stats for user {user.name} "
+                        f"(BattleTag: {user.battleTag}): {reason}"
+                    )
+                else:
+                    synced.add(user.id)
+
+        if throttled:
+            stopped = [
+                u for u in pending if u.id not in synced and u.id not in failures
+            ]
+            for u in stopped:
+                failures[u.id] = THROTTLED_MESSAGE
+            logger.warning(
+                f"W3Champions throttled the sync, {len(stopped)} player(s) not synced"
+            )
+
+        # The report follows the order the caller passed, not the order the
+        # workers finished in.
+        for user in pending:
+            if user.id in synced:
+                result.synced.append(user.id)
+            else:
+                result.failed.append(
+                    W3CSyncFailure(
+                        id=user.id,
+                        name=user.name,
+                        battleTag=user.battleTag,
+                        reason=failures[user.id],
+                    )
+                )
+        return result
 
     def _writeW3CStats(
         self, session: OrmSession, user_id: int, w3c_stats: W3CStatsCreate

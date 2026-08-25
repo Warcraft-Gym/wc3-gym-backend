@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import TYPE_CHECKING, Annotated, Any, Self
 
 from sqlmodel import Field, Relationship, SQLModel
@@ -32,6 +33,8 @@ class User(UserBase, DBModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     race: Race
+    # When the app last asked w3champions about this player, null when never
+    w3c_synced_at: datetime | None = None
     team_seasons: list["DBUserTeamSeason"] = Relationship(
         back_populates="user", sa_relationship_kwargs={"cascade": "all, delete"}
     )
@@ -74,6 +77,7 @@ class UserReduced(UserBase):
     discordTag: Annotated[str | None, NumToStr] = None
     discordId: Annotated[str | None, NumToStr] = None
     race: Annotated[str | None, EnumValue] = None
+    w3c_synced_at: datetime | None = None
 
     @classmethod
     def from_user_reduced(cls, user: User | None) -> Self | None:
@@ -91,6 +95,7 @@ class UserReduced(UserBase):
             mmr=user.mmr,
             country=user.country,
             fantasy_tier=user.fantasy_tier,
+            w3c_synced_at=user.w3c_synced_at,
         )
 
     def to_dict(self) -> dict[str, Any]:

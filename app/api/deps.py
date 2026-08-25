@@ -94,9 +94,6 @@ fantasy_score_service = FantasyScoreService(
 koth_service = KothService(settings_app_service=settings_service)
 stats_service = PlayerCareerStatsService()
 
-# 24-hour markers per process, e.g. the per-team W3C sync rate limit
-ttl_cache: dict[str, float] = {}
-
 
 def get_settings_service() -> SettingsService:
     return settings_service
