@@ -65,7 +65,9 @@ Dependencies live in `pyproject.toml`: runtime packages under `[project] depende
 
 The backend reads its configuration from the environment. `just up` passes development-only values, so nothing here needs setting by hand to run the project locally. Read this table before deploying, and when a container starts but behaves oddly.
 
-`.env` is committed and holds the values that are not secret: `TOKEN_TIME`, `REFRESH_TOKEN_TIME`, `CURRENT_WC3_SEASON` and `W3C_URL`. `create_app` calls `load_dotenv`, so those arrive on their own. The rest are passed in.
+`.env` is committed and holds the values that are not secret: `TOKEN_TIME`, `REFRESH_TOKEN_TIME` and `W3C_URL`. `create_app` calls `load_dotenv`, so those arrive on their own. The rest are passed in.
+
+Three more values live in the `settings` table, not the environment, and are edited on the admin Config page: `w3c_url` (wins over the `W3C_URL` variable when present), `current_wc3_season` (the w3champions season the MMR columns read; when the row is missing the backend takes the newest season from w3champions) and `KOTH_NIGHTBOT_TOKEN`. `GET /config/w3c` shows the URL and season the backend resolved.
 
 **Key environment variables:**
 
@@ -89,7 +91,11 @@ BOT_WEBHOOK_URL="http://host.docker.internal:3001/webhook/series-updated"
 | `JWT_ALGORITHM` | JWT signing algorithm | `HS256` or `HS512` |
 | `BOT_CLIENT_TOKEN` | Authentication token for Discord bot webhooks | 64-character hex string |
 | `FRONTEND_URL` | Admin frontend URL for CORS configuration | `http://localhost:5003` |
-| `BOT_WEBHOOK_URL` | Discord bot webhook endpoint for series updates | `http://host.docker.internal:3001/webhook/series-updated` |
+| `BOT_WEBHOOK_URL` | Discord bot webhook endpoint for series updates; when unset, the notification is skipped | `http://host.docker.internal:3001/webhook/series-updated` |
+| `TOKEN_TIME` | Access token lifetime in minutes; from `.env` | `60` |
+| `REFRESH_TOKEN_TIME` | Refresh token lifetime in minutes; from `.env` | `300` |
+| `W3C_URL` | w3champions API base; from `.env` | `https://website-backend.w3champions.com/api` |
+| `LOG_LEVEL` | Python log level | `INFO` |
 
 **Important Notes:**
 - `host.docker.internal` is a special DNS name that resolves to the host machine from within a Docker container
@@ -224,7 +230,7 @@ Both commands need the network that reaches MySQL, and both need `DB_URL` in the
 
 `gnl-backend:local` stands in for the image here because this repository builds no other. A deployment substitutes its own image name.
 
-This is where the deployment differs from the official FastAPI template, which runs `alembic upgrade head` from a `prestart` step of its own and leaves the container command as the server alone. That shape is the right destination. Today there is no compose file and no deploy pipeline in this repository — CI runs lint and tests only — so the single `docker run` carries both, and the commands above are what splitting them looks like by hand.
+This is where the deployment differs from the official FastAPI template, which runs `alembic upgrade head` from a `prestart` step of its own and leaves the container command as the server alone. That shape is the right destination. Today there is no compose file and no deploy pipeline in this repository — CI runs lint and tests and publishes the image — so the single `docker run` carries both, and the commands above are what splitting them looks like by hand.
 
 ## Troubleshooting
 
@@ -268,17 +274,21 @@ backend/
 ├── tests/                 # pytest suite
 ├── app/
 │   ├── main.py            # The application factory, create_app
-│   ├── exceptions.py      # Shared exception types
 │   ├── api/
 │   │   ├── main.py        # Collects the routers
 │   │   ├── deps.py        # Dependencies: auth guards, service instances
 │   │   └── routes/        # One module per API area
 │   ├── core/
 │   │   ├── db.py          # Engine and session factory
-│   │   └── security.py    # Token minting and validation
-│   ├── services/          # One service per entity
-│   ├── models/            # SQLModel table models and their API schemas
-│   └── utils/             # Utility functions
+│   │   ├── security.py    # Token minting and validation
+│   │   ├── exceptions.py  # NotFoundError, BadRequestError
+│   │   ├── query.py       # The search language of the /search routes
+│   │   ├── ordering.py    # sort and order on list statements
+│   │   ├── scoring.py     # Series points rule
+│   │   ├── career.py      # Career rating rule
+│   │   └── fantasy.py     # Fantasy scoring rule
+│   ├── services/          # One service per entity; derived.py computes scores at read time
+│   └── models/            # SQLModel table models and their API schemas
 ├── alembic.ini            # Alembic configuration
 └── migrations/            # Schema migrations
 ```
@@ -308,12 +318,13 @@ migrations as well. See `tests/conftest.py` for the design rules.
 
 The list routes take `limit` (1 to 500, default 500) and `offset` (>= 0, default 0) query parameters. A limit outside that range answers 422. The page is ordered by `id`, and both values go into the SQL statement, so a large table never becomes a large answer. `tests/test_paging.py` names every paged route.
 
-Six routes carry the total row count in an `X-Total-Count` response header, which CORS exposes to browsers. A client reads the header, then walks the pages with `limit` and `offset`. The count holds for the whole set the route answers, not for the page.
+Seven routes carry the total row count in an `X-Total-Count` response header, which CORS exposes to browsers. A client reads the header, then walks the pages with `limit` and `offset`. The count holds for the whole set the route answers, not for the page.
 
 | Route | Default page size |
 | --- | --- |
 | `GET /users` | 500 |
 | `GET /fantasy/teams` | 500 |
+| `POST /fantasy/teams/search` | 500 |
 | `GET /fantasy/bets` | 500 |
 | `POST /fantasy/bets/search` | 500 |
 | `GET /player-series` | 500 |
@@ -329,6 +340,6 @@ Three routes also take `sort` and `order`, both optional. `sort` names one field
 | `GET /player-series` | `date_time`, `week`, `id` |
 | `GET /stats/career` | `name`, `mapped`, `rating`, `series_won`, `series_lost`, `series_winrate`, `games_won`, `games_lost`, `games_winrate`, `seasons_played` |
 
-`GET /koth/events`, `/config/settings`, the export and import routes and `routes/scores.py` answer full lists: their clients read the whole set.
+`GET /koth/events`, `/config/settings` and the export and import routes answer full lists: their clients read the whole set.
 
 The list routes answer reduced payloads: every JSON key stays, and the collections nested inside embedded objects answer `[]`. The single-row routes keep the full graph. `tests/test_memory_budget.py` pins the peak memory of the bets list, and `tests/test_query_budget.py` pins the statement counts of the list queries.
