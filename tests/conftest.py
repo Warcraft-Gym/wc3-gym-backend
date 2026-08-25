@@ -9,12 +9,16 @@ The application and the process are one-to-one: Session.configure and the
 service singletons in app/api/deps.py are process-global, so the app
 fixture is session-scoped. Tests share one database file and the clean_db
 fixture empties it between tests.
+
+The suite opens no socket: no_third_party_calls fails any call the tests
+did not stand in for.
 """
 
 import os
 from typing import Any
 
 import pytest
+import requests
 from fastapi import FastAPI
 from httpx2 import Client
 
@@ -69,6 +73,17 @@ def clean_db(app: FastAPI) -> None:
         for table in reversed(SQLModel.metadata.sorted_tables):
             session.execute(table.delete())
         session.commit()
+
+
+@pytest.fixture(autouse=True)
+def no_third_party_calls(monkeypatch: pytest.MonkeyPatch) -> None:
+    """No test reaches w3champions. A test that answers for it patches this
+    method again, and one that forgets fails here instead of on the network."""
+
+    def refuse(self: requests.Session, method: str, url: str, **kwargs: object) -> None:
+        raise AssertionError(f"the test called out to {method} {url}")
+
+    monkeypatch.setattr(requests.Session, "request", refuse)
 
 
 @pytest.fixture

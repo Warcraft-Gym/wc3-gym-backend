@@ -3,6 +3,9 @@
 A fresh database holds no settings rows. The base URL falls back to a
 default, and the season comes from w3champions itself, so the config page
 starts working instead of blank.
+
+The calls go through one shared session, so a test that stands in for
+w3champions patches the session class.
 """
 
 from pathlib import Path
@@ -52,11 +55,13 @@ def test_the_player_check_asks_for_the_players_endpoint(
         def json(self) -> dict[str, str]:
             return {"battleTag": "P1#1234"}
 
-    def fake_request(method: str, url: str, **kwargs: object) -> FakeResponse:
+    def fake_request(
+        self: requests.Session, method: str, url: str, **kwargs: object
+    ) -> FakeResponse:
         asked["url"] = url
         return FakeResponse()
 
-    monkeypatch.setattr(requests, "request", fake_request)
+    monkeypatch.setattr(requests.Session, "request", fake_request)
     monkeypatch.setenv("W3C_URL", "https://example.test/api")
 
     assert W3CService().validatePlayer("P1#1234") is True
@@ -74,7 +79,7 @@ def test_the_season_comes_from_w3champions_when_none_is_configured(
         def json(self) -> list[dict[str, int]]:
             return [{"id": 25}, {"id": 24}, {"id": 23}]
 
-    monkeypatch.setattr(requests, "request", lambda *a, **k: FakeResponse())
+    monkeypatch.setattr(requests.Session, "request", lambda *a, **k: FakeResponse())
     monkeypatch.setenv("W3C_URL", "https://example.test/api")
 
     assert W3CService().current_season() == 25
@@ -114,7 +119,7 @@ def test_the_config_route_reports_the_url_in_use(
         def json(self) -> list[dict[str, int]]:
             return [{"id": 25}, {"id": 24}]
 
-    monkeypatch.setattr(requests, "request", lambda *a, **k: FakeResponse())
+    monkeypatch.setattr(requests.Session, "request", lambda *a, **k: FakeResponse())
     monkeypatch.setenv("W3C_URL", "https://example.test/api")
 
     body = client.get("/config/w3c").json()
@@ -131,7 +136,7 @@ def test_the_config_route_survives_w3champions_being_down(
     def fake_request(*args: object, **kwargs: object) -> None:
         raise requests.exceptions.Timeout("read timed out")
 
-    monkeypatch.setattr(requests, "request", fake_request)
+    monkeypatch.setattr(requests.Session, "request", fake_request)
 
     body = client.get("/config/w3c").json()
 

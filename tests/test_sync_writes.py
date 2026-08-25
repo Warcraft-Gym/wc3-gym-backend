@@ -31,13 +31,17 @@ def stats(mmr: int, race: Race = Race.HU, season: int = SEASON) -> W3CStatsCreat
 
 
 def answer_w3c(monkeypatch: pytest.MonkeyPatch, reply: list[W3CStatsCreate]) -> None:
-    """The w3champions call answers this list, so no test needs a network."""
+    """The w3champions calls answer from here, so no test needs a network.
+
+    The season comes from w3champions too when no setting names one, so the
+    sync asks for both of them."""
 
     def getPlayerStats(
         self: W3CService, bnet_name: str, season_override: int | None = None
     ) -> list[W3CStatsCreate]:
         return list(reply)
 
+    monkeypatch.setattr(W3CService, "current_season", lambda self: SEASON)
     monkeypatch.setattr(W3CService, "getPlayerStats", getPlayerStats)
 
 

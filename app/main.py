@@ -24,7 +24,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.api.deps import AuthError
 from app.api.main import api_router
 from app.core.db import init_engine
-from app.core.exceptions import BadRequestError, NotFoundError
+from app.core.exceptions import BadRequestError, ExternalServiceError, NotFoundError
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +66,14 @@ def create_app(db_url: str | None = None) -> FastAPI:
     async def bad_request(request: Request, exc: BadRequestError) -> JSONResponse:
         logger.error(exc)
         return JSONResponse({"error": str(exc)}, status_code=400)
+
+    @app.exception_handler(ExternalServiceError)
+    async def external_service(
+        request: Request, exc: ExternalServiceError
+    ) -> JSONResponse:
+        """A service outside the app failed, so the app answers for it."""
+        logger.error(exc)
+        return JSONResponse({"error": str(exc)}, status_code=502)
 
     @app.exception_handler(SQLAlchemyError)
     async def db_error(request: Request, exc: SQLAlchemyError) -> JSONResponse:

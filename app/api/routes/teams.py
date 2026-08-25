@@ -1,7 +1,7 @@
 import hashlib
 import logging
 import time
-from typing import Annotated, Any
+from typing import Annotated
 
 from fastapi import APIRouter, Body, Depends, File, Query, Request, Response, UploadFile
 from fastapi.responses import JSONResponse
@@ -10,6 +10,7 @@ from app.api.deps import TeamServiceDep, require_admin, ttl_cache
 from app.core.exceptions import BadRequestError
 from app.core.query import QueryUtil
 from app.models.team import TeamCreate, TeamPublic, TeamUpdate
+from app.models.w3c_stats import W3CSyncResult
 
 logger = logging.getLogger(__name__)
 
@@ -164,13 +165,13 @@ def search_teams(
 
 @router.post(
     "/teams/w3c_sync/{team_id}/seasons/{season_id}",
-    response_model=None,
+    response_model=W3CSyncResult,
     dependencies=[Depends(require_admin)],
 )
 def sync_w3c_users_season(
     team_id: int, season_id: int, service: TeamServiceDep
-) -> Response | dict[str, Any] | None:
-    """Sync w3c information for each user of the team"""
+) -> W3CSyncResult | Response:
+    """Sync w3c information for each user of the team, and report every player"""
     cache_key = f"w3c_sync:{team_id}:{season_id}"
 
     if ttl_cache.get(cache_key, 0) > time.time():
@@ -180,12 +181,10 @@ def sync_w3c_users_season(
 
     ttl_cache[cache_key] = time.time() + 86400  # One sync per team and season per day
     try:
-        team = service.syncW3CStatsTeam(team_id, season_id)
+        return service.syncW3CStatsTeam(team_id, season_id)
     except Exception:
         ttl_cache.pop(cache_key, None)  # A failed sync may run again
         raise
-
-    return team.to_dict() if team else None
 
 
 @router.post("/teams/{team_id}/image", dependencies=[Depends(require_admin)])

@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any
 
 import requests
 
-from app.core.exceptions import BadRequestError, NotFoundError
+from app.core.exceptions import NotFoundError, W3CThrottledError
 from app.models.enums import Race
 from app.models.w3c_stats import W3CStatsCreate
 
@@ -19,6 +19,19 @@ REQUEST_TIMEOUT = 10
 
 # The w3champions API base, used when neither the setting nor the environment names one.
 DEFAULT_BASE_URL = "https://website-backend.w3champions.com/api"
+
+# What the admin reads when w3champions turns the sync away.
+THROTTLED_MESSAGE = "W3Champions throttled the sync, try again in a few minutes"
+
+# One connection pool for every w3champions call, so a sync pays no new TCP handshake.
+_session = requests.Session()
+
+
+def _is_throttled(response: requests.Response) -> bool:
+    """W3Champions turns a burst away with 429, or with 503 and a Retry-After."""
+    if response.status_code == 429:
+        return True
+    return response.status_code == 503 and "Retry-After" in response.headers
 
 
 class W3CService:
@@ -98,8 +111,9 @@ class W3CService:
             params=param,
         )
         if not result:
+            # A season the player did not play is an empty answer, not a failure
             logger.debug(f"no stats found for player {bnet_name} on w3c")
-            raise BadRequestError(f"No stats found for player {bnet_name} on W3C")
+            return []
         stats: list[W3CStatsCreate] = []
         for gmode_stats in result:
             if gmode_stats.get("gameMode") and gmode_stats.get("gameMode") == 1:
@@ -134,7 +148,7 @@ class W3CService:
     ) -> Any:  # noqa: ANN401  # the w3champions body has no fixed shape
         try:
             # Send the request
-            response = requests.request(
+            response = _session.request(
                 method,
                 url,
                 json=data,
@@ -142,6 +156,9 @@ class W3CService:
                 params=params,
                 timeout=REQUEST_TIMEOUT,
             )
+
+            if _is_throttled(response):
+                raise W3CThrottledError(THROTTLED_MESSAGE)
 
             # Check the status code
             if response.status_code in [200, 201]:

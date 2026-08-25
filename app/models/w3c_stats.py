@@ -53,3 +53,20 @@ class W3CStatsPublic(W3CStatsBase):
 
     def to_dict(self) -> dict[str, Any]:
         return self.model_dump(mode="json")
+
+
+class W3CSyncFailure(SQLModel):
+    """One player the sync could not update, and the reason it gives the admin."""
+
+    id: int
+    name: str | None = None
+    battleTag: str | None = None
+    reason: str
+
+
+class W3CSyncResult(SQLModel):
+    """What one sync did, player by player."""
+
+    synced: list[int] = Field(default_factory=list)
+    skipped: list[int] = Field(default_factory=list)
+    failed: list[W3CSyncFailure] = Field(default_factory=list)
