@@ -9,7 +9,8 @@ for a value the caller supplies; keep this for a query a client wrote.
 import re
 from typing import Self, cast
 
-from sqlalchemy import ColumnElement, and_, or_
+from sqlalchemy import ColumnElement, Enum, String, and_, func, or_
+from sqlmodel import AutoString
 
 from app.core.exceptions import BadRequestError
 from app.models.base import DBModel
@@ -105,20 +106,29 @@ class QueryUtil:
         filter = None
         column = getattr(cls, query.key, None)
         if column is not None:
+            value = query.value
+            if (
+                query.operator in ("==", "!=")
+                and isinstance(value, str)
+                and isinstance(column.type, String | AutoString)
+                and not isinstance(column.type, Enum)
+            ):
+                # MySQL's collation matched text case-insensitively, Postgres does not
+                column, value = func.lower(column), value.lower()
             if query.operator == "==":
-                filter = column == query.value
+                filter = column == value
             elif query.operator == "!=":
-                filter = column != query.value
+                filter = column != value
             elif query.operator == ">":
-                filter = column > query.value
+                filter = column > value
             elif query.operator == ">=":
-                filter = column >= query.value
+                filter = column >= value
             elif query.operator == "<":
-                filter = column < query.value
+                filter = column < value
             elif query.operator == "<=":
-                filter = column <= query.value
+                filter = column <= value
             elif query.operator == "ilike":
-                filter = column.ilike(f"%{query.value}%")
+                filter = column.ilike(f"%{value}%")
         return filter
 
     @staticmethod

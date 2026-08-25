@@ -52,3 +52,30 @@ def test_find_by_discord_id_treats_the_value_as_a_value(users: UserService) -> N
 
     widened = QueryUtil.parseQuery(f"discordId == {crafted}")
     assert len(users.search(widened)) == 2
+
+
+def test_a_name_matches_in_any_case(users: UserService) -> None:
+    """MySQL's collation matched text case-insensitively, Postgres does not."""
+    found = users.search(QueryUtil.parseQuery("name == grubby"))
+
+    assert [user.name for user in found] == ["Grubby"]
+
+
+def test_not_equals_drops_a_name_in_another_case(users: UserService) -> None:
+    found = users.search(QueryUtil.parseQuery("name != grubby"))
+
+    assert [user.name for user in found] == ["Fire or Ice"]
+
+
+def test_a_number_still_compares_as_a_number(users: UserService) -> None:
+    grubby = users.find_by_name("Grubby")[0]
+
+    found = users.search(QueryUtil.parseQuery(f"id == {grubby.id}"))
+
+    assert [user.name for user in found] == ["Grubby"]
+
+
+def test_ilike_still_matches_part_of_a_name(users: UserService) -> None:
+    found = users.search(QueryUtil.parseQuery("name ilike RUBB"))
+
+    assert [user.name for user in found] == ["Grubby"]
