@@ -18,7 +18,7 @@ class MapService(BaseService):
 
     def update(self, map_id: int, map: MapUpdate) -> MapPublic:
         with self.get_session() as session:
-            updated = Map.update(session, map_id, **map.model_dump())
+            updated = Map.update(session, map_id, **map.model_dump(exclude_unset=True))
             if not updated:
                 raise NotFoundError("Map not found")
             return MapPublic.model_validate(updated)
