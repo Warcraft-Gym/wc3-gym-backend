@@ -11,7 +11,7 @@ from app.models.relationships import DBMapSeason, DBUserSeasonSignup
 from app.models.season import Season, SeasonCreate, SeasonPublic, SeasonUpdate
 from app.models.team import Team
 from app.models.team_season import DBTeamSeason
-from app.models.user import User, UserPublic
+from app.models.user import User, UserListPublic
 from app.services.base import BaseService
 
 logger = logging.getLogger(__name__)
@@ -242,21 +242,19 @@ class SeasonService(BaseService):
 
     def getSignedUpUsers(
         self, season_id: int, limit: int | None = None, offset: int = 0
-    ) -> list[UserPublic]:
+    ) -> list[UserListPublic]:
         with self.get_session() as session:
             if session.scalar(select(Season.id).where(Season.id == season_id)) is None:
                 raise NotFoundError("Season not found")
 
-            # Eager load the signed up users with their w3c_stats
+            # The signup row has no gnl_stats, so the link rows stay out
             statement = (
                 select(DBUserSeasonSignup)
                 .options(
                     joinedload(DBUserSeasonSignup.user)
                     .joinedload(User.w3c_stats)
                     .noload("*"),
-                    joinedload(DBUserSeasonSignup.user)
-                    .joinedload(User.team_seasons)
-                    .noload("*"),
+                    joinedload(DBUserSeasonSignup.user).noload(User.team_seasons),
                 )
                 .where(DBUserSeasonSignup.season_id == season_id)
             )
@@ -271,7 +269,7 @@ class SeasonService(BaseService):
             result = []
             for signup in session.scalars(statement).unique().all():
                 if signup.user:
-                    user_public = UserPublic.from_user(signup.user)
+                    user_public = UserListPublic.from_user(signup.user)
                     if user_public:
                         result.append(user_public)
 

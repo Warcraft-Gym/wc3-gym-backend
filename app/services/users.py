@@ -4,13 +4,13 @@ from typing import TYPE_CHECKING
 from sqlalchemy import ColumnElement, Select, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as OrmSession
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import joinedload, noload
 
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.core.query import QueryElement, QueryUtil
 from app.models.season import Season
 from app.models.team import Team
-from app.models.user import User, UserCreate, UserPublic, UserUpdate
+from app.models.user import User, UserCreate, UserListPublic, UserPublic, UserUpdate
 from app.models.user_team_season import DBUserTeamSeason, UserTeamSeasonStatsPublic
 from app.models.w3c_stats import W3CStats, W3CStatsCreate
 from app.services.base import BaseService
@@ -63,26 +63,26 @@ class UserService(BaseService):
 
     def search(
         self, query: QueryElement | None, limit: int | None = None, offset: int = 0
-    ) -> list[UserPublic]:
+    ) -> list[UserListPublic]:
         return self._where(
             QueryUtil.convertQueryToDBFilter(User, query), limit=limit, offset=offset
         )
 
-    def find_by_name(self, name: str) -> list[UserPublic]:
+    def find_by_name(self, name: str) -> list[UserListPublic]:
         return self._where(User.name == name)
 
-    def find_by_battle_tag(self, battle_tag: str) -> list[UserPublic]:
+    def find_by_battle_tag(self, battle_tag: str) -> list[UserListPublic]:
         return self._where(User.battleTag == battle_tag)
 
-    def find_by_discord_tag(self, discord_tag: str) -> list[UserPublic]:
+    def find_by_discord_tag(self, discord_tag: str) -> list[UserListPublic]:
         return self._where(User.discordTag == discord_tag)
 
-    def find_by_discord_id(self, discord_id: str) -> list[UserPublic]:
+    def find_by_discord_id(self, discord_id: str) -> list[UserListPublic]:
         return self._where(User.discordId == discord_id)
 
     def find_by_discord_id_or_tag(
         self, discord_id: str, discord_tag: str
-    ) -> list[UserPublic]:
+    ) -> list[UserListPublic]:
         return self._where(
             or_(User.discordId == discord_id, User.discordTag == discord_tag)
         )
@@ -92,14 +92,14 @@ class UserService(BaseService):
         filter: ColumnElement[bool] | None,
         limit: int | None = None,
         offset: int = 0,
-    ) -> list[UserPublic]:
+    ) -> list[UserListPublic]:
         with self.get_session() as session:
             result = []
-            # Eager load related entities, disable nested loading
+            # The list row has no gnl_stats, so the link rows stay out
             statement = (
                 select(User)
                 .options(
-                    joinedload(User.team_seasons).noload("*"),
+                    noload(User.team_seasons),
                     joinedload(User.w3c_stats),
                 )
                 .where(filter)
@@ -117,19 +117,19 @@ class UserService(BaseService):
                 return result
 
             for user in users:
-                result.append(UserPublic.from_user(user))
+                result.append(UserListPublic.from_user(user))
             return result
 
     def getAll(
         self, limit: int | None = None, offset: int = 0
-    ) -> tuple[list[UserPublic], int]:
+    ) -> tuple[list[UserListPublic], int]:
         """The users, or one page of them, and the total row count."""
         with self.get_session() as session:
             total = session.scalar(select(func.count()).select_from(User)) or 0
             result = []
-            # Eager load related entities, disable nested loading
+            # The list row has no gnl_stats, so the link rows stay out
             statement = select(User).options(
-                joinedload(User.team_seasons).joinedload(DBUserTeamSeason.season),
+                noload(User.team_seasons),
                 joinedload(User.w3c_stats),
             )
             # Offset paging is deterministic only with a fixed order
@@ -139,7 +139,7 @@ class UserService(BaseService):
             users = session.scalars(statement).unique().all()
 
             for user in users:
-                result.append(UserPublic.from_user(user))
+                result.append(UserListPublic.from_user(user))
             return result, total
 
     def create_user(self, user: UserCreate) -> UserPublic:
@@ -171,7 +171,7 @@ class UserService(BaseService):
             )
             return False
 
-    def updateW3CStats(self, user: UserPublic) -> None:
+    def updateW3CStats(self, user: UserListPublic) -> None:
         w3c_service = W3CService(settings_app_service=self.settings_app_service)
 
         # Resolve the season once, so both fetches agree and w3champions is

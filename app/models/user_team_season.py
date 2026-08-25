@@ -11,8 +11,6 @@ from sqlalchemy import JSON, Column
 from sqlmodel import Field, Relationship, SQLModel
 
 from app.models.base import DBModel
-from app.models.season import SeasonPublic
-from app.models.team_reduced import TeamReduced
 from app.models.types import NoneToList
 
 if TYPE_CHECKING:
@@ -40,14 +38,14 @@ class DBUserTeamSeason(DBModel, table=True):
 
 
 class UserTeamSeasonStatsPublic(SQLModel):
+    """The record itself. The team and the season are ids here."""
+
     user_id: int | None = None
     team_id: int | None = None
     games: int | None = None
-    team: TeamReduced | None = None
     wins: int | None = None
     losses: int | None = None
     season_id: int | None = None
-    season: SeasonPublic | None = None
     matchup_history: Annotated[list[Any], NoneToList] = []
 
     @classmethod
@@ -59,11 +57,9 @@ class UserTeamSeasonStatsPublic(SQLModel):
             user_id=uts.user_id,
             team_id=uts.team_id,
             games=uts.games,
-            team=TeamReduced.from_team(uts.team) if uts.team else None,
             wins=uts.wins,
             losses=uts.losses,
             season_id=uts.season_id,
-            season=SeasonPublic.from_season_reduced(uts.season) if uts.season else None,
             matchup_history=uts.matchup_history if uts.matchup_history else [],
         )
 

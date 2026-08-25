@@ -97,9 +97,10 @@ class UserReduced(UserBase):
         return self.model_dump(mode="json")
 
 
-class UserPublic(UserReduced):
+class UserListPublic(UserReduced):
+    """The user of a list answer: the scalars, the w3c stats and the signups."""
+
     w3c_stats: Annotated[list[W3CStatsPublic], NoneToList] = []
-    gnl_stats: Annotated[list[UserTeamSeasonStatsPublic], NoneToList] = []
     signup_seasons: Annotated[list[SeasonPublic], NoneToList] = []
 
     @classmethod
@@ -107,25 +108,28 @@ class UserPublic(UserReduced):
         if not user:
             return None
 
-        return cls(
-            id=user.id,
-            name=user.name,
-            battleTag=user.battleTag,
-            discordTag=user.discordTag,
-            discordId=user.discordId,
-            race=user.race,
-            mmr=user.mmr,
-            country=user.country,
-            w3c_stats=[
-                W3CStatsPublic.model_validate(stat) for stat in (user.w3c_stats or [])
-            ],
-            gnl_stats=[
-                UserTeamSeasonStatsPublic.from_user_team_season(stat)
-                for stat in (user.team_seasons or [])
-            ],
-            fantasy_tier=user.fantasy_tier,
-            signup_seasons=[
-                SeasonPublic.from_season_reduced(signup.season)
-                for signup in (user.signup_seasons or [])
-            ],
-        )
+        row = cls.from_user_reduced(user)
+        row.w3c_stats = [
+            W3CStatsPublic.model_validate(stat) for stat in (user.w3c_stats or [])
+        ]
+        row.signup_seasons = [
+            SeasonPublic.from_season_reduced(signup.season)
+            for signup in (user.signup_seasons or [])
+        ]
+        return row
+
+
+class UserPublic(UserListPublic):
+    gnl_stats: Annotated[list[UserTeamSeasonStatsPublic], NoneToList] = []
+
+    @classmethod
+    def from_user(cls, user: User | None) -> Self | None:
+        row = super().from_user(user)
+        if not row:
+            return None
+
+        row.gnl_stats = [
+            UserTeamSeasonStatsPublic.from_user_team_season(stat)
+            for stat in (user.team_seasons or [])
+        ]
+        return row

@@ -11,7 +11,6 @@ from app.models.season import Season, SeasonPublic
 from app.models.series import Series, SeriesPublic
 from app.models.types import EmptyStrToNone
 from app.models.user import User, UserPublic
-from app.models.user_team_season import DBUserTeamSeason
 
 
 class FantasyBetBase(SQLModel):
@@ -64,12 +63,7 @@ class FantasyBet(FantasyBetBase, DBModel, table=True):
                 for player in players
                 for option in (
                     player.selectinload(User.w3c_stats),
-                    player.selectinload(User.team_seasons).joinedload(
-                        DBUserTeamSeason.team
-                    ),
-                    player.selectinload(User.team_seasons).joinedload(
-                        DBUserTeamSeason.season
-                    ),
+                    player.selectinload(User.team_seasons),
                     player.selectinload(User.signup_seasons).joinedload(
                         DBUserSeasonSignup.season
                     ),

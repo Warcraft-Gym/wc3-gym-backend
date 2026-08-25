@@ -50,20 +50,16 @@ class DraftSeries(DraftSeriesBase, DBModel, table=True):
 
         from app.models.match import Match
         from app.models.user import User
-        from app.models.user_team_season import DBUserTeamSeason
 
         return (
             joinedload(cls.match).joinedload(Match.team1),
             joinedload(cls.match).joinedload(Match.team2),
+            joinedload(cls.match).joinedload(Match.season),
             joinedload(cls.player1).selectinload(User.w3c_stats),
-            joinedload(cls.player1)
-            .selectinload(User.team_seasons)
-            .joinedload(DBUserTeamSeason.season),
+            joinedload(cls.player1).selectinload(User.team_seasons),
             joinedload(cls.player1).selectinload(User.signup_seasons),
             joinedload(cls.player2).selectinload(User.w3c_stats),
-            joinedload(cls.player2)
-            .selectinload(User.team_seasons)
-            .joinedload(DBUserTeamSeason.season),
+            joinedload(cls.player2).selectinload(User.team_seasons),
             joinedload(cls.player2).selectinload(User.signup_seasons),
         )
 

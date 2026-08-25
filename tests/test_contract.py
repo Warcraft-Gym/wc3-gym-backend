@@ -45,10 +45,57 @@ def test_users_list(client: Client, seeded: dict[str, Any]) -> None:
     assert p1["race"] == "HU"
     assert p1["mmr"] == 1500
     assert p1["country"] == "DE"
-    # gnl_stats carries the player's team and season memberships.
+    # The list row carries no gnl_stats; the player page reads them by id.
+    assert "gnl_stats" not in p1
+
+
+def test_user_by_id_carries_the_season_record(
+    client: Client, seeded: dict[str, Any]
+) -> None:
+    """gnl_stats names its team and its season by id."""
+    p1 = get_json(client, f"/users/{seeded['player_ids'][0]}")
     assert len(p1["gnl_stats"]) == 1
-    assert p1["gnl_stats"][0]["season"]["name"] == "Season 1"
-    assert p1["gnl_stats"][0]["team"]["name"] == "Alpha"
+    stats = p1["gnl_stats"][0]
+    assert stats["season_id"] == seeded["season_id"]
+    assert stats["team_id"] == seeded["team_a_id"]
+    assert set(stats) == {
+        "user_id",
+        "team_id",
+        "season_id",
+        "games",
+        "wins",
+        "losses",
+        "matchup_history",
+    }
+
+
+def test_season_signups_answer_list_rows(
+    client: Client, seeded: dict[str, Any]
+) -> None:
+    """The signup row carries the scalars and the w3c stats, no gnl_stats."""
+    with Session() as session:
+        session.add(
+            DBUserSeasonSignup(
+                user_id=seeded["player_ids"][0], season_id=seeded["season_id"]
+            )
+        )
+        session.commit()
+
+    rows = get_json(client, f"/seasons/{seeded['season_id']}/signups")
+    assert len(rows) == 1
+    assert rows[0]["battleTag"] == "P1#1111"
+    assert rows[0]["w3c_stats"] == []
+    assert "gnl_stats" not in rows[0]
+
+
+def test_match_by_id_carries_the_season_length(
+    client: Client, seeded: dict[str, Any]
+) -> None:
+    """The match page reads number_weeks here, not from /seasons/{id}."""
+    match = get_json(client, f"/matches/{seeded['match_id']}")
+    assert match["season"]["id"] == seeded["season_id"]
+    assert match["season"]["number_weeks"] == 4
+    assert match["season"]["series_per_week"] == 2
 
 
 def test_seasons_list(client: Client, seeded: dict[str, Any]) -> None:

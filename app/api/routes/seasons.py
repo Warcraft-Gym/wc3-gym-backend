@@ -7,7 +7,7 @@ from app.api.deps import SeasonServiceDep, require_admin
 from app.core.exceptions import BadRequestError
 from app.core.query import QueryUtil
 from app.models.season import SeasonCreate, SeasonPublic, SeasonUpdate
-from app.models.user import UserPublic
+from app.models.user import UserListPublic
 
 logger = logging.getLogger(__name__)
 
@@ -133,6 +133,6 @@ def get_season_signups(
     service: SeasonServiceDep,
     limit: Annotated[int, Query(ge=1, le=500)] = 500,
     offset: Annotated[int, Query(ge=0)] = 0,
-) -> list[UserPublic]:
+) -> list[UserListPublic]:
     """Retrieve one page of the users signed up for a season, at most 500."""
     return service.getSignedUpUsers(season_id, limit=limit, offset=offset) or []

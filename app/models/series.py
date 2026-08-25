@@ -109,20 +109,15 @@ class Series(SeriesBase, DBModel, table=True):
         """The rows a season report reads off every series."""
         from sqlalchemy.orm import joinedload
 
-        from app.models.user_team_season import DBUserTeamSeason
-
         return (
             joinedload(cls.match).joinedload(Match.team1),
             joinedload(cls.match).joinedload(Match.team2),
+            joinedload(cls.match).joinedload(Match.season),
             joinedload(cls.player1).selectinload(User.w3c_stats),
-            joinedload(cls.player1)
-            .selectinload(User.team_seasons)
-            .joinedload(DBUserTeamSeason.season),
+            joinedload(cls.player1).selectinload(User.team_seasons),
             joinedload(cls.player1).selectinload(User.signup_seasons),
             joinedload(cls.player2).selectinload(User.w3c_stats),
-            joinedload(cls.player2)
-            .selectinload(User.team_seasons)
-            .joinedload(DBUserTeamSeason.season),
+            joinedload(cls.player2).selectinload(User.team_seasons),
             joinedload(cls.player2).selectinload(User.signup_seasons),
         )
 

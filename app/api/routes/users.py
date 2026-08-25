@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Query, Response
 from app.api.deps import UserServiceDep, require_admin
 from app.core.exceptions import BadRequestError
 from app.core.query import QueryUtil
-from app.models.user import UserCreate, UserPublic, UserUpdate
+from app.models.user import UserCreate, UserListPublic, UserPublic, UserUpdate
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +54,7 @@ def get_all_users(
     response: Response,
     limit: Annotated[int, Query(ge=1, le=500)] = 500,
     offset: Annotated[int, Query(ge=0)] = 0,
-) -> list[UserPublic]:
+) -> list[UserListPublic]:
     """Retrieve one page of users, at most 500, ordered by id."""
     users, total = service.getAll(limit=limit, offset=offset)
     response.headers["X-Total-Count"] = str(total)
@@ -67,7 +67,7 @@ def search_users(
     query: str = "",
     limit: Annotated[int, Query(ge=1, le=500)] = 500,
     offset: Annotated[int, Query(ge=0)] = 0,
-) -> list[UserPublic]:
+) -> list[UserListPublic]:
     """Search users by criteria using a custom query format."""
     parsed_query = QueryUtil.parseQuery(query)
     if not parsed_query or not parsed_query.elementA:

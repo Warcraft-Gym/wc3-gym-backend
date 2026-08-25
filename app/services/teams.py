@@ -46,7 +46,7 @@ def _season_loads(season_id: int) -> list[Any]:
         .joinedload(DBUserTeamSeason.user)
         .options(
             selectinload(User.w3c_stats),
-            selectinload(stats).joinedload(DBUserTeamSeason.season),
+            selectinload(stats),
             noload(User.signup_seasons),
         ),
         joinedload(roster).noload(DBUserTeamSeason.team),
@@ -196,7 +196,7 @@ class TeamService(BaseService):
 
     def get_with_nested_users(self, team_id: int) -> TeamPublic:
         with self.get_session() as session:
-            # Eager load user_seasons and their users with w3c_stats and team_seasons (gnl_stats) with season info
+            # Eager load the roster users with their w3c_stats and gnl_stats
             team = (
                 session.scalars(
                     select(Team)
@@ -206,8 +206,7 @@ class TeamService(BaseService):
                         .joinedload(User.w3c_stats),
                         joinedload(Team.user_seasons)
                         .joinedload(DBUserTeamSeason.user)
-                        .joinedload(User.team_seasons)
-                        .joinedload(DBUserTeamSeason.season),
+                        .joinedload(User.team_seasons),
                         joinedload(Team.user_seasons).noload(DBUserTeamSeason.team),
                         joinedload(Team.season_info).noload("*"),
                     )

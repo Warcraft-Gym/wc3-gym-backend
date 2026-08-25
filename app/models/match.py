@@ -91,5 +91,13 @@ class MatchPublic(MatchBase):
             else None,
         )
 
+    @classmethod
+    def from_match_with_season(cls, match: Match | None) -> Self | None:
+        """The match with every scalar of its season, without the map pool."""
+        public = cls.from_match(match)
+        if public and match.season:
+            public.season = SeasonPublic.from_season_without_maps(match.season)
+        return public
+
     def to_dict(self) -> dict[str, Any]:
         return self.model_dump(mode="json")

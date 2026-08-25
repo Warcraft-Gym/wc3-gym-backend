@@ -5,6 +5,8 @@ default, and the season comes from w3champions itself, so the config page
 starts working instead of blank.
 """
 
+from pathlib import Path
+
 import pytest
 import requests
 
@@ -84,6 +86,18 @@ def test_a_configured_season_wins_over_w3champions() -> None:
     settings.update_setting("current_wc3_season", "18")
 
     assert W3CService(settings_app_service=settings).current_season() == 18
+
+
+def test_only_the_w3c_service_names_the_season_setting() -> None:
+    """One truth for the season: W3CService.current_season()."""
+    app_root = Path(__file__).resolve().parent.parent / "app"
+    naming = sorted(
+        path.relative_to(app_root).as_posix()
+        for path in app_root.rglob("*.py")
+        if "current_wc3_season" in path.read_text()
+    )
+
+    assert naming == ["services/w3c.py"]
 
 
 def test_a_missing_setting_does_not_raise() -> None:

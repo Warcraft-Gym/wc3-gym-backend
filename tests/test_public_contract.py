@@ -308,6 +308,22 @@ def test_team_image_serves_an_image(
     assert resp.content == TEAM_ICON
 
 
+def test_team_image_is_cached_by_its_content(
+    client: Client, public_seed: dict[str, Any]
+) -> None:
+    """A day of browser cache, a tag of the bytes, and 304 on a repeat."""
+    path = f"/teams/{public_seed['team_a_id']}/image"
+    resp = client.get(path)
+    assert resp.headers["cache-control"] == "public, max-age=86400"
+    etag = resp.headers["etag"]
+    assert etag
+
+    again = client.get(path, headers={"If-None-Match": etag})
+    assert again.status_code == 304
+    assert again.content == b""
+    assert again.headers["etag"] == etag
+
+
 # gnl-detailed-standings
 
 

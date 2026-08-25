@@ -1,8 +1,9 @@
+import hashlib
 import logging
 import time
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Body, Depends, File, Query, Response, UploadFile
+from fastapi import APIRouter, Body, Depends, File, Query, Request, Response, UploadFile
 from fastapi.responses import JSONResponse
 
 from app.api.deps import TeamServiceDep, require_admin, ttl_cache
@@ -205,18 +206,18 @@ def upload_team_image(
 
 
 @router.get("/teams/{team_id}/image")
-def get_team_image(team_id: int, service: TeamServiceDep) -> Response:
+def get_team_image(team_id: int, request: Request, service: TeamServiceDep) -> Response:
     """Fetches and returns the stored binary image for a team"""
     team_icon = service.get_team_icon(team_id)
     if not team_icon:
         return JSONResponse({"error": "Image not found"}, status_code=404)
 
-    # Browsers cache the image for one hour.
-    return Response(
-        content=team_icon,
-        media_type="image/png",
-        headers={
-            "Cache-Control": "public, max-age=3600",
-            "ETag": f"team-{team_id}",
-        },
-    )
+    # The tag is the content, so a replaced icon answers a new one.
+    etag = f'"{hashlib.sha256(team_icon).hexdigest()}"'
+    headers = {"Cache-Control": "public, max-age=86400", "ETag": etag}
+    if etag in [
+        tag.strip() for tag in request.headers.get("if-none-match", "").split(",")
+    ]:
+        return Response(status_code=304, headers=headers)
+
+    return Response(content=team_icon, media_type="image/png", headers=headers)
