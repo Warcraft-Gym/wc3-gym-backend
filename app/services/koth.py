@@ -1,7 +1,7 @@
 import logging
 from typing import TYPE_CHECKING
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as OrmSession
 from sqlalchemy.orm import joinedload
@@ -140,11 +140,6 @@ class KothService(BaseService):
         return self.get_event(event_id)
 
     # ============ Signup Methods ============
-    def add_signup(self, signup: KothSignupCreate) -> KothSignupPublic:
-        with self.get_session() as session:
-            db_signup = KothSignup.add(session, signup.model_dump())
-            return KothSignupPublic.model_validate(db_signup)
-
     def update_signup(
         self, signup_id: int, signup: KothSignupUpdate
     ) -> KothSignupPublic:
@@ -513,16 +508,6 @@ class KothService(BaseService):
             db_participant = KothMatchParticipant.add(session, participant.model_dump())
             return KothMatchParticipantPublic.model_validate(db_participant)
 
-    def delete_participants_by_match(self, match_id: int) -> None:
-        """Delete all participants for a given match"""
-        with self.get_session() as session:
-            session.execute(
-                delete(KothMatchParticipant).where(
-                    KothMatchParticipant.match_id == match_id
-                ),
-                execution_options={"synchronize_session": False},
-            )
-
     def get_participants_by_match(
         self, match_id: int
     ) -> list[KothMatchParticipantPublic]:
@@ -627,7 +612,7 @@ class KothService(BaseService):
 
         return stats
 
-    # BaseService requires these four; this service uses add_event/add_signup/add_match
+    # BaseService requires these four; this service uses add_event/add_match
     def get(self, obj_id: object) -> None:
         pass
 

@@ -195,31 +195,6 @@ class TeamService(BaseService):
                 raise NotFoundError("Team not found")
             return _public(session, team)
 
-    def get_with_nested_users(self, team_id: int) -> TeamPublic:
-        with self.get_session() as session:
-            # Eager load the roster users with their w3c_stats and gnl_stats
-            team = (
-                session.scalars(
-                    select(Team)
-                    .options(
-                        joinedload(Team.user_seasons)
-                        .joinedload(DBUserTeamSeason.user)
-                        .joinedload(User.w3c_stats),
-                        joinedload(Team.user_seasons)
-                        .joinedload(DBUserTeamSeason.user)
-                        .joinedload(User.team_seasons),
-                        joinedload(Team.user_seasons).noload(DBUserTeamSeason.team),
-                        joinedload(Team.season_info).noload("*"),
-                    )
-                    .where(Team.id == team_id)
-                )
-                .unique()
-                .first()
-            )
-            if not team:
-                raise NotFoundError("Team not found")
-            return _public(session, team)
-
     def get_with_nested_users_by_season(
         self, team_id: int, season_id: int
     ) -> TeamPublic:
@@ -321,8 +296,6 @@ class TeamService(BaseService):
         with self.get_session() as session:
             result: list[TeamPublic] = []
             # Explicitly prevent loading of all relationships
-            from sqlalchemy.orm import noload
-
             statement = select(Team).options(noload("*"))
             if limit is not None or offset:
                 # Offset paging is deterministic only with a fixed order
@@ -341,8 +314,6 @@ class TeamService(BaseService):
         """Get all teams for a season with season_info but without users"""
         with self.get_session() as session:
             result: list[TeamPublic] = []
-            from sqlalchemy.orm import noload
-
             # An EXISTS, not a join: a join multiplies the rows a page counts
             statement = (
                 select(Team)

@@ -342,7 +342,6 @@ async def update_player_series(
     return await run_in_threadpool(
         player_series.update_player_series,
         series_id,
-        content_type,
         data,
         files,
         discord_id=str(entry.get("discord_id")),

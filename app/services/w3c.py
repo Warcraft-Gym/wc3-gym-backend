@@ -39,12 +39,6 @@ class W3CService:
         self.settings_app_service = settings_app_service
 
     GET = "GET"
-    POST = "POST"
-    PUT = "PUT"
-    DELETE = "DELETE"
-    PATCH = "PATCH"
-    HEAD = "HEAD"
-    OPTIONS = "OPTIONS"
 
     def _setting(self, key: str) -> str | None:
         """A settings value, or None when the row is absent."""
@@ -80,9 +74,6 @@ class W3CService:
         Uses the /players endpoint which is simpler and doesn't require season info.
         Returns True if player exists, False otherwise.
         """
-        if not isinstance(bnet_name, str):
-            raise ValueError("bnet_name must be a string")
-
         try:
             result = self.send_request(
                 method=self.GET,
@@ -97,9 +88,6 @@ class W3CService:
     def getPlayerStats(
         self, bnet_name: str, season_override: int | None = None
     ) -> list[W3CStatsCreate]:
-        if not isinstance(bnet_name, str):
-            raise ValueError("bnet_name must be a string")
-
         season_to_fetch = (
             season_override if season_override is not None else self.current_season()
         )
@@ -142,8 +130,6 @@ class W3CService:
         self,
         method: str,
         url: str,
-        data: dict[str, Any] | None = None,
-        headers: dict[str, str] | None = None,
         params: dict[str, Any] | None = None,
     ) -> Any:  # noqa: ANN401  # the w3champions body has no fixed shape
         try:
@@ -151,8 +137,6 @@ class W3CService:
             response = _session.request(
                 method,
                 url,
-                json=data,
-                headers=headers,
                 params=params,
                 timeout=REQUEST_TIMEOUT,
             )

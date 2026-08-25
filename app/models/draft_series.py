@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import TYPE_CHECKING, Annotated, Any, Self
+from typing import TYPE_CHECKING, Annotated, Self
 
 from sqlalchemy import TIMESTAMP
 from sqlalchemy.sql.base import ExecutableOption
@@ -119,6 +119,3 @@ class DraftSeriesPublic(DraftSeriesBase):
             is_fantasy_match=draft_series.is_fantasy_match,
             created_at=draft_series.created_at,
         )
-
-    def to_dict(self) -> dict[str, Any]:
-        return self.model_dump(mode="json")

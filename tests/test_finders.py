@@ -31,14 +31,8 @@ def users(app: FastAPI) -> UserService:
     return service
 
 
-def test_find_by_name_accepts_a_name_holding_or(users: UserService) -> None:
-    found = users.find_by_name("Fire or Ice")
-
-    assert [user.name for user in found] == ["Fire or Ice"]
-
-
 def test_the_query_language_cannot_carry_that_name(users: UserService) -> None:
-    """Why find_by_name exists. The parser splits the value at " or "."""
+    """The parser splits the value at " or "."""
     with pytest.raises(Exception, match="could not be parsed"):
         QueryUtil.parseQuery("name == Fire or Ice")
 
@@ -67,15 +61,15 @@ def test_not_equals_drops_a_name_in_another_case(users: UserService) -> None:
     assert [user.name for user in found] == ["Fire or Ice"]
 
 
-def test_a_number_still_compares_as_a_number(users: UserService) -> None:
-    grubby = users.find_by_name("Grubby")[0]
-
-    found = users.search(QueryUtil.parseQuery(f"id == {grubby.id}"))
+def test_ilike_still_matches_part_of_a_name(users: UserService) -> None:
+    found = users.search(QueryUtil.parseQuery("name ilike RUBB"))
 
     assert [user.name for user in found] == ["Grubby"]
 
 
-def test_ilike_still_matches_part_of_a_name(users: UserService) -> None:
-    found = users.search(QueryUtil.parseQuery("name ilike RUBB"))
+def test_a_number_still_compares_as_a_number(users: UserService) -> None:
+    grubby = users.find_by_discord_id("id-Grubby")[0]
+
+    found = users.search(QueryUtil.parseQuery(f"id == {grubby.id}"))
 
     assert [user.name for user in found] == ["Grubby"]

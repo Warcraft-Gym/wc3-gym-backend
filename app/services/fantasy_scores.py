@@ -6,7 +6,6 @@ from app.services import derived
 from app.services.fantasy_bets import FantasyBetService
 from app.services.fantasy_teams import FantasyTeamService
 from app.services.series import SeriesService
-from app.services.teams import TeamService
 
 if TYPE_CHECKING:
     from app.models.fantasy_team import FantasyTeamPublic
@@ -19,12 +18,10 @@ class FantasyScoreService:
         fantasy_team_service: FantasyTeamService,
         fantasy_bet_service: FantasyBetService,
         series_app_service: SeriesService,
-        team_app_service: TeamService,
     ) -> None:
         self.fantasy_team_service = fantasy_team_service
         self.fantasy_bet_service = fantasy_bet_service
         self.series_app_service = series_app_service
-        self.team_app_service = team_app_service
 
     def _season_series_by_week(
         self, season: "SeasonPublic"
@@ -175,6 +172,3 @@ class FantasyScoreService:
         breakdown["totals"]["total_points"] = scores["total_points"]
 
         return breakdown
-
-    def calculatePoints(self, score1: int, score2: int) -> int:
-        return fantasy.series_points(score1, score2)

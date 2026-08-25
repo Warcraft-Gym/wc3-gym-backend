@@ -71,7 +71,6 @@ def require_refresh(credentials: _Credentials) -> str:
     return claims["sub"]
 
 
-RequireAdmin = Annotated[str, Depends(require_admin)]
 RequireRefresh = Annotated[str, Depends(require_refresh)]
 
 
@@ -89,7 +88,6 @@ fantasy_score_service = FantasyScoreService(
     fantasy_team_service=fantasy_team_service,
     fantasy_bet_service=fantasy_bet_service,
     series_app_service=series_service,
-    team_app_service=team_service,
 )
 koth_service = KothService(settings_app_service=settings_service)
 stats_service = PlayerCareerStatsService()

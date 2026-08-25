@@ -62,6 +62,3 @@ class UserTeamSeasonStatsPublic(SQLModel):
             season_id=uts.season_id,
             matchup_history=uts.matchup_history if uts.matchup_history else [],
         )
-
-    def to_dict(self) -> dict[str, Any]:
-        return self.model_dump(mode="json")

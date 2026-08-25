@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Annotated, Any
+from typing import TYPE_CHECKING, Annotated
 
 from sqlalchemy import Index
 from sqlmodel import Field, Relationship, SQLModel
@@ -50,9 +50,6 @@ class W3CStatsPublic(W3CStatsBase):
     id: int
     race: Annotated[str | None, EnumValue] = None
     user_id: int
-
-    def to_dict(self) -> dict[str, Any]:
-        return self.model_dump(mode="json")
 
 
 class W3CSyncFailure(SQLModel):

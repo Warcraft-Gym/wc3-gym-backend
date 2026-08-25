@@ -33,7 +33,6 @@ class SeasonService(BaseService):
             season = Season.update(
                 session, season_id, **season.model_dump(exclude_unset=True)
             )
-            # Example usage
             if not season:
                 raise NotFoundError("Season not found")
             return SeasonPublic.from_season(season)
@@ -60,7 +59,6 @@ class SeasonService(BaseService):
                 .unique()
                 .first()
             )
-            # Example usage
             if not season:
                 raise NotFoundError("Season not found")
             return SeasonPublic.from_season(season)

@@ -89,9 +89,6 @@ class UserService(BaseService):
             QueryUtil.convertQueryToDBFilter(User, query), limit=limit, offset=offset
         )
 
-    def find_by_name(self, name: str) -> list[UserListPublic]:
-        return self._where(User.name == name)
-
     def find_by_ids(self, user_ids: Iterable[int | None]) -> list[UserListPublic]:
         """The users of those ids, read in one statement."""
         ids = [user_id for user_id in user_ids if user_id is not None]

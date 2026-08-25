@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Annotated, Any, Self
+from typing import TYPE_CHECKING, Annotated, Self
 
 from sqlmodel import Field, Relationship, SQLModel
 
@@ -98,6 +98,3 @@ class MatchPublic(MatchBase):
         if public and match.season:
             public.season = SeasonPublic.from_season_without_maps(match.season)
         return public
-
-    def to_dict(self) -> dict[str, Any]:
-        return self.model_dump(mode="json")

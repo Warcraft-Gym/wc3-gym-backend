@@ -600,7 +600,6 @@ def _fantasy_bets(
     ) in rows:
         by_captain.setdefault((user_id, season_id), []).append(
             fantasy.Bet(
-                id=bet_id,
                 points=bet_points,
                 winner_id=winner_id,
                 winner_name=winner_name,
@@ -640,7 +639,6 @@ def public_series(series: SeriesPublic | None) -> fantasy.Series | None:
 def public_bet(bet: FantasyBetPublic) -> fantasy.Bet:
     """One answered bet, as the fantasy rules read it."""
     return fantasy.Bet(
-        id=bet.id,
         points=bet.bet_points,
         winner_id=bet.winner_id,
         winner_name=bet.winner.name if bet.winner else None,

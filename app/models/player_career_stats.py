@@ -42,10 +42,6 @@ class PlayerCareerStats(PlayerCareerStatsBase, DBModel, table=True):
         return (joinedload(cls.user),)
 
 
-class PlayerCareerStatsCreate(PlayerCareerStatsBase):
-    """The columns a career row stores: the player and his historical baseline."""
-
-
 class PlayerCareerStatsUpdate(SQLModel):
     user_id: int | None = None
     player_name: str | None = None
