@@ -77,8 +77,8 @@ def export_season(
     matches, series, fantasy teams, fantasy team players, fantasy bets and
     the fantasy users who are on no roster.
     """
-    # get_season raises NotFoundError, which answers 404
-    season = season_service.get_season(season_id)
+    # get raises NotFoundError, which answers 404
+    season = season_service.get(season_id)
 
     # write_only keeps one row in memory at a time instead of the whole sheet
     workbook = openpyxl.Workbook(write_only=True)
@@ -289,7 +289,7 @@ def export_season(
     q_string = f"season_id=={season_id}"
     query = QueryUtil.parseQuery(q_string)
     if query and query.elementA:
-        fantasy_teams, _ = fantasy_team_service.search_fantasy_teams(query)
+        fantasy_teams, _ = fantasy_team_service.search(query)
         for fteam in fantasy_teams:
             fantasy_user_ids.add(fteam.captain_id)
             drafted_race_value = (
@@ -340,9 +340,7 @@ def export_season(
         # A season holds the most bets of anything here, so it is read by page
         offset = 0
         while True:
-            page, _ = fantasy_bet_service.search_fantasy_bets(
-                query, limit=BET_PAGE, offset=offset
-            )
+            page, _ = fantasy_bet_service.search(query, limit=BET_PAGE, offset=offset)
             for fbet in page:
                 fantasy_user_ids.add(fbet.user_id)
                 fantasy_user_ids.add(fbet.winner_id)

@@ -159,38 +159,3 @@ class FantasyTeamService(BaseService):
             public = FantasyTeamPublic.from_fantasy_team(fteam)
             derived.fill_fantasy_teams(session, [public])
             return public
-
-    def create_fantasy_team(self, team: FantasyTeamCreate) -> FantasyTeamPublic:
-        return self.add(team)
-
-    def update_fantasy_team(
-        self, team_id: int, team: FantasyTeamUpdate
-    ) -> FantasyTeamPublic:
-        return self.update(team_id, team)
-
-    def delete_fantasy_team(self, team_id: int) -> None:
-        self.delete(team_id)
-
-    def get_fantasy_team(self, team_id: int) -> FantasyTeamPublic:
-        team_data = self.get(team_id)
-        if not team_data:
-            raise NotFoundError(f"Fantasy Team not found by Id: {team_id}")
-        return team_data
-
-    def getAll_fantasy_teams(
-        self, limit: int | None = None, offset: int = 0
-    ) -> tuple[list[FantasyTeamPublic], int]:
-        return self.getAll(limit=limit, offset=offset)
-
-    def search_fantasy_teams(
-        self, query: QueryElement | None, limit: int | None = None, offset: int = 0
-    ) -> tuple[list[FantasyTeamPublic], int | None]:
-        return self.search(query, limit=limit, offset=offset)
-
-    def addFantasyPlayers(self, team_id: int, players: list[int]) -> FantasyTeamPublic:
-        return self.addPlayers(team_id, players)
-
-    def removeFantasyPlayers(
-        self, team_id: int, players: list[int]
-    ) -> FantasyTeamPublic:
-        return self.removePlayers(team_id, players)

@@ -334,34 +334,6 @@ class TeamService(BaseService):
             derived.fill_standings(session, result)
             return result
 
-    def create_team(self, team: TeamCreate) -> TeamPublic:
-        return self.add(team)
-
-    def update_team(self, team_id: int, team: TeamUpdate) -> TeamPublic:
-        return self.update(team_id, team)
-
-    def update_team_icon(self, team_id: int, file: bytes) -> TeamPublic:
-        return self.update_icon(team_id, file)
-
-    def delete_team(self, team_id: int) -> None:
-        self.delete(team_id)
-
-    def get_team(self, team_id: int) -> TeamPublic:
-        team_data = self.get(team_id)
-        if not team_data:
-            raise NotFoundError(f"Team not found by Id: {team_id}")
-        return team_data
-
-    def get_team_icon(self, team_id: int) -> bytes | None:
-        return self.get_icon(team_id)
-
-    def get_team_season(self, team_id: int, season_id: int) -> TeamPublic:
-        team_data = self.get_with_nested_users_by_season(team_id, season_id)
-        if not team_data:
-            raise NotFoundError(f"Team not found by Id: {team_id}")
-        # Data is already filtered by season at database level
-        return team_data
-
     def get_teams_season(
         self, season_id: int, limit: int | None = None, offset: int = 0
     ) -> list[TeamPublic]:
@@ -407,6 +379,6 @@ class TeamService(BaseService):
         return result
 
     def syncW3CStatsTeam(self, team_id: int, season_id: int) -> W3CSyncResult:
-        team = self.get_team_season(team_id, season_id)
+        team = self.get_with_nested_users_by_season(team_id, season_id)
         users = team.player_by_season.get(season_id) or []
         return self.user_app_service.syncW3CStatsUsers(users, SYNC_MAX_AGE)

@@ -19,7 +19,7 @@ from app.services.users import UserService
 def users(app: FastAPI) -> UserService:
     service = UserService()
     for name in ["Fire or Ice", "Grubby"]:
-        service.create_user(
+        service.add(
             UserCreate(
                 name=name,
                 battleTag=f"{name}#1234",

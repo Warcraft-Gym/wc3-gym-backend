@@ -200,15 +200,9 @@ class SeriesService(BaseService):
         return series
 
     def delete_series(self, series_id: int) -> None:
-        series = self.get_series(series_id=series_id)
+        series = self.get(series_id=series_id)
         self.delete(series_id)
         self.updateGNLSeasonStats(series)
-
-    def get_series(self, series_id: int) -> SeriesPublic:
-        series_data = self.get(series_id)
-        if not series_data:
-            raise NotFoundError(f"Series not found byId: {series_id}")
-        return series_data
 
     def updateGNLSeasonStats(self, series: SeriesPublic) -> None:
         p1_season_data = self.calculateUserSeasonStats(

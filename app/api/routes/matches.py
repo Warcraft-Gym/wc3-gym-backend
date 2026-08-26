@@ -21,7 +21,7 @@ router = APIRouter(tags=["matches"])
 )
 def add_match(data: MatchCreate, service: MatchServiceDep) -> MatchPublic:
     """Creates a new match between two teams with the given teams and score."""
-    return service.create_match(data)
+    return service.add(data)
 
 
 @router.put(
@@ -33,7 +33,7 @@ def update_match(
     match_id: int, data: MatchUpdate, service: MatchServiceDep
 ) -> MatchPublic:
     """Update the data of an existing matcht."""
-    return service.update_match(match_id, data)
+    return service.update(match_id, data)
 
 
 @router.delete(
@@ -41,13 +41,13 @@ def update_match(
 )
 def delete_match(match_id: int, service: MatchServiceDep) -> None:
     """Delete a match by its ID."""
-    service.delete_match(match_id)
+    service.delete(match_id)
 
 
 @router.get("/matches/{match_id}")
 def get_match(match_id: int, service: MatchServiceDep) -> MatchPublic:
     """Retrieve a match by its ID."""
-    return service.get_match(match_id)
+    return service.get(match_id)
 
 
 @router.post("/matches/search")

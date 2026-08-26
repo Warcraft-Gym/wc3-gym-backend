@@ -74,37 +74,6 @@ class DraftSeriesService(BaseService):
         with self.get_session() as session:
             session.execute(delete(DraftSeries).where(DraftSeries.match_id == match_id))
 
-    def create_draft_series(self, draft_series: DraftSeriesCreate) -> DraftSeriesPublic:
-        """Create a new draft series"""
-        return self.add(draft_series)
-
-    def update_draft_series(
-        self, draft_series_id: int, draft_series: DraftSeriesUpdate
-    ) -> DraftSeriesPublic:
-        """Update an existing draft series"""
-        return self.update(draft_series_id, draft_series)
-
-    def delete_draft_series(self, draft_series_id: int) -> None:
-        """Delete a draft series"""
-        self.delete(draft_series_id)
-
-    def get_draft_series(self, draft_series_id: int) -> DraftSeriesPublic:
-        """Get a draft series by ID"""
-        draft_series_data = self.get(draft_series_id)
-        if not draft_series_data:
-            raise NotFoundError(f"Draft series not found by ID: {draft_series_id}")
-        return draft_series_data
-
-    def get_draft_series_by_match(
-        self, match_id: int, limit: int | None = None, offset: int = 0
-    ) -> list[DraftSeriesPublic]:
-        """Get all draft series for a match"""
-        return self.getByMatchId(match_id, limit=limit, offset=offset)
-
-    def delete_all_drafts_for_match(self, match_id: int) -> None:
-        """Delete all draft series for a match"""
-        self.deleteByMatchId(match_id)
-
     def convert_to_series(self, draft_series: DraftSeries) -> SeriesCreate:
         """Build the SeriesCreate for a draft series. SeriesService writes the row."""
         return SeriesCreate(

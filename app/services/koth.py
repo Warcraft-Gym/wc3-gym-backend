@@ -51,9 +51,6 @@ class KothService(BaseService):
             db_event = KothEvent.add(session, event.model_dump())
             return KothEventPublic.model_validate(db_event)
 
-    def create_event(self, event: KothEventCreate) -> KothEventPublic:
-        return self.add_event(event)
-
     def update_event(self, event_id: int, event: KothEventUpdate) -> KothEventPublic:
         with self.get_session() as session:
             db_event = KothEvent.update(

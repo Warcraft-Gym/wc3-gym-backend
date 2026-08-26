@@ -279,18 +279,3 @@ class SeasonService(BaseService):
         """Sync every player signed up for the season and report each one."""
         users = self.getSignedUpUsers(season_id)
         return self.user_app_service.syncW3CStatsUsers(users, SYNC_MAX_AGE)
-
-    def create_season(self, season: SeasonCreate) -> SeasonPublic:
-        return self.add(season)
-
-    def update_season(self, season_id: int, season: SeasonUpdate) -> SeasonPublic:
-        return self.update(season_id, season)
-
-    def delete_season(self, season_id: int) -> None:
-        self.delete(season_id)
-
-    def get_season(self, season_id: int) -> SeasonPublic:
-        season_data = self.get(season_id)
-        if not season_data:
-            raise NotFoundError(f"Season not found by Id: {season_id}")
-        return season_data

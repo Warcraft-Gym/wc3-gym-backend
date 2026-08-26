@@ -122,7 +122,7 @@ def update_player_series(
     user = users[0]
 
     # Get the series and verify ownership
-    series = series_service.get_series(series_id)
+    series = series_service.get(series_id)
     if not series:
         return JSONResponse({"error": "series_not_found"}, status_code=404)
 

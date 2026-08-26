@@ -26,7 +26,7 @@ def add_draft_series(
     data: DraftSeriesCreate, service: DraftSeriesServiceDep
 ) -> DraftSeriesPublic:
     """Create a new draft series (visible in admin UI only)"""
-    return service.create_draft_series(data)
+    return service.add(data)
 
 
 @router.put(
@@ -40,7 +40,7 @@ def update_draft_series(
     service: DraftSeriesServiceDep,
 ) -> DraftSeriesPublic:
     """Update the data of an existing draft series"""
-    return service.update_draft_series(draft_series_id, data)
+    return service.update(draft_series_id, data)
 
 
 @router.delete(
@@ -50,7 +50,7 @@ def update_draft_series(
 )
 def delete_draft_series(draft_series_id: int, service: DraftSeriesServiceDep) -> None:
     """Delete a draft series by its ID."""
-    service.delete_draft_series(draft_series_id)
+    service.delete(draft_series_id)
 
 
 @router.get("/draft-series/{draft_series_id}")
@@ -58,7 +58,7 @@ def get_draft_series(
     draft_series_id: int, service: DraftSeriesServiceDep
 ) -> DraftSeriesPublic:
     """Retrieve a draft series by its ID."""
-    return service.get_draft_series(draft_series_id)
+    return service.get(draft_series_id)
 
 
 @router.get("/draft-series/match/{match_id}")
@@ -69,7 +69,7 @@ def get_draft_series_by_match(
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[DraftSeriesPublic]:
     """Return one page of the draft series of a match, at most 500."""
-    return service.get_draft_series_by_match(match_id, limit=limit, offset=offset) or []
+    return service.getByMatchId(match_id, limit=limit, offset=offset) or []
 
 
 @router.delete(
@@ -81,7 +81,7 @@ def delete_all_draft_series_for_match(
     match_id: int, service: DraftSeriesServiceDep
 ) -> None:
     """Delete all draft series for a specific match"""
-    service.delete_all_drafts_for_match(match_id)
+    service.deleteByMatchId(match_id)
 
 
 @router.post(
@@ -96,7 +96,7 @@ def promote_draft_series(
 ) -> SeriesPublic:
     """Convert a draft series to a real published series and delete the draft"""
     # Get the draft series
-    draft_series = service.get_draft_series(draft_series_id)
+    draft_series = service.get(draft_series_id)
 
     # Convert to a SeriesCreate
     series_create = service.convert_to_series(draft_series)
@@ -105,6 +105,6 @@ def promote_draft_series(
     created_series = series_service.create_series(series_create)
 
     # Delete the draft
-    service.delete_draft_series(draft_series_id)
+    service.delete(draft_series_id)
 
     return created_series

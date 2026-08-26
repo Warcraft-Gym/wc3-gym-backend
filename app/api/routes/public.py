@@ -195,10 +195,10 @@ def public_create_user(
         # update first matched user
         existing = existing_users[0]
         user_create = UserCreate(**user_payload)
-        user = user_service.update_user(existing.id, user_create)
+        user = user_service.update(existing.id, user_create)
     else:
         # create new user
-        user = user_service.create_user(UserCreate(**user_payload))
+        user = user_service.add(UserCreate(**user_payload))
 
     # Add to season if specified
     season_id = entry.get("season_id") or data.get("season_id") or data.get("seasonId")
@@ -443,7 +443,7 @@ def create_fantasy_team(
             "race": "RANDOM",
         }
 
-        user = user_service.create_user(UserCreate(**user_payload))
+        user = user_service.add(UserCreate(**user_payload))
         logger.info(f"Created new user for fantasy team captain: {user.id}")
     else:
         user = users[0]
@@ -452,7 +452,7 @@ def create_fantasy_team(
     team_query = QueryUtil.parseQuery(
         f"captain_id == {user.id} and season_id == {season_id}"
     )
-    existing_teams, _ = fantasy_team_service.search_fantasy_teams(team_query)
+    existing_teams, _ = fantasy_team_service.search(team_query)
 
     team_data = {
         "name": data.get(
@@ -466,13 +466,13 @@ def create_fantasy_team(
 
     if existing_teams and len(existing_teams) > 0:
         # Update existing team
-        team = fantasy_team_service.update_fantasy_team(
+        team = fantasy_team_service.update(
             existing_teams[0].id, FantasyTeamUpdate(**team_data)
         )
         team_id = existing_teams[0].id
     else:
         # Create new team
-        team = fantasy_team_service.create_fantasy_team(FantasyTeamCreate(**team_data))
+        team = fantasy_team_service.add(FantasyTeamCreate(**team_data))
         team_id = team.id
 
     # Update players if provided
@@ -494,12 +494,12 @@ def create_fantasy_team(
         ]
 
         if players_to_add:
-            fantasy_team_service.addFantasyPlayers(team_id, players_to_add)
+            fantasy_team_service.addPlayers(team_id, players_to_add)
         if players_to_remove:
-            fantasy_team_service.removeFantasyPlayers(team_id, players_to_remove)
+            fantasy_team_service.removePlayers(team_id, players_to_remove)
 
     # Return created/updated team
-    final_team = fantasy_team_service.get_fantasy_team(team_id)
+    final_team = fantasy_team_service.get(team_id)
     return final_team.to_dict() if hasattr(final_team, "to_dict") else final_team
 
 
@@ -605,7 +605,7 @@ def update_fantasy_bet(
             return JSONResponse({"error": "user_not_found"}, status_code=404)
 
         # Get the existing bet to verify ownership
-        existing_bet = fantasy_bet_service.get_fantasy_bet(bet_id)
+        existing_bet = fantasy_bet_service.get(bet_id)
         if not existing_bet:
             return JSONResponse({"error": "bet_not_found"}, status_code=404)
 
@@ -672,7 +672,7 @@ def delete_fantasy_bet(
         return JSONResponse({"error": "user_not_found"}, status_code=404)
 
     # Get the existing bet to verify ownership
-    existing_bet = fantasy_bet_service.get_fantasy_bet(bet_id)
+    existing_bet = fantasy_bet_service.get(bet_id)
     if not existing_bet:
         return JSONResponse({"error": "bet_not_found"}, status_code=404)
 
@@ -687,4 +687,4 @@ def delete_fantasy_bet(
         )
 
     # Delete the bet
-    fantasy_bet_service.delete_fantasy_bet(bet_id)
+    fantasy_bet_service.delete(bet_id)

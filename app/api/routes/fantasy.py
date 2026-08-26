@@ -43,7 +43,7 @@ def add_fantasy_team(
     data: FantasyTeamCreate, service: FantasyTeamServiceDep
 ) -> FantasyTeamPublic:
     """Create a new fantasy team with the provided name."""
-    return service.create_fantasy_team(data)
+    return service.add(data)
 
 
 @router.put(
@@ -55,7 +55,7 @@ def update_team(
     team_id: int, data: FantasyTeamUpdate, service: FantasyTeamServiceDep
 ) -> FantasyTeamPublic:
     """Update an existing fantasy team."""
-    return service.update_fantasy_team(team_id, data)
+    return service.update(team_id, data)
 
 
 @router.delete(
@@ -63,13 +63,13 @@ def update_team(
 )
 def delete_team(team_id: int, service: FantasyTeamServiceDep) -> None:
     """Delete a team by its ID."""
-    service.delete_fantasy_team(team_id)
+    service.delete(team_id)
 
 
 @router.get("/fantasy/teams/{team_id}")
 def get_team(team_id: int, service: FantasyTeamServiceDep) -> FantasyTeamPublic:
     """Retrieve a team by its ID."""
-    return service.get_fantasy_team(team_id)
+    return service.get(team_id)
 
 
 @router.post(
@@ -79,7 +79,7 @@ def addPlayers(
     team_id: int, data: FantasyTeamPlayerIds, service: FantasyTeamServiceDep
 ) -> FantasyTeamPublic:
     """Add players to a fantasy team for a season using their IDs."""
-    return service.addFantasyPlayers(team_id, data.player_ids)
+    return service.addPlayers(team_id, data.player_ids)
 
 
 @router.post(
@@ -89,7 +89,7 @@ def removePlayers(
     team_id: int, data: FantasyTeamPlayerIds, service: FantasyTeamServiceDep
 ) -> FantasyTeamPublic:
     """Removes players from a fantasy team for a season using their IDs."""
-    return service.removeFantasyPlayers(team_id, data.player_ids)
+    return service.removePlayers(team_id, data.player_ids)
 
 
 @router.get("/fantasy/teams")
@@ -100,7 +100,7 @@ def get_all_teams(
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[FantasyTeamPublic]:
     """Retrieve one page of fantasy teams, at most 500, ordered by id."""
-    teams, total = service.getAll_fantasy_teams(limit=limit, offset=offset)
+    teams, total = service.getAll(limit=limit, offset=offset)
     response.headers["X-Total-Count"] = str(total)
     return teams or []
 
@@ -117,7 +117,7 @@ def search_teams(
     parsed = QueryUtil.parseQuery(query)
     if not parsed or not parsed.elementA:
         raise BadRequestError(f"No valid query found: {query}")
-    teams, total = service.search_fantasy_teams(parsed, limit=limit, offset=offset)
+    teams, total = service.search(parsed, limit=limit, offset=offset)
     if total is not None:
         response.headers["X-Total-Count"] = str(total)
     return teams or []
@@ -152,13 +152,13 @@ def update_bet(
 )
 def delete_bet(bet_id: int, service: FantasyBetServiceDep) -> None:
     """Delete a bet by its ID."""
-    service.delete_fantasy_bet(bet_id)
+    service.delete(bet_id)
 
 
 @router.get("/fantasy/bets/{bet_id}")
 def get_bet(bet_id: int, service: FantasyBetServiceDep) -> FantasyBetPublic:
     """Retrieve a bet by its ID."""
-    return service.get_fantasy_bet(bet_id)
+    return service.get(bet_id)
 
 
 @router.get("/fantasy/bets")
@@ -169,7 +169,7 @@ def get_all_bets(
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[FantasyBetPublic]:
     """Retrieve one page of fantasy bets, at most 500."""
-    bets, total = service.getAll_fantasy_bets(limit=limit, offset=offset)
+    bets, total = service.getAll(limit=limit, offset=offset)
     if total is not None:
         response.headers["X-Total-Count"] = str(total)
     return bets or []
@@ -192,7 +192,7 @@ def search_bets(
     parsed = QueryUtil.parseQuery(query)
     if not parsed or not parsed.elementA:
         raise BadRequestError(f"No valid query found: {query}")
-    bets, total = service.search_fantasy_bets(
+    bets, total = service.search(
         parsed, limit=limit, offset=offset, sort=sort, order=order
     )
     if total is not None:
@@ -212,6 +212,6 @@ def get_fantasy_team_breakdown(
     Returns a detailed breakdown showing how each component of the fantasy
     team score was calculated.
     """
-    # get_season raises NotFoundError, which answers 404
-    season = season_service.get_season(season_id)
+    # get raises NotFoundError, which answers 404
+    season = season_service.get(season_id)
     return fantasy_score_service.getTeamScoreBreakdown(team_id, season)

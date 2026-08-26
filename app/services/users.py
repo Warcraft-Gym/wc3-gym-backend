@@ -63,7 +63,7 @@ class UserService(BaseService):
         with self.get_session() as session:
             User.delete(session, user_id)
 
-    def get(self, user_id: int) -> UserPublic | None:
+    def get(self, user_id: int) -> UserPublic:
         with self.get_session() as session:
             # Eager load related entities, disable nested loading
             user = (
@@ -79,7 +79,7 @@ class UserService(BaseService):
                 .first()
             )
             if not user:
-                return None
+                raise NotFoundError(f"User not found by Id: {user_id}")
             return UserPublic.from_user(user)
 
     def search(
@@ -160,21 +160,6 @@ class UserService(BaseService):
             for user in users:
                 result.append(UserListPublic.from_user(user))
             return result, total
-
-    def create_user(self, user: UserCreate) -> UserPublic:
-        return self.add(user)
-
-    def update_user(self, user_id: int, user: UserUpdate) -> UserPublic:
-        return self.update(user_id, user)
-
-    def delete_user(self, user_id: int) -> None:
-        self.delete(user_id)
-
-    def get_user(self, user_id: int) -> UserPublic:
-        user_data = self.get(user_id)
-        if not user_data:
-            raise NotFoundError(f"User not found by Id: {user_id}")
-        return user_data
 
     def validateBattleTag(self, battle_tag: str) -> bool:
         """
@@ -344,11 +329,8 @@ class UserService(BaseService):
         )
 
     def updateW3CStats_ById(self, user_id: int) -> UserPublic:
-        user = self.get(user_id)
-        if not user:
-            raise NotFoundError(f"User could not be found by id: {user_id}")
-        self.updateW3CStats(user)
-        return self.get_user(user_id)
+        self.updateW3CStats(self.get(user_id))
+        return self.get(user_id)
 
     def updateUserTeamSeasonStats(
         self, season_stats: UserTeamSeasonStatsPublic
@@ -384,4 +366,4 @@ class UserService(BaseService):
             uts_obj.losses = season_stats.losses
             uts_obj.matchup_history = season_stats.matchup_history
             session.flush()
-        return self.get_user(season_stats.user_id)
+        return self.get(season_stats.user_id)

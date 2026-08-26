@@ -47,7 +47,7 @@ def delete_series(series_id: int, service: SeriesServiceDep) -> None:
 @router.get("/series/{series_id}")
 def get_series(series_id: int, service: SeriesServiceDep) -> SeriesPublic:
     """Retrieve a series by its ID."""
-    return service.get_series(series_id)
+    return service.get(series_id)
 
 
 @router.post("/series/search")

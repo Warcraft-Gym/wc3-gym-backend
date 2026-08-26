@@ -23,7 +23,7 @@ router = APIRouter(tags=["seasons"])
 )
 def add_season(data: SeasonCreate, service: SeasonServiceDep) -> SeasonPublic:
     """Create a new season with the provided name."""
-    return service.create_season(data)
+    return service.add(data)
 
 
 @router.put(
@@ -35,7 +35,7 @@ def update_season(
     season_id: int, data: SeasonUpdate, service: SeasonServiceDep
 ) -> SeasonPublic:
     """Update the name of an existing season."""
-    return service.update_season(season_id, data)
+    return service.update(season_id, data)
 
 
 @router.delete(
@@ -43,13 +43,13 @@ def update_season(
 )
 def delete_season(season_id: int, service: SeasonServiceDep) -> None:
     """Delete a season by its ID."""
-    service.delete_season(season_id)
+    service.delete(season_id)
 
 
 @router.get("/seasons/{season_id}")
 def get_season(season_id: int, service: SeasonServiceDep) -> SeasonPublic:
     """Retrieve a season by its ID."""
-    return service.get_season(season_id)
+    return service.get(season_id)
 
 
 @router.post("/seasons/addTeams/{season_id}", dependencies=[Depends(require_admin)])

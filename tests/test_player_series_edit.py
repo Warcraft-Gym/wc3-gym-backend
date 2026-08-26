@@ -38,14 +38,14 @@ def test_a_caster_set_after_the_read_survives_the_player_edit(
 ) -> None:
     series_id = seeded["series_played_id"]
     series_service = SeriesService(user_app_service=UserService())
-    read_series = series_service.get_series
+    read_series = series_service.get
 
     def read_then_admin_sets_the_caster(sid: int) -> SeriesPublic:
         series = read_series(sid)
         series_service.update(sid, SeriesUpdate(caster="Grubby"))
         return series
 
-    monkeypatch.setattr(series_service, "get_series", read_then_admin_sets_the_caster)
+    monkeypatch.setattr(series_service, "get", read_then_admin_sets_the_caster)
 
     result = player_series.update_player_series(
         series_id,

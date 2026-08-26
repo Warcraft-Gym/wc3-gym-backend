@@ -35,7 +35,7 @@ def get_all_career_stats(
 
     sort names the field the rows are ordered by, and the id breaks its ties.
     """
-    stats, total = service.get_all_career_stats(
+    stats, total = service.get_all(
         limit=limit, offset=offset, search=search, sort=sort, order=order
     )
     response.headers["X-Total-Count"] = str(total)
@@ -45,7 +45,7 @@ def get_all_career_stats(
 @router.get("/stats/career/{stat_id}")
 def get_career_stats_by_user(stat_id: int, service: StatsServiceDep) -> JSONResponse:
     """Retrieve career statistics for a single player by user ID."""
-    stat = service.get_career_stats_by_user(stat_id)
+    stat = service.get_by_user_id(stat_id)
     if stat:
         return JSONResponse(stat.to_dict(), status_code=200)
     return JSONResponse({"error": "Stats not found"}, status_code=404)

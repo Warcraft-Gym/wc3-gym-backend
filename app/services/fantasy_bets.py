@@ -224,28 +224,3 @@ class FantasyBetService(BaseService):
         if "bet_points" in bet.model_fields_set:
             self._apply_bet_points_logic(bet)
         return self.update(bet_id, bet)
-
-    def delete_fantasy_bet(self, bet_id: int) -> None:
-        self.delete(bet_id)
-
-    def get_fantasy_bet(self, bet_id: int) -> FantasyBetPublic:
-        bet_data = self.get(bet_id)
-        if not bet_data:
-            raise NotFoundError(f"Fantasy Bet not found by Id: {bet_id}")
-        return bet_data
-
-    def getAll_fantasy_bets(
-        self, limit: int | None = None, offset: int = 0
-    ) -> tuple[list[FantasyBetPublic], int | None]:
-        return self.getAll(limit=limit, offset=offset)
-
-    def search_fantasy_bets(
-        self,
-        query: QueryElement | None,
-        limit: int | None = None,
-        offset: int = 0,
-        *,
-        sort: BetSort | None = None,
-        order: SortOrder = "asc",
-    ) -> tuple[list[FantasyBetPublic], int | None]:
-        return self.search(query, limit=limit, offset=offset, sort=sort, order=order)

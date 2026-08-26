@@ -163,24 +163,6 @@ class PlayerCareerStatsService(BaseService):
                 )
                 session.add(stats)
 
-    def get_all_career_stats(
-        self,
-        limit: int | None = None,
-        offset: int = 0,
-        search: str = "",
-        *,
-        sort: CareerSort | None = None,
-        order: SortOrder = "asc",
-    ) -> tuple[list[PlayerCareerStatsPublic], int]:
-        """Get all player career stats ordered by rating, and the total count"""
-        return self.get_all(
-            limit=limit, offset=offset, search=search, sort=sort, order=order
-        )
-
-    def get_career_stats_by_user(self, user_id: int) -> PlayerCareerStatsPublic | None:
-        """Get career stats for a specific user"""
-        return self.get_by_user_id(user_id)
-
     def import_historical_stats(
         self, csv_reader: Iterable[dict[str, str]]
     ) -> dict[str, Any]:
