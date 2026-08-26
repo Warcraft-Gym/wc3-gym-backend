@@ -51,7 +51,7 @@ def get_all_maps(
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[MapPublic]:
     """Retrieve one page of maps, at most 500."""
-    return service.getAll(limit=limit, offset=offset)
+    return service.get_all(limit=limit, offset=offset)
 
 
 @router.post("/maps/search", response_model=list[MapPublic])
@@ -63,7 +63,7 @@ def search_maps(
 ) -> list[MapPublic]:
     """Search maps by criteria using a custom query format."""
     query_param = query
-    query = QueryUtil.parseQuery(query_param)
+    query = QueryUtil.parse_query(query_param)
     if not query or not query.elementA:
         raise BadRequestError(f"No valid query found: {query_param}")
     return service.search(query, limit=limit, offset=offset)

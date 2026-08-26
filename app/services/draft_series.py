@@ -49,7 +49,7 @@ class DraftSeriesService(BaseService):
                 raise NotFoundError("Draft series not found")
             return DraftSeriesPublic.from_draft_series(draft_series)
 
-    def getByMatchId(
+    def get_by_match_id(
         self, match_id: int, limit: int | None = None, offset: int = 0
     ) -> list[DraftSeriesPublic]:
         with self.get_session() as session:
@@ -69,7 +69,7 @@ class DraftSeriesService(BaseService):
                 result.append(DraftSeriesPublic.from_draft_series(single_draft_series))
             return result
 
-    def deleteByMatchId(self, match_id: int) -> None:
+    def delete_by_match_id(self, match_id: int) -> None:
         """Delete all draft series for a given match"""
         with self.get_session() as session:
             session.execute(delete(DraftSeries).where(DraftSeries.match_id == match_id))

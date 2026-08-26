@@ -34,7 +34,7 @@ def users(app: FastAPI) -> UserService:
 def test_the_query_language_cannot_carry_that_name(users: UserService) -> None:
     """The parser splits the value at " or "."""
     with pytest.raises(Exception, match="could not be parsed"):
-        QueryUtil.parseQuery("name == Fire or Ice")
+        QueryUtil.parse_query("name == Fire or Ice")
 
 
 def test_find_by_discord_id_treats_the_value_as_a_value(users: UserService) -> None:
@@ -44,25 +44,25 @@ def test_find_by_discord_id_treats_the_value_as_a_value(users: UserService) -> N
 
     assert users.find_by_discord_id(crafted) == []
 
-    widened = QueryUtil.parseQuery(f"discordId == {crafted}")
+    widened = QueryUtil.parse_query(f"discordId == {crafted}")
     assert len(users.search(widened)) == 2
 
 
 def test_a_name_matches_in_any_case(users: UserService) -> None:
     """Postgres compares text case-sensitively, so the search folds both sides."""
-    found = users.search(QueryUtil.parseQuery("name == grubby"))
+    found = users.search(QueryUtil.parse_query("name == grubby"))
 
     assert [user.name for user in found] == ["Grubby"]
 
 
 def test_not_equals_drops_a_name_in_another_case(users: UserService) -> None:
-    found = users.search(QueryUtil.parseQuery("name != grubby"))
+    found = users.search(QueryUtil.parse_query("name != grubby"))
 
     assert [user.name for user in found] == ["Fire or Ice"]
 
 
 def test_ilike_still_matches_part_of_a_name(users: UserService) -> None:
-    found = users.search(QueryUtil.parseQuery("name ilike RUBB"))
+    found = users.search(QueryUtil.parse_query("name ilike RUBB"))
 
     assert [user.name for user in found] == ["Grubby"]
 
@@ -70,25 +70,25 @@ def test_ilike_still_matches_part_of_a_name(users: UserService) -> None:
 def test_a_number_still_compares_as_a_number(users: UserService) -> None:
     grubby = users.find_by_discord_id("id-Grubby")[0]
 
-    found = users.search(QueryUtil.parseQuery(f"id == {grubby.id}"))
+    found = users.search(QueryUtil.parse_query(f"id == {grubby.id}"))
 
     assert [user.name for user in found] == ["Grubby"]
 
 
 def test_a_race_matches_in_any_case(users: UserService) -> None:
     """Postgres rejects an enum literal in the wrong case outright."""
-    found = users.search(QueryUtil.parseQuery("race == ud"))
+    found = users.search(QueryUtil.parse_query("race == ud"))
 
     assert [user.name for user in found] == ["Grubby"]
-    assert found == users.search(QueryUtil.parseQuery("race == UD"))
+    assert found == users.search(QueryUtil.parse_query("race == UD"))
 
 
 def test_a_race_the_enum_does_not_hold_is_rejected(users: UserService) -> None:
     with pytest.raises(Exception, match="does not take"):
-        users.search(QueryUtil.parseQuery("race == NOTARACE"))
+        users.search(QueryUtil.parse_query("race == NOTARACE"))
 
 
 def test_ilike_matches_part_of_a_race(users: UserService) -> None:
-    found = users.search(QueryUtil.parseQuery("race ilike u"))
+    found = users.search(QueryUtil.parse_query("race ilike u"))
 
     assert [user.name for user in found] == ["Grubby"]

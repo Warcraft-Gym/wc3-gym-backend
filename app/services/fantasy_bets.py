@@ -123,7 +123,7 @@ class FantasyBetService(BaseService):
             derived.fill_bet_results([public])
             return public
 
-    def getAll(
+    def get_all(
         self, limit: int | None = None, offset: int = 0
     ) -> tuple[list[FantasyBetPublic], int | None]:
         """The bets and, when a page is asked for, the total count."""
@@ -159,7 +159,7 @@ class FantasyBetService(BaseService):
         """
         with self.get_session() as session:
             result = []
-            filter = QueryUtil.convertQueryToDBFilter(FantasyBet, query)
+            filter = QueryUtil.convert_query_to_db_filter(FantasyBet, query)
             if filter is None:
                 logger.debug(f"No fantasy bets found by searchcriteria: {query}")
                 return result, None

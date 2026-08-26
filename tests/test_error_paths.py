@@ -318,7 +318,7 @@ def test_a_bug_writes_one_error_record_with_the_traceback(
     def broken(self: MapService, **kwargs: object) -> Never:
         raise RuntimeError("an internal detail the client must not see")
 
-    monkeypatch.setattr(MapService, "getAll", broken)
+    monkeypatch.setattr(MapService, "get_all", broken)
 
     with caplog.at_level(logging.ERROR):
         resp = client.get("/maps")

@@ -98,8 +98,8 @@ def w3c_free(monkeypatch: pytest.MonkeyPatch, app: FastAPI) -> None:
     """Signup calls W3Champions twice. Answer both without the network."""
     from app.services.users import UserService
 
-    monkeypatch.setattr(UserService, "validateBattleTag", lambda self, tag: True)
-    monkeypatch.setattr(UserService, "updateW3CStats_ById", lambda self, user_id: None)
+    monkeypatch.setattr(UserService, "validate_battle_tag", lambda self, tag: True)
+    monkeypatch.setattr(UserService, "update_w3c_stats_by_id", lambda self, user_id: None)
 
 
 SIGNUP_BODY = {"name": "P9", "battleTag": "P9#1234", "race": "HU", "country": "DE"}
@@ -137,8 +137,8 @@ def test_signup_stops_when_a_parallel_request_takes_the_token(
         empty_store.pop("t", None)
         return True
 
-    monkeypatch.setattr(UserService, "validateBattleTag", take_the_token)
-    monkeypatch.setattr(UserService, "updateW3CStats_ById", lambda self, user_id: None)
+    monkeypatch.setattr(UserService, "validate_battle_tag", take_the_token)
+    monkeypatch.setattr(UserService, "update_w3c_stats_by_id", lambda self, user_id: None)
     empty_store["t"] = entry()
 
     resp = client.post("/signup", json={"token": "t"} | SIGNUP_BODY)
@@ -157,7 +157,7 @@ def test_signup_keeps_the_token_after_a_bad_battle_tag(
     """The signup page shows the error and the player posts the form again."""
     from app.services.users import UserService
 
-    monkeypatch.setattr(UserService, "validateBattleTag", lambda self, tag: False)
+    monkeypatch.setattr(UserService, "validate_battle_tag", lambda self, tag: False)
     empty_store["t"] = entry()
 
     resp = client.post("/signup", json={"token": "t"} | SIGNUP_BODY)

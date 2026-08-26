@@ -178,7 +178,7 @@ def test_the_limit_reaches_the_statement(league: dict[str, Any]) -> None:
 
     service = TeamService(user_app_service=None)
     with capture_sql() as statements:
-        teams = service.getAll(limit=1)
+        teams = service.get_all(limit=1)
     assert len(teams) == 1
     assert any("LIMIT" in statement for statement in statements)
 

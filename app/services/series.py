@@ -72,7 +72,7 @@ class SeriesService(BaseService):
         """
         with self.get_session() as session:
             result = []
-            filter = QueryUtil.convertQueryToDBFilter(Series, query)
+            filter = QueryUtil.convert_query_to_db_filter(Series, query)
             statement = (
                 select(Series).options(*Series._list_eager_options()).where(filter)
             )
@@ -97,16 +97,16 @@ class SeriesService(BaseService):
     def count(self, query: QueryElement | None) -> int:
         """The number of series that match the query."""
         with self.get_session() as session:
-            filter = QueryUtil.convertQueryToDBFilter(Series, query)
+            filter = QueryUtil.convert_query_to_db_filter(Series, query)
             if filter is None:
                 return 0
             statement = select(func.count()).select_from(Series).where(filter)
             return session.scalar(statement) or 0
 
-    def countForSeason(self, season_id: int, query: QueryElement | None) -> int:
+    def count_for_season(self, season_id: int, query: QueryElement | None) -> int:
         """The number of series in one season that match the query."""
         with self.get_session() as session:
-            filter = QueryUtil.convertQueryToDBFilter(Series, query)
+            filter = QueryUtil.convert_query_to_db_filter(Series, query)
             statement = (
                 select(func.count())
                 .select_from(Series)
@@ -123,7 +123,7 @@ class SeriesService(BaseService):
         with self.get_session() as session:
             return derived.fantasy_series(session, {season_id}).get(season_id, {})
 
-    def searchForSeasonAndPlayday(
+    def search_for_season_and_playday(
         self,
         season_id: int,
         playday: int,
@@ -133,8 +133,8 @@ class SeriesService(BaseService):
     ) -> list[SeriesPublic]:
         with self.get_session() as session:
             result = []
-            filter = QueryUtil.convertQueryToDBFilter(Series, query)
-            series_list = Series.searchForSeasonAndPlayday(
+            filter = QueryUtil.convert_query_to_db_filter(Series, query)
+            series_list = Series.search_for_season_and_playday(
                 session, season_id, playday, filter, limit=limit, offset=offset
             )
             if not series_list:
@@ -145,7 +145,7 @@ class SeriesService(BaseService):
             derived.fill_series(session, result)
             return result
 
-    def searchForSeason(
+    def search_for_season(
         self,
         season_id: int,
         query: QueryElement | None,
@@ -161,8 +161,8 @@ class SeriesService(BaseService):
         """
         with self.get_session() as session:
             result = []
-            filter = QueryUtil.convertQueryToDBFilter(Series, query)
-            series_list = Series.searchForSeason(
+            filter = QueryUtil.convert_query_to_db_filter(Series, query)
+            series_list = Series.search_for_season(
                 session,
                 season_id,
                 filter,

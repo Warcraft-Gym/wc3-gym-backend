@@ -36,13 +36,13 @@ def answer_w3c(monkeypatch: pytest.MonkeyPatch, reply: list[W3CStatsCreate]) -> 
     The season comes from w3champions too when no setting names one, so the
     sync asks for both of them."""
 
-    def getPlayerStats(
+    def get_player_stats(
         self: W3CService, bnet_name: str, season_override: int | None = None
     ) -> list[W3CStatsCreate]:
         return list(reply)
 
     monkeypatch.setattr(W3CService, "current_season", lambda self: SEASON)
-    monkeypatch.setattr(W3CService, "getPlayerStats", getPlayerStats)
+    monkeypatch.setattr(W3CService, "get_player_stats", get_player_stats)
 
 
 def stamped_at(user_id: int) -> datetime | None:
@@ -68,14 +68,14 @@ def test_a_second_sync_updates_the_row_and_adds_none(
     user_id = seeded["player_ids"][0]
 
     answer_w3c(monkeypatch, [stats(mmr=1500)])
-    UserService().updateW3CStats_ById(user_id)
+    UserService().update_w3c_stats_by_id(user_id)
     first = rows_of(user_id)
     assert [(r.race, r.wc3_season, r.mmr) for r in first] == [(Race.HU, SEASON, 1500)]
 
     first_stamp = stamped_at(user_id)
 
     answer_w3c(monkeypatch, [stats(mmr=1600)])
-    UserService().updateW3CStats_ById(user_id)
+    UserService().update_w3c_stats_by_id(user_id)
     second = rows_of(user_id)
 
     assert len(second) == len(first)
@@ -97,7 +97,7 @@ def test_one_sync_writes_one_row_per_race_and_season(
             stats(mmr=1300, race=Race.HU, season=SEASON - 1),
         ],
     )
-    UserService().updateW3CStats_ById(user_id)
+    UserService().update_w3c_stats_by_id(user_id)
 
     keys = {(r.race, r.wc3_season) for r in rows_of(user_id)}
     assert keys == {(Race.HU, SEASON), (Race.OC, SEASON), (Race.HU, SEASON - 1)}
@@ -123,7 +123,7 @@ def test_a_lost_race_updates_the_row_the_winner_wrote(
     the sync then updates the row that is there."""
     user_id = seeded["player_ids"][0]
     answer_w3c(monkeypatch, [stats(mmr=1500)])
-    UserService().updateW3CStats_ById(user_id)
+    UserService().update_w3c_stats_by_id(user_id)
     written = rows_of(user_id)
 
     real_key = UserService._w3c_stats_key
@@ -140,7 +140,7 @@ def test_a_lost_race_updates_the_row_the_winner_wrote(
     monkeypatch.setattr(UserService, "_w3c_stats_key", staticmethod(blind_first_read))
 
     answer_w3c(monkeypatch, [stats(mmr=1700)])
-    UserService().updateW3CStats_ById(user_id)
+    UserService().update_w3c_stats_by_id(user_id)
 
     survivors = rows_of(user_id)
     assert [r.id for r in survivors] == [r.id for r in written]

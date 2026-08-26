@@ -21,7 +21,7 @@ def test_a_database_error_answers_a_fixed_message(
     def broken(session: Session, **kwargs: object) -> Never:
         raise OperationalError("SELECT secret FROM maps", {}, Exception("boom"))
 
-    monkeypatch.setattr(Map, "getAll", broken)
+    monkeypatch.setattr(Map, "get_all", broken)
     resp = client.get("/maps")
     assert resp.status_code == 500
     assert resp.json() == {"error": "Database error"}

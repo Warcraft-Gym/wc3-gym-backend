@@ -51,7 +51,7 @@ def get_all_teams_basic(
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[TeamPublic]:
     """Retrieve one page of teams, at most 500, with basic information only (id, name, long_name, discord_role). No user or season data included."""
-    return service.getAll_basic(limit=limit, offset=offset) or []
+    return service.get_all_basic(limit=limit, offset=offset) or []
 
 
 @router.get("/teams/{team_id}")
@@ -101,7 +101,7 @@ def add_players(
     service: TeamServiceDep,
 ) -> TeamPublic:
     """Add players to a team for a season using their IDs."""
-    return service.addPlayers(team_id, season_id, data.get("player_ids"))
+    return service.add_players(team_id, season_id, data.get("player_ids"))
 
 
 @router.delete(
@@ -115,7 +115,7 @@ def remove_players(
     service: TeamServiceDep,
 ) -> TeamPublic:
     """Removes players from a team for a season using their IDs."""
-    return service.removePlayers(team_id, season_id, data.get("player_ids"))
+    return service.remove_players(team_id, season_id, data.get("player_ids"))
 
 
 @router.put(
@@ -134,7 +134,7 @@ def set_coaches(
     if len(coach_ids) > 3:
         raise BadRequestError("Cannot assign more than 3 coaches per team per season")
 
-    return service.setCoaches(team_id, season_id, coach_ids)
+    return service.set_coaches(team_id, season_id, coach_ids)
 
 
 @router.get("/teams")
@@ -144,7 +144,7 @@ def get_all_teams(
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[TeamPublic]:
     """Retrieve one page of teams, at most 500."""
-    return service.getAll(limit=limit, offset=offset) or []
+    return service.get_all(limit=limit, offset=offset) or []
 
 
 @router.post("/teams/search")
@@ -155,7 +155,7 @@ def search_teams(
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[TeamPublic]:
     """Search teams by criteria using a custom query format."""
-    parsed_query = QueryUtil.parseQuery(query)
+    parsed_query = QueryUtil.parse_query(query)
     if not parsed_query or not parsed_query.elementA:
         raise BadRequestError(f"No valid query found: {query}")
     return service.search(parsed_query, limit=limit, offset=offset) or []
@@ -169,7 +169,7 @@ def sync_w3c_users_season(
     team_id: int, season_id: int, service: TeamServiceDep
 ) -> W3CSyncResult:
     """Sync w3c information for each user of the team, and report every player"""
-    return service.syncW3CStatsTeam(team_id, season_id)
+    return service.sync_w3c_stats_team(team_id, season_id)
 
 
 @router.post("/teams/{team_id}/image", dependencies=[Depends(require_admin)])

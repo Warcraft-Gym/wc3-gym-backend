@@ -43,7 +43,7 @@ class Series(SeriesBase, DBModel, table=True):
     )
 
     @classmethod
-    def searchForSeasonAndPlayday(
+    def search_for_season_and_playday(
         cls,
         session: Session,
         season_id: int,
@@ -66,7 +66,7 @@ class Series(SeriesBase, DBModel, table=True):
         return session.scalars(stmt).all()
 
     @classmethod
-    def searchForSeason(
+    def search_for_season(
         cls,
         session: Session,
         season_id: int,

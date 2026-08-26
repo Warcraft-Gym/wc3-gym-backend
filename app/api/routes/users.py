@@ -56,7 +56,7 @@ def get_all_users(
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[UserListPublic]:
     """Retrieve one page of users, at most 500, ordered by id."""
-    users, total = service.getAll(limit=limit, offset=offset)
+    users, total = service.get_all(limit=limit, offset=offset)
     response.headers["X-Total-Count"] = str(total)
     return users or []
 
@@ -69,7 +69,7 @@ def search_users(
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[UserListPublic]:
     """Search users by criteria using a custom query format."""
-    parsed_query = QueryUtil.parseQuery(query)
+    parsed_query = QueryUtil.parse_query(query)
     if not parsed_query or not parsed_query.elementA:
         raise BadRequestError(f"No valid query found: {query}")
     return service.search(parsed_query, limit=limit, offset=offset) or []
@@ -78,4 +78,4 @@ def search_users(
 @router.post("/users/{user_id}/w3c-sync", dependencies=[Depends(require_admin)])
 def sync_w3c_user(user_id: int, service: UserServiceDep) -> UserPublic:
     """Sync w3c information for a user_id"""
-    return service.updateW3CStats_ById(user_id)
+    return service.update_w3c_stats_by_id(user_id)

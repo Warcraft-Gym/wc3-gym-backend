@@ -80,7 +80,7 @@ def test_the_player_check_answers_false_on_a_timeout(
     raise_timeout(monkeypatch)
     monkeypatch.setenv("W3C_URL", "https://example.test/api/players")
 
-    assert W3CService().validatePlayer("P1#1234") is False
+    assert W3CService().validate_player("P1#1234") is False
 
 
 @pytest.mark.parametrize(

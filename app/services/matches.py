@@ -66,7 +66,7 @@ class MatchService(BaseService):
     ) -> list[MatchPublic]:
         with self.get_session() as session:
             result: list[MatchPublic] = []
-            filter = QueryUtil.convertQueryToDBFilter(Match, query)
+            filter = QueryUtil.convert_query_to_db_filter(Match, query)
             # Eager load only what we need, explicitly disable other relationships
             statement = (
                 select(Match)

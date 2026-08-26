@@ -68,7 +68,7 @@ class W3CService:
         season = self._setting("current_wc3_season")
         return int(season) if season else self.latest_season()
 
-    def validatePlayer(self, bnet_name: str) -> bool:
+    def validate_player(self, bnet_name: str) -> bool:
         """
         Validate that a player exists on W3Champions.
         Uses the /players endpoint which is simpler and doesn't require season info.
@@ -85,7 +85,7 @@ class W3CService:
             logger.debug(f"Player validation failed for {bnet_name}: {e!s}")
             return False
 
-    def getPlayerStats(
+    def get_player_stats(
         self, bnet_name: str, season_override: int | None = None
     ) -> list[W3CStatsCreate]:
         season_to_fetch = (
@@ -113,13 +113,13 @@ class W3CService:
                         games=gmode_stats.get("games"),
                         mmr=gmode_stats.get("mmr"),
                         winrate=gmode_stats.get("winrate"),
-                        race=self.getRaceEnum(gmode_stats.get("race")),
+                        race=self.get_race_enum(gmode_stats.get("race")),
                         league=gmode_stats.get("leagueOrder"),
                     )
                 )
         return stats
 
-    def getRaceEnum(self, race_int: int | None) -> Race | None:
+    def get_race_enum(self, race_int: int | None) -> Race | None:
         if race_int is None:
             return None
         race_mapping = {0: Race.RANDOM, 8: Race.UD, 1: Race.HU, 4: Race.NE, 2: Race.OC}

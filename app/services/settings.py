@@ -47,12 +47,12 @@ class SettingsService(BaseService):
                 raise NotFoundError(f"Setting with id '{setting_id}' not found")
             return SettingsPublic.model_validate(setting)
 
-    def getAll(self) -> list[SettingsPublic]:
+    def get_all(self) -> list[SettingsPublic]:
         """Get all settings"""
         with self.get_session() as session:
             return [
                 SettingsPublic.model_validate(setting)
-                for setting in Settings.getAll(session)
+                for setting in Settings.get_all(session)
             ]
 
     def get_settings_dict(self) -> dict[str, str | None]:
@@ -75,7 +75,7 @@ class SettingsService(BaseService):
 
     def get_all_settings(self) -> list[dict[str, Any]]:
         """Get all settings"""
-        return [setting.to_dict() for setting in self.getAll()]
+        return [setting.to_dict() for setting in self.get_all()]
 
     def update_setting(
         self, key: str, value: object, description: str | None = None

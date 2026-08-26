@@ -58,7 +58,7 @@ def search_match(
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[MatchPublic]:
     """Search matches by criteria using a custom query format."""
-    parsed_query = QueryUtil.parseQuery(query)
+    parsed_query = QueryUtil.parse_query(query)
     if not parsed_query or not parsed_query.elementA:
         raise BadRequestError(f"No valid query found: {query}")
     return service.search(parsed_query, limit=limit, offset=offset) or []

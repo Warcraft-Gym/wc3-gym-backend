@@ -214,7 +214,7 @@ class KothService(BaseService):
         for season_offset in range(2):
             season = current_season - season_offset
             try:
-                stats = w3c_service.getPlayerStats(battle_tag, season_override=season)
+                stats = w3c_service.get_player_stats(battle_tag, season_override=season)
                 if stats:
                     for stat in stats:
                         if stat.mmr and stat.mmr > 0:

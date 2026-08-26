@@ -91,7 +91,7 @@ class UserService(BaseService):
         self, query: QueryElement | None, limit: int | None = None, offset: int = 0
     ) -> list[UserListPublic]:
         return self._where(
-            QueryUtil.convertQueryToDBFilter(User, query), limit=limit, offset=offset
+            QueryUtil.convert_query_to_db_filter(User, query), limit=limit, offset=offset
         )
 
     def find_by_ids(self, user_ids: Iterable[int | None]) -> list[UserListPublic]:
@@ -144,7 +144,7 @@ class UserService(BaseService):
                 result.append(UserListPublic.from_user(user))
             return result
 
-    def getAll(
+    def get_all(
         self, limit: int | None = None, offset: int = 0
     ) -> tuple[list[UserListPublic], int]:
         """The users, or one page of them, and the total row count."""
@@ -166,21 +166,21 @@ class UserService(BaseService):
                 result.append(UserListPublic.from_user(user))
             return result, total
 
-    def validateBattleTag(self, battle_tag: str) -> bool:
+    def validate_battle_tag(self, battle_tag: str) -> bool:
         """
         Validate that a BattleTag exists on W3Champions without persisting anything.
         Returns True if player exists, False otherwise.
         """
         w3c_service = W3CService(settings_app_service=self.settings_app_service)
         try:
-            return w3c_service.validatePlayer(battle_tag)
+            return w3c_service.validate_player(battle_tag)
         except Exception as e:
             logging.getLogger(__name__).debug(
                 f"BattleTag validation failed for {battle_tag}: {e!s}"
             )
             return False
 
-    def updateW3CStats(self, user: UserListPublic) -> None:
+    def update_w3c_stats(self, user: UserListPublic) -> None:
         w3c_service = W3CService(settings_app_service=self.settings_app_service)
 
         # Resolve the season once, so both fetches agree and w3champions is
@@ -196,7 +196,7 @@ class UserService(BaseService):
         refusals: list[Exception] = []
         for season in seasons:
             try:
-                stats = w3c_service.getPlayerStats(
+                stats = w3c_service.get_player_stats(
                     user.battleTag, season_override=season
                 )
                 if stats:
@@ -218,13 +218,13 @@ class UserService(BaseService):
         # other sync can insert between the read and the write.
         with self.get_session() as session:
             for s in all_stats:
-                self._writeW3CStats(session, user.id, s)
+                self._write_w3c_stats(session, user.id, s)
             # The stamp says when the app last asked, not that stats were found
             session.execute(
                 update(User).where(User.id == user.id).values(w3c_synced_at=_now())
             )
 
-    def syncW3CStatsUsers(
+    def sync_w3c_stats_users(
         self, users: list[UserListPublic], max_age: timedelta
     ) -> W3CSyncResult:
         """Sync these players in parallel and report every one of them.
@@ -249,7 +249,7 @@ class UserService(BaseService):
 
         # Each worker opens its own session; the threads share the engine only
         with ThreadPoolExecutor(W3C_SYNC_WORKERS) as pool:
-            futures = {pool.submit(self.updateW3CStats, u): u for u in pending}
+            futures = {pool.submit(self.update_w3c_stats, u): u for u in pending}
             for future in as_completed(futures):
                 if future.cancelled():
                     continue
@@ -299,7 +299,7 @@ class UserService(BaseService):
                 )
         return result
 
-    def _writeW3CStats(
+    def _write_w3c_stats(
         self, session: OrmSession, user_id: int, w3c_stats: W3CStatsCreate
     ) -> None:
         """Update the row of this race and season, or insert it."""
@@ -307,7 +307,7 @@ class UserService(BaseService):
         existing = session.scalars(self._w3c_stats_key(user_id, w3c_stats)).all()
         if existing:
             for row in existing:
-                W3CStats.updateObject(session, row, **values)
+                W3CStats.update_object(session, row, **values)
             return
         try:
             # A savepoint, so a lost race rolls back the insert alone
@@ -320,7 +320,7 @@ class UserService(BaseService):
             ).first()
             if row is None:
                 raise
-            W3CStats.updateObject(session, row, **values)
+            W3CStats.update_object(session, row, **values)
 
     @staticmethod
     def _w3c_stats_key(
@@ -333,6 +333,6 @@ class UserService(BaseService):
             W3CStats.wc3_season == w3c_stats.wc3_season,
         )
 
-    def updateW3CStats_ById(self, user_id: int) -> UserPublic:
-        self.updateW3CStats(self.get(user_id))
+    def update_w3c_stats_by_id(self, user_id: int) -> UserPublic:
+        self.update_w3c_stats(self.get(user_id))
         return self.get(user_id)

@@ -33,7 +33,7 @@ def test_a_bug_answers_a_fixed_body(
     def broken(self: MapService) -> Never:
         raise RuntimeError("an internal detail the client must not see")
 
-    monkeypatch.setattr(MapService, "getAll", broken)
+    monkeypatch.setattr(MapService, "get_all", broken)
     resp = client.get("/maps")
     assert resp.status_code == 500
     assert resp.json() == {"error": "Internal Server Error"}

@@ -22,7 +22,7 @@ class DBModel(SQLModel):
     def update(
         cls, session: Session, obj_id: int | None, **kwargs: object
     ) -> Self | None:
-        obj = cls.getById(session, obj_id)
+        obj = cls.get_by_id(session, obj_id)
         if obj:
             for key, value in kwargs.items():
                 setattr(obj, key, value)
@@ -30,7 +30,7 @@ class DBModel(SQLModel):
         return obj
 
     @classmethod
-    def updateObject(
+    def update_object(
         cls, session: Session, obj: Self | None, **kwargs: object
     ) -> Self | None:
         if obj:
@@ -41,7 +41,7 @@ class DBModel(SQLModel):
 
     @classmethod
     def delete(cls, session: Session, obj_id: int | None) -> Self | None:
-        obj = cls.getById(session, obj_id)
+        obj = cls.get_by_id(session, obj_id)
         if obj:
             session.delete(obj)
             session.flush()
@@ -66,7 +66,7 @@ class DBModel(SQLModel):
         return session.scalars(statement).unique().all()
 
     @classmethod
-    def getAll(
+    def get_all(
         cls, session: Session, limit: int | None = None, offset: int = 0
     ) -> Sequence[Self]:
         statement = select(cls)
@@ -78,7 +78,7 @@ class DBModel(SQLModel):
         return session.scalars(statement).unique().all()
 
     @classmethod
-    def getById(cls, session: Session, id: int | None) -> Self | None:
+    def get_by_id(cls, session: Session, id: int | None) -> Self | None:
         # No row has a null primary key, and session.get warns on one
         if id is None:
             return None

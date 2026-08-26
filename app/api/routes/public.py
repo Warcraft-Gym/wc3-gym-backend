@@ -173,7 +173,7 @@ def public_create_user(
         raise BadRequestError("missing user fields")
 
     # Validate BattleTag with W3Champions BEFORE creating/updating user
-    if not user_service.validateBattleTag(user_payload["battleTag"]):
+    if not user_service.validate_battle_tag(user_payload["battleTag"]):
         raise BadRequestError(
             f"BattleNet name '{user_payload['battleTag']}' is not valid"
             " - no W3Champions stats found"
@@ -200,11 +200,11 @@ def public_create_user(
     # Add to season if specified
     season_id = entry.get("season_id") or data.get("season_id") or data.get("seasonId")
     if season_id:
-        season_service.addUserSignup(int(season_id), [user.id])
+        season_service.add_user_signup(int(season_id), [user.id])
 
     # trigger W3C stats sync for the newly created/updated user (non-blocking)
     try:
-        user_service.updateW3CStats_ById(user.id)
+        user_service.update_w3c_stats_by_id(user.id)
         logger.info(f"W3C sync triggered for user {user.id} after signup")
     except Exception as we:  # a refused sync must not fail the signup
         logger.warning(f"W3C sync failed after signup for user {user.id}: {we}")
@@ -251,10 +251,10 @@ def get_player_series(
     if entry.get("season_id"):
         # The token stores the season id as text
         season_id = int(entry["season_id"])
-        query = QueryUtil.parseQuery(
+        query = QueryUtil.parse_query(
             f"player1_id == {user.id} or player2_id == {user.id}"
         )
-        series = series_service.searchForSeason(
+        series = series_service.search_for_season(
             season_id,
             query,
             limit=limit,
@@ -262,10 +262,10 @@ def get_player_series(
             sort=sort,
             order=order,
         )
-        total = series_service.countForSeason(season_id, query)
+        total = series_service.count_for_season(season_id, query)
     else:
         # Search all series for this user
-        query = QueryUtil.parseQuery(
+        query = QueryUtil.parse_query(
             f"player1_id == {user.id} or player2_id == {user.id}"
         )
         series = series_service.search(
@@ -436,7 +436,7 @@ def create_fantasy_team(
         user = users[0]
 
     # Check if team already exists
-    team_query = QueryUtil.parseQuery(
+    team_query = QueryUtil.parse_query(
         f"captain_id == {user.id} and season_id == {season_id}"
     )
     existing_teams, _ = fantasy_team_service.search(team_query)
@@ -481,9 +481,9 @@ def create_fantasy_team(
         ]
 
         if players_to_add:
-            fantasy_team_service.addPlayers(team_id, players_to_add)
+            fantasy_team_service.add_players(team_id, players_to_add)
         if players_to_remove:
-            fantasy_team_service.removePlayers(team_id, players_to_remove)
+            fantasy_team_service.remove_players(team_id, players_to_remove)
 
     # Return created/updated team
     final_team = fantasy_team_service.get(team_id)

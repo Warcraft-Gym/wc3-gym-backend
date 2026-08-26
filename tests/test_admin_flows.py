@@ -563,7 +563,7 @@ def answer_no_stats(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(W3CService, "current_season", lambda self: W3C_SEASON)
     monkeypatch.setattr(
         W3CService,
-        "getPlayerStats",
+        "get_player_stats",
         lambda self, bnet_name, season_override=None: [],
     )
 
@@ -605,7 +605,7 @@ def test_a_w3c_sync_names_the_player_it_could_not_update(
             W3CStatsCreate(wc3_season=season_override, race=Race.HU, mmr=1500, games=20)
         ]
 
-    monkeypatch.setattr(W3CService, "getPlayerStats", player_stats)
+    monkeypatch.setattr(W3CService, "get_player_stats", player_stats)
 
     resp = client.post(
         f"/teams/{seeded['team_a_id']}/seasons/{seeded['season_id']}/w3c-sync",
@@ -630,7 +630,7 @@ def test_a_player_w3champions_has_no_rows_for_is_synced(
     monkeypatch.setattr(W3CService, "current_season", lambda self: W3C_SEASON)
     monkeypatch.setattr(
         W3CService,
-        "getPlayerStats",
+        "get_player_stats",
         lambda self, bnet_name, season_override=None: [],
     )
 
@@ -688,12 +688,12 @@ def test_a_throttle_reaches_the_caller_of_the_player_sync(
     ) -> list[W3CStatsCreate]:
         raise W3CThrottledError(THROTTLED_MESSAGE)
 
-    monkeypatch.setattr(W3CService, "getPlayerStats", throttled)
+    monkeypatch.setattr(W3CService, "get_player_stats", throttled)
     service = UserService()
     user = service.get(seeded["player_ids"][0])
 
     with pytest.raises(W3CThrottledError):
-        service.updateW3CStats(user)
+        service.update_w3c_stats(user)
 
 
 def test_the_players_of_a_team_sync_at_the_same_time(
@@ -714,7 +714,7 @@ def test_the_players_of_a_team_sync_at_the_same_time(
             meet.wait()
         return []
 
-    monkeypatch.setattr(W3CService, "getPlayerStats", player_stats)
+    monkeypatch.setattr(W3CService, "get_player_stats", player_stats)
 
     resp = client.post(
         f"/teams/{seeded['team_a_id']}/seasons/{seeded['season_id']}/w3c-sync",
@@ -778,14 +778,14 @@ def test_one_players_database_failure_leaves_the_others_synced(
 ) -> None:
     """The reason reaches the admin without the statement the database named."""
     answer_no_stats(monkeypatch)
-    real = UserService.updateW3CStats
+    real = UserService.update_w3c_stats
 
     def one_bad(self: UserService, user: UserListPublic) -> None:
         if user.battleTag == "P2#2222":
             raise SQLAlchemyError("INSERT INTO w3cstats (user_id) VALUES (2)")
         real(self, user)
 
-    monkeypatch.setattr(UserService, "updateW3CStats", one_bad)
+    monkeypatch.setattr(UserService, "update_w3c_stats", one_bad)
     synced, failed = seeded["player_ids"][:2]
 
     resp = client.post(
@@ -820,7 +820,7 @@ def test_a_second_w3c_sync_during_the_first_answers_200(
         release.wait(timeout=5)
         return []
 
-    monkeypatch.setattr(W3CService, "getPlayerStats", player_stats)
+    monkeypatch.setattr(W3CService, "get_player_stats", player_stats)
     url = f"/teams/{seeded['team_a_id']}/seasons/{seeded['season_id']}/w3c-sync"
 
     # One client in one context, so both requests share the server thread pool
@@ -857,9 +857,9 @@ def test_a_throttle_stops_the_pool_and_names_the_players_it_left(
             ]
         raise W3CThrottledError(THROTTLED_MESSAGE)
 
-    monkeypatch.setattr(W3CService, "getPlayerStats", player_stats)
+    monkeypatch.setattr(W3CService, "get_player_stats", player_stats)
 
-    result = UserService().syncW3CStatsUsers(players, timedelta(0))
+    result = UserService().sync_w3c_stats_users(players, timedelta(0))
 
     assert result.synced == [players[0].id]
     assert [f.id for f in result.failed] == [p.id for p in players[1:]]

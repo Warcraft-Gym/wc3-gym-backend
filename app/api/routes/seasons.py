@@ -57,7 +57,7 @@ def add_teams(
     season_id: int, data: Annotated[dict, Body()], service: SeasonServiceDep
 ) -> SeasonPublic:
     """Add teams to season by providing a list of team ids."""
-    return service.addTeams(season_id, data.get("team_ids"))
+    return service.add_teams(season_id, data.get("team_ids"))
 
 
 @router.delete("/seasons/{season_id}/teams", dependencies=[Depends(require_admin)])
@@ -65,7 +65,7 @@ def remove_teams(
     season_id: int, data: Annotated[dict, Body()], service: SeasonServiceDep
 ) -> SeasonPublic:
     """Remove teams from season by providing a list of team ids."""
-    return service.removeTeams(season_id, data.get("team_ids"))
+    return service.remove_teams(season_id, data.get("team_ids"))
 
 
 @router.get("/seasons")
@@ -75,7 +75,7 @@ def get_all(
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[SeasonPublic]:
     """Return one page of seasons, at most 500."""
-    return service.getAll(limit=limit, offset=offset) or []
+    return service.get_all(limit=limit, offset=offset) or []
 
 
 @router.post("/seasons/search")
@@ -86,7 +86,7 @@ def search_seasons(
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[SeasonPublic]:
     """Search seasons by criteria using a custom query format."""
-    parsed_query = QueryUtil.parseQuery(query)
+    parsed_query = QueryUtil.parse_query(query)
     if not parsed_query or not parsed_query.elementA:
         raise BadRequestError(f"No valid query found: {query}")
     return service.search(parsed_query, limit=limit, offset=offset) or []
@@ -97,7 +97,7 @@ def add_maps(
     season_id: int, data: Annotated[dict, Body()], service: SeasonServiceDep
 ) -> SeasonPublic:
     """Add maps to season by providing a list of map ids."""
-    return service.addMaps(season_id, data.get("map_ids"))
+    return service.add_maps(season_id, data.get("map_ids"))
 
 
 @router.delete("/seasons/{season_id}/maps", dependencies=[Depends(require_admin)])
@@ -105,7 +105,7 @@ def remove_maps(
     season_id: int, data: Annotated[dict, Body()], service: SeasonServiceDep
 ) -> SeasonPublic:
     """Remove maps from season by providing a list of map ids."""
-    return service.removeMaps(season_id, data.get("map_ids"))
+    return service.remove_maps(season_id, data.get("map_ids"))
 
 
 @router.post("/seasons/{season_id}/signups", dependencies=[Depends(require_admin)])
@@ -113,7 +113,7 @@ def add_user_signup(
     season_id: int, data: Annotated[dict, Body()], service: SeasonServiceDep
 ) -> SeasonPublic:
     """Add signup users to season by providing a list of user ids."""
-    return service.addUserSignup(season_id, data.get("user_ids"))
+    return service.add_user_signup(season_id, data.get("user_ids"))
 
 
 @router.delete("/seasons/{season_id}/signups", dependencies=[Depends(require_admin)])
@@ -121,7 +121,7 @@ def remove_user_signup(
     season_id: int, data: Annotated[dict, Body()], service: SeasonServiceDep
 ) -> SeasonPublic:
     """Remove signup users from season by providing a list of user ids."""
-    return service.removeUserSignup(season_id, data.get("user_ids"))
+    return service.remove_user_signup(season_id, data.get("user_ids"))
 
 
 @router.get("/seasons/{season_id}/signups")
@@ -132,10 +132,10 @@ def get_season_signups(
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[UserListPublic]:
     """Retrieve one page of the users signed up for a season, at most 500."""
-    return service.getSignedUpUsers(season_id, limit=limit, offset=offset) or []
+    return service.get_signed_up_users(season_id, limit=limit, offset=offset) or []
 
 
 @router.post("/seasons/{season_id}/w3c-sync", dependencies=[Depends(require_admin)])
 def sync_w3c_season_signups(season_id: int, service: SeasonServiceDep) -> W3CSyncResult:
     """Sync w3c information for every player signed up for the season."""
-    return service.syncW3CStatsSeason(season_id)
+    return service.sync_w3c_stats_season(season_id)

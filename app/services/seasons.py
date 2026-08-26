@@ -63,7 +63,7 @@ class SeasonService(BaseService):
                 raise NotFoundError("Season not found")
             return SeasonPublic.from_season(season)
 
-    def getAll(self, limit: int | None = None, offset: int = 0) -> list[SeasonPublic]:
+    def get_all(self, limit: int | None = None, offset: int = 0) -> list[SeasonPublic]:
         with self.get_session() as session:
             result = []
             # Eager load related entities, disable nested loading except for maps
@@ -84,7 +84,7 @@ class SeasonService(BaseService):
                 result.append(SeasonPublic.from_season(season))
             return result
 
-    def addTeams(self, season_id: int, team_ids: list[int]) -> SeasonPublic:
+    def add_teams(self, season_id: int, team_ids: list[int]) -> SeasonPublic:
         with self.get_session() as session:
             season = session.get(Season, season_id)
             if not season:
@@ -106,7 +106,7 @@ class SeasonService(BaseService):
         self, query: QueryElement | None, limit: int | None = None, offset: int = 0
     ) -> list[SeasonPublic]:
         return self._where(
-            QueryUtil.convertQueryToDBFilter(Season, query), limit=limit, offset=offset
+            QueryUtil.convert_query_to_db_filter(Season, query), limit=limit, offset=offset
         )
 
     def _where(
@@ -144,7 +144,7 @@ class SeasonService(BaseService):
                 result.append(SeasonPublic.from_season(season))
             return result
 
-    def removeTeams(self, season_id: int, team_ids: list[int]) -> SeasonPublic:
+    def remove_teams(self, season_id: int, team_ids: list[int]) -> SeasonPublic:
         with self.get_session() as session:
             season = session.get(Season, season_id)
             if not season:
@@ -164,7 +164,7 @@ class SeasonService(BaseService):
             session.flush()
             return SeasonPublic.from_season(season)
 
-    def addMaps(self, season_id: int, map_ids: list[int]) -> SeasonPublic:
+    def add_maps(self, season_id: int, map_ids: list[int]) -> SeasonPublic:
         with self.get_session() as session:
             season = session.get(Season, season_id)
             if not season:
@@ -182,7 +182,7 @@ class SeasonService(BaseService):
             session.flush()
             return SeasonPublic.from_season(season)
 
-    def removeMaps(self, season_id: int, map_ids: list[int]) -> SeasonPublic:
+    def remove_maps(self, season_id: int, map_ids: list[int]) -> SeasonPublic:
         with self.get_session() as session:
             season = session.get(Season, season_id)
             if not season:
@@ -202,7 +202,7 @@ class SeasonService(BaseService):
             session.flush()
             return SeasonPublic.from_season(season)
 
-    def addUserSignup(self, season_id: int, user_ids: list[int]) -> SeasonPublic:
+    def add_user_signup(self, season_id: int, user_ids: list[int]) -> SeasonPublic:
         with self.get_session() as session:
             season = session.get(Season, season_id)
             if not season:
@@ -220,7 +220,7 @@ class SeasonService(BaseService):
             session.flush()
             return SeasonPublic.from_season(season)
 
-    def removeUserSignup(self, season_id: int, user_ids: list[int]) -> SeasonPublic:
+    def remove_user_signup(self, season_id: int, user_ids: list[int]) -> SeasonPublic:
         with self.get_session() as session:
             season = session.get(Season, season_id)
             if not season:
@@ -240,7 +240,7 @@ class SeasonService(BaseService):
             session.flush()
             return SeasonPublic.from_season(season)
 
-    def getSignedUpUsers(
+    def get_signed_up_users(
         self, season_id: int, limit: int | None = None, offset: int = 0
     ) -> list[UserListPublic]:
         with self.get_session() as session:
@@ -275,7 +275,7 @@ class SeasonService(BaseService):
 
             return result
 
-    def syncW3CStatsSeason(self, season_id: int) -> W3CSyncResult:
+    def sync_w3c_stats_season(self, season_id: int) -> W3CSyncResult:
         """Sync every player signed up for the season and report each one."""
-        users = self.getSignedUpUsers(season_id)
-        return self.user_app_service.syncW3CStatsUsers(users, SYNC_MAX_AGE)
+        users = self.get_signed_up_users(season_id)
+        return self.user_app_service.sync_w3c_stats_users(users, SYNC_MAX_AGE)

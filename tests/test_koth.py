@@ -55,7 +55,7 @@ def w3c_mmr(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(W3CService, "current_season", lambda self: 20)
     monkeypatch.setattr(
         W3CService,
-        "getPlayerStats",
+        "get_player_stats",
         lambda self, bnet_name, season_override=None: [
             W3CStatsCreate(wc3_season=season_override, mmr=1400, race=Race.HU)
         ],
@@ -363,7 +363,7 @@ def test_an_admin_signup_needs_no_w3c_configuration(
         return [W3CStatsCreate(wc3_season=season_override, mmr=1400, race=Race.HU)]
 
     monkeypatch.setattr(W3CService, "send_request", fake_send_request)
-    monkeypatch.setattr(W3CService, "getPlayerStats", fake_stats)
+    monkeypatch.setattr(W3CService, "get_player_stats", fake_stats)
 
     resp = client.post(
         "/koth/signups/admin",

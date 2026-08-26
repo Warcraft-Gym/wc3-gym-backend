@@ -29,7 +29,7 @@ class MapService(BaseService):
 
     def get(self, map_id: int) -> MapPublic:
         with self.get_session() as session:
-            map = Map.getById(session, map_id)
+            map = Map.get_by_id(session, map_id)
             if not map:
                 raise NotFoundError(f"Map not found by Id: {map_id}")
             return MapPublic.model_validate(map)
@@ -38,7 +38,7 @@ class MapService(BaseService):
         self, query: QueryElement | None, limit: int | None = None, offset: int = 0
     ) -> list[MapPublic]:
         return self._where(
-            QueryUtil.convertQueryToDBFilter(Map, query), limit=limit, offset=offset
+            QueryUtil.convert_query_to_db_filter(Map, query), limit=limit, offset=offset
         )
 
     def _where(
@@ -54,7 +54,7 @@ class MapService(BaseService):
                 return []
             return [MapPublic.model_validate(map) for map in maps]
 
-    def getAll(self, limit: int | None = None, offset: int = 0) -> list[MapPublic]:
+    def get_all(self, limit: int | None = None, offset: int = 0) -> list[MapPublic]:
         with self.get_session() as session:
-            maps = Map.getAll(session, limit=limit, offset=offset)
+            maps = Map.get_all(session, limit=limit, offset=offset)
             return [MapPublic.model_validate(map) for map in maps]

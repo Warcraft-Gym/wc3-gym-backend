@@ -92,7 +92,7 @@ class TeamService(BaseService):
                 raise NotFoundError("Team not found")
             return _public(session, team)
 
-    def addPlayers(
+    def add_players(
         self, team_id: int, season_id: int, player_ids: list[int]
     ) -> TeamPublic:
         with self.get_session() as session:
@@ -117,7 +117,7 @@ class TeamService(BaseService):
             session.flush()
             return _public(session, team)
 
-    def removePlayers(
+    def remove_players(
         self, team_id: int, season_id: int, player_ids: list[int]
     ) -> TeamPublic:
         with self.get_session() as session:
@@ -143,7 +143,7 @@ class TeamService(BaseService):
             session.flush()
             return _public(session, team)
 
-    def setCoaches(
+    def set_coaches(
         self, team_id: int, season_id: int, coach_ids: list[int]
     ) -> TeamPublic:
         """Set coaches for a team in a season (up to 3)."""
@@ -238,7 +238,7 @@ class TeamService(BaseService):
         self, query: QueryElement | None, limit: int | None = None, offset: int = 0
     ) -> list[TeamPublic]:
         return self._where(
-            QueryUtil.convertQueryToDBFilter(Team, query), limit=limit, offset=offset
+            QueryUtil.convert_query_to_db_filter(Team, query), limit=limit, offset=offset
         )
 
     def _where(
@@ -279,7 +279,7 @@ class TeamService(BaseService):
             _fill(session, result)
             return result
 
-    def getAll(self, limit: int | None = None, offset: int = 0) -> list[TeamPublic]:
+    def get_all(self, limit: int | None = None, offset: int = 0) -> list[TeamPublic]:
         with self.get_session() as session:
             result: list[TeamPublic] = []
             # Eager load related entities, disable nested loading
@@ -303,7 +303,7 @@ class TeamService(BaseService):
             _fill(session, result)
             return result
 
-    def getAll_basic(
+    def get_all_basic(
         self, limit: int | None = None, offset: int = 0
     ) -> list[TeamPublic]:
         """Get all teams with basic info only (no users, no seasons)"""
@@ -322,7 +322,7 @@ class TeamService(BaseService):
             _fill(session, result)
             return result
 
-    def getAll_by_season(
+    def get_all_by_season(
         self, season_id: int, limit: int | None = None, offset: int = 0
     ) -> list[TeamPublic]:
         """Get all teams for a season with season_info but without users"""
@@ -379,7 +379,7 @@ class TeamService(BaseService):
         self, season_id: int, limit: int | None = None, offset: int = 0
     ) -> list[TeamPublic]:
         """Get teams for a season with season_info but without users (for list views)"""
-        teams_data = self.getAll_by_season(season_id, limit=limit, offset=offset)
+        teams_data = self.get_all_by_season(season_id, limit=limit, offset=offset)
         result: list[TeamPublic] = []
         if teams_data:
             for team_data in teams_data:
@@ -392,7 +392,7 @@ class TeamService(BaseService):
                 result.append(team_data)
         return result
 
-    def syncW3CStatsTeam(self, team_id: int, season_id: int) -> W3CSyncResult:
+    def sync_w3c_stats_team(self, team_id: int, season_id: int) -> W3CSyncResult:
         team = self.get_with_nested_users_by_season(team_id, season_id)
         users = team.player_by_season.get(season_id) or []
-        return self.user_app_service.syncW3CStatsUsers(users, SYNC_MAX_AGE)
+        return self.user_app_service.sync_w3c_stats_users(users, SYNC_MAX_AGE)

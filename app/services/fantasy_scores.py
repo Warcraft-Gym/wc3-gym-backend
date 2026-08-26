@@ -73,7 +73,7 @@ class FantasyScoreService:
     ) -> dict[str, Any]:
         """The five score parts of one fantasy team, over the bets its captain
         holds in the season."""
-        query = QueryUtil.parseQuery(
+        query = QueryUtil.parse_query(
             f"user_id=={fantasy_team.captain.id} and season_id=={season.id}"
         )
         player_bets, _ = self.fantasy_bet_service.search(query)
@@ -92,7 +92,7 @@ class FantasyScoreService:
             include_breakdown=include_breakdown,
         )
 
-    def getTeamScoreBreakdown(
+    def get_team_score_breakdown(
         self, fantasy_team_id: int, season: "SeasonPublic"
     ) -> dict[str, Any]:
         """

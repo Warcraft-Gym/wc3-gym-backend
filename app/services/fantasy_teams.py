@@ -67,7 +67,7 @@ class FantasyTeamService(BaseService):
         .noload("*"),
     )
 
-    def getAll(
+    def get_all(
         self, limit: int | None = None, offset: int = 0
     ) -> tuple[list[FantasyTeamPublic], int]:
         """The teams, or one page of them, and the total row count."""
@@ -91,7 +91,7 @@ class FantasyTeamService(BaseService):
         """The matching teams and, when a page is asked for, the total count."""
         with self.get_session() as session:
             result = []
-            filter = QueryUtil.convertQueryToDBFilter(FantasyTeam, query)
+            filter = QueryUtil.convert_query_to_db_filter(FantasyTeam, query)
             if filter is None:
                 logger.debug(f"No fantasy team found by searchcriteria: {query}")
                 return result, None
@@ -117,7 +117,7 @@ class FantasyTeamService(BaseService):
             derived.fill_fantasy_teams(session, result)
             return result, total
 
-    def addPlayers(self, team_id: int, player_ids: list[int]) -> FantasyTeamPublic:
+    def add_players(self, team_id: int, player_ids: list[int]) -> FantasyTeamPublic:
         with self.get_session() as session:
             fteam = session.get(FantasyTeam, team_id)
             if not fteam:
@@ -137,7 +137,7 @@ class FantasyTeamService(BaseService):
             derived.fill_fantasy_teams(session, [public])
             return public
 
-    def removePlayers(self, team_id: int, player_ids: list[int]) -> FantasyTeamPublic:
+    def remove_players(self, team_id: int, player_ids: list[int]) -> FantasyTeamPublic:
         with self.get_session() as session:
             fteam = session.get(FantasyTeam, team_id)
             if not fteam:

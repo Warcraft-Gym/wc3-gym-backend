@@ -132,9 +132,9 @@ def test_get_series_costs_eleven_statements(league: dict[str, Any]) -> None:
 def test_search_for_season_costs_three_statements(league: dict[str, Any]) -> None:
     """The season list is reduced, so it needs no collection statements."""
     service = SeriesService()
-    query = QueryUtil.parseQuery("player1_id > 0")
+    query = QueryUtil.parse_query("player1_id > 0")
     with count_statements() as tally:
-        series_list = service.searchForSeason(league["season_id"], query)
+        series_list = service.search_for_season(league["season_id"], query)
     assert len(series_list) == 2
     assert series_list[0].player1.name
     assert series_list[0].player1.w3c_stats == []
@@ -161,7 +161,7 @@ def test_the_season_record_costs_two_statements(league: dict[str, Any]) -> None:
 def test_draft_series_by_match_costs_seven_statements(league: dict[str, Any]) -> None:
     service = DraftSeriesService()
     with count_statements() as tally:
-        draft_list = service.getByMatchId(league["match_id"])
+        draft_list = service.get_by_match_id(league["match_id"])
     assert len(draft_list) == 1
     assert tally[0] == 7
 
@@ -215,7 +215,7 @@ def test_fantasy_bets_list_costs_three_statements(league: dict[str, Any]) -> Non
     """
     service = FantasyBetService()
     with count_statements() as tally:
-        bets, total = service.getAll()
+        bets, total = service.get_all()
     assert len(bets) == 1
     assert total is None
     assert bets[0].bet_result == 10
@@ -247,7 +247,7 @@ def test_the_bets_count_holds_when_the_bets_grow(league: dict[str, Any]) -> None
 
     service = FantasyBetService()
     with count_statements() as tally:
-        bets, _ = service.getAll()
+        bets, _ = service.get_all()
     assert len(bets) == 5
     assert all(bet.bet_result == 10 for bet in bets)
     assert tally[0] == 3
@@ -276,7 +276,7 @@ def test_the_fantasy_team_list_costs_six_statements(league: dict[str, Any]) -> N
     series and one for the captains' bets."""
     service = FantasyTeamService()
     with count_statements() as tally:
-        teams, total = service.getAll()
+        teams, total = service.get_all()
     assert len(teams) == 1
     assert total == 1
     assert teams[0].total_points == 30
@@ -289,7 +289,7 @@ def test_the_fantasy_count_holds_when_the_teams_grow(league: dict[str, Any]) -> 
 
     service = FantasyTeamService()
     with count_statements() as tally:
-        teams, total = service.getAll()
+        teams, total = service.get_all()
     assert len(teams) == 5
     assert total == 5
     assert tally[0] == 6
@@ -300,7 +300,7 @@ def test_the_fantasy_team_search_costs_five_statements(league: dict[str, Any]) -
     add_fantasy_teams(league, 4)
 
     service = FantasyTeamService()
-    query = QueryUtil.parseQuery(f"season_id == {league['season_id']}")
+    query = QueryUtil.parse_query(f"season_id == {league['season_id']}")
     with count_statements() as tally:
         teams, total = service.search(query)
     assert len(teams) == 5

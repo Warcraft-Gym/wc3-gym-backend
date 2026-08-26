@@ -198,7 +198,7 @@ def export_season(
         ]
     )
     q_string = f"season_id=={season_id}"
-    query = QueryUtil.parseQuery(q_string)
+    query = QueryUtil.parse_query(q_string)
     if query and query.elementA:
         all_matches = match_service.search(query)
         for match in all_matches:
@@ -236,7 +236,7 @@ def export_season(
     )
     for match in all_matches if "all_matches" in locals() else []:
         q_string = f"match_id=={match.id}"
-        query = QueryUtil.parseQuery(q_string)
+        query = QueryUtil.parse_query(q_string)
         if query and query.elementA:
             series_list = series_service.search(query)
             for series in series_list:
@@ -288,7 +288,7 @@ def export_season(
         ]
     )
     q_string = f"season_id=={season_id}"
-    query = QueryUtil.parseQuery(q_string)
+    query = QueryUtil.parse_query(q_string)
     if query and query.elementA:
         fantasy_teams, _ = fantasy_team_service.search(query)
         for fteam in fantasy_teams:

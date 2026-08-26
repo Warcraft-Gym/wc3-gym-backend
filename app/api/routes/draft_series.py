@@ -69,7 +69,7 @@ def get_draft_series_by_match(
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[DraftSeriesPublic]:
     """Return one page of the draft series of a match, at most 500."""
-    return service.getByMatchId(match_id, limit=limit, offset=offset) or []
+    return service.get_by_match_id(match_id, limit=limit, offset=offset) or []
 
 
 @router.delete(
@@ -81,7 +81,7 @@ def delete_all_draft_series_for_match(
     match_id: int, service: DraftSeriesServiceDep
 ) -> None:
     """Delete all draft series for a specific match"""
-    service.deleteByMatchId(match_id)
+    service.delete_by_match_id(match_id)
 
 
 @router.post(
