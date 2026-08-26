@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any
 
 import requests
 
-from app.core.exceptions import NotFoundError, W3CThrottledError
+from app.core.exceptions import ExternalServiceError, NotFoundError, W3CThrottledError
 from app.models.enums import Race
 from app.models.w3c_stats import W3CStatsCreate
 
@@ -149,15 +149,15 @@ class W3CService:
                 try:
                     return response.json()  # Parse JSON response
                 except ValueError:
-                    raise Exception(response.text)  # Return plain text if not JSON
+                    raise ExternalServiceError(response.text)
             if response.status_code == 204:
                 return response.text
             else:
                 # Log or raise an error for non-200 status codes
-                raise Exception(
+                raise ExternalServiceError(
                     f"Request failed with status code {response.status_code}: {response.text}"
                 )
 
         except requests.exceptions.RequestException as e:
             # Handle network-related errors
-            raise Exception(f"An exception occurred: {e!s}")
+            raise ExternalServiceError(f"An exception occurred: {e!s}")

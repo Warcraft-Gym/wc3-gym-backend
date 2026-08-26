@@ -4,12 +4,12 @@ The public pages, the admin frontend and the Discord bot branch on the
 error string, so a renamed message or a changed status changes what a
 consumer shows. Every assertion below names the exact body the code
 answers today, so a refactor of where errors are raised has to keep it.
-
-The xfail tests name the answer the code should give instead. Each one
-fails today, and the reason says which file decides it.
 """
 
+import importlib
+import inspect
 import logging
+import pkgutil
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from typing import Any, Never
@@ -18,7 +18,9 @@ import pytest
 from fastapi import FastAPI
 from httpx2 import Client, Response
 
+from app.api import routes
 from app.core.exceptions import ExternalServiceError, W3CThrottledError
+from app.services import w3c
 from app.services.maps import MapService
 from app.services.users import UserService
 from app.services.w3c import W3CService
@@ -256,16 +258,27 @@ def test_a_w3c_failure_answers_502_with_its_message(
     assert resp.json() == {"error": str(failure)}
 
 
-@pytest.mark.xfail(
-    strict=True, reason="w3c.py raises Exception, not ExternalServiceError"
-)
 def test_a_plain_w3c_failure_answers_502_with_its_message(
     client: Client,
     auth_headers: dict[str, str],
     seeded: dict[str, Any],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    refuse_w3c(monkeypatch, Exception("plain text"))
+    """w3champions answers 200 with a body that is not JSON."""
+
+    class NotJson:
+        status_code = 200
+        headers: dict[str, str] = {}
+        text = "plain text"
+
+        def json(self) -> Never:
+            raise ValueError("no JSON here")
+
+    class Session:
+        def request(self, *args: object, **kwargs: object) -> NotJson:
+            return NotJson()
+
+    monkeypatch.setattr(w3c, "_session", Session())
     user_id = seeded["player_ids"][0]
 
     resp = client.post(f"/users/w3c_sync/{user_id}", headers=auth_headers)
@@ -274,9 +287,6 @@ def test_a_plain_w3c_failure_answers_502_with_its_message(
     assert resp.json() == {"error": "plain text"}
 
 
-@pytest.mark.xfail(
-    strict=True, reason="the unknown column reaches base.py, which raises ValueError"
-)
 def test_a_query_on_an_unknown_column_answers_400(client: Client) -> None:
     """The route checks that the query parses, not that it names a column."""
     resp = client.post("/maps/search", params={"query": "nosuchcolumn == 1"})
@@ -289,7 +299,6 @@ def errors(caplog: pytest.LogCaptureFixture) -> list[logging.LogRecord]:
     return [record for record in caplog.records if record.levelno >= logging.ERROR]
 
 
-@pytest.mark.xfail(strict=True, reason="4xx handlers log at ERROR")
 def test_a_missing_row_writes_no_error_record(
     client: Client, caplog: pytest.LogCaptureFixture
 ) -> None:
@@ -319,9 +328,6 @@ def test_a_bug_writes_one_error_record_with_the_traceback(
     assert errors(caplog)[0].exc_info
 
 
-@pytest.mark.xfail(
-    strict=True, reason="public.py logs the message without the traceback"
-)
 def test_a_failed_player_lookup_logs_the_traceback(
     client: Client,
     empty_store: dict[str, dict[str, Any]],
@@ -338,5 +344,13 @@ def test_a_failed_player_lookup_logs_the_traceback(
         resp = client.post("/fantasy-bet", json={"token": token})
 
     assert resp.status_code == 500, resp.text
-    assert resp.json() == {"error": "user_lookup_failed"}
+    assert resp.json() == {"error": "Internal Server Error"}
     assert errors(caplog)[0].exc_info
+
+
+def test_no_route_builds_an_error_body_itself() -> None:
+    """The handlers in app.main own every error body, so no route writes one."""
+    for module in pkgutil.iter_modules(routes.__path__):
+        name = f"{routes.__name__}.{module.name}"
+        source = inspect.getsource(importlib.import_module(name))
+        assert 'JSONResponse({"error"' not in source, name

@@ -11,6 +11,7 @@ import jwt
 from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
+from app.core.exceptions import ApiError
 from app.core.security import decode_token
 from app.services.draft_series import DraftSeriesService
 from app.services.fantasy_bets import FantasyBetService
@@ -26,19 +27,6 @@ from app.services.settings import SettingsService
 from app.services.teams import TeamService
 from app.services.users import UserService
 
-
-class AuthError(Exception):
-    """A request without a valid token.
-
-    Clients read the status and the {"error": ...} body: 401 for a missing header or an
-    expired token, 422 for a malformed token or the wrong token type."""
-
-    def __init__(self, message: str, status_code: int = 401) -> None:
-        super().__init__(message)
-        self.message = message
-        self.status_code = status_code
-
-
 _bearer = HTTPBearer(auto_error=False)
 
 _Credentials = Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)]
@@ -46,20 +34,20 @@ _Credentials = Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)]
 
 def _decode(credentials: _Credentials) -> dict[str, Any]:
     if credentials is None:
-        raise AuthError("Missing Authorization Header")
+        raise ApiError(401, {"error": "Missing Authorization Header"})
     try:
         return decode_token(credentials.credentials)
     except jwt.ExpiredSignatureError as e:
-        raise AuthError("Token has expired") from e
+        raise ApiError(401, {"error": "Token has expired"}) from e
     except jwt.InvalidTokenError as e:
-        raise AuthError(str(e), status_code=422) from e
+        raise ApiError(422, {"error": str(e)}) from e
 
 
 def require_admin(credentials: _Credentials) -> str:
     """Admit a valid access token and answer its subject."""
     claims = _decode(credentials)
     if claims.get("type") != "access":
-        raise AuthError("Only non-refresh tokens are allowed", status_code=422)
+        raise ApiError(422, {"error": "Only non-refresh tokens are allowed"})
     return claims["sub"]
 
 
@@ -67,7 +55,7 @@ def require_refresh(credentials: _Credentials) -> str:
     """Admit a valid refresh token and answer its subject."""
     claims = _decode(credentials)
     if claims.get("type") != "refresh":
-        raise AuthError("Only refresh tokens are allowed", status_code=422)
+        raise ApiError(422, {"error": "Only refresh tokens are allowed"})
     return claims["sub"]
 
 

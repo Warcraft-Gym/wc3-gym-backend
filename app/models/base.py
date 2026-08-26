@@ -5,6 +5,8 @@ from sqlalchemy import ColumnExpressionArgument, select
 from sqlalchemy.orm import Session
 from sqlmodel import SQLModel
 
+from app.core.exceptions import BadRequestError
+
 
 class DBModel(SQLModel):
     """Shared query helpers for the mapped classes. It has no table of its own."""
@@ -54,7 +56,7 @@ class DBModel(SQLModel):
         offset: int = 0,
     ) -> Sequence[Self]:
         if filters is None:
-            raise ValueError("No search criteria was defined!")
+            raise BadRequestError("No search criteria was defined!")
         statement = select(cls).where(filters)
         if limit is not None or offset:
             # Offset paging is deterministic only with a fixed order

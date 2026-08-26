@@ -3,10 +3,9 @@ import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Body, Depends, File, Query, Request, Response, UploadFile
-from fastapi.responses import JSONResponse
 
 from app.api.deps import TeamServiceDep, require_admin
-from app.core.exceptions import BadRequestError
+from app.core.exceptions import BadRequestError, NotFoundError
 from app.core.query import QueryUtil
 from app.models.team import TeamCreate, TeamPublic, TeamUpdate
 from app.models.w3c_stats import W3CSyncResult
@@ -178,16 +177,16 @@ def upload_team_image(
     team_id: int,
     service: TeamServiceDep,
     image: Annotated[UploadFile | None, File()] = None,
-) -> JSONResponse:
+) -> dict[str, str]:
     """Allows a user to upload or modify a team's image stored in binary format"""
     if image is None:
-        return JSONResponse({"error": "No image provided"}, status_code=400)
+        raise BadRequestError("No image provided")
 
     file_data = image.file.read()  # Read binary data
 
     service.update_icon(team_id, file_data)
 
-    return JSONResponse({"message": "Image uploaded successfully"}, status_code=200)
+    return {"message": "Image uploaded successfully"}
 
 
 @router.get("/teams/{team_id}/image")
@@ -195,7 +194,7 @@ def get_team_image(team_id: int, request: Request, service: TeamServiceDep) -> R
     """Fetches and returns the stored binary image for a team"""
     team_icon = service.get_icon(team_id)
     if not team_icon:
-        return JSONResponse({"error": "Image not found"}, status_code=404)
+        raise NotFoundError("Image not found")
 
     # The tag is the content, so a replaced icon answers a new one.
     etag = f'"{hashlib.sha256(team_icon).hexdigest()}"'

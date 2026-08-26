@@ -16,7 +16,7 @@ from app.api.deps import (
     SettingsServiceDep,
     UserServiceDep,
 )
-from app.core.exceptions import BadRequestError
+from app.core.exceptions import ApiError, BadRequestError, NotFoundError
 from app.core.ordering import SortOrder
 from app.core.query import QueryUtil
 from app.models.fantasy_bet import FantasyBetCreate, FantasyBetUpdate
@@ -52,13 +52,13 @@ def create_public_access_helper(
     season_id: str | None = None,
     access_type: str | None = None,
     ttl_minutes: str | None = None,
-) -> JSONResponse | dict[str, Any]:
+) -> dict[str, Any]:
     """Protected endpoint for the Discord bot to request a one-time public access URL. Requires BOT client token."""
     data = data or {}
     client_token = data.get("client_token") or client_token
     expected = os.getenv("BOT_CLIENT_TOKEN") or ""
     if not expected or str(client_token) != str(expected):
-        return JSONResponse({"error": "unauthorized"}, status_code=401)
+        raise ApiError(401, {"error": "unauthorized"})
 
     discord_id = data.get("discord_id") or discord_id
     discord_tag = data.get("discord_tag") or discord_tag
@@ -67,10 +67,10 @@ def create_public_access_helper(
     ttl = int(data.get("ttl_minutes") or ttl_minutes or 30)
 
     if not discord_id or not discord_tag or not access_type:
-        return JSONResponse({"error": "missing parameters"}, status_code=400)
+        raise BadRequestError("missing parameters")
 
     if access_type not in ["signup", "dashboard", "fantasy"]:
-        return JSONResponse({"error": "invalid access_type"}, status_code=400)
+        raise BadRequestError("invalid access_type")
 
     # cleanup store
     _cleanup_expired()
@@ -99,12 +99,12 @@ def create_public_access_helper(
 
 
 @router.get("/public-token/{token}", response_model=None)
-def get_public_token(token: str) -> JSONResponse | dict[str, Any]:
+def get_public_token(token: str) -> dict[str, Any]:
     """Return token metadata (used by public pages to validate token)."""
     _cleanup_expired()
     entry = _token_store.get(token)
     if not entry:
-        return JSONResponse({"error": "not_found"}, status_code=404)
+        raise NotFoundError("not_found")
     return {
         "discord_id": entry["discord_id"],
         "discord_tag": entry["discord_tag"],
@@ -114,12 +114,12 @@ def get_public_token(token: str) -> JSONResponse | dict[str, Any]:
 
 
 @router.delete("/public-token/{token}", response_model=None)
-def delete_public_token(token: str) -> JSONResponse | dict[str, Any]:
+def delete_public_token(token: str) -> dict[str, Any]:
     """Remove a token after it has been used."""
     # a pop, because two parallel deletes must not both find the token
     if _token_store.pop(token, None) is not None:
         return {"status": "deleted"}
-    return JSONResponse({"error": "not_found"}, status_code=404)
+    raise NotFoundError("not_found")
 
 
 @router.post("/signup", status_code=201, response_model=None)
@@ -128,35 +128,34 @@ def public_create_user(
     user_service: UserServiceDep,
     season_service: SeasonServiceDep,
     data: Annotated[dict | None, Body()] = None,
-) -> JSONResponse | dict[str, Any]:
+) -> dict[str, Any]:
     """Create user and optionally assign to season using a one-time token."""
-    # Check if signups are enabled
+    # A missing signups_enabled row leaves signups open
     try:
         signup_enabled = settings_service.get_setting("signups_enabled")
-        if signup_enabled and signup_enabled.get("value", "true").lower() == "false":
-            return JSONResponse(
-                {
-                    "error": "signups_closed",
-                    "message": "Signups are currently closed",
-                },
-                status_code=403,
-            )
-    except Exception as e:
-        logger.warning(f"Could not check signups_enabled setting: {e}")
-        # Continue if setting doesn't exist
+    except NotFoundError:
+        signup_enabled = None
+    if signup_enabled and signup_enabled.get("value", "true").lower() == "false":
+        raise ApiError(
+            403,
+            {
+                "error": "signups_closed",
+                "message": "Signups are currently closed",
+            },
+        )
 
     data = data or {}
     token = data.get("token")
     if not token:
-        return JSONResponse({"error": "missing token"}, status_code=400)
+        raise BadRequestError("missing token")
 
     _cleanup_expired()
     entry = _token_store.get(token)
     if not entry:
-        return JSONResponse({"error": "token_not_found_or_expired"}, status_code=404)
+        raise NotFoundError("token_not_found_or_expired")
 
     if entry.get("access_type") != "signup":
-        return JSONResponse({"error": "invalid_token_type"}, status_code=400)
+        raise BadRequestError("invalid_token_type")
 
     # Build user payload. Force discord fields from token to avoid spoofing.
     user_payload = {
@@ -171,20 +170,18 @@ def public_create_user(
 
     # Basic validation
     if not user_payload["name"] or not user_payload["battleTag"]:
-        return JSONResponse({"error": "missing user fields"}, status_code=400)
+        raise BadRequestError("missing user fields")
 
     # Validate BattleTag with W3Champions BEFORE creating/updating user
     if not user_service.validateBattleTag(user_payload["battleTag"]):
-        return JSONResponse(
-            {
-                "error": f"BattleNet name '{user_payload['battleTag']}' is not valid - no W3Champions stats found"
-            },
-            status_code=400,
+        raise BadRequestError(
+            f"BattleNet name '{user_payload['battleTag']}' is not valid"
+            " - no W3Champions stats found"
         )
 
     # take the token here, because a pop lets only one parallel request continue
     if _token_store.pop(token, None) is None:
-        return JSONResponse({"error": "token_not_found_or_expired"}, status_code=404)
+        raise NotFoundError("token_not_found_or_expired")
 
     # Check for existing user by discord id or tag
     existing_users = user_service.find_by_discord_id_or_tag(
@@ -209,17 +206,13 @@ def public_create_user(
     try:
         user_service.updateW3CStats_ById(user.id)
         logger.info(f"W3C sync triggered for user {user.id} after signup")
-    except Exception as we:
+    except Exception as we:  # a refused sync must not fail the signup
         logger.warning(f"W3C sync failed after signup for user {user.id}: {we}")
 
     # return created user
     if user:
-        try:
-            out = user.to_dict()
-        except Exception:
-            out = user if isinstance(user, dict) else {}
-        return out
-    return JSONResponse({"error": "user_creation_failed"}, status_code=500)
+        return user.to_dict()
+    raise ApiError(500, {"error": "user_creation_failed"})
 
 
 @router.get("/player-series", response_model=None)
@@ -232,26 +225,26 @@ def get_player_series(
     offset: Annotated[int, Query(ge=0)] = 0,
     sort: SeriesSort | None = None,
     order: SortOrder = "asc",
-) -> JSONResponse | dict[str, Any]:
+) -> dict[str, Any]:
     """Get one page of a player's series for the dashboard view, at most 500.
 
     sort names the field the page is ordered by, and the series id breaks its ties.
     """
     if not token:
-        return JSONResponse({"error": "missing token"}, status_code=400)
+        raise BadRequestError("missing token")
 
     _cleanup_expired()
     entry = _token_store.get(token)
     if not entry:
-        return JSONResponse({"error": "token_not_found_or_expired"}, status_code=404)
+        raise NotFoundError("token_not_found_or_expired")
 
     if entry.get("access_type") != "dashboard":
-        return JSONResponse({"error": "invalid_token_type"}, status_code=400)
+        raise BadRequestError("invalid_token_type")
 
     # Find the user by discord_id
     users = user_service.find_by_discord_id(str(entry.get("discord_id")))
     if not users:
-        return JSONResponse({"error": "player_not_found"}, status_code=404)
+        raise NotFoundError("player_not_found")
     user = users[0]
 
     # Get series where user is player1 or player2
@@ -282,13 +275,7 @@ def get_player_series(
     response.headers["X-Total-Count"] = str(total)
 
     # Convert to dict format
-    series_data = []
-    for s in series:
-        try:
-            series_dict = s.to_dict() if hasattr(s, "to_dict") else s
-            series_data.append(series_dict)
-        except Exception:
-            series_data.append(s if isinstance(s, dict) else {})
+    series_data = [s.to_dict() if hasattr(s, "to_dict") else s for s in series]
 
     return {
         "player": user.to_dict() if hasattr(user, "to_dict") else user,
@@ -328,15 +315,15 @@ async def update_player_series(
 
     token = data.get("token")
     if not token:
-        return JSONResponse({"error": "missing token"}, status_code=400)
+        raise BadRequestError("missing token")
 
     _cleanup_expired()
     entry = _token_store.get(token)
     if not entry:
-        return JSONResponse({"error": "token_not_found_or_expired"}, status_code=404)
+        raise NotFoundError("token_not_found_or_expired")
 
     if entry.get("access_type") != "dashboard":
-        return JSONResponse({"error": "invalid_token_type"}, status_code=400)
+        raise BadRequestError("invalid_token_type")
 
     # Only the parsing and the token check above need the event loop
     return await run_in_threadpool(
@@ -354,15 +341,15 @@ async def update_player_series(
 @router.get("/user-info", response_model=None)
 def get_user_info(
     user_service: UserServiceDep, token: str | None = None
-) -> JSONResponse | dict[str, Any]:
+) -> dict[str, Any]:
     """Get user information by token (for fantasy team captains who may not be players)."""
     if not token:
-        return JSONResponse({"error": "missing token"}, status_code=400)
+        raise BadRequestError("missing token")
 
     _cleanup_expired()
     entry = _token_store.get(token)
     if not entry:
-        return JSONResponse({"error": "token_not_found_or_expired"}, status_code=404)
+        raise NotFoundError("token_not_found_or_expired")
 
     # Find the user by discord_id
     users = user_service.find_by_discord_id(str(entry.get("discord_id")))
@@ -391,32 +378,31 @@ def create_fantasy_team(
     user_service: UserServiceDep,
     fantasy_team_service: FantasyTeamServiceDep,
     data: Annotated[dict | None, Body()] = None,
-) -> JSONResponse | dict[str, Any]:
+) -> dict[str, Any]:
     """Create or update fantasy team, creating user if needed."""
-    # Check if fantasy team creation is enabled
+    # A missing fantasy_team_creation_enabled row leaves creation open
     try:
         fantasy_enabled = settings_service.get_setting("fantasy_team_creation_enabled")
-        if fantasy_enabled and fantasy_enabled.get("value", "true").lower() == "false":
-            return JSONResponse(
-                {
-                    "error": "fantasy_team_creation_closed",
-                    "message": "Fantasy team creation is currently closed",
-                },
-                status_code=403,
-            )
-    except Exception as e:
-        logger.warning(f"Could not check fantasy_team_creation_enabled setting: {e}")
-        # Continue if setting doesn't exist
+    except NotFoundError:
+        fantasy_enabled = None
+    if fantasy_enabled and fantasy_enabled.get("value", "true").lower() == "false":
+        raise ApiError(
+            403,
+            {
+                "error": "fantasy_team_creation_closed",
+                "message": "Fantasy team creation is currently closed",
+            },
+        )
 
     data = data or {}
     token = data.get("token")
     if not token:
-        return JSONResponse({"error": "missing token"}, status_code=400)
+        raise BadRequestError("missing token")
 
     _cleanup_expired()
     entry = _token_store.get(token)
     if not entry:
-        return JSONResponse({"error": "token_not_found_or_expired"}, status_code=404)
+        raise NotFoundError("token_not_found_or_expired")
 
     # Validate required fields
     season_id = data.get("season_id")
@@ -425,7 +411,7 @@ def create_fantasy_team(
     player_ids = data.get("player_ids", [])
 
     if not season_id or not drafted_team_id or not drafted_race:
-        return JSONResponse({"error": "missing required fields"}, status_code=400)
+        raise BadRequestError("missing required fields")
 
     # Find or create user
     users = user_service.find_by_discord_id(str(entry.get("discord_id")))
@@ -508,62 +494,48 @@ def create_fantasy_bet(
     user_service: UserServiceDep,
     fantasy_bet_service: FantasyBetServiceDep,
     data: Annotated[dict | None, Body()] = None,
-) -> JSONResponse | dict[str, Any] | None:
+) -> dict[str, Any] | None:
     """Create a fantasy bet using a token."""
+    data = data or {}
+    token = data.get("token")
+
+    if not token:
+        raise BadRequestError("missing token")
+
+    _cleanup_expired()
+    entry = _token_store.get(token)
+    if not entry:
+        raise NotFoundError("token_not_found_or_expired")
+
+    # Get or create user based on discord info
+    existing_users = user_service.find_by_discord_id(str(entry.get("discord_id")))
+    user = existing_users[0] if existing_users else None
+
+    if not user:
+        raise ApiError(
+            404,
+            {
+                "error": "user_not_found",
+                "message": "You must register first before placing bets",
+            },
+        )
+
+    # Create the bet
+    bet_payload = {
+        "series_id": data.get("series_id"),
+        "season_id": data.get("season_id"),
+        "user_id": user.id,
+        "winner_id": data.get("winner_id"),
+        "bet_points": data.get("bet_points"),
+    }
+
     try:
-        data = data or {}
-        token = data.get("token")
-
-        if not token:
-            return JSONResponse({"error": "missing token"}, status_code=400)
-
-        _cleanup_expired()
-        entry = _token_store.get(token)
-        if not entry:
-            return JSONResponse(
-                {"error": "token_not_found_or_expired"}, status_code=404
-            )
-
-        # Get or create user based on discord info
-
-        user = None
-        try:
-            existing_users = user_service.find_by_discord_id(
-                str(entry.get("discord_id"))
-            )
-            if existing_users and len(existing_users) > 0:
-                user = existing_users[0]
-        except Exception as e:
-            logger.error(f"Error searching for user: {e}")
-            return JSONResponse({"error": "user_lookup_failed"}, status_code=500)
-
-        if not user:
-            return JSONResponse(
-                {
-                    "error": "user_not_found",
-                    "message": "You must register first before placing bets",
-                },
-                status_code=404,
-            )
-
-        # Create the bet
-        bet_payload = {
-            "series_id": data.get("series_id"),
-            "season_id": data.get("season_id"),
-            "user_id": user.id,
-            "winner_id": data.get("winner_id"),
-            "bet_points": data.get("bet_points"),
-        }
-
         bet = fantasy_bet_service.create_fantasy_bet(FantasyBetCreate(**bet_payload))
-
-        return bet.to_dict() if hasattr(bet, "to_dict") else bet
-
     except (BadRequestError, ValueError) as e:
         logger.error(f"Validation error creating bet: {e}")
-        return JSONResponse(
-            {"error": "validation_error", "message": str(e)}, status_code=400
-        )
+        raise ApiError(400, {"error": "validation_error", "message": str(e)}) from e
+
+    return bet.to_dict() if hasattr(bet, "to_dict") else bet
 
 
 @router.put("/fantasy-bet/{bet_id}", response_model=None)
@@ -572,73 +544,59 @@ def update_fantasy_bet(
     user_service: UserServiceDep,
     fantasy_bet_service: FantasyBetServiceDep,
     data: Annotated[dict | None, Body()] = None,
-) -> JSONResponse | dict[str, Any] | None:
+) -> dict[str, Any] | None:
     """Update a fantasy bet using a token."""
+    data = data or {}
+    token = data.get("token")
+
+    if not token:
+        raise BadRequestError("missing token")
+
+    _cleanup_expired()
+    entry = _token_store.get(token)
+    if not entry:
+        raise NotFoundError("token_not_found_or_expired")
+
+    # Get user based on discord info
+    existing_users = user_service.find_by_discord_id(str(entry.get("discord_id")))
+    user = existing_users[0] if existing_users else None
+
+    if not user:
+        raise NotFoundError("user_not_found")
+
+    # Get the existing bet to verify ownership
+    existing_bet = fantasy_bet_service.get(bet_id)
+    if not existing_bet:
+        raise NotFoundError("bet_not_found")
+
+    # Verify that the bet belongs to this user
+    if existing_bet.user_id != user.id:
+        raise ApiError(
+            403,
+            {
+                "error": "unauthorized",
+                "message": "You can only update your own bets",
+            },
+        )
+
+    # Update the bet
+    bet_payload = {
+        "series_id": existing_bet.series_id,
+        "season_id": existing_bet.season_id,
+        "user_id": user.id,
+        "winner_id": data.get("winner_id", existing_bet.winner_id),
+        "bet_points": data.get("bet_points", existing_bet.bet_points),
+    }
+
     try:
-        data = data or {}
-        token = data.get("token")
-
-        if not token:
-            return JSONResponse({"error": "missing token"}, status_code=400)
-
-        _cleanup_expired()
-        entry = _token_store.get(token)
-        if not entry:
-            return JSONResponse(
-                {"error": "token_not_found_or_expired"}, status_code=404
-            )
-
-        # Get user based on discord info
-
-        user = None
-        try:
-            existing_users = user_service.find_by_discord_id(
-                str(entry.get("discord_id"))
-            )
-            if existing_users and len(existing_users) > 0:
-                user = existing_users[0]
-        except Exception as e:
-            logger.error(f"Error searching for user: {e}")
-            return JSONResponse({"error": "user_lookup_failed"}, status_code=500)
-
-        if not user:
-            return JSONResponse({"error": "user_not_found"}, status_code=404)
-
-        # Get the existing bet to verify ownership
-        existing_bet = fantasy_bet_service.get(bet_id)
-        if not existing_bet:
-            return JSONResponse({"error": "bet_not_found"}, status_code=404)
-
-        # Verify that the bet belongs to this user
-        if existing_bet.user_id != user.id:
-            return JSONResponse(
-                {
-                    "error": "unauthorized",
-                    "message": "You can only update your own bets",
-                },
-                status_code=403,
-            )
-
-        # Update the bet
-        bet_payload = {
-            "series_id": existing_bet.series_id,
-            "season_id": existing_bet.season_id,
-            "user_id": user.id,
-            "winner_id": data.get("winner_id", existing_bet.winner_id),
-            "bet_points": data.get("bet_points", existing_bet.bet_points),
-        }
-
         bet = fantasy_bet_service.update_fantasy_bet(
             bet_id, FantasyBetUpdate(**bet_payload)
         )
-
-        return bet.to_dict() if hasattr(bet, "to_dict") else bet
-
     except (BadRequestError, ValueError) as e:
         logger.error(f"Validation error updating bet: {e}")
-        return JSONResponse(
-            {"error": "validation_error", "message": str(e)}, status_code=400
-        )
+        raise ApiError(400, {"error": "validation_error", "message": str(e)}) from e
+
+    return bet.to_dict() if hasattr(bet, "to_dict") else bet
 
 
 @router.delete("/fantasy-bet/{bet_id}", status_code=204, response_model=None)
@@ -647,43 +605,36 @@ def delete_fantasy_bet(
     user_service: UserServiceDep,
     fantasy_bet_service: FantasyBetServiceDep,
     token: str | None = None,
-) -> JSONResponse | None:
+) -> None:
     """Delete a fantasy bet using a token."""
     if not token:
-        return JSONResponse({"error": "missing token"}, status_code=400)
+        raise BadRequestError("missing token")
 
     _cleanup_expired()
     entry = _token_store.get(token)
     if not entry:
-        return JSONResponse({"error": "token_not_found_or_expired"}, status_code=404)
+        raise NotFoundError("token_not_found_or_expired")
 
     # Get user based on discord info
-
-    user = None
-    try:
-        existing_users = user_service.find_by_discord_id(str(entry.get("discord_id")))
-        if existing_users and len(existing_users) > 0:
-            user = existing_users[0]
-    except Exception as e:
-        logger.error(f"Error searching for user: {e}")
-        return JSONResponse({"error": "user_lookup_failed"}, status_code=500)
+    existing_users = user_service.find_by_discord_id(str(entry.get("discord_id")))
+    user = existing_users[0] if existing_users else None
 
     if not user:
-        return JSONResponse({"error": "user_not_found"}, status_code=404)
+        raise NotFoundError("user_not_found")
 
     # Get the existing bet to verify ownership
     existing_bet = fantasy_bet_service.get(bet_id)
     if not existing_bet:
-        return JSONResponse({"error": "bet_not_found"}, status_code=404)
+        raise NotFoundError("bet_not_found")
 
     # Verify that the bet belongs to this user
     if existing_bet.user_id != user.id:
-        return JSONResponse(
+        raise ApiError(
+            403,
             {
                 "error": "unauthorized",
                 "message": "You can only delete your own bets",
             },
-            status_code=403,
         )
 
     # Delete the bet

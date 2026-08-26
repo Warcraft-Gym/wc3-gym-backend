@@ -4,9 +4,9 @@ import logging
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Body, Depends, File, Query, Response, UploadFile
-from fastapi.responses import JSONResponse
 
 from app.api.deps import StatsServiceDep, require_admin
+from app.core.exceptions import BadRequestError, NotFoundError
 from app.core.ordering import SortOrder
 from app.models.player_career_stats import (
     PlayerCareerStatsUpdate,
@@ -43,52 +43,52 @@ def get_all_career_stats(
 
 
 @router.get("/stats/career/{stat_id}")
-def get_career_stats_by_user(stat_id: int, service: StatsServiceDep) -> JSONResponse:
+def get_career_stats_by_user(stat_id: int, service: StatsServiceDep) -> dict[str, Any]:
     """Retrieve career statistics for a single player by user ID."""
     stat = service.get_by_user_id(stat_id)
-    if stat:
-        return JSONResponse(stat.to_dict(), status_code=200)
-    return JSONResponse({"error": "Stats not found"}, status_code=404)
+    if not stat:
+        raise NotFoundError("Stats not found")
+    return stat.to_dict()
 
 
 @router.put("/stats/career/{stat_id}", dependencies=[Depends(require_admin)])
 def update_career_stats(
     stat_id: int, data: Annotated[dict, Body()], service: StatsServiceDep
-) -> JSONResponse:
+) -> dict[str, Any]:
     """Update historical baseline values and user link for career stats."""
     update = PlayerCareerStatsUpdate(**data)
     stat = service.update_career_stats(stat_id, update)
-    if stat:
-        return JSONResponse(stat.to_dict(), status_code=200)
-    return JSONResponse({"error": "Stats not found"}, status_code=404)
+    if not stat:
+        raise NotFoundError("Stats not found")
+    return stat.to_dict()
 
 
 @router.delete("/stats/career/{stat_id}", dependencies=[Depends(require_admin)])
-def delete_career_stats(stat_id: int, service: StatsServiceDep) -> JSONResponse:
+def delete_career_stats(stat_id: int, service: StatsServiceDep) -> dict[str, Any]:
     """Delete career statistics record."""
     success = service.delete_career_stats(stat_id)
-    if success:
-        return JSONResponse({"success": True}, status_code=200)
-    return JSONResponse({"error": "Stats not found"}, status_code=404)
+    if not success:
+        raise NotFoundError("Stats not found")
+    return {"success": True}
 
 
 @router.post("/stats/career/import-csv", dependencies=[Depends(require_admin)])
 def import_historical_csv(
     service: StatsServiceDep, file: Annotated[UploadFile | None, File()] = None
-) -> JSONResponse:
+) -> dict[str, Any]:
     """One-time import of historical stats.
 
     Requires CSV file upload with columns: NAME, RATING, WON Series, LOST
     Series, WON Games, LOST Games, Seasons PLAYED
     """
     if file is None:
-        return JSONResponse({"error": "No file provided"}, status_code=400)
+        raise BadRequestError("No file provided")
 
     if file.filename == "":
-        return JSONResponse({"error": "No file selected"}, status_code=400)
+        raise BadRequestError("No file selected")
 
     if not file.filename.endswith(".csv"):
-        return JSONResponse({"error": "File must be a CSV"}, status_code=400)
+        raise BadRequestError("File must be a CSV")
 
     # Read CSV content with flexible encoding (handles Windows files)
     try:
@@ -103,12 +103,9 @@ def import_historical_csv(
 
     result = service.import_historical_stats(csv_input)
 
-    return JSONResponse(
-        {
-            "success": True,
-            "imported": result["imported"],
-            "skipped": result["skipped"],
-            "errors": result["errors"],
-        },
-        status_code=200,
-    )
+    return {
+        "success": True,
+        "imported": result["imported"],
+        "skipped": result["skipped"],
+        "errors": result["errors"],
+    }
