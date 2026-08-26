@@ -50,15 +50,14 @@ def w3c_mmr(monkeypatch: pytest.MonkeyPatch) -> None:
     """The signup path with the two w3champions calls answered from memory."""
     from app.models.enums import Race
     from app.models.w3c_stats import W3CStatsCreate
-    from app.services.koth import KothService
     from app.services.w3c import W3CService
 
     monkeypatch.setattr(W3CService, "current_season", lambda self: 20)
     monkeypatch.setattr(
-        KothService,
-        "_get_w3c_stats_for_season",
-        lambda self, service, w3c_url, battle_tag, season: [
-            W3CStatsCreate(wc3_season=season, mmr=1400, race=Race.HU)
+        W3CService,
+        "getPlayerStats",
+        lambda self, bnet_name, season_override=None: [
+            W3CStatsCreate(wc3_season=season_override, mmr=1400, race=Race.HU)
         ],
     )
     monkeypatch.setattr(
@@ -345,7 +344,6 @@ def test_an_admin_signup_needs_no_w3c_configuration(
     base URL and the season w3champions reports."""
     from app.models.enums import Race
     from app.models.w3c_stats import W3CStatsCreate
-    from app.services.koth import KothService
     from app.services.w3c import DEFAULT_BASE_URL, W3CService
 
     monkeypatch.delenv("W3C_URL", raising=False)
@@ -358,18 +356,14 @@ def test_an_admin_signup_needs_no_w3c_configuration(
         return [{"id": 25}, {"id": 24}]
 
     def fake_stats(
-        self: KothService,
-        service: W3CService,
-        w3c_url: str,
-        battle_tag: str,
-        season: int,
+        self: W3CService, bnet_name: str, season_override: int | None = None
     ) -> list[W3CStatsCreate]:
-        asked["stats_base"] = w3c_url
-        asked["season"] = season
-        return [W3CStatsCreate(wc3_season=season, mmr=1400, race=Race.HU)]
+        asked["stats_base"] = self.base_url()
+        asked["season"] = season_override
+        return [W3CStatsCreate(wc3_season=season_override, mmr=1400, race=Race.HU)]
 
     monkeypatch.setattr(W3CService, "send_request", fake_send_request)
-    monkeypatch.setattr(KothService, "_get_w3c_stats_for_season", fake_stats)
+    monkeypatch.setattr(W3CService, "getPlayerStats", fake_stats)
 
     resp = client.post(
         "/koth/signups/admin",

@@ -23,6 +23,7 @@ _RACE_NAMES = {
     "human": "HU",
     "orc": "OC",
     "night elf": "NE",
+    "nightelf": "NE",
     "undead": "UD",
     "rd": "RANDOM",
 }
