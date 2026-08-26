@@ -46,3 +46,9 @@ def test_a_query_the_parser_rejects_answers_400(client: Client, query: str) -> N
     resp = client.post("/users/search", params={"query": query})
     assert resp.status_code == 400
     assert "error" in resp.json()
+
+
+def test_a_value_the_column_cannot_take_answers_400(client: Client) -> None:
+    resp = client.post("/users/search", params={"query": "race == NOTARACE"})
+    assert resp.status_code == 400
+    assert "error" in resp.json()

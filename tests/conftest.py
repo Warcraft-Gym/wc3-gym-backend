@@ -38,10 +38,9 @@ from app.main import create_app
 def db_url(tmp_path_factory: pytest.TempPathFactory) -> str:
     """A migrated database. A file, not :memory:, because the migration and
     the application open their own connections to it."""
-    from tests.migrate import upgrade_to_head
+    from tests.migrate import fresh_database, upgrade_to_head
 
-    db_file = tmp_path_factory.mktemp("db") / "test.sqlite"
-    url = f"sqlite:///{db_file}"
+    url = fresh_database(tmp_path_factory.mktemp("db"), "test")
     upgrade_to_head(url)
     return url
 
@@ -60,19 +59,31 @@ def client(app: FastAPI) -> Client:
     return TestClient(app, follow_redirects=False, raise_server_exceptions=False)
 
 
-@pytest.fixture(autouse=True)
-def clean_db(app: FastAPI) -> None:
-    """Empty every table after each test. Children first, so no foreign
-    key constraint fires."""
-    yield
+def empty_tables() -> None:
+    """Empty every table. Children first, so no foreign key constraint
+    fires."""
+    from sqlalchemy import text
     from sqlmodel import SQLModel
 
     from app.core.db import Session
 
     with Session() as session:
-        for table in reversed(SQLModel.metadata.sorted_tables):
-            session.execute(table.delete())
+        if session.get_bind().dialect.name == "postgresql":
+            # Restart the id sequences too, so ids count from 1 in every
+            # test, as they do in SQLite.
+            names = ", ".join(t.name for t in SQLModel.metadata.sorted_tables)
+            session.execute(text(f"TRUNCATE {names} RESTART IDENTITY CASCADE"))
+        else:
+            for table in reversed(SQLModel.metadata.sorted_tables):
+                session.execute(table.delete())
         session.commit()
+
+
+@pytest.fixture(autouse=True)
+def clean_db(app: FastAPI) -> None:
+    """Empty every table after each test."""
+    yield
+    empty_tables()
 
 
 @pytest.fixture(autouse=True)

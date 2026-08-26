@@ -6,7 +6,9 @@ inside a value as part of the query. Use the services' find_by_ methods
 for a value the caller supplies; keep this for a query a client wrote.
 """
 
+import enum
 import re
+from datetime import date, datetime
 from typing import Self, cast
 
 from sqlalchemy import ColumnElement, Enum, String, and_, func, or_
@@ -100,20 +102,50 @@ class QueryUtil:
         return QueryCondition(operator, key, value)
 
     @staticmethod
+    def readValue(column: ColumnElement[object], key: str, value: str | bool) -> object:
+        """The value as the column's Python type. The query arrives as text
+        and Postgres does not compare a number column with text."""
+        if isinstance(value, bool):
+            return value
+        try:
+            python_type = column.type.python_type
+        except NotImplementedError:
+            return value
+        try:
+            if issubclass(python_type, enum.Enum):
+                return python_type.from_text(value)
+            if python_type is bool:
+                return {"1": True, "true": True, "0": False, "false": False}[
+                    value.lower()
+                ]
+            if python_type in (int, float):
+                return python_type(value)
+            if python_type in (datetime, date):
+                return python_type.fromisoformat(value)
+        except (KeyError, ValueError):
+            raise BadRequestError(f"{key} does not take {value!r}") from None
+        return value
+
+    @staticmethod
     def createClassQuery(
         cls: type[DBModel], query: QueryCondition
     ) -> ColumnElement[bool] | None:
         filter = None
         column = getattr(cls, query.key, None)
         if column is not None:
-            value = query.value
+            if query.operator == "ilike":
+                if isinstance(column.type, Enum):
+                    # Postgres has no ILIKE for a native enum, so match its text
+                    column = column.cast(String)
+                return column.ilike(f"%{query.value}%")
+            value = QueryUtil.readValue(column, query.key, query.value)
             if (
                 query.operator in ("==", "!=")
                 and isinstance(value, str)
                 and isinstance(column.type, String | AutoString)
                 and not isinstance(column.type, Enum)
             ):
-                # MySQL's collation matched text case-insensitively, Postgres does not
+                # Postgres compares text case-sensitively, so both sides fold
                 column, value = func.lower(column), value.lower()
             if query.operator == "==":
                 filter = column == value
@@ -127,8 +159,6 @@ class QueryUtil:
                 filter = column < value
             elif query.operator == "<=":
                 filter = column <= value
-            elif query.operator == "ilike":
-                filter = column.ilike(f"%{value}%")
         return filter
 
     @staticmethod

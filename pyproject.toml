@@ -8,7 +8,7 @@ dependencies = [
     "pandas",
     "openpyxl",
     "python-dotenv",
-    "pymysql",
+    "psycopg[binary]>=3.2",
     "sqlalchemy>=2,<3",
     "pydantic>=2,<3",
     "pyjwt",

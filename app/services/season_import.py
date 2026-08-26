@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from typing import Any, NamedTuple
 
 import pandas as pd
+from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session as OrmSession
 from sqlmodel import SQLModel
@@ -41,6 +42,7 @@ class ImportedSeason(NamedTuple):
 
     id: int
     name: str
+    duplicate_bets: int
 
 
 @dataclass
@@ -49,6 +51,12 @@ class Users:
 
     by_old_id: dict[int, User] = field(default_factory=dict)
     by_tag: dict[str, User] = field(default_factory=dict)
+
+
+def strip_text(frame: pd.DataFrame) -> pd.DataFrame:
+    """A sheet with the spaces around every text cell dropped, so a lookup
+    by name matches the value the workbook carries."""
+    return frame.map(lambda value: value.strip() if isinstance(value, str) else value)
 
 
 def cell_value[T](value: T) -> T | None:
@@ -71,7 +79,8 @@ def import_season_workbook(
 ) -> ImportedSeason:
     """Read the workbook and write the season it holds."""
     # sheet_name=None reads every sheet, so the workbook is parsed once
-    sheets = pd.read_excel(io.BytesIO(file_bytes), sheet_name=None)
+    frames = pd.read_excel(io.BytesIO(file_bytes), sheet_name=None)
+    sheets = {name: strip_text(frame) for name, frame in frames.items()}
     with Session.begin() as session:
         return _write(session, sheets, create_new, score_system)
 
@@ -103,9 +112,9 @@ def _write(
     _fantasy_users(session, sheets, users)
     fantasy_teams = _fantasy_teams(session, sheets, season, teams, users)
     _fantasy_players(session, sheets, fantasy_teams, users)
-    _fantasy_bets(session, sheets, season, series, users)
+    duplicate_bets = _fantasy_bets(session, sheets, season, series, users)
     logger.info(f"Import completed for season: {season.name}")
-    return ImportedSeason(id=season.id, name=season.name)
+    return ImportedSeason(id=season.id, name=season.name, duplicate_bets=duplicate_bets)
 
 
 def _known_system(system: str) -> str:
@@ -309,7 +318,13 @@ def _player_values(row: pd.Series) -> UserCreate:
     for name, column in columns.items():
         if cell_value(row[column]) is not None:
             data[name] = row[column]
-    return UserCreate(**data)
+    try:
+        return UserCreate(**data)
+    except ValidationError as error:
+        missing = ", ".join(str(detail["loc"][0]) for detail in error.errors())
+        raise BadRequestError(
+            f"Player {row['ID']} of the Players sheet has no {missing}"
+        ) from error
 
 
 def _players(
@@ -594,11 +609,12 @@ def _fantasy_bets(
     season: Season,
     series: dict[int, int],
     users: Users,
-) -> None:
-    """The bets of the season, matched by series, bettor and pick."""
+) -> int:
+    """The bets of the season, matched by series, bettor and pick. Answers
+    how many rows repeat a key an earlier row of the sheet already held."""
     rows = _rows(sheets.get("Fantasy Bets"), ["Series ID", "User ID", "Winner ID"])
     if not rows:
-        return
+        return 0
     stored = {
         (bet.series_id, bet.user_id, bet.winner_id): bet
         for bet in session.scalars(
@@ -607,6 +623,8 @@ def _fantasy_bets(
     }
 
     written: list[FantasyBet] = []
+    seen: set[tuple[int, int, int]] = set()
+    duplicates = 0
     for row in rows:
         series_id = series.get(whole_number(row["Series ID"]))
         user = users.by_old_id.get(whole_number(row["User ID"]))
@@ -624,6 +642,9 @@ def _fantasy_bets(
             bet_points=whole_number(row["Bet Points"]) or 0,
         )
         key = (series_id, user.id, winner.id)
+        if key in seen:
+            duplicates += 1
+        seen.add(key)
         bet = stored.get(key)
         if bet:
             _apply(bet, values)
@@ -632,3 +653,6 @@ def _fantasy_bets(
             written.append(bet)
             stored[key] = bet
     session.add_all(written)
+    if duplicates:
+        logger.warning(f"Skipped {duplicates} repeated rows of the Fantasy Bets sheet")
+    return duplicates

@@ -27,7 +27,7 @@ from app.models.settings import Settings
 from app.models.team import Team
 from app.models.user import User, UserCreate
 from app.services.fantasy_bets import resolve_bet_points
-from app.services.season_import import cell_value, whole_number
+from app.services.season_import import cell_value, strip_text, whole_number
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +46,9 @@ def import_fantasy_teams_workbook(
     file_bytes: bytes, season_id: int | None, season_name: str | None
 ) -> None:
     """Read the "Formatted Responses" sheet and write the fantasy teams."""
-    frame = pd.read_excel(io.BytesIO(file_bytes), sheet_name="Formatted Responses")
+    frame = strip_text(
+        pd.read_excel(io.BytesIO(file_bytes), sheet_name="Formatted Responses")
+    )
     rows = _rows(frame)
     with Session.begin() as session:
         _teams(session, rows, _season_id(session, season_id, season_name))
@@ -57,7 +59,8 @@ def import_fantasy_bets_workbook(
 ) -> None:
     """Read the "Betting Matches" and "Bets" sheets and write the bets."""
     # sheet_name=None reads both sheets, so the workbook is parsed once
-    sheets = pd.read_excel(io.BytesIO(file_bytes), sheet_name=None)
+    frames = pd.read_excel(io.BytesIO(file_bytes), sheet_name=None)
+    sheets = {name: strip_text(frame) for name, frame in frames.items()}
     with Session.begin() as session:
         season = _season_id(session, season_id, season_name)
         matches, series = _fantasy_matches(session, sheets["Betting Matches"], season)

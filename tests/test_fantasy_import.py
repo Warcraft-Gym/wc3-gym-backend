@@ -178,7 +178,7 @@ def test_the_import_creates_a_captain_it_cannot_find(
 
 
 # A Google Form entry is typed by hand, so a lookup folds the case of the
-# text it matches on. MySQL collated the per-row queries that way.
+# text it matches on.
 
 
 def test_a_captain_matches_a_discord_tag_in_another_case(

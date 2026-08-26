@@ -57,6 +57,7 @@ def import_season(
         "message": "Season imported successfully",
         "season_id": imported.id,
         "season_name": imported.name,
+        "duplicate_bets_skipped": imported.duplicate_bets,
     }
 
 

@@ -249,19 +249,20 @@ def get_player_series(
 
     # Get series where user is player1 or player2
     if entry.get("season_id"):
-        # Use the series service searchForSeason method for season-specific queries
+        # The token stores the season id as text
+        season_id = int(entry["season_id"])
         query = QueryUtil.parseQuery(
             f"player1_id == {user.id} or player2_id == {user.id}"
         )
         series = series_service.searchForSeason(
-            entry.get("season_id"),
+            season_id,
             query,
             limit=limit,
             offset=offset,
             sort=sort,
             order=order,
         )
-        total = series_service.countForSeason(entry.get("season_id"), query)
+        total = series_service.countForSeason(season_id, query)
     else:
         # Search all series for this user
         query = QueryUtil.parseQuery(

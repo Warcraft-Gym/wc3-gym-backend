@@ -170,3 +170,4 @@ cython_debug/
 
 # Docker
 docker-compose*
+.vercel

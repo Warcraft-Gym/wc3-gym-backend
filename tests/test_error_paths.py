@@ -348,6 +348,33 @@ def test_a_failed_player_lookup_logs_the_traceback(
     assert errors(caplog)[0].exc_info
 
 
+@pytest.mark.parametrize("score", [3, -1])
+def test_a_map_score_outside_the_range_answers_422(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any], score: int
+) -> None:
+    """A series is best of three. A score the scoring rule cannot price is
+    the caller's fault, so the write model refuses it before it is stored."""
+    resp = client.put(
+        f"/series/{seeded['series_open_id']}",
+        json={"player1_score": score},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 422
+    assert "player1_score" in resp.json()["error"]
+
+
+def test_a_map_score_in_the_range_is_stored(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    resp = client.put(
+        f"/series/{seeded['series_open_id']}",
+        json={"player1_score": 2, "player2_score": 1},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["player1_score"] == 2
+
+
 def test_no_route_builds_an_error_body_itself() -> None:
     """The handlers in app.main own every error body, so no route writes one."""
     for module in pkgutil.iter_modules(routes.__path__):

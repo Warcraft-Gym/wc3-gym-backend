@@ -1,4 +1,4 @@
-# Local dev stack: MySQL and the backend, both in Docker.
+# Local dev stack: Postgres and the backend, both in Docker.
 # just installs with the dev dependencies; run recipes with `uv run just <recipe>`.
 
 set shell := ["bash", "-euo", "pipefail", "-c"]
@@ -9,42 +9,36 @@ image := "gnl-backend:local"
 
 # The same database under its two names. Which one is right depends on
 # where the command runs, and that is the usual reason a connection fails.
-# The backend container reaches MySQL over the gnl-net network by container
+# The backend container reaches Postgres over the gnl-net network by container
 # name; a command on the host reaches it through the published port.
-container_db_url := "mysql+pymysql://gym_user:gym_user@gnl-mysql:3306/GYM_BACKEND"
-host_db_url := "mysql+pymysql://gym_user:gym_user@localhost:3306/GYM_BACKEND"
+container_db_url := "postgresql+psycopg://gym_user:gym_user@gnl-postgres:5432/gym_backend"
+host_db_url := "postgresql+psycopg://gym_user:gym_user@localhost:5432/gym_backend"
 
 default:
     @just --list
 
-# Start MySQL, then build and start the backend on port 5002.
+# Start Postgres, then build and start the backend on port 5002.
 up:
     #!/usr/bin/env bash
     set -euo pipefail
 
     docker network inspect gnl-net >/dev/null 2>&1 || docker network create gnl-net
 
-    if docker container inspect gnl-mysql >/dev/null 2>&1; then
-        docker start gnl-mysql
+    if docker container inspect gnl-postgres >/dev/null 2>&1; then
+        docker start gnl-postgres
     else
-        # The slow-log arguments apply only when Docker creates the container.
-        # An existing gnl-mysql keeps its old arguments until it is removed.
-        docker run -d --name gnl-mysql --network gnl-net \
-            -e MYSQL_ROOT_PASSWORD=root_password \
-            -e MYSQL_DATABASE=GYM_BACKEND \
-            -e MYSQL_USER=gym_user \
-            -e MYSQL_PASSWORD=gym_user \
-            -p 3306:3306 \
-            -v gnl-mysql-data:/var/lib/mysql \
-            mysql:5.7.41 \
-            --slow_query_log=ON \
-            --long_query_time=0.2 \
-            --slow_query_log_file=/var/lib/mysql/slow.log
+        docker run -d --name gnl-postgres --network gnl-net \
+            -e POSTGRES_DB=gym_backend \
+            -e POSTGRES_USER=gym_user \
+            -e POSTGRES_PASSWORD=gym_user \
+            -p 5432:5432 \
+            -v gnl-postgres-data:/var/lib/postgresql/data \
+            postgres:17
     fi
 
-    echo "Waiting for MySQL..."
+    echo "Waiting for Postgres..."
     for _ in $(seq 1 30); do
-        if docker exec gnl-mysql mysqladmin ping -u gym_user -pgym_user --silent 2>/dev/null; then
+        if docker exec gnl-postgres pg_isready -U gym_user -d gym_backend -q 2>/dev/null; then
             break
         fi
         sleep 2
@@ -84,18 +78,18 @@ up:
     echo
     echo "Backend: http://localhost:5002/docs (admin token: devtoken)"
 
-# Start the stopped containers again, MySQL first. Use after Docker Desktop restarts.
+# Start the stopped containers again, Postgres first. Use after Docker Desktop restarts.
 restart:
-    docker start gnl-mysql
+    docker start gnl-postgres
     docker start gnl-backend
 
 # Follow the backend log, where the migration and the server both write.
 logs *args:
     docker logs --follow --tail 50 {{args}} gnl-backend
 
-# Show the MySQL slow query log: every query slower than 0.2 seconds.
-slow-log:
-    docker exec gnl-mysql cat /var/lib/mysql/slow.log
+# Open psql on the development database.
+psql:
+    docker exec -it gnl-postgres psql -U gym_user -d gym_backend
 
 # Bring a database up to date by hand. The backend container does this at every start.
 migrate db_url=host_db_url:
@@ -115,9 +109,9 @@ db-reset db_url=host_db_url:
     DB_URL="{{db_url}}" uv run alembic downgrade base
     DB_URL="{{db_url}}" uv run alembic upgrade head
 
-# Stop the backend and MySQL, keeping the data. A missing container is not an error.
+# Stop the backend and Postgres, keeping the data. A missing container is not an error.
 down:
-    docker stop gnl-backend gnl-mysql 2>/dev/null || true
+    docker stop gnl-backend gnl-postgres 2>/dev/null || true
 
 # Run the tests as CI runs them. Takes pytest arguments, for example `just test -k koth`.
 test *args:
@@ -136,3 +130,13 @@ fmt:
 # Show the gnl containers.
 status:
     docker ps --all --filter name=gnl- --format 'table {{"{{.Names}}"}}\t{{"{{.Status}}"}}\t{{"{{.Ports}}"}}'
+
+# Import the S18 and S17 workbooks from tests/data into the running backend, S18 first.
+seed api="http://localhost:5002" token="devtoken":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    access=$(curl -fsS -X POST "{{ api }}/login" -H 'Content-Type: application/json' \
+        -d "{\"token\": \"{{ token }}\"}" | python3 -c 'import json, sys; print(json.load(sys.stdin)["access_token"])')
+    for f in tests/data/GNL_S18_export_v2.xlsx tests/data/GNL_S17_export_v2.xlsx; do
+        curl -fsS -X POST "{{ api }}/import?create_new=true" -H "Authorization: Bearer $access" -F "file=@$f"; echo
+    done

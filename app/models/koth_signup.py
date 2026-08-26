@@ -39,7 +39,6 @@ class KothSignup(KothSignupBase, DBModel, table=True):
             "race",
             unique=True,
         ),
-        {"mysql_charset": "utf8mb4"},
     )
 
     id: int | None = Field(default=None, primary_key=True)
@@ -49,7 +48,7 @@ class KothSignup(KothSignupBase, DBModel, table=True):
         default=None,
         sa_column=Column(
             AutoString(length=50),
-            Computed(ACTIVE_TWITCH_USERNAME, persisted=False),
+            Computed(ACTIVE_TWITCH_USERNAME),
             nullable=True,
         ),
     )

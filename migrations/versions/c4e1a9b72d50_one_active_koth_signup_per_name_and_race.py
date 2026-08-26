@@ -32,7 +32,7 @@ ACTIVE_TWITCH_USERNAME = (
     "CASE WHEN is_active = 1 AND twitch_username <> '' THEN twitch_username END"
 )
 
-# MySQL 5.7 reads the table it updates only through a derived table
+# The ids come from a derived table, so the update reads no row it writes
 DEACTIVATE_DUPLICATES = """
 UPDATE koth_signups SET is_active = 0
 WHERE is_active = 1
@@ -57,7 +57,7 @@ def upgrade() -> None:
         sa.Column(
             "active_twitch_username",
             sqlmodel.sql.sqltypes.AutoString(length=50),
-            sa.Computed(ACTIVE_TWITCH_USERNAME, persisted=False),
+            sa.Computed(ACTIVE_TWITCH_USERNAME),
             nullable=True,
         ),
     )

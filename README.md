@@ -10,35 +10,154 @@ FastAPI REST API for the GNL (Gym Newbie League) esports platform providing JWT-
 - **VS Code Extensions:**
   - Docker (Microsoft)
   - Python (Microsoft)
-- **MySQL 5.7.x** - Either:
-  - Local MySQL installation, OR
-  - MySQL Docker container (recommended)
+- **PostgreSQL 15+** - Either:
+  - PostgreSQL Docker container (recommended for development), OR
+  - A Supabase project
 
-## MySQL Setup
+## PostgreSQL Setup
 
-### Option 1: MySQL Docker Container (Recommended)
+### Option 1: PostgreSQL Docker Container (Recommended)
 
-Run MySQL in a Docker container:
+Run PostgreSQL in a Docker container (`just up` does this for you):
 
 ```bash
 docker run -d \
-  --name gnl-mysql \
-  -e MYSQL_ROOT_PASSWORD=root_password \
-  -e MYSQL_DATABASE=GYM_BACKEND \
-  -e MYSQL_USER=gym_user \
-  -e MYSQL_PASSWORD=gym_user \
-  -p 3306:3306 \
-  mysql:5.7.41
+  --name gnl-postgres \
+  -e POSTGRES_DB=gym_backend \
+  -e POSTGRES_USER=gym_user \
+  -e POSTGRES_PASSWORD=gym_user \
+  -p 5432:5432 \
+  postgres:17
 ```
 
-This creates a MySQL 5.7 container accessible at `localhost:3306`.
+This creates a PostgreSQL 17 container accessible at `localhost:5432`.
 
-### Option 2: Local MySQL Installation
+### Option 2: Supabase
 
-If you have MySQL installed locally:
-1. Create database: `CREATE DATABASE GYM_BACKEND;`
-2. Create user: `CREATE USER 'gym_user'@'localhost' IDENTIFIED BY 'your_password';`
-3. Grant privileges: `GRANT ALL PRIVILEGES ON GYM_BACKEND.* TO 'gym_user'@'localhost';`
+Use the **pooler** connection string from the Supabase dashboard (Connect → Session pooler), not the direct `db.<ref>.supabase.co` host: the direct host resolves to IPv6 only, which Vercel and most home networks cannot reach. The pooler user is `postgres.<ref>` and the SQLAlchemy scheme is `postgresql+psycopg`:
+
+```bash
+DB_URL="postgresql+psycopg://postgres.<ref>:<password>@aws-1-<region>.pooler.supabase.com:5432/postgres?sslmode=require"
+```
+
+Port 5432 is the session pooler, which behaves like a direct connection and is the one to use for `alembic upgrade head` and for a long-lived server. Port 6543 is the transaction pooler for serverless functions; it needs `connect_args={"prepare_threshold": None}` in `init_engine`, which is not set today.
+
+## Deploying to Vercel
+
+Vercel serves `api/index.py`, which imports the same application the container runs. Set `DB_URL`, `JWT_SECRET_KEY`, `ADMIN_TOKEN`, `BOT_CLIENT_TOKEN` and `FRONTEND_URL` in the project settings; the deployment reads no `.env` file.
+
+A deploy runs no migration. Before you deploy a commit that carries one, run it by hand against the same database:
+
+```bash
+DB_URL="<pooler url>" uv run alembic upgrade head
+```
+
+Use the session pooler on port 5432 for that command and for `DB_URL` itself. Port 6543 is the transaction pooler; it needs `connect_args={"prepare_threshold": None}` in `init_engine`, which is not set, so a `DB_URL` on 6543 fails on the second request.
+
+A full-season `POST /import` takes longer than the Vercel function timeout. Import a season from a machine that runs the server itself, or against the pooler URL directly.
+
+## Deploying to a Docker host
+
+The Azure VM runs the same image next to Postgres under Docker Compose. This is the stack with the values a deployment has to fill in; the secrets belong in the stack environment (Portainer, a `.env` next to the file), not in the file.
+
+```yaml
+# GNL prod stack on Postgres. Same shape as gnl_docker_compose/docker-compose.yml with the
+# database swapped and the backend mount removed. Put the secrets in Portainer's stack env, not here.
+name: gnl
+
+services:
+  gnl-postgres:
+    container_name: gnl-postgres
+    image: postgres:17-alpine
+    restart: always
+    command: ["postgres", "-c", "log_min_duration_statement=200", "-c", "effective_cache_size=512MB"]
+    environment:
+      POSTGRES_DB: GYM_BACKEND
+      POSTGRES_USER: gnl_user
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      # Case-insensitive text order, as MySQL had. Only read on first start of an empty volume.
+      POSTGRES_INITDB_ARGS: --locale-provider=icu --icu-locale=en-US
+    volumes:
+      - gnl-pgdata:/var/lib/postgresql/data
+    networks:
+      - gnl-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gnl_user -d GYM_BACKEND"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  gnl-backend:
+    container_name: backend
+    image: eashibby/gnl_backend:latest
+    restart: always
+    environment:
+      - DB_URL=postgresql+psycopg://gnl_user:${DB_PASSWORD}@gnl-postgres:5432/GYM_BACKEND
+      - ADMIN_TOKEN=${ADMIN_TOKEN}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - JWT_ALGORITHM=HS256
+      - BOT_CLIENT_TOKEN=${BOT_CLIENT_TOKEN}
+      - FRONTEND_URL=${FRONTEND_URL}
+      - LOG_LEVEL=INFO
+    ports:
+      - 5002:5002
+    depends_on:
+      gnl-postgres:
+        condition: service_healthy
+    networks:
+      - gnl-network
+
+  gnl-discord-bot:
+    container_name: discord-bot
+    image: eashibby/gnl_discord_bot:latest
+    restart: always
+    environment:
+      - DISCORD_TOKEN=${DISCORD_TOKEN}
+      - BACKEND_URL=http://backend:5002
+      - ADMIN_TOKEN=${ADMIN_TOKEN}
+    depends_on:
+      - gnl-backend
+    networks:
+      - gnl-network
+
+  gnl-admin-ui:
+    container_name: admin-ui
+    image: eashibby/gnl_admin_ui:latest
+    restart: always
+    ports:
+      - "5003:5003"
+    depends_on:
+      - gnl-backend
+    networks:
+      - gnl-network
+
+volumes:
+  gnl-pgdata:
+
+networks:
+  gnl-network:
+    driver: bridge
+```
+
+What this changes against a MySQL stack of the original app:
+
+- `DB_URL` uses the `postgresql+psycopg` scheme, port 5432 and the Postgres service name.
+- The backend mounts no volume over `/app`. The image carries the code, so a new image is a new version; a volume there would shadow it.
+- The container runs `alembic upgrade head` before the server, so it creates the schema on an empty database. `depends_on` with `service_healthy` keeps it from starting before Postgres answers.
+- `BOT_CLIENT_TOKEN` and `FRONTEND_URL` are read; without them the bot's public routes and the browser's CORS requests are refused.
+- `POSTGRES_INITDB_ARGS` picks the ICU collation, which orders text without regard to case as MySQL did. It is read once, on the first start of an empty volume.
+- The data moves by workbook, not by dump: export every season from the old app, `POST /import` each here, newest season first. Then set the `settings` rows and upload the team icons.
+- A backup is one command: `docker compose exec -T gnl-postgres pg_dump -U gnl_user -Fc GYM_BACKEND > gnl.dump`; restore with `pg_restore -U gnl_user -d GYM_BACKEND < gnl.dump` on the same service.
+
+## Season workbooks
+
+`POST /export` writes one season as an xlsx and `POST /import` reads it back. The pair is the migration path off the MySQL app: export each season there, import each here.
+
+The import writes no ids of its own. A season matches by name, a player by battle tag, a team by name and a series by its match and its two players, so the Postgres sequences keep counting from the rows that are already stored.
+
+`tests/data/` holds the real S17 and S18 exports; `just seed` imports both into a running backend (S18 first, so shared players keep the newer attributes) and the suite round-trips them.
+
+Ten sheets travel. These tables do not: `settings`, `w3cstats`, `player_career_stats`, `user_season_signup`, `koth_events`, `koth_matches`, `koth_match_participants`, `koth_signups`, `draft_series`, and the `icon` column of `teams`. Carry those over another way.
 
 ## Project Setup
 
@@ -72,7 +191,7 @@ Three more values live in the `settings` table, not the environment, and are edi
 **Key environment variables:**
 
 ```bash
-DB_URL="mysql+pymysql://gym_user:gym_user@host.docker.internal:3306/GYM_BACKEND"
+DB_URL="postgresql+psycopg://gym_user:gym_user@host.docker.internal:5432/gym_backend"
 ADMIN_TOKEN="your-admin-token-here"
 JWT_SECRET_KEY="your-secret-key-here"
 JWT_ALGORITHM="HS256"
@@ -85,7 +204,7 @@ BOT_WEBHOOK_URL="http://host.docker.internal:3001/webhook/series-updated"
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `DB_URL` | MySQL connection string. Use `host.docker.internal` to connect from Docker container to host machine's MySQL | `mysql+pymysql://gym_user:gym_user@host.docker.internal:3306/GYM_BACKEND` |
+| `DB_URL` | PostgreSQL connection string with the `postgresql+psycopg` scheme. Use `host.docker.internal` to connect from a Docker container to the host machine's PostgreSQL | `postgresql+psycopg://gym_user:gym_user@host.docker.internal:5432/gym_backend` |
 | `ADMIN_TOKEN` | Secret token for admin API access (used by Discord bot and admin UI) | `this_is_my_token` |
 | `JWT_SECRET_KEY` | Secret key for JWT token signing (generate with `openssl rand -hex 32`) | 64-character hex string |
 | `JWT_ALGORITHM` | JWT signing algorithm | `HS256` or `HS512` |
@@ -99,8 +218,8 @@ BOT_WEBHOOK_URL="http://host.docker.internal:3001/webhook/series-updated"
 
 **Important Notes:**
 - `host.docker.internal` is a special DNS name that resolves to the host machine from within a Docker container
-- If MySQL is running locally (not in Docker), use `host.docker.internal:3306`
-- If MySQL is in another Docker container on the same network, use the container name instead
+- If PostgreSQL is running locally (not in Docker), use `host.docker.internal:5432`
+- If PostgreSQL is in another Docker container on the same network, use the container name instead
 - Generate secure tokens using: `openssl rand -hex 32` or `python -c "import secrets; print(secrets.token_hex(32))"`
 
 ## Running the Application
@@ -111,7 +230,7 @@ BOT_WEBHOOK_URL="http://host.docker.internal:3001/webhook/series-updated"
 
 ```bash
 uv run just             # list the recipes
-uv run just up          # build the image, start MySQL and the backend in Docker
+uv run just up          # build the image, start Postgres and the backend in Docker
 uv run just restart     # start the containers again after a stop
 uv run just logs        # follow the backend log
 uv run just status      # show the gnl containers
@@ -121,14 +240,15 @@ uv run just lint        # check formatting and lint, as CI runs them
 uv run just fmt         # apply the formatting and lint fixes
 uv run just db-status   # show the revision the database is on
 uv run just migrate     # bring a database up to date by hand
+uv run just seed        # import the S18 and S17 workbooks from tests/data
 uv run just revision    # write a migration for the current models
 ```
 
-`up` covers the full MySQL setup from above: on first use it creates the `gnl-net` Docker network and the `gnl-mysql` container with a named volume (`gnl-mysql-data`), so the database survives `down` and container removal. It then builds the image and starts it on port 5002. Run it again after a code change to rebuild and restart the backend.
+`up` covers the full PostgreSQL setup from above: on first use it creates the `gnl-net` Docker network and the `gnl-postgres` container with a named volume (`gnl-postgres-data`), so the database survives `down` and container removal. It then builds the image and starts it on port 5002. Run it again after a code change to rebuild and restart the backend.
 
 The image is tagged `gnl-backend:local`. The tag means what it says: `just up` builds it from the working tree for use on this machine, and nothing pushes it to a registry. A deployment builds and names its own image, so treat `gnl-backend:local` as a local name only and do not read it as a stage of a release.
 
-`up` replaces the backend container, which is what makes it the recipe for a code change. `restart` starts the containers that are already there, which is what a stopped Docker Desktop leaves behind. Neither loses the database: the data is in the `gnl-mysql-data` volume.
+`up` replaces the backend container, which is what makes it the recipe for a code change. `restart` starts the containers that are already there, which is what a stopped Docker Desktop leaves behind. Neither loses the database: the data is in the `gnl-postgres-data` volume.
 
 The container starts with development-only values (`ADMIN_TOKEN=devtoken`, `JWT_SECRET_KEY=devsecret`). Log in with `devtoken`. Do not use these values outside local development. The backend accepts connections about 30 seconds after `up` returns.
 
@@ -151,7 +271,7 @@ docker build -t eashibby/gnl_backend:latest .
 # Run container
 docker run -d \
   -p 5002:5002 \
-  -e DB_URL="mysql+pymysql://gym_user:gym_user@host.docker.internal:3306/GYM_BACKEND" \
+  -e DB_URL="postgresql+psycopg://gym_user:gym_user@host.docker.internal:5432/gym_backend" \
   -e ADMIN_TOKEN="your-token" \
   -e JWT_SECRET_KEY="your-secret" \
   -e JWT_ALGORITHM="HS256" \
@@ -163,7 +283,7 @@ docker run -d \
 Alembic owns the database structure. The container runs `alembic upgrade head` once at start, before the server, so the application itself never creates or changes a table.
 
 ```bash
-export DB_URL="mysql+pymysql://gym_user:gym_user@localhost:3306/GYM_BACKEND"
+export DB_URL="postgresql+psycopg://gym_user:gym_user@localhost:5432/gym_backend"
 
 uv run alembic upgrade head        # bring the database up to date
 uv run alembic current             # show the revision the database is on
@@ -178,11 +298,11 @@ The justfile wraps these as `just migrate`, `just db-status` and `just revision`
 
 | Where the command runs | Host to use | Why |
 |---|---|---|
-| Inside a container on `gnl-net` | `gnl-mysql:3306` | Docker resolves the container name on that network |
-| On the host, or in an IDE | `localhost:3306` | reaches the port `gnl-mysql` publishes |
-| In a container, MySQL on the host | `host.docker.internal:3306` | Docker Desktop's name for the host |
+| Inside a container on `gnl-net` | `gnl-postgres:5432` | Docker resolves the container name on that network |
+| On the host, or in an IDE | `localhost:5432` | reaches the port `gnl-postgres` publishes |
+| In a container, PostgreSQL on the host | `host.docker.internal:5432` | Docker Desktop's name for the host |
 
-A container started with the `localhost` form will not find MySQL, because `localhost` inside a container is that container. A container started with the `gnl-mysql` form but no `--network gnl-net` will not find it either, because the name only resolves on that network. The justfile holds both forms as `container_db_url` and `host_db_url` and passes the right one, which is the reason to prefer the recipes over typing the commands.
+A container started with the `localhost` form will not find PostgreSQL, because `localhost` inside a container is that container. A container started with the `gnl-postgres` form but no `--network gnl-net` will not find it either, because the name only resolves on that network. The justfile holds both forms as `container_db_url` and `host_db_url` and passes the right one, which is the reason to prefer the recipes over typing the commands.
 
 After changing a model, write the migration for it:
 
@@ -208,7 +328,7 @@ A start with nothing to do logs the two context lines and goes straight to the s
 
 ### Serving from more than one container
 
-**The migration step belongs to the container, so run one backend container per database.** The command starts `alembic upgrade head` and then the server, which is once per container however many workers the server runs. Two containers started together against the same database would run it at the same time, and Alembic does not lock MySQL. To serve from more than one container, run the migration as its own step first and give the containers the server command alone:
+**The migration step belongs to the container, so run one backend container per database.** The command starts `alembic upgrade head` and then the server, which is once per container however many workers the server runs. Two containers started together against the same database would run it at the same time, and Alembic does not lock the database. To serve from more than one container, run the migration as its own step first and give the containers the server command alone:
 
 ```bash
 # The migration, once, and wait for it to finish before starting any server.
@@ -226,7 +346,7 @@ docker run -d --network gnl-net -p 5002:5002 \
     uvicorn --factory app.main:create_app --host 0.0.0.0 --port 5002
 ```
 
-Both commands need the network that reaches MySQL, and both need `DB_URL` in the form that resolves there — see the table above. The server command needs the rest of the variables too. Without them the container still starts and still serves, and every admin login answers 401, because `ADMIN_TOKEN` is read per request and an unset one matches no token. Read the variable table before deploying rather than after.
+Both commands need the network that reaches PostgreSQL, and both need `DB_URL` in the form that resolves there — see the table above. The server command needs the rest of the variables too. Without them the container still starts and still serves, and every admin login answers 401, because `ADMIN_TOKEN` is read per request and an unset one matches no token. Read the variable table before deploying rather than after.
 
 `gnl-backend:local` stands in for the image here because this repository builds no other. A deployment substitutes its own image name.
 
@@ -234,13 +354,13 @@ This is where the deployment differs from the official FastAPI template, which r
 
 ## Troubleshooting
 
-### Backend Can't Connect to MySQL
+### Backend Can't Connect to PostgreSQL
 
 **Symptom:** Database connection errors on startup
 
 **Solutions:**
-1. Verify MySQL is running: `docker ps` (for Docker) or `netstat -an | findstr 3306` (for local)
-2. Test connection: `mysql -h 127.0.0.1 -u gym_user -p`
+1. Verify PostgreSQL is running: `docker ps` (for Docker) or `netstat -an | findstr 5432` (for local)
+2. Test connection: `psql -h 127.0.0.1 -U gym_user -d gym_backend`
 3. Ensure `host.docker.internal` is resolving (Windows/Mac Docker Desktop feature)
 4. For Linux, use `--add-host=host.docker.internal:host-gateway` in docker run command
 
@@ -313,6 +433,13 @@ The tests run against a temporary SQLite file and need no database server
 and no environment variables. The suite builds that file with
 `alembic upgrade head`, the way a deployment does, so every run checks the
 migrations as well. See `tests/conftest.py` for the design rules.
+
+To run the same suite against PostgreSQL, point `TEST_DB_URL` at a server
+whose user may create databases; the suite drops and creates its own:
+
+```bash
+TEST_DB_URL="postgresql+psycopg://gym_user:gym_user@localhost:5432/postgres" uv run pytest
+```
 
 ## List routes and paging
 

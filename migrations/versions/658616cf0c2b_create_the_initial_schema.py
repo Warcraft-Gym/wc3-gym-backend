@@ -71,7 +71,6 @@ def upgrade() -> None:
         sa.Column("bracket_1_threshold", sa.Integer(), nullable=False),
         sa.Column("bracket_2_threshold", sa.Integer(), nullable=False),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_koth_events")),
-        mysql_charset="utf8mb4",
     )
     op.create_table(
         "maps",
@@ -147,7 +146,6 @@ def upgrade() -> None:
         sa.Column("country", sqlmodel.sql.sqltypes.AutoString(length=2), nullable=True),
         sa.Column("fantasy_tier", sa.Integer(), nullable=True),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_users")),
-        mysql_charset="utf8mb4",
     )
     op.create_table(
         "fantasy_teams",
@@ -203,7 +201,6 @@ def upgrade() -> None:
             name=op.f("fk_koth_matches_event_id_koth_events"),
         ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_koth_matches")),
-        mysql_charset="utf8mb4",
     )
     op.create_table(
         "koth_signups",
@@ -235,7 +232,6 @@ def upgrade() -> None:
             name=op.f("fk_koth_signups_event_id_koth_events"),
         ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_koth_signups")),
-        mysql_charset="utf8mb4",
     )
     op.create_table(
         "map_season",
@@ -467,7 +463,6 @@ def upgrade() -> None:
             name=op.f("fk_koth_match_participants_signup_id_koth_signups"),
         ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_koth_match_participants")),
-        mysql_charset="utf8mb4",
     )
     op.create_table(
         "series",

@@ -18,7 +18,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.main import api_router
@@ -83,6 +83,13 @@ def create_app(db_url: str | None = None) -> FastAPI:
             exc,
         )
         return JSONResponse({"error": str(exc)}, status_code=502)
+
+    @app.exception_handler(IntegrityError)
+    async def integrity_error(request: Request, exc: IntegrityError) -> JSONResponse:
+        """The database refused the write because another row depends on
+        it, so the request conflicts with the data rather than failing."""
+        logger.warning("Integrity error", exc_info=exc)
+        return JSONResponse({"error": "Row is still referenced"}, status_code=409)
 
     @app.exception_handler(SQLAlchemyError)
     async def db_error(request: Request, exc: SQLAlchemyError) -> JSONResponse:

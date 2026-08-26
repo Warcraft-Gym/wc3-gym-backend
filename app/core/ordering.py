@@ -18,7 +18,11 @@ def ordered[SelectT: Select[Any]](
     """
     if sort is not None:
         column = sort_map[sort]
+        # A null leads the ascending page and closes the descending one on
+        # every database; Postgres alone would put it at the other end.
         statement = statement.order_by(
-            column.desc() if order == "desc" else column.asc()
+            column.desc().nulls_last()
+            if order == "desc"
+            else column.asc().nulls_first()
         )
     return statement.order_by(*default)

@@ -9,10 +9,10 @@ from pathlib import Path
 import pytest
 from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
-from sqlalchemy import create_engine, text
+from sqlalchemy import column, create_engine, table, text
 from sqlmodel import SQLModel
 
-from tests.migrate import upgrade_to, upgrade_to_head
+from tests.migrate import fresh_database, upgrade_to, upgrade_to_head
 from tests.test_models import import_all_models
 
 # The revision before the seasons table carries a score system
@@ -23,10 +23,10 @@ BEFORE_W3C_STATS_UNIQUE = "9f4b7c1d2ae5"
 
 def test_a_migrated_database_matches_the_models(tmp_path: Path) -> None:
     import_all_models()
-    db_file = tmp_path / "migrated.sqlite"
-    upgrade_to_head(f"sqlite:///{db_file}")
+    url = fresh_database(tmp_path, "migrated")
+    upgrade_to_head(url)
 
-    engine = create_engine(f"sqlite:///{db_file}")
+    engine = create_engine(url)
     with engine.connect() as connection:
         context = MigrationContext.configure(connection)
         differences = compare_metadata(context, SQLModel.metadata)
@@ -45,8 +45,7 @@ def test_a_migrated_database_matches_the_models(tmp_path: Path) -> None:
 def test_the_score_system_backfill_reads_the_settings_row(
     tmp_path: Path, setting: str | None, expected: str
 ) -> None:
-    db_file = tmp_path / "backfill.sqlite"
-    url = f"sqlite:///{db_file}"
+    url = fresh_database(tmp_path, "backfill")
     upgrade_to(url, BEFORE_SCORE_SYSTEM)
 
     engine = create_engine(url)
@@ -74,16 +73,27 @@ def test_the_score_system_backfill_reads_the_settings_row(
 def test_the_w3c_stats_dedupe_keeps_the_highest_id_of_each_key(tmp_path: Path) -> None:
     """The highest id is the row the last sync wrote, so it is the one to
     keep. A null race is one key, not one key per row."""
-    db_file = tmp_path / "dedupe.sqlite"
-    url = f"sqlite:///{db_file}"
+    url = fresh_database(tmp_path, "dedupe")
     upgrade_to(url, BEFORE_W3C_STATS_UNIQUE)
 
     engine = create_engine(url)
     with engine.begin() as connection:
+        # A table construct, not text: Postgres needs the camelCase names quoted
+        users = table(
+            "users",
+            *(
+                column(c)
+                for c in ("id", "name", "battleTag", "discordTag", "discordId", "race")
+            ),
+        )
         connection.execute(
-            text(
-                "INSERT INTO users (id, name, battleTag, discordTag, discordId, race) "
-                "VALUES (1, 'P1', 'P1#1111', 'p1', '1', 'HU')"
+            users.insert().values(
+                id=1,
+                name="P1",
+                battleTag="P1#1111",
+                discordTag="p1",
+                discordId="1",
+                race="HU",
             )
         )
         # id, user, race, season, mmr. Rows 1 to 3 share one key, and so do 5 and 6.

@@ -18,7 +18,6 @@ class KothMatchParticipantBase(SQLModel):
 
 class KothMatchParticipant(KothMatchParticipantBase, DBModel, table=True):
     __tablename__ = "koth_match_participants"
-    __table_args__ = {"mysql_charset": "utf8mb4"}
 
     id: int | None = Field(default=None, primary_key=True)
 
