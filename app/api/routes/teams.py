@@ -91,7 +91,7 @@ def get_all_teams_season_basic(
 
 
 @router.post(
-    "/teams/addPlayers/{team_id}/seasons/{season_id}",
+    "/teams/{team_id}/seasons/{season_id}/players",
     dependencies=[Depends(require_admin)],
 )
 def add_players(
@@ -104,8 +104,8 @@ def add_players(
     return service.addPlayers(team_id, season_id, data.get("player_ids"))
 
 
-@router.post(
-    "/teams/removePlayers/{team_id}/seasons/{season_id}",
+@router.delete(
+    "/teams/{team_id}/seasons/{season_id}/players",
     dependencies=[Depends(require_admin)],
 )
 def remove_players(
@@ -162,7 +162,7 @@ def search_teams(
 
 
 @router.post(
-    "/teams/w3c_sync/{team_id}/seasons/{season_id}",
+    "/teams/{team_id}/seasons/{season_id}/w3c-sync",
     dependencies=[Depends(require_admin)],
 )
 def sync_w3c_users_season(

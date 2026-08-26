@@ -52,7 +52,7 @@ def get_season(season_id: int, service: SeasonServiceDep) -> SeasonPublic:
     return service.get(season_id)
 
 
-@router.post("/seasons/addTeams/{season_id}", dependencies=[Depends(require_admin)])
+@router.post("/seasons/{season_id}/teams", dependencies=[Depends(require_admin)])
 def add_teams(
     season_id: int, data: Annotated[dict, Body()], service: SeasonServiceDep
 ) -> SeasonPublic:
@@ -60,7 +60,7 @@ def add_teams(
     return service.addTeams(season_id, data.get("team_ids"))
 
 
-@router.post("/seasons/removeTeams/{season_id}", dependencies=[Depends(require_admin)])
+@router.delete("/seasons/{season_id}/teams", dependencies=[Depends(require_admin)])
 def remove_teams(
     season_id: int, data: Annotated[dict, Body()], service: SeasonServiceDep
 ) -> SeasonPublic:
@@ -92,7 +92,7 @@ def search_seasons(
     return service.search(parsed_query, limit=limit, offset=offset) or []
 
 
-@router.post("/seasons/addMaps/{season_id}", dependencies=[Depends(require_admin)])
+@router.post("/seasons/{season_id}/maps", dependencies=[Depends(require_admin)])
 def add_maps(
     season_id: int, data: Annotated[dict, Body()], service: SeasonServiceDep
 ) -> SeasonPublic:
@@ -100,7 +100,7 @@ def add_maps(
     return service.addMaps(season_id, data.get("map_ids"))
 
 
-@router.post("/seasons/removeMaps/{season_id}", dependencies=[Depends(require_admin)])
+@router.delete("/seasons/{season_id}/maps", dependencies=[Depends(require_admin)])
 def remove_maps(
     season_id: int, data: Annotated[dict, Body()], service: SeasonServiceDep
 ) -> SeasonPublic:
@@ -108,9 +108,7 @@ def remove_maps(
     return service.removeMaps(season_id, data.get("map_ids"))
 
 
-@router.post(
-    "/seasons/addUserSignup/{season_id}", dependencies=[Depends(require_admin)]
-)
+@router.post("/seasons/{season_id}/signups", dependencies=[Depends(require_admin)])
 def add_user_signup(
     season_id: int, data: Annotated[dict, Body()], service: SeasonServiceDep
 ) -> SeasonPublic:
@@ -118,9 +116,7 @@ def add_user_signup(
     return service.addUserSignup(season_id, data.get("user_ids"))
 
 
-@router.post(
-    "/seasons/removeUserSignup/{season_id}", dependencies=[Depends(require_admin)]
-)
+@router.delete("/seasons/{season_id}/signups", dependencies=[Depends(require_admin)])
 def remove_user_signup(
     season_id: int, data: Annotated[dict, Body()], service: SeasonServiceDep
 ) -> SeasonPublic:
@@ -139,7 +135,7 @@ def get_season_signups(
     return service.getSignedUpUsers(season_id, limit=limit, offset=offset) or []
 
 
-@router.post("/seasons/{season_id}/w3c_sync", dependencies=[Depends(require_admin)])
+@router.post("/seasons/{season_id}/w3c-sync", dependencies=[Depends(require_admin)])
 def sync_w3c_season_signups(season_id: int, service: SeasonServiceDep) -> W3CSyncResult:
     """Sync w3c information for every player signed up for the season."""
     return service.syncW3CStatsSeason(season_id)

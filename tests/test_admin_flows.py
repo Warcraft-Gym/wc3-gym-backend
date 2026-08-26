@@ -48,10 +48,10 @@ GUARDED_WRITES = [
     ("POST", "/seasons"),
     ("PUT", "/seasons/1"),
     ("DELETE", "/seasons/1"),
-    ("POST", "/seasons/addTeams/1"),
-    ("POST", "/seasons/removeTeams/1"),
-    ("POST", "/teams/addPlayers/1/seasons/1"),
-    ("POST", "/teams/removePlayers/1/seasons/1"),
+    ("POST", "/seasons/1/teams"),
+    ("DELETE", "/seasons/1/teams"),
+    ("POST", "/teams/1/seasons/1/players"),
+    ("DELETE", "/teams/1/seasons/1/players"),
     ("POST", "/matches"),
     ("PUT", "/matches/1"),
     ("DELETE", "/matches/1"),
@@ -66,8 +66,9 @@ def post(
     headers: dict[str, str],
     path: str,
     body: dict[str, Any] | None = None,
+    method: str = "POST",
 ) -> dict[str, Any]:
-    resp = client.post(path, json=body or {}, headers=headers)
+    resp = client.request(method, path, json=body or {}, headers=headers)
     assert resp.status_code in (200, 201), (path, resp.status_code, resp.text)
     return resp.json()
 
@@ -171,19 +172,19 @@ def league(client: Client, auth_headers: dict[str, str]) -> dict[str, Any]:
     post(
         client,
         headers,
-        f"/seasons/addTeams/{season['id']}",
+        f"/seasons/{season['id']}/teams",
         {"team_ids": [team_a["id"], team_b["id"]]},
     )
     post(
         client,
         headers,
-        f"/teams/addPlayers/{team_a['id']}/seasons/{season['id']}",
+        f"/teams/{team_a['id']}/seasons/{season['id']}/players",
         {"player_ids": [player_a["id"]]},
     )
     post(
         client,
         headers,
-        f"/teams/addPlayers/{team_b['id']}/seasons/{season['id']}",
+        f"/teams/{team_b['id']}/seasons/{season['id']}/players",
         {"player_ids": [player_b["id"]]},
     )
 
@@ -287,8 +288,9 @@ def test_a_team_removed_from_a_season_drops_it(
     post(
         client,
         auth_headers,
-        f"/seasons/removeTeams/{league['season_id']}",
+        f"/seasons/{league['season_id']}/teams",
         {"team_ids": [league["team_a_id"]]},
+        method="DELETE",
     )
 
     assert get(client, f"/teams/{league['team_a_id']}")["seasons_info"] == []
@@ -307,8 +309,9 @@ def test_a_player_removed_from_a_team_leaves_its_roster(
     post(
         client,
         auth_headers,
-        f"/teams/removePlayers/{league['team_a_id']}/seasons/{league['season_id']}",
+        f"/teams/{league['team_a_id']}/seasons/{league['season_id']}/players",
         {"player_ids": [league["player_a_id"]]},
+        method="DELETE",
     )
 
     assert roster(client, league["team_a_id"], league["season_id"]) == []
@@ -605,7 +608,7 @@ def test_a_w3c_sync_names_the_player_it_could_not_update(
     monkeypatch.setattr(W3CService, "getPlayerStats", player_stats)
 
     resp = client.post(
-        f"/teams/w3c_sync/{seeded['team_a_id']}/seasons/{seeded['season_id']}",
+        f"/teams/{seeded['team_a_id']}/seasons/{seeded['season_id']}/w3c-sync",
         headers=auth_headers,
     )
 
@@ -632,7 +635,7 @@ def test_a_player_w3champions_has_no_rows_for_is_synced(
     )
 
     resp = client.post(
-        f"/teams/w3c_sync/{seeded['team_a_id']}/seasons/{seeded['season_id']}",
+        f"/teams/{seeded['team_a_id']}/seasons/{seeded['season_id']}/w3c-sync",
         headers=auth_headers,
     )
 
@@ -665,7 +668,7 @@ def test_a_throttled_w3c_answers_502_on_the_single_player_route(
     monkeypatch.setattr(requests.Session, "request", refuse)
 
     resp = client.post(
-        f"/users/w3c_sync/{seeded['player_ids'][0]}", headers=auth_headers
+        f"/users/{seeded['player_ids'][0]}/w3c-sync", headers=auth_headers
     )
 
     assert resp.status_code == 502
@@ -714,7 +717,7 @@ def test_the_players_of_a_team_sync_at_the_same_time(
     monkeypatch.setattr(W3CService, "getPlayerStats", player_stats)
 
     resp = client.post(
-        f"/teams/w3c_sync/{seeded['team_a_id']}/seasons/{seeded['season_id']}",
+        f"/teams/{seeded['team_a_id']}/seasons/{seeded['season_id']}/w3c-sync",
         headers=auth_headers,
     )
 
@@ -738,7 +741,7 @@ def test_a_player_synced_minutes_ago_is_skipped_and_a_stale_one_is_synced(
     before = stamped_at(fresh)
 
     resp = client.post(
-        f"/teams/w3c_sync/{seeded['team_a_id']}/seasons/{seeded['season_id']}",
+        f"/teams/{seeded['team_a_id']}/seasons/{seeded['season_id']}/w3c-sync",
         headers=auth_headers,
     )
 
@@ -759,7 +762,7 @@ def test_a_sync_that_finds_no_stats_still_stamps_the_player(
     assert [stamped_at(p) for p in seeded["player_ids"][:2]] == [None, None]
 
     resp = client.post(
-        f"/teams/w3c_sync/{seeded['team_a_id']}/seasons/{seeded['season_id']}",
+        f"/teams/{seeded['team_a_id']}/seasons/{seeded['season_id']}/w3c-sync",
         headers=auth_headers,
     )
 
@@ -786,7 +789,7 @@ def test_one_players_database_failure_leaves_the_others_synced(
     synced, failed = seeded["player_ids"][:2]
 
     resp = client.post(
-        f"/teams/w3c_sync/{seeded['team_a_id']}/seasons/{seeded['season_id']}",
+        f"/teams/{seeded['team_a_id']}/seasons/{seeded['season_id']}/w3c-sync",
         headers=auth_headers,
     )
 
@@ -818,7 +821,7 @@ def test_a_second_w3c_sync_during_the_first_answers_200(
         return []
 
     monkeypatch.setattr(W3CService, "getPlayerStats", player_stats)
-    url = f"/teams/w3c_sync/{seeded['team_a_id']}/seasons/{seeded['season_id']}"
+    url = f"/teams/{seeded['team_a_id']}/seasons/{seeded['season_id']}/w3c-sync"
 
     # One client in one context, so both requests share the server thread pool
     with TestClient(app) as c, ThreadPoolExecutor(2) as pool:
@@ -872,7 +875,7 @@ def test_a_throttle_stops_the_pool_and_names_the_players_it_left(
 def sign_up(
     client: Client, headers: dict[str, str], season_id: int, user_ids: list[int]
 ) -> None:
-    post(client, headers, f"/seasons/addUserSignup/{season_id}", {"user_ids": user_ids})
+    post(client, headers, f"/seasons/{season_id}/signups", {"user_ids": user_ids})
 
 
 def test_a_season_sync_reports_every_player_signed_up(
@@ -886,7 +889,7 @@ def test_a_season_sync_reports_every_player_signed_up(
     signed_up = seeded["player_ids"][:3]
     sign_up(client, auth_headers, seeded["season_id"], signed_up)
 
-    resp = client.post(f"/seasons/{seeded['season_id']}/w3c_sync", headers=auth_headers)
+    resp = client.post(f"/seasons/{seeded['season_id']}/w3c-sync", headers=auth_headers)
 
     assert resp.status_code == 200
     body = resp.json()
@@ -904,7 +907,7 @@ def test_a_season_nobody_signed_up_for_syncs_nothing(
     """An empty report, not an error, so the button reads the same either way."""
     answer_no_stats(monkeypatch)
 
-    resp = client.post(f"/seasons/{seeded['season_id']}/w3c_sync", headers=auth_headers)
+    resp = client.post(f"/seasons/{seeded['season_id']}/w3c-sync", headers=auth_headers)
 
     assert resp.status_code == 200
     assert resp.json() == {"synced": [], "skipped": [], "failed": []}
@@ -915,7 +918,7 @@ def test_a_season_sync_of_an_unknown_season_answers_404(
     auth_headers: dict[str, str],
     seeded: dict[str, Any],
 ) -> None:
-    resp = client.post("/seasons/9999/w3c_sync", headers=auth_headers)
+    resp = client.post("/seasons/9999/w3c-sync", headers=auth_headers)
 
     assert resp.status_code == 404
     assert resp.json() == {"error": "Season not found"}
@@ -931,7 +934,7 @@ def test_a_second_season_sync_skips_the_players_the_first_stamped(
     answer_no_stats(monkeypatch)
     signed_up = seeded["player_ids"][:3]
     sign_up(client, auth_headers, seeded["season_id"], signed_up)
-    url = f"/seasons/{seeded['season_id']}/w3c_sync"
+    url = f"/seasons/{seeded['season_id']}/w3c-sync"
     assert client.post(url, headers=auth_headers).status_code == 200
 
     resp = client.post(url, headers=auth_headers)

@@ -75,14 +75,14 @@ def build_season(
     post(
         client,
         headers,
-        f"/seasons/addTeams/{season['id']}",
+        f"/seasons/{season['id']}/teams",
         {"team_ids": [team1["id"], team2["id"]]},
     )
     for team, player in zip((team1, team2), players, strict=True):
         post(
             client,
             headers,
-            f"/teams/addPlayers/{team['id']}/seasons/{season['id']}",
+            f"/teams/{team['id']}/seasons/{season['id']}/players",
             {"player_ids": [player["id"]]},
         )
 
@@ -263,7 +263,7 @@ def test_a_season_with_no_match_stands_every_team_at_zero(
     post(
         client,
         auth_headers,
-        f"/seasons/addTeams/{season['id']}",
+        f"/seasons/{season['id']}/teams",
         {"team_ids": [team["id"] for team in teams]},
     )
 

@@ -72,9 +72,7 @@ def get_team(team_id: int, service: FantasyTeamServiceDep) -> FantasyTeamPublic:
     return service.get(team_id)
 
 
-@router.post(
-    "/fantasy/teams/addPlayers/{team_id}", dependencies=[Depends(require_admin)]
-)
+@router.post("/fantasy/teams/{team_id}/players", dependencies=[Depends(require_admin)])
 def addPlayers(
     team_id: int, data: FantasyTeamPlayerIds, service: FantasyTeamServiceDep
 ) -> FantasyTeamPublic:
@@ -82,8 +80,8 @@ def addPlayers(
     return service.addPlayers(team_id, data.player_ids)
 
 
-@router.post(
-    "/fantasy/teams/removePlayers/{team_id}", dependencies=[Depends(require_admin)]
+@router.delete(
+    "/fantasy/teams/{team_id}/players", dependencies=[Depends(require_admin)]
 )
 def removePlayers(
     team_id: int, data: FantasyTeamPlayerIds, service: FantasyTeamServiceDep

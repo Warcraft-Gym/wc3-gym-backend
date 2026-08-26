@@ -75,7 +75,7 @@ def search_users(
     return service.search(parsed_query, limit=limit, offset=offset) or []
 
 
-@router.post("/users/w3c_sync/{user_id}", dependencies=[Depends(require_admin)])
+@router.post("/users/{user_id}/w3c-sync", dependencies=[Depends(require_admin)])
 def sync_w3c_user(user_id: int, service: UserServiceDep) -> UserPublic:
     """Sync w3c information for a user_id"""
     return service.updateW3CStats_ById(user_id)

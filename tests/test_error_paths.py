@@ -252,7 +252,7 @@ def test_a_w3c_failure_answers_502_with_its_message(
     refuse_w3c(monkeypatch, failure)
     user_id = seeded["player_ids"][0]
 
-    resp = client.post(f"/users/w3c_sync/{user_id}", headers=auth_headers)
+    resp = client.post(f"/users/{user_id}/w3c-sync", headers=auth_headers)
 
     assert resp.status_code == 502, resp.text
     assert resp.json() == {"error": str(failure)}
@@ -281,7 +281,7 @@ def test_a_plain_w3c_failure_answers_502_with_its_message(
     monkeypatch.setattr(w3c, "_session", Session())
     user_id = seeded["player_ids"][0]
 
-    resp = client.post(f"/users/w3c_sync/{user_id}", headers=auth_headers)
+    resp = client.post(f"/users/{user_id}/w3c-sync", headers=auth_headers)
 
     assert resp.status_code == 502, resp.text
     assert resp.json() == {"error": "plain text"}
