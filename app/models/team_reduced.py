@@ -5,7 +5,7 @@ team itself, a match, and the per-season stats of a player - and it
 depends on nothing, so importing it never closes a cycle.
 """
 
-from typing import TYPE_CHECKING, Annotated, Any, Self
+from typing import TYPE_CHECKING, Annotated, Self
 
 from sqlmodel import SQLModel
 
@@ -30,6 +30,3 @@ class TeamReduced(SQLModel):
             long_name=team.long_name,
             discord_role=team.discord_role,
         )
-
-    def to_dict(self) -> dict[str, Any]:
-        return self.model_dump(mode="json")

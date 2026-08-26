@@ -5,6 +5,8 @@ from sqlalchemy import ColumnExpressionArgument, select
 from sqlalchemy.orm import Session
 from sqlmodel import SQLModel
 
+from app.core.exceptions import BadRequestError
+
 
 class DBModel(SQLModel):
     """Shared query helpers for the mapped classes. It has no table of its own."""
@@ -20,7 +22,7 @@ class DBModel(SQLModel):
     def update(
         cls, session: Session, obj_id: int | None, **kwargs: object
     ) -> Self | None:
-        obj = cls.getById(session, obj_id)
+        obj = cls.get_by_id(session, obj_id)
         if obj:
             for key, value in kwargs.items():
                 setattr(obj, key, value)
@@ -28,7 +30,7 @@ class DBModel(SQLModel):
         return obj
 
     @classmethod
-    def updateObject(
+    def update_object(
         cls, session: Session, obj: Self | None, **kwargs: object
     ) -> Self | None:
         if obj:
@@ -39,7 +41,7 @@ class DBModel(SQLModel):
 
     @classmethod
     def delete(cls, session: Session, obj_id: int | None) -> Self | None:
-        obj = cls.getById(session, obj_id)
+        obj = cls.get_by_id(session, obj_id)
         if obj:
             session.delete(obj)
             session.flush()
@@ -54,7 +56,7 @@ class DBModel(SQLModel):
         offset: int = 0,
     ) -> Sequence[Self]:
         if filters is None:
-            raise ValueError("No search criteria was defined!")
+            raise BadRequestError("No search criteria was defined!")
         statement = select(cls).where(filters)
         if limit is not None or offset:
             # Offset paging is deterministic only with a fixed order
@@ -64,7 +66,7 @@ class DBModel(SQLModel):
         return session.scalars(statement).unique().all()
 
     @classmethod
-    def getAll(
+    def get_all(
         cls, session: Session, limit: int | None = None, offset: int = 0
     ) -> Sequence[Self]:
         statement = select(cls)
@@ -76,7 +78,7 @@ class DBModel(SQLModel):
         return session.scalars(statement).unique().all()
 
     @classmethod
-    def getById(cls, session: Session, id: int | None) -> Self | None:
+    def get_by_id(cls, session: Session, id: int | None) -> Self | None:
         # No row has a null primary key, and session.get warns on one
         if id is None:
             return None

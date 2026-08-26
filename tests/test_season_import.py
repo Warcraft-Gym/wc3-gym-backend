@@ -347,3 +347,118 @@ def test_importing_the_same_workbook_twice_adds_no_row(
     assert second.status_code == 200, second.text
     assert second.json()["season_id"] == first.json()["season_id"]
     assert _row_counts() == after_first
+
+
+def _season_sheet(system: str) -> dict[str, tuple[list[str], list[list[Any]]]]:
+    """The Season sheet of a newer export, which names its score system."""
+    columns, rows = SHEETS["Season"]
+    return {"Season": ([*columns, "Score System"], [[*rows[0], system]])}
+
+
+def _series_sheet(player1_points: int) -> dict[str, tuple[list[str], list[list[Any]]]]:
+    """A played 2-1 series. Its two point columns sum to 3 under standard
+    and to 4 under helpstone."""
+    columns, _ = SHEETS["Series"]
+    row = [1, 1, 1, 2, 2, 1, player1_points, 1, 1, None, None, False]
+    return {"Series": (columns, [row])}
+
+
+def _score_system_of(name: str = "Season 9") -> str:
+    with Session() as session:
+        return (
+            session.scalars(select(Season).where(Season.name == name))
+            .one()
+            .score_system
+        )
+
+
+def test_the_score_system_column_names_the_scale(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """The column wins over what the series imply, and here they disagree."""
+    response = _post(client, _workbook(extra=_season_sheet("helpstone")), auth_headers)
+
+    assert response.status_code == 200, response.text
+    assert _score_system_of() == "helpstone"
+
+
+def test_a_workbook_without_the_column_reads_helpstone_from_its_series(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """An export of the original app carries no column, so the 4 points its
+    played series pay name the scale."""
+    response = _post(client, _workbook(extra=_series_sheet(3)), auth_headers)
+
+    assert response.status_code == 200, response.text
+    assert _score_system_of() == "helpstone"
+
+
+def test_a_workbook_without_the_column_reads_standard_from_its_series(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    response = _post(client, _workbook(extra=_series_sheet(2)), auth_headers)
+
+    assert response.status_code == 200, response.text
+    assert _score_system_of() == "standard"
+
+
+def test_a_workbook_with_no_played_series_reads_standard(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """Nothing implies a scale, so the season takes the default one."""
+    columns, _ = SHEETS["Series"]
+    empty = {
+        "Series": (columns, [[1, 1, 1, 2, 2, 1, None, None, 1, None, None, False]])
+    }
+
+    response = _post(client, _workbook(extra=empty), auth_headers)
+
+    assert response.status_code == 200, response.text
+    assert _score_system_of() == "standard"
+
+
+def test_the_score_system_parameter_overrides_the_workbook(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """The column says helpstone and the request says standard."""
+    response = client.post(
+        "/import",
+        params={"score_system": "standard"},
+        files={
+            "file": (
+                "season.xlsx",
+                _workbook(extra=_season_sheet("helpstone")),
+                "application/vnd.ms-excel",
+            )
+        },
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200, response.text
+    assert _score_system_of() == "standard"
+
+
+def test_a_score_system_the_scoring_rule_does_not_know_is_refused(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    response = client.post(
+        "/import",
+        params={"score_system": "double"},
+        files={"file": ("season.xlsx", _workbook(), "application/vnd.ms-excel")},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 400, response.text
+    assert response.json() == {"error": "Unknown score system: double"}
+
+    with Session() as session:
+        assert session.scalars(select(Season)).all() == []
+
+
+def test_a_score_system_column_the_scoring_rule_does_not_know_is_refused(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    response = _post(client, _workbook(extra=_season_sheet("triple")), auth_headers)
+
+    assert response.status_code == 400, response.text
+    assert response.json() == {"error": "Unknown score system: triple"}

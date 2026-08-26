@@ -62,13 +62,13 @@ def test_refresh_rejects_access_token(
 
 def test_team_w3c_sync_needs_a_token(client: Client, seeded: dict[str, Any]) -> None:
     resp = client.post(
-        f"/teams/w3c_sync/{seeded['team_a_id']}/seasons/{seeded['season_id']}"
+        f"/teams/{seeded['team_a_id']}/seasons/{seeded['season_id']}/w3c-sync"
     )
     assert resp.status_code == 401
 
 
 def test_season_w3c_sync_needs_a_token(client: Client, seeded: dict[str, Any]) -> None:
-    resp = client.post(f"/seasons/{seeded['season_id']}/w3c_sync")
+    resp = client.post(f"/seasons/{seeded['season_id']}/w3c-sync")
     assert resp.status_code == 401
 
 

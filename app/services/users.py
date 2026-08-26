@@ -9,18 +9,16 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session as OrmSession
 from sqlalchemy.orm import joinedload, noload
 
-from app.core.exceptions import BadRequestError, NotFoundError, W3CThrottledError
+from app.core.exceptions import NotFoundError, W3CThrottledError
 from app.core.query import QueryElement, QueryUtil
-from app.models.season import Season
-from app.models.team import Team
 from app.models.user import User, UserCreate, UserListPublic, UserPublic, UserUpdate
-from app.models.user_team_season import DBUserTeamSeason, UserTeamSeasonStatsPublic
 from app.models.w3c_stats import (
     W3CStats,
     W3CStatsCreate,
     W3CSyncFailure,
     W3CSyncResult,
 )
+from app.services import derived
 from app.services.base import BaseService
 from app.services.w3c import THROTTLED_MESSAGE, W3CService
 
@@ -43,6 +41,13 @@ def _now() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
 
 
+def _public(session: OrmSession, user: User) -> UserPublic:
+    """One user, with the season record of every team he played for."""
+    public = UserPublic.from_user(user)
+    derived.fill_gnl_stats(session, [public])
+    return public
+
+
 class UserService(BaseService):
     def __init__(self, settings_app_service: "SettingsService | None" = None) -> None:
         self.settings_app_service = settings_app_service
@@ -50,20 +55,20 @@ class UserService(BaseService):
     def add(self, user: UserCreate) -> UserPublic:
         with self.get_session() as session:
             user = User.add(session, user.model_dump())
-            return UserPublic.from_user(user)
+            return _public(session, user)
 
     def update(self, user_id: int, user: UserUpdate) -> UserPublic:
         with self.get_session() as session:
             user = User.update(session, user_id, **user.model_dump(exclude_unset=True))
             if not user:
                 raise NotFoundError("User not found")
-            return UserPublic.from_user(user)
+            return _public(session, user)
 
     def delete(self, user_id: int) -> None:
         with self.get_session() as session:
             User.delete(session, user_id)
 
-    def get(self, user_id: int) -> UserPublic | None:
+    def get(self, user_id: int) -> UserPublic:
         with self.get_session() as session:
             # Eager load related entities, disable nested loading
             user = (
@@ -79,18 +84,17 @@ class UserService(BaseService):
                 .first()
             )
             if not user:
-                return None
-            return UserPublic.from_user(user)
+                raise NotFoundError(f"User not found by Id: {user_id}")
+            return _public(session, user)
 
     def search(
         self, query: QueryElement | None, limit: int | None = None, offset: int = 0
     ) -> list[UserListPublic]:
         return self._where(
-            QueryUtil.convertQueryToDBFilter(User, query), limit=limit, offset=offset
+            QueryUtil.convert_query_to_db_filter(User, query),
+            limit=limit,
+            offset=offset,
         )
-
-    def find_by_name(self, name: str) -> list[UserListPublic]:
-        return self._where(User.name == name)
 
     def find_by_ids(self, user_ids: Iterable[int | None]) -> list[UserListPublic]:
         """The users of those ids, read in one statement."""
@@ -98,9 +102,6 @@ class UserService(BaseService):
         if not ids:
             return []
         return self._where(User.id.in_(ids))
-
-    def find_by_discord_tag(self, discord_tag: str) -> list[UserListPublic]:
-        return self._where(User.discordTag == discord_tag)
 
     def find_by_discord_id(self, discord_id: str) -> list[UserListPublic]:
         return self._where(User.discordId == discord_id)
@@ -145,7 +146,7 @@ class UserService(BaseService):
                 result.append(UserListPublic.from_user(user))
             return result
 
-    def getAll(
+    def get_all(
         self, limit: int | None = None, offset: int = 0
     ) -> tuple[list[UserListPublic], int]:
         """The users, or one page of them, and the total row count."""
@@ -167,36 +168,21 @@ class UserService(BaseService):
                 result.append(UserListPublic.from_user(user))
             return result, total
 
-    def create_user(self, user: UserCreate) -> UserPublic:
-        return self.add(user)
-
-    def update_user(self, user_id: int, user: UserUpdate) -> UserPublic:
-        return self.update(user_id, user)
-
-    def delete_user(self, user_id: int) -> None:
-        self.delete(user_id)
-
-    def get_user(self, user_id: int) -> UserPublic:
-        user_data = self.get(user_id)
-        if not user_data:
-            raise NotFoundError(f"User not found by Id: {user_id}")
-        return user_data
-
-    def validateBattleTag(self, battle_tag: str) -> bool:
+    def validate_battle_tag(self, battle_tag: str) -> bool:
         """
         Validate that a BattleTag exists on W3Champions without persisting anything.
         Returns True if player exists, False otherwise.
         """
         w3c_service = W3CService(settings_app_service=self.settings_app_service)
         try:
-            return w3c_service.validatePlayer(battle_tag)
+            return w3c_service.validate_player(battle_tag)
         except Exception as e:
             logging.getLogger(__name__).debug(
                 f"BattleTag validation failed for {battle_tag}: {e!s}"
             )
             return False
 
-    def updateW3CStats(self, user: UserListPublic) -> None:
+    def update_w3c_stats(self, user: UserListPublic) -> None:
         w3c_service = W3CService(settings_app_service=self.settings_app_service)
 
         # Resolve the season once, so both fetches agree and w3champions is
@@ -212,7 +198,7 @@ class UserService(BaseService):
         refusals: list[Exception] = []
         for season in seasons:
             try:
-                stats = w3c_service.getPlayerStats(
+                stats = w3c_service.get_player_stats(
                     user.battleTag, season_override=season
                 )
                 if stats:
@@ -234,13 +220,13 @@ class UserService(BaseService):
         # other sync can insert between the read and the write.
         with self.get_session() as session:
             for s in all_stats:
-                self._writeW3CStats(session, user.id, s)
+                self._write_w3c_stats(session, user.id, s)
             # The stamp says when the app last asked, not that stats were found
             session.execute(
                 update(User).where(User.id == user.id).values(w3c_synced_at=_now())
             )
 
-    def syncW3CStatsUsers(
+    def sync_w3c_stats_users(
         self, users: list[UserListPublic], max_age: timedelta
     ) -> W3CSyncResult:
         """Sync these players in parallel and report every one of them.
@@ -265,7 +251,7 @@ class UserService(BaseService):
 
         # Each worker opens its own session; the threads share the engine only
         with ThreadPoolExecutor(W3C_SYNC_WORKERS) as pool:
-            futures = {pool.submit(self.updateW3CStats, u): u for u in pending}
+            futures = {pool.submit(self.update_w3c_stats, u): u for u in pending}
             for future in as_completed(futures):
                 if future.cancelled():
                     continue
@@ -315,7 +301,7 @@ class UserService(BaseService):
                 )
         return result
 
-    def _writeW3CStats(
+    def _write_w3c_stats(
         self, session: OrmSession, user_id: int, w3c_stats: W3CStatsCreate
     ) -> None:
         """Update the row of this race and season, or insert it."""
@@ -323,7 +309,7 @@ class UserService(BaseService):
         existing = session.scalars(self._w3c_stats_key(user_id, w3c_stats)).all()
         if existing:
             for row in existing:
-                W3CStats.updateObject(session, row, **values)
+                W3CStats.update_object(session, row, **values)
             return
         try:
             # A savepoint, so a lost race rolls back the insert alone
@@ -336,7 +322,7 @@ class UserService(BaseService):
             ).first()
             if row is None:
                 raise
-            W3CStats.updateObject(session, row, **values)
+            W3CStats.update_object(session, row, **values)
 
     @staticmethod
     def _w3c_stats_key(
@@ -349,45 +335,6 @@ class UserService(BaseService):
             W3CStats.wc3_season == w3c_stats.wc3_season,
         )
 
-    def updateW3CStats_ById(self, user_id: int) -> UserPublic:
-        user = self.get(user_id)
-        if not user:
-            raise NotFoundError(f"User could not be found by id: {user_id}")
-        self.updateW3CStats(user)
-        return self.get_user(user_id)
-
-    def updateUserTeamSeasonStats(
-        self, season_stats: UserTeamSeasonStatsPublic
-    ) -> UserPublic:
-        if not season_stats:
-            raise BadRequestError("Seasonstats not defined")
-        with self.get_session() as session:
-            team = session.get(Team, season_stats.team_id)
-            if not team:
-                raise NotFoundError(f"Team not found by id: {season_stats.team_id}")
-            season = session.get(Season, season_stats.season_id)
-            if not season:
-                raise NotFoundError(f"Season not found by id: {season_stats.season_id}")
-            user = session.get(User, season_stats.user_id)
-            if not user:
-                raise NotFoundError(f"User not found by id: {season_stats.user_id}")
-            key = {"team_id": team.id, "season_id": season.id, "user_id": user.id}
-            uts_obj = session.get(DBUserTeamSeason, key)
-            if uts_obj is None:
-                try:
-                    # A savepoint, so a lost race rolls back the insert alone
-                    with session.begin_nested():
-                        uts_obj = DBUserTeamSeason(user=user, season=season, team=team)
-                        session.add(uts_obj)
-                        session.flush()
-                except IntegrityError:
-                    # Another writer inserted the row first, so update that row
-                    uts_obj = session.get(DBUserTeamSeason, key, with_for_update=True)
-                    if uts_obj is None:
-                        raise
-            uts_obj.games = season_stats.games
-            uts_obj.wins = season_stats.wins
-            uts_obj.losses = season_stats.losses
-            uts_obj.matchup_history = season_stats.matchup_history
-            session.flush()
-        return self.get_user(season_stats.user_id)
+    def update_w3c_stats_by_id(self, user_id: int) -> UserPublic:
+        self.update_w3c_stats(self.get(user_id))
+        return self.get(user_id)

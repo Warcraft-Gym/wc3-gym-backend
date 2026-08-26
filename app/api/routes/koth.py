@@ -47,7 +47,7 @@ def get_event(event_id: int, service: KothServiceDep) -> KothEventPublic:
 )
 def create_event(data: KothEventCreate, service: KothServiceDep) -> KothEventPublic:
     """Create a new King of the Hill event."""
-    return service.create_event(data)
+    return service.add_event(data)
 
 
 @router.put(

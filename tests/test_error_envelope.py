@@ -33,7 +33,7 @@ def test_a_bug_answers_a_fixed_body(
     def broken(self: MapService) -> Never:
         raise RuntimeError("an internal detail the client must not see")
 
-    monkeypatch.setattr(MapService, "getAll", broken)
+    monkeypatch.setattr(MapService, "get_all", broken)
     resp = client.get("/maps")
     assert resp.status_code == 500
     assert resp.json() == {"error": "Internal Server Error"}
@@ -44,5 +44,11 @@ def test_a_query_the_parser_rejects_answers_400(client: Client, query: str) -> N
     """The caller wrote the query, so the fault is the caller's. It used to
     answer 500, which told the caller nothing."""
     resp = client.post("/users/search", params={"query": query})
+    assert resp.status_code == 400
+    assert "error" in resp.json()
+
+
+def test_a_value_the_column_cannot_take_answers_400(client: Client) -> None:
+    resp = client.post("/users/search", params={"query": "race == NOTARACE"})
     assert resp.status_code == 400
     assert "error" in resp.json()

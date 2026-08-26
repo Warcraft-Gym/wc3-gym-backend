@@ -19,11 +19,11 @@ if TYPE_CHECKING:
 class DBTeamSeason(DBModel, table=True):
     __tablename__ = "team_season"
     team_id: int = Field(foreign_key="teams.id", primary_key=True)
-    season_id: int = Field(foreign_key="seasons.id", primary_key=True)
+    season_id: int = Field(index=True, foreign_key="seasons.id", primary_key=True)
     # Team coaches (up to 3)
-    coach_1_id: int | None = Field(default=None, foreign_key="users.id")
-    coach_2_id: int | None = Field(default=None, foreign_key="users.id")
-    coach_3_id: int | None = Field(default=None, foreign_key="users.id")
+    coach_1_id: int | None = Field(index=True, default=None, foreign_key="users.id")
+    coach_2_id: int | None = Field(index=True, default=None, foreign_key="users.id")
+    coach_3_id: int | None = Field(index=True, default=None, foreign_key="users.id")
     # Relationships
     team: "Team" = Relationship(back_populates="season_info")
     season: "Season" = Relationship(back_populates="teams")

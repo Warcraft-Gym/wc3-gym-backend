@@ -108,7 +108,6 @@ def _notify_discord_series_update(
 
 def update_player_series(
     series_id: int,
-    content_type: str | None,
     data: dict[str, Any],
     files: dict[str, dict[str, Any]],
     discord_id: str,
@@ -123,7 +122,7 @@ def update_player_series(
     user = users[0]
 
     # Get the series and verify ownership
-    series = series_service.get_series(series_id)
+    series = series_service.get(series_id)
     if not series:
         return JSONResponse({"error": "series_not_found"}, status_code=404)
 
@@ -142,14 +141,6 @@ def update_player_series(
     uploaded_files = {}
     allowed_extensions = {"w3g"}
 
-    # Debug logging
-    logger.info(f"Request content type: {content_type}")
-    logger.info(f"Form data keys: {list(data.keys())}")
-    logger.info(f"Files keys: {list(files.keys())}")
-    logger.info(
-        f"Files details: {[(k, v['filename'] if v['filename'] else 'no filename') for k, v in files.items()]}"
-    )
-
     def allowed_file(filename: str) -> bool:
         return (
             "." in filename and filename.rsplit(".", 1)[1].lower() in allowed_extensions
@@ -158,14 +149,12 @@ def update_player_series(
     for file_key in ["game1", "game2", "game3"]:
         if file_key in files and files[file_key]["filename"]:
             file = files[file_key]
-            logger.info(f"Processing file {file_key}: {file['filename']}")
             if allowed_file(file["filename"]):
                 uploaded_files[file_key] = {
                     "filename": secure_filename(file["filename"]),
                     "data": file["data"],
                     "content_type": file["content_type"] or "application/octet-stream",
                 }
-                logger.info(f"Prepared replay file for Discord: {file['filename']}")
             else:
                 logger.warning(f"File {file_key} failed validation: {file['filename']}")
                 return JSONResponse(
@@ -174,21 +163,12 @@ def update_player_series(
                     },
                     status_code=400,
                 )
-        else:
-            logger.info(f"No file found for {file_key}")
-
-    logger.info(f"Final uploaded_files keys: {list(uploaded_files.keys())}")
 
     # Determine action: 'score_updated' or 'scheduled'. Frontend may send 'action'.
     action = data.get("action")
-    logger.info(f"Action from request: {action}")
 
     # If the action explicitly indicates a result report, enforce file requirements.
     if action == "score_updated":
-        logger.info("Processing as score update; enforcing replay upload requirements")
-        logger.info(f"Game1 in uploaded_files: {'game1' in uploaded_files}")
-        logger.info(f"Game2 in uploaded_files: {'game2' in uploaded_files}")
-
         if "game1" not in uploaded_files or "game2" not in uploaded_files:
             return JSONResponse(
                 {
@@ -209,7 +189,6 @@ def update_player_series(
             )
 
         needs_game3 = (p1 == 2 and p2 == 1) or (p1 == 1 and p2 == 2)
-        logger.info(f"Needs game3: {needs_game3}")
         if needs_game3 and "game3" not in uploaded_files:
             return JSONResponse(
                 {"error": "Game 3 replay file is required for 2:1 or 1:2 results."},
@@ -218,7 +197,6 @@ def update_player_series(
     else:
         # Backwards compatibility: if no explicit action provided, fall back to previous behavior
         scores_being_updated = "player1_score" in data or "player2_score" in data
-        logger.info(f"Scores being updated (fallback): {scores_being_updated}")
         if scores_being_updated and (
             "game1" not in uploaded_files or "game2" not in uploaded_files
         ):
@@ -238,8 +216,6 @@ def update_player_series(
                 changes["date_time"] = datetime.fromisoformat(
                     data["date_time"].replace(" ", "T")
                 )
-
-                logger.info(f"Storing ET datetime: {changes['date_time']}")
             except ValueError as e:
                 logger.error(
                     f"Invalid datetime format: {data['date_time']}, error: {e}"
@@ -258,7 +234,7 @@ def update_player_series(
         changes["player2_score"] = int(data["player2_score"])
 
     # Only the fields this editor changes, so a concurrent edit stands
-    updated_series = series_service.update_series(series_id, SeriesUpdate(**changes))
+    updated_series = series_service.update(series_id, SeriesUpdate(**changes))
 
     # Determine notification action based on what was updated
     player_name = user.name if hasattr(user, "name") else discord_tag

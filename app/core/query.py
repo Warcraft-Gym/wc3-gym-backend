@@ -6,11 +6,13 @@ inside a value as part of the query. Use the services' find_by_ methods
 for a value the caller supplies; keep this for a query a client wrote.
 """
 
+import enum
 import re
 from datetime import date, datetime
 from typing import Self, cast
 
-from sqlalchemy import ColumnElement, and_, or_
+from sqlalchemy import ColumnElement, Enum, String, and_, func, or_
+from sqlmodel import AutoString
 
 from app.core.exceptions import BadRequestError
 from app.models.base import DBModel
@@ -52,7 +54,7 @@ class QueryElement:
         self.elementA: QueryElement | QueryCondition | None = None
         self.elementB: QueryElement | QueryCondition | None = None
 
-    def setQueryElement(self, elem: "QueryElement | QueryCondition") -> None:
+    def set_query_element(self, elem: "QueryElement | QueryCondition") -> None:
         if not self.elementA:
             self.elementA = elem
         else:
@@ -74,7 +76,7 @@ class QueryCondition:
 
 class QueryUtil:
     @staticmethod
-    def parseQuery(query: str | None) -> QueryElement | None:
+    def parse_query(query: str | None) -> QueryElement | None:
         if not query:
             return None
         result = QueryElement()
@@ -82,7 +84,7 @@ class QueryUtil:
         return result
 
     @staticmethod
-    def convertToQueryCondition(query: str) -> QueryCondition:
+    def convert_to_query_condition(query: str) -> QueryCondition:
         pattern = r"(\w+)\s*(==|!=|>=|<=|>|<|ilike)\s*(.+)"
         match = re.match(pattern, query)
         if match:
@@ -100,7 +102,9 @@ class QueryUtil:
         return QueryCondition(operator, key, value)
 
     @staticmethod
-    def readValue(column: ColumnElement[object], key: str, value: str | bool) -> object:
+    def read_value(
+        column: ColumnElement[object], key: str, value: str | bool
+    ) -> object:
         """The value as the column's Python type. The query arrives as text
         and Postgres does not compare a number column with text."""
         if isinstance(value, bool):
@@ -110,6 +114,8 @@ class QueryUtil:
         except NotImplementedError:
             return value
         try:
+            if issubclass(python_type, enum.Enum):
+                return python_type.from_text(value)
             if python_type is bool:
                 return {"1": True, "true": True, "0": False, "false": False}[
                     value.lower()
@@ -123,15 +129,26 @@ class QueryUtil:
         return value
 
     @staticmethod
-    def createClassQuery(
+    def create_class_query(
         cls: type[DBModel], query: QueryCondition
     ) -> ColumnElement[bool] | None:
         filter = None
         column = getattr(cls, query.key, None)
         if column is not None:
             if query.operator == "ilike":
+                if isinstance(column.type, Enum):
+                    # Postgres has no ILIKE for a native enum, so match its text
+                    column = column.cast(String)
                 return column.ilike(f"%{query.value}%")
-            value = QueryUtil.readValue(column, query.key, query.value)
+            value = QueryUtil.read_value(column, query.key, query.value)
+            if (
+                query.operator in ("==", "!=")
+                and isinstance(value, str)
+                and isinstance(column.type, String | AutoString)
+                and not isinstance(column.type, Enum)
+            ):
+                # Postgres compares text case-sensitively, so both sides fold
+                column, value = func.lower(column), value.lower()
             if query.operator == "==":
                 filter = column == value
             elif query.operator == "!=":
@@ -147,26 +164,28 @@ class QueryUtil:
         return filter
 
     @staticmethod
-    def convertQueryToDBFilter(
+    def convert_query_to_db_filter(
         cls: type[DBModel], query: QueryElement | None
     ) -> ColumnElement[bool] | None:
         if not query:
             return None
-        return QueryUtil.convertQueryToDBFilter_Rec(cls, query)
+        return QueryUtil.convert_query_to_db_filter_rec(cls, query)
 
     @staticmethod
-    def convertQueryToDBFilter_Rec(
+    def convert_query_to_db_filter_rec(
         cls: type[DBModel], query: QueryElement | None
     ) -> ColumnElement[bool] | None:
         if not query:
             return None
         # QUERY nodes hold a condition, AND/OR nodes hold two QueryElements
         if query.type == ConcatenationType.QUERY:
-            return QueryUtil.createClassQuery(cls, cast(QueryCondition, query.elementA))
-        queryA = QueryUtil.convertQueryToDBFilter_Rec(
+            return QueryUtil.create_class_query(
+                cls, cast(QueryCondition, query.elementA)
+            )
+        queryA = QueryUtil.convert_query_to_db_filter_rec(
             cls, cast(QueryElement | None, query.elementA)
         )
-        queryB = QueryUtil.convertQueryToDBFilter_Rec(
+        queryB = QueryUtil.convert_query_to_db_filter_rec(
             cls, cast(QueryElement | None, query.elementB)
         )
         if queryA is None or queryB is None:
@@ -193,8 +212,8 @@ class QueryUtil:
 
             if not match:
                 concatCondition.type = ConcatenationType.QUERY
-                concatCondition.setQueryElement(
-                    QueryUtil.convertToQueryCondition(query)
+                concatCondition.set_query_element(
+                    QueryUtil.convert_to_query_condition(query)
                 )
                 return
 
@@ -211,8 +230,8 @@ class QueryUtil:
         # Recursively process the left and right parts
         condA = QueryElement()
         QueryUtil.find_and_split(condA, left)
-        concatCondition.setQueryElement(condA)
+        concatCondition.set_query_element(condA)
         condB = QueryElement()
         QueryUtil.find_and_split(condB, right)
-        concatCondition.setQueryElement(condB)
+        concatCondition.set_query_element(condB)
         return

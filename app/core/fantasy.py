@@ -68,7 +68,6 @@ class Series(NamedTuple):
 class Bet(NamedTuple):
     """One bet a captain holds on a series. A bet reads no race."""
 
-    id: int | None
     points: int | None
     winner_id: int | None
     winner_name: str | None

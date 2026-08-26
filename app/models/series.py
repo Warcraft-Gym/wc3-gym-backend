@@ -17,11 +17,11 @@ SeriesSort = Literal["date_time", "week", "id"]
 
 
 class SeriesBase(SQLModel):
-    match_id: int = Field(foreign_key="matches.id", ondelete="CASCADE")
+    match_id: int = Field(index=True, foreign_key="matches.id", ondelete="CASCADE")
     date_time: datetime | None = None
     caster: Annotated[str | None, NumToStr] = Field(default=None, max_length=50)
-    player1_id: int = Field(foreign_key="users.id", ondelete="CASCADE")
-    player2_id: int = Field(foreign_key="users.id", ondelete="CASCADE")
+    player1_id: int = Field(index=True, foreign_key="users.id", ondelete="CASCADE")
+    player2_id: int = Field(index=True, foreign_key="users.id", ondelete="CASCADE")
     player1_score: int | None = None
     player2_score: int | None = None
     host_player_id: int
@@ -43,7 +43,7 @@ class Series(SeriesBase, DBModel, table=True):
     )
 
     @classmethod
-    def searchForSeasonAndPlayday(
+    def search_for_season_and_playday(
         cls,
         session: Session,
         season_id: int,
@@ -66,7 +66,7 @@ class Series(SeriesBase, DBModel, table=True):
         return session.scalars(stmt).all()
 
     @classmethod
-    def searchForSeason(
+    def search_for_season(
         cls,
         session: Session,
         season_id: int,
@@ -131,7 +131,9 @@ SERIES_SORTS: dict[SeriesSort, ColumnElement[Any]] = {
 
 
 class SeriesCreate(SeriesBase):
-    pass
+    # A series is best of three, so app.core.scoring only scores 0 to 2
+    player1_score: int | None = Field(default=None, ge=0, le=2)
+    player2_score: int | None = Field(default=None, ge=0, le=2)
 
 
 class SeriesUpdate(SQLModel):
@@ -140,8 +142,8 @@ class SeriesUpdate(SQLModel):
     caster: Annotated[str | None, NumToStr] = None
     player1_id: int | None = None
     player2_id: int | None = None
-    player1_score: int | None = None
-    player2_score: int | None = None
+    player1_score: int | None = Field(default=None, ge=0, le=2)
+    player2_score: int | None = Field(default=None, ge=0, le=2)
     host_player_id: int | None = None
     is_fantasy_match: bool | None = None
 

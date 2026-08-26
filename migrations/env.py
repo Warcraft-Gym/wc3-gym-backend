@@ -8,9 +8,9 @@ what autogenerate compares the live database against.
 """
 
 import importlib
+import logging
 import os
 import pkgutil
-from logging.config import fileConfig
 
 from alembic import context
 from dotenv import load_dotenv
@@ -23,10 +23,7 @@ load_dotenv()
 
 config = context.config
 
-if config.config_file_name is not None:
-    # disable_existing_loggers stays off: the test suite runs a migration
-    # inside a process that has already configured logging.
-    fileConfig(config.config_file_name, disable_existing_loggers=False)
+logging.basicConfig(level=logging.INFO)
 
 for module in pkgutil.iter_modules(app.models.__path__):
     importlib.import_module(f"app.models.{module.name}")

@@ -35,7 +35,7 @@ def get_w3c_config(service: SettingsServiceDep) -> W3CConfig:
     w3c = W3CService(settings_app_service=service)
     try:
         current_season = w3c.current_season()
-    except Exception as e:
+    except Exception as e:  # the page shows the URL even when w3champions is down
         logger.debug(f"w3champions gave no season: {e!s}")
         current_season = None
     return W3CConfig(w3c_url=w3c.base_url(), current_season=current_season)

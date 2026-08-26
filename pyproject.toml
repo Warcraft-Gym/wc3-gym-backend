@@ -5,11 +5,9 @@ description = "FastAPI backend for the GNL (Gym Newbie League) esports platform"
 requires-python = ">=3.13"
 dependencies = [
     "requests",
-    "gspread",
     "pandas",
     "openpyxl",
     "python-dotenv",
-    "apscheduler",
     "psycopg[binary]>=3.2",
     "sqlalchemy>=2,<3",
     "pydantic>=2,<3",

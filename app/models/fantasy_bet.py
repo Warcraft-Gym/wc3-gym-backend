@@ -14,10 +14,10 @@ from app.models.user import User, UserPublic
 
 
 class FantasyBetBase(SQLModel):
-    season_id: int = Field(foreign_key="seasons.id", ondelete="CASCADE")
-    series_id: int = Field(foreign_key="series.id", ondelete="CASCADE")
-    user_id: int = Field(foreign_key="users.id", ondelete="CASCADE")
-    winner_id: int = Field(foreign_key="users.id", ondelete="CASCADE")
+    season_id: int = Field(index=True, foreign_key="seasons.id", ondelete="CASCADE")
+    series_id: int = Field(index=True, foreign_key="series.id", ondelete="CASCADE")
+    user_id: int = Field(index=True, foreign_key="users.id", ondelete="CASCADE")
+    winner_id: int = Field(index=True, foreign_key="users.id", ondelete="CASCADE")
 
 
 class FantasyBet(FantasyBetBase, DBModel, table=True):

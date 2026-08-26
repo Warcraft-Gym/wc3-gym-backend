@@ -5,7 +5,7 @@ for it, under the name seasons_info on a team. app.services.derived fills
 final_score, points_against and points_available from the series.
 """
 
-from typing import TYPE_CHECKING, Any, Self
+from typing import TYPE_CHECKING, Self
 
 from sqlmodel import SQLModel
 
@@ -25,6 +25,3 @@ class SeasonInfoPublic(SQLModel):
             return None
 
         return cls(season_id=season_info.season_id)
-
-    def to_dict(self) -> dict[str, Any]:
-        return self.model_dump(mode="json")

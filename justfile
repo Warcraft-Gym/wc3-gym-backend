@@ -130,3 +130,13 @@ fmt:
 # Show the gnl containers.
 status:
     docker ps --all --filter name=gnl- --format 'table {{"{{.Names}}"}}\t{{"{{.Status}}"}}\t{{"{{.Ports}}"}}'
+
+# Import the S18 and S17 workbooks from tests/data into the running backend, S18 first.
+seed api="http://localhost:5002" token="devtoken":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    access=$(curl -fsS -X POST "{{ api }}/login" -H 'Content-Type: application/json' \
+        -d "{\"token\": \"{{ token }}\"}" | python3 -c 'import json, sys; print(json.load(sys.stdin)["access_token"])')
+    for f in tests/data/GNL_S18_export_v2.xlsx tests/data/GNL_S17_export_v2.xlsx; do
+        curl -fsS -X POST "{{ api }}/import?create_new=true" -H "Authorization: Bearer $access" -F "file=@$f"; echo
+    done

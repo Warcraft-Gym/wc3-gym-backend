@@ -18,6 +18,11 @@ answer, one for the sum of the series on that system. Both are constant.
 A team answer derives its standings the same way, and the two statements it
 adds do not grow with the number of teams in the answer.
 
+A user, a team roster or a full series answer also derives the season record of
+every player it carries, which costs two more statements: one groups the series
+of those players by season, one names the race of every opponent they met.
+Neither grows with the number of players.
+
 A career answer derives its nine totals from two more statements, and loads
 the players who hold no stored row from one. Neither part grows with the
 number of players or of rows in the answer, and a search over those rows
@@ -51,12 +56,14 @@ from app.models.relationships import DBUserSeasonSignup
 from app.models.series import Series, SeriesPublic
 from app.models.user import User
 from app.models.w3c_stats import W3CStats
+from app.services import derived
 from app.services.draft_series import DraftSeriesService
 from app.services.fantasy_bets import FantasyBetService
 from app.services.fantasy_teams import FantasyTeamService
 from app.services.player_career_stats import PlayerCareerStatsService
 from app.services.series import SeriesService
 from app.services.teams import TeamService
+from app.services.users import UserService
 
 STATS_PER_PLAYER = 8
 
@@ -76,34 +83,6 @@ def count_statements() -> Iterator[list[int]]:
         yield tally
     finally:
         event.remove(engine, "before_cursor_execute", on_execute)
-
-
-def add_bets(seeded: dict[str, Any], count: int) -> None:
-    """Put count more bets of one captain in the seeded season, each on its
-    own series so the keys stay distinct."""
-    from app.models.fantasy_bet import FantasyBet
-    from app.models.series import Series
-
-    with Session() as session:
-        for _ in range(count):
-            series = Series(
-                match_id=seeded["match_id"],
-                player1_id=seeded["player_ids"][0],
-                player2_id=seeded["player_ids"][2],
-                host_player_id=seeded["player_ids"][0],
-            )
-            session.add(series)
-            session.flush()
-            session.add(
-                FantasyBet(
-                    season_id=seeded["season_id"],
-                    series_id=series.id,
-                    user_id=seeded["player_ids"][0],
-                    winner_id=seeded["player_ids"][0],
-                    bet_points=10,
-                )
-            )
-        session.commit()
 
 
 @pytest.fixture
@@ -142,41 +121,47 @@ def league(app: FastAPI, seeded: dict[str, Any]) -> dict[str, Any]:
     return seeded
 
 
-def test_get_series_costs_nine_statements(league: dict[str, Any]) -> None:
-    service = SeriesService(user_app_service=None)
+def test_get_series_costs_eleven_statements(league: dict[str, Any]) -> None:
+    service = SeriesService()
     with count_statements() as tally:
         series = service.get(league["series_played_id"])
     assert series.player1.w3c_stats
-    assert tally[0] == 9
+    assert tally[0] == 11
 
 
 def test_search_for_season_costs_three_statements(league: dict[str, Any]) -> None:
     """The season list is reduced, so it needs no collection statements."""
-    service = SeriesService(user_app_service=None)
-    query = QueryUtil.parseQuery("player1_id > 0")
+    service = SeriesService()
+    query = QueryUtil.parse_query("player1_id > 0")
     with count_statements() as tally:
-        series_list = service.searchForSeason(league["season_id"], query)
+        series_list = service.search_for_season(league["season_id"], query)
     assert len(series_list) == 2
     assert series_list[0].player1.name
     assert series_list[0].player1.w3c_stats == []
     assert tally[0] == 3
 
 
-def test_user_season_stats_cost_two_statements(league: dict[str, Any]) -> None:
-    """One statement for the counts and one for the matchup history."""
-    service = SeriesService(user_app_service=None)
-    with count_statements() as tally:
-        stats = service.calculateUserSeasonStats(
-            league["player_ids"][0], league["season_id"], league["team_a_id"]
-        )
-    assert stats.games == 1
-    assert tally[0] == 2
+def test_the_season_record_costs_two_statements(league: dict[str, Any]) -> None:
+    """One statement for the counts and one for the matchup history, whether
+    the answer holds one player or every player of the league."""
+    service = UserService()
+    users = [service.get(user_id) for user_id in league["player_ids"]]
+    assert [len(user.gnl_stats) for user in users] == [1, 1, 1, 1]
+
+    with Session() as session:
+        with count_statements() as tally:
+            derived.fill_gnl_stats(session, users[:1])
+        assert tally[0] == 2
+        with count_statements() as tally:
+            derived.fill_gnl_stats(session, users)
+        assert tally[0] == 2
+    assert users[0].gnl_stats[0].games == 1
 
 
 def test_draft_series_by_match_costs_seven_statements(league: dict[str, Any]) -> None:
     service = DraftSeriesService()
     with count_statements() as tally:
-        draft_list = service.getByMatchId(league["match_id"])
+        draft_list = service.get_by_match_id(league["match_id"])
     assert len(draft_list) == 1
     assert tally[0] == 7
 
@@ -191,11 +176,11 @@ def test_statement_count_holds_when_the_collections_grow(
                 session.add(W3CStats(user_id=user_id, wc3_season=season, race=Race.HU))
         session.commit()
 
-    service = SeriesService(user_app_service=None)
+    service = SeriesService()
     with count_statements() as tally:
         series = service.get(league["series_played_id"])
     assert len(series.player1.w3c_stats) == 4 * STATS_PER_PLAYER
-    assert tally[0] == 9
+    assert tally[0] == 11
 
 
 def test_options_cover_the_player_graph(league: dict[str, Any]) -> None:
@@ -230,7 +215,7 @@ def test_fantasy_bets_list_costs_three_statements(league: dict[str, Any]) -> Non
     """
     service = FantasyBetService()
     with count_statements() as tally:
-        bets, total = service.getAll()
+        bets, total = service.get_all()
     assert len(bets) == 1
     assert total is None
     assert bets[0].bet_result == 10
@@ -262,7 +247,7 @@ def test_the_bets_count_holds_when_the_bets_grow(league: dict[str, Any]) -> None
 
     service = FantasyBetService()
     with count_statements() as tally:
-        bets, _ = service.getAll()
+        bets, _ = service.get_all()
     assert len(bets) == 5
     assert all(bet.bet_result == 10 for bet in bets)
     assert tally[0] == 3
@@ -291,7 +276,7 @@ def test_the_fantasy_team_list_costs_six_statements(league: dict[str, Any]) -> N
     series and one for the captains' bets."""
     service = FantasyTeamService()
     with count_statements() as tally:
-        teams, total = service.getAll()
+        teams, total = service.get_all()
     assert len(teams) == 1
     assert total == 1
     assert teams[0].total_points == 30
@@ -304,7 +289,7 @@ def test_the_fantasy_count_holds_when_the_teams_grow(league: dict[str, Any]) -> 
 
     service = FantasyTeamService()
     with count_statements() as tally:
-        teams, total = service.getAll()
+        teams, total = service.get_all()
     assert len(teams) == 5
     assert total == 5
     assert tally[0] == 6
@@ -315,33 +300,12 @@ def test_the_fantasy_team_search_costs_five_statements(league: dict[str, Any]) -
     add_fantasy_teams(league, 4)
 
     service = FantasyTeamService()
-    query = QueryUtil.parseQuery(f"season_id == {league['season_id']}")
+    query = QueryUtil.parse_query(f"season_id == {league['season_id']}")
     with count_statements() as tally:
         teams, total = service.search(query)
     assert len(teams) == 5
     assert total is None
     assert tally[0] == 5
-
-
-def test_the_bet_lookup_costs_one_statement(league: dict[str, Any]) -> None:
-    """The import reads the stored bets of a season in one statement, so it
-    needs none per row of the workbook."""
-    service = FantasyBetService()
-    with count_statements() as tally:
-        stored = service.bet_ids_of_season(league["season_id"])
-    assert len(stored) == 1
-    assert tally[0] == 1
-
-
-def test_the_bet_lookup_holds_when_the_bets_grow(league: dict[str, Any]) -> None:
-    """Twenty more bets, the same one statement."""
-    add_bets(league, 20)
-
-    service = FantasyBetService()
-    with count_statements() as tally:
-        stored = service.bet_ids_of_season(league["season_id"])
-    assert len(stored) == 21
-    assert tally[0] == 1
 
 
 def test_career_stats_cost_four_statements(league: dict[str, Any]) -> None:
@@ -448,27 +412,28 @@ def add_teams_to_the_season(season_id: int, count: int) -> None:
         session.commit()
 
 
-def test_the_teams_of_a_season_cost_five_statements(league: dict[str, Any]) -> None:
-    """Three for the teams and their people, two for the standings."""
+def test_the_teams_of_a_season_cost_seven_statements(league: dict[str, Any]) -> None:
+    """Three for the teams and their people, two for the standings and two for
+    the season record of every player."""
     service = TeamService(user_app_service=None)
     with count_statements() as tally:
         teams = service.get_teams_season(league["season_id"])
     assert len(teams) == 2
     assert teams[0].seasons_info[0].final_score is not None
-    assert tally[0] == 5
+    assert tally[0] == 7
 
 
 def test_the_standings_count_holds_when_the_teams_grow(
     league: dict[str, Any],
 ) -> None:
-    """Four more teams in the season, the same five statements."""
+    """Four more teams in the season, the same seven statements."""
     add_teams_to_the_season(league["season_id"], 4)
 
     service = TeamService(user_app_service=None)
     with count_statements() as tally:
         teams = service.get_teams_season(league["season_id"])
     assert len(teams) == 6
-    assert tally[0] == 5
+    assert tally[0] == 7
 
 
 def test_career_options_cover_the_player_graph(league: dict[str, Any]) -> None:

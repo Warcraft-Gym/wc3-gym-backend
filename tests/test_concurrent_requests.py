@@ -25,7 +25,7 @@ def test_two_sync_requests_run_at_the_same_time(
         meet.wait()  # raises BrokenBarrierError when the second request never arrives
         return []
 
-    monkeypatch.setattr(deps.season_service, "getAll", wait_for_the_other)
+    monkeypatch.setattr(deps.season_service, "get_all", wait_for_the_other)
 
     # One client in one context, so both requests share one event loop and
     # one thread pool, as they do in the server.

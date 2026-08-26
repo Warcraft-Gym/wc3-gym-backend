@@ -64,7 +64,7 @@ def test_the_player_check_asks_for_the_players_endpoint(
     monkeypatch.setattr(requests.Session, "request", fake_request)
     monkeypatch.setenv("W3C_URL", "https://example.test/api")
 
-    assert W3CService().validatePlayer("P1#1234") is True
+    assert W3CService().validate_player("P1#1234") is True
     assert asked["url"] == "https://example.test/api/players/P1%231234"
 
 
