@@ -99,7 +99,9 @@ def w3c_free(monkeypatch: pytest.MonkeyPatch, app: FastAPI) -> None:
     from app.services.users import UserService
 
     monkeypatch.setattr(UserService, "validate_battle_tag", lambda self, tag: True)
-    monkeypatch.setattr(UserService, "update_w3c_stats_by_id", lambda self, user_id: None)
+    monkeypatch.setattr(
+        UserService, "update_w3c_stats_by_id", lambda self, user_id: None
+    )
 
 
 SIGNUP_BODY = {"name": "P9", "battleTag": "P9#1234", "race": "HU", "country": "DE"}
@@ -138,7 +140,9 @@ def test_signup_stops_when_a_parallel_request_takes_the_token(
         return True
 
     monkeypatch.setattr(UserService, "validate_battle_tag", take_the_token)
-    monkeypatch.setattr(UserService, "update_w3c_stats_by_id", lambda self, user_id: None)
+    monkeypatch.setattr(
+        UserService, "update_w3c_stats_by_id", lambda self, user_id: None
+    )
     empty_store["t"] = entry()
 
     resp = client.post("/signup", json={"token": "t"} | SIGNUP_BODY)

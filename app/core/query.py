@@ -102,7 +102,9 @@ class QueryUtil:
         return QueryCondition(operator, key, value)
 
     @staticmethod
-    def read_value(column: ColumnElement[object], key: str, value: str | bool) -> object:
+    def read_value(
+        column: ColumnElement[object], key: str, value: str | bool
+    ) -> object:
         """The value as the column's Python type. The query arrives as text
         and Postgres does not compare a number column with text."""
         if isinstance(value, bool):
@@ -177,7 +179,9 @@ class QueryUtil:
             return None
         # QUERY nodes hold a condition, AND/OR nodes hold two QueryElements
         if query.type == ConcatenationType.QUERY:
-            return QueryUtil.create_class_query(cls, cast(QueryCondition, query.elementA))
+            return QueryUtil.create_class_query(
+                cls, cast(QueryCondition, query.elementA)
+            )
         queryA = QueryUtil.convert_query_to_db_filter_rec(
             cls, cast(QueryElement | None, query.elementA)
         )

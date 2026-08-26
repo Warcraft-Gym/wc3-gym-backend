@@ -106,7 +106,9 @@ class SeasonService(BaseService):
         self, query: QueryElement | None, limit: int | None = None, offset: int = 0
     ) -> list[SeasonPublic]:
         return self._where(
-            QueryUtil.convert_query_to_db_filter(Season, query), limit=limit, offset=offset
+            QueryUtil.convert_query_to_db_filter(Season, query),
+            limit=limit,
+            offset=offset,
         )
 
     def _where(

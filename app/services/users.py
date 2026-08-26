@@ -91,7 +91,9 @@ class UserService(BaseService):
         self, query: QueryElement | None, limit: int | None = None, offset: int = 0
     ) -> list[UserListPublic]:
         return self._where(
-            QueryUtil.convert_query_to_db_filter(User, query), limit=limit, offset=offset
+            QueryUtil.convert_query_to_db_filter(User, query),
+            limit=limit,
+            offset=offset,
         )
 
     def find_by_ids(self, user_ids: Iterable[int | None]) -> list[UserListPublic]:

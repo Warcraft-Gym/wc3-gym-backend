@@ -238,7 +238,9 @@ class TeamService(BaseService):
         self, query: QueryElement | None, limit: int | None = None, offset: int = 0
     ) -> list[TeamPublic]:
         return self._where(
-            QueryUtil.convert_query_to_db_filter(Team, query), limit=limit, offset=offset
+            QueryUtil.convert_query_to_db_filter(Team, query),
+            limit=limit,
+            offset=offset,
         )
 
     def _where(
