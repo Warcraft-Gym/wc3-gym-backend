@@ -11,8 +11,8 @@ if TYPE_CHECKING:
 
 
 class KothMatchParticipantBase(SQLModel):
-    match_id: int = Field(foreign_key="koth_matches.id")
-    signup_id: int = Field(foreign_key="koth_signups.id")
+    match_id: int = Field(index=True, foreign_key="koth_matches.id")
+    signup_id: int = Field(index=True, foreign_key="koth_signups.id")
     team_number: int  # Which team this player is on (1, 2, 3, etc.)
 
 

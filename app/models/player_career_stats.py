@@ -13,7 +13,7 @@ _FLOAT_FIELDS = ("series_winrate", "games_winrate", "avg_series_per_season")
 
 class PlayerCareerStatsBase(SQLModel):
     user_id: int | None = Field(
-        default=None, foreign_key="users.id", ondelete="SET NULL"
+        index=True, default=None, foreign_key="users.id", ondelete="SET NULL"
     )
     player_name: str = Field(max_length=255, unique=True)
 

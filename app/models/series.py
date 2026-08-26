@@ -17,11 +17,11 @@ SeriesSort = Literal["date_time", "week", "id"]
 
 
 class SeriesBase(SQLModel):
-    match_id: int = Field(foreign_key="matches.id", ondelete="CASCADE")
+    match_id: int = Field(index=True, foreign_key="matches.id", ondelete="CASCADE")
     date_time: datetime | None = None
     caster: Annotated[str | None, NumToStr] = Field(default=None, max_length=50)
-    player1_id: int = Field(foreign_key="users.id", ondelete="CASCADE")
-    player2_id: int = Field(foreign_key="users.id", ondelete="CASCADE")
+    player1_id: int = Field(index=True, foreign_key="users.id", ondelete="CASCADE")
+    player2_id: int = Field(index=True, foreign_key="users.id", ondelete="CASCADE")
     player1_score: int | None = None
     player2_score: int | None = None
     host_player_id: int

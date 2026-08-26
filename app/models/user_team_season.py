@@ -21,8 +21,8 @@ if TYPE_CHECKING:
 class DBUserTeamSeason(DBModel, table=True):
     __tablename__ = "user_team_season"
     user_id: int = Field(foreign_key="users.id", primary_key=True)
-    team_id: int = Field(foreign_key="teams.id", primary_key=True)
-    season_id: int = Field(foreign_key="seasons.id", primary_key=True)
+    team_id: int = Field(index=True, foreign_key="teams.id", primary_key=True)
+    season_id: int = Field(index=True, foreign_key="seasons.id", primary_key=True)
     user: "User" = Relationship(back_populates="team_seasons")
     team: "Team" = Relationship(back_populates="user_seasons")
     season: "Season" = Relationship(back_populates="user_teams")
