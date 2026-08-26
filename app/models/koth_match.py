@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Annotated, Any
+from typing import TYPE_CHECKING, Annotated
 
 from sqlmodel import Field, Relationship, SQLModel
 
@@ -12,7 +12,7 @@ if TYPE_CHECKING:
 
 
 class KothMatchBase(SQLModel):
-    event_id: int = Field(foreign_key="koth_events.id")
+    event_id: int = Field(index=True, foreign_key="koth_events.id")
     bracket: int  # 1, 2, or 3
     # e.g., "1v1", "2v1", "2v2", "3v1", "FFA", "Custom"
     game_mode: str = Field(max_length=50)
@@ -63,6 +63,3 @@ class KothMatchUpdate(SQLModel):
 class KothMatchPublic(KothMatchBase):
     id: int
     participants: Annotated[list[KothMatchParticipantPublic], NoneToList] = []
-
-    def to_dict(self) -> dict[str, Any]:
-        return self.model_dump(mode="json")

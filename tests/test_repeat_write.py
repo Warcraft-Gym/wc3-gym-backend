@@ -34,7 +34,7 @@ def test_a_map_added_twice_answers_200_and_links_once(
     client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
 ) -> None:
     body = {"map_ids": [seeded["map_id"]]}
-    path = f"/seasons/addMaps/{seeded['season_id']}"
+    path = f"/seasons/{seeded['season_id']}/maps"
 
     first = client.post(path, json=body, headers=auth_headers)
     assert first.status_code == 200, first.text
@@ -55,7 +55,7 @@ def test_a_repeated_map_leaves_the_rest_of_the_request_alive(
     new_map_id = new_map.json()["id"]
 
     resp = client.post(
-        f"/seasons/addMaps/{seeded['season_id']}",
+        f"/seasons/{seeded['season_id']}/maps",
         json={"map_ids": [seeded["map_id"], seeded["map_id"], new_map_id]},
         headers=auth_headers,
     )

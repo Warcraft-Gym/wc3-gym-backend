@@ -21,7 +21,7 @@ router = APIRouter(tags=["users"])
 )
 def add_user(data: UserCreate, service: UserServiceDep) -> UserPublic:
     """Create a new user with the provided details."""
-    return service.create_user(data)
+    return service.add(data)
 
 
 @router.put(
@@ -31,7 +31,7 @@ def add_user(data: UserCreate, service: UserServiceDep) -> UserPublic:
 )
 def update_user(user_id: int, data: UserUpdate, service: UserServiceDep) -> UserPublic:
     """Update the details of an existing user."""
-    return service.update_user(user_id, data)
+    return service.update(user_id, data)
 
 
 @router.delete(
@@ -39,13 +39,13 @@ def update_user(user_id: int, data: UserUpdate, service: UserServiceDep) -> User
 )
 def delete_user(user_id: int, service: UserServiceDep) -> None:
     """Delete a user by their ID."""
-    service.delete_user(user_id)
+    service.delete(user_id)
 
 
 @router.get("/users/{user_id}")
 def get_user(user_id: int, service: UserServiceDep) -> UserPublic:
     """Retrieve a user by their ID."""
-    return service.get_user(user_id)
+    return service.get(user_id)
 
 
 @router.get("/users")
@@ -56,7 +56,7 @@ def get_all_users(
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[UserListPublic]:
     """Retrieve one page of users, at most 500, ordered by id."""
-    users, total = service.getAll(limit=limit, offset=offset)
+    users, total = service.get_all(limit=limit, offset=offset)
     response.headers["X-Total-Count"] = str(total)
     return users or []
 
@@ -69,13 +69,13 @@ def search_users(
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[UserListPublic]:
     """Search users by criteria using a custom query format."""
-    parsed_query = QueryUtil.parseQuery(query)
+    parsed_query = QueryUtil.parse_query(query)
     if not parsed_query or not parsed_query.elementA:
         raise BadRequestError(f"No valid query found: {query}")
     return service.search(parsed_query, limit=limit, offset=offset) or []
 
 
-@router.post("/users/w3c_sync/{user_id}", dependencies=[Depends(require_admin)])
+@router.post("/users/{user_id}/w3c-sync", dependencies=[Depends(require_admin)])
 def sync_w3c_user(user_id: int, service: UserServiceDep) -> UserPublic:
     """Sync w3c information for a user_id"""
-    return service.updateW3CStats_ById(user_id)
+    return service.update_w3c_stats_by_id(user_id)

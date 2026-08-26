@@ -173,3 +173,98 @@ def test_the_export_reads_every_bet_over_several_pages(
     ids = [row[0] for row in rows]
     assert len(ids) == 6
     assert len(set(ids)) == 6
+
+
+def set_score_system(season_id: int, system: str) -> None:
+    """Put one score system on the seeded season."""
+    from app.core.db import Session
+    from app.models.season import Season
+
+    with Session() as session:
+        season = session.get(Season, season_id)
+        season.score_system = system
+        session.commit()
+
+
+def test_the_season_sheet_carries_the_score_system(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """The column is the last of the sheet, so the import reads back the
+    scale the season was played on."""
+    set_score_system(seeded["season_id"], "helpstone")
+
+    resp = client.post(f"/export?season_id={seeded['season_id']}", headers=auth_headers)
+    assert resp.status_code == 200
+
+    rows = list(workbook_of(resp.content)["Season"].values)
+    assert rows[0][-1] == "Score System"
+    assert rows[1][-1] == "helpstone"
+
+
+def test_an_exported_helpstone_season_imports_as_helpstone(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """The workbook of a helpstone season writes a helpstone season back."""
+    from app.core.db import Session
+    from app.models.season import Season
+
+    set_score_system(seeded["season_id"], "helpstone")
+    resp = client.post(f"/export?season_id={seeded['season_id']}", headers=auth_headers)
+    assert resp.status_code == 200
+    set_score_system(seeded["season_id"], "standard")
+
+    imported = client.post(
+        "/import",
+        files={
+            "file": ("season.xlsx", BytesIO(resp.content), "application/vnd.ms-excel")
+        },
+        headers=auth_headers,
+    )
+    assert imported.status_code == 200, imported.text
+
+    with Session() as session:
+        assert session.get(Season, seeded["season_id"]).score_system == "helpstone"
+
+
+def draft_outsider(seeded: dict[str, Any]) -> int:
+    """A player of a fantasy team who is on no team roster."""
+    from app.core.db import Session
+    from app.models.enums import Race
+    from app.models.fantasy_team import FantasyTeam
+    from app.models.relationships import DBFantasyTeamPlayer
+    from app.models.user import User
+
+    with Session() as session:
+        drafted = User(
+            name="Sub",
+            battleTag="Sub#9999",
+            discordTag="sub",
+            discordId="9",
+            race=Race.UD,
+        )
+        fteam = FantasyTeam(
+            name="The Benchwarmers",
+            season_id=seeded["season_id"],
+            captain_id=seeded["player_ids"][0],
+            drafted_team_id=seeded["team_a_id"],
+            drafted_race=Race.HU,
+        )
+        session.add_all([drafted, fteam])
+        session.flush()
+        session.add(DBFantasyTeamPlayer(fantasy_team_id=fteam.id, user_id=drafted.id))
+        session.commit()
+        return drafted.id
+
+
+def test_the_fantasy_users_sheet_holds_a_drafted_player_on_no_roster(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """A drafted player who is on no roster reaches no other sheet, so the
+    import would skip his Fantasy Team Players row without this one."""
+    drafted_id = draft_outsider(seeded)
+
+    resp = client.post(f"/export?season_id={seeded['season_id']}", headers=auth_headers)
+    assert resp.status_code == 200
+
+    rows = list(workbook_of(resp.content)["Fantasy Users"].values)[1:]
+    assert [row[0] for row in rows] == [drafted_id]

@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import TYPE_CHECKING, Annotated, Any, Self
+from typing import TYPE_CHECKING, Annotated, Self
 
 from sqlalchemy import TIMESTAMP
 from sqlalchemy.sql.base import ExecutableOption
@@ -16,11 +16,11 @@ if TYPE_CHECKING:
 
 
 class DraftSeriesBase(SQLModel):
-    match_id: int = Field(foreign_key="matches.id")
+    match_id: int = Field(index=True, foreign_key="matches.id")
     date_time: datetime | None = None
     caster: Annotated[str | None, NumToStr] = Field(default=None, max_length=50)
-    player1_id: int = Field(foreign_key="users.id")
-    player2_id: int = Field(foreign_key="users.id")
+    player1_id: int = Field(index=True, foreign_key="users.id")
+    player2_id: int = Field(index=True, foreign_key="users.id")
     player1_score: int | None = 0
     player2_score: int | None = 0
     host_player_id: int
@@ -119,6 +119,3 @@ class DraftSeriesPublic(DraftSeriesBase):
             is_fantasy_match=draft_series.is_fantasy_match,
             created_at=draft_series.created_at,
         )
-
-    def to_dict(self) -> dict[str, Any]:
-        return self.model_dump(mode="json")

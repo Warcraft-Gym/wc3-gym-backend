@@ -20,9 +20,6 @@ class Settings(SettingsBase, DBModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
 
-    def __repr__(self) -> str:
-        return f"<Settings(key='{self.key}', value='{self.value}')>"
-
     @classmethod
     def get_by_key(cls, session: Session, key: str) -> Self | None:
         """Get a setting by its key"""

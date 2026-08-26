@@ -1,4 +1,4 @@
-"""UserService reads a row and then writes it, and a sync repeats.
+"""UserService reads a w3c stats row and then writes it, and a sync repeats.
 
 Both steps are in one transaction, and the database holds each key to one
 row, so a second sync updates the row it finds and adds none. When the
@@ -13,12 +13,10 @@ import pytest
 from fastapi import FastAPI
 from sqlalchemy import Select, select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session as OrmSession
 
 from app.core.db import Session
 from app.models.enums import Race
 from app.models.user import User
-from app.models.user_team_season import DBUserTeamSeason, UserTeamSeasonStatsPublic
 from app.models.w3c_stats import W3CStats, W3CStatsCreate
 from app.services.users import UserService
 from app.services.w3c import W3CService
@@ -38,13 +36,13 @@ def answer_w3c(monkeypatch: pytest.MonkeyPatch, reply: list[W3CStatsCreate]) -> 
     The season comes from w3champions too when no setting names one, so the
     sync asks for both of them."""
 
-    def getPlayerStats(
+    def get_player_stats(
         self: W3CService, bnet_name: str, season_override: int | None = None
     ) -> list[W3CStatsCreate]:
         return list(reply)
 
     monkeypatch.setattr(W3CService, "current_season", lambda self: SEASON)
-    monkeypatch.setattr(W3CService, "getPlayerStats", getPlayerStats)
+    monkeypatch.setattr(W3CService, "get_player_stats", get_player_stats)
 
 
 def stamped_at(user_id: int) -> datetime | None:
@@ -70,14 +68,14 @@ def test_a_second_sync_updates_the_row_and_adds_none(
     user_id = seeded["player_ids"][0]
 
     answer_w3c(monkeypatch, [stats(mmr=1500)])
-    UserService().updateW3CStats_ById(user_id)
+    UserService().update_w3c_stats_by_id(user_id)
     first = rows_of(user_id)
     assert [(r.race, r.wc3_season, r.mmr) for r in first] == [(Race.HU, SEASON, 1500)]
 
     first_stamp = stamped_at(user_id)
 
     answer_w3c(monkeypatch, [stats(mmr=1600)])
-    UserService().updateW3CStats_ById(user_id)
+    UserService().update_w3c_stats_by_id(user_id)
     second = rows_of(user_id)
 
     assert len(second) == len(first)
@@ -99,7 +97,7 @@ def test_one_sync_writes_one_row_per_race_and_season(
             stats(mmr=1300, race=Race.HU, season=SEASON - 1),
         ],
     )
-    UserService().updateW3CStats_ById(user_id)
+    UserService().update_w3c_stats_by_id(user_id)
 
     keys = {(r.race, r.wc3_season) for r in rows_of(user_id)}
     assert keys == {(Race.HU, SEASON), (Race.OC, SEASON), (Race.HU, SEASON - 1)}
@@ -125,7 +123,7 @@ def test_a_lost_race_updates_the_row_the_winner_wrote(
     the sync then updates the row that is there."""
     user_id = seeded["player_ids"][0]
     answer_w3c(monkeypatch, [stats(mmr=1500)])
-    UserService().updateW3CStats_ById(user_id)
+    UserService().update_w3c_stats_by_id(user_id)
     written = rows_of(user_id)
 
     real_key = UserService._w3c_stats_key
@@ -142,48 +140,8 @@ def test_a_lost_race_updates_the_row_the_winner_wrote(
     monkeypatch.setattr(UserService, "_w3c_stats_key", staticmethod(blind_first_read))
 
     answer_w3c(monkeypatch, [stats(mmr=1700)])
-    UserService().updateW3CStats_ById(user_id)
+    UserService().update_w3c_stats_by_id(user_id)
 
     survivors = rows_of(user_id)
     assert [r.id for r in survivors] == [r.id for r in written]
     assert survivors[0].mmr == 1700
-
-
-def test_a_lost_season_stats_race_updates_the_row_the_winner_wrote(
-    app: FastAPI, seeded: dict[str, Any], monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """The composite primary key refuses the second insert, and the write
-    falls through to the update rather than failing the request."""
-    real_get = OrmSession.get
-    missed: list[int] = []
-
-    def blind_first_get(
-        self: OrmSession, entity: type[object], ident: object, **kwargs: object
-    ) -> object | None:
-        # The first read stands for the one another writer filled in after
-        if entity is DBUserTeamSeason and not missed:
-            missed.append(1)
-            return None
-        return real_get(self, entity, ident, **kwargs)
-
-    monkeypatch.setattr(OrmSession, "get", blind_first_get)
-
-    user = UserService().updateUserTeamSeasonStats(
-        UserTeamSeasonStatsPublic(
-            user_id=seeded["player_ids"][0],
-            team_id=seeded["team_a_id"],
-            season_id=seeded["season_id"],
-            games=7,
-            wins=5,
-            losses=2,
-            matchup_history=[Race.NE.value],
-        )
-    )
-
-    assert missed == [1]
-    with Session() as session:
-        rows = session.scalars(select(DBUserTeamSeason)).all()
-    assert len([r for r in rows if r.user_id == user.id]) == 1
-    assert [(r.games, r.wins, r.losses) for r in rows if r.user_id == user.id] == [
-        (7, 5, 2)
-    ]

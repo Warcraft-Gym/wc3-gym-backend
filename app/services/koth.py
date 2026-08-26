@@ -1,7 +1,8 @@
 import logging
+from collections import defaultdict
 from typing import TYPE_CHECKING
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as OrmSession
 from sqlalchemy.orm import joinedload
@@ -35,7 +36,6 @@ from app.services.base import BaseService
 from app.services.w3c import W3CService
 
 if TYPE_CHECKING:
-    from app.models.w3c_stats import W3CStatsCreate
     from app.services.settings import SettingsService
 
 logger = logging.getLogger(__name__)
@@ -50,9 +50,6 @@ class KothService(BaseService):
         with self.get_session() as session:
             db_event = KothEvent.add(session, event.model_dump())
             return KothEventPublic.model_validate(db_event)
-
-    def create_event(self, event: KothEventCreate) -> KothEventPublic:
-        return self.add_event(event)
 
     def update_event(self, event_id: int, event: KothEventUpdate) -> KothEventPublic:
         with self.get_session() as session:
@@ -140,11 +137,6 @@ class KothService(BaseService):
         return self.get_event(event_id)
 
     # ============ Signup Methods ============
-    def add_signup(self, signup: KothSignupCreate) -> KothSignupPublic:
-        with self.get_session() as session:
-            db_signup = KothSignup.add(session, signup.model_dump())
-            return KothSignupPublic.model_validate(db_signup)
-
     def update_signup(
         self, signup_id: int, signup: KothSignupUpdate
     ) -> KothSignupPublic:
@@ -160,11 +152,11 @@ class KothService(BaseService):
         with self.get_session() as session:
             KothSignup.delete(session, signup_id)
 
-    def get_signup(self, signup_id: int) -> KothSignupPublic | None:
+    def get_signup(self, signup_id: int) -> KothSignupPublic:
         with self.get_session() as session:
             signup = session.get(KothSignup, signup_id)
             if not signup:
-                return None
+                raise NotFoundError(f"Signup not found by Id: {signup_id}")
             return KothSignupPublic.model_validate(signup)
 
     def get_signups_by_event(
@@ -193,28 +185,14 @@ class KothService(BaseService):
         If preferred_race is provided, only considers MMR for that race.
         Returns the created signup or raises an exception.
         """
-        # Normalize race input
-        race_map = {
-            "orc": "OC",
-            "oc": "OC",
-            "human": "HU",
-            "hu": "HU",
-            "undead": "UD",
-            "ud": "UD",
-            "nightelf": "NE",
-            "ne": "NE",
-            "random": "RANDOM",
-            "rd": "RANDOM",
-        }
-
         signup_race = None
         if preferred_race:
-            preferred_race_lower = preferred_race.lower()
-            signup_race = race_map.get(preferred_race_lower)
-            if not signup_race:
+            try:
+                signup_race = Race.from_text(preferred_race).value
+            except ValueError as error:
                 raise BadRequestError(
                     f"Invalid race '{preferred_race}'. Valid options: orc, human, undead, nightelf, random"
-                )
+                ) from error
 
         # Get active event
         event = self.get_active_event()
@@ -233,13 +211,10 @@ class KothService(BaseService):
         w3c_name = battle_tag
 
         current_season = w3c_service.current_season()
-        w3c_url = w3c_service.base_url()
         for season_offset in range(2):
             season = current_season - season_offset
             try:
-                stats = self._get_w3c_stats_for_season(
-                    w3c_service, w3c_url, battle_tag, season
-                )
+                stats = w3c_service.get_player_stats(battle_tag, season_override=season)
                 if stats:
                     for stat in stats:
                         if stat.mmr and stat.mmr > 0:
@@ -321,41 +296,22 @@ class KothService(BaseService):
         if new_bracket not in [1, 2, 3]:
             raise BadRequestError("Bracket must be 1, 2, or 3")
 
-        signup = self.get_signup(signup_id)
-        if not signup:
-            raise NotFoundError(f"Signup not found by Id: {signup_id}")
-
+        self.get_signup(signup_id)  # 404 names the id
         return self.update_signup(signup_id, KothSignupUpdate(bracket=new_bracket))
 
     def set_king(self, signup_id: int) -> KothSignupPublic:
         """Set a player as king of their bracket (clears other kings in bracket)"""
         signup = self.get_signup(signup_id)
-        if not signup:
-            raise NotFoundError(f"Signup not found by Id: {signup_id}")
-
-        # Unset any other kings in the same bracket
-        event_signups = self.get_signups_by_event(signup.event_id)
-        for s in event_signups:
-            if s.bracket == signup.bracket and s.is_king == 1 and s.id != signup_id:
-                self.update_signup(s.id, KothSignupUpdate(is_king=0))
-
+        self._clear_bracket_kings(signup.event_id, signup.bracket)
         return self.update_signup(signup_id, KothSignupUpdate(is_king=1))
 
     def add_king(self, signup_id: int) -> KothSignupPublic:
         """Add a player as king of their bracket (keeps existing kings)"""
-        signup = self.get_signup(signup_id)
-        if not signup:
-            raise NotFoundError(f"Signup not found by Id: {signup_id}")
-
-        return self.update_signup(signup_id, KothSignupUpdate(is_king=1))
+        return self._set_king(signup_id, 1)
 
     def unset_king(self, signup_id: int) -> KothSignupPublic:
         """Remove king status from a player"""
-        signup = self.get_signup(signup_id)
-        if not signup:
-            raise NotFoundError(f"Signup not found by Id: {signup_id}")
-
-        return self.update_signup(signup_id, KothSignupUpdate(is_king=0))
+        return self._set_king(signup_id, 0)
 
     # ============ Match Methods ============
     def add_match(self, match: KothMatchCreate) -> KothMatchPublic:
@@ -376,7 +332,7 @@ class KothService(BaseService):
         with self.get_session() as session:
             KothMatch.delete(session, match_id)
 
-    def get_match(self, match_id: int) -> KothMatchPublic | None:
+    def get_match(self, match_id: int) -> KothMatchPublic:
         with self.get_session() as session:
             match = (
                 session.scalars(
@@ -392,7 +348,7 @@ class KothService(BaseService):
                 .first()
             )
             if not match:
-                return None
+                raise NotFoundError(f"Match not found by Id: {match_id}")
             return KothMatchPublic.model_validate(match)
 
     def get_matches_by_event(
@@ -418,20 +374,16 @@ class KothService(BaseService):
 
     def create_match(
         self, match: KothMatchCreate, participant_signup_ids: list[dict[str, int]]
-    ) -> KothMatchPublic | None:
+    ) -> KothMatchPublic:
         """
         Create a team-based match with participants.
         participant_signup_ids: list of dicts with {'signup_id': int, 'team_number': int}
         """
         # Validate all participants exist and are in the same bracket
-        signups = []
-        for participant in participant_signup_ids:
-            signup = self.get_signup(participant["signup_id"])
-            if not signup:
-                raise NotFoundError(
-                    f"Signup not found by Id: {participant['signup_id']}"
-                )
-            signups.append(signup)
+        signups = [
+            self.get_signup(participant["signup_id"])
+            for participant in participant_signup_ids
+        ]
 
         # All must be in same bracket
         if signups:
@@ -474,9 +426,6 @@ class KothService(BaseService):
     ) -> KothMatchPublic:
         """Update match winner, set all winning team members as kings, and delete losing participant signups"""
         match = self.get_match(match_id)
-        if not match:
-            raise NotFoundError(f"Match not found by Id: {match_id}")
-
         if winner_team_number < 1 or winner_team_number > match.num_teams:
             raise BadRequestError(
                 f"Winner team number must be between 1 and {match.num_teams}"
@@ -489,11 +438,7 @@ class KothService(BaseService):
         # Get participants and set winners as kings
         participants = self.get_participants_by_match(match_id)
 
-        # Unset all kings in this bracket first
-        all_signups = self.get_signups_by_event(match.event_id)
-        for signup in all_signups:
-            if signup.bracket == match.bracket and signup.is_king == 1:
-                self.update_signup(signup.id, KothSignupUpdate(is_king=0))
+        self._clear_bracket_kings(match.event_id, match.bracket)
 
         # Set winning team members as kings and mark losing team signups as inactive
         for participant in participants:
@@ -513,16 +458,6 @@ class KothService(BaseService):
             db_participant = KothMatchParticipant.add(session, participant.model_dump())
             return KothMatchParticipantPublic.model_validate(db_participant)
 
-    def delete_participants_by_match(self, match_id: int) -> None:
-        """Delete all participants for a given match"""
-        with self.get_session() as session:
-            session.execute(
-                delete(KothMatchParticipant).where(
-                    KothMatchParticipant.match_id == match_id
-                ),
-                execution_options={"synchronize_session": False},
-            )
-
     def get_participants_by_match(
         self, match_id: int
     ) -> list[KothMatchParticipantPublic]:
@@ -541,12 +476,9 @@ class KothService(BaseService):
 
     def get_bracket_kings(self, event_id: int) -> dict[int, list[KothSignupPublic]]:
         """Get all kings for each bracket"""
-        signups = self.get_signups_by_event(event_id)
-        kings: dict[int, list[KothSignupPublic]] = {}
-        for signup in signups:
+        kings: defaultdict[int, list[KothSignupPublic]] = defaultdict(list)
+        for signup in self.get_signups_by_event(event_id):
             if signup.is_king == 1:
-                if signup.bracket not in kings:
-                    kings[signup.bracket] = []
                 kings[signup.bracket].append(signup)
         return kings
 
@@ -581,6 +513,24 @@ class KothService(BaseService):
                 f"Player {twitch_username} already has an active signup with race {race}"
             )
 
+    def _set_king(self, signup_id: int, value: int) -> KothSignupPublic:
+        """Write the king flag of a signup."""
+        self.get_signup(signup_id)  # 404 names the id
+        return self.update_signup(signup_id, KothSignupUpdate(is_king=value))
+
+    def _clear_bracket_kings(self, event_id: int, bracket: int) -> None:
+        """Take the crown from every signup in the bracket."""
+        with self.get_session() as session:
+            session.execute(
+                update(KothSignup)
+                .where(
+                    KothSignup.event_id == event_id,
+                    KothSignup.bracket == bracket,
+                )
+                .values(is_king=0),
+                execution_options={"synchronize_session": False},
+            )
+
     def _determine_bracket(self, mmr: int, event: KothEventPublic) -> int:
         """Determine bracket based on MMR thresholds"""
         if mmr < event.bracket_1_threshold:
@@ -590,44 +540,7 @@ class KothService(BaseService):
         else:
             return 3
 
-    def _get_w3c_stats_for_season(
-        self, w3c_service: W3CService, w3c_url: str, battle_tag: str, season: int
-    ) -> list["W3CStatsCreate"]:
-        """Get W3C stats for a specific season"""
-        import urllib.parse
-
-        param = {"gateWay": 20, "season": season}
-
-        result = w3c_service.send_request(
-            method=w3c_service.GET,
-            url=f"{w3c_url}/players/{urllib.parse.quote(battle_tag)}/game-mode-stats",
-            params=param,
-        )
-
-        if not result:
-            return []
-
-        stats = []
-        from app.models.w3c_stats import W3CStatsCreate
-
-        for gmode_stats in result:
-            if gmode_stats.get("gameMode") and gmode_stats.get("gameMode") == 1:
-                stats.append(
-                    W3CStatsCreate(
-                        wc3_season=gmode_stats.get("season"),
-                        wins=gmode_stats.get("wins"),
-                        losses=gmode_stats.get("losses"),
-                        games=gmode_stats.get("games"),
-                        mmr=gmode_stats.get("mmr"),
-                        winrate=gmode_stats.get("winrate"),
-                        race=w3c_service.getRaceEnum(gmode_stats.get("race")),
-                        league=gmode_stats.get("leagueOrder"),
-                    )
-                )
-
-        return stats
-
-    # BaseService requires these four; this service uses add_event/add_signup/add_match
+    # BaseService requires these four; this service uses add_event/add_match
     def get(self, obj_id: object) -> None:
         pass
 

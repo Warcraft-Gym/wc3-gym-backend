@@ -59,11 +59,9 @@ def client(app: FastAPI) -> Client:
     return TestClient(app, follow_redirects=False, raise_server_exceptions=False)
 
 
-@pytest.fixture(autouse=True)
-def clean_db(app: FastAPI) -> None:
-    """Empty every table after each test. Children first, so no foreign
-    key constraint fires."""
-    yield
+def empty_tables() -> None:
+    """Empty every table. Children first, so no foreign key constraint
+    fires."""
     from sqlalchemy import text
     from sqlmodel import SQLModel
 
@@ -79,6 +77,13 @@ def clean_db(app: FastAPI) -> None:
             for table in reversed(SQLModel.metadata.sorted_tables):
                 session.execute(table.delete())
         session.commit()
+
+
+@pytest.fixture(autouse=True)
+def clean_db(app: FastAPI) -> None:
+    """Empty every table after each test."""
+    yield
+    empty_tables()
 
 
 @pytest.fixture(autouse=True)

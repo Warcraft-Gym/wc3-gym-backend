@@ -6,7 +6,6 @@ from app.services import derived
 from app.services.fantasy_bets import FantasyBetService
 from app.services.fantasy_teams import FantasyTeamService
 from app.services.series import SeriesService
-from app.services.teams import TeamService
 
 if TYPE_CHECKING:
     from app.models.fantasy_team import FantasyTeamPublic
@@ -19,12 +18,10 @@ class FantasyScoreService:
         fantasy_team_service: FantasyTeamService,
         fantasy_bet_service: FantasyBetService,
         series_app_service: SeriesService,
-        team_app_service: TeamService,
     ) -> None:
         self.fantasy_team_service = fantasy_team_service
         self.fantasy_bet_service = fantasy_bet_service
         self.series_app_service = series_app_service
-        self.team_app_service = team_app_service
 
     def _season_series_by_week(
         self, season: "SeasonPublic"
@@ -76,10 +73,10 @@ class FantasyScoreService:
     ) -> dict[str, Any]:
         """The five score parts of one fantasy team, over the bets its captain
         holds in the season."""
-        query = QueryUtil.parseQuery(
+        query = QueryUtil.parse_query(
             f"user_id=={fantasy_team.captain.id} and season_id=={season.id}"
         )
-        player_bets, _ = self.fantasy_bet_service.search_fantasy_bets(query)
+        player_bets, _ = self.fantasy_bet_service.search(query)
 
         return fantasy.team_scores(
             drafted_players=[
@@ -95,15 +92,15 @@ class FantasyScoreService:
             include_breakdown=include_breakdown,
         )
 
-    def getTeamScoreBreakdown(
+    def get_team_score_breakdown(
         self, fantasy_team_id: int, season: "SeasonPublic"
     ) -> dict[str, Any]:
         """
         Get detailed breakdown of how a fantasy team's score was calculated
         Returns a dictionary with all components and their calculations
         """
-        # get_fantasy_team raises NotFoundError for an unknown id.
-        fantasy_team = self.fantasy_team_service.get_fantasy_team(fantasy_team_id)
+        # get raises NotFoundError for an unknown id.
+        fantasy_team = self.fantasy_team_service.get(fantasy_team_id)
 
         breakdown = {
             "team_id": fantasy_team_id,
@@ -175,6 +172,3 @@ class FantasyScoreService:
         breakdown["totals"]["total_points"] = scores["total_points"]
 
         return breakdown
-
-    def calculatePoints(self, score1: int, score2: int) -> int:
-        return fantasy.series_points(score1, score2)

@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from sqlmodel import Field, Relationship, SQLModel
 
@@ -11,8 +11,8 @@ if TYPE_CHECKING:
 
 
 class KothMatchParticipantBase(SQLModel):
-    match_id: int = Field(foreign_key="koth_matches.id")
-    signup_id: int = Field(foreign_key="koth_signups.id")
+    match_id: int = Field(index=True, foreign_key="koth_matches.id")
+    signup_id: int = Field(index=True, foreign_key="koth_signups.id")
     team_number: int  # Which team this player is on (1, 2, 3, etc.)
 
 
@@ -33,6 +33,3 @@ class KothMatchParticipantCreate(KothMatchParticipantBase):
 class KothMatchParticipantPublic(KothMatchParticipantBase):
     id: int
     signup: KothSignupPublic | None = None
-
-    def to_dict(self) -> dict[str, Any]:
-        return self.model_dump(mode="json")

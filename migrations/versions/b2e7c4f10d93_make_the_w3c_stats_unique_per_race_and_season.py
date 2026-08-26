@@ -25,8 +25,8 @@ depends_on: str | Sequence[str] | None = None
 
 INDEX = "uq_w3cstats_user_id_race_wc3_season"
 
-# MySQL 5.7 cannot read the table it deletes from, so the keepers go
-# through a derived table, which MySQL materialises first.
+# The keepers come from a derived table, so the delete reads a result set
+# rather than the table it writes.
 DEDUPE = """
 DELETE FROM w3cstats
 WHERE id NOT IN (

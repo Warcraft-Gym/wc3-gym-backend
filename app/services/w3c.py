@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any
 
 import requests
 
-from app.core.exceptions import NotFoundError, W3CThrottledError
+from app.core.exceptions import ExternalServiceError, NotFoundError, W3CThrottledError
 from app.models.enums import Race
 from app.models.w3c_stats import W3CStatsCreate
 
@@ -39,12 +39,6 @@ class W3CService:
         self.settings_app_service = settings_app_service
 
     GET = "GET"
-    POST = "POST"
-    PUT = "PUT"
-    DELETE = "DELETE"
-    PATCH = "PATCH"
-    HEAD = "HEAD"
-    OPTIONS = "OPTIONS"
 
     def _setting(self, key: str) -> str | None:
         """A settings value, or None when the row is absent."""
@@ -74,15 +68,12 @@ class W3CService:
         season = self._setting("current_wc3_season")
         return int(season) if season else self.latest_season()
 
-    def validatePlayer(self, bnet_name: str) -> bool:
+    def validate_player(self, bnet_name: str) -> bool:
         """
         Validate that a player exists on W3Champions.
         Uses the /players endpoint which is simpler and doesn't require season info.
         Returns True if player exists, False otherwise.
         """
-        if not isinstance(bnet_name, str):
-            raise ValueError("bnet_name must be a string")
-
         try:
             result = self.send_request(
                 method=self.GET,
@@ -94,12 +85,9 @@ class W3CService:
             logger.debug(f"Player validation failed for {bnet_name}: {e!s}")
             return False
 
-    def getPlayerStats(
+    def get_player_stats(
         self, bnet_name: str, season_override: int | None = None
     ) -> list[W3CStatsCreate]:
-        if not isinstance(bnet_name, str):
-            raise ValueError("bnet_name must be a string")
-
         season_to_fetch = (
             season_override if season_override is not None else self.current_season()
         )
@@ -125,13 +113,13 @@ class W3CService:
                         games=gmode_stats.get("games"),
                         mmr=gmode_stats.get("mmr"),
                         winrate=gmode_stats.get("winrate"),
-                        race=self.getRaceEnum(gmode_stats.get("race")),
+                        race=self.get_race_enum(gmode_stats.get("race")),
                         league=gmode_stats.get("leagueOrder"),
                     )
                 )
         return stats
 
-    def getRaceEnum(self, race_int: int | None) -> Race | None:
+    def get_race_enum(self, race_int: int | None) -> Race | None:
         if race_int is None:
             return None
         race_mapping = {0: Race.RANDOM, 8: Race.UD, 1: Race.HU, 4: Race.NE, 2: Race.OC}
@@ -142,8 +130,6 @@ class W3CService:
         self,
         method: str,
         url: str,
-        data: dict[str, Any] | None = None,
-        headers: dict[str, str] | None = None,
         params: dict[str, Any] | None = None,
     ) -> Any:  # noqa: ANN401  # the w3champions body has no fixed shape
         try:
@@ -151,8 +137,6 @@ class W3CService:
             response = _session.request(
                 method,
                 url,
-                json=data,
-                headers=headers,
                 params=params,
                 timeout=REQUEST_TIMEOUT,
             )
@@ -165,15 +149,15 @@ class W3CService:
                 try:
                     return response.json()  # Parse JSON response
                 except ValueError:
-                    raise Exception(response.text)  # Return plain text if not JSON
+                    raise ExternalServiceError(response.text)
             if response.status_code == 204:
                 return response.text
             else:
                 # Log or raise an error for non-200 status codes
-                raise Exception(
+                raise ExternalServiceError(
                     f"Request failed with status code {response.status_code}: {response.text}"
                 )
 
         except requests.exceptions.RequestException as e:
             # Handle network-related errors
-            raise Exception(f"An exception occurred: {e!s}")
+            raise ExternalServiceError(f"An exception occurred: {e!s}")

@@ -66,7 +66,7 @@ class MatchService(BaseService):
     ) -> list[MatchPublic]:
         with self.get_session() as session:
             result: list[MatchPublic] = []
-            filter = QueryUtil.convertQueryToDBFilter(Match, query)
+            filter = QueryUtil.convert_query_to_db_filter(Match, query)
             # Eager load only what we need, explicitly disable other relationships
             statement = (
                 select(Match)
@@ -93,18 +93,3 @@ class MatchService(BaseService):
                 result.append(MatchPublic.from_match(match))
             derived.fill_matches(session, result)
             return result
-
-    def create_match(self, match: MatchCreate) -> MatchPublic:
-        return self.add(match)
-
-    def update_match(self, match_id: int, match: MatchUpdate) -> MatchPublic:
-        return self.update(match_id, match)
-
-    def delete_match(self, match_id: int) -> None:
-        self.delete(match_id)
-
-    def get_match(self, match_id: int) -> MatchPublic:
-        match_data = self.get(match_id)
-        if not match_data:
-            raise NotFoundError(f"Match not found by Id: {match_id}")
-        return match_data

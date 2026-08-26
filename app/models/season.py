@@ -122,6 +122,3 @@ class SeasonPublic(SeasonBase):
             discordRole=season.discordRole,
             score_system=season.score_system,
         )
-
-    def to_dict(self) -> dict[str, Any]:
-        return self.model_dump(mode="json")

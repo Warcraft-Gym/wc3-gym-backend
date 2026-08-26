@@ -18,13 +18,18 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.api.deps import AuthError
 from app.api.main import api_router
 from app.core.db import init_engine
-from app.core.exceptions import BadRequestError, ExternalServiceError, NotFoundError
+from app.core.exceptions import (
+    ApiError,
+    BadRequestError,
+    ExternalServiceError,
+    NotFoundError,
+    W3CThrottledError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -59,12 +64,12 @@ def create_app(db_url: str | None = None) -> FastAPI:
 
     @app.exception_handler(NotFoundError)
     async def not_found(request: Request, exc: NotFoundError) -> JSONResponse:
-        logger.error(exc)
+        logger.warning(exc)
         return JSONResponse({"error": str(exc)}, status_code=404)
 
     @app.exception_handler(BadRequestError)
     async def bad_request(request: Request, exc: BadRequestError) -> JSONResponse:
-        logger.error(exc)
+        logger.warning(exc)
         return JSONResponse({"error": str(exc)}, status_code=400)
 
     @app.exception_handler(ExternalServiceError)
@@ -72,8 +77,19 @@ def create_app(db_url: str | None = None) -> FastAPI:
         request: Request, exc: ExternalServiceError
     ) -> JSONResponse:
         """A service outside the app failed, so the app answers for it."""
-        logger.error(exc)
+        # A refused burst is the other side pacing the app, not an incident.
+        logger.log(
+            logging.WARNING if isinstance(exc, W3CThrottledError) else logging.ERROR,
+            exc,
+        )
         return JSONResponse({"error": str(exc)}, status_code=502)
+
+    @app.exception_handler(IntegrityError)
+    async def integrity_error(request: Request, exc: IntegrityError) -> JSONResponse:
+        """The database refused the write because another row depends on
+        it, so the request conflicts with the data rather than failing."""
+        logger.warning("Integrity error", exc_info=exc)
+        return JSONResponse({"error": "Row is still referenced"}, status_code=409)
 
     @app.exception_handler(SQLAlchemyError)
     async def db_error(request: Request, exc: SQLAlchemyError) -> JSONResponse:
@@ -83,9 +99,10 @@ def create_app(db_url: str | None = None) -> FastAPI:
         logger.error("Database error", exc_info=exc)
         return JSONResponse({"error": "Database error"}, status_code=500)
 
-    @app.exception_handler(AuthError)
-    async def auth_error(request: Request, exc: AuthError) -> JSONResponse:
-        return JSONResponse({"error": exc.message}, status_code=exc.status_code)
+    @app.exception_handler(ApiError)
+    async def api_error(request: Request, exc: ApiError) -> JSONResponse:
+        """A status and a body a route named itself."""
+        return JSONResponse(exc.body, status_code=exc.status_code)
 
     @app.exception_handler(RequestValidationError)
     async def invalid_request(

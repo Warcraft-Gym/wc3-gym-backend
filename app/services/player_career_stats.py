@@ -107,41 +107,6 @@ class PlayerCareerStatsService(BaseService):
             derived.fill_career(session, [public])
             return public
 
-    def get_by_player_name(self, player_name: str) -> PlayerCareerStatsPublic | None:
-        """Get career stats by player name (for unmapped historical records)"""
-        with self.get_session() as session:
-            stat = session.scalars(
-                select(PlayerCareerStats)
-                .options(*PlayerCareerStats.eager_options())
-                .where(PlayerCareerStats.player_name == player_name)
-                .limit(1)
-            ).first()
-            if not stat:
-                return None
-            public = PlayerCareerStatsPublic.from_career_stats(stat)
-            derived.fill_career(session, [public])
-            return public
-
-    def get_or_create(self, user_id: int) -> PlayerCareerStatsPublic | None:
-        """Get existing stats or create new record for user"""
-        with self.get_session() as session:
-            stats = session.scalars(
-                select(PlayerCareerStats)
-                .where(PlayerCareerStats.user_id == user_id)
-                .limit(1)
-            ).first()
-
-            if not stats:
-                # Get user name for player_name
-                user = session.get(User, user_id)
-                player_name = user.name if user else f"User_{user_id}"
-
-                stats = PlayerCareerStats(user_id=user_id, player_name=player_name)
-                session.add(stats)
-                session.flush()
-
-            return PlayerCareerStatsPublic.from_career_stats(stats)
-
     def update_historical_baseline(
         self,
         player_name: str,
@@ -197,24 +162,6 @@ class PlayerCareerStatsService(BaseService):
                     historical_seasons_played=seasons_played,
                 )
                 session.add(stats)
-
-    def get_all_career_stats(
-        self,
-        limit: int | None = None,
-        offset: int = 0,
-        search: str = "",
-        *,
-        sort: CareerSort | None = None,
-        order: SortOrder = "asc",
-    ) -> tuple[list[PlayerCareerStatsPublic], int]:
-        """Get all player career stats ordered by rating, and the total count"""
-        return self.get_all(
-            limit=limit, offset=offset, search=search, sort=sort, order=order
-        )
-
-    def get_career_stats_by_user(self, user_id: int) -> PlayerCareerStatsPublic | None:
-        """Get career stats for a specific user"""
-        return self.get_by_user_id(user_id)
 
     def import_historical_stats(
         self, csv_reader: Iterable[dict[str, str]]

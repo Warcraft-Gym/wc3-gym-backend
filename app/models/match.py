@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Annotated, Any, Self
+from typing import TYPE_CHECKING, Annotated, Self
 
 from sqlmodel import Field, Relationship, SQLModel
 
@@ -14,11 +14,11 @@ if TYPE_CHECKING:
 
 
 class MatchBase(SQLModel):
-    team1_id: int = Field(foreign_key="teams.id", ondelete="CASCADE")
-    team2_id: int = Field(foreign_key="teams.id", ondelete="CASCADE")
-    season_id: int = Field(foreign_key="seasons.id", ondelete="CASCADE")
+    team1_id: int = Field(index=True, foreign_key="teams.id", ondelete="CASCADE")
+    team2_id: int = Field(index=True, foreign_key="teams.id", ondelete="CASCADE")
+    season_id: int = Field(index=True, foreign_key="seasons.id", ondelete="CASCADE")
     playday: int
-    fixed_map_id: int | None = Field(default=None, foreign_key="maps.id")
+    fixed_map_id: int | None = Field(index=True, default=None, foreign_key="maps.id")
     # date_frame receives numeric cells from the xlsx import.
     date_frame: Annotated[str | None, NumToStr] = Field(default=None, max_length=50)
 
@@ -98,6 +98,3 @@ class MatchPublic(MatchBase):
         if public and match.season:
             public.season = SeasonPublic.from_season_without_maps(match.season)
         return public
-
-    def to_dict(self) -> dict[str, Any]:
-        return self.model_dump(mode="json")
