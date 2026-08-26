@@ -34,10 +34,10 @@ This creates a PostgreSQL 17 container accessible at `localhost:5432`.
 
 ### Option 2: Supabase
 
-Use the **pooler** connection string from the Supabase dashboard (Connect → Session pooler), not the direct `db.<ref>.supabase.co` host: the direct host resolves to IPv6 only, which Vercel and most home networks cannot reach. The pooler user is `postgres.<ref>` and the SQLAlchemy scheme is `postgresql+psycopg`:
+Use the **pooler** connection string from the Supabase dashboard (Connect → Session pooler), not the direct `db.<ref>.supabase.co` host: the direct host resolves to IPv6 only, which Vercel and most home networks cannot reach. The pooler user is `postgres.<ref>`, the host prefix `aws-<n>` differs per region (us-east-1 is `aws-0`, eu-west-1 was `aws-1`), the password must be percent-encoded, and the SQLAlchemy scheme is `postgresql+psycopg`:
 
 ```bash
-DB_URL="postgresql+psycopg://postgres.<ref>:<password>@aws-1-<region>.pooler.supabase.com:5432/postgres?sslmode=require"
+DB_URL="postgresql+psycopg://postgres.<ref>:<password>@aws-<n>-<region>.pooler.supabase.com:5432/postgres?sslmode=require"
 ```
 
 Port 5432 is the session pooler, which behaves like a direct connection and is the one to use for `alembic upgrade head` and for a long-lived server. Port 6543 is the transaction pooler for serverless functions; it needs `connect_args={"prepare_threshold": None}` in `init_engine`, which is not set today.
