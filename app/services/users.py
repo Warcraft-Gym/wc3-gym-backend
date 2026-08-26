@@ -7,10 +7,11 @@ from typing import TYPE_CHECKING
 from sqlalchemy import ColumnElement, Select, func, or_, select, update
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session as OrmSession
-from sqlalchemy.orm import joinedload, noload
+from sqlalchemy.orm import joinedload, noload, selectinload
 
 from app.core.exceptions import NotFoundError, W3CThrottledError
 from app.core.query import QueryElement, QueryUtil
+from app.models.relationships import DBUserSeasonSignup
 from app.models.user import User, UserCreate, UserListPublic, UserPublic, UserUpdate
 from app.models.w3c_stats import (
     W3CStats,
@@ -127,6 +128,9 @@ class UserService(BaseService):
                 .options(
                     noload(User.team_seasons),
                     joinedload(User.w3c_stats),
+                    selectinload(User.signup_seasons).joinedload(
+                        DBUserSeasonSignup.season
+                    ),
                 )
                 .where(filter)
             )
@@ -157,6 +161,7 @@ class UserService(BaseService):
             statement = select(User).options(
                 noload(User.team_seasons),
                 joinedload(User.w3c_stats),
+                selectinload(User.signup_seasons).joinedload(DBUserSeasonSignup.season),
             )
             # Offset paging is deterministic only with a fixed order
             statement = statement.order_by(User.id).offset(offset)
