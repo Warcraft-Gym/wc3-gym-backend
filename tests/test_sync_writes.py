@@ -1,4 +1,4 @@
-"""UserService reads a row and then writes it, and a sync repeats.
+"""UserService reads a w3c stats row and then writes it, and a sync repeats.
 
 Both steps are in one transaction, and the database holds each key to one
 row, so a second sync updates the row it finds and adds none. When the
@@ -13,12 +13,10 @@ import pytest
 from fastapi import FastAPI
 from sqlalchemy import Select, select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session as OrmSession
 
 from app.core.db import Session
 from app.models.enums import Race
 from app.models.user import User
-from app.models.user_team_season import DBUserTeamSeason, UserTeamSeasonStatsPublic
 from app.models.w3c_stats import W3CStats, W3CStatsCreate
 from app.services.users import UserService
 from app.services.w3c import W3CService
@@ -147,43 +145,3 @@ def test_a_lost_race_updates_the_row_the_winner_wrote(
     survivors = rows_of(user_id)
     assert [r.id for r in survivors] == [r.id for r in written]
     assert survivors[0].mmr == 1700
-
-
-def test_a_lost_season_stats_race_updates_the_row_the_winner_wrote(
-    app: FastAPI, seeded: dict[str, Any], monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """The composite primary key refuses the second insert, and the write
-    falls through to the update rather than failing the request."""
-    real_get = OrmSession.get
-    missed: list[int] = []
-
-    def blind_first_get(
-        self: OrmSession, entity: type[object], ident: object, **kwargs: object
-    ) -> object | None:
-        # The first read stands for the one another writer filled in after
-        if entity is DBUserTeamSeason and not missed:
-            missed.append(1)
-            return None
-        return real_get(self, entity, ident, **kwargs)
-
-    monkeypatch.setattr(OrmSession, "get", blind_first_get)
-
-    user = UserService().updateUserTeamSeasonStats(
-        UserTeamSeasonStatsPublic(
-            user_id=seeded["player_ids"][0],
-            team_id=seeded["team_a_id"],
-            season_id=seeded["season_id"],
-            games=7,
-            wins=5,
-            losses=2,
-            matchup_history=[Race.NE.value],
-        )
-    )
-
-    assert missed == [1]
-    with Session() as session:
-        rows = session.scalars(select(DBUserTeamSeason)).all()
-    assert len([r for r in rows if r.user_id == user.id]) == 1
-    assert [(r.games, r.wins, r.losses) for r in rows if r.user_id == user.id] == [
-        (7, 5, 2)
-    ]

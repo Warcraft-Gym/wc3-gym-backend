@@ -26,7 +26,7 @@ def test_a_player_edit_stores_the_new_date(
         discord_id="1",
         discord_tag="p1",
         user_service=UserService(),
-        series_service=SeriesService(user_app_service=UserService()),
+        series_service=SeriesService(),
     )
 
     assert isinstance(result, dict), result
@@ -37,7 +37,7 @@ def test_a_caster_set_after_the_read_survives_the_player_edit(
     app: FastAPI, seeded: dict[str, Any], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     series_id = seeded["series_played_id"]
-    series_service = SeriesService(user_app_service=UserService())
+    series_service = SeriesService()
     read_series = series_service.get
 
     def read_then_admin_sets_the_caster(sid: int) -> SeriesPublic:

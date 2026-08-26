@@ -1,8 +1,6 @@
 import logging
-from typing import TYPE_CHECKING
 
-from sqlalchemy import case, func, select
-from sqlalchemy.orm import aliased
+from sqlalchemy import func, select
 
 from app.core import fantasy
 from app.core.exceptions import NotFoundError
@@ -17,21 +15,13 @@ from app.models.series import (
     SeriesSort,
     SeriesUpdate,
 )
-from app.models.user import User
-from app.models.user_team_season import UserTeamSeasonStatsPublic
 from app.services import derived
 from app.services.base import BaseService
-
-if TYPE_CHECKING:
-    from app.services.users import UserService
 
 logger = logging.getLogger(__name__)
 
 
 class SeriesService(BaseService):
-    def __init__(self, user_app_service: "UserService") -> None:
-        self.user_app_service = user_app_service
-
     def add(self, series: SeriesCreate) -> SeriesPublic:
         with self.get_session() as session:
             series = Series.add(session, series.model_dump())
@@ -188,87 +178,3 @@ class SeriesService(BaseService):
                 result.append(SeriesPublic.from_series_reduced(series))
             derived.fill_series(session, result)
             return result
-
-    def create_series(self, series: SeriesCreate) -> SeriesPublic:
-        series = self.add(series)
-        self.updateGNLSeasonStats(series)
-        return series
-
-    def update_series(self, series_id: int, series: SeriesUpdate) -> SeriesPublic:
-        series = self.update(series_id, series)
-        self.updateGNLSeasonStats(series)
-        return series
-
-    def delete_series(self, series_id: int) -> None:
-        series = self.get(series_id=series_id)
-        self.delete(series_id)
-        self.updateGNLSeasonStats(series)
-
-    def updateGNLSeasonStats(self, series: SeriesPublic) -> None:
-        p1_season_data = self.calculateUserSeasonStats(
-            series.player1.id, series.match.season_id, series.match.team1_id
-        )
-        self.user_app_service.updateUserTeamSeasonStats(p1_season_data)
-        p2_season_data = self.calculateUserSeasonStats(
-            series.player2.id, series.match.season_id, series.match.team2_id
-        )
-        self.user_app_service.updateUserTeamSeasonStats(p2_season_data)
-
-    def calculateUserSeasonStats(
-        self, user_id: int, season_id: int, team_id: int
-    ) -> UserTeamSeasonStatsPublic:
-        """The season record of one player, counted by the database.
-
-        Two statements: the counts come back as one row, and the matchup
-        history as one race per series the player is in.
-        """
-        plays = (Series.player1_id == user_id) | (Series.player2_id == user_id)
-        # A series counts once both scores are in and they are not both zero
-        scored = (
-            Series.player1_score.is_not(None)
-            & Series.player2_score.is_not(None)
-            & ~((Series.player1_score == 0) & (Series.player2_score == 0))
-        )
-        # Two games take the series, so every other scored series is a loss
-        took_two = ((Series.player1_id == user_id) & (Series.player1_score == 2)) | (
-            (Series.player2_id == user_id) & (Series.player2_score == 2)
-        )
-        opponent = aliased(User)
-        with self.get_session() as session:
-            # count() skips the null a case with no else leaves behind
-            games, wins, losses = session.execute(
-                select(
-                    func.count(),
-                    func.count(case((scored & took_two, 1))),
-                    func.count(case((scored & ~took_two, 1))),
-                )
-                .select_from(Series)
-                .join(Match, Match.id == Series.match_id)
-                .where(Match.season_id == season_id, plays)
-            ).one()
-            races = session.scalars(
-                select(opponent.race)
-                .select_from(Series)
-                .join(Match, Match.id == Series.match_id)
-                # The opponent is the other player of the series
-                .join(
-                    opponent,
-                    opponent.id
-                    == case(
-                        (Series.player1_id == user_id, Series.player2_id),
-                        else_=Series.player1_id,
-                    ),
-                )
-                .where(Match.season_id == season_id, plays)
-                # Playday then series id, so the stored list has one order
-                .order_by(Match.playday, Series.id)
-            ).all()
-        return UserTeamSeasonStatsPublic(
-            user_id=user_id,
-            games=int(games),
-            wins=int(wins),
-            losses=int(losses),
-            season_id=season_id,
-            team_id=team_id,
-            matchup_history=[race.value for race in races],
-        )

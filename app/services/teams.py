@@ -20,10 +20,24 @@ from app.services.users import SYNC_MAX_AGE, UserService
 logger = logging.getLogger(__name__)
 
 
+def _fill(session: Session, teams: list[TeamPublic]) -> None:
+    """The standings of every team, and the season record of every player."""
+    derived.fill_standings(session, teams)
+    derived.fill_gnl_stats(
+        session,
+        [
+            player
+            for team in teams
+            for players in team.player_by_season.values()
+            for player in players
+        ],
+    )
+
+
 def _public(session: Session, team: Team) -> TeamPublic:
     """One team, with its standings derived from the series it played."""
     public = TeamPublic.from_team(team)
-    derived.fill_standings(session, [public])
+    _fill(session, [public])
     return public
 
 
@@ -262,7 +276,7 @@ class TeamService(BaseService):
                 return result
             for team in teams:
                 result.append(TeamPublic.from_team(team))
-            derived.fill_standings(session, result)
+            _fill(session, result)
             return result
 
     def getAll(self, limit: int | None = None, offset: int = 0) -> list[TeamPublic]:
@@ -286,7 +300,7 @@ class TeamService(BaseService):
             teams = session.scalars(statement).unique().all()
             for team in teams:
                 result.append(TeamPublic.from_team(team))
-            derived.fill_standings(session, result)
+            _fill(session, result)
             return result
 
     def getAll_basic(
@@ -305,7 +319,7 @@ class TeamService(BaseService):
             teams = session.scalars(statement).unique().all()
             for team in teams:
                 result.append(TeamPublic.from_team(team))
-            derived.fill_standings(session, result)
+            _fill(session, result)
             return result
 
     def getAll_by_season(
@@ -331,7 +345,7 @@ class TeamService(BaseService):
             teams = session.scalars(statement).unique().all()
             for team in teams:
                 result.append(TeamPublic.from_team(team))
-            derived.fill_standings(session, result)
+            _fill(session, result)
             return result
 
     def get_teams_season(
@@ -358,7 +372,7 @@ class TeamService(BaseService):
             teams = session.scalars(statement).unique().all()
             for team in teams:
                 result.append(TeamPublic.from_team(team))
-            derived.fill_standings(session, result)
+            _fill(session, result)
             return result
 
     def get_teams_season_basic(

@@ -199,7 +199,12 @@ DEFAULT_ORDER = {
     "GET /teams": ["teams.id"],
     "GET /teams/basic": ["teams.id"],
     "POST /teams/search?query=id > 0": ["teams.id"],
-    "GET /teams/season/{season_id}": ["teams.id", "anon_1.id"],
+    # The last fragment orders the matchup history of the season record
+    "GET /teams/season/{season_id}": [
+        "teams.id",
+        "anon_1.id",
+        "anon_1.playday, anon_1.series_id",
+    ],
     "GET /teams/season/{season_id}/basic": ["teams.id", "anon_1.id"],
     "GET /users": ["users.id", "anon_1.id"],
     "POST /users/search?query=id > 0": ["users.id", "anon_1.id"],

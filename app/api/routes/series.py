@@ -21,7 +21,7 @@ router = APIRouter(tags=["series"])
 )
 def add_series(data: SeriesCreate, service: SeriesServiceDep) -> SeriesPublic:
     """Create a new series with the provided data"""
-    return service.create_series(data)
+    return service.add(data)
 
 
 @router.put(
@@ -33,7 +33,7 @@ def update_series(
     series_id: int, data: SeriesUpdate, service: SeriesServiceDep
 ) -> SeriesPublic:
     """Update the series data of an existing series"""
-    return service.update_series(series_id, data)
+    return service.update(series_id, data)
 
 
 @router.delete(
@@ -41,7 +41,7 @@ def update_series(
 )
 def delete_series(series_id: int, service: SeriesServiceDep) -> None:
     """Delete a series by its ID."""
-    service.delete_series(series_id)
+    service.delete(series_id)
 
 
 @router.get("/series/{series_id}")

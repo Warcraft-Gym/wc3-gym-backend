@@ -9,18 +9,16 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session as OrmSession
 from sqlalchemy.orm import joinedload, noload
 
-from app.core.exceptions import BadRequestError, NotFoundError, W3CThrottledError
+from app.core.exceptions import NotFoundError, W3CThrottledError
 from app.core.query import QueryElement, QueryUtil
-from app.models.season import Season
-from app.models.team import Team
 from app.models.user import User, UserCreate, UserListPublic, UserPublic, UserUpdate
-from app.models.user_team_season import DBUserTeamSeason, UserTeamSeasonStatsPublic
 from app.models.w3c_stats import (
     W3CStats,
     W3CStatsCreate,
     W3CSyncFailure,
     W3CSyncResult,
 )
+from app.services import derived
 from app.services.base import BaseService
 from app.services.w3c import THROTTLED_MESSAGE, W3CService
 
@@ -43,6 +41,13 @@ def _now() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
 
 
+def _public(session: OrmSession, user: User) -> UserPublic:
+    """One user, with the season record of every team he played for."""
+    public = UserPublic.from_user(user)
+    derived.fill_gnl_stats(session, [public])
+    return public
+
+
 class UserService(BaseService):
     def __init__(self, settings_app_service: "SettingsService | None" = None) -> None:
         self.settings_app_service = settings_app_service
@@ -50,14 +55,14 @@ class UserService(BaseService):
     def add(self, user: UserCreate) -> UserPublic:
         with self.get_session() as session:
             user = User.add(session, user.model_dump())
-            return UserPublic.from_user(user)
+            return _public(session, user)
 
     def update(self, user_id: int, user: UserUpdate) -> UserPublic:
         with self.get_session() as session:
             user = User.update(session, user_id, **user.model_dump(exclude_unset=True))
             if not user:
                 raise NotFoundError("User not found")
-            return UserPublic.from_user(user)
+            return _public(session, user)
 
     def delete(self, user_id: int) -> None:
         with self.get_session() as session:
@@ -80,7 +85,7 @@ class UserService(BaseService):
             )
             if not user:
                 raise NotFoundError(f"User not found by Id: {user_id}")
-            return UserPublic.from_user(user)
+            return _public(session, user)
 
     def search(
         self, query: QueryElement | None, limit: int | None = None, offset: int = 0
@@ -331,39 +336,3 @@ class UserService(BaseService):
     def updateW3CStats_ById(self, user_id: int) -> UserPublic:
         self.updateW3CStats(self.get(user_id))
         return self.get(user_id)
-
-    def updateUserTeamSeasonStats(
-        self, season_stats: UserTeamSeasonStatsPublic
-    ) -> UserPublic:
-        if not season_stats:
-            raise BadRequestError("Seasonstats not defined")
-        with self.get_session() as session:
-            team = session.get(Team, season_stats.team_id)
-            if not team:
-                raise NotFoundError(f"Team not found by id: {season_stats.team_id}")
-            season = session.get(Season, season_stats.season_id)
-            if not season:
-                raise NotFoundError(f"Season not found by id: {season_stats.season_id}")
-            user = session.get(User, season_stats.user_id)
-            if not user:
-                raise NotFoundError(f"User not found by id: {season_stats.user_id}")
-            key = {"team_id": team.id, "season_id": season.id, "user_id": user.id}
-            uts_obj = session.get(DBUserTeamSeason, key)
-            if uts_obj is None:
-                try:
-                    # A savepoint, so a lost race rolls back the insert alone
-                    with session.begin_nested():
-                        uts_obj = DBUserTeamSeason(user=user, season=season, team=team)
-                        session.add(uts_obj)
-                        session.flush()
-                except IntegrityError:
-                    # Another writer inserted the row first, so update that row
-                    uts_obj = session.get(DBUserTeamSeason, key, with_for_update=True)
-                    if uts_obj is None:
-                        raise
-            uts_obj.games = season_stats.games
-            uts_obj.wins = season_stats.wins
-            uts_obj.losses = season_stats.losses
-            uts_obj.matchup_history = season_stats.matchup_history
-            session.flush()
-        return self.get(season_stats.user_id)

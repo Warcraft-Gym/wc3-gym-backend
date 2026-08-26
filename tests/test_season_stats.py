@@ -1,12 +1,11 @@
-"""What SeriesService.calculateUserSeasonStats counts and in which order.
+"""What app.services.derived counts for one player's season and in which order.
 
-The counts come from the database, so the rules live in SQL: a series
-counts as played once both scores are in and they are not both zero, and
-the player who took two games won it.
+The counts come from the database: a series counts as a game once the
+player stands in it, and pays a win or a loss once both map scores are in
+and they are not both zero. The player who took two games won it.
 
-matchup_history is stored as JSON, so its order is part of the stored
-value. The order is playday then series id, which no longer depends on
-the order the database hands the rows back.
+matchup_history reads playday then series id, so the list follows the
+order the season was played rather than the order the rows went in.
 """
 
 from datetime import datetime
@@ -14,18 +13,23 @@ from typing import Any
 
 import pytest
 from fastapi import FastAPI
+from httpx2 import Client
 
 from app.core.db import Session
 from app.models.enums import Race
 from app.models.match import Match
 from app.models.series import Series
-from app.models.user import User
-from app.services.series import SeriesService
+from app.models.user import User, UserPublic
+from app.models.user_team_season import UserTeamSeasonStatsPublic
+from app.services import derived
 
 
-@pytest.fixture
-def service() -> SeriesService:
-    return SeriesService(user_app_service=None)
+def record(user_id: int, season_id: int) -> UserTeamSeasonStatsPublic:
+    """The season record the API answers for one player."""
+    stats = UserTeamSeasonStatsPublic(user_id=user_id, season_id=season_id)
+    with Session() as session:
+        derived.fill_gnl_stats(session, [UserPublic(gnl_stats=[stats])])
+    return stats
 
 
 def add_series(**values: object) -> int:
@@ -37,30 +41,24 @@ def add_series(**values: object) -> int:
 
 
 def test_the_seeded_season_counts_one_win_and_one_open_series(
-    app: FastAPI, seeded: dict[str, Any], service: SeriesService
+    app: FastAPI, seeded: dict[str, Any]
 ) -> None:
     """Player 1 won 2-1; the second series has no scores, so it only counts
     as a game played."""
-    stats = service.calculateUserSeasonStats(
-        seeded["player_ids"][0], seeded["season_id"], seeded["team_a_id"]
-    )
+    stats = record(seeded["player_ids"][0], seeded["season_id"])
     assert (stats.games, stats.wins, stats.losses) == (1, 1, 0)
     assert stats.matchup_history == [Race.NE.value]
 
-    opponent = service.calculateUserSeasonStats(
-        seeded["player_ids"][2], seeded["season_id"], seeded["team_b_id"]
-    )
+    opponent = record(seeded["player_ids"][2], seeded["season_id"])
     assert (opponent.games, opponent.wins, opponent.losses) == (1, 0, 1)
     assert opponent.matchup_history == [Race.HU.value]
 
-    open_series = service.calculateUserSeasonStats(
-        seeded["player_ids"][1], seeded["season_id"], seeded["team_a_id"]
-    )
+    open_series = record(seeded["player_ids"][1], seeded["season_id"])
     assert (open_series.games, open_series.wins, open_series.losses) == (1, 0, 0)
 
 
 def test_a_zero_to_zero_series_is_played_but_neither_won_nor_lost(
-    app: FastAPI, seeded: dict[str, Any], service: SeriesService
+    app: FastAPI, seeded: dict[str, Any]
 ) -> None:
     add_series(
         match_id=seeded["match_id"],
@@ -70,14 +68,12 @@ def test_a_zero_to_zero_series_is_played_but_neither_won_nor_lost(
         player2_score=0,
         host_player_id=seeded["player_ids"][0],
     )
-    stats = service.calculateUserSeasonStats(
-        seeded["player_ids"][0], seeded["season_id"], seeded["team_a_id"]
-    )
+    stats = record(seeded["player_ids"][0], seeded["season_id"])
     assert (stats.games, stats.wins, stats.losses) == (2, 1, 0)
 
 
 def test_matchup_history_follows_playday_not_series_id(
-    app: FastAPI, seeded: dict[str, Any], service: SeriesService
+    app: FastAPI, seeded: dict[str, Any]
 ) -> None:
     """A series added later on an earlier playday comes first."""
     with Session() as session:
@@ -110,16 +106,14 @@ def test_matchup_history_follows_playday_not_series_id(
         host_player_id=seeded["player_ids"][0],
     )
 
-    stats = service.calculateUserSeasonStats(
-        seeded["player_ids"][0], seeded["season_id"], seeded["team_a_id"]
-    )
+    stats = record(seeded["player_ids"][0], seeded["season_id"])
     assert (stats.games, stats.wins, stats.losses) == (3, 2, 1)
     # Both playday 1 series, then the playday 2 one; id order reads NE NE UD
     assert stats.matchup_history == [Race.NE.value, Race.UD.value, Race.NE.value]
 
 
 def test_a_player_with_no_series_in_the_season_counts_nothing(
-    app: FastAPI, seeded: dict[str, Any], service: SeriesService
+    app: FastAPI, seeded: dict[str, Any]
 ) -> None:
     with Session() as session:
         stranger = User(
@@ -133,8 +127,30 @@ def test_a_player_with_no_series_in_the_season_counts_nothing(
         session.commit()
         stranger_id = stranger.id
 
-    stats = service.calculateUserSeasonStats(
-        stranger_id, seeded["season_id"], seeded["team_a_id"]
-    )
+    stats = record(stranger_id, seeded["season_id"])
     assert (stats.games, stats.wins, stats.losses) == (0, 0, 0)
     assert stats.matchup_history == []
+
+
+@pytest.mark.parametrize("route", ["user", "team"])
+def test_an_imported_season_answers_the_record(
+    client: Client, seeded: dict[str, Any], route: str
+) -> None:
+    """The seed writes the series rows the way a workbook import does, and
+    both routes count the record off them."""
+    user_id = seeded["player_ids"][0]
+    season_id = seeded["season_id"]
+    if route == "user":
+        stats = client.get(f"/users/{user_id}").json()["gnl_stats"]
+    else:
+        teams = client.get(f"/teams/season/{season_id}").json()
+        stats = next(
+            player["gnl_stats"]
+            for team in teams
+            for player in team["player_by_season"][str(season_id)]
+            if player["id"] == user_id
+        )
+
+    assert len(stats) == 1
+    assert (stats[0]["games"], stats[0]["wins"], stats[0]["losses"]) == (1, 1, 0)
+    assert stats[0]["matchup_history"] == [Race.NE.value]

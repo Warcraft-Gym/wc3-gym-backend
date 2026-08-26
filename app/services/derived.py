@@ -22,6 +22,10 @@ captains. Every fantasy team scores against the season it names, so a mixed
 answer pays each row by its own season. A bet result needs no statement at all,
 because the map scores of the series already ride in the response.
 
+A per-player season record costs two more statements: one groups the series
+of the named players by season, one names the race of every opponent they met.
+Neither grows with the number of players in the answer.
+
 A team with no played series stands at zero, not at null.
 """
 
@@ -41,7 +45,7 @@ from app.models.player_career_stats import PlayerCareerStatsPublic
 from app.models.season import Season
 from app.models.series import Series, SeriesPublic
 from app.models.team import TeamPublic
-from app.models.user import User, UserReduced
+from app.models.user import User, UserPublic, UserReduced
 
 type MatchScores = dict[int, tuple[int, int]]
 # score system, series per week and number of weeks, per season
@@ -94,7 +98,8 @@ def _fill_match(match: MatchPublic, scores: MatchScores) -> None:
 
 
 def fill_series(session: Session, series_list: Iterable[SeriesPublic | None]) -> None:
-    """Fill the points of every series and the score of the match it carries."""
+    """Fill the points of every series, the score of the match it carries and
+    the season record of its two players."""
     rows = [series for series in series_list if series is not None]
     if not rows:
         return
@@ -113,6 +118,11 @@ def fill_series(session: Session, series_list: Iterable[SeriesPublic | None]) ->
         )
         if series.match:
             _fill_match(series.match, scores)
+
+    fill_gnl_stats(
+        session,
+        [player for series in rows for player in (series.player1, series.player2)],
+    )
 
 
 def fill_matches(session: Session, matches: Iterable[MatchPublic | None]) -> None:
@@ -207,6 +217,128 @@ def fill_standings(session: Session, teams: Iterable[TeamPublic | None]) -> None
             if per_week is not None and weeks is not None
             else None
         )
+
+
+class GnlTally(NamedTuple):
+    """What one player took from one season: series he stood in, series won
+    and series lost. A drawn or open series counts as a game and pays
+    neither."""
+
+    games: int
+    wins: int
+    losses: int
+
+
+def _gnl_tallies(
+    session: Session, user_ids: set[int], season_ids: set[int]
+) -> dict[tuple[int, int], GnlTally]:
+    """The season record of every named player, in one statement.
+
+    A series counts for both of its players, so the two sides union before the
+    grouping. It counts as a game once the player stands in it, and pays a win
+    or a loss once both map scores are in and they are not both zero. Two games
+    take the series, so every other scored series is a loss.
+    """
+    sides = union_all(
+        select(
+            Series.player1_id.label("user_id"),
+            Match.season_id.label("season_id"),
+            Series.player1_score.label("own"),
+            Series.player2_score.label("opp"),
+        ).join(Match, Match.id == Series.match_id),
+        select(
+            Series.player2_id,
+            Match.season_id,
+            Series.player2_score,
+            Series.player1_score,
+        ).join(Match, Match.id == Series.match_id),
+    ).subquery()
+
+    own, opp = sides.c.own, sides.c.opp
+    scored = own.is_not(None) & opp.is_not(None) & ~((own == 0) & (opp == 0))
+    rows = session.execute(
+        select(
+            sides.c.user_id,
+            sides.c.season_id,
+            func.count(),
+            # count() skips the null a case with no else leaves behind
+            func.count(case((scored & (own == 2), 1))),
+            func.count(case((scored & (own != 2), 1))),
+        )
+        .where(sides.c.user_id.in_(user_ids), sides.c.season_id.in_(season_ids))
+        .group_by(sides.c.user_id, sides.c.season_id)
+    ).all()
+    return {
+        (user_id, season_id): GnlTally(int(games), int(wins), int(losses))
+        for user_id, season_id, games, wins, losses in rows
+    }
+
+
+def _gnl_matchups(
+    session: Session, user_ids: set[int], season_ids: set[int]
+) -> dict[tuple[int, int], list[str]]:
+    """The race every opponent of every named player played, in one statement.
+
+    The opponent is the other player of the series, so the two sides union
+    again. Playday then series id, so the list reads in the order the season
+    was played.
+    """
+    opponent1, opponent2 = aliased(User), aliased(User)
+    sides = union_all(
+        select(
+            Series.player1_id.label("user_id"),
+            Match.season_id.label("season_id"),
+            Match.playday.label("playday"),
+            Series.id.label("series_id"),
+            opponent1.race.label("race"),
+        )
+        .join(Match, Match.id == Series.match_id)
+        .join(opponent1, opponent1.id == Series.player2_id),
+        select(
+            Series.player2_id,
+            Match.season_id,
+            Match.playday,
+            Series.id,
+            opponent2.race,
+        )
+        .join(Match, Match.id == Series.match_id)
+        .join(opponent2, opponent2.id == Series.player1_id),
+    ).subquery()
+
+    rows = session.execute(
+        select(sides.c.user_id, sides.c.season_id, sides.c.race)
+        .where(sides.c.user_id.in_(user_ids), sides.c.season_id.in_(season_ids))
+        .order_by(sides.c.playday, sides.c.series_id)
+    ).all()
+
+    history: dict[tuple[int, int], list[str]] = {}
+    for user_id, season_id, race in rows:
+        history.setdefault((user_id, season_id), []).append(race.value)
+    return history
+
+
+def fill_gnl_stats(session: Session, users: Iterable[UserPublic | None]) -> None:
+    """Fill games, wins, losses and matchup_history on every gnl_stats row of
+    every user."""
+    rows = [
+        stat
+        for user in users
+        if user is not None
+        for stat in user.gnl_stats
+        if stat.user_id is not None and stat.season_id is not None
+    ]
+    if not rows:
+        return
+
+    user_ids = {stat.user_id for stat in rows}
+    season_ids = {stat.season_id for stat in rows}
+    tallies = _gnl_tallies(session, user_ids, season_ids)
+    matchups = _gnl_matchups(session, user_ids, season_ids)
+
+    for stat in rows:
+        key = (stat.user_id, stat.season_id)
+        stat.games, stat.wins, stat.losses = tallies.get(key, GnlTally(0, 0, 0))
+        stat.matchup_history = matchups.get(key, [])
 
 
 class CareerTally(NamedTuple):

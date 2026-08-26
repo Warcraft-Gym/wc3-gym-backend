@@ -234,7 +234,7 @@ def update_player_series(
         changes["player2_score"] = int(data["player2_score"])
 
     # Only the fields this editor changes, so a concurrent edit stands
-    updated_series = series_service.update_series(series_id, SeriesUpdate(**changes))
+    updated_series = series_service.update(series_id, SeriesUpdate(**changes))
 
     # Determine notification action based on what was updated
     player_name = user.name if hasattr(user, "name") else discord_tag

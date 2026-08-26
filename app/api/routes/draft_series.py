@@ -102,7 +102,7 @@ def promote_draft_series(
     series_create = service.convert_to_series(draft_series)
 
     # Create as real series (this will trigger all calculations)
-    created_series = series_service.create_series(series_create)
+    created_series = series_service.add(series_create)
 
     # Delete the draft
     service.delete(draft_series_id)
