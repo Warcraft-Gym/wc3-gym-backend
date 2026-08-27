@@ -21,3 +21,16 @@ jobs:
       - uses: astral-sh/setup-uv@v6
       - run: uv sync --frozen
       - run: uv run just test
+
+  # The Vercel deployment runs no alembic, so main migrates the Supabase database here.
+  migrate:
+    if: github.repository == 'Warcraft-Gym/wc3-gym-backend' && github.event_name == 'push'
+    needs: [test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --frozen
+      - run: uv run alembic upgrade head
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
