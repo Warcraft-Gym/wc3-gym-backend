@@ -33,4 +33,4 @@ jobs:
       - run: uv sync --frozen
       - run: uv run alembic upgrade head
         env:
-          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          DB_URL: ${{ secrets.DB_URL }}
