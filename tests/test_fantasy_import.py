@@ -10,6 +10,7 @@ from typing import Any
 import pandas as pd
 import pytest
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from starlette.testclient import TestClient as Client
 
 from app.core.db import Session
@@ -133,6 +134,52 @@ def test_import_fantasy_bets_stores_a_bet(
         assert bet.series_id == seeded["series_played_id"]
         assert bet.winner_id == seeded["player_ids"][0]
         assert bet.bet_points == 7
+
+
+def test_a_changed_pick_updates_the_bet_the_bettor_already_made(
+    client: Client, seeded: dict[str, Any], auth_headers: dict[str, str]
+) -> None:
+    """One bet per bettor and series, so the second sheet moves the pick
+    rather than leaving two bets that both score."""
+    for winner, points in (("P1", 7), ("P3", 5)):
+        response = client.post(
+            "/fantasy/import/bets",
+            params={"season_id": str(seeded["season_id"])},
+            files={
+                "file": (
+                    "bets.xlsx",
+                    _bets_sheets([[1, "P1", "P3"]], [[1, "p2", winner, points]]),
+                    "application/vnd.ms-excel",
+                )
+            },
+            headers=auth_headers,
+        )
+        assert response.status_code == 200, response.text
+
+    with Session() as session:
+        bet = session.scalars(
+            select(FantasyBet).where(FantasyBet.user_id == seeded["player_ids"][1])
+        ).one()
+        assert bet.winner_id == seeded["player_ids"][2]
+        assert bet.bet_points == 5
+
+
+def test_the_database_refuses_a_second_bet_on_one_series(
+    client: Client, seeded: dict[str, Any]
+) -> None:
+    """The unique index, not the service, is what stops the duplicate."""
+    with Session() as session, pytest.raises(IntegrityError):
+        for winner in seeded["player_ids"][:2]:
+            session.add(
+                FantasyBet(
+                    season_id=seeded["season_id"],
+                    series_id=seeded["series_played_id"],
+                    user_id=seeded["player_ids"][1],
+                    winner_id=winner,
+                    bet_points=10,
+                )
+            )
+            session.flush()
 
 
 def test_import_fantasy_teams_names_the_row_it_rejects(

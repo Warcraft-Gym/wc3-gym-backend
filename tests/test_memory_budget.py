@@ -15,11 +15,11 @@ from fastapi import FastAPI
 
 from app.core.db import Session
 from app.models.enums import Race
-from app.models.fantasy_bet import FantasyBet
 from app.models.relationships import DBUserSeasonSignup
 from app.models.season import Season
 from app.models.w3c_stats import W3CStats
 from app.services.fantasy_bets import FantasyBetService
+from tests.seed import add_bets
 
 BETS = 300
 SEASONS = 8
@@ -42,16 +42,7 @@ def crowded(app: FastAPI, seeded: dict[str, Any]) -> dict[str, Any]:
             session.add(
                 W3CStats(user_id=user_id, wc3_season=20, race=Race.HU, mmr=1500)
             )
-        for _ in range(BETS):
-            session.add(
-                FantasyBet(
-                    season_id=seeded["season_id"],
-                    series_id=seeded["series_played_id"],
-                    user_id=seeded["player_ids"][0],
-                    winner_id=seeded["player_ids"][0],
-                    bet_points=10,
-                )
-            )
+        add_bets(session, seeded, BETS)
         session.commit()
     return seeded
 

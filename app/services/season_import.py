@@ -610,20 +610,20 @@ def _fantasy_bets(
     series: dict[int, int],
     users: Users,
 ) -> int:
-    """The bets of the season, matched by series, bettor and pick. Answers
-    how many rows repeat a key an earlier row of the sheet already held."""
+    """The bets of the season, matched by series and bettor. Answers how
+    many rows repeat a key an earlier row of the sheet already held."""
     rows = _rows(sheets.get("Fantasy Bets"), ["Series ID", "User ID", "Winner ID"])
     if not rows:
         return 0
     stored = {
-        (bet.series_id, bet.user_id, bet.winner_id): bet
+        (bet.series_id, bet.user_id): bet
         for bet in session.scalars(
             select(FantasyBet).where(FantasyBet.season_id == season.id)
         )
     }
 
     written: list[FantasyBet] = []
-    seen: set[tuple[int, int, int]] = set()
+    seen: set[tuple[int, int]] = set()
     duplicates = 0
     for row in rows:
         series_id = series.get(whole_number(row["Series ID"]))
@@ -641,7 +641,7 @@ def _fantasy_bets(
             winner_id=winner.id,
             bet_points=whole_number(row["Bet Points"]) or 0,
         )
-        key = (series_id, user.id, winner.id)
+        key = (series_id, user.id)
         if key in seen:
             duplicates += 1
         seen.add(key)
