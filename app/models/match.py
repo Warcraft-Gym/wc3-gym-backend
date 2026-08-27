@@ -1,5 +1,6 @@
 from typing import TYPE_CHECKING, Annotated, Self
 
+from sqlalchemy import Index
 from sqlmodel import Field, Relationship, SQLModel
 
 from app.models.base import DBModel
@@ -25,6 +26,17 @@ class MatchBase(SQLModel):
 
 class Match(MatchBase, DBModel, table=True):
     __tablename__ = "matches"
+    # Two teams meet once on a playday. A-vs-B and B-vs-A are different rows.
+    __table_args__ = (
+        Index(
+            "uq_matches_season_id_team1_id_team2_id_playday",
+            "season_id",
+            "team1_id",
+            "team2_id",
+            "playday",
+            unique=True,
+        ),
+    )
 
     id: int | None = Field(default=None, primary_key=True)
     team1: "Team" = Relationship(

@@ -57,20 +57,24 @@ def build_season(
     )
     team1 = post(client, headers, "/teams", {"name": f"{name} one"})
     team2 = post(client, headers, "/teams", {"name": f"{name} two"})
-    players = [
-        post(
-            client,
-            headers,
-            "/users",
-            {
-                "name": f"{name} p{index}",
-                "battleTag": f"{name}{index}#1",
-                "discordTag": f"{name}{index}",
-                "discordId": f"{name}{index}",
-                "race": "HU",
-            },
-        )
-        for index in (1, 2)
+    # A pair of players meet once in a match, so each result needs its own pair
+    rosters = [
+        [
+            post(
+                client,
+                headers,
+                "/users",
+                {
+                    "name": f"{name} t{team} p{index}",
+                    "battleTag": f"{name}t{team}p{index}#1",
+                    "discordTag": f"{name}t{team}p{index}",
+                    "discordId": f"{name}t{team}p{index}",
+                    "race": "HU",
+                },
+            )
+            for index in range(len(RESULTS))
+        ]
+        for team in (1, 2)
     ]
     post(
         client,
@@ -78,12 +82,12 @@ def build_season(
         f"/seasons/{season['id']}/teams",
         {"team_ids": [team1["id"], team2["id"]]},
     )
-    for team, player in zip((team1, team2), players, strict=True):
+    for team, roster in zip((team1, team2), rosters, strict=True):
         post(
             client,
             headers,
             f"/teams/{team['id']}/seasons/{season['id']}/players",
-            {"player_ids": [player["id"]]},
+            {"player_ids": [player["id"] for player in roster]},
         )
 
     match = post(
@@ -104,14 +108,14 @@ def build_season(
             "/series",
             {
                 "match_id": match["id"],
-                "player1_id": players[0]["id"],
-                "player2_id": players[1]["id"],
-                "host_player_id": players[0]["id"],
+                "player1_id": rosters[0][index]["id"],
+                "player2_id": rosters[1][index]["id"],
+                "host_player_id": rosters[0][index]["id"],
                 "player1_score": one,
                 "player2_score": two,
             },
         )["id"]
-        for one, two in RESULTS
+        for index, (one, two) in enumerate(RESULTS)
     ]
     return {
         "season_id": season["id"],

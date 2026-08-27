@@ -2,7 +2,7 @@ from collections.abc import Sequence
 from datetime import datetime
 from typing import Annotated, Any, Literal, Self
 
-from sqlalchemy import ColumnElement, ColumnExpressionArgument, and_, select
+from sqlalchemy import ColumnElement, ColumnExpressionArgument, Index, and_, select
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.base import ExecutableOption
 from sqlmodel import Field, Relationship, SQLModel
@@ -30,6 +30,16 @@ class SeriesBase(SQLModel):
 
 class Series(SeriesBase, DBModel, table=True):
     __tablename__ = "series"
+    # A pair of players meet once inside a team series
+    __table_args__ = (
+        Index(
+            "uq_series_match_id_player1_id_player2_id",
+            "match_id",
+            "player1_id",
+            "player2_id",
+            unique=True,
+        ),
+    )
 
     id: int | None = Field(default=None, primary_key=True)
     match: "Match" = Relationship(

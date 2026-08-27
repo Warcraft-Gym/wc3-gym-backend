@@ -244,22 +244,7 @@ def test_the_bets_count_holds_when_the_bets_grow(league: dict[str, Any]) -> None
     assert tally[0] == 3
 
 
-def add_fantasy_teams(seeded: dict[str, Any], count: int) -> None:
-    """More fantasy teams in the season, so a per-team fill would be visible."""
-    from app.models.fantasy_team import FantasyTeam
-
-    with Session() as session:
-        for index in range(count):
-            session.add(
-                FantasyTeam(
-                    name=f"Extra {index}",
-                    season_id=seeded["season_id"],
-                    captain_id=seeded["player_ids"][index % 4],
-                    drafted_team_id=seeded["team_a_id"],
-                    drafted_race=Race.HU,
-                )
-            )
-        session.commit()
+from tests.seed import add_fantasy_teams
 
 
 def test_the_fantasy_team_list_costs_six_statements(league: dict[str, Any]) -> None:

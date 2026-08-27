@@ -220,7 +220,7 @@ def test_the_import_creates_a_captain_it_cannot_find(
         team = session.scalars(
             select(FantasyTeam).where(FantasyTeam.name == "Night Owls")
         ).one()
-    assert captain.battleTag == "Fantasy_User"
+    assert captain.battleTag == "Fantasy_User#newcap"
     assert team.captain_id == captain.id
 
 

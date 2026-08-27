@@ -1,6 +1,7 @@
 from typing import TYPE_CHECKING, Annotated, Any, Self
 
 from pydantic import BeforeValidator
+from sqlalchemy import Index
 from sqlalchemy.orm import Session
 from sqlmodel import Field, Relationship, SQLModel
 
@@ -40,6 +41,9 @@ class TeamBase(SQLModel):
 
 class Team(TeamBase, DBModel, table=True):
     __tablename__ = "teams"
+    # A Discord role belongs to one club, which is what makes the club the same
+    # club across seasons. The short name is a label and may repeat.
+    __table_args__ = (Index("uq_teams_discord_role", "discord_role", unique=True),)
 
     id: int | None = Field(default=None, primary_key=True)
     icon: bytes | None = None

@@ -63,7 +63,7 @@ def test_a_zero_to_zero_series_is_played_but_neither_won_nor_lost(
     add_series(
         match_id=seeded["match_id"],
         player1_id=seeded["player_ids"][0],
-        player2_id=seeded["player_ids"][2],
+        player2_id=seeded["player_ids"][3],
         player1_score=0,
         player2_score=0,
         host_player_id=seeded["player_ids"][0],
