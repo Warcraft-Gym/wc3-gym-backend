@@ -1,0 +1,25 @@
+name: Drop preview databases
+
+# Every pull request preview gets its own database on the staging Supabase project (api/preview_db.py).
+# Drop the ones whose pull request is closed or whose branch is gone.
+on:
+  pull_request:
+    types: [closed]
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+jobs:
+  drop:
+    if: github.repository == 'Warcraft-Gym/wc3-gym-backend'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --frozen
+      - run: |
+          keep=$(gh pr list --state open --json number -q '.[].number'; git ls-remote --heads origin | sed 's|.*refs/heads/||')
+          uv run python scripts/drop_previews.py $keep
+        env:
+          DB_URL: ${{ secrets.STAGING_DB_URL }}
+          GH_TOKEN: ${{ github.token }}
