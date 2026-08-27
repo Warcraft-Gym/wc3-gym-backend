@@ -1,5 +1,6 @@
 from typing import TYPE_CHECKING, Annotated
 
+from sqlalchemy import Index, text
 from sqlmodel import Field, Relationship, SQLModel
 
 from app.models.base import DBModel
@@ -18,6 +19,10 @@ class MapBase(SQLModel):
 
 class Map(MapBase, DBModel, table=True):
     __tablename__ = "maps"
+    # The import matches a map by short name
+    __table_args__ = (
+        Index("uq_maps_shortname", text("lower(trim(shortname))"), unique=True),
+    )
 
     id: int | None = Field(default=None, primary_key=True)
     seasons: list["DBMapSeason"] = Relationship(

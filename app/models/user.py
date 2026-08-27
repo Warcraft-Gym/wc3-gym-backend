@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import TYPE_CHECKING, Annotated, Any, Self
 
+from sqlalchemy import Index, text
 from sqlmodel import Field, Relationship, SQLModel
 
 from app.models.base import DBModel
@@ -29,6 +30,18 @@ class UserBase(SQLModel):
 
 class User(UserBase, DBModel, table=True):
     __tablename__ = "users"
+    # The importers match a player by battle tag and a bettor by Discord tag,
+    # and neither service is case sensitive. A blank Discord tag means unknown.
+    __table_args__ = (
+        Index("uq_users_battle_tag", text('lower(trim("battleTag"))'), unique=True),
+        Index(
+            "uq_users_discord_tag",
+            text('lower(trim("discordTag"))'),
+            unique=True,
+            sqlite_where=text("trim(\"discordTag\") <> ''"),
+            postgresql_where=text("trim(\"discordTag\") <> ''"),
+        ),
+    )
 
     id: int | None = Field(default=None, primary_key=True)
     race: Race

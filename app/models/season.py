@@ -1,6 +1,7 @@
 from datetime import date
 from typing import TYPE_CHECKING, Annotated, Any, Self
 
+from sqlalchemy import Index, text
 from sqlmodel import Field, Relationship, SQLModel
 
 from app.models.base import DBModel
@@ -31,6 +32,8 @@ class SeasonBase(SQLModel):
 
 class Season(SeasonBase, DBModel, table=True):
     __tablename__ = "seasons"
+    # The import matches a season by name, so two seasons cannot share one
+    __table_args__ = (Index("uq_seasons_name", text("lower(trim(name))"), unique=True),)
 
     id: int | None = Field(default=None, primary_key=True)
     user_teams: list["DBUserTeamSeason"] = Relationship(

@@ -130,28 +130,10 @@ def test_the_fantasy_users_sheet_holds_the_users_who_are_on_no_roster(
 def add_bets(seeded: dict[str, Any], count: int) -> None:
     """Put count more bets in the seeded season, each on its own series."""
     from app.core.db import Session
-    from app.models.fantasy_bet import FantasyBet
-    from app.models.series import Series
+    from tests.seed import add_bets as seed_bets
 
     with Session() as session:
-        for _ in range(count):
-            series = Series(
-                match_id=seeded["match_id"],
-                player1_id=seeded["player_ids"][0],
-                player2_id=seeded["player_ids"][2],
-                host_player_id=seeded["player_ids"][0],
-            )
-            session.add(series)
-            session.flush()
-            session.add(
-                FantasyBet(
-                    season_id=seeded["season_id"],
-                    series_id=series.id,
-                    user_id=seeded["player_ids"][0],
-                    winner_id=seeded["player_ids"][0],
-                    bet_points=10,
-                )
-            )
+        seed_bets(session, seeded, count)
         session.commit()
 
 
@@ -245,7 +227,7 @@ def draft_outsider(seeded: dict[str, Any]) -> int:
         fteam = FantasyTeam(
             name="The Benchwarmers",
             season_id=seeded["season_id"],
-            captain_id=seeded["player_ids"][0],
+            captain_id=seeded["player_ids"][1],
             drafted_team_id=seeded["team_a_id"],
             drafted_race=Race.HU,
         )

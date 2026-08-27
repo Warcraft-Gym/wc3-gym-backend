@@ -12,7 +12,7 @@ from typing import Any, NamedTuple
 
 import pandas as pd
 from pydantic import ValidationError
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session as OrmSession
 from sqlmodel import SQLModel
 
@@ -47,7 +47,7 @@ class ImportedSeason(NamedTuple):
 
 @dataclass
 class Users:
-    """The users the workbook names, by the id it carries and by battle tag."""
+    """The users the workbook names, by the id it carries and by folded battle tag."""
 
     by_old_id: dict[int, User] = field(default_factory=dict)
     by_tag: dict[str, User] = field(default_factory=dict)
@@ -57,6 +57,12 @@ def strip_text(frame: pd.DataFrame) -> pd.DataFrame:
     """A sheet with the spaces around every text cell dropped, so a lookup
     by name matches the value the workbook carries."""
     return frame.map(lambda value: value.strip() if isinstance(value, str) else value)
+
+
+def folded[T](value: T) -> T:
+    """The key a lookup matches on. Text folds to lower case, so a cell
+    finds the stored row whatever the case it was typed in."""
+    return value.strip().lower() if isinstance(value, str) else value
 
 
 def cell_value[T](value: T) -> T | None:
@@ -185,7 +191,7 @@ def _season(
     stored = None
     if not create_new:
         stored = session.scalars(
-            select(Season).where(Season.name == values.name)
+            select(Season).where(func.lower(Season.name) == folded(values.name))
         ).first()
     if stored:
         _apply(stored, values)
@@ -205,31 +211,33 @@ def _maps(session: OrmSession, sheets: Sheets, season: Season) -> dict[int, int]
     values = [
         MapCreate(
             name=row["Name"],
-            shortname=row["Shortname"],
+            shortname=cell_value(row["Shortname"]),
             image=cell_value(row["Image URL"]),
         )
         for row in rows
     ]
-    wanted = {value.shortname for value in values if value.shortname is not None}
+    wanted = {folded(value.shortname) for value in values if value.shortname}
     stored: dict[str, Map] = {}
     if wanted:
         stored = {
-            map_obj.shortname: map_obj
-            for map_obj in session.scalars(select(Map).where(Map.shortname.in_(wanted)))
+            folded(map_obj.shortname): map_obj
+            for map_obj in session.scalars(
+                select(Map).where(func.lower(Map.shortname).in_(wanted))
+            )
         }
 
     written: list[Map] = []
     pool: list[Map] = []
     old_ids: dict[int, Map] = {}
     for row, value in zip(rows, values, strict=True):
-        map_obj = stored.get(value.shortname)
+        map_obj = stored.get(folded(value.shortname))
         if map_obj:
             _apply(map_obj, value)
         else:
             map_obj = Map(**value.model_dump())
             written.append(map_obj)
-            if value.shortname is not None:
-                stored[value.shortname] = map_obj
+            if value.shortname:
+                stored[folded(value.shortname)] = map_obj
         pool.append(map_obj)
         old_id = whole_number(row["ID"])
         if old_id:
@@ -264,22 +272,24 @@ def _teams(session: OrmSession, sheets: Sheets, season: Season) -> dict[int, int
         for row in rows
     ]
     stored = {
-        team.name: team
+        folded(team.name): team
         for team in session.scalars(
-            select(Team).where(Team.name.in_({value.name for value in values}))
+            select(Team).where(
+                func.lower(Team.name).in_({folded(value.name) for value in values})
+            )
         )
     }
 
     written: list[Team] = []
     old_ids: dict[int, Team] = {}
     for row, value in zip(rows, values, strict=True):
-        team = stored.get(value.name)
+        team = stored.get(folded(value.name))
         if team:
             _apply(team, value)
         else:
             team = Team(**value.model_dump())
             written.append(team)
-            stored[value.name] = team
+            stored[folded(value.name)] = team
         old_id = whole_number(row["ID"])
         if old_id:
             old_ids[old_id] = team
@@ -336,10 +346,12 @@ def _players(
     values = [_player_values(row) for row in rows]
     users = Users(
         by_tag={
-            user.battleTag: user
+            folded(user.battleTag): user
             for user in session.scalars(
                 select(User).where(
-                    User.battleTag.in_({value.battleTag for value in values})
+                    func.lower(User.battleTag).in_(
+                        {folded(value.battleTag) for value in values}
+                    )
                 )
             )
         }
@@ -347,10 +359,10 @@ def _players(
 
     written: list[User] = []
     for value in values:
-        if value.battleTag not in users.by_tag:
+        if folded(value.battleTag) not in users.by_tag:
             user = User(**value.model_dump())
             written.append(user)
-            users.by_tag[value.battleTag] = user
+            users.by_tag[folded(value.battleTag)] = user
     session.add_all(written)
     session.flush()
 
@@ -359,7 +371,7 @@ def _players(
         old_id = whole_number(row["ID"])
         if not old_id:
             continue
-        user = users.by_tag[value.battleTag]
+        user = users.by_tag[folded(value.battleTag)]
         users.by_old_id[old_id] = user
         team_id = teams.get(whole_number(row["Team ID"]))
         if team_id:
@@ -506,24 +518,28 @@ def _fantasy_users(session: OrmSession, sheets: Sheets, users: Users) -> None:
         for row in rows
     ]
     unknown = {
-        value.battleTag for value in values if value.battleTag not in users.by_tag
+        folded(value.battleTag)
+        for value in values
+        if folded(value.battleTag) not in users.by_tag
     }
     if unknown:
-        for user in session.scalars(select(User).where(User.battleTag.in_(unknown))):
-            users.by_tag[user.battleTag] = user
+        for user in session.scalars(
+            select(User).where(func.lower(User.battleTag).in_(unknown))
+        ):
+            users.by_tag[folded(user.battleTag)] = user
 
     written: list[User] = []
     for value in values:
-        if value.battleTag not in users.by_tag:
+        if folded(value.battleTag) not in users.by_tag:
             user = User(**value.model_dump())
             written.append(user)
-            users.by_tag[value.battleTag] = user
+            users.by_tag[folded(value.battleTag)] = user
     session.add_all(written)
     session.flush()
 
     for row, value in zip(rows, values, strict=True):
         old_id = whole_number(row["ID"])
-        users.by_old_id.setdefault(old_id, users.by_tag[value.battleTag])
+        users.by_old_id.setdefault(old_id, users.by_tag[folded(value.battleTag)])
 
 
 def _fantasy_teams(

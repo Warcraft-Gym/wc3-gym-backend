@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
-from sqlalchemy import column, create_engine, table, text
+from sqlalchemy import Column, column, create_engine, table, text
 from sqlmodel import SQLModel
 
 from tests.migrate import fresh_database, upgrade_to, upgrade_to_head
@@ -21,6 +21,21 @@ BEFORE_SCORE_SYSTEM = "658616cf0c2b"
 BEFORE_W3C_STATS_UNIQUE = "9f4b7c1d2ae5"
 
 
+def comparable(
+    obj: object, name: str | None, type_: str, reflected: bool, compare_to: object
+) -> bool:
+    """Whether autogenerate can tell this object apart from the database.
+
+    An index over an expression reads back as text no dialect turns into the
+    element the model holds, so alembic reports it as changed on every run.
+    The natural keys are checked by the writes they refuse instead, in
+    tests/test_natural_keys.py.
+    """
+    if type_ == "index":
+        return all(isinstance(part, Column) for part in obj.expressions)
+    return True
+
+
 def test_a_migrated_database_matches_the_models(tmp_path: Path) -> None:
     import_all_models()
     url = fresh_database(tmp_path, "migrated")
@@ -28,7 +43,9 @@ def test_a_migrated_database_matches_the_models(tmp_path: Path) -> None:
 
     engine = create_engine(url)
     with engine.connect() as connection:
-        context = MigrationContext.configure(connection)
+        context = MigrationContext.configure(
+            connection, opts={"include_object": comparable}
+        )
         differences = compare_metadata(context, SQLModel.metadata)
 
     assert differences == []
