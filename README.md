@@ -46,13 +46,9 @@ Port 5432 is the session pooler, which behaves like a direct connection and is t
 
 Vercel serves `api/index.py`, which imports the same application the container runs. Set `DB_URL`, `JWT_SECRET_KEY`, `ADMIN_TOKEN`, `BOT_CLIENT_TOKEN` and `FRONTEND_URL` in the project settings; the deployment reads no `.env` file.
 
-A deploy runs no migration. Before you deploy a commit that carries one, run it by hand against the same database:
+The production build runs `alembic upgrade head` (`vercel.json`) before the new code is promoted, so a migration that fails stops the deploy. Preview builds skip it. The old code keeps serving while the build runs, so every migration must work with the code before it and after it: add columns nullable or with a default, drop a column only after the code that read it has shipped.
 
-```bash
-DB_URL="<pooler url>" uv run alembic upgrade head
-```
-
-Use the session pooler on port 5432 for that command and for `DB_URL` itself. Port 6543 is the transaction pooler; it needs `connect_args={"prepare_threshold": None}` in `init_engine`, which is not set, so a `DB_URL` on 6543 fails on the second request.
+Use the session pooler on port 5432 for `DB_URL`. Port 6543 is the transaction pooler; it needs `connect_args={"prepare_threshold": None}` in `init_engine`, which is not set, so a `DB_URL` on 6543 fails on the second request.
 
 A full-season `POST /import` takes longer than the Vercel function timeout. Import a season from a machine that runs the server itself, or against the pooler URL directly.
 
