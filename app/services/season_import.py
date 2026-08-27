@@ -14,7 +14,6 @@ import pandas as pd
 from pydantic import ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session as OrmSession
-from sqlmodel import SQLModel
 
 from app.core.db import Session
 from app.core.exceptions import BadRequestError
@@ -99,10 +98,14 @@ def _rows(frame: pd.DataFrame | None, required: list[str]) -> list[pd.Series]:
     return [row for _, row in frame.dropna(subset=required).iterrows()]
 
 
-def _apply(obj: SQLModel, values: SQLModel) -> None:
-    """Write the fields the workbook carried onto a stored row."""
-    for name, value in values.model_dump(exclude_unset=True).items():
-        setattr(obj, name, value)
+def _cells(row: pd.Series, columns: dict[str, str]) -> dict[str, Any]:
+    """The fields the row carries. An empty cell leaves its field unset, so a
+    re-import keeps the value the database already holds."""
+    return {
+        name: row[column]
+        for name, column in columns.items()
+        if cell_value(row[column]) is not None
+    }
 
 
 def _write(
@@ -175,18 +178,21 @@ def _season(
     """The season row. Its name matches it, because the id the file carries
     belongs to the database the file was exported from."""
     row = sheets["Season"].iloc[0]
-    data = {
-        "name": row["Name"],
-        "number_weeks": whole_number(row["Number of Weeks"]) or 0,
-        "series_per_week": whole_number(row["Series Per Week"]) or 0,
-        "pick_ban": cell_value(row["Pick Ban"]),
-        "discordRole": cell_value(row["Discord Role"]),
-        "score_system": score_system,
-    }
-    for name, column in (("start_date", "Start Date"), ("end_date", "End Date")):
-        if cell_value(row[column]) is not None:
-            data[name] = row[column]
-    values = SeasonCreate(**data)
+    values = SeasonCreate(
+        name=row["Name"],
+        number_weeks=whole_number(row["Number of Weeks"]) or 0,
+        series_per_week=whole_number(row["Series Per Week"]) or 0,
+        score_system=score_system,
+        **_cells(
+            row,
+            {
+                "pick_ban": "Pick Ban",
+                "discordRole": "Discord Role",
+                "start_date": "Start Date",
+                "end_date": "End Date",
+            },
+        ),
+    )
 
     stored = None
     if not create_new:
@@ -194,7 +200,7 @@ def _season(
             select(Season).where(func.lower(Season.name) == folded(values.name))
         ).first()
     if stored:
-        _apply(stored, values)
+        stored.sqlmodel_update(values.model_dump(exclude_unset=True))
         logger.info(f"Updating season {values.name} with ID: {stored.id}")
         return stored
 
@@ -211,8 +217,7 @@ def _maps(session: OrmSession, sheets: Sheets, season: Season) -> dict[int, int]
     values = [
         MapCreate(
             name=row["Name"],
-            shortname=cell_value(row["Shortname"]),
-            image=cell_value(row["Image URL"]),
+            **_cells(row, {"shortname": "Shortname", "image": "Image URL"}),
         )
         for row in rows
     ]
@@ -232,7 +237,7 @@ def _maps(session: OrmSession, sheets: Sheets, season: Season) -> dict[int, int]
     for row, value in zip(rows, values, strict=True):
         map_obj = stored.get(folded(value.shortname))
         if map_obj:
-            _apply(map_obj, value)
+            map_obj.sqlmodel_update(value.model_dump(exclude_unset=True))
         else:
             map_obj = Map(**value.model_dump())
             written.append(map_obj)
@@ -266,8 +271,7 @@ def _teams(session: OrmSession, sheets: Sheets, season: Season) -> dict[int, int
     values = [
         TeamCreate(
             name=row["Name"],
-            long_name=cell_value(row["Long Name"]),
-            discord_role=cell_value(row["Discord Role"]),
+            **_cells(row, {"long_name": "Long Name", "discord_role": "Discord Role"}),
         )
         for row in rows
     ]
@@ -285,7 +289,7 @@ def _teams(session: OrmSession, sheets: Sheets, season: Season) -> dict[int, int
     for row, value in zip(rows, values, strict=True):
         team = stored.get(folded(value.name))
         if team:
-            _apply(team, value)
+            team.sqlmodel_update(value.model_dump(exclude_unset=True))
         else:
             team = Team(**value.model_dump())
             written.append(team)
@@ -315,7 +319,6 @@ def _teams(session: OrmSession, sheets: Sheets, season: Season) -> dict[int, int
 def _player_values(row: pd.Series) -> UserCreate:
     """A player of the Players sheet. An empty cell leaves the field unset,
     so a column the workbook does not carry writes nothing."""
-    data: dict[str, Any] = {"battleTag": row["Battle Tag"]}
     columns = {
         "name": "Name",
         "discordTag": "Discord Tag",
@@ -325,11 +328,8 @@ def _player_values(row: pd.Series) -> UserCreate:
         "country": "Country",
         "fantasy_tier": "Fantasy Tier",
     }
-    for name, column in columns.items():
-        if cell_value(row[column]) is not None:
-            data[name] = row[column]
     try:
-        return UserCreate(**data)
+        return UserCreate(battleTag=row["Battle Tag"], **_cells(row, columns))
     except ValidationError as error:
         missing = ", ".join(str(detail["loc"][0]) for detail in error.errors())
         raise BadRequestError(
@@ -426,7 +426,7 @@ def _matches(
         key = (team1_id, team2_id, values.playday)
         match = stored.get(key)
         if match:
-            _apply(match, values)
+            match.sqlmodel_update(values.model_dump(exclude_unset=True))
         else:
             match = Match(**values.model_dump())
             written.append(match)
@@ -489,7 +489,7 @@ def _series(
         key = (match_id, player1.id, player2.id)
         series = stored.get(key)
         if series:
-            _apply(series, values)
+            series.sqlmodel_update(values.model_dump(exclude_unset=True))
         else:
             series = Series(**values.model_dump())
             written.append(series)
@@ -574,7 +574,7 @@ def _fantasy_teams(
         )
         fteam = stored.get(captain.id)
         if fteam:
-            _apply(fteam, values)
+            fteam.sqlmodel_update(values.model_dump(exclude_unset=True))
         else:
             fteam = FantasyTeam(**values.model_dump())
             written.append(fteam)
@@ -663,7 +663,7 @@ def _fantasy_bets(
         seen.add(key)
         bet = stored.get(key)
         if bet:
-            _apply(bet, values)
+            bet.sqlmodel_update(values.model_dump(exclude_unset=True))
         else:
             bet = FantasyBet(**values.model_dump())
             written.append(bet)
