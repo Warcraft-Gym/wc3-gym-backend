@@ -121,3 +121,11 @@ def test_the_w3c_stats_dedupe_keeps_the_highest_id_of_each_key(tmp_path: Path) -
             text("SELECT id, mmr FROM w3cstats ORDER BY id")
         ).all()
     assert kept == [(3, 1700), (4, 1400), (6, 1300), (7, 1100)]
+
+
+def test_the_migrations_have_one_head() -> None:
+    """Two heads mean two branches each added a migration and neither rebased; upgrade refuses that."""
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+
+    assert len(ScriptDirectory.from_config(Config("alembic.ini")).get_heads()) == 1
