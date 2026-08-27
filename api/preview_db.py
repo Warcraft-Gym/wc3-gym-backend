@@ -6,6 +6,7 @@ Run as a script in the preview build to make that choice and create the copy; im
 api/index.py to point the app at the right database at cold start.
 """
 
+import hashlib
 import os
 import re
 import sys
@@ -16,8 +17,11 @@ TEMPLATE = "wc3gym_template"
 
 
 def branch_db_name(branch: str) -> str:
-    """wc3gym_<branch>, lower-case, non-alphanumerics folded to _, within the 63-byte identifier limit."""
-    return "wc3gym_" + re.sub(r"[^a-z0-9]+", "_", branch.lower()).strip("_")[:40]
+    """wc3gym_<slug>_<hash>: the slug (lower-case, non-alphanumerics folded to _, at most 30 chars) is
+    for reading, the 8-hex sha1 of the exact branch name keeps two branches from sharing a database
+    when their slugs collide. 46 chars at most, within Postgres's 63-byte identifier limit."""
+    slug = re.sub(r"[^a-z0-9]+", "_", branch.lower()).strip("_")[:30].rstrip("_")
+    return f"wc3gym_{slug}_{hashlib.sha1(branch.encode()).hexdigest()[:8]}"
 
 
 def with_database(url: str, name: str) -> str:

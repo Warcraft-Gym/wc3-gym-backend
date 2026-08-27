@@ -17,6 +17,9 @@ host_db_url := "postgresql+psycopg://gym_user:gym_user@localhost:5432/gym_backen
 default:
     @just --list
 
+# Migrate, seed, list and drop databases by deployment path and environment. `just db` lists them.
+mod db
+
 # Start Postgres, then build and start the backend on port 5002.
 up:
     #!/usr/bin/env bash
@@ -91,23 +94,9 @@ logs *args:
 psql:
     docker exec -it gnl-postgres psql -U gym_user -d gym_backend
 
-# Bring a database up to date by hand. The backend container does this at every start.
-migrate db_url=host_db_url:
-    DB_URL="{{db_url}}" uv run alembic upgrade head
 
-# Write a migration for the current models. Read it before committing: autogenerate also drops.
-revision message db_url=host_db_url:
-    DB_URL="{{db_url}}" uv run alembic revision --autogenerate -m "{{message}}"
 
-# Show the revision a database is on, and the revisions that exist.
-db-status db_url=host_db_url:
-    DB_URL="{{db_url}}" uv run alembic current
-    DB_URL="{{db_url}}" uv run alembic history
 
-# Drop every table, then build the schema again. Deletes all data.
-db-reset db_url=host_db_url:
-    DB_URL="{{db_url}}" uv run alembic downgrade base
-    DB_URL="{{db_url}}" uv run alembic upgrade head
 
 # Stop the backend and Postgres, keeping the data. A missing container is not an error.
 down:

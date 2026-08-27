@@ -180,7 +180,7 @@ Dependencies live in `pyproject.toml`: runtime packages under `[project] depende
 
 The backend reads its configuration from the environment. `just up` passes development-only values, so nothing here needs setting by hand to run the project locally. Read this table before deploying, and when a container starts but behaves oddly.
 
-`.env` is committed and holds the values that are not secret: `TOKEN_TIME`, `REFRESH_TOKEN_TIME` and `W3C_URL`. `create_app` calls `load_dotenv`, so those arrive on their own. The rest are passed in.
+`.env` is gitignored; copy `.env.example` to `.env` and fill in what you use. `create_app` calls `load_dotenv`, so its values arrive on their own; each has a default in the code. The deployment secrets are passed in by the stack.
 
 Three more values live in the `settings` table, not the environment, and are edited on the admin Config page: `w3c_url` (wins over the `W3C_URL` variable when present), `current_wc3_season` (the w3champions season the MMR columns read; when the row is missing the backend takes the newest season from w3champions) and `KOTH_NIGHTBOT_TOKEN`. `GET /config/w3c` shows the URL and season the backend resolved.
 
@@ -207,9 +207,9 @@ BOT_WEBHOOK_URL="http://host.docker.internal:3001/webhook/series-updated"
 | `BOT_CLIENT_TOKEN` | Authentication token for Discord bot webhooks | 64-character hex string |
 | `FRONTEND_URL` | Admin frontend URL for CORS configuration | `http://localhost:5003` |
 | `BOT_WEBHOOK_URL` | Discord bot webhook endpoint for series updates; when unset, the notification is skipped | `http://host.docker.internal:3001/webhook/series-updated` |
-| `TOKEN_TIME` | Access token lifetime in minutes; from `.env` | `60` |
-| `REFRESH_TOKEN_TIME` | Refresh token lifetime in minutes; from `.env` | `300` |
-| `W3C_URL` | w3champions API base; from `.env` | `https://website-backend.w3champions.com/api` |
+| `TOKEN_TIME` | Access token lifetime in minutes | `60` |
+| `REFRESH_TOKEN_TIME` | Refresh token lifetime in minutes | `300` |
+| `W3C_URL` | w3champions API base | `https://website-backend.w3champions.com/api` |
 | `LOG_LEVEL` | Python log level | `INFO` |
 
 **Important Notes:**
@@ -286,7 +286,7 @@ uv run alembic current             # show the revision the database is on
 uv run alembic history             # list the revisions
 ```
 
-The justfile wraps these as `just migrate`, `just db-status` and `just revision`, each taking the same URL as an optional argument, so `just db-status` answers the everyday question without exporting anything.
+The `db` recipes wrap these by deployment path and environment: `just db status local`, `just db migrate vercel prod`, `just db seed vercel staging`, `just db list vercel staging`, `just db drop vercel staging <database>`. The URLs come from `.env` (`LOCAL_DB_URL`, `VERCEL_PROD_DB_URL`, `VERCEL_STAGING_DB_URL`), gitignored, copied from `.env.example`. The Azure staging box has no URL reachable from a laptop and is seeded over SSH from the gym-root workspace (`just azure seed`), so `just db ... azure ...` answers "not implemented".
 
 ### DB_URL names the same database twice
 
