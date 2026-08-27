@@ -21,7 +21,7 @@ def index() -> RedirectResponse:
 @router.post("/login")
 def login(data: LoginRequest) -> dict[str, str]:
     """Exchange the admin token for an access token and a refresh token."""
-    token_time = int(os.getenv("TOKEN_TIME", "15"))
+    token_time = int(os.getenv("TOKEN_TIME", "60"))
     refresh_token_time = int(os.getenv("REFRESH_TOKEN_TIME", "300"))
     if data.token != os.getenv("ADMIN_TOKEN"):
         raise ApiError(401, {"error": "Bad admin token"})
@@ -34,6 +34,6 @@ def login(data: LoginRequest) -> dict[str, str]:
 @router.post("/refresh")
 def refresh(identity: RequireRefresh) -> dict[str, Any]:
     """Exchange a refresh token for a new access token."""
-    token_time = int(os.getenv("TOKEN_TIME", "15"))
+    token_time = int(os.getenv("TOKEN_TIME", "60"))
     new_access_token = create_access_token(identity, token_time)
     return {"access_token": new_access_token}
