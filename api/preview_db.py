@@ -10,6 +10,7 @@ import hashlib
 import os
 import re
 import sys
+from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
 SHARED = "wc3gym_staging"
@@ -17,11 +18,20 @@ TEMPLATE = "wc3gym_template"
 
 
 def branch_db_name(branch: str) -> str:
-    """wc3gym_<slug>_<hash>: the slug (lower-case, non-alphanumerics folded to _, at most 30 chars) is
+    """wc3gym_<slug>_<hash>: the slug (lower-case, non-alphanumerics folded to _, at most 16 chars) is
     for reading, the 8-hex sha1 of the exact branch name keeps two branches from sharing a database
-    when their slugs collide. 46 chars at most, within Postgres's 63-byte identifier limit."""
-    slug = re.sub(r"[^a-z0-9]+", "_", branch.lower()).strip("_")[:30].rstrip("_")
+    when their slugs collide. 32 chars at most, within Postgres's 63-byte identifier limit."""
+    slug = re.sub(r"[^a-z0-9]+", "_", branch.lower()).strip("_")[:16].rstrip("_")
     return f"wc3gym_{slug}_{hashlib.sha1(branch.encode()).hexdigest()[:8]}"
+
+
+def migrations_fingerprint(versions: Path = Path("migrations/versions")) -> str:
+    """sha1 over the branch's migration files: it changes when one is edited, renamed or removed."""
+    digest = hashlib.sha1()
+    for path in sorted(versions.glob("*.py")):
+        digest.update(path.name.encode())
+        digest.update(path.read_bytes())
+    return digest.hexdigest()
 
 
 def with_database(url: str, name: str) -> str:
@@ -81,17 +91,26 @@ def main() -> None:
         )
 
     name = branch_db_name(branch)
+    fingerprint = migrations_fingerprint()
     # CREATE DATABASE cannot run inside a transaction, hence autocommit
     with psycopg.connect(
         with_database(base_url, "postgres").replace("+psycopg", ""), autocommit=True
     ) as conn:
-        if not conn.execute(
-            "SELECT 1 FROM pg_database WHERE datname = %s", (name,)
-        ).fetchone():
+        comment = conn.execute(
+            "SELECT shobj_description(oid, 'pg_database') FROM pg_database WHERE datname = %s",
+            (name,),
+        ).fetchone()
+        if comment and comment[0] != fingerprint:
+            # a copy built from other migration files, or one whose build died before commenting
+            conn.execute(f'DROP DATABASE "{name}" WITH (FORCE)')
+            print(f"dropped {name}, it does not match this branch's migrations")
+            comment = None
+        if not comment:
             conn.execute(f'CREATE DATABASE "{name}" TEMPLATE {TEMPLATE}')
             print(f"created {name} from {TEMPLATE}")
-    os.environ["DB_URL"] = with_database(base_url, name)
-    command.upgrade(Config("alembic.ini"), "head")
+        os.environ["DB_URL"] = with_database(base_url, name)
+        command.upgrade(Config("alembic.ini"), "head")
+        conn.execute(f"COMMENT ON DATABASE \"{name}\" IS '{fingerprint}'")
     print(f"the preview uses {name} at {branch_head}")
 
 
