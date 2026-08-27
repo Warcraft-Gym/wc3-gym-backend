@@ -225,19 +225,10 @@ def test_fantasy_bets_list_costs_three_statements(league: dict[str, Any]) -> Non
 
 def add_bets_to_the_season(seeded: dict[str, Any], count: int) -> None:
     """More bets in the season, so a per-bet fill would be visible."""
-    from app.models.fantasy_bet import FantasyBet
+    from tests.seed import add_bets
 
     with Session() as session:
-        for _ in range(count):
-            session.add(
-                FantasyBet(
-                    season_id=seeded["season_id"],
-                    series_id=seeded["series_played_id"],
-                    user_id=seeded["player_ids"][1],
-                    winner_id=seeded["player_ids"][0],
-                    bet_points=10,
-                )
-            )
+        add_bets(session, seeded, count)
         session.commit()
 
 

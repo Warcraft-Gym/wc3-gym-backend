@@ -1,5 +1,6 @@
 """Turn a prod /dump zip into a seed directory of CSVs: blank the Nightbot token, drop the
-named seasons and their rows, drop the stored score columns the app now derives at read.
+named seasons and their rows, drop the repeated bets and the stored score columns the app
+now derives at read.
 
 usage: uv run python scripts/clean_dump.py <in.zip> <out_dir> [season_id ...]
 """
@@ -8,6 +9,7 @@ import csv
 import io
 import sys
 import zipfile
+from operator import itemgetter
 from pathlib import Path
 
 csv.field_size_limit(sys.maxsize)
@@ -91,6 +93,12 @@ def main(src: str, dst: str, seasons: set[str]) -> None:
         r for r in tables["teams"][1:] if r[0] in used_teams
     ]
     drop("seasons", "id", seasons)
+    # Prod holds one bet twice; the seeded database is unique per series and
+    # bettor, so keep the row that holds the pick the bettor made last
+    header, *bets = tables["fantasy_bets"]
+    key = itemgetter(header.index("series_id"), header.index("user_id"))
+    last = {key(row): row for row in bets}
+    tables["fantasy_bets"] = [header] + [r for r in bets if last[key(r)] is r]
     for r in tables["settings"][1:]:
         if r[1] == "KOTH_NIGHTBOT_TOKEN":
             r[2] = ""

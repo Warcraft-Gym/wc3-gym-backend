@@ -174,3 +174,38 @@ def seed_league(session: Session) -> dict[str, Any]:
         "fantasy_team_id": fantasy_team.id,
         "map_id": game_map.id,
     }
+
+
+def add_bets(session: Session, seeded: dict[str, Any], count: int) -> None:
+    """More bets in the seeded season, one per new series of the seeded match.
+
+    The database holds one bet per bettor and series, so bets that pile up
+    need series of their own. Every series repeats the played one, 2-1 to
+    player 1, and every bet calls it right for 10 points.
+    """
+    players = seeded["player_ids"]
+    series = [
+        Series(
+            match_id=seeded["match_id"],
+            player1_id=players[0],
+            player2_id=players[2],
+            player1_score=2,
+            player2_score=1,
+            host_player_id=players[0],
+        )
+        for _ in range(count)
+    ]
+    session.add_all(series)
+    session.flush()
+    session.add_all(
+        [
+            FantasyBet(
+                season_id=seeded["season_id"],
+                series_id=one.id,
+                user_id=players[1],
+                winner_id=players[0],
+                bet_points=10,
+            )
+            for one in series
+        ]
+    )

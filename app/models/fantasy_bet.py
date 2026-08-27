@@ -1,5 +1,6 @@
 from typing import Annotated, Any, Self
 
+from sqlalchemy import Index
 from sqlalchemy.orm import joinedload
 from sqlalchemy.sql.base import ExecutableOption
 from sqlmodel import Field, Relationship, SQLModel
@@ -22,6 +23,10 @@ class FantasyBetBase(SQLModel):
 
 class FantasyBet(FantasyBetBase, DBModel, table=True):
     __tablename__ = "fantasy_bets"
+    # A bettor picks one player to win a series, so a second bet is a repeat
+    __table_args__ = (
+        Index("uq_fantasy_bets_series_id_user_id", "series_id", "user_id", unique=True),
+    )
 
     id: int | None = Field(default=None, primary_key=True)
     bet_points: int

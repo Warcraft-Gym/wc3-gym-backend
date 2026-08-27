@@ -154,19 +154,10 @@ def test_bets_list_pages_by_id_and_reports_the_total(
 ) -> None:
     """limit and offset page the list by id; the header carries the total."""
     from app.core.db import Session
-    from app.models.fantasy_bet import FantasyBet
+    from tests.seed import add_bets
 
     with Session() as session:
-        for _ in range(4):
-            session.add(
-                FantasyBet(
-                    season_id=seeded["season_id"],
-                    series_id=seeded["series_played_id"],
-                    user_id=seeded["player_ids"][1],
-                    winner_id=seeded["player_ids"][0],
-                    bet_points=10,
-                )
-            )
+        add_bets(session, seeded, 4)
         session.commit()
 
     everything = client.get("/fantasy/bets")
@@ -194,19 +185,10 @@ def test_bets_search_pages_by_id_and_counts_the_filtered_set(
 ) -> None:
     """limit and offset page the search; the total counts the filter matches."""
     from app.core.db import Session
-    from app.models.fantasy_bet import FantasyBet
+    from tests.seed import add_bets
 
     with Session() as session:
-        for _ in range(4):
-            session.add(
-                FantasyBet(
-                    season_id=seeded["season_id"],
-                    series_id=seeded["series_played_id"],
-                    user_id=seeded["player_ids"][1],
-                    winner_id=seeded["player_ids"][0],
-                    bet_points=10,
-                )
-            )
+        add_bets(session, seeded, 4)
         session.commit()
 
     query = f"user_id == {seeded['player_ids'][1]}"
