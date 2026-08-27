@@ -179,21 +179,33 @@ def seed_league(session: Session) -> dict[str, Any]:
 def add_bets(session: Session, seeded: dict[str, Any], count: int) -> None:
     """More bets in the seeded season, one per new series of the seeded match.
 
-    The database holds one bet per bettor and series, so bets that pile up
-    need series of their own. Every series repeats the played one, 2-1 to
-    player 1, and every bet calls it right for 10 points.
+    The database holds one bet per bettor and series, and one series per pair
+    of players inside a match, so bets that pile up need a series and a match
+    of their own. Every series repeats the played one, 2-1 to player 1, and
+    every bet calls it right for 10 points.
     """
     players = seeded["player_ids"]
+    matches = [
+        Match(
+            team1_id=seeded["team_a_id"],
+            team2_id=seeded["team_b_id"],
+            season_id=seeded["season_id"],
+            playday=index + 2,
+        )
+        for index in range(count)
+    ]
+    session.add_all(matches)
+    session.flush()
     series = [
         Series(
-            match_id=seeded["match_id"],
+            match_id=match.id,
             player1_id=players[0],
             player2_id=players[2],
             player1_score=2,
             player2_score=1,
             host_player_id=players[0],
         )
-        for _ in range(count)
+        for match in matches
     ]
     session.add_all(series)
     session.flush()
@@ -209,3 +221,39 @@ def add_bets(session: Session, seeded: dict[str, Any], count: int) -> None:
             for one in series
         ]
     )
+
+
+def add_fantasy_teams(seeded: dict[str, Any], count: int) -> None:
+    """More fantasy teams in the seeded season.
+
+    One captain holds one fantasy team per season, so every extra team is
+    drafted by a captain of its own.
+    """
+    from app.core.db import Session as AppSession  # the factory, not the type
+
+    with AppSession() as session:
+        captains = [
+            User(
+                name=f"Extra cap {index}",
+                battleTag=f"ExtraCap{index}#9",
+                discordTag=f"extracap{index}",
+                discordId=f"90{index}",
+                race=Race.HU,
+            )
+            for index in range(count)
+        ]
+        session.add_all(captains)
+        session.flush()
+        session.add_all(
+            [
+                FantasyTeam(
+                    name=f"Extra {index}",
+                    season_id=seeded["season_id"],
+                    captain_id=captain.id,
+                    drafted_team_id=seeded["team_a_id"],
+                    drafted_race=Race.HU,
+                )
+                for index, captain in enumerate(captains)
+            ]
+        )
+        session.commit()

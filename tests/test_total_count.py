@@ -16,42 +16,36 @@ from typing import Any
 import pytest
 from httpx2 import Client
 
+from tests.seed import add_fantasy_teams
+
 
 def add_series_for_player(
-    match_id: int, player_id: int, opponent_id: int, count: int
+    seeded: dict[str, Any], player_id: int, opponent_id: int, count: int
 ) -> None:
-    """Put count more series of one player on one match."""
+    """Put count more series of one player in the seeded season.
+
+    A pair of players meet once inside a match, so every series takes a
+    match of its own, one playday after the seeded one."""
     from app.core.db import Session
+    from app.models.match import Match
     from app.models.series import Series
 
     with Session() as session:
-        for _ in range(count):
+        for index in range(count):
+            match = Match(
+                team1_id=seeded["team_a_id"],
+                team2_id=seeded["team_b_id"],
+                season_id=seeded["season_id"],
+                playday=index + 2,
+            )
+            session.add(match)
+            session.flush()
             session.add(
                 Series(
-                    match_id=match_id,
+                    match_id=match.id,
                     player1_id=player_id,
                     player2_id=opponent_id,
                     host_player_id=player_id,
-                )
-            )
-        session.commit()
-
-
-def add_fantasy_teams(seeded: dict[str, Any], count: int) -> None:
-    """Put count more fantasy teams in the seeded season."""
-    from app.core.db import Session
-    from app.models.enums import Race
-    from app.models.fantasy_team import FantasyTeam
-
-    with Session() as session:
-        for index in range(count):
-            session.add(
-                FantasyTeam(
-                    name=f"Extra {index}",
-                    season_id=seeded["season_id"],
-                    captain_id=seeded["player_ids"][index % 4],
-                    drafted_team_id=seeded["team_a_id"],
-                    drafted_race=Race.HU,
                 )
             )
         session.commit()
@@ -248,9 +242,7 @@ def test_player_series_report_the_total_of_that_player(
     client: Client, seeded: dict[str, Any], dashboard_token: Callable[..., str]
 ) -> None:
     """P1 has five series, and one page of two still reports five."""
-    add_series_for_player(
-        seeded["match_id"], seeded["player_ids"][0], seeded["player_ids"][2], 4
-    )
+    add_series_for_player(seeded, seeded["player_ids"][0], seeded["player_ids"][2], 4)
     token = dashboard_token()
 
     everything = client.get(f"/player-series?token={token}")
@@ -271,6 +263,7 @@ def test_player_series_count_holds_to_the_season_of_the_token(
     from app.core.db import Session
     from app.models.match import Match
     from app.models.season import Season
+    from app.models.series import Series
 
     with Session() as session:
         other = Season(
@@ -290,12 +283,15 @@ def test_player_series_count_holds_to_the_season_of_the_token(
         )
         session.add(match)
         session.flush()
-        other_match_id = match.id
+        session.add(
+            Series(
+                match_id=match.id,
+                player1_id=seeded["player_ids"][0],
+                player2_id=seeded["player_ids"][2],
+                host_player_id=seeded["player_ids"][0],
+            )
+        )
         session.commit()
-
-    add_series_for_player(
-        other_match_id, seeded["player_ids"][0], seeded["player_ids"][2], 1
-    )
 
     everything = client.get(f"/player-series?token={dashboard_token()}")
     assert everything.headers["X-Total-Count"] == "2"

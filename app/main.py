@@ -86,10 +86,16 @@ def create_app(db_url: str | None = None) -> FastAPI:
 
     @app.exception_handler(IntegrityError)
     async def integrity_error(request: Request, exc: IntegrityError) -> JSONResponse:
-        """The database refused the write because another row depends on
-        it, so the request conflicts with the data rather than failing."""
+        """The database refused the write because it conflicts with a row it
+        already holds. A natural key that repeats and a parent another row
+        still points at are different conflicts, so the client is told which.
+        Postgres names the first 23505, SQLite says it in words."""
         logger.warning("Integrity error", exc_info=exc)
-        return JSONResponse({"error": "Row is still referenced"}, status_code=409)
+        repeats = getattr(exc.orig, "sqlstate", "") == "23505" or (
+            "UNIQUE constraint failed" in str(exc.orig)
+        )
+        message = "Row already exists" if repeats else "Row is still referenced"
+        return JSONResponse({"error": message}, status_code=409)
 
     @app.exception_handler(SQLAlchemyError)
     async def db_error(request: Request, exc: SQLAlchemyError) -> JSONResponse:

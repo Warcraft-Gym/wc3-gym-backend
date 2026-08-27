@@ -1,5 +1,6 @@
 from typing import TYPE_CHECKING, Annotated, Any, Self
 
+from sqlalchemy import Index, text
 from sqlmodel import Field, Relationship, SQLModel
 
 from app.models.base import DBModel
@@ -26,6 +27,21 @@ class FantasyTeamBase(SQLModel):
 
 class FantasyTeam(FantasyTeamBase, DBModel, table=True):
     __tablename__ = "fantasy_teams"
+    # One team per captain per season, named once within the season
+    __table_args__ = (
+        Index(
+            "uq_fantasy_teams_season_id_name",
+            "season_id",
+            text("lower(trim(name))"),
+            unique=True,
+        ),
+        Index(
+            "uq_fantasy_teams_season_id_captain_id",
+            "season_id",
+            "captain_id",
+            unique=True,
+        ),
+    )
 
     id: int | None = Field(default=None, primary_key=True)
     drafted_race: Race | None = None

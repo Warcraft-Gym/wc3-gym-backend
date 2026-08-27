@@ -12,6 +12,7 @@ from httpx2 import Client, Response
 from sqlalchemy import func, select
 
 from app.core.db import Session
+from app.models.map import Map
 from app.models.season import Season
 from app.models.team import Team
 from app.models.user import User
@@ -212,6 +213,69 @@ def test_a_second_import_updates_the_bets_instead_of_adding_them(
         bets = session.scalars(select(FantasyBet)).all()
     assert len(bets) == 2
     assert sorted(bet.bet_points for bet in bets) == [10, 20]
+
+
+def _branding(
+    *,
+    pick_ban: str | None,
+    discord_role: str | None,
+    long_name: str | None,
+    image: str | None,
+) -> dict[str, tuple[list[str], list[list[Any]]]]:
+    """The sheets whose optional cells carry branding, filled or blank."""
+    return {
+        "Season": (
+            SHEETS["Season"][0],
+            [
+                [
+                    None,
+                    "Season 9",
+                    4,
+                    2,
+                    pick_ban,
+                    "2026-01-05",
+                    "2026-02-27",
+                    discord_role,
+                ]
+            ],
+        ),
+        "Teams": (
+            SHEETS["Teams"][0],
+            [[1, "Alpha", long_name, discord_role], [2, "Beta", "Team Beta", None]],
+        ),
+        "Maps": (
+            ["ID", "Name", "Shortname", "Image URL"],
+            [[1, "Echo Isles", "EI", image]],
+        ),
+    }
+
+
+def test_a_blank_cell_keeps_the_stored_value(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """The second workbook leaves those cells empty, so the season, the team
+    and the map keep the values the first one wrote."""
+    filled = _branding(
+        pick_ban="EI, LR",
+        discord_role="9001",
+        long_name="Team Alpha",
+        image="https://example.com/ei.png",
+    )
+    first = _post(client, _workbook(extra=filled), auth_headers)
+    assert first.status_code == 200, first.text
+
+    blank = _branding(pick_ban=None, discord_role=None, long_name=None, image=None)
+    second = _post(client, _workbook(extra=blank), auth_headers)
+    assert second.status_code == 200, second.text
+
+    with Session() as session:
+        season = session.scalars(select(Season).where(Season.name == "Season 9")).one()
+        team = session.scalars(select(Team).where(Team.name == "Alpha")).one()
+        stored_map = session.scalars(select(Map).where(Map.shortname == "EI")).one()
+
+    assert (season.pick_ban, season.discordRole) == ("EI, LR", "9001")
+    assert (team.long_name, team.discord_role) == ("Team Alpha", "9001")
+    assert stored_map.image == "https://example.com/ei.png"
 
 
 def _add_captain() -> None:
