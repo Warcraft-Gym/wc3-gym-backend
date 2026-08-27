@@ -319,8 +319,8 @@ def _bets(
     matches: dict[int, list[Match]],
     series: dict[int, list[Series]],
 ) -> None:
-    """Write one bet per row of the "Bets" sheet, matched by series, bettor
-    and pick."""
+    """Write one bet per row of the "Bets" sheet, matched by series and
+    bettor."""
     rows = _rows(frame)
     by_tag = _by_key(
         session.scalars(
@@ -336,7 +336,7 @@ def _bets(
     )
     stored = _by_key(
         session.scalars(select(FantasyBet).where(FantasyBet.season_id == season_id)),
-        lambda bet: (bet.series_id, bet.user_id, bet.winner_id),
+        lambda bet: (bet.series_id, bet.user_id),
     )
     settings = Settings.get_all_as_dict(session)
 
@@ -381,11 +381,10 @@ def _bets(
             raise BadRequestError(f"Bet Points not defined: {row.iloc[3]}")
         points = resolve_bet_points(settings, whole_number(row.iloc[3]))
 
-        key = (played.id, captain.id, bet_player.id)
+        key = (played.id, captain.id)
         found_bets = stored.get(key, [])
-        if len(found_bets) > 1:
-            raise BadRequestError(f"More than one bet found by search: {key}")
         if found_bets:
+            found_bets[0].winner_id = bet_player.id
             found_bets[0].bet_points = points
         else:
             bet = FantasyBet(

@@ -317,7 +317,8 @@ def test_a_bet_write_that_still_sends_the_result_is_accepted(
         json={
             "season_id": bet["season_id"],
             "series_id": bet["series_id"],
-            "user_id": bet["winner_id"],
+            # The loser of the series has no bet on it, so this one is new
+            "user_id": bet["series"]["player2_id"],
             "winner_id": bet["winner_id"],
             "bet_points": 3,
             "bet_result": None,
