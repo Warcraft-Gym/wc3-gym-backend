@@ -27,6 +27,8 @@ from app.models import (
     koth_match,
     koth_match_participant,
     koth_signup,
+    ladder_achievement,
+    ladder_sync,
     map,
     match,
     player_career_stats,
@@ -41,6 +43,7 @@ from app.models import (
     types,
     user,
     user_team_season,
+    w3c_ladder_match,
     w3c_stats,
 )
 
@@ -54,6 +57,8 @@ __all__ = [
     "koth_match",
     "koth_match_participant",
     "koth_signup",
+    "ladder_achievement",
+    "ladder_sync",
     "map",
     "match",
     "player_career_stats",
@@ -68,5 +73,6 @@ __all__ = [
     "types",
     "user",
     "user_team_season",
+    "w3c_ladder_match",
     "w3c_stats",
 ]

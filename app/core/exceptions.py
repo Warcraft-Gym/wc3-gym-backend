@@ -27,3 +27,6 @@ class ExternalServiceError(Exception):
 
 class W3CThrottledError(ExternalServiceError):
     """W3Champions refused the call for rate. The API answers 502."""
+
+    # The matches and the finished seasons the refused call had already read
+    fetched: tuple[list[Any], dict[int, bool]] | None = None

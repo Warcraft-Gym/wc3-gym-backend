@@ -18,6 +18,7 @@ from app.services.fantasy_bets import FantasyBetService
 from app.services.fantasy_scores import FantasyScoreService
 from app.services.fantasy_teams import FantasyTeamService
 from app.services.koth import KothService
+from app.services.ladder import LadderService
 from app.services.maps import MapService
 from app.services.matches import MatchService
 from app.services.player_career_stats import PlayerCareerStatsService
@@ -78,6 +79,7 @@ fantasy_score_service = FantasyScoreService(
     series_app_service=series_service,
 )
 koth_service = KothService(settings_app_service=settings_service)
+ladder_service = LadderService(settings_app_service=settings_service)
 stats_service = PlayerCareerStatsService()
 
 
@@ -129,6 +131,10 @@ def get_koth_service() -> KothService:
     return koth_service
 
 
+def get_ladder_service() -> LadderService:
+    return ladder_service
+
+
 def get_stats_service() -> PlayerCareerStatsService:
     return stats_service
 
@@ -147,4 +153,5 @@ FantasyScoreServiceDep = Annotated[
     FantasyScoreService, Depends(get_fantasy_score_service)
 ]
 KothServiceDep = Annotated[KothService, Depends(get_koth_service)]
+LadderServiceDep = Annotated[LadderService, Depends(get_ladder_service)]
 StatsServiceDep = Annotated[PlayerCareerStatsService, Depends(get_stats_service)]

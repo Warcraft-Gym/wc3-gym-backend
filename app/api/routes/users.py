@@ -3,10 +3,11 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Response
 
-from app.api.deps import UserServiceDep, require_admin
+from app.api.deps import LadderServiceDep, UserServiceDep, require_admin
 from app.core.exceptions import BadRequestError
 from app.core.query import QueryUtil
 from app.models.user import UserCreate, UserListPublic, UserPublic, UserUpdate
+from app.models.w3c_ladder_match import UserLadder
 
 logger = logging.getLogger(__name__)
 
@@ -79,3 +80,18 @@ def search_users(
 def sync_w3c_user(user_id: int, service: UserServiceDep) -> UserPublic:
     """Sync w3c information for a user_id"""
     return service.update_w3c_stats_by_id(user_id)
+
+
+@router.get("/users/{user_id}/ladder", dependencies=[Depends(require_admin)])
+def get_user_ladder(
+    user_id: int,
+    service: LadderServiceDep,
+    season_id: int | None = None,
+    limit: Annotated[int, Query(ge=1, le=500)] = 500,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> UserLadder:
+    """One player's ladder record, and one page of the matches behind it.
+
+    Without a season the answer covers every match the player has.
+    """
+    return service.user_ladder(user_id, season_id, limit=limit, offset=offset)
