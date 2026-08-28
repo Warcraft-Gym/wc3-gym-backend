@@ -1,6 +1,6 @@
-"""Link tables that carry nothing beyond the keys.
+"""Link tables, each keyed by the two ids it joins.
 
-The link tables with columns of their own are models in their own files:
+The link tables with a model's worth of columns are in their own files:
 team_season.py and user_team_season.py.
 """
 
@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 from sqlmodel import Field, Relationship
 
 from app.models.base import DBModel
+from app.models.enums import Race
 
 if TYPE_CHECKING:
     from app.models.fantasy_team import FantasyTeam
@@ -21,7 +22,8 @@ class DBUserSeasonSignup(DBModel, table=True):
     __tablename__ = "user_season_signup"
     user_id: int = Field(foreign_key="users.id", primary_key=True)
     season_id: int = Field(index=True, foreign_key="seasons.id", primary_key=True)
-    # Additional columns can be added here if needed
+    # The race the player registered on for this season, null when not recorded
+    race: Race | None = None
     user: "User" = Relationship(back_populates="signup_seasons")
     season: "Season" = Relationship(back_populates="signup_users")
 

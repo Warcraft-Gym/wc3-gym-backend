@@ -47,6 +47,8 @@ class User(UserBase, DBModel, table=True):
     race: Race
     # When the app last asked w3champions about this player, null when never
     w3c_synced_at: datetime | None = None
+    # When the app last asked w3champions for this player's ladder matches
+    ladder_synced_at: datetime | None = None
     team_seasons: list["DBUserTeamSeason"] = Relationship(
         back_populates="user", sa_relationship_kwargs={"cascade": "all, delete"}
     )
@@ -90,6 +92,7 @@ class UserReduced(UserBase):
     discordId: Annotated[str | None, NumToStr] = None
     race: Annotated[str | None, EnumValue] = None
     w3c_synced_at: datetime | None = None
+    ladder_synced_at: datetime | None = None
 
     @classmethod
     def from_user_reduced(cls, user: User | None) -> Self | None:
@@ -108,6 +111,7 @@ class UserReduced(UserBase):
             country=user.country,
             fantasy_tier=user.fantasy_tier,
             w3c_synced_at=user.w3c_synced_at,
+            ladder_synced_at=user.ladder_synced_at,
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -119,6 +123,8 @@ class UserListPublic(UserReduced):
 
     w3c_stats: Annotated[list[W3CStatsPublic], NoneToList] = []
     signup_seasons: Annotated[list[SeasonPublic], NoneToList] = []
+    # The race of one signup, filled by the signups answer of a single season
+    signup_race: Annotated[str | None, EnumValue] = None
 
     @classmethod
     def from_user(cls, user: User | None) -> Self | None:

@@ -22,6 +22,8 @@ TABLES = {
     "koth_events",
     "koth_match_participants",
     "koth_matches",
+    "ladder_achievements",
+    "ladder_sync",
     "koth_signups",
     "map_season",
     "maps",
@@ -35,6 +37,7 @@ TABLES = {
     "user_season_signup",
     "user_team_season",
     "users",
+    "w3c_ladder_matches",
     "w3cstats",
 }
 

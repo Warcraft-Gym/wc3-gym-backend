@@ -1,12 +1,15 @@
 import logging
 import os
 import urllib.parse
+from collections.abc import Sequence
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 import requests
 
 from app.core.exceptions import ExternalServiceError, NotFoundError, W3CThrottledError
 from app.models.enums import Race
+from app.models.w3c_ladder_match import W3CLadderMatchCreate
 from app.models.w3c_stats import W3CStatsCreate
 
 if TYPE_CHECKING:
@@ -23,8 +26,26 @@ DEFAULT_BASE_URL = "https://website-backend.w3champions.com/api"
 # What the admin reads when w3champions turns the sync away.
 THROTTLED_MESSAGE = "W3Champions throttled the sync, try again in a few minutes"
 
+# Matches per match search call, the largest page w3champions serves.
+MATCH_PAGE_SIZE = 100
+
+# Seasons the match walk may step back from the one it starts at. The search
+# needs a season id and w3champions publishes no season dates, so a window
+# that reaches into an older season is walked, not looked up.
+MATCH_SEASON_STEPS = 6
+
 # One connection pool for every w3champions call, so a sync pays no new TCP handshake.
 _session = requests.Session()
+
+
+def _by_start_time(
+    rows: dict[str, list[W3CLadderMatchCreate]],
+) -> list[W3CLadderMatchCreate]:
+    """Every parsed row of every page, oldest first."""
+    return sorted(
+        (row for match_rows in rows.values() for row in match_rows),
+        key=lambda row: row.start_time,
+    )
 
 
 def _is_throttled(response: requests.Response) -> bool:
@@ -118,6 +139,136 @@ class W3CService:
                     )
                 )
         return stats
+
+    def get_player_matches(
+        self, battle_tag: str, seasons: Sequence[tuple[int, datetime]]
+    ) -> tuple[list[W3CLadderMatchCreate], dict[int, bool]]:
+        """The matches of these w3champions seasons, each read from its own `since`.
+
+        Answers the matches, and per season whether it was read to its end. A
+        throttle carries what was read before it on the refusal it raises.
+        """
+        rows: dict[str, list[W3CLadderMatchCreate]] = {}
+        complete: dict[int, bool] = {}
+        for season, since in seasons:
+            try:
+                complete[season] = self._page_season(battle_tag, season, since, rows)[1]
+            except W3CThrottledError as refusal:
+                # The seasons already read are worth keeping, so they ride out
+                # with the refusal. The season it cut short names none.
+                refusal.fetched = (_by_start_time(rows), complete)
+                raise
+        return _by_start_time(rows), complete
+
+    def walk_player_matches(
+        self, battle_tag: str, season: int, since: datetime
+    ) -> tuple[list[W3CLadderMatchCreate], dict[int, bool]]:
+        """Every 1v1 match this player started at or after `since`.
+
+        Pages the season newest first and steps back a season until a page
+        older than `since` is seen, at most MATCH_SEASON_STEPS times. This is
+        the first read of a window, which has no stored match to name the
+        w3champions seasons it sits in.
+        """
+        rows: dict[str, list[W3CLadderMatchCreate]] = {}
+        complete: dict[int, bool] = {}
+        for step in range(MATCH_SEASON_STEPS + 1):
+            current = season - step
+            if current < 0:
+                break
+            older, complete[current] = self._page_season(
+                battle_tag, current, since, rows
+            )
+            # A season with no match says nothing about the ones below it, so
+            # only a page older than `since` ends the walk before the cap
+            if older:
+                break
+        return _by_start_time(rows), complete
+
+    def _page_season(
+        self,
+        battle_tag: str,
+        season: int,
+        since: datetime,
+        rows: dict[str, list[W3CLadderMatchCreate]],
+    ) -> tuple[bool, bool]:
+        """Page one season into `rows`. Answers whether a match older than
+        `since` was seen, and whether the season was read that far or to its end.
+
+        Matches are keyed by their w3champions id, so a match that arrives at
+        the head between two calls cannot land twice.
+        """
+        offset = 0
+        while True:
+            body = self.send_request(
+                method=self.GET,
+                url=f"{self.base_url()}/matches/search",
+                params={
+                    "playerId": battle_tag,
+                    "gateway": 20,
+                    "gameMode": 1,
+                    "season": season,
+                    "pageSize": MATCH_PAGE_SIZE,
+                    "offset": offset,
+                },
+            )
+            page = (body or {}).get("matches") or []
+            if not page:
+                return False, True
+            oldest = None
+            for match in page:
+                parsed = self.parse_match(match)
+                if not parsed:
+                    continue
+                rows[match["id"]] = parsed
+                start = parsed[0].start_time
+                oldest = start if oldest is None else min(oldest, start)
+            if oldest is not None and oldest < since:
+                return True, True
+            if len(page) < MATCH_PAGE_SIZE:
+                return False, True
+            offset += len(page)
+
+    def parse_match(self, match: dict[str, Any]) -> list[W3CLadderMatchCreate]:
+        """One row per player of a 1v1 match. Anything else answers nothing.
+
+        Each side keeps both races: the one selected, which is what the
+        league scores by, and the one played, which resolves a random pick.
+        """
+        players = [
+            team["players"][0]
+            for team in match.get("teams") or []
+            if team.get("players")
+        ]
+        if len(players) != 2:
+            return []
+        start_time = datetime.fromisoformat(match["startTime"]).astimezone(UTC)
+        return [
+            W3CLadderMatchCreate(
+                battleTag=player["battleTag"],
+                w3c_match_id=match["id"],
+                wc3_season=match["season"],
+                start_time=start_time.replace(tzinfo=None),
+                duration_s=match["durationInSeconds"],
+                map_name=match.get("mapName"),
+                race=self.get_race_enum(player.get("race")),
+                played_race=self._played_race(player),
+                opp_battletag=opponent.get("battleTag"),
+                opp_race=self.get_race_enum(opponent.get("race")),
+                opp_played_race=self._played_race(opponent),
+                won=bool(player.get("won")),
+                mmr_before=player.get("oldMmr"),
+                mmr_after=player.get("currentMmr"),
+            )
+            for player, opponent in zip(players, reversed(players), strict=True)
+        ]
+
+    def _played_race(self, player: dict[str, Any]) -> Race | None:
+        """The race the player played: the random pick when the pick is known."""
+        race = self.get_race_enum(player.get("race"))
+        if race is Race.RANDOM:
+            return self.get_race_enum(player.get("rndRace")) or Race.RANDOM
+        return race
 
     def get_race_enum(self, race_int: int | None) -> Race | None:
         if race_int is None:

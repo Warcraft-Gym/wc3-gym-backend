@@ -19,6 +19,7 @@ from app.models.enums import Race
 from app.models.fantasy_bet import FantasyBet
 from app.models.fantasy_team import FantasyTeam
 from app.models.koth_event import KothEvent
+from app.models.ladder_achievement import default_rows
 from app.models.map import Map
 from app.models.match import Match
 from app.models.player_career_stats import PlayerCareerStats
@@ -161,6 +162,9 @@ def seed_league(session: Session) -> dict[str, Any]:
             ),
         ]
     )
+    session.flush()
+    # A real season is created with its achievement set; the fixture matches that
+    session.add_all(default_rows(season.id))
     session.flush()
 
     return {

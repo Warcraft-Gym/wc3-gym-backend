@@ -878,6 +878,41 @@ def sign_up(
     post(client, headers, f"/seasons/{season_id}/signups", {"user_ids": user_ids})
 
 
+def test_a_signup_records_the_race_it_names(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """The signup keeps its own race, so a later re-registration leaves it alone."""
+    first, second = seeded["player_ids"][:2]
+    season_id = seeded["season_id"]
+    post(
+        client,
+        auth_headers,
+        f"/seasons/{season_id}/signups",
+        {"user_ids": [first], "race": "Undead"},
+    )
+    sign_up(client, auth_headers, season_id, [second])
+
+    body = get(client, f"/seasons/{season_id}/signups")
+
+    assert {row["id"]: row["signup_race"] for row in body} == {
+        first: "UD",
+        second: None,
+    }
+
+
+def test_a_signup_refuses_a_race_that_is_not_one(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    resp = client.post(
+        f"/seasons/{seeded['season_id']}/signups",
+        json={"user_ids": seeded["player_ids"][:1], "race": "Goblin"},
+        headers=auth_headers,
+    )
+
+    assert resp.status_code == 400
+    assert "Goblin" in resp.json()["error"]
+
+
 def test_a_season_sync_reports_every_player_signed_up(
     client: Client,
     auth_headers: dict[str, str],
