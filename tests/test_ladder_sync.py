@@ -6,7 +6,7 @@ answers with.
 """
 
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +14,8 @@ import pytest
 from fastapi import FastAPI
 from httpx2 import Client
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session as OrmSession
 
 from app.core.db import Session
 from app.core.exceptions import W3CThrottledError
@@ -22,7 +24,7 @@ from app.models.ladder_sync import LadderSync
 from app.models.relationships import DBUserSeasonSignup
 from app.models.season import Season
 from app.models.user import User, UserCreate, UserReduced
-from app.models.w3c_ladder_match import W3CLadderMatch
+from app.models.w3c_ladder_match import W3CLadderMatch, W3CLadderMatchCreate
 from app.services import w3c as w3c_module
 from app.services.ladder import LadderService
 from app.services.users import UserService
@@ -103,6 +105,16 @@ def serve(
     monkeypatch.setattr(W3CService, "current_season", lambda self: W3C_SEASON)
     monkeypatch.setattr(W3CService, "_page_season", page)
     return fake
+
+
+def at(match_id: str, season: int, when: datetime) -> dict[str, Any]:
+    """One captured match, moved to this w3champions season and start time."""
+    return {
+        **THANKS[0],
+        "id": match_id,
+        "season": season,
+        "startTime": when.replace(tzinfo=UTC).isoformat(),
+    }
 
 
 def add_player(name: str, battle_tag: str) -> UserReduced:
@@ -335,7 +347,7 @@ def test_a_player_w3champions_refuses_does_not_stop_the_others(
 
     monkeypatch.setattr(W3CService, "get_player_matches", refuse_one)
 
-    result = LadderService().sync_users([thanks, psike], SINCE)
+    result = LadderService().sync_users([thanks, psike], SINCE, [W3C_SEASON])
 
     assert result.synced == [thanks.id]
     assert [(f.id, f.battleTag) for f in result.failed] == [(psike.id, "Psike#1331")]
@@ -480,10 +492,10 @@ def test_the_open_season_is_read_again_from_its_own_stamp(
     thanks = add_player("thanks", "thanks#11187")
     fake = serve(monkeypatch, {W3C_SEASON: THANKS[:3]})
 
-    LadderService().sync_users([thanks], SINCE)
+    LadderService().sync_users([thanks], SINCE, [W3C_SEASON])
     assert fake.since[W3C_SEASON] == SINCE
     stamp = ledger_of(thanks.id)[W3C_SEASON].synced_at
-    LadderService().sync_users([thanks], SINCE)
+    LadderService().sync_users([thanks], SINCE, [W3C_SEASON])
 
     assert fake.since[W3C_SEASON] == stamp
 
@@ -500,6 +512,84 @@ def test_the_first_sync_of_a_window_walks_and_writes_what_it_found(
 
     assert fake.seasons()[0] == W3C_SEASON
     assert set(ledger_of(player)) == set(fake.seasons())
+
+
+# The window this bootstrap walk reads: it starts inside season 23.
+WINDOW = datetime(2026, 1, 18)
+
+
+def test_the_bootstrap_walk_records_every_season_it_read(
+    app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A window two seasons below the pin stamps every season down to it."""
+    thanks = add_player("thanks", "thanks#11187")
+    fake = serve(
+        monkeypatch,
+        {
+            25: [at("s25", 25, datetime(2026, 7, 1))],
+            24: [at("s24", 24, datetime(2026, 2, 10))],
+            23: [
+                at("s23-in", 23, datetime(2026, 1, 20)),
+                at("s23-out", 23, datetime(2026, 1, 10)),
+            ],
+        },
+    )
+
+    LadderService().sync_users([thanks], WINDOW)
+
+    assert fake.seasons() == [25, 24, 23]
+    ledger = ledger_of(thanks.id)
+    assert sorted(ledger) == [23, 24, 25]
+    assert all(row.complete for row in ledger.values())
+    # Season 23 holds the start of the window, so the walk never reaches 22
+    assert 22 not in ledger
+    stored_ids = {row.w3c_match_id for row in stored()}
+    assert {"s24", "s23-in"} <= stored_ids
+
+
+def test_the_bootstrap_walk_records_an_empty_season_it_passed_through(
+    app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A season the player sat out was read, so it is complete."""
+    thanks = add_player("thanks", "thanks#11187")
+    serve(
+        monkeypatch,
+        {
+            25: [at("s25", 25, datetime(2026, 7, 1))],
+            23: [
+                at("s23-in", 23, datetime(2026, 1, 20)),
+                at("s23-out", 23, datetime(2026, 1, 10)),
+            ],
+        },
+    )
+
+    LadderService().sync_users([thanks], WINDOW)
+
+    ledger = ledger_of(thanks.id)
+    assert ledger[24].complete is True
+    assert "s23-in" in {row.w3c_match_id for row in stored()}
+
+
+def test_a_database_error_names_its_class(
+    app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The admin reads which database error it was, and no statement."""
+    thanks = add_player("thanks", "thanks#11187")
+    serve(monkeypatch, {W3C_SEASON: THANKS[:1]})
+
+    def clash(
+        self: LadderService,
+        session: OrmSession,
+        user_id: int,
+        rows: list[W3CLadderMatchCreate],
+    ) -> None:
+        raise IntegrityError("statement", {}, Exception("duplicate key"))
+
+    monkeypatch.setattr(LadderService, "_write_matches", clash)
+
+    result = LadderService().sync_users([thanks], SINCE, [W3C_SEASON])
+
+    assert [f.reason for f in result.failed] == ["Database error (IntegrityError)"]
 
 
 # The route. It runs in chunks, because one request per season would outlive

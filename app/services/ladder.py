@@ -250,10 +250,9 @@ class LadderService:
     ) -> W3CSyncResult:
         """Store the matches these players started at or after `since`.
 
-        `seasons` names the w3champions seasons of a GNL window: an empty one
-        is a window with no stored match, which the walk discovers from
-        `walk_from`. Naming none at all refreshes the open season alone, which
-        is what a player's own sync means.
+        `seasons` names the w3champions seasons of a GNL window. Naming none,
+        which is a window with no stored match to date it, walks down from
+        `walk_from` and discovers them.
         """
         result = W3CSyncResult()
         if not users:
@@ -261,8 +260,7 @@ class LadderService:
 
         w3c_service = W3CService(settings_app_service=self.settings_app_service)
         open_season = w3c_service.current_season()
-        # An empty list is a window no stored match names a season for
-        named = (open_season,) if seasons is None else tuple(seasons) or None
+        named = tuple(seasons) if seasons else None
         plan = _Plan(
             since=since,
             open_season=open_season,
@@ -291,15 +289,22 @@ class LadderService:
                     for other in futures:
                         other.cancel()
                 except Exception as e:
-                    # The reason reaches the client, so it names no statement
+                    # The reason reaches the client, so it names the class of a
+                    # database error and no statement
+                    database = isinstance(e, SQLAlchemyError)
                     reason = (
-                        "Database error" if isinstance(e, SQLAlchemyError) else str(e)
+                        f"Database error ({type(e).__name__})" if database else str(e)
                     )
                     failures[user.id] = reason
-                    logger.warning(
+                    message = (
                         f"Failed to sync ladder matches for user {user.name} "
                         f"(BattleTag: {user.battleTag}): {reason}"
                     )
+                    # A database error keeps its traceback in the server log
+                    if database:
+                        logger.exception(message)
+                    else:
+                        logger.warning(message)
                 else:
                     synced.add(user.id)
 
