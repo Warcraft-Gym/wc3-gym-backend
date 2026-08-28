@@ -2,3 +2,4 @@ tests/
 .github/
 Dockerfile
 justfile
+just/
