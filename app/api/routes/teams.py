@@ -102,7 +102,7 @@ def add_players(
     service: TeamServiceDep,
 ) -> TeamPublic:
     """Add players to a team for a season using their IDs."""
-    return service.add_players(team_id, season_id, data.get("player_ids"))
+    return service.add_players(team_id, season_id, data["player_ids"])
 
 
 @router.delete(
@@ -116,7 +116,7 @@ def remove_players(
     service: TeamServiceDep,
 ) -> TeamPublic:
     """Removes players from a team for a season using their IDs."""
-    return service.remove_players(team_id, season_id, data.get("player_ids"))
+    return service.remove_players(team_id, season_id, data["player_ids"])
 
 
 @router.put(

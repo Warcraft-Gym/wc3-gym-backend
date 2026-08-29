@@ -25,6 +25,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import date, datetime
 from itertools import accumulate
+from operator import itemgetter
 from typing import Protocol
 
 from app.core import ladder
@@ -79,20 +80,29 @@ PaidSet = Mapping[str, int]
 class RaceValue(Protocol):
     """A race the way the models spell it, for example Race.NE."""
 
-    value: str
+    @property
+    def value(self) -> str: ...
 
 
 class AchievementRow(Protocol):
     """What the rules read off a match, stored or straight from w3champions."""
 
-    won: bool
-    start_time: datetime
-    duration_s: int
-    map_name: str | None
-    opp_race: RaceValue | None
-    opp_battletag: str | None
-    mmr_before: int | None
-    mmr_after: int | None
+    @property
+    def won(self) -> bool: ...
+    @property
+    def start_time(self) -> datetime: ...
+    @property
+    def duration_s(self) -> int: ...
+    @property
+    def map_name(self) -> str | None: ...
+    @property
+    def opp_race(self) -> RaceValue | None: ...
+    @property
+    def opp_battletag(self) -> str | None: ...
+    @property
+    def mmr_before(self) -> int | None: ...
+    @property
+    def mmr_after(self) -> int | None: ...
 
 
 WIN_FIRST = Achievement(
@@ -359,7 +369,8 @@ def earned(
     kills = sum(1 for tag in beaten if tag in opponents)
     race = top_race(wins)
 
-    found: list[Achievement] = []
+    # Each badge with the start of the match that earned it, for the sort
+    found: list[tuple[datetime, Achievement]] = []
 
     def pay(
         rule: Achievement, at: AchievementRow | None, extra: int = 0, suffix: str = ""
@@ -368,14 +379,13 @@ def earned(
         price = paid.get(rule.id)
         if price is None or at is None:
             return
-        found.append(
-            replace(
-                rule,
-                points=price + extra,
-                description=rule.description + suffix,
-                achieved_at=at.start_time,
-            )
+        badge = replace(
+            rule,
+            points=price + extra,
+            description=rule.description + suffix,
+            achieved_at=at.start_time,
         )
+        found.append((at.start_time, badge))
 
     pay(WIN_FIRST if rows[0].won else LOSE_FIRST, rows[0])
     pay(WINNER_WINNER, nth(wins, 100))
@@ -412,9 +422,7 @@ def earned(
     if points >= LADDER_GOAL * 2:
         pay(DOUBLE_UP, reaches(rows, LADDER_GOAL * 2) or rows[-1])
 
-    # pay() stamps every badge, so the date is never None here
-    found.sort(key=lambda item: item.achieved_at)
-    return found
+    return [badge for _, badge in sorted(found, key=itemgetter(0))]
 
 
 def total_points(found: Iterable[Achievement]) -> int:

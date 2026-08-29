@@ -4,7 +4,7 @@ import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Body, Query, Request, Response
+from fastapi import APIRouter, Body, Query, Request, Response, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 
@@ -22,7 +22,7 @@ from app.core.query import QueryUtil
 from app.models.fantasy_bet import FantasyBetCreate, FantasyBetUpdate
 from app.models.fantasy_team import FantasyTeamCreate, FantasyTeamUpdate
 from app.models.series import SeriesSort
-from app.models.user import UserCreate
+from app.models.user import UserCreate, UserUpdate
 from app.services import player_series
 
 logger = logging.getLogger(__name__)
@@ -158,7 +158,7 @@ def public_create_user(
         raise BadRequestError("invalid_token_type")
 
     # Build user payload. Force discord fields from token to avoid spoofing.
-    user_payload = {
+    user_payload: dict[str, Any] = {
         "name": data.get("name"),
         "battleTag": data.get("battleTag"),
         "discordId": entry.get("discord_id"),
@@ -191,8 +191,9 @@ def public_create_user(
     if existing_users and len(existing_users) > 0:
         # update first matched user
         existing = existing_users[0]
+        # Validated as a whole profile, then written as the update it is
         user_create = UserCreate(**user_payload)
-        user = user_service.update(existing.id, user_create)
+        user = user_service.update(existing.id, UserUpdate(**user_create.model_dump()))
     else:
         # create new user
         user = user_service.add(UserCreate(**user_payload))
@@ -301,7 +302,7 @@ async def update_player_series(
     files = {}
     if content_type and "multipart/form-data" in content_type:
         for key, value in (await request.form()).multi_items():
-            if hasattr(value, "filename"):
+            if isinstance(value, UploadFile):
                 if key not in files:
                     await value.seek(0)
                     files[key] = {
@@ -422,7 +423,7 @@ def create_fantasy_team(
         user_name = data.get("user_name") or entry.get("discord_tag")
         battle_tag = data.get("battle_tag") or entry.get("discord_tag")
 
-        user_payload = {
+        user_payload: dict[str, Any] = {
             "name": user_name,
             "battleTag": battle_tag,
             "discordId": entry.get("discord_id"),
@@ -522,7 +523,7 @@ def create_fantasy_bet(
         )
 
     # Create the bet
-    bet_payload = {
+    bet_payload: dict[str, Any] = {
         "series_id": data.get("series_id"),
         "season_id": data.get("season_id"),
         "user_id": user.id,

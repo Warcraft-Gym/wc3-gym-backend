@@ -15,6 +15,7 @@ import pytest
 from httpx2 import Client
 
 from app.core.db import Session
+from app.models.base import ident
 from app.models.enums import Race
 from app.models.fantasy_bet import FantasyBet
 from app.models.fantasy_team import FantasyTeam
@@ -110,54 +111,60 @@ def league(client: Client) -> dict[str, Any]:
 
         session.add_all(
             [
-                DBTeamSeason(team_id=team1.id, season_id=season.id),
-                DBTeamSeason(team_id=team2.id, season_id=season.id),
+                DBTeamSeason(team_id=ident(team1), season_id=ident(season)),
+                DBTeamSeason(team_id=ident(team2), season_id=ident(season)),
             ]
         )
         week1 = Match(
-            team1_id=team1.id, team2_id=team2.id, season_id=season.id, playday=1
+            team1_id=ident(team1),
+            team2_id=ident(team2),
+            season_id=ident(season),
+            playday=1,
         )
         week2 = Match(
-            team1_id=team1.id, team2_id=team2.id, season_id=season.id, playday=2
+            team1_id=ident(team1),
+            team2_id=ident(team2),
+            season_id=ident(season),
+            playday=2,
         )
         session.add_all([week1, week2])
         session.flush()
 
         sweep = Series(
-            match_id=week1.id,
-            player1_id=players[0].id,
-            player2_id=players[2].id,
+            match_id=ident(week1),
+            player1_id=ident(players[0]),
+            player2_id=ident(players[2]),
             player1_score=2,
             player2_score=0,
-            host_player_id=players[0].id,
+            host_player_id=ident(players[0]),
         )
         open_series = Series(
-            match_id=week1.id,
-            player1_id=players[1].id,
-            player2_id=players[3].id,
-            host_player_id=players[1].id,
+            match_id=ident(week1),
+            player1_id=ident(players[1]),
+            player2_id=ident(players[3]),
+            host_player_id=ident(players[1]),
         )
         close = Series(
-            match_id=week2.id,
-            player1_id=players[0].id,
-            player2_id=players[2].id,
+            match_id=ident(week2),
+            player1_id=ident(players[0]),
+            player2_id=ident(players[2]),
             player1_score=1,
             player2_score=2,
-            host_player_id=players[0].id,
+            host_player_id=ident(players[0]),
         )
         session.add_all([sweep, open_series, close])
 
         first = FantasyTeam(
             name="First",
-            season_id=season.id,
-            captain_id=players[0].id,
+            season_id=ident(season),
+            captain_id=ident(players[0]),
             drafted_team_id=team1.id,
             drafted_race=Race.HU,
         )
         second = FantasyTeam(
             name="Second",
-            season_id=season.id,
-            captain_id=players[1].id,
+            season_id=ident(season),
+            captain_id=ident(players[1]),
             drafted_team_id=team2.id,
             drafted_race=Race.OC,
         )
@@ -166,29 +173,35 @@ def league(client: Client) -> dict[str, Any]:
 
         session.add_all(
             [
-                DBFantasyTeamPlayer(fantasy_team_id=first.id, user_id=players[0].id),
-                DBFantasyTeamPlayer(fantasy_team_id=first.id, user_id=players[1].id),
-                DBFantasyTeamPlayer(fantasy_team_id=second.id, user_id=players[2].id),
+                DBFantasyTeamPlayer(
+                    fantasy_team_id=ident(first), user_id=ident(players[0])
+                ),
+                DBFantasyTeamPlayer(
+                    fantasy_team_id=ident(first), user_id=ident(players[1])
+                ),
+                DBFantasyTeamPlayer(
+                    fantasy_team_id=ident(second), user_id=ident(players[2])
+                ),
                 # Called right, called wrong, and called on a series with no result
                 FantasyBet(
-                    season_id=season.id,
-                    series_id=sweep.id,
-                    user_id=players[0].id,
-                    winner_id=players[0].id,
+                    season_id=ident(season),
+                    series_id=ident(sweep),
+                    user_id=ident(players[0]),
+                    winner_id=ident(players[0]),
                     bet_points=10,
                 ),
                 FantasyBet(
-                    season_id=season.id,
-                    series_id=close.id,
-                    user_id=players[0].id,
-                    winner_id=players[0].id,
+                    season_id=ident(season),
+                    series_id=ident(close),
+                    user_id=ident(players[0]),
+                    winner_id=ident(players[0]),
                     bet_points=4,
                 ),
                 FantasyBet(
-                    season_id=season.id,
-                    series_id=open_series.id,
-                    user_id=players[1].id,
-                    winner_id=players[1].id,
+                    season_id=ident(season),
+                    series_id=ident(open_series),
+                    user_id=ident(players[1]),
+                    winner_id=ident(players[1]),
                     bet_points=7,
                 ),
             ]
@@ -353,50 +366,56 @@ def two_seasons(client: Client) -> dict[str, Any]:
 
         session.add_all(
             [
-                DBTeamSeason(team_id=team_a1.id, season_id=season_a.id),
-                DBTeamSeason(team_id=team_a2.id, season_id=season_a.id),
-                DBTeamSeason(team_id=team_b1.id, season_id=season_b.id),
-                DBTeamSeason(team_id=team_b2.id, season_id=season_b.id),
+                DBTeamSeason(team_id=ident(team_a1), season_id=ident(season_a)),
+                DBTeamSeason(team_id=ident(team_a2), season_id=ident(season_a)),
+                DBTeamSeason(team_id=ident(team_b1), season_id=ident(season_b)),
+                DBTeamSeason(team_id=ident(team_b2), season_id=ident(season_b)),
             ]
         )
         match_a = Match(
-            team1_id=team_a1.id, team2_id=team_a2.id, season_id=season_a.id, playday=1
+            team1_id=ident(team_a1),
+            team2_id=ident(team_a2),
+            season_id=ident(season_a),
+            playday=1,
         )
         match_b = Match(
-            team1_id=team_b1.id, team2_id=team_b2.id, season_id=season_b.id, playday=1
+            team1_id=ident(team_b1),
+            team2_id=ident(team_b2),
+            season_id=ident(season_b),
+            playday=1,
         )
         session.add_all([match_a, match_b])
         session.flush()
 
         series_a = Series(
-            match_id=match_a.id,
-            player1_id=pa1.id,
-            player2_id=pa2.id,
+            match_id=ident(match_a),
+            player1_id=ident(pa1),
+            player2_id=ident(pa2),
             player1_score=2,
             player2_score=0,
-            host_player_id=pa1.id,
+            host_player_id=ident(pa1),
         )
         series_b = Series(
-            match_id=match_b.id,
-            player1_id=pb1.id,
-            player2_id=pb2.id,
+            match_id=ident(match_b),
+            player1_id=ident(pb1),
+            player2_id=ident(pb2),
             player1_score=2,
             player2_score=1,
-            host_player_id=pb1.id,
+            host_player_id=ident(pb1),
         )
         session.add_all([series_a, series_b])
 
         fantasy_a = FantasyTeam(
             name="Fantasy A",
-            season_id=season_a.id,
-            captain_id=pa1.id,
+            season_id=ident(season_a),
+            captain_id=ident(pa1),
             drafted_team_id=team_a1.id,
             drafted_race=Race.HU,
         )
         fantasy_b = FantasyTeam(
             name="Fantasy B",
-            season_id=season_b.id,
-            captain_id=pb1.id,
+            season_id=ident(season_b),
+            captain_id=ident(pb1),
             drafted_team_id=team_b1.id,
             drafted_race=Race.NE,
         )
@@ -405,20 +424,24 @@ def two_seasons(client: Client) -> dict[str, Any]:
 
         session.add_all(
             [
-                DBFantasyTeamPlayer(fantasy_team_id=fantasy_a.id, user_id=pa1.id),
-                DBFantasyTeamPlayer(fantasy_team_id=fantasy_b.id, user_id=pb1.id),
+                DBFantasyTeamPlayer(
+                    fantasy_team_id=ident(fantasy_a), user_id=ident(pa1)
+                ),
+                DBFantasyTeamPlayer(
+                    fantasy_team_id=ident(fantasy_b), user_id=ident(pb1)
+                ),
                 FantasyBet(
-                    season_id=season_a.id,
-                    series_id=series_a.id,
-                    user_id=pa1.id,
-                    winner_id=pa1.id,
+                    season_id=ident(season_a),
+                    series_id=ident(series_a),
+                    user_id=ident(pa1),
+                    winner_id=ident(pa1),
                     bet_points=10,
                 ),
                 FantasyBet(
-                    season_id=season_b.id,
-                    series_id=series_b.id,
-                    user_id=pb1.id,
-                    winner_id=pb2.id,
+                    season_id=ident(season_b),
+                    series_id=ident(series_b),
+                    user_id=ident(pb1),
+                    winner_id=ident(pb2),
                     bet_points=7,
                 ),
             ]

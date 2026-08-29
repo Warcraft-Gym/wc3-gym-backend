@@ -5,7 +5,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
 from sqlmodel import col
 
-from app.core.db import Session
+from app.core.db import Session, rel
 from app.core.exceptions import NotFoundError
 from app.core.query import QueryElement, QueryUtil
 from app.models.fantasy_team import (
@@ -24,8 +24,8 @@ logger = logging.getLogger(__name__)
 class FantasyTeamService:
     def add(self, fantasy_team: FantasyTeamCreate) -> FantasyTeamPublic:
         with Session.begin() as session:
-            fantasy_team = FantasyTeam.add(session, fantasy_team.model_dump())
-            public = FantasyTeamPublic.from_fantasy_team(fantasy_team)
+            row = FantasyTeam.add(session, fantasy_team.model_dump())
+            public = FantasyTeamPublic.from_fantasy_team(row)
             derived.fill_fantasy_teams(session, [public])
             return public
 
@@ -33,14 +33,14 @@ class FantasyTeamService:
         self, fantasy_team_id: int, fantasy_team: FantasyTeamUpdate
     ) -> FantasyTeamPublic:
         with Session.begin() as session:
-            fantasy_team = FantasyTeam.update(
+            row = FantasyTeam.update(
                 session,
                 fantasy_team_id,
                 **fantasy_team.model_dump(exclude_unset=True),
             )
-            if not fantasy_team:
+            if not row:
                 raise NotFoundError("Fantasy Team not found")
-            public = FantasyTeamPublic.from_fantasy_team(fantasy_team)
+            public = FantasyTeamPublic.from_fantasy_team(row)
             derived.fill_fantasy_teams(session, [public])
             return public
 
@@ -60,11 +60,11 @@ class FantasyTeamService:
 
     # Every relation the list answer reads; the sub-collections stay empty
     _reduced_options = (
-        joinedload(FantasyTeam.season).noload("*"),
-        joinedload(FantasyTeam.drafted_team).noload("*"),
-        joinedload(FantasyTeam.captain).noload("*"),
-        joinedload(FantasyTeam.drafted_players)
-        .joinedload(DBFantasyTeamPlayer.users)
+        joinedload(rel(FantasyTeam.season)).noload("*"),
+        joinedload(rel(FantasyTeam.drafted_team)).noload("*"),
+        joinedload(rel(FantasyTeam.captain)).noload("*"),
+        joinedload(rel(FantasyTeam.drafted_players))
+        .joinedload(rel(DBFantasyTeamPlayer.users))
         .noload("*"),
     )
 

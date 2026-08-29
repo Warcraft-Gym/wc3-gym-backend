@@ -19,6 +19,7 @@ from sqlmodel import col
 from app.core.db import Session
 from app.core.exceptions import BadRequestError
 from app.core.scoring import DEFAULT_SYSTEM, MAX_POINTS
+from app.models.base import ident
 from app.models.enums import Race
 from app.models.fantasy_bet import FantasyBet, FantasyBetCreate
 from app.models.fantasy_team import FantasyTeam, FantasyTeamCreate
@@ -72,7 +73,7 @@ def cell_value[T](value: T) -> T | None:
     return value
 
 
-def whole_number(value: object) -> int | None:
+def whole_number(value: str | float | None) -> int | None:
     """Read a cell that holds a whole number."""
     value = cell_value(value)
     if value is None or value == "":
@@ -124,7 +125,9 @@ def _write(
     _fantasy_players(session, sheets, fantasy_teams, users)
     duplicate_bets = _fantasy_bets(session, sheets, season, series, users)
     logger.info(f"Import completed for season: {season.name}")
-    return ImportedSeason(id=season.id, name=season.name, duplicate_bets=duplicate_bets)
+    return ImportedSeason(
+        id=ident(season), name=season.name, duplicate_bets=duplicate_bets
+    )
 
 
 def _known_system(system: str) -> str:
@@ -261,8 +264,8 @@ def _maps(session: OrmSession, sheets: Sheets, season: Season) -> dict[int, int]
         )
         session.add_all(
             [
-                DBMapSeason(season_id=season.id, map_id=map_id)
-                for map_id in {map_obj.id for map_obj in pool} - linked
+                DBMapSeason(season_id=ident(season), map_id=map_id)
+                for map_id in {ident(map_obj) for map_obj in pool} - linked
             ]
         )
     return {
@@ -307,7 +310,7 @@ def _teams(session: OrmSession, sheets: Sheets, season: Season) -> dict[int, int
     session.add_all(written)
     session.flush()
 
-    team_ids = {team.id for team in old_ids.values()}
+    team_ids = {ident(team) for team in old_ids.values()}
     if team_ids:
         linked = set(
             session.scalars(
@@ -318,7 +321,7 @@ def _teams(session: OrmSession, sheets: Sheets, season: Season) -> dict[int, int
         )
         session.add_all(
             [
-                DBTeamSeason(season_id=season.id, team_id=team_id)
+                DBTeamSeason(season_id=ident(season), team_id=team_id)
                 for team_id in team_ids - linked
             ]
         )
@@ -384,7 +387,7 @@ def _players(
         users.by_old_id[old_id] = user
         team_id = teams.get(whole_number(row["Team ID"]))
         if team_id:
-            roster.add((user.id, team_id))
+            roster.add((ident(user), team_id))
 
     if roster:
         linked = set(
@@ -396,7 +399,9 @@ def _players(
         )
         session.add_all(
             [
-                DBUserTeamSeason(user_id=user_id, team_id=team_id, season_id=season.id)
+                DBUserTeamSeason(
+                    user_id=user_id, team_id=team_id, season_id=ident(season)
+                )
                 for user_id, team_id in roster - linked
             ]
         )
@@ -426,11 +431,14 @@ def _matches(
         team2_id = teams.get(whole_number(row["Team2 ID"]))
         if not team1_id or not team2_id:
             raise BadRequestError(f"Match {row['ID']} names a team the workbook lacks")
+        playday = whole_number(row["Playday"])
+        if playday is None:
+            raise BadRequestError(f"Match {row['ID']} has no playday")
         values = MatchCreate(
             team1_id=team1_id,
             team2_id=team2_id,
-            season_id=season.id,
-            playday=whole_number(row["Playday"]),
+            season_id=ident(season),
+            playday=playday,
             fixed_map_id=maps.get(whole_number(row["Fixed Map ID"])),
             date_frame=cell_value(row["Date Frame"]),
         )
@@ -554,7 +562,8 @@ def _fantasy_users(session: OrmSession, sheets: Sheets, users: Users) -> None:
 
     for row, value in zip(rows, values, strict=True):
         old_id = whole_number(row["ID"])
-        users.by_old_id.setdefault(old_id, users.by_tag[folded(value.battleTag)])
+        if old_id is not None:
+            users.by_old_id.setdefault(old_id, users.by_tag[folded(value.battleTag)])
 
 
 def _fantasy_teams(
@@ -582,8 +591,8 @@ def _fantasy_teams(
             continue
         values = FantasyTeamCreate(
             name=row["Name"],
-            season_id=season.id,
-            captain_id=captain.id,
+            season_id=ident(season),
+            captain_id=ident(captain),
             drafted_team_id=teams.get(whole_number(row["Drafted Team ID"])),
             drafted_race=cell_value(row["Drafted Race"]),
         )
@@ -615,7 +624,7 @@ def _fantasy_players(
         fteam_id = fantasy_teams.get(whole_number(row["Fantasy Team ID"]))
         user = users.by_old_id.get(whole_number(row["Player ID"]))
         if fteam_id and user:
-            drafted.add((fteam_id, user.id))
+            drafted.add((fteam_id, ident(user)))
     if not drafted:
         return
 
@@ -671,13 +680,13 @@ def _fantasy_bets(
             )
             continue
         values = FantasyBetCreate(
-            season_id=season.id,
+            season_id=ident(season),
             series_id=series_id,
-            user_id=user.id,
-            winner_id=winner.id,
+            user_id=ident(user),
+            winner_id=ident(winner),
             bet_points=whole_number(row["Bet Points"]) or 0,
         )
-        key = (series_id, user.id)
+        key = (series_id, ident(user))
         if key in seen:
             duplicates += 1
         seen.add(key)

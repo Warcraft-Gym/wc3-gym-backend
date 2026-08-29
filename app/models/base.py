@@ -1,11 +1,24 @@
 from collections.abc import Sequence
-from typing import Any, Self
+from typing import Any, Protocol, Self
 
 from sqlalchemy import ColumnExpressionArgument, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, class_mapper
 from sqlmodel import SQLModel
 
 from app.core.exceptions import BadRequestError
+
+
+class Stored(Protocol):
+    """A mapped row: its id is None only before the session flushes it."""
+
+    id: int | None
+
+
+def ident(row: Stored) -> int:
+    """The id of a row the session has flushed."""
+    if row.id is None:
+        raise ValueError(f"{type(row).__name__} is not stored yet")
+    return row.id
 
 
 class DBModel(SQLModel):
@@ -60,7 +73,9 @@ class DBModel(SQLModel):
         statement = select(cls).where(filters)
         if limit is not None or offset:
             # Offset paging is deterministic only with a fixed order
-            statement = statement.order_by(*cls.__table__.primary_key).offset(offset)
+            statement = statement.order_by(*class_mapper(cls).primary_key).offset(
+                offset
+            )
             if limit is not None:
                 statement = statement.limit(limit)
         return session.scalars(statement).unique().all()
@@ -72,7 +87,9 @@ class DBModel(SQLModel):
         statement = select(cls)
         if limit is not None or offset:
             # Offset paging is deterministic only with a fixed order
-            statement = statement.order_by(*cls.__table__.primary_key).offset(offset)
+            statement = statement.order_by(*class_mapper(cls).primary_key).offset(
+                offset
+            )
             if limit is not None:
                 statement = statement.limit(limit)
         return session.scalars(statement).unique().all()

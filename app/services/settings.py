@@ -77,7 +77,7 @@ class SettingsService:
         return [setting.to_dict() for setting in self.get_all()]
 
     def update_setting(
-        self, key: str, value: object, description: str | None = None
+        self, key: str, value: str | None, description: str | None = None
     ) -> dict[str, Any]:
         """Update or create a single setting"""
         try:
@@ -97,7 +97,9 @@ class SettingsService:
         )
         return updated.to_dict()
 
-    def update_settings(self, settings_dict: dict[str, object]) -> list[dict[str, Any]]:
+    def update_settings(
+        self, settings_dict: dict[str, str | None]
+    ) -> list[dict[str, Any]]:
         """Update multiple settings"""
         updated: list[dict[str, Any]] = []
         for key, value in settings_dict.items():

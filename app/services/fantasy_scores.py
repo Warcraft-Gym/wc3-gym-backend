@@ -29,20 +29,14 @@ class FantasyScoreService:
         """All series of the season, keyed by the week their match was played."""
         return self.series_app_service.fantasy_series_by_week(season.id)
 
-    # include_weekly_details also changes the return type
     def _calculate_race_points(
         self,
         season: "SeasonPublic",
         series_by_week: dict[int | None, list[fantasy.Series]],
-        include_weekly_details: bool = False,
-    ) -> (
-        fantasy.RacePoints
-        | tuple[fantasy.RacePoints, fantasy.RaceStats, fantasy.RaceWeeklyDetails]
-    ):
-        """The points every race takes off the weekly race table of the season."""
-        return fantasy.race_points(
-            season.number_weeks, series_by_week, include_weekly_details
-        )
+    ) -> tuple[fantasy.RacePoints, fantasy.RaceStats, fantasy.RaceWeeklyDetails]:
+        """The points every race takes off the weekly race table of the season,
+        with the stats and the weekly table behind them."""
+        return fantasy.race_points(season.number_weeks, series_by_week, True)
 
     def _drafted_standing(
         self, fantasy_team: "FantasyTeamPublic", season: "SeasonPublic"
@@ -74,7 +68,7 @@ class FantasyScoreService:
         """The five score parts of one fantasy team, over the bets its captain
         holds in the season."""
         query = QueryUtil.parse_query(
-            f"user_id=={fantasy_team.captain.id} and season_id=={season.id}"
+            f"user_id=={fantasy_team.captain_id} and season_id=={season.id}"
         )
         player_bets, _ = self.fantasy_bet_service.search(query)
 
@@ -85,7 +79,11 @@ class FantasyScoreService:
             ],
             drafted_race=fantasy.race_value(fantasy_team.drafted_race),
             standing=self._drafted_standing(fantasy_team, season),
-            bets=[derived.public_bet(bet) for bet in player_bets or []],
+            bets=[
+                scored
+                for bet in player_bets or []
+                if (scored := derived.public_bet(bet)) is not None
+            ],
             race_points=race_points,
             series_by_week=series_by_week,
             number_weeks=season.number_weeks,
@@ -125,7 +123,7 @@ class FantasyScoreService:
         # Calculate race points for all races using shared method
         series_by_week = self._season_series_by_week(season)
         race_points, race_stats, race_weekly_details = self._calculate_race_points(
-            season, series_by_week, include_weekly_details=True
+            season, series_by_week
         )
 
         # Calculate all score components using shared method

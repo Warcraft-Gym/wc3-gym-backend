@@ -2,10 +2,11 @@ from typing import Annotated, Any, Self
 
 from sqlalchemy import Index
 from sqlalchemy.orm import joinedload
-from sqlalchemy.sql.base import ExecutableOption
+from sqlalchemy.orm.interfaces import ORMOption
 from sqlmodel import Field, Relationship, SQLModel
 
-from app.models.base import DBModel
+from app.core.db import rel
+from app.models.base import DBModel, ident
 from app.models.match import Match
 from app.models.relationships import DBMapSeason, DBUserSeasonSignup
 from app.models.season import Season, SeasonPublic
@@ -45,50 +46,66 @@ class FantasyBet(FantasyBetBase, DBModel, table=True):
     )
 
     @classmethod
-    def eager_options(cls) -> tuple[ExecutableOption, ...]:
+    def eager_options(cls) -> tuple[ORMOption, ...]:
         """Every relation the public bet reads."""
         # A bet holds four users: both sides of the bet and both players
         players = (
-            joinedload(cls.user),
-            joinedload(cls.winner),
-            joinedload(cls.series).joinedload(Series.player1),
-            joinedload(cls.series).joinedload(Series.player2),
+            joinedload(rel(cls.user)),
+            joinedload(rel(cls.winner)),
+            joinedload(rel(cls.series)).joinedload(rel(Series.player1)),
+            joinedload(rel(cls.series)).joinedload(rel(Series.player2)),
         )
         return (
             # Collections use selectinload; a joined collection multiplies the rows
-            joinedload(cls.season)
-            .selectinload(Season.maps)
-            .joinedload(DBMapSeason.map),
-            joinedload(cls.series).joinedload(Series.match).joinedload(Match.team1),
-            joinedload(cls.series).joinedload(Series.match).joinedload(Match.team2),
-            joinedload(cls.series).joinedload(Series.match).joinedload(Match.season),
-            joinedload(cls.series).joinedload(Series.match).joinedload(Match.fixed_map),
+            joinedload(rel(cls.season))
+            .selectinload(rel(Season.maps))
+            .joinedload(rel(DBMapSeason.map)),
+            joinedload(rel(cls.series))
+            .joinedload(rel(Series.match))
+            .joinedload(rel(Match.team1)),
+            joinedload(rel(cls.series))
+            .joinedload(rel(Series.match))
+            .joinedload(rel(Match.team2)),
+            joinedload(rel(cls.series))
+            .joinedload(rel(Series.match))
+            .joinedload(rel(Match.season)),
+            joinedload(rel(cls.series))
+            .joinedload(rel(Series.match))
+            .joinedload(rel(Match.fixed_map)),
             *(
                 option
                 for player in players
                 for option in (
-                    player.selectinload(User.w3c_stats),
-                    player.selectinload(User.team_seasons),
-                    player.selectinload(User.signup_seasons).joinedload(
-                        DBUserSeasonSignup.season
+                    player.selectinload(rel(User.w3c_stats)),
+                    player.selectinload(rel(User.team_seasons)),
+                    player.selectinload(rel(User.signup_seasons)).joinedload(
+                        rel(DBUserSeasonSignup.season)
                     ),
                 )
             ),
         )
 
     @classmethod
-    def list_eager_options(cls) -> tuple[ExecutableOption, ...]:
+    def list_eager_options(cls) -> tuple[ORMOption, ...]:
         """The to-one relations the reduced public bet reads."""
         return (
-            joinedload(cls.season),
-            joinedload(cls.user),
-            joinedload(cls.winner),
-            joinedload(cls.series).joinedload(Series.player1),
-            joinedload(cls.series).joinedload(Series.player2),
-            joinedload(cls.series).joinedload(Series.match).joinedload(Match.team1),
-            joinedload(cls.series).joinedload(Series.match).joinedload(Match.team2),
-            joinedload(cls.series).joinedload(Series.match).joinedload(Match.season),
-            joinedload(cls.series).joinedload(Series.match).joinedload(Match.fixed_map),
+            joinedload(rel(cls.season)),
+            joinedload(rel(cls.user)),
+            joinedload(rel(cls.winner)),
+            joinedload(rel(cls.series)).joinedload(rel(Series.player1)),
+            joinedload(rel(cls.series)).joinedload(rel(Series.player2)),
+            joinedload(rel(cls.series))
+            .joinedload(rel(Series.match))
+            .joinedload(rel(Match.team1)),
+            joinedload(rel(cls.series))
+            .joinedload(rel(Series.match))
+            .joinedload(rel(Match.team2)),
+            joinedload(rel(cls.series))
+            .joinedload(rel(Series.match))
+            .joinedload(rel(Match.season)),
+            joinedload(rel(cls.series))
+            .joinedload(rel(Series.match))
+            .joinedload(rel(Match.fixed_map)),
         )
 
 
@@ -122,7 +139,7 @@ class FantasyBetPublic(FantasyBetBase):
     @classmethod
     def from_fantasy_bet(cls, fbet: FantasyBet) -> Self:
         return cls(
-            id=fbet.id,
+            id=ident(fbet),
             series_id=fbet.series_id,
             season_id=fbet.season_id,
             season=SeasonPublic.from_season(fbet.season) if fbet.season else None,
@@ -138,7 +155,7 @@ class FantasyBetPublic(FantasyBetBase):
     def from_fantasy_bet_reduced(cls, fbet: FantasyBet) -> Self:
         """Every field of the bet, with the nested collections empty."""
         return cls(
-            id=fbet.id,
+            id=ident(fbet),
             series_id=fbet.series_id,
             season_id=fbet.season_id,
             season=SeasonPublic.from_season_without_maps(fbet.season)

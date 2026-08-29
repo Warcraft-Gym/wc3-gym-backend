@@ -4,7 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 from sqlmodel import col
 
-from app.core.db import Session
+from app.core.db import Session, rel
 from app.core.exceptions import NotFoundError
 from app.core.query import QueryElement, QueryUtil
 from app.models.match import Match, MatchCreate, MatchPublic, MatchUpdate
@@ -16,20 +16,20 @@ logger = logging.getLogger(__name__)
 class MatchService:
     def add(self, match: MatchCreate) -> MatchPublic:
         with Session.begin() as session:
-            match = Match.add(session, match.model_dump())
-            public = MatchPublic.from_match(match)
+            row = Match.add(session, match.model_dump())
+            public = MatchPublic.from_match(row)
             derived.fill_matches(session, [public])
             return public
 
     def update(self, match_id: int, match: MatchUpdate) -> MatchPublic:
         with Session.begin() as session:
-            match = Match.update(
+            row = Match.update(
                 session, match_id, **match.model_dump(exclude_unset=True)
             )
-            if not match:
+            if not row:
                 logger.error("Match could not be updated!")
                 raise NotFoundError("Match not found")
-            public = MatchPublic.from_match(match)
+            public = MatchPublic.from_match(row)
             derived.fill_matches(session, [public])
             return public
 
@@ -44,10 +44,10 @@ class MatchService:
                 session.scalars(
                     select(Match)
                     .options(
-                        joinedload(Match.team1).noload("*"),
-                        joinedload(Match.team2).noload("*"),
-                        joinedload(Match.season).noload("*"),
-                        joinedload(Match.fixed_map),
+                        joinedload(rel(Match.team1)).noload("*"),
+                        joinedload(rel(Match.team2)).noload("*"),
+                        joinedload(rel(Match.season)).noload("*"),
+                        joinedload(rel(Match.fixed_map)),
                     )
                     .where(col(Match.id) == match_id)
                     .limit(1)
@@ -68,14 +68,16 @@ class MatchService:
         with Session.begin() as session:
             result: list[MatchPublic] = []
             filter = QueryUtil.convert_query_to_db_filter(Match, query)
+            if filter is None:
+                return []
             # Eager load only what we need, explicitly disable other relationships
             statement = (
                 select(Match)
                 .options(
-                    joinedload(Match.team1).noload("*"),
-                    joinedload(Match.team2).noload("*"),
-                    joinedload(Match.season).noload("*"),
-                    joinedload(Match.fixed_map),
+                    joinedload(rel(Match.team1)).noload("*"),
+                    joinedload(rel(Match.team2)).noload("*"),
+                    joinedload(rel(Match.season)).noload("*"),
+                    joinedload(rel(Match.fixed_map)),
                 )
                 .where(filter)
             )

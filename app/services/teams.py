@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session as OrmSession
 from sqlalchemy.orm import joinedload, noload, selectinload
 from sqlmodel import col
 
-from app.core.db import Session
+from app.core.db import Session, rel
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.core.query import QueryElement, QueryUtil
 from app.models.season import Season
@@ -44,28 +44,32 @@ def _public(session: OrmSession, team: Team) -> TeamPublic:
 
 def _season_loads(season_id: int) -> list[Any]:
     """Loader options for one season of a team: roster, coaches and stats."""
-    roster = Team.user_seasons.and_(DBUserTeamSeason.season_id == season_id)
-    info = Team.season_info.and_(DBTeamSeason.season_id == season_id)
-    stats = User.team_seasons.and_(DBUserTeamSeason.season_id == season_id)
+    roster = rel(Team.user_seasons).and_(col(DBUserTeamSeason.season_id) == season_id)
+    info = rel(Team.season_info).and_(col(DBTeamSeason.season_id) == season_id)
+    stats = rel(User.team_seasons).and_(col(DBUserTeamSeason.season_id) == season_id)
     coach_loads = (
         joinedload(info)
         .joinedload(coach)
         .options(
-            selectinload(User.w3c_stats),
-            noload(User.team_seasons),
-            noload(User.signup_seasons),
+            selectinload(rel(User.w3c_stats)),
+            noload(rel(User.team_seasons)),
+            noload(rel(User.signup_seasons)),
         )
-        for coach in (DBTeamSeason.coach_1, DBTeamSeason.coach_2, DBTeamSeason.coach_3)
+        for coach in (
+            rel(DBTeamSeason.coach_1),
+            rel(DBTeamSeason.coach_2),
+            rel(DBTeamSeason.coach_3),
+        )
     )
     return [
         joinedload(roster)
-        .joinedload(DBUserTeamSeason.user)
+        .joinedload(rel(DBUserTeamSeason.user))
         .options(
-            selectinload(User.w3c_stats),
+            selectinload(rel(User.w3c_stats)),
             selectinload(stats),
-            noload(User.signup_seasons),
+            noload(rel(User.signup_seasons)),
         ),
-        joinedload(roster).noload(DBUserTeamSeason.team),
+        joinedload(roster).noload(rel(DBUserTeamSeason.team)),
         *coach_loads,
     ]
 
@@ -81,10 +85,10 @@ class TeamService:
 
     def update(self, team_id: int, team: TeamUpdate) -> TeamPublic:
         with Session.begin() as session:
-            team = Team.update(session, team_id, **team.model_dump(exclude_unset=True))
-            if not team:
+            row = Team.update(session, team_id, **team.model_dump(exclude_unset=True))
+            if not row:
                 raise NotFoundError("Team not found")
-            return _public(session, team)
+            return _public(session, row)
 
     def update_icon(self, team_id: int, file: bytes) -> TeamPublic:
         with Session.begin() as session:
@@ -196,10 +200,16 @@ class TeamService:
                 session.scalars(
                     select(Team)
                     .options(
-                        joinedload(Team.user_seasons).noload("*"),
-                        joinedload(Team.season_info).joinedload(DBTeamSeason.coach_1),
-                        joinedload(Team.season_info).joinedload(DBTeamSeason.coach_2),
-                        joinedload(Team.season_info).joinedload(DBTeamSeason.coach_3),
+                        joinedload(rel(Team.user_seasons)).noload("*"),
+                        joinedload(rel(Team.season_info)).joinedload(
+                            rel(DBTeamSeason.coach_1)
+                        ),
+                        joinedload(rel(Team.season_info)).joinedload(
+                            rel(DBTeamSeason.coach_2)
+                        ),
+                        joinedload(rel(Team.season_info)).joinedload(
+                            rel(DBTeamSeason.coach_3)
+                        ),
                     )
                     .where(col(Team.id) == team_id)
                 )
@@ -250,6 +260,8 @@ class TeamService:
         limit: int | None = None,
         offset: int = 0,
     ) -> list[TeamPublic]:
+        if filter is None:
+            return []
         with Session.begin() as session:
             result: list[TeamPublic] = []
             # Eager load related entities, disable nested loading
@@ -257,11 +269,11 @@ class TeamService:
                 select(Team)
                 .options(
                     # noload alone; a joined link table multiplies the rows
-                    noload(Team.user_seasons),
-                    selectinload(Team.season_info).options(
-                        noload(DBTeamSeason.coach_1),
-                        noload(DBTeamSeason.coach_2),
-                        noload(DBTeamSeason.coach_3),
+                    noload(rel(Team.user_seasons)),
+                    selectinload(rel(Team.season_info)).options(
+                        noload(rel(DBTeamSeason.coach_1)),
+                        noload(rel(DBTeamSeason.coach_2)),
+                        noload(rel(DBTeamSeason.coach_3)),
                     ),
                 )
                 .where(filter)
@@ -288,11 +300,11 @@ class TeamService:
             # Eager load related entities, disable nested loading
             statement = select(Team).options(
                 # noload alone; a joined link table multiplies the rows
-                noload(Team.user_seasons),
-                selectinload(Team.season_info).options(
-                    noload(DBTeamSeason.coach_1),
-                    noload(DBTeamSeason.coach_2),
-                    noload(DBTeamSeason.coach_3),
+                noload(rel(Team.user_seasons)),
+                selectinload(rel(Team.season_info)).options(
+                    noload(rel(DBTeamSeason.coach_1)),
+                    noload(rel(DBTeamSeason.coach_2)),
+                    noload(rel(DBTeamSeason.coach_3)),
                 ),
             )
             if limit is not None or offset:
@@ -335,8 +347,8 @@ class TeamService:
             statement = (
                 select(Team)
                 .options(
-                    noload(Team.user_seasons),
-                    joinedload(Team.season_info).noload("*"),
+                    noload(rel(Team.user_seasons)),
+                    joinedload(rel(Team.season_info)).noload("*"),
                 )
                 .where(col(Team.season_info).any(season_id=season_id))
             )

@@ -44,8 +44,9 @@ from fastapi import FastAPI
 from sqlalchemy import event, select
 from sqlalchemy.orm import joinedload
 
-from app.core.db import Session
+from app.core.db import Session, rel
 from app.core.query import QueryUtil
+from app.models.base import ident
 from app.models.draft_series import DraftSeries
 from app.models.enums import Race
 from app.models.player_career_stats import (
@@ -125,6 +126,7 @@ def test_get_series_costs_eleven_statements(league: dict[str, Any]) -> None:
     service = SeriesService()
     with count_statements() as tally:
         series = service.get(league["series_played_id"])
+    assert series.player1 is not None
     assert series.player1.w3c_stats
     assert tally[0] == 11
 
@@ -136,6 +138,7 @@ def test_search_for_season_costs_three_statements(league: dict[str, Any]) -> Non
     with count_statements() as tally:
         series_list = service.search_for_season(league["season_id"], query)
     assert len(series_list) == 2
+    assert series_list[0].player1 is not None
     assert series_list[0].player1.name
     assert series_list[0].player1.w3c_stats == []
     assert tally[0] == 3
@@ -179,6 +182,7 @@ def test_statement_count_holds_when_the_collections_grow(
     service = SeriesService()
     with count_statements() as tally:
         series = service.get(league["series_played_id"])
+    assert series.player1 is not None
     assert len(series.player1.w3c_stats) == 4 * STATS_PER_PLAYER
     assert tally[0] == 11
 
@@ -191,8 +195,8 @@ def test_options_cover_the_player_graph(league: dict[str, Any]) -> None:
     """
     options = (
         *Series._eager_options(),
-        joinedload(Series.player1).raiseload("*"),
-        joinedload(Series.player2).raiseload("*"),
+        joinedload(rel(Series.player1)).raiseload("*"),
+        joinedload(rel(Series.player2)).raiseload("*"),
     )
     with Session() as session:
         series = session.scalars(
@@ -203,6 +207,7 @@ def test_options_cover_the_player_graph(league: dict[str, Any]) -> None:
         assert series is not None
         public = SeriesPublic.from_series(series)
 
+    assert public.player1 is not None
     assert len(public.player1.w3c_stats) == STATS_PER_PLAYER
     assert len(public.player1.gnl_stats) == 1
     assert len(public.player1.signup_seasons) == 1
@@ -220,6 +225,7 @@ def test_fantasy_bets_list_costs_three_statements(league: dict[str, Any]) -> Non
     assert len(bets) == 1
     assert total is None
     assert bets[0].bet_result == 10
+    assert bets[0].user is not None
     assert bets[0].user.w3c_stats == []
     assert tally[0] == 3
 
@@ -295,6 +301,7 @@ def test_career_stats_cost_four_statements(league: dict[str, Any]) -> None:
         career, total = service.get_all()
     assert len(career) == 3
     assert total == 3
+    assert career[0].user is not None
     assert career[0].user.name
     assert tally[0] == 4
 
@@ -332,11 +339,11 @@ def test_career_statement_count_holds_when_the_players_grow(
         session.add(
             Series(
                 match_id=league["match_id"],
-                player1_id=players[0].id,
-                player2_id=players[1].id,
+                player1_id=ident(players[0]),
+                player2_id=ident(players[1]),
                 player1_score=2,
                 player2_score=0,
-                host_player_id=players[0].id,
+                host_player_id=ident(players[0]),
             )
         )
         session.commit()
@@ -373,6 +380,7 @@ def test_one_career_row_costs_three_statements(league: dict[str, Any]) -> None:
     service = PlayerCareerStatsService()
     with count_statements() as tally:
         stats = service.get_by_user_id(league["player_ids"][0])
+    assert stats is not None
     assert stats.series_won == 1
     assert tally[0] == 3
 
@@ -387,14 +395,14 @@ def add_teams_to_the_season(season_id: int, count: int) -> None:
             team = Team(name=f"Extra {index}")
             session.add(team)
             session.flush()
-            session.add(DBTeamSeason(team_id=team.id, season_id=season_id))
+            session.add(DBTeamSeason(team_id=ident(team), season_id=season_id))
         session.commit()
 
 
 def test_the_teams_of_a_season_cost_seven_statements(league: dict[str, Any]) -> None:
     """Three for the teams and their people, two for the standings and two for
     the season record of every player."""
-    service = TeamService(user_app_service=None)
+    service = TeamService(UserService())
     with count_statements() as tally:
         teams = service.get_teams_season(league["season_id"])
     assert len(teams) == 2
@@ -408,7 +416,7 @@ def test_the_standings_count_holds_when_the_teams_grow(
     """Four more teams in the season, the same seven statements."""
     add_teams_to_the_season(league["season_id"], 4)
 
-    service = TeamService(user_app_service=None)
+    service = TeamService(UserService())
     with count_statements() as tally:
         teams = service.get_teams_season(league["season_id"])
     assert len(teams) == 6
@@ -423,7 +431,7 @@ def test_career_options_cover_the_player_graph(league: dict[str, Any]) -> None:
     """
     options = (
         *PlayerCareerStats.eager_options(),
-        joinedload(PlayerCareerStats.user).raiseload("*"),
+        joinedload(rel(PlayerCareerStats.user)).raiseload("*"),
     )
     with Session() as session:
         stats = session.scalars(
@@ -434,6 +442,7 @@ def test_career_options_cover_the_player_graph(league: dict[str, Any]) -> None:
         assert stats is not None
         public = PlayerCareerStatsPublic.from_career_stats(stats)
 
+    assert public.user is not None
     assert public.user.name
     assert public.user.race
     assert not hasattr(public.user, "w3c_stats")

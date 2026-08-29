@@ -84,7 +84,7 @@ def import_historical_csv(
     if file is None:
         raise BadRequestError("No file provided")
 
-    if file.filename == "":
+    if not file.filename:
         raise BadRequestError("No file selected")
 
     if not file.filename.endswith(".csv"):

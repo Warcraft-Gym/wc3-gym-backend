@@ -16,6 +16,7 @@ from fastapi import FastAPI
 from httpx2 import Client
 
 from app.core.db import Session
+from app.models.base import ident
 from app.models.enums import Race
 from app.models.match import Match
 from app.models.series import Series
@@ -32,7 +33,7 @@ def record(user_id: int, season_id: int) -> UserTeamSeasonStatsPublic:
     return stats
 
 
-def add_series(**values: object) -> int:
+def add_series(**values: Any) -> int:  # noqa: ANN401  # the Series fields
     with Session() as session:
         series = Series(**values)
         session.add(series)
@@ -126,7 +127,7 @@ def test_a_player_with_no_series_in_the_season_counts_nothing(
         )
         session.add(stranger)
         session.commit()
-        stranger_id = stranger.id
+        stranger_id = ident(stranger)
 
     stats = record(stranger_id, seeded["season_id"])
     assert (stats.games, stats.wins, stats.losses) == (0, 0, 0)

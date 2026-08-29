@@ -49,7 +49,7 @@ def answer_w3c(monkeypatch: pytest.MonkeyPatch, reply: list[W3CStatsCreate]) -> 
 def stamped_at(user_id: int) -> datetime | None:
     """When the last sync of this player reached w3champions."""
     with Session() as session:
-        return session.get(User, user_id).w3c_synced_at
+        return session.get_one(User, user_id).w3c_synced_at
 
 
 def rows_of(user_id: int) -> list[W3CStats]:

@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Annotated, Self
 
 from sqlmodel import SQLModel
 
+from app.models.base import ident
 from app.models.types import NumToStr
 
 if TYPE_CHECKING:
@@ -25,7 +26,7 @@ class TeamReduced(SQLModel):
     @classmethod
     def from_team(cls, team: "Team") -> Self:
         return cls(
-            id=team.id,
+            id=ident(team),
             name=team.name,
             long_name=team.long_name,
             discord_role=team.discord_role,

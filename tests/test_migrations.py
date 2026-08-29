@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
-from sqlalchemy import Column, column, create_engine, table, text
+from sqlalchemy import Column, Index, column, create_engine, table, text
 from sqlmodel import SQLModel
 
 from tests.migrate import fresh_database, upgrade_to, upgrade_to_head
@@ -31,7 +31,7 @@ def comparable(
     The natural keys are checked by the writes they refuse instead, in
     tests/test_natural_keys.py.
     """
-    if type_ == "index":
+    if isinstance(obj, Index):
         return all(isinstance(part, Column) for part in obj.expressions)
     return True
 

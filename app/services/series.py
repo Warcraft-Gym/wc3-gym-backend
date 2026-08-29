@@ -25,19 +25,19 @@ logger = logging.getLogger(__name__)
 class SeriesService:
     def add(self, series: SeriesCreate) -> SeriesPublic:
         with Session.begin() as session:
-            series = Series.add(session, series.model_dump())
-            public = SeriesPublic.from_series(series)
+            row = Series.add(session, series.model_dump())
+            public = SeriesPublic.from_series(row)
             derived.fill_series(session, [public])
             return public
 
     def update(self, series_id: int, series: SeriesUpdate) -> SeriesPublic:
         with Session.begin() as session:
-            series = Series.update(
+            row = Series.update(
                 session, series_id, **series.model_dump(exclude_unset=True)
             )
-            if not series:
+            if not row:
                 raise NotFoundError("Series not found")
-            public = SeriesPublic.from_series(series)
+            public = SeriesPublic.from_series(row)
             derived.fill_series(session, [public])
             return public
 
@@ -74,6 +74,8 @@ class SeriesService:
         with Session.begin() as session:
             result = []
             filter = QueryUtil.convert_query_to_db_filter(Series, query)
+            if filter is None:
+                return []
             statement = (
                 select(Series).options(*Series._list_eager_options()).where(filter)
             )

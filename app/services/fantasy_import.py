@@ -17,6 +17,7 @@ from sqlmodel import col
 
 from app.core.db import Session
 from app.core.exceptions import BadRequestError, NotFoundError
+from app.models.base import ident
 from app.models.enums import Race
 from app.models.fantasy_bet import FantasyBet
 from app.models.fantasy_team import FantasyTeam, FantasyTeamCreate
@@ -142,6 +143,8 @@ def _drafts(
     for row in rows:
         name = cell_value(row.iloc[0])
         tag = cell_value(row.iloc[1])
+        if not name:
+            raise BadRequestError("Team without name")
         if not tag:
             raise BadRequestError(f"Team without captain: {name}")
         found_users = by_tag.get(folded(tag), [])
@@ -196,7 +199,7 @@ def _drafts(
             if len(found_players) != 1:
                 raise BadRequestError(f"Could not find player by name: {cell}")
             players.append(found_players[0])
-        drafts.append(Draft(name, captain, found_teams[0].id, race, players))
+        drafts.append(Draft(name, captain, ident(found_teams[0]), race, players))
     return drafts, captains
 
 
@@ -218,7 +221,7 @@ def _teams(session: OrmSession, rows: list[pd.Series], season_id: int) -> None:
         values = FantasyTeamCreate(
             name=draft.name,
             season_id=season_id,
-            captain_id=draft.captain.id,
+            captain_id=ident(draft.captain),
             drafted_team_id=draft.team_id,
             drafted_race=draft.race,
         )
@@ -241,7 +244,10 @@ def _drafted_players(
     session: OrmSession, drafted: list[tuple[FantasyTeam, list[User]]]
 ) -> None:
     """The drafted players a row names replace the ones its team holds."""
-    wanted = {fteam.id: {player.id for player in players} for fteam, players in drafted}
+    wanted = {
+        ident(fteam): {ident(player) for player in players}
+        for fteam, players in drafted
+    }
     if not wanted:
         return
     linked: set[tuple[int, int]] = set()
@@ -395,9 +401,9 @@ def _bets(
         else:
             bet = FantasyBet(
                 season_id=season_id,
-                series_id=played.id,
-                user_id=captain.id,
-                winner_id=bet_player.id,
+                series_id=ident(played),
+                user_id=ident(captain),
+                winner_id=ident(bet_player),
                 bet_points=points,
             )
             written.append(bet)

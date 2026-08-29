@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Annotated, Any, Self
 from sqlalchemy import Index, text
 from sqlmodel import Field, Relationship, SQLModel
 
-from app.models.base import DBModel
+from app.models.base import DBModel, ident
 from app.models.enums import Race
 from app.models.season import SeasonPublic
 from app.models.types import EnumValue, NoneToList, NumToStr, SuggestRace
@@ -98,7 +98,7 @@ class UserReduced(UserBase):
     def from_user_reduced(cls, user: User) -> Self:
         """The scalar fields of the user. A subclass keeps its collections empty."""
         return cls(
-            id=user.id,
+            id=ident(user),
             name=user.name,
             battleTag=user.battleTag,
             discordTag=user.discordTag,

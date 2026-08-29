@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session as OrmSession
 from sqlalchemy.orm import joinedload
 from sqlmodel import col
 
-from app.core.db import Session
+from app.core.db import Session, rel
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.models.enums import Race
 from app.models.koth_event import (
@@ -43,7 +43,7 @@ logger = logging.getLogger(__name__)
 
 
 class KothService:
-    def __init__(self, settings_app_service: "SettingsService | None" = None) -> None:
+    def __init__(self, settings_app_service: "SettingsService") -> None:
         self.settings_app_service = settings_app_service
 
     # ============ Event Methods ============
@@ -71,10 +71,10 @@ class KothService:
                 session.scalars(
                     select(KothEvent)
                     .options(
-                        joinedload(KothEvent.signups),
-                        joinedload(KothEvent.matches)
-                        .joinedload(KothMatch.participants)
-                        .joinedload(KothMatchParticipant.signup),
+                        joinedload(rel(KothEvent.signups)),
+                        joinedload(rel(KothEvent.matches))
+                        .joinedload(rel(KothMatch.participants))
+                        .joinedload(rel(KothMatchParticipant.signup)),
                     )
                     .where(col(KothEvent.id) == event_id)
                 )
@@ -103,10 +103,10 @@ class KothService:
                 session.scalars(
                     select(KothEvent)
                     .options(
-                        joinedload(KothEvent.signups),
-                        joinedload(KothEvent.matches)
-                        .joinedload(KothMatch.participants)
-                        .joinedload(KothMatchParticipant.signup),
+                        joinedload(rel(KothEvent.signups)),
+                        joinedload(rel(KothEvent.matches))
+                        .joinedload(rel(KothMatch.participants))
+                        .joinedload(rel(KothMatchParticipant.signup)),
                     )
                     .where(col(KothEvent.id) == active_event_id)
                 )
@@ -208,7 +208,7 @@ class KothService:
         w3c_service = W3CService(settings_app_service=self.settings_app_service)
 
         # Get stats from the most recent season (within last 3 seasons)
-        race_mmr_data = {}  # {race: mmr} for the found season
+        race_mmr_data: dict[str, int] = {}  # {race: mmr} for the found season
         w3c_name = battle_tag
 
         current_season = w3c_service.current_season()
@@ -218,7 +218,7 @@ class KothService:
                 stats = w3c_service.get_player_stats(battle_tag, season_override=season)
                 if stats:
                     for stat in stats:
-                        if stat.mmr and stat.mmr > 0:
+                        if stat.race and stat.mmr and stat.mmr > 0:
                             # Race is an object, get the value string
                             race_mmr_data[stat.race.value] = stat.mmr
 
@@ -257,7 +257,7 @@ class KothService:
                     f"No valid MMR data found for {battle_tag} in the last 3 seasons"
                 )
 
-            highest_race = max(race_mmr_data, key=race_mmr_data.get)
+            highest_race = max(race_mmr_data, key=lambda race: race_mmr_data[race])
             avg_mmr = race_mmr_data[highest_race]
             final_race = highest_race
 
@@ -339,8 +339,8 @@ class KothService:
                 session.scalars(
                     select(KothMatch)
                     .options(
-                        joinedload(KothMatch.participants).joinedload(
-                            KothMatchParticipant.signup
+                        joinedload(rel(KothMatch.participants)).joinedload(
+                            rel(KothMatchParticipant.signup)
                         )
                     )
                     .where(col(KothMatch.id) == match_id)
@@ -359,8 +359,8 @@ class KothService:
             statement = (
                 select(KothMatch)
                 .options(
-                    joinedload(KothMatch.participants).joinedload(
-                        KothMatchParticipant.signup
+                    joinedload(rel(KothMatch.participants)).joinedload(
+                        rel(KothMatchParticipant.signup)
                     )
                 )
                 .where(col(KothMatch.event_id) == event_id)
@@ -466,7 +466,7 @@ class KothService:
             participants = (
                 session.scalars(
                     select(KothMatchParticipant)
-                    .options(joinedload(KothMatchParticipant.signup))
+                    .options(joinedload(rel(KothMatchParticipant.signup)))
                     .where(col(KothMatchParticipant.match_id) == match_id)
                     .order_by(col(KothMatchParticipant.team_number))
                 )

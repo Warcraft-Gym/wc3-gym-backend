@@ -15,6 +15,7 @@ import pytest
 from httpx2 import Client
 
 from app.core.db import Session
+from app.models.base import ident
 from app.models.enums import Race
 from app.models.match import Match
 from app.models.player_career_stats import PlayerCareerStats
@@ -209,9 +210,9 @@ def league(client: Client) -> dict[str, Any]:
 
         matches = [
             Match(
-                team1_id=teams[0].id,
-                team2_id=teams[1].id,
-                season_id=season.id,
+                team1_id=ident(teams[0]),
+                team2_id=ident(teams[1]),
+                season_id=ident(season),
                 playday=1,
             )
             for season in seasons
@@ -222,13 +223,13 @@ def league(client: Client) -> dict[str, Any]:
         for one, two, own, opp, season in RESULTS:
             session.add(
                 Series(
-                    match_id=matches[season].id,
+                    match_id=ident(matches[season]),
                     date_time=datetime(2026, 1, 7, 19, 0),
-                    player1_id=players[one].id,
-                    player2_id=players[two].id,
+                    player1_id=ident(players[one]),
+                    player2_id=ident(players[two]),
                     player1_score=own,
                     player2_score=opp,
-                    host_player_id=players[one].id,
+                    host_player_id=ident(players[one]),
                 )
             )
 

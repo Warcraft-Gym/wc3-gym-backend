@@ -12,6 +12,7 @@ from app.core.ordering import SortOrder
 from app.models.player_career_stats import (
     PlayerCareerStats,
     PlayerCareerStatsPublic,
+    PlayerCareerStatsUpdate,
 )
 from app.models.user import User
 from app.services import derived
@@ -197,7 +198,7 @@ class PlayerCareerStatsService:
         return {"imported": imported, "skipped": skipped, "errors": errors}
 
     def update_career_stats(
-        self, stat_id: int, stats: PlayerCareerStatsPublic
+        self, stat_id: int, stats: PlayerCareerStatsUpdate
     ) -> PlayerCareerStatsPublic | None:
         """Update career stats (historical values and user link)"""
         with Session.begin() as session:

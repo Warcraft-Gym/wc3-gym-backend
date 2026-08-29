@@ -52,12 +52,13 @@ ignore = [
 testpaths = ["tests"]
 
 # ty ratchet: rules at "ignore" still fail today; flip each to "error" once its
-# diagnostics are fixed. The first three are SQLModel typing class attributes as
-# instance values (User.id is `int | None`, not a column); the fix is sqlmodel.col().
+# diagnostics are fixed. SQLModel types a class attribute as its instance value
+# (User.id is `int | None`, not a column); sqlmodel.col() and app.core.db.rel()
+# give an expression its column type, app.models.base.ident() a stored row its id.
 [tool.ty.rules]
-invalid-argument-type = "ignore"
-unresolved-attribute = "ignore"
-no-matching-overload = "ignore"
+invalid-argument-type = "error"
+unresolved-attribute = "error"
+no-matching-overload = "error"
 invalid-return-type = "error"
 invalid-assignment = "ignore"
 not-subscriptable = "ignore"

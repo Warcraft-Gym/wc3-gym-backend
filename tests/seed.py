@@ -15,6 +15,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from app.models.base import ident
 from app.models.enums import Race
 from app.models.fantasy_bet import FantasyBet
 from app.models.fantasy_team import FantasyTeam
@@ -91,51 +92,62 @@ def seed_league(session: Session) -> dict[str, Any]:
 
     session.add_all(
         [
-            DBTeamSeason(team_id=team_a.id, season_id=season.id),
-            DBTeamSeason(team_id=team_b.id, season_id=season.id),
-            DBMapSeason(map_id=game_map.id, season_id=season.id),
+            DBTeamSeason(team_id=ident(team_a), season_id=ident(season)),
+            DBTeamSeason(team_id=ident(team_b), season_id=ident(season)),
+            DBMapSeason(map_id=ident(game_map), season_id=ident(season)),
             DBUserTeamSeason(
-                user_id=players[0].id, team_id=team_a.id, season_id=season.id
+                user_id=ident(players[0]),
+                team_id=ident(team_a),
+                season_id=ident(season),
             ),
             DBUserTeamSeason(
-                user_id=players[1].id, team_id=team_a.id, season_id=season.id
+                user_id=ident(players[1]),
+                team_id=ident(team_a),
+                season_id=ident(season),
             ),
             DBUserTeamSeason(
-                user_id=players[2].id, team_id=team_b.id, season_id=season.id
+                user_id=ident(players[2]),
+                team_id=ident(team_b),
+                season_id=ident(season),
             ),
             DBUserTeamSeason(
-                user_id=players[3].id, team_id=team_b.id, season_id=season.id
+                user_id=ident(players[3]),
+                team_id=ident(team_b),
+                season_id=ident(season),
             ),
         ]
     )
 
     match = Match(
-        team1_id=team_a.id, team2_id=team_b.id, season_id=season.id, playday=1
+        team1_id=ident(team_a),
+        team2_id=ident(team_b),
+        season_id=ident(season),
+        playday=1,
     )
     session.add(match)
     session.flush()
 
     series_played = Series(
-        match_id=match.id,
+        match_id=ident(match),
         date_time=datetime(2026, 1, 7, 19, 0),
-        player1_id=players[0].id,
-        player2_id=players[2].id,
+        player1_id=ident(players[0]),
+        player2_id=ident(players[2]),
         player1_score=2,
         player2_score=1,
-        host_player_id=players[0].id,
+        host_player_id=ident(players[0]),
     )
     series_open = Series(
-        match_id=match.id,
-        player1_id=players[1].id,
-        player2_id=players[3].id,
-        host_player_id=players[3].id,
+        match_id=ident(match),
+        player1_id=ident(players[1]),
+        player2_id=ident(players[3]),
+        host_player_id=ident(players[3]),
     )
     session.add_all([series_played, series_open])
 
     fantasy_team = FantasyTeam(
         name="The Optimists",
-        season_id=season.id,
-        captain_id=players[0].id,
+        season_id=ident(season),
+        captain_id=ident(players[0]),
         drafted_team_id=team_a.id,
         drafted_race=Race.HU,
     )
@@ -145,10 +157,10 @@ def seed_league(session: Session) -> dict[str, Any]:
     session.add_all(
         [
             FantasyBet(
-                season_id=season.id,
-                series_id=series_played.id,
-                user_id=players[0].id,
-                winner_id=players[0].id,
+                season_id=ident(season),
+                series_id=ident(series_played),
+                user_id=ident(players[0]),
+                winner_id=ident(players[0]),
                 bet_points=10,
             ),
             PlayerCareerStats(user_id=players[0].id, player_name="P1"),
@@ -202,7 +214,7 @@ def add_bets(session: Session, seeded: dict[str, Any], count: int) -> None:
     session.flush()
     series = [
         Series(
-            match_id=match.id,
+            match_id=ident(match),
             player1_id=players[0],
             player2_id=players[2],
             player1_score=2,
@@ -217,7 +229,7 @@ def add_bets(session: Session, seeded: dict[str, Any], count: int) -> None:
         [
             FantasyBet(
                 season_id=seeded["season_id"],
-                series_id=one.id,
+                series_id=ident(one),
                 user_id=players[1],
                 winner_id=players[0],
                 bet_points=10,
@@ -253,7 +265,7 @@ def add_fantasy_teams(seeded: dict[str, Any], count: int) -> None:
                 FantasyTeam(
                     name=f"Extra {index}",
                     season_id=seeded["season_id"],
-                    captain_id=captain.id,
+                    captain_id=ident(captain),
                     drafted_team_id=seeded["team_a_id"],
                     drafted_race=Race.HU,
                 )

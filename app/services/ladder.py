@@ -31,7 +31,13 @@ from sqlmodel import col
 
 from app.core import achievements, ladder
 from app.core.db import Session
-from app.core.exceptions import ExternalServiceError, NotFoundError, W3CThrottledError
+from app.core.exceptions import (
+    BadRequestError,
+    ExternalServiceError,
+    NotFoundError,
+    W3CThrottledError,
+)
+from app.models.base import ident
 from app.models.enums import Race
 from app.models.ladder_achievement import LadderAchievement
 from app.models.ladder_sync import LadderSync
@@ -123,7 +129,7 @@ class LadderService:
             earned = _earned(session, scope, roster, totals, season_id, paid)
             return SeasonLadder(
                 season=LadderSeason(
-                    id=season.id,
+                    id=ident(season),
                     start_date=season.start_date,
                     end_date=season.end_date,
                     synced_at=_season_stamp(stamps, user_ids),
@@ -221,7 +227,7 @@ class LadderService:
         )
 
     def sync_season_users(
-        self, season_id: int, users: list[UserReduced], max_age: timedelta
+        self, season_id: int, users: Sequence[UserReduced], max_age: timedelta
     ) -> W3CSyncResult:
         """Sync these players against the window of one season.
 
@@ -241,13 +247,14 @@ class LadderService:
             # already stored, an open one ends in the pinned season
             walk_from = None if open_window else _walk_start(session, end)
             fresh_since = _now() - max_age
-            synced_at = dict(
-                session.execute(
+            synced_at = {
+                user_id: stamp
+                for user_id, stamp in session.execute(
                     select(col(User.id), col(User.ladder_synced_at)).where(
                         col(User.id).in_([user.id for user in users])
                     )
-                ).all()
-            )
+                )
+            }
 
         pending: list[UserReduced] = []
         skipped: list[int] = []
@@ -293,7 +300,7 @@ class LadderService:
 
     def sync_users(
         self,
-        users: list[UserReduced],
+        users: Sequence[UserReduced],
         since: datetime,
         seasons: Sequence[int] | None = None,
         walk_from: int | None = None,
@@ -408,6 +415,8 @@ class LadderService:
                 )
             }
 
+        if not user.battleTag:
+            raise BadRequestError(f"User {user.id} has no battle tag to sync")
         throttled: W3CThrottledError | None = None
         try:
             if plan.seasons is None:
@@ -578,7 +587,8 @@ def _season_stamp(
     """The season is as fresh as its least fresh player, and unsynced while one
     rostered player has a season of the window unread."""
     read = [stamps.get(user_id) for user_id in user_ids]
-    return min(read) if read and all(stamp is not None for stamp in read) else None
+    stamped = [stamp for stamp in read if stamp is not None]
+    return min(stamped) if stamped and len(stamped) == len(read) else None
 
 
 def _walk_start(session: OrmSession, end: datetime) -> int | None:
@@ -936,7 +946,7 @@ def _paid(session: OrmSession, season_id: int | None) -> achievements.PaidSet:
     a rule: by not having one.
     """
     where = (
-        LadderAchievement.season_id == season_id
+        col(LadderAchievement.season_id) == season_id
         if season_id is not None
         else col(LadderAchievement.season_id).is_(None)
     )

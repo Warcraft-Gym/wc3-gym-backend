@@ -13,6 +13,7 @@ import pytest
 from httpx2 import Client
 
 from app.api.routes import import_export
+from app.models.base import ident
 
 SHEETS = [
     "Season",
@@ -94,14 +95,14 @@ def add_outsider(seeded: dict[str, Any]) -> int:
                 FantasyTeam(
                     name="The Outsiders",
                     season_id=seeded["season_id"],
-                    captain_id=outsider.id,
+                    captain_id=ident(outsider),
                     drafted_team_id=seeded["team_a_id"],
                     drafted_race=Race.HU,
                 ),
                 FantasyBet(
                     season_id=seeded["season_id"],
                     series_id=seeded["series_played_id"],
-                    user_id=outsider.id,
+                    user_id=ident(outsider),
                     winner_id=seeded["player_ids"][0],
                     bet_points=10,
                 ),
@@ -206,7 +207,7 @@ def test_an_exported_helpstone_season_imports_as_helpstone(
     assert imported.status_code == 200, imported.text
 
     with Session() as session:
-        assert session.get(Season, seeded["season_id"]).score_system == "helpstone"
+        assert session.get_one(Season, seeded["season_id"]).score_system == "helpstone"
 
 
 def draft_outsider(seeded: dict[str, Any]) -> int:
@@ -234,7 +235,9 @@ def draft_outsider(seeded: dict[str, Any]) -> int:
         )
         session.add_all([drafted, fteam])
         session.flush()
-        session.add(DBFantasyTeamPlayer(fantasy_team_id=fteam.id, user_id=drafted.id))
+        session.add(
+            DBFantasyTeamPlayer(fantasy_team_id=ident(fteam), user_id=ident(drafted))
+        )
         session.commit()
         assert drafted.id is not None
         return drafted.id

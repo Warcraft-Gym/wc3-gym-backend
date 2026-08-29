@@ -14,6 +14,7 @@ import pytest
 from fastapi import FastAPI
 
 from app.core.db import Session
+from app.models.base import ident
 from app.models.enums import Race
 from app.models.relationships import DBUserSeasonSignup
 from app.models.season import Season
@@ -38,7 +39,9 @@ def crowded(app: FastAPI, seeded: dict[str, Any]) -> dict[str, Any]:
         session.flush()
         for user_id in seeded["player_ids"]:
             for season in seasons:
-                session.add(DBUserSeasonSignup(user_id=user_id, season_id=season.id))
+                session.add(
+                    DBUserSeasonSignup(user_id=user_id, season_id=ident(season))
+                )
             session.add(
                 W3CStats(user_id=user_id, wc3_season=20, race=Race.HU, mmr=1500)
             )
