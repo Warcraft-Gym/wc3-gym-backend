@@ -5,8 +5,9 @@ written by capture.py), so the shape under test is the shape the service
 answers with.
 """
 
+import inspect
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +18,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as OrmSession
 
+from app.api.routes.seasons import sync_ladder_season_signups
 from app.core.db import Session
 from app.core.exceptions import W3CThrottledError
 from app.models.enums import Race
@@ -24,10 +26,12 @@ from app.models.ladder_sync import LadderSync
 from app.models.relationships import DBUserSeasonSignup
 from app.models.season import Season
 from app.models.user import User, UserCreate, UserReduced
+from app.models.user_team_season import DBUserTeamSeason
 from app.models.w3c_ladder_match import W3CLadderMatch, W3CLadderMatchCreate
+from app.models.w3c_stats import W3CStats, W3CStatsCreate
 from app.services import w3c as w3c_module
 from app.services.ladder import LadderService
-from app.services.users import UserService
+from app.services.users import W3C_SYNC_WORKERS, UserService
 from app.services.w3c import THROTTLED_MESSAGE, W3CService
 
 FIXTURES = Path(__file__).parent / "data" / "w3c"
@@ -102,6 +106,10 @@ def serve(
 
     monkeypatch.setattr(w3c_module, "MATCH_PAGE_SIZE", page_size)
     monkeypatch.setattr(W3CService, "send_request", fake.send_request)
+    # One sync reads the stats too; these tests are about the matches
+    monkeypatch.setattr(
+        W3CService, "get_player_stats", lambda self, tag, season_override=None: []
+    )
     monkeypatch.setattr(W3CService, "current_season", lambda self: W3C_SEASON)
     monkeypatch.setattr(W3CService, "_page_season", page)
     return fake
@@ -129,9 +137,14 @@ def add_player(name: str, battle_tag: str) -> UserReduced:
     )
 
 
-def sign_up(season_id: int, user_id: int) -> None:
+def sign_up(season_id: int, user_id: int, team_id: int | None = None) -> None:
+    """Sign a player up, and put him on a team when one is named."""
     with Session() as session:
         session.add(DBUserSeasonSignup(user_id=user_id, season_id=season_id))
+        if team_id is not None:
+            session.add(
+                DBUserTeamSeason(user_id=user_id, team_id=team_id, season_id=season_id)
+            )
         session.commit()
 
 
@@ -298,10 +311,10 @@ def test_the_walk_is_capped(monkeypatch: pytest.MonkeyPatch) -> None:
 # The sync, against the database.
 
 
-def test_a_match_between_two_gnl_players_writes_both_rows(
+def test_a_sync_writes_no_row_for_the_opponent(
     app: FastAPI, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """One payload carries both sides, so both rows are written at once."""
+    """The payload carries both sides; a worker writes the player it syncs."""
     match = next(m for m in THANKS if m["id"] == "6a6ea769ea6bb176a031b63d")
     thanks = add_player("thanks", "thanks#11187")
     rhax = add_player("rhax", "rhaxtamanN#2250")
@@ -311,9 +324,10 @@ def test_a_match_between_two_gnl_players_writes_both_rows(
 
     assert result.synced == [thanks.id]
     rows = {row.user_id: row for row in stored()}
+    assert set(rows) == {thanks.id}
     assert rows[thanks.id].won is False
-    assert rows[rhax.id].won is True
-    assert rows[rhax.id].opp_battletag == "thanks#11187"
+    assert rows[thanks.id].opp_battletag == "rhaxtamanN#2250"
+    assert rhax.id not in rows
 
 
 def test_a_second_sync_writes_no_second_row(
@@ -470,7 +484,7 @@ def test_a_throttle_keeps_the_seasons_read_before_it(
 ) -> None:
     """The finished season is written and stamped; the refused one is not."""
     thanks = add_player("thanks", "thanks#11187")
-    sign_up(seeded["season_id"], thanks.id)
+    sign_up(seeded["season_id"], thanks.id, seeded["team_a_id"])
     # The window sits in two w3champions seasons, read newest first
     store_match(thanks.id, W3C_SEASON, datetime(2026, 1, 10))
     store_match(thanks.id, W3C_SEASON - 1, datetime(2026, 1, 11))
@@ -657,6 +671,120 @@ def test_the_ladder_sync_route_stores_the_matches_of_the_signups(
     assert resp.json()["synced"] == [player]
     with Session() as session:
         assert session.scalar(select(func.count()).select_from(W3CLadderMatch)) == 4
+
+
+def test_the_season_sync_counts_the_players_on_a_team(
+    app: FastAPI, seeded: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The ladder page shows the players on a team, so the sync walks those."""
+    for player in seeded["player_ids"]:
+        sign_up(seeded["season_id"], player)
+    bench = add_player("bench", "bench#9999")
+    sign_up(seeded["season_id"], bench.id)
+    serve(monkeypatch, {})
+
+    result = LadderService().sync_season(seeded["season_id"])
+
+    assert result.total == len(seeded["player_ids"])
+    assert result.synced == seeded["player_ids"]
+    assert bench.id not in result.synced
+
+
+def test_a_player_synced_a_moment_ago_is_skipped(
+    app: FastAPI, seeded: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A second press of the button costs no w3champions call."""
+    for player in seeded["player_ids"]:
+        sign_up(seeded["season_id"], player)
+    fake = serve(monkeypatch, {})
+
+    first = LadderService().sync_season(seeded["season_id"])
+    fake.calls.clear()
+    second = LadderService().sync_season(seeded["season_id"])
+
+    assert first.synced == seeded["player_ids"]
+    assert second.skipped == seeded["player_ids"]
+    assert second.synced == []
+    assert fake.calls == []
+
+
+def test_a_player_is_synced_again_once_max_age_has_passed(
+    app: FastAPI, seeded: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    for player in seeded["player_ids"]:
+        sign_up(seeded["season_id"], player)
+    serve(monkeypatch, {})
+
+    LadderService().sync_season(seeded["season_id"])
+    result = LadderService().sync_season(
+        seeded["season_id"], max_age=timedelta(seconds=0)
+    )
+
+    assert result.skipped == []
+    assert result.synced == seeded["player_ids"]
+
+
+def test_the_ladder_sync_route_syncs_one_worker_wave() -> None:
+    """One chunk is one wave of workers, so the default limit is that many."""
+    limit = inspect.signature(sync_ladder_season_signups).parameters["limit"]
+
+    assert limit.default == W3C_SYNC_WORKERS
+
+
+def test_one_sync_writes_the_stats_and_the_matches_of_a_player(
+    app: FastAPI, seeded: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """One press per player: his MMR row and his ladder rows in one worker."""
+    player = seeded["player_ids"][0]
+    with Session() as session:
+        session.get(User, player).battleTag = "thanks#11187"
+        session.commit()
+    sign_up(seeded["season_id"], player)
+    serve(monkeypatch, {W3C_SEASON: THANKS[:2]})
+    monkeypatch.setattr(
+        W3CService,
+        "get_player_stats",
+        lambda self, tag, season_override=None: [
+            W3CStatsCreate(wc3_season=season_override, race=Race.HU, mmr=1500, games=20)
+        ],
+    )
+
+    result = LadderService().sync_season(seeded["season_id"])
+
+    assert result.synced == [player]
+    with Session() as session:
+        stats = session.scalars(
+            select(W3CStats).where(W3CStats.user_id == player)
+        ).all()
+        user = session.get(User, player)
+    assert [row.mmr for row in stats] == [1500, 1500]
+    assert len(stored()) == 2
+    assert user.w3c_synced_at is not None
+    assert user.ladder_synced_at is not None
+
+
+def test_the_single_player_route_syncs_the_season_running_today(
+    client: Client,
+    auth_headers: dict[str, str],
+    seeded: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The route reads the matches of the season today sits in."""
+    player = seeded["player_ids"][0]
+    today = datetime.now(UTC).date()
+    with Session() as session:
+        user = session.get(User, player)
+        user.battleTag = "thanks#11187"
+        season = session.get(Season, seeded["season_id"])
+        season.start_date = today - timedelta(days=1)
+        season.end_date = today + timedelta(days=1)
+        session.commit()
+    serve(monkeypatch, {W3C_SEASON: THANKS[:2]})
+
+    resp = client.post(f"/users/{player}/w3c-sync", headers=auth_headers)
+
+    assert resp.status_code == 200
+    assert len(stored()) == 2
 
 
 def test_the_ladder_sync_route_answers_404_for_an_unknown_season(

@@ -10,12 +10,11 @@ from app.core.query import QueryElement, QueryUtil
 from app.models.season import Season
 from app.models.team import Team, TeamCreate, TeamPublic, TeamUpdate
 from app.models.team_season import DBTeamSeason
-from app.models.user import User
+from app.models.user import User, UserListPublic
 from app.models.user_team_season import DBUserTeamSeason
-from app.models.w3c_stats import W3CSyncResult
 from app.services import derived
 from app.services.base import BaseService
-from app.services.users import SYNC_MAX_AGE, UserService
+from app.services.users import UserService
 
 logger = logging.getLogger(__name__)
 
@@ -394,7 +393,7 @@ class TeamService(BaseService):
                 result.append(team_data)
         return result
 
-    def sync_w3c_stats_team(self, team_id: int, season_id: int) -> W3CSyncResult:
+    def season_players(self, team_id: int, season_id: int) -> list[UserListPublic]:
+        """The players this team fielded in this season."""
         team = self.get_with_nested_users_by_season(team_id, season_id)
-        users = team.player_by_season.get(season_id) or []
-        return self.user_app_service.sync_w3c_stats_users(users, SYNC_MAX_AGE)
+        return team.player_by_season.get(season_id) or []

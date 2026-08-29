@@ -4,11 +4,12 @@ from typing import Annotated
 
 from fastapi import APIRouter, Body, Depends, File, Query, Request, Response, UploadFile
 
-from app.api.deps import TeamServiceDep, require_admin
+from app.api.deps import LadderServiceDep, TeamServiceDep, require_admin
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.core.query import QueryUtil
 from app.models.team import TeamCreate, TeamPublic, TeamUpdate
 from app.models.w3c_stats import W3CSyncResult
+from app.services.users import SYNC_MAX_AGE
 
 logger = logging.getLogger(__name__)
 
@@ -166,10 +167,12 @@ def search_teams(
     dependencies=[Depends(require_admin)],
 )
 def sync_w3c_users_season(
-    team_id: int, season_id: int, service: TeamServiceDep
+    team_id: int, season_id: int, service: TeamServiceDep, ladder: LadderServiceDep
 ) -> W3CSyncResult:
-    """Sync w3c information for each user of the team, and report every player"""
-    return service.sync_w3c_stats_team(team_id, season_id)
+    """Sync the stats and the matches of each player of the team, and report
+    every player."""
+    users = service.season_players(team_id, season_id)
+    return ladder.sync_season_users(season_id, users, SYNC_MAX_AGE)
 
 
 @router.post("/teams/{team_id}/image", dependencies=[Depends(require_admin)])

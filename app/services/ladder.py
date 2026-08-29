@@ -1,7 +1,7 @@
 """Store the w3champions ladder matches of the GNL players.
 
 The ladder page aggregates these rows at read time, so the sync only has to
-put every match of every signed-up player in the table once.
+put every match of every player on a team in the table once.
 """
 
 import logging
@@ -30,7 +30,7 @@ from sqlalchemy.orm import aliased
 
 from app.core import achievements, ladder
 from app.core.db import Session
-from app.core.exceptions import NotFoundError, W3CThrottledError
+from app.core.exceptions import ExternalServiceError, NotFoundError, W3CThrottledError
 from app.models.enums import Race
 from app.models.ladder_achievement import LadderAchievement
 from app.models.ladder_sync import LadderSync
@@ -55,7 +55,7 @@ from app.models.w3c_ladder_match import (
     W3CLadderMatchCreate,
 )
 from app.models.w3c_stats import W3CSyncFailure, W3CSyncResult
-from app.services.users import W3C_SYNC_WORKERS
+from app.services.users import SYNC_MAX_AGE, W3C_SYNC_WORKERS, UserService
 from app.services.w3c import THROTTLED_MESSAGE, W3CService
 
 if TYPE_CHECKING:
@@ -89,6 +89,7 @@ class LadderService:
 
     def __init__(self, settings_app_service: "SettingsService | None" = None) -> None:
         self.settings_app_service = settings_app_service
+        self.user_app_service = UserService(settings_app_service=settings_app_service)
 
     def season_ladder(self, season_id: int) -> SeasonLadder:
         """The ladder of one season: its teams, its players and its hours.
@@ -191,12 +192,41 @@ class LadderService:
             return answer
 
     def sync_season(
-        self, season_id: int, offset: int = 0, limit: int = 10
+        self,
+        season_id: int,
+        offset: int = 0,
+        limit: int = W3C_SYNC_WORKERS,
+        max_age: timedelta = SYNC_MAX_AGE,
     ) -> LadderSyncResult:
-        """Sync one chunk of the players signed up for the season.
+        """Sync one chunk of the players on a team of the season."""
+        with Session.begin() as session:
+            if session.get(Season, season_id) is None:
+                raise NotFoundError("Season not found")
+            # The ladder page counts the players on a team, so the sync walks
+            # the same list
+            roster = [r for r in _roster(session, season_id) if r.team_id is not None]
+        total = len(roster)
+        rows = roster[offset : offset + limit]
+        users = [
+            UserReduced(id=row.user_id, name=row.name, battleTag=row.battleTag)
+            for row in rows
+        ]
 
-        The window starts at the season start date, so a chunk backfills as
-        well as it refreshes.
+        result = self.sync_season_users(season_id, users, max_age)
+        done = offset + len(rows)
+        next_offset = done if done < total else None
+        return LadderSyncResult(
+            **result.model_dump(), total=total, next_offset=next_offset
+        )
+
+    def sync_season_users(
+        self, season_id: int, users: list[UserReduced], max_age: timedelta
+    ) -> W3CSyncResult:
+        """Sync these players against the window of one season.
+
+        The window starts at the season start date, so a run backfills as
+        well as it refreshes. A player synced more recently than max_age is
+        skipped untouched; a max_age of zero syncs everyone.
         """
         with Session.begin() as session:
             season = session.get(Season, season_id)
@@ -209,37 +239,55 @@ class LadderService:
             # The bootstrap start: a closed window is dated by the matches
             # already stored, an open one ends in the pinned season
             walk_from = None if open_window else _walk_start(session, end)
-            total = session.scalar(
-                select(func.count())
-                .select_from(DBUserSeasonSignup)
-                .where(DBUserSeasonSignup.season_id == season_id)
+            fresh_since = _now() - max_age
+            synced_at = dict(
+                session.execute(
+                    select(User.id, User.ladder_synced_at).where(
+                        User.id.in_([user.id for user in users])
+                    )
+                ).all()
             )
-            rows = session.execute(
-                select(User.id, User.name, User.battleTag)
-                .join(DBUserSeasonSignup, DBUserSeasonSignup.user_id == User.id)
-                .where(DBUserSeasonSignup.season_id == season_id)
-                .order_by(User.id)
-                .offset(offset)
-                .limit(limit)
-            ).all()
 
-        if seasons and open_window:
+        pending: list[UserReduced] = []
+        skipped: list[int] = []
+        for user in users:
+            stamp = synced_at.get(user.id)
+            if stamp is not None and stamp > fresh_since:
+                skipped.append(user.id)
+            else:
+                pending.append(user)
+
+        if pending and seasons and open_window:
             # w3champions can have opened a season no stored match names yet
             open_season = W3CService(
                 settings_app_service=self.settings_app_service
             ).current_season()
             seasons = sorted({*seasons, open_season}, reverse=True)
 
-        users = [
-            UserReduced(id=row.id, name=row.name, battleTag=row.battleTag)
-            for row in rows
-        ]
-        result = self.sync_users(users, since, seasons, walk_from)
-        done = offset + len(users)
-        next_offset = done if done < (total or 0) else None
-        return LadderSyncResult(
-            **result.model_dump(), total=total or 0, next_offset=next_offset
-        )
+        result = self.sync_users(pending, since, seasons, walk_from)
+        result.skipped = skipped
+        return result
+
+    def sync_user(self, user_id: int) -> None:
+        """Sync one player now: his stats, and his matches of the season
+        running today. Outside a season his stats are all there is to read."""
+        with Session.begin() as session:
+            user = UserReduced.from_user_reduced(session.get(User, user_id))
+            if user is None:
+                raise NotFoundError("User not found")
+            today = _now().date()
+            season_id = session.scalar(
+                select(Season.id).where(
+                    Season.start_date <= today, Season.end_date >= today
+                )
+            )
+
+        if season_id is None:
+            self.user_app_service.update_w3c_stats(user)
+            return
+        result = self.sync_season_users(season_id, [user], timedelta(0))
+        if result.failed:
+            raise ExternalServiceError(result.failed[0].reason)
 
     def sync_users(
         self,
@@ -248,7 +296,8 @@ class LadderService:
         seasons: Sequence[int] | None = None,
         walk_from: int | None = None,
     ) -> W3CSyncResult:
-        """Store the matches these players started at or after `since`.
+        """Sync these players: their stats, and the matches they started at or
+        after `since`.
 
         `seasons` names the w3champions seasons of a GNL window. Naming none,
         which is a window with no stored match to date it, walks down from
@@ -267,7 +316,6 @@ class LadderService:
             seasons=named,
             walk_from=walk_from or open_season,
         )
-        owners = self._user_ids_by_battle_tag()
         synced: set[int] = set()
         failures: dict[int, str] = {}
         throttled = False
@@ -275,8 +323,7 @@ class LadderService:
         # Each worker opens its own session; the threads share the engine only
         with ThreadPoolExecutor(W3C_SYNC_WORKERS) as pool:
             futures = {
-                pool.submit(self._sync_user, u, w3c_service, plan, owners): u
-                for u in users
+                pool.submit(self._sync_user, u, w3c_service, plan): u for u in users
             }
             for future in as_completed(futures):
                 if future.cancelled():
@@ -337,14 +384,16 @@ class LadderService:
         user: UserReduced,
         w3c_service: W3CService,
         plan: _Plan,
-        owners: dict[str, int],
     ) -> None:
-        """Fetch what this player still owes the plan and write every row a
-        GNL player owns.
+        """Sync this player: his w3champions stats, then the matches he still
+        owes the plan.
 
         A throttle part way through the plan still writes the seasons read
         before it, and then refuses the player.
         """
+        # One worker per player, so the stats and the matches are one sync
+        self.user_app_service.update_w3c_stats(user)
+
         with Session.begin() as session:
             ledger = {
                 row.wc3_season: row
@@ -381,18 +430,14 @@ class LadderService:
             matches, complete = refusal.fetched
             throttled = refusal
 
-        by_user: dict[int, list[W3CLadderMatchCreate]] = defaultdict(list)
-        for row in matches:
-            # The opponent's row is written from the same payload; the unique
-            # index makes his own sync a no-op.
-            owner = owners.get(row.battleTag.lower())
-            if owner is not None:
-                by_user[owner].append(row)
+        # A worker writes this player alone; writing the opponent's rows too
+        # made two workers order the same users in reverse and deadlock
+        tag = user.battleTag.lower()
+        own = [row for row in matches if row.battleTag.lower() == tag]
 
         stamp = _now()
         with Session.begin() as session:
-            for user_id, rows in by_user.items():
-                self._write_matches(session, user_id, rows)
+            self._write_matches(session, user.id, own)
             # The ledger names the seasons this run read; a skipped one keeps
             # the stamp of the run that read it
             for season, done in complete.items():
@@ -452,18 +497,9 @@ class LadderService:
                 with session.begin_nested():
                     W3CLadderMatch.add(session, values)
             except IntegrityError:
-                # Another worker wrote the row from the opponent's payload
+                # Another run of the same player wrote the row first
                 pass
             stored.add(row.w3c_match_id)
-
-    @staticmethod
-    def _user_ids_by_battle_tag() -> dict[str, int]:
-        """Every GNL player, keyed by battle tag in lower case."""
-        with Session.begin() as session:
-            return {
-                tag.lower(): user_id
-                for user_id, tag in session.execute(select(User.id, User.battleTag))
-            }
 
 
 def _window(season: Season) -> tuple[datetime, datetime]:
