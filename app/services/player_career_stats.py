@@ -5,6 +5,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session as OrmSession
+from sqlmodel import col
 
 from app.core.db import Session
 from app.core.ordering import SortOrder
@@ -47,7 +48,7 @@ class PlayerCareerStatsService:
             session.scalars(
                 select(PlayerCareerStats)
                 .options(*PlayerCareerStats.eager_options())
-                .order_by(PlayerCareerStats.id)
+                .order_by(col(PlayerCareerStats.id))
             )
             .unique()
             .all()
@@ -84,7 +85,7 @@ class PlayerCareerStatsService:
             stat = session.scalars(
                 select(PlayerCareerStats)
                 .options(*PlayerCareerStats.eager_options())
-                .where(PlayerCareerStats.user_id == user_id)
+                .where(col(PlayerCareerStats.user_id) == user_id)
                 .limit(1)
             ).first()
             if not stat:
@@ -110,7 +111,7 @@ class PlayerCareerStatsService:
         """
         with Session.begin() as session:
             user = session.scalars(
-                select(User).where(User.name == player_name).limit(1)
+                select(User).where(col(User.name) == player_name).limit(1)
             ).first()
             user_id = user.id if user else None
             if not user:
@@ -121,7 +122,7 @@ class PlayerCareerStatsService:
             # Find by player_name first
             stats = session.scalars(
                 select(PlayerCareerStats)
-                .where(PlayerCareerStats.player_name == player_name)
+                .where(col(PlayerCareerStats.player_name) == player_name)
                 .limit(1)
             ).first()
 

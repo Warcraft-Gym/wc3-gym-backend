@@ -18,6 +18,7 @@ from typing import Any, get_args
 import pytest
 from httpx2 import Client
 from sqlalchemy import event, select
+from sqlmodel import col
 
 from app.core.db import Session
 
@@ -87,7 +88,7 @@ def league(seeded: dict[str, Any]) -> dict[str, Any]:
 
     with Session() as session:
         seeded["koth_event_id"] = session.scalar(
-            select(KothEvent.id).order_by(KothEvent.id)
+            select(col(KothEvent.id)).order_by(col(KothEvent.id))
         )
     return seeded
 

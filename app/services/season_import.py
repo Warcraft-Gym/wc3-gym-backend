@@ -14,6 +14,7 @@ import pandas as pd
 from pydantic import ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session as OrmSession
+from sqlmodel import col
 
 from app.core.db import Session
 from app.core.exceptions import BadRequestError
@@ -253,7 +254,9 @@ def _maps(session: OrmSession, sheets: Sheets, season: Season) -> dict[int, int]
     if pool:
         linked = set(
             session.scalars(
-                select(DBMapSeason.map_id).where(DBMapSeason.season_id == season.id)
+                select(col(DBMapSeason.map_id)).where(
+                    col(DBMapSeason.season_id) == season.id
+                )
             )
         )
         session.add_all(
@@ -308,7 +311,9 @@ def _teams(session: OrmSession, sheets: Sheets, season: Season) -> dict[int, int
     if team_ids:
         linked = set(
             session.scalars(
-                select(DBTeamSeason.team_id).where(DBTeamSeason.season_id == season.id)
+                select(col(DBTeamSeason.team_id)).where(
+                    col(DBTeamSeason.season_id) == season.id
+                )
             )
         )
         session.add_all(
@@ -384,9 +389,9 @@ def _players(
     if roster:
         linked = set(
             session.execute(
-                select(DBUserTeamSeason.user_id, DBUserTeamSeason.team_id).where(
-                    DBUserTeamSeason.season_id == season.id
-                )
+                select(
+                    col(DBUserTeamSeason.user_id), col(DBUserTeamSeason.team_id)
+                ).where(col(DBUserTeamSeason.season_id) == season.id)
             ).all()
         )
         session.add_all(
@@ -409,7 +414,9 @@ def _matches(
     rows = _rows(sheets["Matches"], ["Team1 ID", "Team2 ID", "Playday"])
     stored = {
         (match.team1_id, match.team2_id, match.playday): match
-        for match in session.scalars(select(Match).where(Match.season_id == season.id))
+        for match in session.scalars(
+            select(Match).where(col(Match.season_id) == season.id)
+        )
     }
 
     written: list[Match] = []
@@ -476,7 +483,7 @@ def _series(
         stored = {
             (series.match_id, series.player1_id, series.player2_id): series
             for series in session.scalars(
-                select(Series).where(Series.match_id.in_(match_ids))
+                select(Series).where(col(Series.match_id).in_(match_ids))
             )
         }
 
@@ -562,7 +569,7 @@ def _fantasy_teams(
     stored = {
         fteam.captain_id: fteam
         for fteam in session.scalars(
-            select(FantasyTeam).where(FantasyTeam.season_id == season.id)
+            select(FantasyTeam).where(col(FantasyTeam.season_id) == season.id)
         )
     }
 
@@ -615,9 +622,12 @@ def _fantasy_players(
     linked = set(
         session.execute(
             select(
-                DBFantasyTeamPlayer.fantasy_team_id, DBFantasyTeamPlayer.user_id
+                col(DBFantasyTeamPlayer.fantasy_team_id),
+                col(DBFantasyTeamPlayer.user_id),
             ).where(
-                DBFantasyTeamPlayer.fantasy_team_id.in_(set(fantasy_teams.values()))
+                col(DBFantasyTeamPlayer.fantasy_team_id).in_(
+                    set(fantasy_teams.values())
+                )
             )
         ).all()
     )
@@ -644,7 +654,7 @@ def _fantasy_bets(
     stored = {
         (bet.series_id, bet.user_id): bet
         for bet in session.scalars(
-            select(FantasyBet).where(FantasyBet.season_id == season.id)
+            select(FantasyBet).where(col(FantasyBet.season_id) == season.id)
         )
     }
 

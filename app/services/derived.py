@@ -34,6 +34,7 @@ from typing import Any, Literal, NamedTuple
 
 from sqlalchemy import case, func, or_, select, union_all
 from sqlalchemy.orm import Session, aliased
+from sqlmodel import col
 
 from app.core import career, fantasy
 from app.core.ordering import SortOrder
@@ -59,9 +60,9 @@ def _systems_by_match(session: Session, match_ids: set[int]) -> dict[int, str]:
     if not match_ids:
         return {}
     rows = session.execute(
-        select(Match.id, Season.score_system)
-        .join(Season, Season.id == Match.season_id)
-        .where(Match.id.in_(match_ids))
+        select(col(Match.id), col(Season.score_system))
+        .join(Season, col(Season.id) == Match.season_id)
+        .where(col(Match.id).in_(match_ids))
     ).all()
     return {match_id: system or DEFAULT_SYSTEM for match_id, system in rows}
 
@@ -76,16 +77,20 @@ def _scores_by_match(session: Session, systems: dict[int, str]) -> MatchScores:
     for system, match_ids in by_system.items():
         rows = session.execute(
             select(
-                Series.match_id,
+                col(Series.match_id),
                 func.sum(
-                    points_case(Series.player1_score, Series.player2_score, system)
+                    points_case(
+                        col(Series.player1_score), col(Series.player2_score), system
+                    )
                 ),
                 func.sum(
-                    points_case(Series.player2_score, Series.player1_score, system)
+                    points_case(
+                        col(Series.player2_score), col(Series.player1_score), system
+                    )
                 ),
             )
-            .where(Series.match_id.in_(match_ids))
-            .group_by(Series.match_id)
+            .where(col(Series.match_id).in_(match_ids))
+            .group_by(col(Series.match_id))
         ).all()
         for match_id, team1, team2 in rows:
             scores[match_id] = (int(team1 or 0), int(team2 or 0))
@@ -143,8 +148,11 @@ def _rules_by_season(session: Session, season_ids: set[int]) -> SeasonRules:
         return {}
     rows = session.execute(
         select(
-            Season.id, Season.score_system, Season.series_per_week, Season.number_weeks
-        ).where(Season.id.in_(season_ids))
+            col(Season.id),
+            col(Season.score_system),
+            col(Season.series_per_week),
+            col(Season.number_weeks),
+        ).where(col(Season.id).in_(season_ids))
     ).all()
     return {
         season_id: (system or DEFAULT_SYSTEM, per_week, weeks)
@@ -166,19 +174,23 @@ def _sums_by_team(session: Session, rules: SeasonRules) -> TeamSums:
     for system, season_ids in by_system.items():
         rows = session.execute(
             select(
-                Match.season_id,
-                Match.team1_id,
-                Match.team2_id,
+                col(Match.season_id),
+                col(Match.team1_id),
+                col(Match.team2_id),
                 func.sum(
-                    points_case(Series.player1_score, Series.player2_score, system)
+                    points_case(
+                        col(Series.player1_score), col(Series.player2_score), system
+                    )
                 ),
                 func.sum(
-                    points_case(Series.player2_score, Series.player1_score, system)
+                    points_case(
+                        col(Series.player2_score), col(Series.player1_score), system
+                    )
                 ),
             )
-            .join(Series, Series.match_id == Match.id)
-            .where(Match.season_id.in_(season_ids))
-            .group_by(Match.season_id, Match.team1_id, Match.team2_id)
+            .join(Series, col(Series.match_id) == Match.id)
+            .where(col(Match.season_id).in_(season_ids))
+            .group_by(col(Match.season_id), col(Match.team1_id), col(Match.team2_id))
         ).all()
         for season_id, team1_id, team2_id, team1, team2 in rows:
             one, two = int(team1 or 0), int(team2 or 0)
@@ -241,17 +253,17 @@ def _gnl_tallies(
     """
     sides = union_all(
         select(
-            Series.player1_id.label("user_id"),
-            Match.season_id.label("season_id"),
-            Series.player1_score.label("own"),
-            Series.player2_score.label("opp"),
-        ).join(Match, Match.id == Series.match_id),
+            col(Series.player1_id).label("user_id"),
+            col(Match.season_id).label("season_id"),
+            col(Series.player1_score).label("own"),
+            col(Series.player2_score).label("opp"),
+        ).join(Match, col(Match.id) == Series.match_id),
         select(
-            Series.player2_id,
-            Match.season_id,
-            Series.player2_score,
-            Series.player1_score,
-        ).join(Match, Match.id == Series.match_id),
+            col(Series.player2_id),
+            col(Match.season_id),
+            col(Series.player2_score),
+            col(Series.player1_score),
+        ).join(Match, col(Match.id) == Series.match_id),
     ).subquery()
 
     own, opp = sides.c.own, sides.c.opp
@@ -286,23 +298,23 @@ def _gnl_matchups(
     opponent1, opponent2 = aliased(User), aliased(User)
     sides = union_all(
         select(
-            Series.player1_id.label("user_id"),
-            Match.season_id.label("season_id"),
-            Match.playday.label("playday"),
-            Series.id.label("series_id"),
-            opponent1.race.label("race"),
+            col(Series.player1_id).label("user_id"),
+            col(Match.season_id).label("season_id"),
+            col(Match.playday).label("playday"),
+            col(Series.id).label("series_id"),
+            col(opponent1.race).label("race"),
         )
-        .join(Match, Match.id == Series.match_id)
-        .join(opponent1, opponent1.id == Series.player2_id),
+        .join(Match, col(Match.id) == Series.match_id)
+        .join(opponent1, col(opponent1.id) == Series.player2_id),
         select(
-            Series.player2_id,
-            Match.season_id,
-            Match.playday,
-            Series.id,
-            opponent2.race,
+            col(Series.player2_id),
+            col(Match.season_id),
+            col(Match.playday),
+            col(Series.id),
+            col(opponent2.race),
         )
-        .join(Match, Match.id == Series.match_id)
-        .join(opponent2, opponent2.id == Series.player1_id),
+        .join(Match, col(Match.id) == Series.match_id)
+        .join(opponent2, col(opponent2.id) == Series.player1_id),
     ).subquery()
 
     rows = session.execute(
@@ -370,23 +382,23 @@ def _career_tallies(session: Session) -> dict[int, CareerPlayer]:
     player1, player2 = aliased(User), aliased(User)
     sides = union_all(
         select(
-            Series.player1_id.label("user_id"),
-            player1.name.label("player_name"),
-            Match.season_id.label("season_id"),
+            col(Series.player1_id).label("user_id"),
+            col(player1.name).label("player_name"),
+            col(Match.season_id).label("season_id"),
             func.coalesce(Series.player1_score, 0).label("own"),
             func.coalesce(Series.player2_score, 0).label("opp"),
         )
-        .join(Match, Match.id == Series.match_id, isouter=True)
-        .join(player1, player1.id == Series.player1_id, isouter=True),
+        .join(Match, col(Match.id) == Series.match_id, isouter=True)
+        .join(player1, col(player1.id) == Series.player1_id, isouter=True),
         select(
-            Series.player2_id,
-            player2.name,
-            Match.season_id,
+            col(Series.player2_id),
+            col(player2.name),
+            col(Match.season_id),
             func.coalesce(Series.player2_score, 0),
             func.coalesce(Series.player1_score, 0),
         )
-        .join(Match, Match.id == Series.match_id, isouter=True)
-        .join(player2, player2.id == Series.player2_id, isouter=True),
+        .join(Match, col(Match.id) == Series.match_id, isouter=True)
+        .join(player2, col(player2.id) == Series.player2_id, isouter=True),
     ).subquery()
 
     own, opp = sides.c.own, sides.c.opp
@@ -421,7 +433,9 @@ def _career_tallies(session: Session) -> dict[int, CareerPlayer]:
 def _system_seasons(session: Session) -> list[int]:
     """The seasons the league has played, in the order the decay applies."""
     season_ids = session.scalars(
-        select(Match.season_id).join(Series, Series.match_id == Match.id).distinct()
+        select(col(Match.season_id))
+        .join(Series, col(Series.match_id) == Match.id)
+        .distinct()
     ).all()
     return sorted(season_id for season_id in season_ids if season_id is not None)
 
@@ -430,7 +444,7 @@ def _career_users(session: Session, user_ids: set[int]) -> dict[int, User]:
     """The players a career row must carry. The row reads their scalars only."""
     if not user_ids:
         return {}
-    users = session.scalars(select(User).where(User.id.in_(user_ids))).all()
+    users = session.scalars(select(User).where(col(User.id).in_(user_ids))).all()
     return {user.id: user for user in users if user.id is not None}
 
 
@@ -635,21 +649,21 @@ def fantasy_series(
     player1, player2 = aliased(User), aliased(User)
     rows = session.execute(
         select(
-            Match.season_id,
-            Match.playday,
-            Series.player1_id,
-            player1.name,
-            player1.race,
-            Series.player2_id,
-            player2.name,
-            player2.race,
-            Series.player1_score,
-            Series.player2_score,
+            col(Match.season_id),
+            col(Match.playday),
+            col(Series.player1_id),
+            col(player1.name),
+            col(player1.race),
+            col(Series.player2_id),
+            col(player2.name),
+            col(player2.race),
+            col(Series.player1_score),
+            col(Series.player2_score),
         )
-        .join(Match, Match.id == Series.match_id)
-        .join(player1, player1.id == Series.player1_id, isouter=True)
-        .join(player2, player2.id == Series.player2_id, isouter=True)
-        .where(Match.season_id.in_(season_ids))
+        .join(Match, col(Match.id) == Series.match_id)
+        .join(player1, col(player1.id) == Series.player1_id, isouter=True)
+        .join(player2, col(player2.id) == Series.player2_id, isouter=True)
+        .where(col(Match.season_id).in_(season_ids))
     ).all()
 
     by_season: dict[int, dict[int | None, list[fantasy.Series]]] = {}
@@ -692,26 +706,29 @@ def _fantasy_bets(
     winner, player1, player2 = aliased(User), aliased(User), aliased(User)
     rows = session.execute(
         select(
-            FantasyBet.user_id,
-            FantasyBet.season_id,
-            FantasyBet.id,
-            FantasyBet.bet_points,
-            FantasyBet.winner_id,
-            winner.name,
-            Match.playday,
-            Series.player1_id,
-            player1.name,
-            Series.player2_id,
-            player2.name,
-            Series.player1_score,
-            Series.player2_score,
+            col(FantasyBet.user_id),
+            col(FantasyBet.season_id),
+            col(FantasyBet.id),
+            col(FantasyBet.bet_points),
+            col(FantasyBet.winner_id),
+            col(winner.name),
+            col(Match.playday),
+            col(Series.player1_id),
+            col(player1.name),
+            col(Series.player2_id),
+            col(player2.name),
+            col(Series.player1_score),
+            col(Series.player2_score),
         )
-        .join(Series, Series.id == FantasyBet.series_id)
-        .join(Match, Match.id == Series.match_id, isouter=True)
-        .join(winner, winner.id == FantasyBet.winner_id, isouter=True)
-        .join(player1, player1.id == Series.player1_id, isouter=True)
-        .join(player2, player2.id == Series.player2_id, isouter=True)
-        .where(FantasyBet.user_id.in_(captains), FantasyBet.season_id.in_(season_ids))
+        .join(Series, col(Series.id) == FantasyBet.series_id)
+        .join(Match, col(Match.id) == Series.match_id, isouter=True)
+        .join(winner, col(winner.id) == FantasyBet.winner_id, isouter=True)
+        .join(player1, col(player1.id) == Series.player1_id, isouter=True)
+        .join(player2, col(player2.id) == Series.player2_id, isouter=True)
+        .where(
+            col(FantasyBet.user_id).in_(captains),
+            col(FantasyBet.season_id).in_(season_ids),
+        )
     ).all()
 
     by_captain: dict[tuple[int, int], list[fantasy.Bet]] = {}

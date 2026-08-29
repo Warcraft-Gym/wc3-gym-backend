@@ -14,6 +14,7 @@ import pytest
 from fastapi import FastAPI
 from httpx2 import Client
 from sqlalchemy import select
+from sqlmodel import col
 
 from app.core import achievements
 from app.core.achievements import Achievement
@@ -347,7 +348,7 @@ def test_the_roster_rules_read_the_season(
     one, three = league["player_ids"][0], league["player_ids"][2]
     with Session() as session:
         team_season = session.scalars(
-            select(DBTeamSeason).where(DBTeamSeason.team_id == league["team_b_id"])
+            select(DBTeamSeason).where(col(DBTeamSeason.team_id) == league["team_b_id"])
         ).one()
         team_season.coach_1_id = three
         session.commit()

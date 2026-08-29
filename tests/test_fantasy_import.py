@@ -11,6 +11,7 @@ import pandas as pd
 import pytest
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
+from sqlmodel import col
 from starlette.testclient import TestClient as Client
 
 from app.core.db import Session
@@ -91,7 +92,7 @@ def test_import_fantasy_teams_reads_the_race(
 
     with Session() as session:
         team = session.scalars(
-            select(FantasyTeam).where(FantasyTeam.name == "Night Owls")
+            select(FantasyTeam).where(col(FantasyTeam.name) == "Night Owls")
         ).one()
         assert team.drafted_race == Race.NE
 
@@ -129,7 +130,7 @@ def test_import_fantasy_bets_stores_a_bet(
 
     with Session() as session:
         bet = session.scalars(
-            select(FantasyBet).where(FantasyBet.user_id == seeded["player_ids"][1])
+            select(FantasyBet).where(col(FantasyBet.user_id) == seeded["player_ids"][1])
         ).one()
         assert bet.series_id == seeded["series_played_id"]
         assert bet.winner_id == seeded["player_ids"][0]
@@ -158,7 +159,7 @@ def test_a_changed_pick_updates_the_bet_the_bettor_already_made(
 
     with Session() as session:
         bet = session.scalars(
-            select(FantasyBet).where(FantasyBet.user_id == seeded["player_ids"][1])
+            select(FantasyBet).where(col(FantasyBet.user_id) == seeded["player_ids"][1])
         ).one()
         assert bet.winner_id == seeded["player_ids"][2]
         assert bet.bet_points == 5
@@ -216,9 +217,11 @@ def test_the_import_creates_a_captain_it_cannot_find(
     assert response.status_code == 200, response.text
 
     with Session() as session:
-        captain = session.scalars(select(User).where(User.discordTag == "newcap")).one()
+        captain = session.scalars(
+            select(User).where(col(User.discordTag) == "newcap")
+        ).one()
         team = session.scalars(
-            select(FantasyTeam).where(FantasyTeam.name == "Night Owls")
+            select(FantasyTeam).where(col(FantasyTeam.name) == "Night Owls")
         ).one()
     assert captain.battleTag == "Fantasy_User#newcap"
     assert team.captain_id == captain.id
@@ -246,7 +249,7 @@ def test_a_captain_matches_a_discord_tag_in_another_case(
 
     with Session() as session:
         team = session.scalars(
-            select(FantasyTeam).where(FantasyTeam.name == "Night Owls")
+            select(FantasyTeam).where(col(FantasyTeam.name) == "Night Owls")
         ).one()
         assert team.captain_id == seeded["player_ids"][0]
         assert len(session.scalars(select(User)).all()) == len(seeded["player_ids"])
@@ -270,7 +273,7 @@ def test_a_drafted_player_matches_a_name_in_another_case(
 
     with Session() as session:
         team = session.scalars(
-            select(FantasyTeam).where(FantasyTeam.name == "Night Owls")
+            select(FantasyTeam).where(col(FantasyTeam.name) == "Night Owls")
         ).one()
         drafted_ids = {player.user_id for player in team.drafted_players}
     assert drafted_ids == set(seeded["player_ids"])
@@ -293,7 +296,7 @@ def test_a_drafted_team_matches_a_name_in_another_case(
 
     with Session() as session:
         team = session.scalars(
-            select(FantasyTeam).where(FantasyTeam.name == "Night Owls")
+            select(FantasyTeam).where(col(FantasyTeam.name) == "Night Owls")
         ).one()
     assert team.drafted_team_id == seeded["team_a_id"]
 
@@ -321,7 +324,9 @@ def test_a_team_sheet_the_import_cannot_read_writes_nothing(
     with Session() as session:
         team = session.scalars(select(FantasyTeam)).one()
         assert team.name == "The Optimists"
-        unknown = session.scalars(select(User).where(User.discordTag == "newcap")).all()
+        unknown = session.scalars(
+            select(User).where(col(User.discordTag) == "newcap")
+        ).all()
         assert unknown == []
 
 
@@ -346,7 +351,7 @@ def test_a_bet_sheet_the_import_cannot_read_writes_nothing(
 
     with Session() as session:
         stored = session.scalars(
-            select(FantasyBet).where(FantasyBet.user_id == seeded["player_ids"][1])
+            select(FantasyBet).where(col(FantasyBet.user_id) == seeded["player_ids"][1])
         ).all()
         assert stored == []
         series = session.get(Series, seeded["series_played_id"])

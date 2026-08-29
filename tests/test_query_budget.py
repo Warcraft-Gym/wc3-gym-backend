@@ -198,7 +198,7 @@ def test_options_cover_the_player_graph(league: dict[str, Any]) -> None:
         series = session.scalars(
             select(Series)
             .options(*options)
-            .where(Series.id == league["series_played_id"])
+            .where(col(Series.id) == league["series_played_id"])
         ).first()
         assert series is not None
         public = SeriesPublic.from_series(series)
@@ -244,6 +244,8 @@ def test_the_bets_count_holds_when_the_bets_grow(league: dict[str, Any]) -> None
     assert all(bet.bet_result == 10 for bet in bets)
     assert tally[0] == 3
 
+
+from sqlmodel import col
 
 from tests.seed import add_fantasy_teams
 
@@ -425,7 +427,9 @@ def test_career_options_cover_the_player_graph(league: dict[str, Any]) -> None:
     )
     with Session() as session:
         stats = session.scalars(
-            select(PlayerCareerStats).options(*options).order_by(PlayerCareerStats.id)
+            select(PlayerCareerStats)
+            .options(*options)
+            .order_by(col(PlayerCareerStats.id))
         ).first()
         assert stats is not None
         public = PlayerCareerStatsPublic.from_career_stats(stats)

@@ -12,6 +12,7 @@ import pytest
 from httpx2 import Client
 from sqlalchemy import func, select
 from sqlalchemy.exc import SQLAlchemyError
+from sqlmodel import col
 
 from app.core.exceptions import NotFoundError
 from app.models.settings import SettingsPublic
@@ -27,7 +28,7 @@ def _map_links(season_id: int) -> int:
             session.scalar(
                 select(func.count())
                 .select_from(DBMapSeason)
-                .where(DBMapSeason.season_id == season_id)
+                .where(col(DBMapSeason.season_id) == season_id)
             )
             or 0
         )

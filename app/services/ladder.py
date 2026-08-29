@@ -153,12 +153,12 @@ class LadderService:
         with Session.begin() as session:
             user = session.execute(
                 select(
-                    User.id.label("user_id"),
-                    User.name.label("name"),
-                    User.battleTag.label("battleTag"),
-                    User.country.label("country"),
-                    User.race.label("race"),
-                ).where(User.id == user_id)
+                    col(User.id).label("user_id"),
+                    col(User.name).label("name"),
+                    col(User.battleTag).label("battleTag"),
+                    col(User.country).label("country"),
+                    col(User.race).label("race"),
+                ).where(col(User.id) == user_id)
             ).first()
             if user is None:
                 raise NotFoundError("User not found")
@@ -243,8 +243,8 @@ class LadderService:
             fresh_since = _now() - max_age
             synced_at = dict(
                 session.execute(
-                    select(User.id, User.ladder_synced_at).where(
-                        User.id.in_([user.id for user in users])
+                    select(col(User.id), col(User.ladder_synced_at)).where(
+                        col(User.id).in_([user.id for user in users])
                     )
                 ).all()
             )
@@ -279,7 +279,7 @@ class LadderService:
             user = UserReduced.from_user_reduced(row)
             today = _now().date()
             season_id = session.scalar(
-                select(Season.id).where(
+                select(col(Season.id)).where(
                     Season.start_date <= today, Season.end_date >= today
                 )
             )
@@ -401,10 +401,10 @@ class LadderService:
                 row.wc3_season: row
                 for row in session.execute(
                     select(
-                        LadderSync.wc3_season,
-                        LadderSync.synced_at,
-                        LadderSync.complete,
-                    ).where(LadderSync.user_id == user.id)
+                        col(LadderSync.wc3_season),
+                        col(LadderSync.synced_at),
+                        col(LadderSync.complete),
+                    ).where(col(LadderSync.user_id) == user.id)
                 )
             }
 
@@ -446,7 +446,9 @@ class LadderService:
                 self._stamp(session, user.id, season, stamp, done)
             # The stamp says when the app last asked, not that matches were found
             session.execute(
-                update(User).where(User.id == user.id).values(ladder_synced_at=stamp)
+                update(User)
+                .where(col(User.id) == user.id)
+                .values(ladder_synced_at=stamp)
             )
         if throttled is not None:
             raise throttled
@@ -462,7 +464,7 @@ class LadderService:
         """Record that this player's w3champions season was read just now."""
         row = session.scalar(
             select(LadderSync).where(
-                LadderSync.user_id == user_id, LadderSync.wc3_season == season
+                col(LadderSync.user_id) == user_id, col(LadderSync.wc3_season) == season
             )
         )
         if row is None:
@@ -485,8 +487,8 @@ class LadderService:
         """Insert the matches this player has no row for yet."""
         stored = set(
             session.scalars(
-                select(W3CLadderMatch.w3c_match_id).where(
-                    W3CLadderMatch.user_id == user_id
+                select(col(W3CLadderMatch.w3c_match_id)).where(
+                    col(W3CLadderMatch.user_id) == user_id
                 )
             )
         )
@@ -535,10 +537,13 @@ def _w3c_seasons_for(session: OrmSession, season: Season) -> list[int]:
     start, end = _window(season)
     return list(
         session.scalars(
-            select(W3CLadderMatch.wc3_season)
-            .where(W3CLadderMatch.start_time >= start, W3CLadderMatch.start_time <= end)
-            .group_by(W3CLadderMatch.wc3_season)
-            .order_by(W3CLadderMatch.wc3_season.desc())
+            select(col(W3CLadderMatch.wc3_season))
+            .where(
+                col(W3CLadderMatch.start_time) >= start,
+                col(W3CLadderMatch.start_time) <= end,
+            )
+            .group_by(col(W3CLadderMatch.wc3_season))
+            .order_by(col(W3CLadderMatch.wc3_season).desc())
         )
     )
 
@@ -551,17 +556,17 @@ def _stamps(
 
     The all-time answer names no seasons, so it reads every season he has.
     """
-    where = [LadderSync.user_id.in_(user_ids)]
+    where = [col(LadderSync.user_id).in_(user_ids)]
     if seasons is not None:
-        where.append(LadderSync.wc3_season.in_(seasons))
+        where.append(col(LadderSync.wc3_season).in_(seasons))
     rows = session.execute(
         select(
-            LadderSync.user_id.label("user_id"),
+            col(LadderSync.user_id).label("user_id"),
             func.min(LadderSync.synced_at).label("oldest"),
             func.count().label("read"),
         )
         .where(*where)
-        .group_by(LadderSync.user_id)
+        .group_by(col(LadderSync.user_id))
     ).all()
     needed = len(seasons) if seasons is not None else 1
     return {row.user_id: (row.oldest if row.read >= needed else None) for row in rows}
@@ -580,10 +585,10 @@ def _walk_start(session: OrmSession, end: datetime) -> int | None:
     """The W3C season the GNL window ends in: the newest stored season that
     began at or before `end`. None while no match is stored."""
     return session.scalar(
-        select(W3CLadderMatch.wc3_season)
-        .group_by(W3CLadderMatch.wc3_season)
+        select(col(W3CLadderMatch.wc3_season))
+        .group_by(col(W3CLadderMatch.wc3_season))
         .having(func.min(W3CLadderMatch.start_time) <= end)
-        .order_by(W3CLadderMatch.wc3_season.desc())
+        .order_by(col(W3CLadderMatch.wc3_season).desc())
         .limit(1)
     )
 
@@ -592,26 +597,26 @@ def _roster(session: OrmSession, season_id: int) -> Sequence[Row]:
     """Everyone signed up for the season, with the team he plays for."""
     return session.execute(
         select(
-            User.id.label("user_id"),
-            User.name.label("name"),
-            User.battleTag.label("battleTag"),
-            User.country.label("country"),
-            User.race.label("race"),
-            Team.id.label("team_id"),
-            Team.name.label("team_name"),
-            Team.long_name.label("team_long_name"),
+            col(User.id).label("user_id"),
+            col(User.name).label("name"),
+            col(User.battleTag).label("battleTag"),
+            col(User.country).label("country"),
+            col(User.race).label("race"),
+            col(Team.id).label("team_id"),
+            col(Team.name).label("team_name"),
+            col(Team.long_name).label("team_long_name"),
         )
-        .join(DBUserSeasonSignup, DBUserSeasonSignup.user_id == User.id)
+        .join(DBUserSeasonSignup, col(DBUserSeasonSignup.user_id) == User.id)
         .outerjoin(
             DBUserTeamSeason,
             and_(
-                DBUserTeamSeason.user_id == User.id,
-                DBUserTeamSeason.season_id == season_id,
+                col(DBUserTeamSeason.user_id) == col(User.id),
+                col(DBUserTeamSeason.season_id) == season_id,
             ),
         )
-        .outerjoin(Team, Team.id == DBUserTeamSeason.team_id)
-        .where(DBUserSeasonSignup.season_id == season_id)
-        .order_by(User.id)
+        .outerjoin(Team, col(Team.id) == DBUserTeamSeason.team_id)
+        .where(col(DBUserSeasonSignup.season_id) == season_id)
+        .order_by(col(User.id))
     ).all()
 
 
@@ -629,13 +634,17 @@ def _league_race(season_id: int | None) -> ColumnElement[bool]:
     no race falls back to `users.race`, and so does the all-time answer, which
     spans seasons and has no signup to read.
     """
-    race = select(User.race).where(User.id == W3CLadderMatch.user_id).scalar_subquery()
+    race = (
+        select(col(User.race))
+        .where(col(User.id) == W3CLadderMatch.user_id)
+        .scalar_subquery()
+    )
     if season_id is not None:
         signup = (
-            select(DBUserSeasonSignup.race)
+            select(col(DBUserSeasonSignup.race))
             .where(
-                DBUserSeasonSignup.user_id == W3CLadderMatch.user_id,
-                DBUserSeasonSignup.season_id == season_id,
+                col(DBUserSeasonSignup.user_id) == W3CLadderMatch.user_id,
+                col(DBUserSeasonSignup.season_id) == season_id,
             )
             .scalar_subquery()
         )
@@ -655,12 +664,12 @@ def _mmr_scope(
     reports what his MMR did is wider than the scope that pays him for it.
     """
     where: list[ColumnElement[bool]] = [
-        W3CLadderMatch.user_id.in_(user_ids),
+        col(W3CLadderMatch.user_id).in_(user_ids),
         _league_race(season_id),
     ]
     if window is not None:
-        where.append(W3CLadderMatch.start_time >= window[0])
-        where.append(W3CLadderMatch.start_time <= window[1])
+        where.append(col(W3CLadderMatch.start_time) >= window[0])
+        where.append(col(W3CLadderMatch.start_time) <= window[1])
     return where
 
 
@@ -673,7 +682,7 @@ def _scope(
     short to be a game. Points and achievements both read this."""
     return [
         *_mmr_scope(user_ids, window, season_id),
-        ladder.counted_clause(W3CLadderMatch.duration_s),
+        ladder.counted_clause(col(W3CLadderMatch.duration_s)),
     ]
 
 
@@ -681,15 +690,17 @@ def _totals(session: OrmSession, scope: list[ColumnElement[bool]]) -> dict[int, 
     """The record and the points of every player, in one group."""
     rows = session.execute(
         select(
-            W3CLadderMatch.user_id.label("user_id"),
+            col(W3CLadderMatch.user_id).label("user_id"),
             func.count().label("games"),
-            func.sum(case((W3CLadderMatch.won, 1), else_=0)).label("wins"),
+            func.sum(case((col(W3CLadderMatch.won), 1), else_=0)).label("wins"),
             func.sum(
-                ladder.points_case(W3CLadderMatch.won, W3CLadderMatch.duration_s)
+                ladder.points_case(
+                    col(W3CLadderMatch.won), col(W3CLadderMatch.duration_s)
+                )
             ).label("points"),
         )
         .where(*scope)
-        .group_by(W3CLadderMatch.user_id)
+        .group_by(col(W3CLadderMatch.user_id))
     ).all()
     return {row.user_id: row for row in rows}
 
@@ -701,22 +712,25 @@ def _mmr_span(session: OrmSession, scope: list[ColumnElement[bool]]) -> dict[int
     match, at either end, so the span runs from the first rated match to the
     last and a player still placing has none at all.
     """
-    rated = [*scope, W3CLadderMatch.mmr_before.is_not(None)]
+    rated = [*scope, col(W3CLadderMatch.mmr_before).is_not(None)]
     ordered = (
         select(
-            W3CLadderMatch.user_id.label("user_id"),
-            W3CLadderMatch.mmr_before.label("mmr_before"),
-            W3CLadderMatch.mmr_after.label("mmr_after"),
+            col(W3CLadderMatch.user_id).label("user_id"),
+            col(W3CLadderMatch.mmr_before).label("mmr_before"),
+            col(W3CLadderMatch.mmr_after).label("mmr_after"),
             func.row_number()
             .over(
-                partition_by=W3CLadderMatch.user_id,
-                order_by=(W3CLadderMatch.start_time, W3CLadderMatch.id),
+                partition_by=col(W3CLadderMatch.user_id),
+                order_by=(col(W3CLadderMatch.start_time), col(W3CLadderMatch.id)),
             )
             .label("oldest"),
             func.row_number()
             .over(
-                partition_by=W3CLadderMatch.user_id,
-                order_by=(W3CLadderMatch.start_time.desc(), W3CLadderMatch.id.desc()),
+                partition_by=col(W3CLadderMatch.user_id),
+                order_by=(
+                    col(W3CLadderMatch.start_time).desc(),
+                    col(W3CLadderMatch.id).desc(),
+                ),
             )
             .label("newest"),
         )
@@ -748,21 +762,24 @@ def _per_day(
     day = func.date(W3CLadderMatch.start_time)
     ordered = (
         select(
-            W3CLadderMatch.user_id.label("user_id"),
+            col(W3CLadderMatch.user_id).label("user_id"),
             day.label("day"),
-            W3CLadderMatch.won.label("won"),
-            W3CLadderMatch.mmr_before.label("mmr_before"),
-            W3CLadderMatch.mmr_after.label("mmr_after"),
+            col(W3CLadderMatch.won).label("won"),
+            col(W3CLadderMatch.mmr_before).label("mmr_before"),
+            col(W3CLadderMatch.mmr_after).label("mmr_after"),
             func.row_number()
             .over(
-                partition_by=(W3CLadderMatch.user_id, day),
-                order_by=(W3CLadderMatch.start_time, W3CLadderMatch.id),
+                partition_by=(col(W3CLadderMatch.user_id), day),
+                order_by=(col(W3CLadderMatch.start_time), col(W3CLadderMatch.id)),
             )
             .label("oldest"),
             func.row_number()
             .over(
-                partition_by=(W3CLadderMatch.user_id, day),
-                order_by=(W3CLadderMatch.start_time.desc(), W3CLadderMatch.id.desc()),
+                partition_by=(col(W3CLadderMatch.user_id), day),
+                order_by=(
+                    col(W3CLadderMatch.start_time).desc(),
+                    col(W3CLadderMatch.id).desc(),
+                ),
             )
             .label("newest"),
         )
@@ -797,13 +814,13 @@ def _vs_race(
     """Every player's record against each race the opponents selected."""
     rows = session.execute(
         select(
-            W3CLadderMatch.user_id.label("user_id"),
-            W3CLadderMatch.opp_race.label("opp_race"),
-            func.sum(case((W3CLadderMatch.won, 1), else_=0)).label("wins"),
-            func.sum(case((W3CLadderMatch.won, 0), else_=1)).label("losses"),
+            col(W3CLadderMatch.user_id).label("user_id"),
+            col(W3CLadderMatch.opp_race).label("opp_race"),
+            func.sum(case((col(W3CLadderMatch.won), 1), else_=0)).label("wins"),
+            func.sum(case((col(W3CLadderMatch.won), 0), else_=1)).label("losses"),
         )
         .where(*scope)
-        .group_by(W3CLadderMatch.user_id, W3CLadderMatch.opp_race)
+        .group_by(col(W3CLadderMatch.user_id), col(W3CLadderMatch.opp_race))
     ).all()
     races: dict[int, dict[str, list[int]]] = defaultdict(_empty_races)
     for row in rows:
@@ -818,13 +835,13 @@ def _vs_race(
 
 def _by_hour(session: OrmSession, scope: list[ColumnElement[bool]]) -> list[list[int]]:
     """Distinct matches by UTC weekday and hour. Row 0 is Sunday."""
-    weekday = extract("dow", W3CLadderMatch.start_time)
-    hour = extract("hour", W3CLadderMatch.start_time)
+    weekday = extract("dow", col(W3CLadderMatch.start_time))
+    hour = extract("hour", col(W3CLadderMatch.start_time))
     rows = session.execute(
         select(
             weekday.label("weekday"),
             hour.label("hour"),
-            func.count(distinct(W3CLadderMatch.w3c_match_id)).label("games"),
+            func.count(distinct(col(W3CLadderMatch.w3c_match_id))).label("games"),
         )
         .where(*scope)
         .group_by(weekday, hour)
@@ -844,7 +861,7 @@ def _games_per_day(
     rows = session.execute(
         select(
             day.label("day"),
-            func.count(distinct(W3CLadderMatch.w3c_match_id)).label("games"),
+            func.count(distinct(col(W3CLadderMatch.w3c_match_id))).label("games"),
         )
         .where(*scope)
         .group_by(day)
@@ -874,7 +891,11 @@ def _match_rows(
     for match in session.scalars(
         select(W3CLadderMatch)
         .where(*scope)
-        .order_by(W3CLadderMatch.user_id, W3CLadderMatch.start_time, W3CLadderMatch.id)
+        .order_by(
+            col(W3CLadderMatch.user_id),
+            col(W3CLadderMatch.start_time),
+            col(W3CLadderMatch.id),
+        )
     ):
         rows[match.user_id].append(match)
     return rows
@@ -883,16 +904,16 @@ def _match_rows(
 def _coach_tags(session: OrmSession, season_id: int) -> frozenset[str]:
     """The battle tags of every coach of the season, in lower case."""
     tags = session.scalars(
-        select(User.battleTag)
+        select(col(User.battleTag))
         .join(
             DBTeamSeason,
             or_(
-                DBTeamSeason.coach_1_id == User.id,
-                DBTeamSeason.coach_2_id == User.id,
-                DBTeamSeason.coach_3_id == User.id,
+                col(DBTeamSeason.coach_1_id) == col(User.id),
+                col(DBTeamSeason.coach_2_id) == User.id,
+                col(DBTeamSeason.coach_3_id) == User.id,
             ),
         )
-        .where(DBTeamSeason.season_id == season_id)
+        .where(col(DBTeamSeason.season_id) == season_id)
     )
     return frozenset(tag.lower() for tag in tags if tag)
 
@@ -917,10 +938,12 @@ def _paid(session: OrmSession, season_id: int | None) -> achievements.PaidSet:
     where = (
         LadderAchievement.season_id == season_id
         if season_id is not None
-        else LadderAchievement.season_id.is_(None)
+        else col(LadderAchievement.season_id).is_(None)
     )
     rows = session.execute(
-        select(LadderAchievement.rule_id, LadderAchievement.points).where(where)
+        select(col(LadderAchievement.rule_id), col(LadderAchievement.points)).where(
+            where
+        )
     ).all()
     return {row.rule_id: row.points for row in rows}
 
@@ -1078,14 +1101,14 @@ def _matches(
     """One page of matches, newest first, with the GNL user of each opponent."""
     opponent = aliased(User)
     rows = session.execute(
-        select(W3CLadderMatch, opponent.id.label("opp_user_id"))
+        select(W3CLadderMatch, col(opponent.id).label("opp_user_id"))
         .outerjoin(
             opponent,
             func.lower(func.trim(opponent.battleTag))
             == func.lower(func.trim(W3CLadderMatch.opp_battletag)),
         )
         .where(*scope)
-        .order_by(W3CLadderMatch.start_time.desc(), W3CLadderMatch.id.desc())
+        .order_by(col(W3CLadderMatch.start_time).desc(), col(W3CLadderMatch.id).desc())
         .offset(offset)
         .limit(limit)
     ).all()

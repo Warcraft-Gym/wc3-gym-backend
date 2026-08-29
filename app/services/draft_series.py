@@ -1,6 +1,7 @@
 import logging
 
 from sqlalchemy import delete, select
+from sqlmodel import col
 
 from app.core.db import Session
 from app.core.exceptions import NotFoundError
@@ -43,7 +44,7 @@ class DraftSeriesService:
             draft_series = session.scalars(
                 select(DraftSeries)
                 .options(*DraftSeries._eager_options())
-                .where(DraftSeries.id == draft_series_id)
+                .where(col(DraftSeries.id) == draft_series_id)
             ).first()
             if not draft_series:
                 raise NotFoundError("Draft series not found")
@@ -57,11 +58,11 @@ class DraftSeriesService:
             statement = (
                 select(DraftSeries)
                 .options(*DraftSeries._eager_options())
-                .where(DraftSeries.match_id == match_id)
+                .where(col(DraftSeries.match_id) == match_id)
             )
             if limit is not None or offset:
                 # Offset paging is deterministic only with a fixed order
-                statement = statement.order_by(DraftSeries.id).offset(offset)
+                statement = statement.order_by(col(DraftSeries.id)).offset(offset)
                 if limit is not None:
                     statement = statement.limit(limit)
             draft_series_list = session.scalars(statement).all()
@@ -72,7 +73,9 @@ class DraftSeriesService:
     def delete_by_match_id(self, match_id: int) -> None:
         """Delete all draft series for a given match"""
         with Session.begin() as session:
-            session.execute(delete(DraftSeries).where(DraftSeries.match_id == match_id))
+            session.execute(
+                delete(DraftSeries).where(col(DraftSeries.match_id) == match_id)
+            )
 
     def convert_to_series(self, draft_series: DraftSeries) -> SeriesCreate:
         """Build the SeriesCreate for a draft series. SeriesService writes the row."""

@@ -5,7 +5,7 @@ from typing import Annotated, Any, Literal, Self
 from sqlalchemy import ColumnElement, ColumnExpressionArgument, Index, and_, select
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.base import ExecutableOption
-from sqlmodel import Field, Relationship, SQLModel
+from sqlmodel import Field, Relationship, SQLModel, col
 
 from app.core.ordering import SortOrder, ordered
 from app.models.base import DBModel
@@ -64,13 +64,15 @@ class Series(SeriesBase, DBModel, table=True):
     ) -> Sequence[Self]:
         stmt = select(cls).options(*cls._list_eager_options())
         stmt = stmt.where(
-            cls.match.has(and_(Match.season_id == season_id, Match.playday == playday))
+            col(cls.match).has(
+                and_(col(Match.season_id) == season_id, col(Match.playday) == playday)
+            )
         )
         if filters is not None:
             stmt = stmt.where(filters)
         if limit is not None or offset:
             # Offset paging is deterministic only with a fixed order
-            stmt = stmt.order_by(cls.id).offset(offset)
+            stmt = stmt.order_by(col(cls.id)).offset(offset)
             if limit is not None:
                 stmt = stmt.limit(limit)
         return session.scalars(stmt).all()
@@ -88,14 +90,14 @@ class Series(SeriesBase, DBModel, table=True):
         order: SortOrder = "asc",
     ) -> Sequence[Self]:
         stmt = select(cls).options(*cls._list_eager_options())
-        stmt = stmt.where(cls.match.has(Match.season_id == season_id))
+        stmt = stmt.where(col(cls.match).has(col(Match.season_id) == season_id))
         if filters is not None:
             stmt = stmt.where(filters)
         if limit is not None or offset:
             # Offset paging is deterministic only with a fixed order
             if sort == "week":
-                stmt = stmt.join(Match, Match.id == cls.match_id)
-            stmt = ordered(stmt, SERIES_SORTS, sort, order, cls.id).offset(offset)
+                stmt = stmt.join(Match, col(Match.id) == cls.match_id)
+            stmt = ordered(stmt, SERIES_SORTS, sort, order, col(cls.id)).offset(offset)
             if limit is not None:
                 stmt = stmt.limit(limit)
         return session.scalars(stmt).all()

@@ -13,6 +13,7 @@ import pytest
 from fastapi import FastAPI
 from sqlalchemy import Select, select
 from sqlalchemy.exc import IntegrityError
+from sqlmodel import col
 
 from app.core.db import Session
 from app.models.enums import Race
@@ -56,8 +57,8 @@ def rows_of(user_id: int) -> list[W3CStats]:
         return list(
             session.scalars(
                 select(W3CStats)
-                .where(W3CStats.user_id == user_id)
-                .order_by(W3CStats.id)
+                .where(col(W3CStats.user_id) == user_id)
+                .order_by(col(W3CStats.id))
             ).all()
         )
 

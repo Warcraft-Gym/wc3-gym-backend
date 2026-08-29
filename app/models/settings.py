@@ -2,7 +2,7 @@ from typing import Annotated, Any, Self
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-from sqlmodel import Field, SQLModel
+from sqlmodel import Field, SQLModel, col
 
 from app.models.base import DBModel
 from app.models.types import NumToStr
@@ -23,7 +23,7 @@ class Settings(SettingsBase, DBModel, table=True):
     @classmethod
     def get_by_key(cls, session: Session, key: str) -> Self | None:
         """Get a setting by its key"""
-        return session.scalars(select(cls).where(cls.key == key).limit(1)).first()
+        return session.scalars(select(cls).where(col(cls.key) == key).limit(1)).first()
 
     @classmethod
     def get_all_as_dict(cls, session: Session) -> dict[str, str | None]:

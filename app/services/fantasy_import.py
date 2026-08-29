@@ -13,6 +13,7 @@ from typing import NamedTuple
 import pandas as pd
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session as OrmSession
+from sqlmodel import col
 
 from app.core.db import Session
 from app.core.exceptions import BadRequestError, NotFoundError
@@ -101,7 +102,9 @@ def _season_id(
         raise BadRequestError(
             "Missing Season parameter, either season_id or season name is required"
         )
-    found = session.scalars(select(Season.id).where(Season.name == season_name)).first()
+    found = session.scalars(
+        select(col(Season.id)).where(col(Season.name) == season_name)
+    ).first()
     if not found:
         raise NotFoundError(f"Season could not be found by name: {season_name}")
     return found
@@ -200,7 +203,9 @@ def _drafts(
 def _teams(session: OrmSession, rows: list[pd.Series], season_id: int) -> None:
     """Write one fantasy team per row of the sheet, matched by captain."""
     stored = _by_key(
-        session.scalars(select(FantasyTeam).where(FantasyTeam.season_id == season_id)),
+        session.scalars(
+            select(FantasyTeam).where(col(FantasyTeam.season_id) == season_id)
+        ),
         lambda fteam: fteam.captain_id,
     )
     drafts, captains = _drafts(session, rows, season_id, stored)
@@ -242,7 +247,7 @@ def _drafted_players(
     linked: set[tuple[int, int]] = set()
     for link in session.scalars(
         select(DBFantasyTeamPlayer).where(
-            DBFantasyTeamPlayer.fantasy_team_id.in_(wanted)
+            col(DBFantasyTeamPlayer.fantasy_team_id).in_(wanted)
         )
     ):
         if link.user_id in wanted[link.fantasy_team_id]:
@@ -266,14 +271,14 @@ def _fantasy_matches(
     matches and series of the season for the sheet that follows."""
     rows = _rows(frame)
     matches = _by_key(
-        session.scalars(select(Match).where(Match.season_id == season_id)),
+        session.scalars(select(Match).where(col(Match.season_id) == season_id)),
         lambda match: match.playday,
     )
     match_ids = {match.id for day in matches.values() for match in day}
     series: dict[int, list[Series]] = {}
     if match_ids:
         series = _by_key(
-            session.scalars(select(Series).where(Series.match_id.in_(match_ids))),
+            session.scalars(select(Series).where(col(Series.match_id).in_(match_ids))),
             lambda one: one.match_id,
         )
 
@@ -334,7 +339,9 @@ def _bets(
         lambda user: folded(user.name),
     )
     stored = _by_key(
-        session.scalars(select(FantasyBet).where(FantasyBet.season_id == season_id)),
+        session.scalars(
+            select(FantasyBet).where(col(FantasyBet.season_id) == season_id)
+        ),
         lambda bet: (bet.series_id, bet.user_id),
     )
     settings = Settings.get_all_as_dict(session)
