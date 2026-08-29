@@ -127,7 +127,7 @@ def test_series_for_season(client: Client, seeded: dict[str, Any]) -> None:
     assert played["player2_score"] == 1
     assert played["player1_points"] == 2
     assert played["player2_points"] == 1
-    assert played["date_time"] == "2026-01-07T19:00:00"
+    assert played["date_time"] == "2026-01-07T19:00:00Z"
     assert played["match"]["playday"] == 1
     open_series = next(s for s in series if s["id"] == ids["series_open_id"])
     assert open_series["player1_score"] is None

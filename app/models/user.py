@@ -7,7 +7,7 @@ from sqlmodel import Field, Relationship, SQLModel
 from app.models.base import DBModel, ident
 from app.models.enums import Race
 from app.models.season import SeasonPublic
-from app.models.types import EnumValue, NoneToList, NumToStr, SuggestRace
+from app.models.types import EnumValue, NoneToList, NumToStr, SuggestRace, UTCDateTime
 from app.models.user_team_season import UserTeamSeasonStatsPublic
 from app.models.w3c_stats import W3CStats, W3CStatsPublic
 
@@ -46,9 +46,9 @@ class User(UserBase, DBModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     race: Race
     # When the app last asked w3champions about this player, null when never
-    w3c_synced_at: datetime | None = None
+    w3c_synced_at: datetime | None = Field(default=None, sa_type=UTCDateTime)
     # When the app last asked w3champions for this player's ladder matches
-    ladder_synced_at: datetime | None = None
+    ladder_synced_at: datetime | None = Field(default=None, sa_type=UTCDateTime)
     team_seasons: list["DBUserTeamSeason"] = Relationship(
         back_populates="user", sa_relationship_kwargs={"cascade": "all, delete"}
     )

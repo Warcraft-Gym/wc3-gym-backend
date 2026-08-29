@@ -16,6 +16,7 @@ from sqlmodel import AutoString
 
 from app.core.exceptions import BadRequestError
 from app.models.base import DBModel
+from app.models.types import _aware_utc
 
 
 class ConcatenationType:
@@ -122,8 +123,10 @@ class QueryUtil:
                 ]
             if python_type in (int, float):
                 return python_type(value)
-            if python_type in (datetime, date):
-                return python_type.fromisoformat(value)
+            if python_type is datetime:
+                return _aware_utc(value)
+            if python_type is date:
+                return date.fromisoformat(value)
         except (KeyError, ValueError):
             raise BadRequestError(f"{key} does not take {value!r}") from None
         return value

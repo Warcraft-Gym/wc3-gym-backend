@@ -11,7 +11,7 @@ from app.core.db import rel
 from app.core.ordering import SortOrder, ordered
 from app.models.base import DBModel, ident
 from app.models.match import Match, MatchPublic
-from app.models.types import IsoDateTime, NumToStr
+from app.models.types import AwareUTC, NumToStr, UTCDateTime
 from app.models.user import User, UserPublic
 
 SeriesSort = Literal["date_time", "week", "id"]
@@ -19,7 +19,9 @@ SeriesSort = Literal["date_time", "week", "id"]
 
 class SeriesBase(SQLModel):
     match_id: int = Field(index=True, foreign_key="matches.id", ondelete="CASCADE")
-    date_time: datetime | None = None
+    date_time: Annotated[datetime | None, AwareUTC] = Field(
+        default=None, sa_type=UTCDateTime
+    )
     caster: Annotated[str | None, NumToStr] = Field(default=None, max_length=50)
     player1_id: int = Field(index=True, foreign_key="users.id", ondelete="CASCADE")
     player2_id: int = Field(index=True, foreign_key="users.id", ondelete="CASCADE")
@@ -151,7 +153,7 @@ class SeriesCreate(SeriesBase):
 
 class SeriesUpdate(SQLModel):
     match_id: int | None = None
-    date_time: datetime | None = None
+    date_time: Annotated[datetime | None, AwareUTC] = None
     caster: Annotated[str | None, NumToStr] = None
     player1_id: int | None = None
     player2_id: int | None = None
@@ -167,7 +169,7 @@ class SeriesPublic(SeriesBase):
     player1_id: int | None = None
     player2_id: int | None = None
     host_player_id: int | None = None
-    date_time: IsoDateTime | None = None
+    date_time: datetime | None = None
     match: MatchPublic | None = None
     player1: UserPublic | None = None
     player2: UserPublic | None = None

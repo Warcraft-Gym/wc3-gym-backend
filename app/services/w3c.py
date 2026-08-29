@@ -241,7 +241,7 @@ class W3CService:
                 battleTag=player["battleTag"],
                 w3c_match_id=match["id"],
                 wc3_season=match["season"],
-                start_time=start_time.replace(tzinfo=None),
+                start_time=start_time,
                 duration_s=match["durationInSeconds"],
                 map_name=match.get("mapName"),
                 race=self.get_race_enum(player.get("race")),

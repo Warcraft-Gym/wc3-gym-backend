@@ -7,15 +7,14 @@ from sqlmodel import Field, SQLModel
 from app.core.achievements import Achievement
 from app.models.base import DBModel
 from app.models.enums import Race
-from app.models.types import EnumValue, IsoDate
+from app.models.types import AwareUTC, EnumValue, IsoDate, UTCDateTime
 from app.models.w3c_stats import W3CSyncResult
 
 
 class W3CLadderMatchBase(SQLModel):
     w3c_match_id: str = Field(max_length=24)
     wc3_season: int
-    # UTC, the shape the DATETIME columns hold
-    start_time: datetime
+    start_time: Annotated[datetime, AwareUTC] = Field(sa_type=UTCDateTime)
     duration_s: int
     map_name: str | None = Field(default=None, max_length=50)
     # The race this player selected, RANDOM when he picked random

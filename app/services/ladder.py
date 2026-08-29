@@ -45,6 +45,7 @@ from app.models.relationships import DBUserSeasonSignup
 from app.models.season import Season
 from app.models.team import Team
 from app.models.team_season import DBTeamSeason
+from app.models.types import utcnow
 from app.models.user import User, UserReduced
 from app.models.user_team_season import DBUserTeamSeason
 from app.models.w3c_ladder_match import (
@@ -69,11 +70,6 @@ if TYPE_CHECKING:
     from app.services.settings import SettingsService
 
 logger = logging.getLogger(__name__)
-
-
-def _now() -> datetime:
-    """UTC without a zone, the shape the DATETIME columns hold."""
-    return datetime.now(UTC).replace(tzinfo=None)
 
 
 @dataclass(frozen=True)
@@ -241,12 +237,12 @@ class LadderService:
                 raise NotFoundError("Season not found")
             # A season without dates reads every match the walk reaches
             since, end = _window(season)
-            open_window = end >= _now()
+            open_window = end >= utcnow()
             seasons = _w3c_seasons_for(session, season)
             # The bootstrap start: a closed window is dated by the matches
             # already stored, an open one ends in the pinned season
             walk_from = None if open_window else _walk_start(session, end)
-            fresh_since = _now() - max_age
+            fresh_since = utcnow() - max_age
             synced_at = {
                 user_id: stamp
                 for user_id, stamp in session.execute(
@@ -284,7 +280,7 @@ class LadderService:
             if row is None:
                 raise NotFoundError("User not found")
             user = UserReduced.from_user_reduced(row)
-            today = _now().date()
+            today = utcnow().date()
             season_id = session.scalar(
                 select(col(Season.id)).where(
                     Season.start_date <= today, Season.end_date >= today
@@ -446,7 +442,7 @@ class LadderService:
         tag = user.battleTag.lower()
         own = [row for row in matches if row.battleTag.lower() == tag]
 
-        stamp = _now()
+        stamp = utcnow()
         with Session.begin() as session:
             self._write_matches(session, user.id, own)
             # The ledger names the seasons this run read; a skipped one keeps
@@ -518,8 +514,8 @@ class LadderService:
 def _window(season: Season) -> tuple[datetime, datetime]:
     """The season as an instant range; a missing date opens that end."""
     return (
-        datetime.combine(season.start_date or date.min, time.min),
-        datetime.combine(season.end_date or date.max, time.max),
+        datetime.combine(season.start_date or date.min, time.min, UTC),
+        datetime.combine(season.end_date or date.max, time.max, UTC),
     )
 
 

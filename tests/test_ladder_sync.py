@@ -41,7 +41,7 @@ FIXTURES = Path(__file__).parent / "data" / "w3c"
 W3C_SEASON = 25
 
 # Before every match in the fixtures.
-SINCE = datetime(2026, 1, 1)
+SINCE = datetime(2026, 1, 1, tzinfo=UTC)
 
 
 def fixture(name: str) -> list[dict[str, Any]]:
@@ -183,7 +183,7 @@ def mark(user_id: int, season: int, complete: bool) -> None:
             LadderSync(
                 user_id=user_id,
                 wc3_season=season,
-                synced_at=datetime(2026, 3, 1),
+                synced_at=datetime(2026, 3, 1, tzinfo=UTC),
                 complete=complete,
             )
         )
@@ -198,7 +198,7 @@ def stored() -> list[W3CLadderMatch]:
 def started_before(matches: list[dict[str, Any]], since: datetime) -> int:
     """The position of the first match older than `since`."""
     for index, match in enumerate(matches):
-        if datetime.fromisoformat(match["startTime"]).replace(tzinfo=None) < since:
+        if datetime.fromisoformat(match["startTime"]) < since:
             return index
     raise AssertionError("every match in the page is newer than since")
 
@@ -218,7 +218,7 @@ def test_the_parser_reads_a_captured_page() -> None:
         for r in rows
         if r.w3c_match_id == row.w3c_match_id and r.battleTag == "thanks#11187"
     )
-    assert opponent.start_time == datetime(2026, 8, 2, 1, 55, 12, 626000)
+    assert opponent.start_time == datetime(2026, 8, 2, 1, 55, 12, 626000, tzinfo=UTC)
     assert opponent.wc3_season == W3C_SEASON
     assert opponent.duration_s == 1000
     assert opponent.map_name == "Last Refuge"
@@ -273,7 +273,7 @@ def test_a_normal_pick_reads_the_same_race_twice() -> None:
 def test_the_paging_stops_at_the_first_page_older_than_since(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    since = datetime(2026, 7, 30)
+    since = datetime(2026, 7, 30, tzinfo=UTC)
     fake = serve(monkeypatch, {W3C_SEASON: THANKS}, page_size=10)
 
     W3CService().get_player_matches("thanks#11187", [(W3C_SEASON, since)])
@@ -391,8 +391,8 @@ def test_the_season_sync_reads_the_seasons_its_window_sits_in(
     player = seeded["player_ids"][0]
     sign_up(seeded["season_id"], player)
     # The seeded season runs 2026-01-05 to 2026-02-27
-    store_match(player, W3C_SEASON - 5, datetime(2026, 1, 10))
-    store_match(player, W3C_SEASON, datetime(2026, 8, 1))
+    store_match(player, W3C_SEASON - 5, datetime(2026, 1, 10, tzinfo=UTC))
+    store_match(player, W3C_SEASON, datetime(2026, 8, 1, tzinfo=UTC))
     fake = serve(monkeypatch, {})
 
     LadderService().sync_season(seeded["season_id"])
@@ -407,7 +407,7 @@ def test_a_season_still_running_starts_the_walk_at_the_pinned_season(
     """No stored match names a season w3champions only just opened."""
     player = seeded["player_ids"][0]
     sign_up(seeded["season_id"], player)
-    store_match(player, W3C_SEASON - 1, datetime(2026, 1, 10))
+    store_match(player, W3C_SEASON - 1, datetime(2026, 1, 10, tzinfo=UTC))
     with Session() as session:
         session.get(Season, seeded["season_id"]).end_date = None
         session.commit()
@@ -436,7 +436,7 @@ def test_a_closed_season_read_to_its_end_is_never_read_again(
     """A resync of an old season costs no w3champions call."""
     player = seeded["player_ids"][0]
     sign_up(seeded["season_id"], player)
-    store_match(player, W3C_SEASON - 1, datetime(2026, 1, 10))
+    store_match(player, W3C_SEASON - 1, datetime(2026, 1, 10, tzinfo=UTC))
     fake = serve(monkeypatch, {})
 
     LadderService().sync_season(seeded["season_id"])
@@ -454,7 +454,7 @@ def test_a_season_read_only_in_part_is_read_again_in_full(
     """An unfinished walk left no matches to trust, so the window is read again."""
     player = seeded["player_ids"][0]
     sign_up(seeded["season_id"], player)
-    store_match(player, W3C_SEASON - 1, datetime(2026, 1, 10))
+    store_match(player, W3C_SEASON - 1, datetime(2026, 1, 10, tzinfo=UTC))
     mark(player, W3C_SEASON - 1, complete=False)
     fake = serve(monkeypatch, {})
 
@@ -462,7 +462,7 @@ def test_a_season_read_only_in_part_is_read_again_in_full(
 
     assert fake.seasons() == [W3C_SEASON - 1]
     # The whole window, not the stamp the unfinished run left
-    assert fake.since[W3C_SEASON - 1] == datetime(2026, 1, 5)
+    assert fake.since[W3C_SEASON - 1] == datetime(2026, 1, 5, tzinfo=UTC)
 
 
 def test_a_walk_that_stops_early_is_written_as_unfinished(
@@ -471,7 +471,7 @@ def test_a_walk_that_stops_early_is_written_as_unfinished(
     """The ledger records what the pager reached, so a short read is no skip."""
     player = seeded["player_ids"][0]
     sign_up(seeded["season_id"], player)
-    store_match(player, W3C_SEASON - 1, datetime(2026, 1, 10))
+    store_match(player, W3C_SEASON - 1, datetime(2026, 1, 10, tzinfo=UTC))
     serve(monkeypatch, {})
     monkeypatch.setattr(W3CService, "_page_season", lambda *args: (False, False))
 
@@ -487,8 +487,8 @@ def test_a_throttle_keeps_the_seasons_read_before_it(
     thanks = add_player("thanks", "thanks#11187")
     sign_up(seeded["season_id"], thanks.id, seeded["team_a_id"])
     # The window sits in two w3champions seasons, read newest first
-    store_match(thanks.id, W3C_SEASON, datetime(2026, 1, 10))
-    store_match(thanks.id, W3C_SEASON - 1, datetime(2026, 1, 11))
+    store_match(thanks.id, W3C_SEASON, datetime(2026, 1, 10, tzinfo=UTC))
+    store_match(thanks.id, W3C_SEASON - 1, datetime(2026, 1, 11, tzinfo=UTC))
     serve(monkeypatch, {W3C_SEASON: THANKS[:3]}, throttle_on=W3C_SEASON - 1)
 
     result = LadderService().sync_season(seeded["season_id"])
@@ -530,7 +530,7 @@ def test_the_first_sync_of_a_window_walks_and_writes_what_it_found(
 
 
 # The window this bootstrap walk reads: it starts inside season 23.
-WINDOW = datetime(2026, 1, 18)
+WINDOW = datetime(2026, 1, 18, tzinfo=UTC)
 
 
 def test_the_bootstrap_walk_records_every_season_it_read(
@@ -541,11 +541,11 @@ def test_the_bootstrap_walk_records_every_season_it_read(
     fake = serve(
         monkeypatch,
         {
-            25: [at("s25", 25, datetime(2026, 7, 1))],
-            24: [at("s24", 24, datetime(2026, 2, 10))],
+            25: [at("s25", 25, datetime(2026, 7, 1, tzinfo=UTC))],
+            24: [at("s24", 24, datetime(2026, 2, 10, tzinfo=UTC))],
             23: [
-                at("s23-in", 23, datetime(2026, 1, 20)),
-                at("s23-out", 23, datetime(2026, 1, 10)),
+                at("s23-in", 23, datetime(2026, 1, 20, tzinfo=UTC)),
+                at("s23-out", 23, datetime(2026, 1, 10, tzinfo=UTC)),
             ],
         },
     )
@@ -570,10 +570,10 @@ def test_the_bootstrap_walk_records_an_empty_season_it_passed_through(
     serve(
         monkeypatch,
         {
-            25: [at("s25", 25, datetime(2026, 7, 1))],
+            25: [at("s25", 25, datetime(2026, 7, 1, tzinfo=UTC))],
             23: [
-                at("s23-in", 23, datetime(2026, 1, 20)),
-                at("s23-out", 23, datetime(2026, 1, 10)),
+                at("s23-in", 23, datetime(2026, 1, 20, tzinfo=UTC)),
+                at("s23-out", 23, datetime(2026, 1, 10, tzinfo=UTC)),
             ],
         },
     )
