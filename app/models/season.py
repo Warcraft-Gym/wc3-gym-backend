@@ -66,7 +66,7 @@ class SeasonUpdate(SQLModel):
 
 
 class SeasonPublic(SeasonBase):
-    id: int | None = None
+    id: int
     # The short form of a season carries only the name, so these read null
     number_weeks: int | None = None
     series_per_week: int | None = None
@@ -78,10 +78,7 @@ class SeasonPublic(SeasonBase):
     user_signup: Annotated[list[Any], NoneToList] = []
 
     @classmethod
-    def from_season(cls, season: Season | None) -> Self | None:
-        if not season:
-            return None
-
+    def from_season(cls, season: Season) -> Self:
         return cls(
             id=season.id,
             name=season.name,
@@ -100,20 +97,14 @@ class SeasonPublic(SeasonBase):
         )
 
     @classmethod
-    def from_season_reduced(cls, season: Season | None) -> Self | None:
+    def from_season_reduced(cls, season: Season) -> Self:
         """The name and the id only. Used where a season is a label on
         another object rather than the subject of the response."""
-        if not season:
-            return None
-
         return cls(id=season.id, name=season.name)
 
     @classmethod
-    def from_season_without_maps(cls, season: Season | None) -> Self | None:
+    def from_season_without_maps(cls, season: Season) -> Self:
         """Every scalar field of the season, without the map pool."""
-        if not season:
-            return None
-
         return cls(
             id=season.id,
             name=season.name,

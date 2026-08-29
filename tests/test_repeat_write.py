@@ -23,10 +23,13 @@ def _map_links(season_id: int) -> int:
     from app.models.relationships import DBMapSeason
 
     with Session() as session:
-        return session.scalar(
-            select(func.count())
-            .select_from(DBMapSeason)
-            .where(DBMapSeason.season_id == season_id)
+        return (
+            session.scalar(
+                select(func.count())
+                .select_from(DBMapSeason)
+                .where(DBMapSeason.season_id == season_id)
+            )
+            or 0
         )
 
 

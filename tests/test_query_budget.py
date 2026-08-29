@@ -200,6 +200,7 @@ def test_options_cover_the_player_graph(league: dict[str, Any]) -> None:
             .options(*options)
             .where(Series.id == league["series_played_id"])
         ).first()
+        assert series is not None
         public = SeriesPublic.from_series(series)
 
     assert len(public.player1.w3c_stats) == STATS_PER_PLAYER
@@ -426,6 +427,7 @@ def test_career_options_cover_the_player_graph(league: dict[str, Any]) -> None:
         stats = session.scalars(
             select(PlayerCareerStats).options(*options).order_by(PlayerCareerStats.id)
         ).first()
+        assert stats is not None
         public = PlayerCareerStatsPublic.from_career_stats(stats)
 
     assert public.user.name

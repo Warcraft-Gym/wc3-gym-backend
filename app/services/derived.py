@@ -431,7 +431,7 @@ def _career_users(session: Session, user_ids: set[int]) -> dict[int, User]:
     if not user_ids:
         return {}
     users = session.scalars(select(User).where(User.id.in_(user_ids))).all()
-    return {user.id: user for user in users}
+    return {user.id: user for user in users if user.id is not None}
 
 
 def _match_players(

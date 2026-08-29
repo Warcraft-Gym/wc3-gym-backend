@@ -15,6 +15,7 @@ did not stand in for.
 """
 
 import os
+from collections.abc import Generator
 from typing import Any
 
 import pytest
@@ -80,7 +81,7 @@ def empty_tables() -> None:
 
 
 @pytest.fixture(autouse=True)
-def clean_db(app: FastAPI) -> None:
+def clean_db(app: FastAPI) -> Generator[None]:
     """Empty every table after each test."""
     yield
     empty_tables()

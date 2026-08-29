@@ -67,7 +67,7 @@ class MatchUpdate(SQLModel):
 
 
 class MatchPublic(MatchBase):
-    id: int | None = None
+    id: int
     team1_id: int | None = None
     team2_id: int | None = None
     season_id: int | None = None
@@ -81,10 +81,7 @@ class MatchPublic(MatchBase):
     team2_score: int | None = None
 
     @classmethod
-    def from_match(cls, match: Match | None) -> Self | None:
-        if not match:
-            return None
-
+    def from_match(cls, match: Match) -> Self:
         return cls(
             id=match.id,
             team1_id=match.team1_id,
@@ -104,9 +101,9 @@ class MatchPublic(MatchBase):
         )
 
     @classmethod
-    def from_match_with_season(cls, match: Match | None) -> Self | None:
+    def from_match_with_season(cls, match: Match) -> Self:
         """The match with every scalar of its season, without the map pool."""
         public = cls.from_match(match)
-        if public and match.season:
+        if match.season:
             public.season = SeasonPublic.from_season_without_maps(match.season)
         return public

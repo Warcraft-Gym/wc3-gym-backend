@@ -68,6 +68,7 @@ def second_season(season_id: int) -> int:
         session.flush()
         session.add_all(default_rows(other.id))
         session.commit()
+        assert other.id is not None
         return other.id
 
 
@@ -585,16 +586,14 @@ def test_every_rule_the_migration_seeded_is_in_the_catalogue() -> None:
 
 def rule_row_id(season_id: int, rule_id: str) -> int:
     with Session() as session:
-        return (
-            session.scalars(
-                select(LadderAchievement).where(
-                    LadderAchievement.season_id == season_id,
-                    LadderAchievement.rule_id == rule_id,
-                )
+        row = session.scalars(
+            select(LadderAchievement).where(
+                LadderAchievement.season_id == season_id,
+                LadderAchievement.rule_id == rule_id,
             )
-            .one()
-            .id
-        )
+        ).one()
+        assert row.id is not None
+        return row.id
 
 
 def repay(season_id: int, rule_id: str, **fields: int) -> None:

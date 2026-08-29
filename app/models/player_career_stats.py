@@ -70,15 +70,12 @@ class PlayerCareerStatsPublic(PlayerCareerStatsBase):
     avg_series_per_season: float | None = None
 
     @classmethod
-    def from_career_stats(cls, stats: PlayerCareerStats | None) -> Self | None:
-        if not stats:
-            return None
-
+    def from_career_stats(cls, stats: PlayerCareerStats) -> Self:
         return cls(
             id=stats.id,
             user_id=stats.user_id,
             player_name=stats.player_name,
-            user=UserReduced.from_user_reduced(stats.user),
+            user=UserReduced.from_user_reduced(stats.user) if stats.user else None,
             historical_rating=stats.historical_rating,
             historical_series_won=stats.historical_series_won,
             historical_series_lost=stats.historical_series_lost,

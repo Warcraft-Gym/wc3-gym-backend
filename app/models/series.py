@@ -159,7 +159,7 @@ class SeriesUpdate(SQLModel):
 
 
 class SeriesPublic(SeriesBase):
-    id: int | None = None
+    id: int
     match_id: int | None = None
     player1_id: int | None = None
     player2_id: int | None = None
@@ -173,10 +173,7 @@ class SeriesPublic(SeriesBase):
     player2_points: int | None = None
 
     @classmethod
-    def from_series(cls, series: Series | None) -> Self | None:
-        if not series:
-            return None
-
+    def from_series(cls, series: Series) -> Self:
         return cls(
             id=series.id,
             match_id=series.match_id,
@@ -194,11 +191,8 @@ class SeriesPublic(SeriesBase):
         )
 
     @classmethod
-    def from_series_reduced(cls, series: Series | None) -> Self | None:
+    def from_series_reduced(cls, series: Series) -> Self:
         """The series with reduced players, so no player collection loads."""
-        if not series:
-            return None
-
         return cls(
             id=series.id,
             match_id=series.match_id,

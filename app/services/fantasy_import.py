@@ -101,10 +101,10 @@ def _season_id(
         raise BadRequestError(
             "Missing Season parameter, either season_id or season name is required"
         )
-    season = session.scalars(select(Season).where(Season.name == season_name)).first()
-    if not season:
+    found = session.scalars(select(Season.id).where(Season.name == season_name)).first()
+    if not found:
         raise NotFoundError(f"Season could not be found by name: {season_name}")
-    return season.id
+    return found
 
 
 def _drafts(

@@ -84,7 +84,7 @@ class UserUpdate(SQLModel):
 class UserReduced(UserBase):
     """The scalar fields of a user, without the per-season collections."""
 
-    id: int | None = None
+    id: int
     # A user reached through another object may hold only some of these
     name: Annotated[str | None, NumToStr] = None
     battleTag: Annotated[str | None, NumToStr] = None
@@ -95,11 +95,8 @@ class UserReduced(UserBase):
     ladder_synced_at: datetime | None = None
 
     @classmethod
-    def from_user_reduced(cls, user: User | None) -> Self | None:
+    def from_user_reduced(cls, user: User) -> Self:
         """The scalar fields of the user. A subclass keeps its collections empty."""
-        if not user:
-            return None
-
         return cls(
             id=user.id,
             name=user.name,
@@ -127,10 +124,7 @@ class UserListPublic(UserReduced):
     signup_race: Annotated[str | None, EnumValue] = None
 
     @classmethod
-    def from_user(cls, user: User | None) -> Self | None:
-        if not user:
-            return None
-
+    def from_user(cls, user: User) -> Self:
         row = cls.from_user_reduced(user)
         row.w3c_stats = [
             W3CStatsPublic.model_validate(stat) for stat in (user.w3c_stats or [])
@@ -146,11 +140,8 @@ class UserPublic(UserListPublic):
     gnl_stats: Annotated[list[UserTeamSeasonStatsPublic], NoneToList] = []
 
     @classmethod
-    def from_user(cls, user: User | None) -> Self | None:
+    def from_user(cls, user: User) -> Self:
         row = super().from_user(user)
-        if not row:
-            return None
-
         row.gnl_stats = [
             UserTeamSeasonStatsPublic.from_user_team_season(stat)
             for stat in (user.team_seasons or [])

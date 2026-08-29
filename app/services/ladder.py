@@ -27,6 +27,7 @@ from sqlalchemy import (
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session as OrmSession
 from sqlalchemy.orm import aliased
+from sqlmodel import col
 
 from app.core import achievements, ladder
 from app.core.db import Session
@@ -272,9 +273,10 @@ class LadderService:
         """Sync one player now: his stats, and his matches of the season
         running today. Outside a season his stats are all there is to read."""
         with Session.begin() as session:
-            user = UserReduced.from_user_reduced(session.get(User, user_id))
-            if user is None:
+            row = session.get(User, user_id)
+            if row is None:
                 raise NotFoundError("User not found")
+            user = UserReduced.from_user_reduced(row)
             today = _now().date()
             season_id = session.scalar(
                 select(Season.id).where(
@@ -638,7 +640,7 @@ def _league_race(season_id: int | None) -> ColumnElement[bool]:
             .scalar_subquery()
         )
         race = func.coalesce(signup, race)
-    return W3CLadderMatch.race == race
+    return col(W3CLadderMatch.race) == race
 
 
 def _mmr_scope(

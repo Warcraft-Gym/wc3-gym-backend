@@ -85,7 +85,7 @@ class FantasyTeamPublic(FantasyTeamBase):
     race_points: int | None = None
     bet_points: int | None = None
     total_points: int | None = None
-    id: int | None = None
+    id: int
     name: Annotated[str | None, NumToStr] = None
     season_id: int | None = None
     captain_id: int | None = None
@@ -96,10 +96,7 @@ class FantasyTeamPublic(FantasyTeamBase):
     drafted_players: Annotated[list[UserPublic], NoneToList] = []
 
     @classmethod
-    def from_fantasy_team(cls, fteam: FantasyTeam | None) -> Self | None:
-        if not fteam:
-            return None
-
+    def from_fantasy_team(cls, fteam: FantasyTeam) -> Self:
         drafted_players = []
         if fteam.drafted_players:
             for dp in fteam.drafted_players:

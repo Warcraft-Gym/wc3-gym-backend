@@ -41,10 +41,7 @@ class UserTeamSeasonStatsPublic(SQLModel):
     matchup_history: Annotated[list[Any], NoneToList] = []
 
     @classmethod
-    def from_user_team_season(cls, uts: DBUserTeamSeason | None) -> Self | None:
-        if not uts:
-            return None
-
+    def from_user_team_season(cls, uts: DBUserTeamSeason) -> Self:
         return cls(
             user_id=uts.user_id,
             team_id=uts.team_id,

@@ -104,7 +104,8 @@ class TeamPublic(TeamReduced):
             for ut in team.user_seasons:
                 if not players.get(ut.season_id):
                     players[ut.season_id] = []
-                user = UserPublic.from_user(ut.user)
+                # A noload on the link leaves the user unloaded
+                user = UserPublic.from_user(ut.user) if ut.user else None
                 if user:
                     for gnl_stat in user.gnl_stats:
                         if gnl_stat.season_id == ut.season_id:

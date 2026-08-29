@@ -58,7 +58,7 @@ def strip_text(frame: pd.DataFrame) -> pd.DataFrame:
     return frame.map(lambda value: value.strip() if isinstance(value, str) else value)
 
 
-def folded[T](value: T) -> T:
+def folded[T](value: T) -> T | str:
     """The key a lookup matches on. Text folds to lower case, so a cell
     finds the stored row whatever the case it was typed in."""
     return value.strip().lower() if isinstance(value, str) else value
@@ -262,7 +262,11 @@ def _maps(session: OrmSession, sheets: Sheets, season: Season) -> dict[int, int]
                 for map_id in {map_obj.id for map_obj in pool} - linked
             ]
         )
-    return {old_id: map_obj.id for old_id, map_obj in old_ids.items()}
+    return {
+        old_id: map_obj.id
+        for old_id, map_obj in old_ids.items()
+        if map_obj.id is not None
+    }
 
 
 def _teams(session: OrmSession, sheets: Sheets, season: Season) -> dict[int, int]:
@@ -313,7 +317,7 @@ def _teams(session: OrmSession, sheets: Sheets, season: Season) -> dict[int, int
                 for team_id in team_ids - linked
             ]
         )
-    return {old_id: team.id for old_id, team in old_ids.items()}
+    return {old_id: team.id for old_id, team in old_ids.items() if team.id is not None}
 
 
 def _player_values(row: pd.Series) -> UserCreate:
@@ -436,7 +440,9 @@ def _matches(
             old_ids[old_id] = match
     session.add_all(written)
     session.flush()
-    return {old_id: match.id for old_id, match in old_ids.items()}
+    return {
+        old_id: match.id for old_id, match in old_ids.items() if match.id is not None
+    }
 
 
 def _series_values(
@@ -499,7 +505,9 @@ def _series(
             old_ids[old_id] = series
     session.add_all(written)
     session.flush()
-    return {old_id: series.id for old_id, series in old_ids.items()}
+    return {
+        old_id: series.id for old_id, series in old_ids.items() if series.id is not None
+    }
 
 
 def _fantasy_users(session: OrmSession, sheets: Sheets, users: Users) -> None:
@@ -584,7 +592,9 @@ def _fantasy_teams(
             old_ids[old_id] = fteam
     session.add_all(written)
     session.flush()
-    return {old_id: fteam.id for old_id, fteam in old_ids.items()}
+    return {
+        old_id: fteam.id for old_id, fteam in old_ids.items() if fteam.id is not None
+    }
 
 
 def _fantasy_players(

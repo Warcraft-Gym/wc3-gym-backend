@@ -20,8 +20,5 @@ class SeasonInfoPublic(SQLModel):
     points_against: int | None = None
 
     @classmethod
-    def from_team_season(cls, season_info: "DBTeamSeason | None") -> Self | None:
-        if not season_info:
-            return None
-
+    def from_team_season(cls, season_info: "DBTeamSeason") -> Self:
         return cls(season_id=season_info.season_id)

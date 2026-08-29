@@ -108,6 +108,7 @@ def add_outsider(seeded: dict[str, Any]) -> int:
             ]
         )
         session.commit()
+        assert outsider.id is not None
         return outsider.id
 
 
@@ -235,6 +236,7 @@ def draft_outsider(seeded: dict[str, Any]) -> int:
         session.flush()
         session.add(DBFantasyTeamPlayer(fantasy_team_id=fteam.id, user_id=drafted.id))
         session.commit()
+        assert drafted.id is not None
         return drafted.id
 
 
