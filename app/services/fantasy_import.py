@@ -220,8 +220,7 @@ def _teams(session: OrmSession, rows: list[pd.Series], season_id: int) -> None:
         found = stored.get(draft.captain.id, [])
         if found:
             fteam = found[0]
-            for field, value in values.model_dump().items():
-                setattr(fteam, field, value)
+            fteam.sqlmodel_update(values.model_dump())
         else:
             fteam = FantasyTeam(**values.model_dump())
             written.append(fteam)

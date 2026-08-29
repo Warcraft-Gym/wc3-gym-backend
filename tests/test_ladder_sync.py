@@ -69,7 +69,7 @@ class FakeW3C:
         self.since: dict[int, datetime] = {}
 
     def send_request(
-        self, method: str, url: str, params: dict[str, Any] | None = None
+        self, url: str, params: dict[str, Any] | None = None
     ) -> dict[str, Any]:
         season, offset = params["season"], params["offset"]
         self.calls.append((season, offset))

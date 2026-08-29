@@ -59,8 +59,6 @@ class W3CService:
     def __init__(self, settings_app_service: "SettingsService | None" = None) -> None:
         self.settings_app_service = settings_app_service
 
-    GET = "GET"
-
     def _setting(self, key: str) -> str | None:
         """A settings value, or None when the row is absent."""
         if not self.settings_app_service:
@@ -79,9 +77,7 @@ class W3CService:
 
     def latest_season(self) -> int:
         """The newest season w3champions lists."""
-        seasons = self.send_request(
-            method=self.GET, url=f"{self.base_url()}/ladder/seasons"
-        )
+        seasons = self.send_request(url=f"{self.base_url()}/ladder/seasons")
         return max(int(season["id"]) for season in seasons)
 
     def current_season(self) -> int:
@@ -97,7 +93,6 @@ class W3CService:
         """
         try:
             result = self.send_request(
-                method=self.GET,
                 url=f"{self.base_url()}/players/{urllib.parse.quote(bnet_name)}",
             )
             # If we get a successful response, the player exists
@@ -115,7 +110,6 @@ class W3CService:
 
         param = {"gateWay": 20, "season": season_to_fetch}
         result = self.send_request(
-            method=self.GET,
             url=f"{self.base_url()}/players/{urllib.parse.quote(bnet_name)}/game-mode-stats",
             params=param,
         )
@@ -201,7 +195,6 @@ class W3CService:
         offset = 0
         while True:
             body = self.send_request(
-                method=self.GET,
                 url=f"{self.base_url()}/matches/search",
                 params={
                     "playerId": battle_tag,
@@ -279,17 +272,13 @@ class W3CService:
 
     def send_request(
         self,
-        method: str,
         url: str,
         params: dict[str, Any] | None = None,
     ) -> Any:  # noqa: ANN401  # the w3champions body has no fixed shape
         try:
             # Send the request
             response = _session.request(
-                method,
-                url,
-                params=params,
-                timeout=REQUEST_TIMEOUT,
+                "GET", url, params=params, timeout=REQUEST_TIMEOUT
             )
 
             if _is_throttled(response):

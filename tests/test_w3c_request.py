@@ -57,7 +57,7 @@ def test_the_request_carries_a_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
     """HARD GATE: no timeout parks the thread for as long as w3champions hangs."""
     sent = answer(monkeypatch, FakeResponse())
 
-    body = W3CService().send_request(method="GET", url="https://example.test/p")
+    body = W3CService().send_request(url="https://example.test/p")
 
     assert body == {"battleTag": "P1#1234"}
     assert sent["timeout"] == REQUEST_TIMEOUT
@@ -70,7 +70,7 @@ def test_a_timeout_fails_like_any_other_network_error(
     raise_timeout(monkeypatch)
 
     with pytest.raises(Exception, match="An exception occurred: read timed out"):
-        W3CService().send_request(method="GET", url="https://example.test/p")
+        W3CService().send_request(url="https://example.test/p")
 
 
 def test_the_player_check_answers_false_on_a_timeout(
@@ -93,7 +93,7 @@ def test_a_refusal_for_rate_is_a_throttle(
     answer(monkeypatch, FakeResponse(status_code=status, headers=headers))
 
     with pytest.raises(W3CThrottledError):
-        W3CService().send_request(method="GET", url="https://example.test/p")
+        W3CService().send_request(url="https://example.test/p")
 
 
 def test_a_503_without_retry_after_stays_an_ordinary_failure(
@@ -103,5 +103,5 @@ def test_a_503_without_retry_after_stays_an_ordinary_failure(
     answer(monkeypatch, FakeResponse(status_code=503))
 
     with pytest.raises(Exception, match="status code 503") as failure:
-        W3CService().send_request(method="GET", url="https://example.test/p")
+        W3CService().send_request(url="https://example.test/p")
     assert not isinstance(failure.value, W3CThrottledError)

@@ -350,7 +350,7 @@ def test_an_admin_signup_needs_no_w3c_configuration(
     asked: dict[str, Any] = {}
 
     def fake_send_request(
-        self: W3CService, method: str, url: str, **kwargs: object
+        self: W3CService, url: str, **kwargs: object
     ) -> list[dict[str, int]]:
         asked["seasons_url"] = url
         return [{"id": 25}, {"id": 24}]

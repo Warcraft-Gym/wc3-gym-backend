@@ -138,7 +138,7 @@ def export_season(
                 team.name,
                 team.long_name if team.long_name else "",
                 team.discord_role if team.discord_role else "",
-                team.icon_url if hasattr(team, "icon_url") and team.icon_url else "",
+                "",  # no model carries an icon URL
             ]
         )
 
@@ -163,10 +163,6 @@ def export_season(
         players = team.player_by_season.get(season_id, [])
         for user in players:
             roster_user_ids.add(user.id)
-            race_value = user.race.value if hasattr(user.race, "value") else user.race
-            country_value = (
-                user.country.value if hasattr(user.country, "value") else user.country
-            )
             players_sheet.append(
                 [
                     user.id,
@@ -174,9 +170,9 @@ def export_season(
                     user.battleTag,
                     user.discordTag,
                     user.discordId if user.discordId else "",
-                    race_value,
+                    user.race,
                     user.mmr if user.mmr else "",
-                    country_value if country_value else "",
+                    user.country if user.country else "",
                     user.fantasy_tier if user.fantasy_tier else "",
                     team.id,
                 ]
@@ -293,11 +289,6 @@ def export_season(
         fantasy_teams, _ = fantasy_team_service.search(query)
         for fteam in fantasy_teams:
             fantasy_user_ids.add(fteam.captain_id)
-            drafted_race_value = (
-                fteam.drafted_race.value
-                if hasattr(fteam.drafted_race, "value")
-                else fteam.drafted_race
-            )
             fantasy_teams_sheet.append(
                 [
                     fteam.id,
@@ -305,7 +296,7 @@ def export_season(
                     fteam.season_id,
                     fteam.captain_id,
                     fteam.drafted_team_id if fteam.drafted_team_id else "",
-                    drafted_race_value if drafted_race_value else "",
+                    fteam.drafted_race if fteam.drafted_race else "",
                     fteam.player_points if fteam.player_points else 0,
                     fteam.bench_points if fteam.bench_points else 0,
                     fteam.team_points if fteam.team_points else 0,

@@ -230,7 +230,7 @@ def test_the_access_helper_refuses_an_unknown_access_type(
 
 def refuse_w3c(monkeypatch: pytest.MonkeyPatch, failure: Exception) -> None:
     def raise_it(
-        self: W3CService, method: str, url: str, params: dict[str, Any] | None = None
+        self: W3CService, url: str, params: dict[str, Any] | None = None
     ) -> Never:
         raise failure
 
