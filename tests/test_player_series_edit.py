@@ -5,7 +5,7 @@ An admin who changes the caster between the two must keep that change, so
 the write carries the date and the scores only.
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
@@ -61,4 +61,4 @@ def test_a_caster_set_after_the_read_survives_the_player_edit(
     assert isinstance(result, dict), result
     written = read_series(series_id)
     assert written.caster == "Grubby"
-    assert written.date_time == datetime(2026, 1, 9, 20, 0)
+    assert written.date_time == datetime(2026, 1, 9, 20, 0, tzinfo=UTC)

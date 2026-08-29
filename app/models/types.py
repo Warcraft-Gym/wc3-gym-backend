@@ -13,10 +13,12 @@ Each type says which group it is in.
 import difflib
 import enum
 import numbers
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from typing import Annotated
 
 from pydantic import BeforeValidator, PlainSerializer
+from sqlalchemy import DateTime, Dialect
+from sqlalchemy.types import TypeDecorator
 
 from app.models.enums import Race
 
@@ -60,6 +62,44 @@ def _lenient_date[T](value: T) -> date | None | T:
     return value
 
 
+def utcnow() -> datetime:
+    return datetime.now(UTC)
+
+
+def _aware_utc[T](value: T) -> datetime | T:
+    # A bare value is UTC already; a zoned one is converted to it.
+    if isinstance(value, str):
+        try:
+            value = datetime.fromisoformat(value)  # type: ignore[assignment]
+        except ValueError:
+            return value
+    if isinstance(value, datetime):
+        return value.astimezone(UTC) if value.tzinfo else value.replace(tzinfo=UTC)
+    return value
+
+
+class UTCDateTime(TypeDecorator[datetime]):
+    """A timestamptz column read back aware in UTC on every dialect.
+    SQLite keeps no zone, so a bare value from it gets UTC again."""
+
+    impl = DateTime(timezone=True)
+    cache_ok = True
+
+    @property
+    def python_type(self) -> type[datetime]:
+        return datetime
+
+    def process_bind_param(
+        self, value: datetime | None, dialect: Dialect
+    ) -> datetime | None:
+        return None if value is None else _aware_utc(value)
+
+    def process_result_value(
+        self, value: datetime | None, dialect: Dialect
+    ) -> datetime | None:
+        return None if value is None else _aware_utc(value)
+
+
 def _empty_str_to_none[T](value: T) -> T | None:
     return None if value == "" else value
 
@@ -85,13 +125,7 @@ def _round_to_int[T](value: T) -> int | T:
     return value
 
 
-# Output. isoformat() ends an aware value with '+00:00' where pydantic writes 'Z'.
-IsoDateTime = Annotated[
-    datetime,
-    PlainSerializer(
-        lambda v: v.isoformat(), return_type=str, when_used="json-unless-none"
-    ),
-]
+# Output. Pydantic writes a date as isoformat already; this pins it.
 IsoDate = Annotated[
     date,
     PlainSerializer(
@@ -108,6 +142,8 @@ NoneToList = BeforeValidator(_none_to_list)
 NumToStr = BeforeValidator(_num_to_str)
 # Input. Date fields that arrive empty or as a full ISO datetime string.
 LenientDate = BeforeValidator(_lenient_date)
+# Input. Datetime fields are aware UTC; a bare value is read as UTC.
+AwareUTC = BeforeValidator(_aware_utc)
 # Input. Number fields where a cleared form field arrives as an empty string.
 EmptyStrToNone = BeforeValidator(_empty_str_to_none)
 # Input. Integer fields fed by the w3champions API, which sends fractions.

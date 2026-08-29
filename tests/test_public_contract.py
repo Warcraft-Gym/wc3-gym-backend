@@ -34,7 +34,7 @@ TEAM_ICON = b"\x89PNG\r\n\x1a\npublic-contract-test"
 WC3_SEASON = 20
 
 # The scheduled time tests/seed.py inserts; the PHP splits it on 'T', '-' and ':'.
-SERIES_DATE_TIME = "2026-01-07T19:00:00"
+SERIES_DATE_TIME = "2026-01-07T19:00:00Z"
 
 
 @pytest.fixture

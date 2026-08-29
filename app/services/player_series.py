@@ -202,7 +202,6 @@ def update_player_series(
     if data.get("date_time"):
         if isinstance(data["date_time"], str):
             try:
-                # The frontend sends ET, stored naive to match the DATETIME column
                 changes["date_time"] = datetime.fromisoformat(
                     data["date_time"].replace(" ", "T")
                 )

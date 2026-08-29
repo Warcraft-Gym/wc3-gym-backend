@@ -6,7 +6,7 @@ read a roster and the wiring into the routes are tested through the service.
 """
 
 from collections.abc import Sequence
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -25,7 +25,7 @@ from app.models.w3c_ladder_match import W3CLadderMatch
 from tests.test_ladder_read import INSIDE, add_match, ladder_of, player_of, sign_up
 from tests.test_query_budget import count_statements
 
-START = datetime(2026, 1, 7, 12, 0)
+START = datetime(2026, 1, 7, 12, 0, tzinfo=UTC)
 
 
 @pytest.fixture
@@ -171,8 +171,8 @@ def test_falling_star_wants_over_a_hundred_mmr_lost_in_a_day() -> None:
 def test_a_day_is_a_calendar_day_not_a_rolling_window() -> None:
     """Two half days over one midnight are two days, as the bundle counts."""
     late = [Row(minutes=i, mmr_before=1500, mmr_after=1560) for i in range(2)]
-    late[0].start_time = datetime(2026, 1, 7, 23, 0)
-    late[1].start_time = datetime(2026, 1, 8, 1, 0)
+    late[0].start_time = datetime(2026, 1, 7, 23, 0, tzinfo=UTC)
+    late[1].start_time = datetime(2026, 1, 8, 1, 0, tzinfo=UTC)
     assert "rising_star" not in run(late)
 
 
@@ -324,7 +324,7 @@ def test_the_answer_carries_the_badges_and_adds_their_points(
         "name": "I am the danger!",
         "description": "Win your first GNL game",
         "icon": "mdi-redhat",
-        "achieved_at": INSIDE.isoformat(),
+        "achieved_at": INSIDE.isoformat().replace("+00:00", "Z"),
     }
 
 
@@ -403,7 +403,9 @@ def test_the_badges_read_only_the_scoped_rows(
         race=Race.UD,
         start_time=INSIDE + timedelta(minutes=1),
     )
-    add_match(player, "outside", won=True, start_time=datetime(2025, 12, 1, 12, 0))
+    add_match(
+        player, "outside", won=True, start_time=datetime(2025, 12, 1, 12, 0, tzinfo=UTC)
+    )
     add_match(player, "counts", won=False, start_time=INSIDE + timedelta(minutes=2))
 
     row = player_of(ladder_of(client, auth_headers, league["season_id"]), player)

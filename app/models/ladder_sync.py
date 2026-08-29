@@ -12,13 +12,13 @@ from sqlalchemy import Index
 from sqlmodel import Field, SQLModel
 
 from app.models.base import DBModel
+from app.models.types import UTCDateTime
 
 
 class LadderSyncBase(SQLModel):
     user_id: int = Field(foreign_key="users.id")
     wc3_season: int
-    # UTC without a zone, the shape the DATETIME columns hold
-    synced_at: datetime
+    synced_at: datetime = Field(sa_type=UTCDateTime)
     # The season was paged to its end, or past the window it was read for
     complete: bool = False
 

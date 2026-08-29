@@ -11,7 +11,7 @@ asked for.
 
 import importlib.util
 from dataclasses import asdict
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -34,7 +34,7 @@ from app.models.w3c_ladder_match import W3CLadderMatch
 from tests.test_query_budget import count_statements
 
 # The seeded season runs 2026-01-05 to 2026-02-27.
-INSIDE = datetime(2026, 1, 7, 14, 30)
+INSIDE = datetime(2026, 1, 7, 14, 30, tzinfo=UTC)
 
 
 def sign_up(season_id: int, user_ids: list[int], race: Race | None = None) -> None:
@@ -243,10 +243,10 @@ def test_the_window_takes_the_season_and_nothing_around_it(
 ) -> None:
     """One second before the start and one second after the end are out."""
     player = league["player_ids"][0]
-    add_match(player, "before", start_time=datetime(2026, 1, 4, 23, 59, 59))
-    add_match(player, "first", start_time=datetime(2026, 1, 5, 0, 0, 0))
-    add_match(player, "last", start_time=datetime(2026, 2, 27, 23, 59, 59))
-    add_match(player, "after", start_time=datetime(2026, 2, 28, 0, 0, 0))
+    add_match(player, "before", start_time=datetime(2026, 1, 4, 23, 59, 59, tzinfo=UTC))
+    add_match(player, "first", start_time=datetime(2026, 1, 5, 0, 0, 0, tzinfo=UTC))
+    add_match(player, "last", start_time=datetime(2026, 2, 27, 23, 59, 59, tzinfo=UTC))
+    add_match(player, "after", start_time=datetime(2026, 2, 28, 0, 0, 0, tzinfo=UTC))
 
     body = ladder_of(client, auth_headers, league["season_id"])
 
@@ -430,9 +430,11 @@ def test_by_hour_buckets_the_matches_by_utc_weekday_and_hour(
     """7 by 24, row 0 Sunday, and a match between two GNL players counts once."""
     one, two = league["player_ids"][0], league["player_ids"][2]
     # 2026-01-07 is a Wednesday, so row 3
-    add_match(one, "shared", start_time=datetime(2026, 1, 7, 14, 30))
-    add_match(two, "shared", start_time=datetime(2026, 1, 7, 14, 30), won=False)
-    add_match(one, "sunday", start_time=datetime(2026, 1, 11, 0, 5))
+    add_match(one, "shared", start_time=datetime(2026, 1, 7, 14, 30, tzinfo=UTC))
+    add_match(
+        two, "shared", start_time=datetime(2026, 1, 7, 14, 30, tzinfo=UTC), won=False
+    )
+    add_match(one, "sunday", start_time=datetime(2026, 1, 11, 0, 5, tzinfo=UTC))
 
     body = ladder_of(client, auth_headers, league["season_id"])
 
@@ -459,17 +461,16 @@ def test_the_season_stamp_is_the_oldest_of_the_roster(
 ) -> None:
     """Everyone is at least this fresh, which is what the page may claim."""
     add_match(league["player_ids"][0], "one")
-    oldest = datetime(2026, 3, 1, 12, 30)
+    oldest = datetime(2026, 3, 1, 12, 30, tzinfo=UTC)
     for index, player in enumerate(league["player_ids"]):
         stamp_ladder(player, 25, oldest + timedelta(hours=index))
 
     body = ladder_of(client, auth_headers, league["season_id"])
 
-    assert body["season"]["synced_at"] == oldest.isoformat()
-    assert (
-        player_of(body, league["player_ids"][1])["synced_at"]
-        == (oldest + timedelta(hours=1)).isoformat()
-    )
+    assert body["season"]["synced_at"] == oldest.isoformat().replace("+00:00", "Z")
+    assert player_of(body, league["player_ids"][1])["synced_at"] == (
+        oldest + timedelta(hours=1)
+    ).isoformat().replace("+00:00", "Z")
 
 
 def test_a_season_with_a_player_never_read_is_unsynced(
@@ -478,7 +479,7 @@ def test_a_season_with_a_player_never_read_is_unsynced(
     """One unread player is a season the page must not call synced."""
     add_match(league["player_ids"][0], "one")
     for player in league["player_ids"][:-1]:
-        stamp_ladder(player, 25, datetime(2026, 3, 1, 12, 30))
+        stamp_ladder(player, 25, datetime(2026, 3, 1, 12, 30, tzinfo=UTC))
 
     body = ladder_of(client, auth_headers, league["season_id"])
 
@@ -493,16 +494,16 @@ def test_a_player_short_of_one_season_of_the_window_is_unsynced(
     player = league["player_ids"][0]
     add_match(player, "one")
     add_match(player, "two", start_time=INSIDE + timedelta(days=1), wc3_season=24)
-    stamp_ladder(player, 25, datetime(2026, 3, 1, 12, 30))
+    stamp_ladder(player, 25, datetime(2026, 3, 1, 12, 30, tzinfo=UTC))
 
     body = ladder_of(client, auth_headers, league["season_id"])
 
     assert player_of(body, player)["synced_at"] is None
-    stamp_ladder(player, 24, datetime(2026, 3, 1, 11, 0))
+    stamp_ladder(player, 24, datetime(2026, 3, 1, 11, 0, tzinfo=UTC))
     body = ladder_of(client, auth_headers, league["season_id"])
-    assert (
-        player_of(body, player)["synced_at"] == datetime(2026, 3, 1, 11, 0).isoformat()
-    )
+    assert player_of(body, player)["synced_at"] == datetime(
+        2026, 3, 1, 11, 0, tzinfo=UTC
+    ).isoformat().replace("+00:00", "Z")
 
 
 def test_every_earned_achievement_is_in_the_catalogue(
@@ -685,7 +686,7 @@ def test_the_user_ladder_answers_the_window_of_the_season(
 ) -> None:
     player = league["player_ids"][0]
     add_match(player, "inside", start_time=INSIDE)
-    add_match(player, "outside", start_time=datetime(2025, 12, 1, 12, 0))
+    add_match(player, "outside", start_time=datetime(2025, 12, 1, 12, 0, tzinfo=UTC))
 
     resp = client.get(
         f"/users/{player}/ladder?season_id={league['season_id']}", headers=auth_headers
@@ -705,7 +706,7 @@ def test_the_user_ladder_without_a_season_reads_every_match(
     """The all-time answer ignores the season window."""
     player = league["player_ids"][0]
     add_match(player, "inside", start_time=INSIDE)
-    add_match(player, "outside", start_time=datetime(2025, 12, 1, 12, 0))
+    add_match(player, "outside", start_time=datetime(2025, 12, 1, 12, 0, tzinfo=UTC))
 
     body = client.get(f"/users/{player}/ladder", headers=auth_headers).json()
 
