@@ -20,7 +20,6 @@ from sqlalchemy import (
     distinct,
     extract,
     func,
-    or_,
     select,
     update,
 )
@@ -41,10 +40,9 @@ from app.models.base import ident
 from app.models.enums import Race
 from app.models.ladder_achievement import LadderAchievement
 from app.models.ladder_sync import LadderSync
-from app.models.relationships import DBUserSeasonSignup
+from app.models.relationships import DBTeamSeasonCoach, DBUserSeasonSignup
 from app.models.season import Season
 from app.models.team import Team
-from app.models.team_season import DBTeamSeason
 from app.models.types import utcnow
 from app.models.user import User, UserReduced
 from app.models.user_team_season import DBUserTeamSeason
@@ -911,15 +909,8 @@ def _coach_tags(session: OrmSession, season_id: int) -> frozenset[str]:
     """The battle tags of every coach of the season, in lower case."""
     tags = session.scalars(
         select(col(User.battleTag))
-        .join(
-            DBTeamSeason,
-            or_(
-                col(DBTeamSeason.coach_1_id) == col(User.id),
-                col(DBTeamSeason.coach_2_id) == User.id,
-                col(DBTeamSeason.coach_3_id) == User.id,
-            ),
-        )
-        .where(col(DBTeamSeason.season_id) == season_id)
+        .join(DBTeamSeasonCoach, col(DBTeamSeasonCoach.user_id) == col(User.id))
+        .where(col(DBTeamSeasonCoach.season_id) == season_id)
     )
     return frozenset(tag.lower() for tag in tags if tag)
 

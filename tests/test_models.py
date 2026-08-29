@@ -33,6 +33,7 @@ TABLES = {
     "series",
     "settings",
     "team_season",
+    "team_season_coach",
     "teams",
     "user_season_signup",
     "user_team_season",

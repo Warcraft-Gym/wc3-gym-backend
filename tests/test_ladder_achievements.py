@@ -14,13 +14,12 @@ import pytest
 from fastapi import FastAPI
 from httpx2 import Client
 from sqlalchemy import select
-from sqlmodel import col
 
 from app.core import achievements
 from app.core.achievements import Achievement
 from app.core.db import Session
 from app.models.enums import Race
-from app.models.team_season import DBTeamSeason
+from app.models.relationships import DBTeamSeasonCoach
 from app.models.w3c_ladder_match import W3CLadderMatch
 from tests.test_ladder_read import INSIDE, add_match, ladder_of, player_of, sign_up
 from tests.test_query_budget import count_statements
@@ -348,10 +347,13 @@ def test_the_roster_rules_read_the_season(
     """P1 on Alpha beats P3 on Beta, who coaches Beta."""
     one, three = league["player_ids"][0], league["player_ids"][2]
     with Session() as session:
-        team_season = session.scalars(
-            select(DBTeamSeason).where(col(DBTeamSeason.team_id) == league["team_b_id"])
-        ).one()
-        team_season.coach_1_id = three
+        session.add(
+            DBTeamSeasonCoach(
+                team_id=league["team_b_id"],
+                season_id=league["season_id"],
+                user_id=three,
+            )
+        )
         session.commit()
     add_match(one, "kill", won=True, opp_battletag="P3#3333")
 

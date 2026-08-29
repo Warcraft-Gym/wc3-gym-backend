@@ -12,6 +12,7 @@ from app.models.types import NoneToList, NumToStr
 from app.models.user import UserPublic
 
 if TYPE_CHECKING:
+    from app.models.relationships import DBTeamSeasonCoach
     from app.models.team_season import DBTeamSeason
     from app.models.user_team_season import DBUserTeamSeason
 
@@ -52,6 +53,13 @@ class Team(TeamBase, DBModel, table=True):
     )
     season_info: list["DBTeamSeason"] = Relationship(
         back_populates="team", sa_relationship_kwargs={"cascade": "all, delete"}
+    )
+    coach_seasons: list["DBTeamSeasonCoach"] = Relationship(
+        back_populates="team",
+        sa_relationship_kwargs={
+            "cascade": "all, delete",
+            "order_by": "DBTeamSeasonCoach.user_id",
+        },
     )
 
     @classmethod
@@ -115,22 +123,11 @@ class TeamPublic(TeamReduced):
                             break
                     players[ut.season_id].append(user)
 
-        # Load coaches from team_season entries
-        if team.season_info:
-            for season_info in team.season_info:
-                season_coaches = []
-                for coach in (
-                    season_info.coach_1,
-                    season_info.coach_2,
-                    season_info.coach_3,
-                ):
-                    if coach:
-                        built = UserPublic.from_user(coach)
-                        if built:
-                            season_coaches.append(built)
-
-                if season_coaches:
-                    coaches[season_info.season_id] = season_coaches
+        # Load coaches from the team_season_coach rows
+        for seat in team.coach_seasons:
+            built = UserPublic.from_user(seat.user) if seat.user else None
+            if built:
+                coaches.setdefault(seat.season_id, []).append(built)
 
         return cls(
             id=ident(team),

@@ -12,13 +12,15 @@ from alembic.migration import MigrationContext
 from sqlalchemy import Column, Index, column, create_engine, table, text
 from sqlmodel import SQLModel
 
-from tests.migrate import fresh_database, upgrade_to, upgrade_to_head
+from tests.migrate import downgrade_to, fresh_database, upgrade_to, upgrade_to_head
 from tests.test_models import import_all_models
 
 # The revision before the seasons table carries a score system
 BEFORE_SCORE_SYSTEM = "658616cf0c2b"
 # The revision before the w3c stats are unique per user, race and season
 BEFORE_W3C_STATS_UNIQUE = "9f4b7c1d2ae5"
+# The revision before the coaches of a team season are their own rows
+BEFORE_COACH_TABLE = "5f4a1a4d88d3"
 
 
 def comparable(
@@ -146,3 +148,62 @@ def test_the_migrations_have_one_head() -> None:
     from alembic.script import ScriptDirectory
 
     assert len(ScriptDirectory.from_config(Config("alembic.ini")).get_heads()) == 1
+
+
+def test_the_coach_slots_move_into_the_table_and_back(tmp_path: Path) -> None:
+    """Three filled slots become three rows; a downgrade keeps the first three."""
+    url = fresh_database(tmp_path, "coaches")
+    upgrade_to(url, BEFORE_COACH_TABLE)
+
+    engine = create_engine(url)
+    users = table(
+        "users",
+        *(
+            column(c)
+            for c in ("id", "name", "battleTag", "discordTag", "discordId", "race")
+        ),
+    )
+    with engine.begin() as connection:
+        for user_id in (1, 2, 3, 4):
+            connection.execute(
+                users.insert().values(
+                    id=user_id,
+                    name=f"P{user_id}",
+                    battleTag=f"P{user_id}#111{user_id}",
+                    discordTag=f"p{user_id}",
+                    discordId=str(user_id),
+                    race="HU",
+                )
+            )
+        connection.execute(
+            text(
+                "INSERT INTO seasons (id, name, number_weeks, series_per_week) "
+                "VALUES (1, 'Season 1', 4, 2)"
+            )
+        )
+        connection.execute(text("INSERT INTO teams (id, name) VALUES (1, 'Alpha')"))
+        connection.execute(
+            text(
+                "INSERT INTO team_season (team_id, season_id, coach_1_id, coach_2_id, "
+                "coach_3_id) VALUES (1, 1, 3, 1, 3)"
+            )
+        )
+
+    upgrade_to(url, "head")
+    with engine.begin() as connection:
+        # A user in two slots is one coach
+        assert connection.execute(
+            text("SELECT user_id FROM team_season_coach ORDER BY user_id")
+        ).all() == [(1,), (3,)]
+        connection.execute(
+            text(
+                "INSERT INTO team_season_coach (team_id, season_id, user_id) "
+                "VALUES (1, 1, 2), (1, 1, 4)"
+            )
+        )
+
+    downgrade_to(url, BEFORE_COACH_TABLE)
+    with engine.connect() as connection:
+        assert connection.execute(
+            text("SELECT coach_1_id, coach_2_id, coach_3_id FROM team_season")
+        ).all() == [(1, 2, 3)]
