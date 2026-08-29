@@ -290,3 +290,53 @@ def test_a_guest_reads_no_player_route(
 
     assert resp.status_code == 403, resp.text
     assert resp.json() == {"error": "No valid WC3 Gym server membership found for user"}
+
+
+def test_signup_stores_the_time_zone(
+    client: Client, w3c_free: None, member_headers: dict[str, str]
+) -> None:
+    """The profile form sends the browser's IANA name."""
+    resp = client.post(
+        "/signup",
+        json=SIGNUP_BODY | {"timezone": "America/New_York"},
+        headers=member_headers,
+    )
+
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["timezone"] == "America/New_York"
+
+
+def test_signup_refuses_an_unknown_time_zone(
+    client: Client, w3c_free: None, member_headers: dict[str, str]
+) -> None:
+    resp = client.post(
+        "/signup",
+        json=SIGNUP_BODY | {"timezone": "Mars/Olympus"},
+        headers=member_headers,
+    )
+
+    assert resp.status_code == 422, resp.text
+    assert "Mars/Olympus" in resp.json()["error"]
+    assert client.get("/users").json() == []
+
+
+def test_the_admin_user_routes_take_the_time_zone(
+    client: Client, w3c_free: None, auth_headers: dict[str, str]
+) -> None:
+    """The same field on the admin form, validated by the request model."""
+    user = client.post(
+        "/users",
+        json=SIGNUP_BODY
+        | {"discordTag": "p9", "discordId": "9", "timezone": "Europe/Berlin"},
+        headers=auth_headers,
+    )
+    assert user.status_code == 201, user.text
+    assert user.json()["timezone"] == "Europe/Berlin"
+
+    bad = client.put(
+        f"/users/{user.json()['id']}",
+        json={"timezone": "Mars/Olympus"},
+        headers=auth_headers,
+    )
+    assert bad.status_code == 422, bad.text
+    assert "Mars/Olympus" in bad.json()["error"]

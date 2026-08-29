@@ -7,6 +7,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Body, Query, Request, Response, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
+from pydantic import ValidationError
 
 from app.api.deps import (
     Credentials,
@@ -193,11 +194,22 @@ def public_create_user(
         "race": data.get("race"),
         "mmr": data.get("mmr"),
         "country": data.get("country"),
+        "timezone": data.get("timezone"),
     }
 
     # Basic validation
     if not user_payload["name"] or not user_payload["battleTag"]:
         raise BadRequestError("missing user fields")
+
+    # The route builds the model itself, so a rejected field is ours to answer
+    try:
+        user_create = UserCreate(**user_payload)
+    except ValidationError as invalid:
+        problems = "; ".join(
+            f"{'.'.join(str(part) for part in error['loc'])}: {error['msg']}"
+            for error in invalid.errors()
+        )
+        raise ApiError(422, {"error": problems}) from invalid
 
     # Validate BattleTag with W3Champions BEFORE creating/updating user
     if not user_service.validate_battle_tag(user_payload["battleTag"]):
@@ -223,7 +235,7 @@ def public_create_user(
         user = user_service.update(existing.id, UserUpdate(**user_create.model_dump()))
     else:
         # create new user
-        user = user_service.add(UserCreate(**user_payload))
+        user = user_service.add(user_create)
 
     # Add to season if specified
     season_id = entry.get("season_id") or data.get("season_id") or data.get("seasonId")

@@ -7,7 +7,14 @@ from sqlmodel import Field, Relationship, SQLModel
 from app.models.base import DBModel, ident
 from app.models.enums import Race
 from app.models.season import SeasonPublic
-from app.models.types import EnumValue, NoneToList, NumToStr, SuggestRace, UTCDateTime
+from app.models.types import (
+    EnumValue,
+    KnownTimeZone,
+    NoneToList,
+    NumToStr,
+    SuggestRace,
+    UTCDateTime,
+)
 from app.models.user_team_season import UserTeamSeasonStatsPublic
 from app.models.w3c_stats import W3CStats, W3CStatsPublic
 
@@ -25,6 +32,8 @@ class UserBase(SQLModel):
     discordId: Annotated[str, NumToStr] = Field(max_length=50)
     mmr: int | None = None
     country: Annotated[str | None, NumToStr] = Field(default=None, max_length=2)
+    # IANA name, as the browser reports it: America/New_York
+    timezone: Annotated[str | None, KnownTimeZone] = Field(default=None, max_length=64)
     fantasy_tier: int | None = None
 
 
@@ -78,6 +87,7 @@ class UserUpdate(SQLModel):
     race: Annotated[Race | None, SuggestRace] = None
     mmr: int | None = None
     country: Annotated[str | None, NumToStr] = None
+    timezone: Annotated[str | None, KnownTimeZone] = None
     fantasy_tier: int | None = None
 
 
@@ -106,6 +116,7 @@ class UserReduced(UserBase):
             race=user.race,
             mmr=user.mmr,
             country=user.country,
+            timezone=user.timezone,
             fantasy_tier=user.fantasy_tier,
             w3c_synced_at=user.w3c_synced_at,
             ladder_synced_at=user.ladder_synced_at,
