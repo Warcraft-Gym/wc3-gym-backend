@@ -5,6 +5,7 @@ instance of each serves the process. Constructing them touches no
 database; the engine work happens in create_app.
 """
 
+import logging
 import os
 from functools import cache
 from typing import Annotated, Any
@@ -36,6 +37,8 @@ _bearer = HTTPBearer(auto_error=False)
 
 Credentials = Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)]
 
+logger = logging.getLogger(__name__)
+
 
 @cache
 def _clerk() -> Clerk:
@@ -58,6 +61,11 @@ def _clerk_claims(request: Request) -> dict[str, Any]:
         ),
     )
     if not state.is_signed_in or state.payload is None:
+        logger.warning(
+            "Clerk refused the session: %s (bearer %s)",
+            state.message,
+            "present" if request.headers.get("authorization") else "missing",
+        )
         raise ApiError(401, {"error": state.message or "Not signed in"})
 
     tokens = _clerk().users.get_o_auth_access_token(
