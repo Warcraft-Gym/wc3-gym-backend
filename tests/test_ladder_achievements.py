@@ -326,7 +326,7 @@ def test_the_answer_carries_the_badges_and_adds_their_points(
     }
 
 
-def test_the_badges_come_worth_most_first(
+def test_the_badges_come_oldest_first(
     client: Client, auth_headers: dict[str, str], league: dict[str, Any]
 ) -> None:
     player = league["player_ids"][0]
@@ -337,7 +337,7 @@ def test_the_badges_come_worth_most_first(
 
     row = player_of(ladder_of(client, auth_headers, league["season_id"]), player)
 
-    assert [badge["id"] for badge in row["achievements"]] == ["win_streak", "win_first"]
+    assert [badge["id"] for badge in row["achievements"]] == ["win_first", "win_streak"]
 
 
 def test_the_roster_rules_read_the_season(
