@@ -88,7 +88,7 @@ def test_the_season_comes_from_w3champions_when_none_is_configured(
 def test_a_configured_season_wins_over_w3champions() -> None:
     """A season typed on the config page is a deliberate choice."""
     settings = SettingsService()
-    settings.update_setting("current_wc3_season", "18")
+    settings.update_setting("current_w3c_season", "18")
 
     assert W3CService(settings_app_service=settings).current_season() == 18
 
@@ -99,7 +99,7 @@ def test_only_the_w3c_service_names_the_season_setting() -> None:
     naming = sorted(
         path.relative_to(app_root).as_posix()
         for path in app_root.rglob("*.py")
-        if "current_wc3_season" in path.read_text()
+        if "current_w3c_season" in path.read_text()
     )
 
     assert naming == ["services/w3c.py"]

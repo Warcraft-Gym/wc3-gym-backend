@@ -23,6 +23,8 @@ BEFORE_W3C_STATS_UNIQUE = "9f4b7c1d2ae5"
 BEFORE_COACH_TABLE = "5f4a1a4d88d3"
 # The revision before every app-owned Discord role is a binding row
 BEFORE_ROLE_BINDINGS = "b3f9d7c21a48"
+# The revision before the season setting is spelled w3c
+BEFORE_W3C_SEASON_KEY = "5f4a1a4d88d3"
 
 
 def comparable(
@@ -245,3 +247,29 @@ def test_the_team_roles_and_the_coach_role_become_bindings(tmp_path: Path) -> No
         assert connection.execute(
             text("SELECT id, discord_role FROM teams ORDER BY id")
         ).all() == [(1, "7788"), (2, None)]
+
+
+def test_the_w3c_season_setting_is_renamed_and_renamed_back(tmp_path: Path) -> None:
+    """The pinned row keeps its value; only the key is spelled w3c."""
+    url = fresh_database(tmp_path, "season_key")
+    upgrade_to(url, BEFORE_W3C_SEASON_KEY)
+
+    engine = create_engine(url)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO settings (key, value) VALUES ('current_wc3_season', '21')"
+            )
+        )
+
+    upgrade_to(url, "head")
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT key, value FROM settings")).all() == [
+            ("current_w3c_season", "21")
+        ]
+
+    downgrade_to(url, BEFORE_W3C_SEASON_KEY)
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT key, value FROM settings")).all() == [
+            ("current_wc3_season", "21")
+        ]

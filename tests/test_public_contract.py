@@ -127,7 +127,7 @@ def public_seed(app: FastAPI) -> dict[str, Any]:
                     value=str(ids["season_id"]),
                     description="Season the shortcodes render",
                 ),
-                Settings(key="current_wc3_season", value=str(WC3_SEASON)),
+                Settings(key="current_w3c_season", value=str(WC3_SEASON)),
             ]
         )
 
@@ -208,7 +208,7 @@ def test_config_settings_carries_the_season_selector(
         assert "value" in setting
     # Every shortcode picks its season out of this key.
     assert by_key["current_gnl_season"]["value"] == str(public_seed["season_id"])
-    assert by_key["current_wc3_season"]["value"] == str(WC3_SEASON)
+    assert by_key["current_w3c_season"]["value"] == str(WC3_SEASON)
 
 
 # gnl-detailed-standings, gnl-teams-players
