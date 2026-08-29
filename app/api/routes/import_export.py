@@ -105,10 +105,10 @@ def export_season(
             season.name,
             season.number_weeks,
             season.series_per_week,
-            season.pick_ban if season.pick_ban else "",
+            season.pick_ban or "",
             season.start_date.strftime("%Y-%m-%d") if season.start_date else "",
             season.end_date.strftime("%Y-%m-%d") if season.end_date else "",
-            season.discordRole if season.discordRole else "",
+            season.discordRole or "",
             season.score_system,
         ]
     )
@@ -123,7 +123,7 @@ def export_season(
                     map_obj.id,
                     map_obj.name,
                     map_obj.shortname,
-                    map_obj.image if map_obj.image else "",
+                    map_obj.image or "",
                 ]
             )
 
@@ -136,8 +136,8 @@ def export_season(
             [
                 team.id,
                 team.name,
-                team.long_name if team.long_name else "",
-                team.discord_role if team.discord_role else "",
+                team.long_name or "",
+                team.discord_role or "",
                 "",  # no model carries an icon URL
             ]
         )
@@ -169,11 +169,11 @@ def export_season(
                     user.name,
                     user.battleTag,
                     user.discordTag,
-                    user.discordId if user.discordId else "",
+                    user.discordId or "",
                     user.race,
-                    user.mmr if user.mmr else "",
-                    user.country if user.country else "",
-                    user.fantasy_tier if user.fantasy_tier else "",
+                    user.mmr or "",
+                    user.country or "",
+                    user.fantasy_tier or "",
                     team.id,
                 ]
             )
@@ -205,10 +205,10 @@ def export_season(
                     match.team2.id,
                     match.season.id,
                     match.playday,
-                    match.team1_score if match.team1_score else "",
-                    match.team2_score if match.team2_score else "",
+                    match.team1_score or "",
+                    match.team2_score or "",
                     match.fixed_map.id if match.fixed_map else "",
-                    match.date_frame if match.date_frame else "",
+                    match.date_frame or "",
                 ]
             )
 
@@ -253,12 +253,12 @@ def export_season(
                         series.player2_score
                         if series.player2_score is not None
                         else "",
-                        series.player1_points if series.player1_points else "",
-                        series.player2_points if series.player2_points else "",
+                        series.player1_points or "",
+                        series.player2_points or "",
                         series.host_player_id,
                         date_time_str,
-                        series.caster if series.caster else "",
-                        series.is_fantasy_match if series.is_fantasy_match else False,
+                        series.caster or "",
+                        series.is_fantasy_match or False,
                     ]
                 )
 
@@ -295,14 +295,14 @@ def export_season(
                     fteam.name,
                     fteam.season_id,
                     fteam.captain_id,
-                    fteam.drafted_team_id if fteam.drafted_team_id else "",
-                    fteam.drafted_race if fteam.drafted_race else "",
-                    fteam.player_points if fteam.player_points else 0,
-                    fteam.bench_points if fteam.bench_points else 0,
-                    fteam.team_points if fteam.team_points else 0,
-                    fteam.race_points if fteam.race_points else 0,
-                    fteam.bet_points if fteam.bet_points else 0,
-                    fteam.total_points if fteam.total_points else 0,
+                    fteam.drafted_team_id or "",
+                    fteam.drafted_race or "",
+                    fteam.player_points or 0,
+                    fteam.bench_points or 0,
+                    fteam.team_points or 0,
+                    fteam.race_points or 0,
+                    fteam.bet_points or 0,
+                    fteam.total_points or 0,
                 ]
             )
 
@@ -344,7 +344,7 @@ def export_season(
                         fbet.user_id,
                         fbet.winner_id,
                         fbet.bet_points,
-                        fbet.bet_result if fbet.bet_result else "",
+                        fbet.bet_result or "",
                     ]
                 )
             if len(page) < BET_PAGE:
@@ -361,10 +361,10 @@ def export_season(
         fantasy_users_sheet.append(
             [
                 user.id,
-                user.name if user.name else "",
+                user.name or "",
                 user.battleTag,
-                user.discordTag if user.discordTag else "",
-                user.discordId if user.discordId else "",
+                user.discordTag or "",
+                user.discordId or "",
             ]
         )
 

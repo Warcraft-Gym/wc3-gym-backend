@@ -32,12 +32,13 @@ dev = [
 ]
 
 [tool.ruff.lint]
-extend-select = ["ANN"]  # flake8-annotations
+extend-select = ["ANN", "N", "FURB"]  # annotations, pep8-naming, refurb
 
 # Raised lint errors in legacy code that were suppressed rather than addressed.
 ignore = [
     "BLE001",  # blind `except Exception`
     "DTZ001",  # naive datetimes match the DATETIME columns
+    "N815",    # battleTag/discordTag columns mirror the wire format
     "PLW0211", # staticmethod argument named cls
     "RUF012",  # mutable class attribute default
     "S110",    # try-except-pass

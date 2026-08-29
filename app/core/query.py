@@ -182,22 +182,22 @@ class QueryUtil:
             return QueryUtil.create_class_query(
                 cls, cast(QueryCondition, query.elementA)
             )
-        queryA = QueryUtil.convert_query_to_db_filter_rec(
+        query_a = QueryUtil.convert_query_to_db_filter_rec(
             cls, cast(QueryElement | None, query.elementA)
         )
-        queryB = QueryUtil.convert_query_to_db_filter_rec(
+        query_b = QueryUtil.convert_query_to_db_filter_rec(
             cls, cast(QueryElement | None, query.elementB)
         )
-        if queryA is None or queryB is None:
+        if query_a is None or query_b is None:
             return None
         if query.type == ConcatenationType.OR:
-            return or_(queryA, queryB)
+            return or_(query_a, query_b)
         elif query.type == ConcatenationType.AND:
-            return and_(queryA, queryB)
+            return and_(query_a, query_b)
         return None
 
     @staticmethod
-    def find_and_split(concatCondition: QueryElement, query: str) -> None:
+    def find_and_split(concat_condition: QueryElement, query: str) -> None:
         # Define the regex pattern to match " or " or " and "
         pattern_and = r"\s+((?i:and))\s+"
         pattern_or = r"\s+((?i:or))\s+"
@@ -211,8 +211,8 @@ class QueryUtil:
             match = re.search(pattern_and, query)
 
             if not match:
-                concatCondition.type = ConcatenationType.QUERY
-                concatCondition.set_query_element(
+                concat_condition.type = ConcatenationType.QUERY
+                concat_condition.set_query_element(
                     QueryUtil.convert_to_query_condition(query)
                 )
                 return
@@ -223,15 +223,15 @@ class QueryUtil:
 
         operator = match.group(1).lower()
         if operator == "and":
-            concatCondition.type = ConcatenationType.AND
+            concat_condition.type = ConcatenationType.AND
         else:
-            concatCondition.type = ConcatenationType.OR
+            concat_condition.type = ConcatenationType.OR
 
         # Recursively process the left and right parts
-        condA = QueryElement()
-        QueryUtil.find_and_split(condA, left)
-        concatCondition.set_query_element(condA)
-        condB = QueryElement()
-        QueryUtil.find_and_split(condB, right)
-        concatCondition.set_query_element(condB)
+        cond_a = QueryElement()
+        QueryUtil.find_and_split(cond_a, left)
+        concat_condition.set_query_element(cond_a)
+        cond_b = QueryElement()
+        QueryUtil.find_and_split(cond_b, right)
+        concat_condition.set_query_element(cond_b)
         return
