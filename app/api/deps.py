@@ -5,14 +5,18 @@ instance of each serves the process. Constructing them touches no
 database; the engine work happens in create_app.
 """
 
+import os
+from functools import cache
 from typing import Annotated, Any
 
 import jwt
-from fastapi import Depends
+from clerk_backend_api import AuthenticateRequestOptions, Clerk
+from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.core.exceptions import ApiError
 from app.core.security import decode_token
+from app.services import discord
 from app.services.draft_series import DraftSeriesService
 from app.services.fantasy_bets import FantasyBetService
 from app.services.fantasy_scores import FantasyScoreService
@@ -33,34 +37,80 @@ _bearer = HTTPBearer(auto_error=False)
 _Credentials = Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)]
 
 
-def _decode(credentials: _Credentials) -> dict[str, Any]:
+@cache
+def _clerk() -> Clerk:
+    return Clerk(bearer_auth=os.getenv("CLERK_SECRET_KEY"))
+
+
+def _clerk_claims(request: Request) -> dict[str, Any]:
+    """The Discord identity and guild role behind the request's Clerk session.
+
+    Clerk verifies the session token and holds the account's Discord token;
+    the guild and its roles are read with that token, as before.
+    """
+    # ponytail: one Clerk call and up to two Discord calls per request; cache
+    # them on the Clerk session id if the latency shows.
+    parties = os.getenv("CLERK_AUTHORIZED_PARTIES", "http://localhost:5173")
+    state = _clerk().authenticate_request(
+        request,
+        AuthenticateRequestOptions(
+            authorized_parties=parties.replace(" ", "").split(",")
+        ),
+    )
+    if not state.is_signed_in or state.payload is None:
+        raise ApiError(401, {"error": state.message or "Not signed in"})
+
+    tokens = _clerk().users.get_o_auth_access_token(
+        user_id=str(state.payload["sub"]), provider="oauth_discord"
+    )
+    if not tokens:
+        raise ApiError(401, {"error": "No Discord account on this login"})
+
+    discord_id = tokens[0].provider_user_id
+    admin_role = settings_service.get_settings_dict().get("admin_role")
+    return {
+        "sub": discord_id,
+        "role": discord.role_for(tokens[0].token, discord_id, admin_role),
+        "token": tokens[0].token,
+    }
+
+
+def require_login(request: Request, credentials: _Credentials) -> dict[str, Any]:
+    """Admit the admin token or a Clerk session, and answer the claims.
+
+    A guest is admitted too: it logs in and reads the public pages.
+    """
     if credentials is None:
         raise ApiError(401, {"error": "Missing Authorization Header"})
     try:
-        return decode_token(credentials.credentials)
-    except jwt.ExpiredSignatureError as e:
-        raise ApiError(401, {"error": "Token has expired"}) from e
-    except jwt.InvalidTokenError as e:
-        raise ApiError(422, {"error": str(e)}) from e
-
-
-def require_admin(credentials: _Credentials) -> str:
-    """Admit a valid access token and answer its subject."""
-    claims = _decode(credentials)
+        claims = decode_token(credentials.credentials)
+    except jwt.InvalidTokenError:
+        return _clerk_claims(request)
     if claims.get("type") != "access":
-        raise ApiError(422, {"error": "Only non-refresh tokens are allowed"})
+        raise ApiError(422, {"error": "Only access tokens are allowed"})
+    return claims
+
+
+def require_member(request: Request, credentials: _Credentials) -> dict[str, Any]:
+    """Admit an account that is in the guild; a guest reads nothing of its own."""
+    claims = require_login(request, credentials)
+    if claims.get("role") == "guest":
+        raise ApiError(
+            403, {"error": "No valid WC3 Gym server membership found for user"}
+        )
+    return claims
+
+
+def require_admin(request: Request, credentials: _Credentials) -> str:
+    """Admit an admin access token and answer its subject."""
+    claims = require_login(request, credentials)
+    if claims.get("role") != "admin" and claims["sub"] != "admin":
+        raise ApiError(403, {"error": "Admins only"})
     return claims["sub"]
 
 
-def require_refresh(credentials: _Credentials) -> str:
-    """Admit a valid refresh token and answer its subject."""
-    claims = _decode(credentials)
-    if claims.get("type") != "refresh":
-        raise ApiError(422, {"error": "Only refresh tokens are allowed"})
-    return claims["sub"]
-
-
-RequireRefresh = Annotated[str, Depends(require_refresh)]
+RequireLogin = Annotated[dict[str, Any], Depends(require_login)]
+RequireMember = Annotated[dict[str, Any], Depends(require_member)]
 
 
 settings_service = SettingsService()

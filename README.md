@@ -230,9 +230,12 @@ BOT_WEBHOOK_URL="http://host.docker.internal:3001/webhook/series-updated"
 | `FRONTEND_URL` | Admin frontend URL for CORS configuration | `http://localhost:5003` |
 | `BOT_WEBHOOK_URL` | Discord bot webhook endpoint for series updates; when unset, the notification is skipped | `http://host.docker.internal:3001/webhook/series-updated` |
 | `TOKEN_TIME` | Access token lifetime in minutes | `60` |
-| `REFRESH_TOKEN_TIME` | Refresh token lifetime in minutes | `300` |
 | `W3C_URL` | w3champions API base | `https://website-backend.w3champions.com/api` |
 | `LOG_LEVEL` | Python log level | `INFO` |
+| `CLERK_SECRET_KEY` | Clerk instance secret; verifies the session token and reads the account's Discord token | `sk_test_...` |
+| `CLERK_AUTHORIZED_PARTIES` | Comma-separated origins Clerk accepts the session from | `http://localhost:5173` |
+| `DISCORD_GUILD_ID` | The WC3 Gym Discord server; an account outside it logs in as a guest and reaches no player route | `316390574808760322` |
+| `ADMIN_DISCORD_IDS` | Comma-separated Discord ids that always get the admin role | `220202568490418179` |
 
 **Important Notes:**
 - `host.docker.internal` is a special DNS name that resolves to the host machine from within a Docker container
@@ -371,7 +374,6 @@ docker run -d --network gnl-net -p 5002:5002 \
     -e JWT_SECRET_KEY="$JWT_SECRET_KEY" \
     -e JWT_ALGORITHM=HS256 \
     -e TOKEN_TIME=60 \
-    -e REFRESH_TOKEN_TIME=1440 \
     gnl-backend:local \
     uvicorn --factory app.main:create_app --host 0.0.0.0 --port 5002
 ```

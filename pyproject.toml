@@ -17,6 +17,7 @@ dependencies = [
     "python-multipart>=0.0.32",
     "sqlmodel>=0.0.39",
     "alembic>=1.19.1",
+    "clerk-backend-api>=7.0.0",
 ]
 
 [build-system]
