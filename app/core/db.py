@@ -1,7 +1,9 @@
 """One engine and one session factory for the whole process.
 
 The engine and the factory are safe to share between threads. A Session is
-not, so every caller opens its own and drops it at the end of the call.
+not, so every caller opens its own with `Session.begin()`: one transaction per
+call, commit on success, roll back on error, always close. Callers must not
+commit; to share a transaction, pass the session instead of opening a new one.
 
 Importing this module opens no connection, and neither does building the
 application: the schema is the job of `alembic upgrade head`, so the

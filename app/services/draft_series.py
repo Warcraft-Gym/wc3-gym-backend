@@ -2,6 +2,7 @@ import logging
 
 from sqlalchemy import delete, select
 
+from app.core.db import Session
 from app.core.exceptions import NotFoundError
 from app.models.draft_series import (
     DraftSeries,
@@ -10,21 +11,20 @@ from app.models.draft_series import (
     DraftSeriesUpdate,
 )
 from app.models.series import SeriesCreate
-from app.services.base import BaseService
 
 logger = logging.getLogger(__name__)
 
 
-class DraftSeriesService(BaseService):
+class DraftSeriesService:
     def add(self, draft_series: DraftSeriesCreate) -> DraftSeriesPublic:
-        with self.get_session() as session:
+        with Session.begin() as session:
             draft_series = DraftSeries.add(session, draft_series.model_dump())
             return DraftSeriesPublic.from_draft_series(draft_series)
 
     def update(
         self, draft_series_id: int, draft_series: DraftSeriesUpdate
     ) -> DraftSeriesPublic:
-        with self.get_session() as session:
+        with Session.begin() as session:
             draft_series = DraftSeries.update(
                 session,
                 draft_series_id,
@@ -35,11 +35,11 @@ class DraftSeriesService(BaseService):
             return DraftSeriesPublic.from_draft_series(draft_series)
 
     def delete(self, draft_series_id: int) -> None:
-        with self.get_session() as session:
+        with Session.begin() as session:
             DraftSeries.delete(session, draft_series_id)
 
     def get(self, draft_series_id: int) -> DraftSeriesPublic:
-        with self.get_session() as session:
+        with Session.begin() as session:
             draft_series = session.scalars(
                 select(DraftSeries)
                 .options(*DraftSeries._eager_options())
@@ -52,7 +52,7 @@ class DraftSeriesService(BaseService):
     def get_by_match_id(
         self, match_id: int, limit: int | None = None, offset: int = 0
     ) -> list[DraftSeriesPublic]:
-        with self.get_session() as session:
+        with Session.begin() as session:
             result = []
             statement = (
                 select(DraftSeries)
@@ -71,7 +71,7 @@ class DraftSeriesService(BaseService):
 
     def delete_by_match_id(self, match_id: int) -> None:
         """Delete all draft series for a given match"""
-        with self.get_session() as session:
+        with Session.begin() as session:
             session.execute(delete(DraftSeries).where(DraftSeries.match_id == match_id))
 
     def convert_to_series(self, draft_series: DraftSeries) -> SeriesCreate:

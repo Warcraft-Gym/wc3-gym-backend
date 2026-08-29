@@ -3,6 +3,7 @@ import logging
 from sqlalchemy import func, select
 
 from app.core import fantasy
+from app.core.db import Session
 from app.core.exceptions import NotFoundError
 from app.core.ordering import SortOrder, ordered
 from app.core.query import QueryElement, QueryUtil
@@ -16,21 +17,20 @@ from app.models.series import (
     SeriesUpdate,
 )
 from app.services import derived
-from app.services.base import BaseService
 
 logger = logging.getLogger(__name__)
 
 
-class SeriesService(BaseService):
+class SeriesService:
     def add(self, series: SeriesCreate) -> SeriesPublic:
-        with self.get_session() as session:
+        with Session.begin() as session:
             series = Series.add(session, series.model_dump())
             public = SeriesPublic.from_series(series)
             derived.fill_series(session, [public])
             return public
 
     def update(self, series_id: int, series: SeriesUpdate) -> SeriesPublic:
-        with self.get_session() as session:
+        with Session.begin() as session:
             series = Series.update(
                 session, series_id, **series.model_dump(exclude_unset=True)
             )
@@ -41,11 +41,11 @@ class SeriesService(BaseService):
             return public
 
     def delete(self, series_id: int) -> None:
-        with self.get_session() as session:
+        with Session.begin() as session:
             Series.delete(session, series_id)
 
     def get(self, series_id: int) -> SeriesPublic:
-        with self.get_session() as session:
+        with Session.begin() as session:
             series = session.scalars(
                 select(Series)
                 .options(*Series._eager_options())
@@ -70,7 +70,7 @@ class SeriesService(BaseService):
 
         sort names a column of SERIES_SORTS and the series id breaks its ties.
         """
-        with self.get_session() as session:
+        with Session.begin() as session:
             result = []
             filter = QueryUtil.convert_query_to_db_filter(Series, query)
             statement = (
@@ -96,7 +96,7 @@ class SeriesService(BaseService):
 
     def count(self, query: QueryElement | None) -> int:
         """The number of series that match the query."""
-        with self.get_session() as session:
+        with Session.begin() as session:
             filter = QueryUtil.convert_query_to_db_filter(Series, query)
             if filter is None:
                 return 0
@@ -105,7 +105,7 @@ class SeriesService(BaseService):
 
     def count_for_season(self, season_id: int, query: QueryElement | None) -> int:
         """The number of series in one season that match the query."""
-        with self.get_session() as session:
+        with Session.begin() as session:
             filter = QueryUtil.convert_query_to_db_filter(Series, query)
             statement = (
                 select(func.count())
@@ -120,7 +120,7 @@ class SeriesService(BaseService):
         self, season_id: int
     ) -> dict[int | None, list[fantasy.Series]]:
         """Every series of the season, by week, in one statement."""
-        with self.get_session() as session:
+        with Session.begin() as session:
             return derived.fantasy_series(session, {season_id}).get(season_id, {})
 
     def search_for_season_and_playday(
@@ -131,7 +131,7 @@ class SeriesService(BaseService):
         limit: int | None = None,
         offset: int = 0,
     ) -> list[SeriesPublic]:
-        with self.get_session() as session:
+        with Session.begin() as session:
             result = []
             filter = QueryUtil.convert_query_to_db_filter(Series, query)
             series_list = Series.search_for_season_and_playday(
@@ -159,7 +159,7 @@ class SeriesService(BaseService):
 
         sort names a column of SERIES_SORTS and the series id breaks its ties.
         """
-        with self.get_session() as session:
+        with Session.begin() as session:
             result = []
             filter = QueryUtil.convert_query_to_db_filter(Series, query)
             series_list = Series.search_for_season(

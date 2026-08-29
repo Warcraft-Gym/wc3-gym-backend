@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, Any, Literal
 from sqlalchemy import ColumnElement, func, select
 from sqlalchemy.orm import joinedload
 
+from app.core.db import Session
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.core.ordering import SortOrder, ordered
 from app.core.query import QueryElement, QueryUtil
@@ -16,7 +17,6 @@ from app.models.fantasy_bet import (
 from app.models.series import Series
 from app.models.user import User
 from app.services import derived
-from app.services.base import BaseService
 
 if TYPE_CHECKING:
     from app.services.settings import SettingsService
@@ -79,12 +79,12 @@ def _points_setting(settings: dict[str, str | None], key: str) -> int | None:
     return int(value) if value else None
 
 
-class FantasyBetService(BaseService):
+class FantasyBetService:
     def __init__(self, settings_app_service: "SettingsService | None" = None) -> None:
         self.settings_app_service = settings_app_service
 
     def add(self, fantasy_bet: FantasyBetCreate) -> FantasyBetPublic:
-        with self.get_session() as session:
+        with Session.begin() as session:
             fbet = FantasyBet.add(session, fantasy_bet.model_dump())
             public = FantasyBetPublic.from_fantasy_bet(fbet)
             derived.fill_series(session, [public.series])
@@ -94,7 +94,7 @@ class FantasyBetService(BaseService):
     def update(
         self, fantasy_bet_id: int, fantasy_bet: FantasyBetUpdate
     ) -> FantasyBetPublic:
-        with self.get_session() as session:
+        with Session.begin() as session:
             fantasy_bet = FantasyBet.update(
                 session,
                 fantasy_bet_id,
@@ -108,11 +108,11 @@ class FantasyBetService(BaseService):
             return public
 
     def delete(self, fantasy_bet_id: int) -> None:
-        with self.get_session() as session:
+        with Session.begin() as session:
             FantasyBet.delete(session, fantasy_bet_id)
 
     def get(self, fantasy_bet_id: int) -> FantasyBetPublic:
-        with self.get_session() as session:
+        with Session.begin() as session:
             fbet = session.get(
                 FantasyBet, fantasy_bet_id, options=FantasyBet.eager_options()
             )
@@ -127,7 +127,7 @@ class FantasyBetService(BaseService):
         self, limit: int | None = None, offset: int = 0
     ) -> tuple[list[FantasyBetPublic], int | None]:
         """The bets and, when a page is asked for, the total count."""
-        with self.get_session() as session:
+        with Session.begin() as session:
             statement = select(FantasyBet).options(*FantasyBet.list_eager_options())
             total = None
             if limit is not None or offset:
@@ -157,7 +157,7 @@ class FantasyBetService(BaseService):
 
         sort names a column of BET_SORTS and the bet id breaks its ties.
         """
-        with self.get_session() as session:
+        with Session.begin() as session:
             result = []
             filter = QueryUtil.convert_query_to_db_filter(FantasyBet, query)
             if filter is None:

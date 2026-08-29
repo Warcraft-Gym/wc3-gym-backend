@@ -3,6 +3,7 @@ from typing import Any
 
 from sqlalchemy.exc import IntegrityError
 
+from app.core.db import Session
 from app.core.exceptions import NotFoundError
 from app.models.settings import (
     Settings,
@@ -10,15 +11,14 @@ from app.models.settings import (
     SettingsPublic,
     SettingsUpdate,
 )
-from app.services.base import BaseService
 
 logger = logging.getLogger(__name__)
 
 
-class SettingsService(BaseService):
+class SettingsService:
     def add(self, settings: SettingsCreate) -> SettingsPublic:
         """Add a new setting"""
-        with self.get_session() as session:
+        with Session.begin() as session:
             new_setting = Settings.add(session, settings.model_dump())
             return SettingsPublic.model_validate(new_setting)
 
@@ -26,7 +26,7 @@ class SettingsService(BaseService):
         self, setting_id: int | None, settings: SettingsUpdate
     ) -> SettingsPublic:
         """Update a setting"""
-        with self.get_session() as session:
+        with Session.begin() as session:
             updated_setting = Settings.update(
                 session, setting_id, **settings.model_dump(exclude_unset=True)
             )
@@ -36,12 +36,12 @@ class SettingsService(BaseService):
 
     def delete(self, setting_id: int | None) -> None:
         """Delete a setting by id"""
-        with self.get_session() as session:
+        with Session.begin() as session:
             Settings.delete(session, setting_id)
 
     def get(self, setting_id: int) -> SettingsPublic:
         """Get a setting by id"""
-        with self.get_session() as session:
+        with Session.begin() as session:
             setting = session.get(Settings, setting_id)
             if not setting:
                 raise NotFoundError(f"Setting with id '{setting_id}' not found")
@@ -49,7 +49,7 @@ class SettingsService(BaseService):
 
     def get_all(self) -> list[SettingsPublic]:
         """Get all settings"""
-        with self.get_session() as session:
+        with Session.begin() as session:
             return [
                 SettingsPublic.model_validate(setting)
                 for setting in Settings.get_all(session)
@@ -57,12 +57,12 @@ class SettingsService(BaseService):
 
     def get_settings_dict(self) -> dict[str, str | None]:
         """Get all settings as a dictionary"""
-        with self.get_session() as session:
+        with Session.begin() as session:
             return Settings.get_all_as_dict(session)
 
     def get_by_key(self, key: str) -> SettingsPublic:
         """Get a setting by key (helper method for API)"""
-        with self.get_session() as session:
+        with Session.begin() as session:
             setting = Settings.get_by_key(session, key)
             if not setting:
                 raise NotFoundError(f"Setting with key '{key}' not found")

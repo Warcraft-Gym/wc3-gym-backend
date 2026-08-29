@@ -4,6 +4,7 @@ from sqlalchemy import ColumnElement, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload, noload, selectinload
 
+from app.core.db import Session
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.core.query import QueryElement, QueryUtil
 from app.models.enums import Race
@@ -14,18 +15,17 @@ from app.models.season import Season, SeasonCreate, SeasonPublic, SeasonUpdate
 from app.models.team import Team
 from app.models.team_season import DBTeamSeason
 from app.models.user import User, UserListPublic
-from app.services.base import BaseService
 from app.services.users import UserService
 
 logger = logging.getLogger(__name__)
 
 
-class SeasonService(BaseService):
+class SeasonService:
     def __init__(self, user_app_service: UserService) -> None:
         self.user_app_service = user_app_service
 
     def add(self, season: SeasonCreate) -> SeasonPublic:
-        with self.get_session() as session:
+        with Session.begin() as session:
             new_season = Season.add(session, season.model_dump())
             # A new season scores like the last one until an admin re-prices it
             session.add_all(default_rows(new_season.id))
@@ -33,7 +33,7 @@ class SeasonService(BaseService):
             return SeasonPublic.from_season(new_season)
 
     def update(self, season_id: int, season: SeasonUpdate) -> SeasonPublic:
-        with self.get_session() as session:
+        with Session.begin() as session:
             season = Season.update(
                 session, season_id, **season.model_dump(exclude_unset=True)
             )
@@ -42,11 +42,11 @@ class SeasonService(BaseService):
             return SeasonPublic.from_season(season)
 
     def delete(self, season_id: int) -> None:
-        with self.get_session() as session:
+        with Session.begin() as session:
             Season.delete(session, season_id)
 
     def get(self, season_id: int) -> SeasonPublic:
-        with self.get_session() as session:
+        with Session.begin() as session:
             # Eager load related entities, disable nested loading except for maps
             season = (
                 session.scalars(
@@ -68,7 +68,7 @@ class SeasonService(BaseService):
             return SeasonPublic.from_season(season)
 
     def get_all(self, limit: int | None = None, offset: int = 0) -> list[SeasonPublic]:
-        with self.get_session() as session:
+        with Session.begin() as session:
             result = []
             # Eager load related entities, disable nested loading except for maps
             statement = select(Season).options(
@@ -89,7 +89,7 @@ class SeasonService(BaseService):
             return result
 
     def add_teams(self, season_id: int, team_ids: list[int]) -> SeasonPublic:
-        with self.get_session() as session:
+        with Session.begin() as session:
             season = session.get(Season, season_id)
             if not season:
                 raise NotFoundError(f"Season not found by id: {season_id}")
@@ -121,7 +121,7 @@ class SeasonService(BaseService):
         limit: int | None = None,
         offset: int = 0,
     ) -> list[SeasonPublic]:
-        with self.get_session() as session:
+        with Session.begin() as session:
             result = []
             # Eager load related entities, disable nested loading except for maps
             statement = (
@@ -151,7 +151,7 @@ class SeasonService(BaseService):
             return result
 
     def remove_teams(self, season_id: int, team_ids: list[int]) -> SeasonPublic:
-        with self.get_session() as session:
+        with Session.begin() as session:
             season = session.get(Season, season_id)
             if not season:
                 raise NotFoundError(f"Season not found by id: {season_id}")
@@ -171,7 +171,7 @@ class SeasonService(BaseService):
             return SeasonPublic.from_season(season)
 
     def add_maps(self, season_id: int, map_ids: list[int]) -> SeasonPublic:
-        with self.get_session() as session:
+        with Session.begin() as session:
             season = session.get(Season, season_id)
             if not season:
                 raise NotFoundError(f"Season not found by id: {season_id}")
@@ -189,7 +189,7 @@ class SeasonService(BaseService):
             return SeasonPublic.from_season(season)
 
     def remove_maps(self, season_id: int, map_ids: list[int]) -> SeasonPublic:
-        with self.get_session() as session:
+        with Session.begin() as session:
             season = session.get(Season, season_id)
             if not season:
                 raise NotFoundError(f"Season not found by id: {season_id}")
@@ -212,7 +212,7 @@ class SeasonService(BaseService):
         self, season_id: int, user_ids: list[int], race: str | None = None
     ) -> SeasonPublic:
         """Sign these users up, all on the race the caller names, if any."""
-        with self.get_session() as session:
+        with Session.begin() as session:
             season = session.get(Season, season_id)
             if not season:
                 raise NotFoundError(f"Season not found by id: {season_id}")
@@ -245,7 +245,7 @@ class SeasonService(BaseService):
             raise BadRequestError(str(error)) from None
 
     def remove_user_signup(self, season_id: int, user_ids: list[int]) -> SeasonPublic:
-        with self.get_session() as session:
+        with Session.begin() as session:
             season = session.get(Season, season_id)
             if not season:
                 raise NotFoundError(f"Season not found by id: {season_id}")
@@ -267,7 +267,7 @@ class SeasonService(BaseService):
     def get_signed_up_users(
         self, season_id: int, limit: int | None = None, offset: int = 0
     ) -> list[UserListPublic]:
-        with self.get_session() as session:
+        with Session.begin() as session:
             if session.scalar(select(Season.id).where(Season.id == season_id)) is None:
                 raise NotFoundError("Season not found")
 
