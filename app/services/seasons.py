@@ -3,6 +3,7 @@ import logging
 from sqlalchemy import ColumnElement, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload, noload, selectinload
+from sqlmodel import col
 
 from app.core.db import Session
 from app.core.exceptions import BadRequestError, NotFoundError
@@ -58,7 +59,7 @@ class SeasonService:
                         selectinload(Season.maps).joinedload(DBMapSeason.map),
                         noload(Season.signup_users),
                     )
-                    .where(Season.id == season_id)
+                    .where(col(Season.id) == season_id)
                 )
                 .unique()
                 .first()
@@ -80,7 +81,7 @@ class SeasonService:
             )
             if limit is not None or offset:
                 # Offset paging is deterministic only with a fixed order
-                statement = statement.order_by(Season.id).offset(offset)
+                statement = statement.order_by(col(Season.id)).offset(offset)
                 if limit is not None:
                     statement = statement.limit(limit)
             seasons = session.scalars(statement).unique().all()
@@ -137,7 +138,7 @@ class SeasonService:
             )
             if limit is not None or offset:
                 # Offset paging is deterministic only with a fixed order
-                statement = statement.order_by(Season.id).offset(offset)
+                statement = statement.order_by(col(Season.id)).offset(offset)
                 if limit is not None:
                     statement = statement.limit(limit)
             seasons = (
@@ -268,7 +269,12 @@ class SeasonService:
         self, season_id: int, limit: int | None = None, offset: int = 0
     ) -> list[UserListPublic]:
         with Session.begin() as session:
-            if session.scalar(select(Season.id).where(Season.id == season_id)) is None:
+            if (
+                session.scalar(
+                    select(col(Season.id)).where(col(Season.id) == season_id)
+                )
+                is None
+            ):
                 raise NotFoundError("Season not found")
 
             # The signup row has no gnl_stats, so the link rows stay out
@@ -280,11 +286,11 @@ class SeasonService:
                     .noload("*"),
                     joinedload(DBUserSeasonSignup.user).noload(User.team_seasons),
                 )
-                .where(DBUserSeasonSignup.season_id == season_id)
+                .where(col(DBUserSeasonSignup.season_id) == season_id)
             )
             if limit is not None or offset:
                 # Offset paging is deterministic only with a fixed order
-                statement = statement.order_by(DBUserSeasonSignup.user_id).offset(
+                statement = statement.order_by(col(DBUserSeasonSignup.user_id)).offset(
                     offset
                 )
                 if limit is not None:

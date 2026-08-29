@@ -17,6 +17,7 @@ from httpx2 import Client
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as OrmSession
+from sqlmodel import col
 
 from app.api.routes.seasons import sync_ladder_season_signups
 from app.core.db import Session
@@ -170,7 +171,7 @@ def ledger_of(user_id: int) -> dict[int, LadderSync]:
         return {
             row.wc3_season: row
             for row in session.scalars(
-                select(LadderSync).where(LadderSync.user_id == user_id)
+                select(LadderSync).where(col(LadderSync.user_id) == user_id)
             )
         }
 
@@ -754,7 +755,7 @@ def test_one_sync_writes_the_stats_and_the_matches_of_a_player(
     assert result.synced == [player]
     with Session() as session:
         stats = session.scalars(
-            select(W3CStats).where(W3CStats.user_id == player)
+            select(W3CStats).where(col(W3CStats.user_id) == player)
         ).all()
         user = session.get(User, player)
     assert [row.mmr for row in stats] == [1500, 1500]

@@ -6,6 +6,7 @@ from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as OrmSession
 from sqlalchemy.orm import joinedload
+from sqlmodel import col
 
 from app.core.db import Session
 from app.core.exceptions import BadRequestError, NotFoundError
@@ -75,7 +76,7 @@ class KothService:
                         .joinedload(KothMatch.participants)
                         .joinedload(KothMatchParticipant.signup),
                     )
-                    .where(KothEvent.id == event_id)
+                    .where(col(KothEvent.id) == event_id)
                 )
                 .unique()
                 .first()
@@ -93,8 +94,8 @@ class KothService:
         with Session.begin() as session:
             # A LIMIT on the outer select would cut the joined rows
             active_event_id = (
-                select(KothEvent.id)
-                .where(KothEvent.is_active == True)
+                select(col(KothEvent.id))
+                .where(col(KothEvent.is_active) == True)
                 .limit(1)
                 .scalar_subquery()
             )
@@ -107,7 +108,7 @@ class KothService:
                         .joinedload(KothMatch.participants)
                         .joinedload(KothMatchParticipant.signup),
                     )
-                    .where(KothEvent.id == active_event_id)
+                    .where(col(KothEvent.id) == active_event_id)
                 )
                 .unique()
                 .first()
@@ -124,13 +125,13 @@ class KothService:
             # One transaction, so no other request reads the table between the two
             session.execute(
                 update(KothEvent)
-                .where(KothEvent.is_active == True)
+                .where(col(KothEvent.is_active) == True)
                 .values(is_active=False),
                 execution_options={"synchronize_session": False},
             )
             session.execute(
                 update(KothEvent)
-                .where(KothEvent.id == event_id)
+                .where(col(KothEvent.id) == event_id)
                 .values(is_active=True),
                 execution_options={"synchronize_session": False},
             )
@@ -165,12 +166,12 @@ class KothService:
         with Session.begin() as session:
             statement = (
                 select(KothSignup)
-                .where(KothSignup.event_id == event_id)
-                .order_by(KothSignup.bracket, KothSignup.mmr.desc())
+                .where(col(KothSignup.event_id) == event_id)
+                .order_by(col(KothSignup.bracket), col(KothSignup.mmr).desc())
             )
             if limit is not None or offset:
                 # The id breaks the ties the bracket and mmr order leaves
-                statement = statement.order_by(KothSignup.id).offset(offset)
+                statement = statement.order_by(col(KothSignup.id)).offset(offset)
                 if limit is not None:
                     statement = statement.limit(limit)
             signups = session.scalars(statement).unique().all()
@@ -342,7 +343,7 @@ class KothService:
                             KothMatchParticipant.signup
                         )
                     )
-                    .where(KothMatch.id == match_id)
+                    .where(col(KothMatch.id) == match_id)
                 )
                 .unique()
                 .first()
@@ -362,8 +363,8 @@ class KothService:
                         KothMatchParticipant.signup
                     )
                 )
-                .where(KothMatch.event_id == event_id)
-                .order_by(KothMatch.bracket, KothMatch.id)
+                .where(col(KothMatch.event_id) == event_id)
+                .order_by(col(KothMatch.bracket), col(KothMatch.id))
             )
             if limit is not None or offset:
                 statement = statement.offset(offset)
@@ -466,8 +467,8 @@ class KothService:
                 session.scalars(
                     select(KothMatchParticipant)
                     .options(joinedload(KothMatchParticipant.signup))
-                    .where(KothMatchParticipant.match_id == match_id)
-                    .order_by(KothMatchParticipant.team_number)
+                    .where(col(KothMatchParticipant.match_id) == match_id)
+                    .order_by(col(KothMatchParticipant.team_number))
                 )
                 .unique()
                 .all()
@@ -497,9 +498,9 @@ class KothService:
         """
         active = session.scalars(
             select(KothSignup).where(
-                KothSignup.event_id == event_id,
-                KothSignup.twitch_username == twitch_username,
-                KothSignup.is_active == 1,
+                col(KothSignup.event_id) == event_id,
+                col(KothSignup.twitch_username) == twitch_username,
+                col(KothSignup.is_active) == 1,
             )
         ).all()
         if not active:
@@ -524,8 +525,8 @@ class KothService:
             session.execute(
                 update(KothSignup)
                 .where(
-                    KothSignup.event_id == event_id,
-                    KothSignup.bracket == bracket,
+                    col(KothSignup.event_id) == event_id,
+                    col(KothSignup.bracket) == bracket,
                 )
                 .values(is_king=0),
                 execution_options={"synchronize_session": False},

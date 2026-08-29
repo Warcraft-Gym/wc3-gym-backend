@@ -1,5 +1,5 @@
 import logging
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Query, Response
 
@@ -198,13 +198,16 @@ def search_bets(
     return bets or []
 
 
-@router.get("/fantasy/teams/{team_id}/season/{season_id}/breakdown")
+@router.get(
+    "/fantasy/teams/{team_id}/season/{season_id}/breakdown",
+    response_model=FantasyTeamScoreBreakdown,
+)
 def get_fantasy_team_breakdown(
     team_id: int,
     season_id: int,
     season_service: SeasonServiceDep,
     fantasy_score_service: FantasyScoreServiceDep,
-) -> FantasyTeamScoreBreakdown:
+) -> dict[str, Any]:
     """Get detailed score breakdown for a fantasy team.
 
     Returns a detailed breakdown showing how each component of the fantasy

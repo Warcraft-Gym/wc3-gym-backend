@@ -108,7 +108,7 @@ class FantasyBetUpdate(SQLModel):
 class FantasyBetPublic(FantasyBetBase):
     # app.services.derived.fill_bet_results answers this one; no column holds it
     bet_result: int | None = None
-    id: int | None = None
+    id: int
     season_id: int | None = None
     series_id: int | None = None
     user_id: int | None = None
@@ -120,10 +120,7 @@ class FantasyBetPublic(FantasyBetBase):
     winner: UserPublic | None = None
 
     @classmethod
-    def from_fantasy_bet(cls, fbet: FantasyBet | None) -> Self | None:
-        if not fbet:
-            return None
-
+    def from_fantasy_bet(cls, fbet: FantasyBet) -> Self:
         return cls(
             id=fbet.id,
             series_id=fbet.series_id,
@@ -138,11 +135,8 @@ class FantasyBetPublic(FantasyBetBase):
         )
 
     @classmethod
-    def from_fantasy_bet_reduced(cls, fbet: FantasyBet | None) -> Self | None:
+    def from_fantasy_bet_reduced(cls, fbet: FantasyBet) -> Self:
         """Every field of the bet, with the nested collections empty."""
-        if not fbet:
-            return None
-
         return cls(
             id=fbet.id,
             series_id=fbet.series_id,

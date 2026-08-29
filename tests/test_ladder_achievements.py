@@ -14,6 +14,7 @@ import pytest
 from fastapi import FastAPI
 from httpx2 import Client
 from sqlalchemy import select
+from sqlmodel import col
 
 from app.core import achievements
 from app.core.achievements import Achievement
@@ -326,7 +327,7 @@ def test_the_answer_carries_the_badges_and_adds_their_points(
     }
 
 
-def test_the_badges_come_worth_most_first(
+def test_the_badges_come_oldest_first(
     client: Client, auth_headers: dict[str, str], league: dict[str, Any]
 ) -> None:
     player = league["player_ids"][0]
@@ -337,7 +338,7 @@ def test_the_badges_come_worth_most_first(
 
     row = player_of(ladder_of(client, auth_headers, league["season_id"]), player)
 
-    assert [badge["id"] for badge in row["achievements"]] == ["win_streak", "win_first"]
+    assert [badge["id"] for badge in row["achievements"]] == ["win_first", "win_streak"]
 
 
 def test_the_roster_rules_read_the_season(
@@ -347,7 +348,7 @@ def test_the_roster_rules_read_the_season(
     one, three = league["player_ids"][0], league["player_ids"][2]
     with Session() as session:
         team_season = session.scalars(
-            select(DBTeamSeason).where(DBTeamSeason.team_id == league["team_b_id"])
+            select(DBTeamSeason).where(col(DBTeamSeason.team_id) == league["team_b_id"])
         ).one()
         team_season.coach_1_id = three
         session.commit()

@@ -7,6 +7,7 @@ from sqlalchemy import ColumnElement, Select, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as OrmSession
 from sqlalchemy.orm import joinedload, noload, selectinload
+from sqlmodel import col
 
 from app.core.db import Session
 from app.core.exceptions import NotFoundError, W3CThrottledError
@@ -83,7 +84,7 @@ class UserService:
                         joinedload(User.team_seasons).noload("*"),
                         joinedload(User.w3c_stats),
                     )
-                    .where(User.id == user_id)
+                    .where(col(User.id) == user_id)
                 )
                 .unique()
                 .first()
@@ -106,16 +107,16 @@ class UserService:
         ids = [user_id for user_id in user_ids if user_id is not None]
         if not ids:
             return []
-        return self._where(User.id.in_(ids))
+        return self._where(col(User.id).in_(ids))
 
     def find_by_discord_id(self, discord_id: str) -> list[UserListPublic]:
-        return self._where(User.discordId == discord_id)
+        return self._where(col(User.discordId) == discord_id)
 
     def find_by_discord_id_or_tag(
         self, discord_id: str, discord_tag: str
     ) -> list[UserListPublic]:
         return self._where(
-            or_(User.discordId == discord_id, User.discordTag == discord_tag)
+            or_(col(User.discordId) == discord_id, col(User.discordTag) == discord_tag)
         )
 
     def _where(
@@ -140,7 +141,7 @@ class UserService:
             )
             if limit is not None or offset:
                 # Offset paging is deterministic only with a fixed order
-                statement = statement.order_by(User.id).offset(offset)
+                statement = statement.order_by(col(User.id)).offset(offset)
                 if limit is not None:
                     statement = statement.limit(limit)
             users = (
@@ -168,7 +169,7 @@ class UserService:
                 selectinload(User.signup_seasons).joinedload(DBUserSeasonSignup.season),
             )
             # Offset paging is deterministic only with a fixed order
-            statement = statement.order_by(User.id).offset(offset)
+            statement = statement.order_by(col(User.id)).offset(offset)
             if limit is not None:
                 statement = statement.limit(limit)
             users = session.scalars(statement).unique().all()
@@ -230,7 +231,7 @@ class UserService:
                 self._write_w3c_stats(session, user.id, s)
             # The stamp says when the app last asked, not that stats were found
             session.execute(
-                update(User).where(User.id == user.id).values(w3c_synced_at=_now())
+                update(User).where(col(User.id) == user.id).values(w3c_synced_at=_now())
             )
 
     def _write_w3c_stats(
@@ -262,9 +263,9 @@ class UserService:
     ) -> Select[tuple[W3CStats]]:
         """The rows the unique index holds to one: user, race and season."""
         return select(W3CStats).where(
-            W3CStats.user_id == user_id,
-            W3CStats.race == w3c_stats.race,
-            W3CStats.wc3_season == w3c_stats.wc3_season,
+            col(W3CStats.user_id) == user_id,
+            col(W3CStats.race) == w3c_stats.race,
+            col(W3CStats.wc3_season) == w3c_stats.wc3_season,
         )
 
     def update_w3c_stats_by_id(self, user_id: int) -> UserPublic:

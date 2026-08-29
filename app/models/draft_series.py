@@ -81,7 +81,7 @@ class DraftSeriesUpdate(SQLModel):
 
 
 class DraftSeriesPublic(DraftSeriesBase):
-    id: int | None = None
+    id: int
     match_id: int | None = None
     player1_id: int | None = None
     player2_id: int | None = None
@@ -93,10 +93,7 @@ class DraftSeriesPublic(DraftSeriesBase):
     player2: UserPublic | None = None
 
     @classmethod
-    def from_draft_series(cls, draft_series: DraftSeries | None) -> Self | None:
-        if not draft_series:
-            return None
-
+    def from_draft_series(cls, draft_series: DraftSeries) -> Self:
         return cls(
             id=draft_series.id,
             match_id=draft_series.match_id,

@@ -3,6 +3,7 @@ import logging
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
+from sqlmodel import col
 
 from app.core.db import Session
 from app.core.exceptions import NotFoundError
@@ -76,7 +77,7 @@ class FantasyTeamService:
             result = []
             statement = select(FantasyTeam).options(*self._reduced_options)
             # Offset paging is deterministic only with a fixed order
-            statement = statement.order_by(FantasyTeam.id).offset(offset)
+            statement = statement.order_by(col(FantasyTeam.id)).offset(offset)
             if limit is not None:
                 statement = statement.limit(limit)
             fteams = session.scalars(statement).unique().all()
@@ -105,7 +106,7 @@ class FantasyTeamService:
                 total = session.scalar(
                     select(func.count()).select_from(FantasyTeam).where(filter)
                 )
-                statement = statement.order_by(FantasyTeam.id).offset(offset)
+                statement = statement.order_by(col(FantasyTeam.id)).offset(offset)
                 if limit is not None:
                     statement = statement.limit(limit)
             fteams = session.scalars(statement).unique().all()

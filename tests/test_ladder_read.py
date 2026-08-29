@@ -19,6 +19,7 @@ import pytest
 from fastapi import FastAPI
 from httpx2 import Client
 from sqlalchemy import case, func, select
+from sqlmodel import col
 
 from app.core import ladder
 from app.core.achievements import ACHIEVEMENTS
@@ -68,6 +69,7 @@ def second_season(season_id: int) -> int:
         session.flush()
         session.add_all(default_rows(other.id))
         session.commit()
+        assert other.id is not None
         return other.id
 
 
@@ -178,18 +180,27 @@ def test_the_two_faces_of_the_rule_agree(app: FastAPI, league: dict[str, Any]) -
         rows = list(session.scalars(select(W3CLadderMatch)))
         in_sql = session.execute(
             select(
-                W3CLadderMatch.id,
-                ladder.points_case(W3CLadderMatch.won, W3CLadderMatch.duration_s),
-                case((ladder.counted_clause(W3CLadderMatch.duration_s), 1), else_=0),
+                col(W3CLadderMatch.id),
+                ladder.points_case(
+                    col(W3CLadderMatch.won), col(W3CLadderMatch.duration_s)
+                ),
+                case(
+                    (ladder.counted_clause(col(W3CLadderMatch.duration_s)), 1), else_=0
+                ),
             )
         ).all()
         totals = session.execute(
             select(
                 func.sum(
-                    ladder.points_case(W3CLadderMatch.won, W3CLadderMatch.duration_s)
+                    ladder.points_case(
+                        col(W3CLadderMatch.won), col(W3CLadderMatch.duration_s)
+                    )
                 ),
                 func.sum(
-                    case((ladder.counted_clause(W3CLadderMatch.duration_s), 1), else_=0)
+                    case(
+                        (ladder.counted_clause(col(W3CLadderMatch.duration_s)), 1),
+                        else_=0,
+                    )
                 ),
             )
         ).one()
@@ -585,16 +596,14 @@ def test_every_rule_the_migration_seeded_is_in_the_catalogue() -> None:
 
 def rule_row_id(season_id: int, rule_id: str) -> int:
     with Session() as session:
-        return (
-            session.scalars(
-                select(LadderAchievement).where(
-                    LadderAchievement.season_id == season_id,
-                    LadderAchievement.rule_id == rule_id,
-                )
+        row = session.scalars(
+            select(LadderAchievement).where(
+                col(LadderAchievement.season_id) == season_id,
+                col(LadderAchievement.rule_id) == rule_id,
             )
-            .one()
-            .id
-        )
+        ).one()
+        assert row.id is not None
+        return row.id
 
 
 def repay(season_id: int, rule_id: str, **fields: int) -> None:

@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
 
 class TeamReduced(SQLModel):
-    id: int | None = None
+    id: int
     # name and long_name also receive numeric cells from the xlsx import.
     name: Annotated[str | None, NumToStr] = None
     long_name: Annotated[str | None, NumToStr] = None

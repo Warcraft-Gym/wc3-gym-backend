@@ -2,6 +2,7 @@ import logging
 
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
+from sqlmodel import col
 
 from app.core.db import Session
 from app.core.exceptions import NotFoundError
@@ -48,7 +49,7 @@ class MatchService:
                         joinedload(Match.season).noload("*"),
                         joinedload(Match.fixed_map),
                     )
-                    .where(Match.id == match_id)
+                    .where(col(Match.id) == match_id)
                     .limit(1)
                 )
                 .unique()
@@ -80,7 +81,7 @@ class MatchService:
             )
             if limit is not None or offset:
                 # Offset paging is deterministic only with a fixed order
-                statement = statement.order_by(Match.id).offset(offset)
+                statement = statement.order_by(col(Match.id)).offset(offset)
                 if limit is not None:
                     statement = statement.limit(limit)
             matches = (

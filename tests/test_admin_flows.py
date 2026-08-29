@@ -25,6 +25,7 @@ from fastapi.testclient import TestClient
 from httpx2 import Client
 from sqlalchemy import update
 from sqlalchemy.exc import SQLAlchemyError
+from sqlmodel import col
 
 from app.core.db import Session
 from app.core.exceptions import W3CThrottledError
@@ -549,7 +550,7 @@ def stamp(user_id: int, minutes_ago: float) -> None:
     with Session() as session:
         session.execute(
             update(User)
-            .where(User.id == user_id)
+            .where(col(User.id) == user_id)
             .values(
                 w3c_synced_at=datetime.now(UTC).replace(tzinfo=None)
                 - timedelta(minutes=minutes_ago),

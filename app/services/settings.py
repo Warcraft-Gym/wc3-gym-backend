@@ -70,8 +70,7 @@ class SettingsService:
 
     def get_setting(self, key: str) -> dict[str, Any]:
         """Get a single setting by key"""
-        setting = self.get_by_key(key)
-        return setting.to_dict() if setting else None
+        return self.get_by_key(key).to_dict()
 
     def get_all_settings(self) -> list[dict[str, Any]]:
         """Get all settings"""

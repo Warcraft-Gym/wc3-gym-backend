@@ -5,6 +5,7 @@ from sqlalchemy import ColumnElement, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as OrmSession
 from sqlalchemy.orm import joinedload, noload, selectinload
+from sqlmodel import col
 
 from app.core.db import Session
 from app.core.exceptions import BadRequestError, NotFoundError
@@ -12,7 +13,7 @@ from app.core.query import QueryElement, QueryUtil
 from app.models.season import Season
 from app.models.team import Team, TeamCreate, TeamPublic, TeamUpdate
 from app.models.team_season import DBTeamSeason
-from app.models.user import User, UserListPublic
+from app.models.user import User, UserPublic
 from app.models.user_team_season import DBUserTeamSeason
 from app.services import derived
 from app.services.users import UserService
@@ -200,7 +201,7 @@ class TeamService:
                         joinedload(Team.season_info).joinedload(DBTeamSeason.coach_2),
                         joinedload(Team.season_info).joinedload(DBTeamSeason.coach_3),
                     )
-                    .where(Team.id == team_id)
+                    .where(col(Team.id) == team_id)
                 )
                 .unique()
                 .first()
@@ -217,7 +218,7 @@ class TeamService:
             team = (
                 session.scalars(
                     select(Team)
-                    .where(Team.id == team_id)
+                    .where(col(Team.id) == team_id)
                     .options(*_season_loads(season_id))
                 )
                 .unique()
@@ -267,7 +268,7 @@ class TeamService:
             )
             if limit is not None or offset:
                 # Offset paging is deterministic only with a fixed order
-                statement = statement.order_by(Team.id).offset(offset)
+                statement = statement.order_by(col(Team.id)).offset(offset)
                 if limit is not None:
                     statement = statement.limit(limit)
             teams = (
@@ -296,7 +297,7 @@ class TeamService:
             )
             if limit is not None or offset:
                 # Offset paging is deterministic only with a fixed order
-                statement = statement.order_by(Team.id).offset(offset)
+                statement = statement.order_by(col(Team.id)).offset(offset)
                 if limit is not None:
                     statement = statement.limit(limit)
             teams = session.scalars(statement).unique().all()
@@ -315,7 +316,7 @@ class TeamService:
             statement = select(Team).options(noload("*"))
             if limit is not None or offset:
                 # Offset paging is deterministic only with a fixed order
-                statement = statement.order_by(Team.id).offset(offset)
+                statement = statement.order_by(col(Team.id)).offset(offset)
                 if limit is not None:
                     statement = statement.limit(limit)
             teams = session.scalars(statement).unique().all()
@@ -337,11 +338,11 @@ class TeamService:
                     noload(Team.user_seasons),
                     joinedload(Team.season_info).noload("*"),
                 )
-                .where(Team.season_info.any(season_id=season_id))
+                .where(col(Team.season_info).any(season_id=season_id))
             )
             if limit is not None or offset:
                 # Offset paging is deterministic only with a fixed order
-                statement = statement.order_by(Team.id).offset(offset)
+                statement = statement.order_by(col(Team.id)).offset(offset)
                 if limit is not None:
                     statement = statement.limit(limit)
             teams = session.scalars(statement).unique().all()
@@ -363,12 +364,14 @@ class TeamService:
             result: list[TeamPublic] = []
             statement = (
                 select(Team)
-                .where(Team.season_info.any(DBTeamSeason.season_id == season_id))
+                .where(
+                    col(Team.season_info).any(col(DBTeamSeason.season_id) == season_id)
+                )
                 .options(*_season_loads(season_id))
             )
             if limit is not None or offset:
                 # Offset paging is deterministic only with a fixed order
-                statement = statement.order_by(Team.id).offset(offset)
+                statement = statement.order_by(col(Team.id)).offset(offset)
                 if limit is not None:
                     statement = statement.limit(limit)
             teams = session.scalars(statement).unique().all()
@@ -394,7 +397,7 @@ class TeamService:
                 result.append(team_data)
         return result
 
-    def season_players(self, team_id: int, season_id: int) -> list[UserListPublic]:
+    def season_players(self, team_id: int, season_id: int) -> list[UserPublic]:
         """The players this team fielded in this season."""
         team = self.get_with_nested_users_by_season(team_id, season_id)
         return team.player_by_season.get(season_id) or []

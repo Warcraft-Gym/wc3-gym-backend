@@ -44,8 +44,8 @@ def get_w3c_config(service: SettingsServiceDep) -> W3CConfig:
 @router.get("/config/settings/{key}")
 def get_setting(key: str, service: SettingsServiceDep) -> SettingsPublic:
     """Retrieve a specific setting by key."""
-    # get_setting raises NotFoundError for an unknown key.
-    return service.get_setting(key)
+    # get_by_key raises NotFoundError for an unknown key.
+    return service.get_by_key(key)
 
 
 @router.put("/config/settings", dependencies=[Depends(require_admin)])

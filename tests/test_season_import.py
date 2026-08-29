@@ -10,6 +10,7 @@ from typing import Any
 import pandas as pd
 from httpx2 import Client, Response
 from sqlalchemy import func, select
+from sqlmodel import col
 
 from app.core.db import Session
 from app.models.map import Map
@@ -157,7 +158,9 @@ def test_a_synchronous_import_writes_the_season(
     assert body["season_name"] == "Season 9"
 
     with Session() as session:
-        season = session.scalars(select(Season).where(Season.name == "Season 9")).one()
+        season = session.scalars(
+            select(Season).where(col(Season.name) == "Season 9")
+        ).one()
         assert season.id == body["season_id"]
         assert season.number_weeks == 4
         assert len(session.scalars(select(Team)).all()) == 2
@@ -191,7 +194,9 @@ def test_an_old_background_parameter_runs_the_import(
     assert response.json()["message"] == "Season imported successfully"
 
     with Session() as session:
-        assert session.scalars(select(Season).where(Season.name == "Season 9")).one()
+        assert session.scalars(
+            select(Season).where(col(Season.name) == "Season 9")
+        ).one()
 
 
 def test_a_second_import_updates_the_bets_instead_of_adding_them(
@@ -269,9 +274,13 @@ def test_a_blank_cell_keeps_the_stored_value(
     assert second.status_code == 200, second.text
 
     with Session() as session:
-        season = session.scalars(select(Season).where(Season.name == "Season 9")).one()
-        team = session.scalars(select(Team).where(Team.name == "Alpha")).one()
-        stored_map = session.scalars(select(Map).where(Map.shortname == "EI")).one()
+        season = session.scalars(
+            select(Season).where(col(Season.name) == "Season 9")
+        ).one()
+        team = session.scalars(select(Team).where(col(Team.name) == "Alpha")).one()
+        stored_map = session.scalars(
+            select(Map).where(col(Map.shortname) == "EI")
+        ).one()
 
     assert (season.pick_ban, season.discordRole) == ("EI, LR", "9001")
     assert (team.long_name, team.discord_role) == ("Team Alpha", "9001")
@@ -309,10 +318,10 @@ def test_the_fantasy_users_sheet_maps_a_captain_and_creates_a_missing_one(
 
     with Session() as session:
         captain = session.scalars(
-            select(User).where(User.battleTag == "Cap#7777")
+            select(User).where(col(User.battleTag) == "Cap#7777")
         ).one()
         created = session.scalars(
-            select(User).where(User.battleTag == "New#8888")
+            select(User).where(col(User.battleTag) == "New#8888")
         ).one()
         teams = session.scalars(select(FantasyTeam)).all()
         assert len(session.scalars(select(User)).all()) == 4
@@ -340,7 +349,9 @@ def test_an_import_without_the_fantasy_users_sheet_still_writes_the_season(
     assert response.status_code == 200, response.text
 
     with Session() as session:
-        assert session.scalars(select(Season).where(Season.name == "Season 9")).one()
+        assert session.scalars(
+            select(Season).where(col(Season.name) == "Season 9")
+        ).one()
         assert session.scalars(select(FantasyTeam)).all() == []
         assert len(session.scalars(select(User)).all()) == 3
 
@@ -430,7 +441,7 @@ def _series_sheet(player1_points: int) -> dict[str, tuple[list[str], list[list[A
 def _score_system_of(name: str = "Season 9") -> str:
     with Session() as session:
         return (
-            session.scalars(select(Season).where(Season.name == name))
+            session.scalars(select(Season).where(col(Season.name) == name))
             .one()
             .score_system
         )

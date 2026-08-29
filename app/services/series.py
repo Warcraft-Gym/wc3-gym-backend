@@ -1,6 +1,7 @@
 import logging
 
 from sqlalchemy import func, select
+from sqlmodel import col
 
 from app.core import fantasy
 from app.core.db import Session
@@ -49,7 +50,7 @@ class SeriesService:
             series = session.scalars(
                 select(Series)
                 .options(*Series._eager_options())
-                .where(Series.id == series_id)
+                .where(col(Series.id) == series_id)
             ).first()
             if not series:
                 raise NotFoundError("Series not found")
@@ -79,9 +80,9 @@ class SeriesService:
             if limit is not None or offset:
                 # Offset paging is deterministic only with a fixed order
                 if sort == "week":
-                    statement = statement.join(Match, Match.id == Series.match_id)
+                    statement = statement.join(Match, col(Match.id) == Series.match_id)
                 statement = ordered(
-                    statement, SERIES_SORTS, sort, order, Series.id
+                    statement, SERIES_SORTS, sort, order, col(Series.id)
                 ).offset(offset)
                 if limit is not None:
                     statement = statement.limit(limit)
@@ -110,7 +111,7 @@ class SeriesService:
             statement = (
                 select(func.count())
                 .select_from(Series)
-                .where(Series.match.has(Match.season_id == season_id))
+                .where(col(Series.match).has(col(Match.season_id) == season_id))
             )
             if filter is not None:
                 statement = statement.where(filter)

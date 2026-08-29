@@ -124,10 +124,8 @@ def race_points(
                (race_points,) if include_weekly_details=False
     """
     race_points: RacePoints = {}
-    race_stats: RaceStats | None = {} if include_weekly_details else None
-    race_weekly_details: RaceWeeklyDetails | None = (
-        {} if include_weekly_details else None
-    )
+    race_stats: RaceStats = {}
+    race_weekly_details: RaceWeeklyDetails = {}
 
     for week in range(1, (number_weeks or 0) + 1):
         season_week_series = series_by_week.get(week, [])

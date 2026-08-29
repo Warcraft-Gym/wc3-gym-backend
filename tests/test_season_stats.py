@@ -28,7 +28,7 @@ def record(user_id: int, season_id: int) -> UserTeamSeasonStatsPublic:
     """The season record the API answers for one player."""
     stats = UserTeamSeasonStatsPublic(user_id=user_id, season_id=season_id)
     with Session() as session:
-        derived.fill_gnl_stats(session, [UserPublic(gnl_stats=[stats])])
+        derived.fill_gnl_stats(session, [UserPublic(id=user_id, gnl_stats=[stats])])
     return stats
 
 
@@ -37,6 +37,7 @@ def add_series(**values: object) -> int:
         series = Series(**values)
         session.add(series)
         session.commit()
+        assert series.id is not None
         return series.id
 
 

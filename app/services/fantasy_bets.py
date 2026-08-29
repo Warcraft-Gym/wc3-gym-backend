@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from sqlalchemy import ColumnElement, func, select
 from sqlalchemy.orm import joinedload
+from sqlmodel import col
 
 from app.core.db import Session
 from app.core.exceptions import BadRequestError, NotFoundError
@@ -133,7 +134,7 @@ class FantasyBetService:
             if limit is not None or offset:
                 # Offset paging is deterministic only with a fixed order
                 total = session.scalar(select(func.count()).select_from(FantasyBet))
-                statement = statement.order_by(FantasyBet.id).offset(offset)
+                statement = statement.order_by(col(FantasyBet.id)).offset(offset)
                 if limit is not None:
                     statement = statement.limit(limit)
             result = []
@@ -188,9 +189,9 @@ class FantasyBetService:
                 )
                 if sort == "captain":
                     # A bet links to users twice, so the join names its own condition
-                    statement = statement.join(User, User.id == FantasyBet.user_id)
+                    statement = statement.join(User, col(User.id) == FantasyBet.user_id)
                 statement = ordered(
-                    statement, BET_SORTS, sort, order, FantasyBet.id
+                    statement, BET_SORTS, sort, order, col(FantasyBet.id)
                 ).offset(offset)
                 if limit is not None:
                     statement = statement.limit(limit)

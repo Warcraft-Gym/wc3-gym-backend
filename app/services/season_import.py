@@ -14,6 +14,7 @@ import pandas as pd
 from pydantic import ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session as OrmSession
+from sqlmodel import col
 
 from app.core.db import Session
 from app.core.exceptions import BadRequestError
@@ -58,7 +59,7 @@ def strip_text(frame: pd.DataFrame) -> pd.DataFrame:
     return frame.map(lambda value: value.strip() if isinstance(value, str) else value)
 
 
-def folded[T](value: T) -> T:
+def folded[T](value: T) -> T | str:
     """The key a lookup matches on. Text folds to lower case, so a cell
     finds the stored row whatever the case it was typed in."""
     return value.strip().lower() if isinstance(value, str) else value
@@ -253,7 +254,9 @@ def _maps(session: OrmSession, sheets: Sheets, season: Season) -> dict[int, int]
     if pool:
         linked = set(
             session.scalars(
-                select(DBMapSeason.map_id).where(DBMapSeason.season_id == season.id)
+                select(col(DBMapSeason.map_id)).where(
+                    col(DBMapSeason.season_id) == season.id
+                )
             )
         )
         session.add_all(
@@ -262,7 +265,11 @@ def _maps(session: OrmSession, sheets: Sheets, season: Season) -> dict[int, int]
                 for map_id in {map_obj.id for map_obj in pool} - linked
             ]
         )
-    return {old_id: map_obj.id for old_id, map_obj in old_ids.items()}
+    return {
+        old_id: map_obj.id
+        for old_id, map_obj in old_ids.items()
+        if map_obj.id is not None
+    }
 
 
 def _teams(session: OrmSession, sheets: Sheets, season: Season) -> dict[int, int]:
@@ -304,7 +311,9 @@ def _teams(session: OrmSession, sheets: Sheets, season: Season) -> dict[int, int
     if team_ids:
         linked = set(
             session.scalars(
-                select(DBTeamSeason.team_id).where(DBTeamSeason.season_id == season.id)
+                select(col(DBTeamSeason.team_id)).where(
+                    col(DBTeamSeason.season_id) == season.id
+                )
             )
         )
         session.add_all(
@@ -313,7 +322,7 @@ def _teams(session: OrmSession, sheets: Sheets, season: Season) -> dict[int, int
                 for team_id in team_ids - linked
             ]
         )
-    return {old_id: team.id for old_id, team in old_ids.items()}
+    return {old_id: team.id for old_id, team in old_ids.items() if team.id is not None}
 
 
 def _player_values(row: pd.Series) -> UserCreate:
@@ -380,9 +389,9 @@ def _players(
     if roster:
         linked = set(
             session.execute(
-                select(DBUserTeamSeason.user_id, DBUserTeamSeason.team_id).where(
-                    DBUserTeamSeason.season_id == season.id
-                )
+                select(
+                    col(DBUserTeamSeason.user_id), col(DBUserTeamSeason.team_id)
+                ).where(col(DBUserTeamSeason.season_id) == season.id)
             ).all()
         )
         session.add_all(
@@ -405,7 +414,9 @@ def _matches(
     rows = _rows(sheets["Matches"], ["Team1 ID", "Team2 ID", "Playday"])
     stored = {
         (match.team1_id, match.team2_id, match.playday): match
-        for match in session.scalars(select(Match).where(Match.season_id == season.id))
+        for match in session.scalars(
+            select(Match).where(col(Match.season_id) == season.id)
+        )
     }
 
     written: list[Match] = []
@@ -436,7 +447,9 @@ def _matches(
             old_ids[old_id] = match
     session.add_all(written)
     session.flush()
-    return {old_id: match.id for old_id, match in old_ids.items()}
+    return {
+        old_id: match.id for old_id, match in old_ids.items() if match.id is not None
+    }
 
 
 def _series_values(
@@ -470,7 +483,7 @@ def _series(
         stored = {
             (series.match_id, series.player1_id, series.player2_id): series
             for series in session.scalars(
-                select(Series).where(Series.match_id.in_(match_ids))
+                select(Series).where(col(Series.match_id).in_(match_ids))
             )
         }
 
@@ -499,7 +512,9 @@ def _series(
             old_ids[old_id] = series
     session.add_all(written)
     session.flush()
-    return {old_id: series.id for old_id, series in old_ids.items()}
+    return {
+        old_id: series.id for old_id, series in old_ids.items() if series.id is not None
+    }
 
 
 def _fantasy_users(session: OrmSession, sheets: Sheets, users: Users) -> None:
@@ -554,7 +569,7 @@ def _fantasy_teams(
     stored = {
         fteam.captain_id: fteam
         for fteam in session.scalars(
-            select(FantasyTeam).where(FantasyTeam.season_id == season.id)
+            select(FantasyTeam).where(col(FantasyTeam.season_id) == season.id)
         )
     }
 
@@ -584,7 +599,9 @@ def _fantasy_teams(
             old_ids[old_id] = fteam
     session.add_all(written)
     session.flush()
-    return {old_id: fteam.id for old_id, fteam in old_ids.items()}
+    return {
+        old_id: fteam.id for old_id, fteam in old_ids.items() if fteam.id is not None
+    }
 
 
 def _fantasy_players(
@@ -605,9 +622,12 @@ def _fantasy_players(
     linked = set(
         session.execute(
             select(
-                DBFantasyTeamPlayer.fantasy_team_id, DBFantasyTeamPlayer.user_id
+                col(DBFantasyTeamPlayer.fantasy_team_id),
+                col(DBFantasyTeamPlayer.user_id),
             ).where(
-                DBFantasyTeamPlayer.fantasy_team_id.in_(set(fantasy_teams.values()))
+                col(DBFantasyTeamPlayer.fantasy_team_id).in_(
+                    set(fantasy_teams.values())
+                )
             )
         ).all()
     )
@@ -634,7 +654,7 @@ def _fantasy_bets(
     stored = {
         (bet.series_id, bet.user_id): bet
         for bet in session.scalars(
-            select(FantasyBet).where(FantasyBet.season_id == season.id)
+            select(FantasyBet).where(col(FantasyBet.season_id) == season.id)
         )
     }
 

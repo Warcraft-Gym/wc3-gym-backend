@@ -338,7 +338,7 @@ def earned(
     coaches: frozenset[str] = frozenset(),
     is_coach: bool = False,
 ) -> list[Achievement]:
-    """Every achievement one player earned, worth most first.
+    """Every achievement one player earned, oldest first.
 
     `rows` are his scoped matches oldest first, `points` his ladder points,
     `paid` what this scope pays for each rule, and `opponents` and `coaches`
@@ -412,7 +412,8 @@ def earned(
     if points >= LADDER_GOAL * 2:
         pay(DOUBLE_UP, reaches(rows, LADDER_GOAL * 2) or rows[-1])
 
-    found.sort(key=lambda item: -item.points)
+    # pay() stamps every badge, so the date is never None here
+    found.sort(key=lambda item: item.achieved_at)
     return found
 
 

@@ -37,6 +37,7 @@ def counts() -> dict[str, int]:
             name: session.scalar(
                 select(func.count()).select_from(SQLModel.metadata.tables[name])
             )
+            or 0
             for name in TOTALS
         }
 
