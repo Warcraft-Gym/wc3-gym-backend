@@ -220,3 +220,161 @@ def test_the_admin_token_login_still_admits(
     resp = client.get("/me", headers=auth_headers)
     assert resp.status_code == 200
     assert resp.json()["role"] == "admin"
+
+
+def _login() -> dict[str, Any]:
+    """The claims a Clerk session resolves to, read without a route."""
+    from fastapi.security import HTTPAuthorizationCredentials
+
+    from app.api.deps import require_login
+
+    request = Request({"type": "http", "headers": []})
+    credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials="a-token")
+    return require_login(request, credentials)
+
+
+def _set_coaches(
+    client: Client, headers: dict[str, str], team_id: int, coach_ids: list[int]
+) -> dict[str, Any]:
+    resp = client.put(
+        f"/teams/{team_id}/seasons/1/coaches",
+        json={"coach_ids": coach_ids},
+        headers=headers,
+    )
+    assert resp.status_code == 200, resp.json()
+    return dict(resp.json())
+
+
+def test_a_coach_slot_makes_a_coach(
+    client: Client,
+    monkeypatch: pytest.MonkeyPatch,
+    seeded: dict[str, Any],
+    auth_headers: dict[str, str],
+) -> None:
+    """P1 coaches Alpha this season, so the claims name the team."""
+    monkeypatch.delenv("DISCORD_BOT_TOKEN", raising=False)
+    _set_coaches(client, auth_headers, seeded["team_a_id"], [seeded["player_ids"][0]])
+
+    stub_clerk(monkeypatch, account={**ACCOUNT, "id": "1"})
+    claims = _login()
+    assert claims["role"] == "coach"
+    assert claims["team_id"] == seeded["team_a_id"]
+    assert claims["season_id"] == seeded["season_id"]
+    assert client.get("/me", headers=SESSION).json()["role"] == "coach"
+
+
+def test_the_discord_role_alone_is_no_coach(
+    client: Client,
+    monkeypatch: pytest.MonkeyPatch,
+    seeded: dict[str, Any],
+    auth_headers: dict[str, str],
+) -> None:
+    """The guild role is a mirror; only a coach slot grants coach rights."""
+    resp = client.put(
+        "/config/settings/captain_coach_role",
+        json={"value": "role-1"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200, resp.json()
+    stub_clerk(monkeypatch, account={**ACCOUNT, "id": "1"}, member_roles=["role-1"])
+    assert client.get("/me", headers=SESSION).json()["role"] == "member"
+
+
+def test_a_coach_slot_in_no_season_of_this_account_is_no_coach(
+    client: Client,
+    monkeypatch: pytest.MonkeyPatch,
+    seeded: dict[str, Any],
+    auth_headers: dict[str, str],
+) -> None:
+    """P1 coaches, so P2 does not."""
+    monkeypatch.delenv("DISCORD_BOT_TOKEN", raising=False)
+    _set_coaches(client, auth_headers, seeded["team_a_id"], [seeded["player_ids"][0]])
+
+    stub_clerk(monkeypatch, account={**ACCOUNT, "id": "2"})
+    assert client.get("/me", headers=SESSION).json()["role"] == "member"
+
+
+def test_require_coach_refuses_a_member(
+    client: Client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fastapi.security import HTTPAuthorizationCredentials
+
+    from app.api.deps import require_coach
+    from app.core.exceptions import ApiError
+
+    stub_clerk(monkeypatch)
+    request = Request({"type": "http", "headers": []})
+    credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials="a-token")
+
+    with pytest.raises(ApiError) as refused:
+        require_coach(request, credentials)
+
+    assert refused.value.status_code == 403
+    assert refused.value.body == {"error": "Coaches only"}
+
+
+def test_require_coach_admits_an_admin(
+    client: Client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fastapi.security import HTTPAuthorizationCredentials
+
+    from app.api.deps import require_coach
+
+    stub_clerk(monkeypatch, account={**ACCOUNT, "id": "220202568490418179"})
+    request = Request({"type": "http", "headers": []})
+    credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials="a-token")
+
+    assert require_coach(request, credentials)["role"] == "admin"
+
+
+def test_saving_coaches_writes_the_guild_role(
+    client: Client,
+    monkeypatch: pytest.MonkeyPatch,
+    seeded: dict[str, Any],
+    auth_headers: dict[str, str],
+) -> None:
+    """The new coach is granted the role, the old one loses it."""
+    resp = client.put(
+        "/config/settings/captain_coach_role",
+        json={"value": "role-1"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200, resp.json()
+    monkeypatch.delenv("DISCORD_BOT_TOKEN", raising=False)
+    _set_coaches(client, auth_headers, seeded["team_a_id"], [seeded["player_ids"][0]])
+
+    calls: list[tuple[str, str]] = []
+
+    def request(method: str, url: str, **kwargs: object) -> FakeResponse:
+        calls.append((method, url))
+        return FakeResponse(200, {"roles": []})
+
+    monkeypatch.setenv("DISCORD_BOT_TOKEN", "a-bot-token")
+    monkeypatch.setenv("DISCORD_GUILD_ID", GUILD_ID)
+    monkeypatch.setattr(discord.requests, "request", request)
+    team = _set_coaches(
+        client, auth_headers, seeded["team_a_id"], [seeded["player_ids"][1]]
+    )
+
+    members = f"{discord.API_URL}/guilds/{GUILD_ID}/members"
+    assert calls == [
+        ("PUT", f"{members}/2/roles/role-1"),
+        ("DELETE", f"{members}/1/roles/role-1"),
+        ("GET", f"{members}/2"),
+    ]
+    # The guild answered without the role, so the page can show the chip
+    assert team["discord_role_missing"] == ["2"]
+
+
+def test_saving_coaches_without_a_bot_token_calls_nothing(
+    client: Client,
+    monkeypatch: pytest.MonkeyPatch,
+    seeded: dict[str, Any],
+    auth_headers: dict[str, str],
+) -> None:
+    """No bot token, no call: the suite fails any request it did not stand in for."""
+    monkeypatch.delenv("DISCORD_BOT_TOKEN", raising=False)
+    team = _set_coaches(
+        client, auth_headers, seeded["team_a_id"], [seeded["player_ids"][0]]
+    )
+    assert team["discord_role_missing"] == []

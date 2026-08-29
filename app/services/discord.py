@@ -4,12 +4,16 @@ The account's Discord token comes from Clerk, so the Clerk Discord
 connection must request the `identify guilds guilds.members.read` scopes.
 """
 
+import logging
 import os
+from collections.abc import Iterable
 from typing import Any
 
 import requests
 
 from app.core.exceptions import ApiError
+
+logger = logging.getLogger(__name__)
 
 API_URL = "https://discord.com/api/v10"
 
@@ -70,3 +74,57 @@ def role_for(access_token: str, discord_id: str, admin_role: str | None = None) 
     member = _user_get(access_token, f"/users/@me/guilds/{guild_id}/member")
     roles = set(member.json().get("roles", [])) if member.ok else set()
     return "admin" if admin_role in roles else "member"
+
+
+def _bot_headers() -> dict[str, str] | None:
+    """The bot's authorization, or None when no bot token is configured."""
+    token = os.getenv("DISCORD_BOT_TOKEN")
+    return {"Authorization": f"Bot {token}"} if token else None
+
+
+def set_role(discord_ids: Iterable[str], role_id: str, grant: bool) -> None:
+    """Grant or revoke a guild role. Discord refusing it is a warning, not a failure."""
+    headers = _bot_headers()
+    if not headers or not role_id:
+        return
+    guild_id = os.getenv("DISCORD_GUILD_ID", "")
+    method = "PUT" if grant else "DELETE"
+    for discord_id in discord_ids:
+        url = f"{API_URL}/guilds/{guild_id}/members/{discord_id}/roles/{role_id}"
+        try:
+            response = requests.request(
+                method, url, headers=headers, timeout=REQUEST_TIMEOUT
+            )
+        except requests.RequestException as error:
+            logger.warning("Discord role write failed for %s: %s", discord_id, error)
+            continue
+        if not response.ok:
+            logger.warning(
+                "Discord refused the role write for %s: %s",
+                discord_id,
+                response.status_code,
+            )
+
+
+def without_role(discord_ids: Iterable[str], role_id: str) -> list[str]:
+    """Which of those accounts the guild does not show the role on.
+
+    Empty when no bot token is configured, so the page shows no chip.
+    """
+    headers = _bot_headers()
+    if not headers or not role_id:
+        return []
+    guild_id = os.getenv("DISCORD_GUILD_ID", "")
+    missing = []
+    for discord_id in discord_ids:
+        url = f"{API_URL}/guilds/{guild_id}/members/{discord_id}"
+        try:
+            response = requests.request(
+                "GET", url, headers=headers, timeout=REQUEST_TIMEOUT
+            )
+        except requests.RequestException as error:
+            logger.warning("Discord member read failed for %s: %s", discord_id, error)
+            continue
+        if not response.ok or role_id not in response.json().get("roles", []):
+            missing.append(discord_id)
+    return missing

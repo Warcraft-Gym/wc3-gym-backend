@@ -1,7 +1,7 @@
 import logging
 from typing import Any
 
-from sqlalchemy import ColumnElement, select
+from sqlalchemy import ColumnElement, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as OrmSession
 from sqlalchemy.orm import joinedload, noload, selectinload
@@ -11,11 +11,12 @@ from app.core.db import Session, rel
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.core.query import QueryElement, QueryUtil
 from app.models.season import Season
+from app.models.settings import Settings
 from app.models.team import Team, TeamCreate, TeamPublic, TeamUpdate
 from app.models.team_season import DBTeamSeason
 from app.models.user import User, UserPublic
 from app.models.user_team_season import DBUserTeamSeason
-from app.services import derived
+from app.services import derived, discord
 from app.services.users import UserService
 
 logger = logging.getLogger(__name__)
@@ -33,6 +34,11 @@ def _fill(session: OrmSession, teams: list[TeamPublic]) -> None:
             for player in players
         ],
     )
+
+
+def _ids(discord_ids: dict[int | None, str], user_ids: set[int]) -> list[str]:
+    """The Discord ids of those users, skipping the ones without one."""
+    return [discord_ids[user_id] for user_id in user_ids if discord_ids.get(user_id)]
 
 
 def _public(session: OrmSession, team: Team) -> TeamPublic:
@@ -181,13 +187,71 @@ class TeamService:
                 team_season = DBTeamSeason(team_id=team_id, season_id=season_id)
                 session.add(team_season)
 
+            before = {
+                coach_id
+                for coach_id in (
+                    team_season.coach_1_id,
+                    team_season.coach_2_id,
+                    team_season.coach_3_id,
+                )
+                if coach_id
+            }
+
             # Set coaches (pad with None if less than 3)
             team_season.coach_1_id = coach_ids[0] if len(coach_ids) > 0 else None
             team_season.coach_2_id = coach_ids[1] if len(coach_ids) > 1 else None
             team_season.coach_3_id = coach_ids[2] if len(coach_ids) > 2 else None
 
             session.flush()
-            return _public(session, team)
+            after = set(coach_ids)
+            role = Settings.get_by_key(session, "captain_coach_role")
+            role_id = (role.value if role else None) or ""
+            discord_ids = {
+                user.id: user.discordId
+                for user in session.scalars(
+                    select(User).where(col(User.id).in_(before | after))
+                )
+            }
+            public = _public(session, team)
+
+        # Discord mirrors the coaches; the app never reads the role back.
+        discord.set_role(_ids(discord_ids, after - before), role_id, grant=True)
+        discord.set_role(_ids(discord_ids, before - after), role_id, grant=False)
+        public.discord_role_missing = discord.without_role(
+            _ids(discord_ids, after), role_id
+        )
+        return public
+
+    def coach_seat(self, discord_id: str, season: str | None) -> tuple[int, int] | None:
+        """The team and season this Discord account coaches now, or None.
+
+        The season is the `current_gnl_season` setting, or the newest season,
+        as the admin pages resolve it.
+        """
+        with Session.begin() as session:
+            season_id = (
+                int(season)
+                if season and season.isdigit()
+                else session.scalar(select(func.max(col(Season.id))))
+            )
+            if season_id is None:
+                return None
+            seat = session.execute(
+                select(col(DBTeamSeason.team_id), col(DBTeamSeason.season_id))
+                .join(
+                    User,
+                    or_(
+                        col(DBTeamSeason.coach_1_id) == col(User.id),
+                        col(DBTeamSeason.coach_2_id) == col(User.id),
+                        col(DBTeamSeason.coach_3_id) == col(User.id),
+                    ),
+                )
+                .where(
+                    col(User.discordId) == discord_id,
+                    col(DBTeamSeason.season_id) == season_id,
+                )
+            ).first()
+            return (seat.team_id, seat.season_id) if seat else None
 
     def delete(self, team_id: int) -> None:
         with Session.begin() as session:

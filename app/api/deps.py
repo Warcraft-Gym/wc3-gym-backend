@@ -75,12 +75,20 @@ def _clerk_claims(request: Request) -> dict[str, Any]:
         raise ApiError(401, {"error": "No Discord account on this login"})
 
     discord_id = tokens[0].provider_user_id
-    admin_role = settings_service.get_settings_dict().get("admin_role")
-    return {
+    settings = settings_service.get_settings_dict()
+    claims: dict[str, Any] = {
         "sub": discord_id,
-        "role": discord.role_for(tokens[0].token, discord_id, admin_role),
+        "role": discord.role_for(
+            tokens[0].token, discord_id, settings.get("admin_role")
+        ),
         "token": tokens[0].token,
     }
+    # A coach is one the database names on a current-season team, never a Discord role.
+    if claims["role"] == "member":
+        seat = team_service.coach_seat(discord_id, settings.get("current_gnl_season"))
+        if seat:
+            claims |= {"role": "coach", "team_id": seat[0], "season_id": seat[1]}
+    return claims
 
 
 def require_login(request: Request, credentials: Credentials) -> dict[str, Any]:
@@ -117,8 +125,17 @@ def require_admin(request: Request, credentials: Credentials) -> str:
     return claims["sub"]
 
 
+def require_coach(request: Request, credentials: Credentials) -> dict[str, Any]:
+    """Admit a coach of the current season, or an admin."""
+    claims = require_login(request, credentials)
+    if claims.get("role") not in ("coach", "admin") and claims["sub"] != "admin":
+        raise ApiError(403, {"error": "Coaches only"})
+    return claims
+
+
 RequireLogin = Annotated[dict[str, Any], Depends(require_login)]
 RequireMember = Annotated[dict[str, Any], Depends(require_member)]
+RequireCoach = Annotated[dict[str, Any], Depends(require_coach)]
 
 
 settings_service = SettingsService()

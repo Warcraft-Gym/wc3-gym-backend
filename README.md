@@ -204,7 +204,7 @@ The backend reads its configuration from the environment. `just up` passes devel
 
 `.env` is gitignored; copy `.env.example` to `.env` and fill in what you use. `create_app` calls `load_dotenv`, so its values arrive on their own; each has a default in the code. The deployment secrets are passed in by the stack.
 
-Three more values live in the `settings` table, not the environment, and are edited on the admin Config page: `w3c_url` (wins over the `W3C_URL` variable when present), `current_wc3_season` (the w3champions season the MMR columns read; when the row is missing the backend takes the newest season from w3champions) and `KOTH_NIGHTBOT_TOKEN`. `GET /config/w3c` shows the URL and season the backend resolved.
+More values live in the `settings` table, not the environment, and are edited on the admin Config page: `w3c_url` (wins over the `W3C_URL` variable when present), `current_wc3_season` (the w3champions season the MMR columns read; when the row is missing the backend takes the newest season from w3champions), `KOTH_NIGHTBOT_TOKEN`, `current_gnl_season` (the season the coach check reads; when the row is missing it takes the newest season) and `captain_coach_role` (the Discord role saving a team's coaches mirrors). `GET /config/w3c` shows the URL and season the backend resolved.
 
 **Key environment variables:**
 
@@ -236,6 +236,7 @@ BOT_WEBHOOK_URL="http://host.docker.internal:3001/webhook/series-updated"
 | `CLERK_AUTHORIZED_PARTIES` | Comma-separated origins Clerk accepts the session from | `http://localhost:5173` |
 | `DISCORD_GUILD_ID` | The WC3 Gym Discord server; an account outside it logs in as a guest and reaches no player route | `316390574808760322` |
 | `ADMIN_DISCORD_IDS` | Comma-separated Discord ids that always get the admin role | `220202568490418179` |
+| `DISCORD_BOT_TOKEN` | Optional bot token; when set, saving a team's coaches grants and revokes the `captain_coach_role` in the guild | `MTIz...` |
 
 **Important Notes:**
 - `host.docker.internal` is a special DNS name that resolves to the host machine from within a Docker container

@@ -83,6 +83,8 @@ class TeamPublic(TeamReduced):
     player_by_season: Annotated[dict[int, list[UserPublic]], SeasonLists] = {}
     coaches_by_season: Annotated[dict[int, list[UserPublic]], SeasonLists] = {}
     seasons_info: Annotated[list[SeasonInfoPublic], NoneToList] = []
+    # Coaches whose Discord account is missing the captain role; only Save Coaches fills it
+    discord_role_missing: Annotated[list[str], NoneToList] = []
 
     @classmethod
     def from_team(cls, team: Team) -> Self:
