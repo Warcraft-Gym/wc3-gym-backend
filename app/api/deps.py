@@ -34,7 +34,7 @@ from app.services.users import UserService
 
 _bearer = HTTPBearer(auto_error=False)
 
-_Credentials = Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)]
+Credentials = Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)]
 
 
 @cache
@@ -75,7 +75,7 @@ def _clerk_claims(request: Request) -> dict[str, Any]:
     }
 
 
-def require_login(request: Request, credentials: _Credentials) -> dict[str, Any]:
+def require_login(request: Request, credentials: Credentials) -> dict[str, Any]:
     """Admit the admin token or a Clerk session, and answer the claims.
 
     A guest is admitted too: it logs in and reads the public pages.
@@ -91,7 +91,7 @@ def require_login(request: Request, credentials: _Credentials) -> dict[str, Any]
     return claims
 
 
-def require_member(request: Request, credentials: _Credentials) -> dict[str, Any]:
+def require_member(request: Request, credentials: Credentials) -> dict[str, Any]:
     """Admit an account that is in the guild; a guest reads nothing of its own."""
     claims = require_login(request, credentials)
     if claims.get("role") == "guest":
@@ -101,7 +101,7 @@ def require_member(request: Request, credentials: _Credentials) -> dict[str, Any
     return claims
 
 
-def require_admin(request: Request, credentials: _Credentials) -> str:
+def require_admin(request: Request, credentials: Credentials) -> str:
     """Admit an admin access token and answer its subject."""
     claims = require_login(request, credentials)
     if claims.get("role") != "admin" and claims["sub"] != "admin":

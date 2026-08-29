@@ -4,6 +4,9 @@ The store is a plain dict that the public routes share. The application
 answers requests in parallel, so the
 cleanup must tolerate a token that another request removes, and the
 signup route must let only one of two parallel requests create the user.
+
+The player routes also take a Clerk session, which is the identity path
+the store gives way to; the last tests cover it.
 """
 
 from collections.abc import Iterator
@@ -13,6 +16,8 @@ from typing import Any
 import pytest
 from fastapi import FastAPI
 from httpx2 import Client
+
+from tests.test_discord_auth import SESSION, stub_clerk
 
 
 @pytest.fixture(autouse=True)
@@ -191,3 +196,97 @@ def test_signup_keeps_the_token_of_another_access_type(
     assert resp.status_code == 400
     assert resp.json()["error"] == "invalid_token_type"
     assert "t" in empty_store
+
+
+def member_session(
+    monkeypatch: pytest.MonkeyPatch,
+    discord_id: str = "1",
+    name: str = "p1",
+    a_member: bool = True,
+) -> dict[str, str]:
+    """Stand Clerk and Discord in for one account, and answer the headers it sends."""
+    stub_clerk(
+        monkeypatch,
+        a_member=a_member,
+        account={"id": discord_id, "username": name, "avatar": None},
+    )
+    return SESSION
+
+
+@pytest.fixture
+def member_headers(monkeypatch: pytest.MonkeyPatch) -> dict[str, str]:
+    return member_session(monkeypatch)
+
+
+def test_signup_takes_the_discord_fields_from_the_session(
+    client: Client, w3c_free: None, member_headers: dict[str, str]
+) -> None:
+    """The session wins over the body, the same way the token entry does."""
+    resp = client.post(
+        "/signup", json=SIGNUP_BODY | {"discordId": "999"}, headers=member_headers
+    )
+
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["discordId"] == "1"
+    assert resp.json()["discordTag"] == "p1"
+
+
+def test_player_series_answers_the_linked_players_series(
+    client: Client, seeded: dict[str, Any], member_headers: dict[str, str]
+) -> None:
+    resp = client.get("/player-series", headers=member_headers)
+
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["player"]["discordId"] == "1"
+    assert body["discord_id"] == "1"
+    assert len(body["series"]) == int(resp.headers["X-Total-Count"])
+
+
+def test_player_series_answers_404_for_a_member_without_a_row(
+    client: Client, seeded: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    headers = member_session(monkeypatch, "no-such-id")
+
+    resp = client.get("/player-series", headers=headers)
+
+    assert resp.status_code == 404, resp.text
+    assert resp.json() == {"error": "player_not_found"}
+
+
+def test_a_bet_of_another_player_answers_403_on_the_session_path(
+    client: Client, seeded: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The seeded bet belongs to P1, and the session names P2."""
+    bet_id = client.get("/fantasy/bets").json()[0]["id"]
+    headers = member_session(monkeypatch, "2", "p2")
+
+    resp = client.put(f"/fantasy-bet/{bet_id}", json={}, headers=headers)
+
+    assert resp.status_code == 403, resp.text
+    assert resp.json() == {
+        "error": "unauthorized",
+        "message": "You can only update your own bets",
+    }
+
+
+def test_an_admin_token_carries_no_discord_id(
+    client: Client, seeded: dict[str, Any], auth_headers: dict[str, str]
+) -> None:
+    """The bot's admin token logs in as no player, so a player route turns it away."""
+    resp = client.get("/player-series", headers=auth_headers)
+
+    assert resp.status_code == 401, resp.text
+    assert resp.json() == {"error": "not_a_discord_member"}
+
+
+def test_a_guest_reads_no_player_route(
+    client: Client, seeded: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An account outside the guild logs in, and the player routes turn it away."""
+    headers = member_session(monkeypatch, a_member=False)
+
+    resp = client.get("/player-series", headers=headers)
+
+    assert resp.status_code == 403, resp.text
+    assert resp.json() == {"error": "No valid WC3 Gym server membership found for user"}
