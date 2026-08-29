@@ -21,7 +21,6 @@ class TeamReduced(SQLModel):
     # name and long_name also receive numeric cells from the xlsx import.
     name: Annotated[str | None, NumToStr] = None
     long_name: Annotated[str | None, NumToStr] = None
-    discord_role: Annotated[str | None, NumToStr] = None
 
     @classmethod
     def from_team(cls, team: "Team") -> Self:
@@ -29,5 +28,4 @@ class TeamReduced(SQLModel):
             id=ident(team),
             name=team.name,
             long_name=team.long_name,
-            discord_role=team.discord_role,
         )

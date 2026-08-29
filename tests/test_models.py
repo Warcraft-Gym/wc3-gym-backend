@@ -15,6 +15,7 @@ from sqlmodel import SQLModel
 import app.models
 
 TABLES = {
+    "discord_role_binding",
     "draft_series",
     "fantasy_bets",
     "fantasy_team_player",

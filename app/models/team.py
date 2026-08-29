@@ -1,7 +1,6 @@
 from typing import TYPE_CHECKING, Annotated, Any, Self
 
 from pydantic import BeforeValidator
-from sqlalchemy import Index
 from sqlalchemy.orm import Session
 from sqlmodel import Field, Relationship, SQLModel
 
@@ -37,14 +36,10 @@ class TeamBase(SQLModel):
     # name and long_name also receive numeric cells from the xlsx import.
     name: Annotated[str, NumToStr] = Field(max_length=50)
     long_name: Annotated[str | None, NumToStr] = Field(default=None, max_length=100)
-    discord_role: Annotated[str | None, NumToStr] = Field(default=None, max_length=50)
 
 
 class Team(TeamBase, DBModel, table=True):
     __tablename__ = "teams"
-    # A Discord role belongs to one club, which is what makes the club the same
-    # club across seasons. The short name is a label and may repeat.
-    __table_args__ = (Index("uq_teams_discord_role", "discord_role", unique=True),)
 
     id: int | None = Field(default=None, primary_key=True)
     icon: bytes | None = None
@@ -78,7 +73,6 @@ class TeamCreate(TeamBase):
 class TeamUpdate(SQLModel):
     name: Annotated[str | None, NumToStr] = None
     long_name: Annotated[str | None, NumToStr] = None
-    discord_role: Annotated[str | None, NumToStr] = None
 
 
 class TeamPublic(TeamReduced):
@@ -91,7 +85,7 @@ class TeamPublic(TeamReduced):
     player_by_season: Annotated[dict[int, list[UserPublic]], SeasonLists] = {}
     coaches_by_season: Annotated[dict[int, list[UserPublic]], SeasonLists] = {}
     seasons_info: Annotated[list[SeasonInfoPublic], NoneToList] = []
-    # Coaches whose Discord account is missing the captain role; only Save Coaches fills it
+    # Coaches whose Discord account still lacks a bound role; only Save Coaches fills it
     discord_role_missing: Annotated[list[str], NoneToList] = []
 
     @classmethod
@@ -133,7 +127,6 @@ class TeamPublic(TeamReduced):
             id=ident(team),
             name=team.name,
             long_name=team.long_name,
-            discord_role=team.discord_role,
             player_by_season=players,
             coaches_by_season=coaches,
             seasons_info=seasons_info,

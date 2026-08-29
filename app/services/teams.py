@@ -12,12 +12,11 @@ from app.core.exceptions import BadRequestError, NotFoundError
 from app.core.query import QueryElement, QueryUtil
 from app.models.relationships import DBTeamSeasonCoach
 from app.models.season import Season
-from app.models.settings import Settings
 from app.models.team import Team, TeamCreate, TeamPublic, TeamUpdate
 from app.models.team_season import DBTeamSeason
 from app.models.user import User, UserPublic
 from app.models.user_team_season import DBUserTeamSeason
-from app.services import derived, discord
+from app.services import derived, discord_roles
 from app.services.users import UserService
 
 logger = logging.getLogger(__name__)
@@ -35,11 +34,6 @@ def _fill(session: OrmSession, teams: list[TeamPublic]) -> None:
             for player in players
         ],
     )
-
-
-def _ids(discord_ids: dict[int | None, str], user_ids: set[int]) -> list[str]:
-    """The Discord ids of those users, skipping the ones without one."""
-    return [discord_ids[user_id] for user_id in user_ids if discord_ids.get(user_id)]
 
 
 def _public(session: OrmSession, team: Team) -> TeamPublic:
@@ -121,7 +115,10 @@ class TeamService:
                 except IntegrityError:
                     logger.debug(f"User {user_id} is already in team {team_id}")
             session.flush()
-            return _public(session, team)
+            public = _public(session, team)
+
+        discord_roles.sync(player_ids)
+        return public
 
     def remove_players(
         self, team_id: int, season_id: int, player_ids: list[int]
@@ -147,7 +144,10 @@ class TeamService:
                     )
                 session.delete(user_team)
             session.flush()
-            return _public(session, team)
+            public = _public(session, team)
+
+        discord_roles.sync(player_ids)
+        return public
 
     def set_coaches(
         self, team_id: int, season_id: int, coach_ids: list[int]
@@ -198,22 +198,15 @@ class TeamService:
             session.flush()
             # The rows were written by id, so the team reads its coaches again
             session.expire(team, ["coach_seasons"])
-            role = Settings.get_by_key(session, "captain_coach_role")
-            role_id = (role.value if role else None) or ""
-            discord_ids = {
-                user.id: user.discordId
-                for user in session.scalars(
-                    select(User).where(col(User.id).in_(before | after))
-                )
-            }
             public = _public(session, team)
 
-        # Discord mirrors the coaches; the app never reads the role back.
-        discord.set_role(_ids(discord_ids, after - before), role_id, grant=True)
-        discord.set_role(_ids(discord_ids, before - after), role_id, grant=False)
-        public.discord_role_missing = discord.without_role(
-            _ids(discord_ids, after), role_id
-        )
+        # Discord mirrors the database, and the chip says what the guild lacks
+        discord_roles.sync(before | after)
+        public.discord_role_missing = [
+            account.discord_id
+            for account in discord_roles.report(after)
+            if account.missing
+        ]
         return public
 
     def coach_seat(self, discord_id: str, season: str | None) -> tuple[int, int] | None:

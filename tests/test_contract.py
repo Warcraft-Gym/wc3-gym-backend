@@ -302,7 +302,6 @@ def test_teams_list_keeps_scalars_and_standings(
     team = get_json(client, "/teams")[0]
     assert team["name"]
     assert "long_name" in team
-    assert "discord_role" in team
     assert isinstance(team["seasons_info"], list) and team["seasons_info"]
     assert "final_score" in team["seasons_info"][0]
     assert team["player_by_season"] == {}

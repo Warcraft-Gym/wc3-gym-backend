@@ -26,7 +26,7 @@ from app.models.fantasy_bet import FantasyBetCreate, FantasyBetUpdate
 from app.models.fantasy_team import FantasyTeamCreate, FantasyTeamUpdate
 from app.models.series import SeriesSort
 from app.models.user import UserCreate, UserUpdate
-from app.services import discord, player_series
+from app.services import discord, discord_roles, player_series
 
 logger = logging.getLogger(__name__)
 
@@ -248,6 +248,9 @@ def public_create_user(
         logger.info(f"W3C sync triggered for user {user.id} after signup")
     except Exception as we:  # a refused sync must not fail the signup
         logger.warning(f"W3C sync failed after signup for user {user.id}: {we}")
+
+    # The account is new to the guild's eyes; give it the roles it earns
+    discord_roles.sync([user.id])
 
     # return created user
     if user:

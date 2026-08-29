@@ -106,25 +106,31 @@ def set_role(discord_ids: Iterable[str], role_id: str, grant: bool) -> None:
             )
 
 
-def without_role(discord_ids: Iterable[str], role_id: str) -> list[str]:
-    """Which of those accounts the guild does not show the role on.
+def member_roles(discord_id: str) -> set[str] | None:
+    """The guild roles that account holds, or None when the guild has no answer.
 
-    Empty when no bot token is configured, so the page shows no chip.
+    None is the answer with no bot token, for an account outside the guild,
+    and for a refused read: the caller leaves that account alone.
     """
     headers = _bot_headers()
-    if not headers or not role_id:
-        return []
+    if not headers:
+        return None
     guild_id = os.getenv("DISCORD_GUILD_ID", "")
-    missing = []
-    for discord_id in discord_ids:
-        url = f"{API_URL}/guilds/{guild_id}/members/{discord_id}"
-        try:
-            response = requests.request(
-                "GET", url, headers=headers, timeout=REQUEST_TIMEOUT
-            )
-        except requests.RequestException as error:
-            logger.warning("Discord member read failed for %s: %s", discord_id, error)
-            continue
-        if not response.ok or role_id not in response.json().get("roles", []):
-            missing.append(discord_id)
-    return missing
+    url = f"{API_URL}/guilds/{guild_id}/members/{discord_id}"
+    try:
+        response = requests.request(
+            "GET", url, headers=headers, timeout=REQUEST_TIMEOUT
+        )
+    except requests.RequestException as error:
+        logger.warning("Discord member read failed for %s: %s", discord_id, error)
+        return None
+    if response.status_code == 404:
+        return None
+    if not response.ok:
+        logger.warning(
+            "Discord refused the member read for %s: %s",
+            discord_id,
+            response.status_code,
+        )
+        return None
+    return set(response.json().get("roles", []))

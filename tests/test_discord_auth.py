@@ -233,6 +233,16 @@ def _login() -> dict[str, Any]:
     return require_login(request, credentials)
 
 
+def _bind_coach_role(client: Client, headers: dict[str, str]) -> None:
+    """Bind role-1 to the coach seat, the way the config page does."""
+    resp = client.post(
+        "/config/discord-role-bindings",
+        json={"kind": "coach", "discord_role": "role-1"},
+        headers=headers,
+    )
+    assert resp.status_code == 201, resp.json()
+
+
 def _set_coaches(
     client: Client, headers: dict[str, str], team_id: int, coach_ids: list[int]
 ) -> dict[str, Any]:
@@ -269,13 +279,8 @@ def test_the_discord_role_alone_is_no_coach(
     seeded: dict[str, Any],
     auth_headers: dict[str, str],
 ) -> None:
-    """The guild role is a mirror; only a coach slot grants coach rights."""
-    resp = client.put(
-        "/config/settings/captain_coach_role",
-        json={"value": "role-1"},
-        headers=auth_headers,
-    )
-    assert resp.status_code == 200, resp.json()
+    """The guild role is a mirror; only a coach seat grants coach rights."""
+    _bind_coach_role(client, auth_headers)
     stub_clerk(monkeypatch, account={**ACCOUNT, "id": "1"}, member_roles=["role-1"])
     assert client.get("/me", headers=SESSION).json()["role"] == "member"
 
@@ -333,21 +338,18 @@ def test_saving_coaches_writes_the_guild_role(
     seeded: dict[str, Any],
     auth_headers: dict[str, str],
 ) -> None:
-    """The new coach is granted the role, the old one loses it."""
-    resp = client.put(
-        "/config/settings/captain_coach_role",
-        json={"value": "role-1"},
-        headers=auth_headers,
-    )
-    assert resp.status_code == 200, resp.json()
+    """The new coach is granted the bound role, the old one loses it."""
+    _bind_coach_role(client, auth_headers)
     monkeypatch.delenv("DISCORD_BOT_TOKEN", raising=False)
     _set_coaches(client, auth_headers, seeded["team_a_id"], [seeded["player_ids"][0]])
 
     calls: list[tuple[str, str]] = []
+    members = f"{discord.API_URL}/guilds/{GUILD_ID}/members"
 
     def request(method: str, url: str, **kwargs: object) -> FakeResponse:
         calls.append((method, url))
-        return FakeResponse(200, {"roles": []})
+        # Only the coach of yesterday holds the role in the guild
+        return FakeResponse(200, {"roles": ["role-1"] if url == f"{members}/1" else []})
 
     monkeypatch.setenv("DISCORD_BOT_TOKEN", "a-bot-token")
     monkeypatch.setenv("DISCORD_GUILD_ID", GUILD_ID)
@@ -356,10 +358,11 @@ def test_saving_coaches_writes_the_guild_role(
         client, auth_headers, seeded["team_a_id"], [seeded["player_ids"][1]]
     )
 
-    members = f"{discord.API_URL}/guilds/{GUILD_ID}/members"
     assert calls == [
-        ("PUT", f"{members}/2/roles/role-1"),
+        ("GET", f"{members}/1"),
+        ("GET", f"{members}/2"),
         ("DELETE", f"{members}/1/roles/role-1"),
+        ("PUT", f"{members}/2/roles/role-1"),
         ("GET", f"{members}/2"),
     ]
     # The guild answered without the role, so the page can show the chip

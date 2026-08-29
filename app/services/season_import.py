@@ -20,7 +20,11 @@ from app.core.db import Session
 from app.core.exceptions import BadRequestError
 from app.core.scoring import DEFAULT_SYSTEM, MAX_POINTS
 from app.models.base import ident
-from app.models.enums import Race
+from app.models.discord_role_binding import (
+    DiscordRoleBinding,
+    DiscordRoleBindingCreate,
+)
+from app.models.enums import Race, RoleKind
 from app.models.fantasy_bet import FantasyBet, FantasyBetCreate
 from app.models.fantasy_team import FantasyTeam, FantasyTeamCreate
 from app.models.map import Map, MapCreate
@@ -275,13 +279,30 @@ def _maps(session: OrmSession, sheets: Sheets, season: Season) -> dict[int, int]
     }
 
 
+def _bind_team_role(session: OrmSession, team_id: int, role: Any) -> None:  # noqa: ANN401  # a cell holds text or a number
+    """The Discord Role cell of a team binds that role to the team."""
+    value = DiscordRoleBindingCreate(
+        kind=RoleKind.team, team_id=team_id, discord_role=role
+    )
+    binding = session.scalars(
+        select(DiscordRoleBinding).where(
+            col(DiscordRoleBinding.kind) == RoleKind.team,
+            col(DiscordRoleBinding.team_id) == team_id,
+        )
+    ).first()
+    if binding:
+        binding.discord_role = value.discord_role
+    else:
+        session.add(DiscordRoleBinding(**value.model_dump()))
+
+
 def _teams(session: OrmSession, sheets: Sheets, season: Season) -> dict[int, int]:
     """The teams of the season, matched by name."""
     rows = _rows(sheets["Teams"], ["Name"])
     values = [
         TeamCreate(
             name=row["Name"],
-            **_cells(row, {"long_name": "Long Name", "discord_role": "Discord Role"}),
+            **_cells(row, {"long_name": "Long Name"}),
         )
         for row in rows
     ]
@@ -296,6 +317,7 @@ def _teams(session: OrmSession, sheets: Sheets, season: Season) -> dict[int, int
 
     written: list[Team] = []
     old_ids: dict[int, Team] = {}
+    roles: list[tuple[Team, Any]] = []
     for row, value in zip(rows, values, strict=True):
         team = stored.get(folded(value.name))
         if team:
@@ -307,7 +329,14 @@ def _teams(session: OrmSession, sheets: Sheets, season: Season) -> dict[int, int
         old_id = whole_number(row["ID"])
         if old_id:
             old_ids[old_id] = team
+        cell = _cells(row, {"discord_role": "Discord Role"})
+        if cell:
+            roles.append((team, cell["discord_role"]))
     session.add_all(written)
+    session.flush()
+
+    for team, role in roles:
+        _bind_team_role(session, ident(team), role)
     session.flush()
 
     team_ids = {ident(team) for team in old_ids.values()}

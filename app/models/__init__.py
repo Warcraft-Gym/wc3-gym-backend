@@ -21,6 +21,7 @@ SQLModel.metadata.naming_convention = {
 
 from app.models import (
     base,
+    discord_role_binding,
     draft_series,
     enums,
     fantasy_bet,
