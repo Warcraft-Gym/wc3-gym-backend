@@ -8,6 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as OrmSession
 from sqlalchemy.orm import joinedload, noload, selectinload
 
+from app.core.db import Session
 from app.core.exceptions import NotFoundError, W3CThrottledError
 from app.core.query import QueryElement, QueryUtil
 from app.models.relationships import DBUserSeasonSignup
@@ -24,7 +25,6 @@ from app.models.w3c_stats import (
     W3CStatsCreate,
 )
 from app.services import derived
-from app.services.base import BaseService
 from app.services.w3c import W3CService
 
 if TYPE_CHECKING:
@@ -53,28 +53,28 @@ def _public(session: OrmSession, user: User) -> UserPublic:
     return public
 
 
-class UserService(BaseService):
+class UserService:
     def __init__(self, settings_app_service: "SettingsService | None" = None) -> None:
         self.settings_app_service = settings_app_service
 
     def add(self, user: UserCreate) -> UserPublic:
-        with self.get_session() as session:
+        with Session.begin() as session:
             user = User.add(session, user.model_dump())
             return _public(session, user)
 
     def update(self, user_id: int, user: UserUpdate) -> UserPublic:
-        with self.get_session() as session:
+        with Session.begin() as session:
             user = User.update(session, user_id, **user.model_dump(exclude_unset=True))
             if not user:
                 raise NotFoundError("User not found")
             return _public(session, user)
 
     def delete(self, user_id: int) -> None:
-        with self.get_session() as session:
+        with Session.begin() as session:
             User.delete(session, user_id)
 
     def get(self, user_id: int) -> UserPublic:
-        with self.get_session() as session:
+        with Session.begin() as session:
             # Eager load related entities, disable nested loading
             user = (
                 session.scalars(
@@ -124,7 +124,7 @@ class UserService(BaseService):
         limit: int | None = None,
         offset: int = 0,
     ) -> list[UserListPublic]:
-        with self.get_session() as session:
+        with Session.begin() as session:
             result = []
             # The list row has no gnl_stats, so the link rows stay out
             statement = (
@@ -158,7 +158,7 @@ class UserService(BaseService):
         self, limit: int | None = None, offset: int = 0
     ) -> tuple[list[UserListPublic], int]:
         """The users, or one page of them, and the total row count."""
-        with self.get_session() as session:
+        with Session.begin() as session:
             total = session.scalar(select(func.count()).select_from(User)) or 0
             result = []
             # The list row has no gnl_stats, so the link rows stay out
@@ -225,7 +225,7 @@ class UserService(BaseService):
 
         # One transaction reads and writes the rows of this player, so no
         # other sync can insert between the read and the write.
-        with self.get_session() as session:
+        with Session.begin() as session:
             for s in all_stats:
                 self._write_w3c_stats(session, user.id, s)
             # The stamp says when the app last asked, not that stats were found

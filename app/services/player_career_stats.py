@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session as OrmSession
 
+from app.core.db import Session
 from app.core.ordering import SortOrder
 from app.models.player_career_stats import (
     PlayerCareerStats,
@@ -13,16 +14,15 @@ from app.models.player_career_stats import (
 )
 from app.models.user import User
 from app.services import derived
-from app.services.base import BaseService
 from app.services.derived import CareerSort
 
 logger = logging.getLogger(__name__)
 
 
-class PlayerCareerStatsService(BaseService):
+class PlayerCareerStatsService:
     def get(self, stat_id: int) -> PlayerCareerStatsPublic | None:
         """Get career stats by stats record ID (implements abstract method)"""
-        with self.get_session() as session:
+        with Session.begin() as session:
             stat = session.get(
                 PlayerCareerStats, stat_id, options=PlayerCareerStats.eager_options()
             )
@@ -32,23 +32,9 @@ class PlayerCareerStatsService(BaseService):
             derived.fill_career(session, [public])
             return public
 
-    def add(self, entity: dict[str, Any]) -> PlayerCareerStatsPublic | None:
-        """Add new career stats record (implements abstract method)"""
-        with self.get_session() as session:
-            new_stat = PlayerCareerStats.add(session, entity)
-            return PlayerCareerStatsPublic.from_career_stats(new_stat)
-
-    def update(self, stats: PlayerCareerStatsPublic) -> PlayerCareerStatsPublic | None:
-        """Update career stats record (implements abstract method)"""
-        with self.get_session() as session:
-            updated_stat = PlayerCareerStats.update(
-                session, stats.id, **stats.model_dump(exclude_unset=True)
-            )
-            return PlayerCareerStatsPublic.from_career_stats(updated_stat)
-
     def delete(self, stat_id: int) -> bool:
         """Delete career stats by stats ID (implements abstract method)"""
-        with self.get_session() as session:
+        with Session.begin() as session:
             stats = session.get(PlayerCareerStats, stat_id)
             if stats:
                 session.delete(stats)
@@ -85,7 +71,7 @@ class PlayerCareerStatsService(BaseService):
 
         sort names a key of derived.CAREER_SORTS and orders the rows by it.
         """
-        with self.get_session() as session:
+        with Session.begin() as session:
             rows = derived.career_rows(
                 session, self._stored_rows(session), search, sort=sort, order=order
             )
@@ -94,7 +80,7 @@ class PlayerCareerStatsService(BaseService):
 
     def get_by_user_id(self, user_id: int) -> PlayerCareerStatsPublic | None:
         """Get career stats for a specific user"""
-        with self.get_session() as session:
+        with Session.begin() as session:
             stat = session.scalars(
                 select(PlayerCareerStats)
                 .options(*PlayerCareerStats.eager_options())
@@ -122,7 +108,7 @@ class PlayerCareerStatsService(BaseService):
         Resolves the user by player name in the same transaction, so one
         CSV row is one short transaction.
         """
-        with self.get_session() as session:
+        with Session.begin() as session:
             user = session.scalars(
                 select(User).where(User.name == player_name).limit(1)
             ).first()
@@ -213,7 +199,7 @@ class PlayerCareerStatsService(BaseService):
         self, stat_id: int, stats: PlayerCareerStatsPublic
     ) -> PlayerCareerStatsPublic | None:
         """Update career stats (historical values and user link)"""
-        with self.get_session() as session:
+        with Session.begin() as session:
             updated_stat = PlayerCareerStats.update(
                 session, stat_id, **stats.model_dump(exclude_unset=True)
             )

@@ -4,6 +4,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload
 
+from app.core.db import Session
 from app.core.exceptions import NotFoundError
 from app.core.query import QueryElement, QueryUtil
 from app.models.fantasy_team import (
@@ -15,14 +16,13 @@ from app.models.fantasy_team import (
 from app.models.relationships import DBFantasyTeamPlayer
 from app.models.user import User
 from app.services import derived
-from app.services.base import BaseService
 
 logger = logging.getLogger(__name__)
 
 
-class FantasyTeamService(BaseService):
+class FantasyTeamService:
     def add(self, fantasy_team: FantasyTeamCreate) -> FantasyTeamPublic:
-        with self.get_session() as session:
+        with Session.begin() as session:
             fantasy_team = FantasyTeam.add(session, fantasy_team.model_dump())
             public = FantasyTeamPublic.from_fantasy_team(fantasy_team)
             derived.fill_fantasy_teams(session, [public])
@@ -31,7 +31,7 @@ class FantasyTeamService(BaseService):
     def update(
         self, fantasy_team_id: int, fantasy_team: FantasyTeamUpdate
     ) -> FantasyTeamPublic:
-        with self.get_session() as session:
+        with Session.begin() as session:
             fantasy_team = FantasyTeam.update(
                 session,
                 fantasy_team_id,
@@ -44,11 +44,11 @@ class FantasyTeamService(BaseService):
             return public
 
     def delete(self, fantasy_team_id: int) -> None:
-        with self.get_session() as session:
+        with Session.begin() as session:
             FantasyTeam.delete(session, fantasy_team_id)
 
     def get(self, fantasy_team_id: int) -> FantasyTeamPublic:
-        with self.get_session() as session:
+        with Session.begin() as session:
             fteam = session.get(FantasyTeam, fantasy_team_id)
             if not fteam:
                 raise NotFoundError("Fantasy Team not found")
@@ -71,7 +71,7 @@ class FantasyTeamService(BaseService):
         self, limit: int | None = None, offset: int = 0
     ) -> tuple[list[FantasyTeamPublic], int]:
         """The teams, or one page of them, and the total row count."""
-        with self.get_session() as session:
+        with Session.begin() as session:
             total = session.scalar(select(func.count()).select_from(FantasyTeam)) or 0
             result = []
             statement = select(FantasyTeam).options(*self._reduced_options)
@@ -89,7 +89,7 @@ class FantasyTeamService(BaseService):
         self, query: QueryElement | None, limit: int | None = None, offset: int = 0
     ) -> tuple[list[FantasyTeamPublic], int | None]:
         """The matching teams and, when a page is asked for, the total count."""
-        with self.get_session() as session:
+        with Session.begin() as session:
             result = []
             filter = QueryUtil.convert_query_to_db_filter(FantasyTeam, query)
             if filter is None:
@@ -118,7 +118,7 @@ class FantasyTeamService(BaseService):
             return result, total
 
     def add_players(self, team_id: int, player_ids: list[int]) -> FantasyTeamPublic:
-        with self.get_session() as session:
+        with Session.begin() as session:
             fteam = session.get(FantasyTeam, team_id)
             if not fteam:
                 raise NotFoundError(f"Fantasy Team not found by id: {team_id}")
@@ -138,7 +138,7 @@ class FantasyTeamService(BaseService):
             return public
 
     def remove_players(self, team_id: int, player_ids: list[int]) -> FantasyTeamPublic:
-        with self.get_session() as session:
+        with Session.begin() as session:
             fteam = session.get(FantasyTeam, team_id)
             if not fteam:
                 raise NotFoundError(f"Fantasy Team not found by id: {team_id}")

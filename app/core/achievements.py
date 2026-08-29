@@ -24,7 +24,10 @@ from collections import defaultdict
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import date, datetime
+from itertools import accumulate
 from typing import Protocol
+
+from app.core import ladder
 
 # The season's points target, hardcoded as `W1=500` in the wc3.no bundle
 LADDER_GOAL = 500
@@ -63,6 +66,9 @@ class Achievement:
     name: str
     description: str
     icon: str
+    # When the rule turned on: the start of the match that earned it, the
+    # last match of the day for the day rules, None on a catalogue entry
+    achieved_at: datetime | None = None
 
 
 # What a scope pays for each rule it pays at all, keyed by rule id. A rule
@@ -253,13 +259,16 @@ RACE_ACHIEVEMENTS = {"HU": HUMAN, "OC": ORC, "NE": NIGHT_ELF, "UD": UNDEAD}
 RACE_IDS = {"RANDOM": 0, "HU": 1, "OC": 2, "NE": 4, "UD": 8}
 
 
-def longest_run(results: Sequence[bool], want: bool) -> int:
-    """The longest run of `want` in a sequence of results."""
-    best = run = 0
-    for result in results:
-        run = run + 1 if result == want else 0
-        best = max(best, run)
-    return best
+def run_end(
+    rows: Sequence[AchievementRow], want: bool, length: int
+) -> AchievementRow | None:
+    """The match that first completes a run of `length` results of `want`."""
+    run = 0
+    for row in rows:
+        run = run + 1 if bool(row.won) == want else 0
+        if run == length:
+            return row
+    return None
 
 
 def by_day(rows: Iterable[AchievementRow]) -> dict[date, list[AchievementRow]]:
@@ -289,6 +298,38 @@ def top_race(wins: Sequence[AchievementRow]) -> tuple[str, int] | None:
     return best, counts[best]
 
 
+def completes(
+    wins: Sequence[AchievementRow], maps: Sequence[str]
+) -> AchievementRow | None:
+    """The win that completed the set of maps, None while one is still open."""
+    left = set(maps)
+    for row in wins:
+        left.discard(row.map_name)
+        if not left:
+            return row
+    return None
+
+
+def nth(rows: Sequence[AchievementRow], count: int) -> AchievementRow | None:
+    """The match that made these `count` many, None short of it."""
+    return rows[count - 1] if len(rows) >= count else None
+
+
+def first(rows: Iterable[AchievementRow]) -> AchievementRow | None:
+    """The oldest of these matches, None when there are none."""
+    return next(iter(rows), None)
+
+
+def reaches(rows: Sequence[AchievementRow], goal: int) -> AchievementRow | None:
+    """The match on which the running ladder points reached the goal."""
+    for row, total in zip(
+        rows, accumulate(ladder.points(r.won, r.duration_s) for r in rows)
+    ):
+        if total >= goal:
+            return row
+    return None
+
+
 def earned(
     rows: Sequence[AchievementRow],
     points: int,
@@ -303,6 +344,7 @@ def earned(
     `paid` what this scope pays for each rule, and `opponents` and `coaches`
     are battle tags in lower case. A rule the scope does not pay is not
     evaluated into the answer, so a season keeps only the rules it defines.
+    Each badge names the match that turned its rule on.
     """
     if not rows:
         # No match means no first game, and 0 points reaches no goal
@@ -310,70 +352,65 @@ def earned(
 
     wins = [row for row in rows if row.won]
     losses = [row for row in rows if not row.won]
-    results = [bool(row.won) for row in rows]
-    won_maps = {row.map_name for row in wins}
     beaten = [_tag(row) for row in wins]
-    days = by_day(rows)
-    daily_mmr = [sum(mmr_gain(row) for row in day) for day in days.values()]
+    days = list(by_day(rows).values())
+    daily_mmr = [sum(mmr_gain(row) for row in day) for day in days]
 
     kills = sum(1 for tag in beaten if tag in opponents)
     race = top_race(wins)
 
     found: list[Achievement] = []
 
-    def pay(rule: Achievement, extra: int = 0, suffix: str = "") -> None:
+    def pay(
+        rule: Achievement, at: AchievementRow | None, extra: int = 0, suffix: str = ""
+    ) -> None:
         """Award a rule at what this scope pays for it, if it pays it at all."""
         price = paid.get(rule.id)
-        if price is None:
+        if price is None or at is None:
             return
         found.append(
             replace(
                 rule,
                 points=price + extra,
                 description=rule.description + suffix,
+                achieved_at=at.start_time,
             )
         )
 
-    pay(WIN_FIRST if rows[0].won else LOSE_FIRST)
-    if len(wins) >= 100:
-        pay(WINNER_WINNER)
-    if len(losses) >= 100:
-        pay(SAD_TROMBONE)
-    if any(row.mmr_after == ELITE_MMR for row in rows):
-        pay(ELITE)
-    if longest_run(results, False) >= 10:
-        pay(DATS_FAKT_AP)
-    if longest_run(results, True) >= 5:
-        pay(WIN_STREAK)
-    if longest_run(results, True) >= 10:
-        pay(WIN_STREAK_2)
+    pay(WIN_FIRST if rows[0].won else LOSE_FIRST, rows[0])
+    pay(WINNER_WINNER, nth(wins, 100))
+    pay(SAD_TROMBONE, nth(losses, 100))
+    pay(ELITE, first(row for row in rows if row.mmr_after == ELITE_MMR))
+    pay(DATS_FAKT_AP, run_end(rows, False, 10))
+    pay(WIN_STREAK, run_end(rows, True, 5))
+    pay(WIN_STREAK_2, run_end(rows, True, 10))
     if kills:
-        pay(DUCK_HUNTING, 5 * kills, f" - {kills} kill(s)")
-    if not is_coach and any(tag in coaches for tag in beaten):
-        pay(I_AM_THE_CAPTAIN_NOW)
+        kill = first(row for row in wins if _tag(row) in opponents)
+        pay(DUCK_HUNTING, kill, 5 * kills, f" - {kills} kill(s)")
+    if not is_coach:
+        pay(I_AM_THE_CAPTAIN_NOW, first(row for row in wins if _tag(row) in coaches))
     # Only the race beaten most pays, and only above 10 wins, not at 10
     if race is not None and race[1] > 10 and race[0] in RACE_ACHIEVEMENTS:
-        pay(RACE_ACHIEVEMENTS[race[0]], race[1], f" - {race[1]} wins!")
-    if won_maps.issuperset(HOLIDAY_MAPS):
-        pay(HOLIDAY)
-    if won_maps.issuperset(WINTER_MAPS):
-        pay(WINTER)
-    if won_maps.issuperset(NEW_MAPS):
-        pay(NEWBIE)
-    if won_maps.issuperset(LADDER_MAPS):
-        pay(WIN_EVERY_MAP)
-    if _longest(wins) > LONG_GAME_S and _longest(losses) > LONG_GAME_S:
-        pay(JOIN_THEM)
-    if max(len(day) for day in days.values()) >= 30:
-        pay(ADDICTED)
-    if max(daily_mmr) > 100:
-        pay(RISING_STAR)
-    if min(daily_mmr) < -100:
-        pay(FALLING_STAR)
+        eleventh = nth(
+            [w for w in wins if w.opp_race and w.opp_race.value == race[0]], 11
+        )
+        pay(RACE_ACHIEVEMENTS[race[0]], eleventh, race[1], f" - {race[1]} wins!")
+    pay(HOLIDAY, completes(wins, HOLIDAY_MAPS))
+    pay(WINTER, completes(wins, WINTER_MAPS))
+    pay(NEWBIE, completes(wins, NEW_MAPS))
+    pay(WIN_EVERY_MAP, completes(wins, LADDER_MAPS))
+    long_win = first(row for row in wins if row.duration_s > LONG_GAME_S)
+    long_loss = first(row for row in losses if row.duration_s > LONG_GAME_S)
+    if long_win is not None and long_loss is not None:
+        pay(JOIN_THEM, max(long_win, long_loss, key=lambda row: row.start_time))
+    pay(ADDICTED, first(day[29] for day in days if len(day) >= 30))
+    pay(RISING_STAR, first(day[-1] for day, mmr in zip(days, daily_mmr) if mmr > 100))
+    pay(FALLING_STAR, first(day[-1] for day, mmr in zip(days, daily_mmr) if mmr < -100))
+    # `points` is the stored total, so it decides; the rows only date it
     if points >= LADDER_GOAL:
-        pay(LADDER_GOAL_REACHED)
+        pay(LADDER_GOAL_REACHED, reaches(rows, LADDER_GOAL) or rows[-1])
     if points >= LADDER_GOAL * 2:
-        pay(DOUBLE_UP)
+        pay(DOUBLE_UP, reaches(rows, LADDER_GOAL * 2) or rows[-1])
 
     found.sort(key=lambda item: -item.points)
     return found
@@ -387,11 +424,6 @@ def total_points(found: Iterable[Achievement]) -> int:
 def _tag(row: AchievementRow) -> str:
     """The opponent's battle tag in lower case, the shape the tag sets hold."""
     return (row.opp_battletag or "").lower()
-
-
-def _longest(rows: Sequence[AchievementRow]) -> int:
-    """The longest of these matches in seconds, 0 when there are none."""
-    return max((row.duration_s for row in rows), default=0)
 
 
 # What a season pays when nobody has changed it: the wc3.no set, at its own

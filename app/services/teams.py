@@ -3,8 +3,10 @@ from typing import Any
 
 from sqlalchemy import ColumnElement, select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session, joinedload, noload, selectinload
+from sqlalchemy.orm import Session as OrmSession
+from sqlalchemy.orm import joinedload, noload, selectinload
 
+from app.core.db import Session
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.core.query import QueryElement, QueryUtil
 from app.models.season import Season
@@ -13,13 +15,12 @@ from app.models.team_season import DBTeamSeason
 from app.models.user import User, UserListPublic
 from app.models.user_team_season import DBUserTeamSeason
 from app.services import derived
-from app.services.base import BaseService
 from app.services.users import UserService
 
 logger = logging.getLogger(__name__)
 
 
-def _fill(session: Session, teams: list[TeamPublic]) -> None:
+def _fill(session: OrmSession, teams: list[TeamPublic]) -> None:
     """The standings of every team, and the season record of every player."""
     derived.fill_standings(session, teams)
     derived.fill_gnl_stats(
@@ -33,7 +34,7 @@ def _fill(session: Session, teams: list[TeamPublic]) -> None:
     )
 
 
-def _public(session: Session, team: Team) -> TeamPublic:
+def _public(session: OrmSession, team: Team) -> TeamPublic:
     """One team, with its standings derived from the series it played."""
     public = TeamPublic.from_team(team)
     _fill(session, [public])
@@ -68,24 +69,24 @@ def _season_loads(season_id: int) -> list[Any]:
     ]
 
 
-class TeamService(BaseService):
+class TeamService:
     def __init__(self, user_app_service: UserService) -> None:
         self.user_app_service = user_app_service
 
     def add(self, team: TeamCreate) -> TeamPublic:
-        with self.get_session() as session:
+        with Session.begin() as session:
             new_team = Team.add(session, team.model_dump())
             return _public(session, new_team)
 
     def update(self, team_id: int, team: TeamUpdate) -> TeamPublic:
-        with self.get_session() as session:
+        with Session.begin() as session:
             team = Team.update(session, team_id, **team.model_dump(exclude_unset=True))
             if not team:
                 raise NotFoundError("Team not found")
             return _public(session, team)
 
     def update_icon(self, team_id: int, file: bytes) -> TeamPublic:
-        with self.get_session() as session:
+        with Session.begin() as session:
             team = Team.update_icon(session, team_id, file)
             if not team:
                 raise NotFoundError("Team not found")
@@ -94,7 +95,7 @@ class TeamService(BaseService):
     def add_players(
         self, team_id: int, season_id: int, player_ids: list[int]
     ) -> TeamPublic:
-        with self.get_session() as session:
+        with Session.begin() as session:
             team = session.get(Team, team_id)
             if not team:
                 raise NotFoundError(f"Team not found by id: {team_id}")
@@ -119,7 +120,7 @@ class TeamService(BaseService):
     def remove_players(
         self, team_id: int, season_id: int, player_ids: list[int]
     ) -> TeamPublic:
-        with self.get_session() as session:
+        with Session.begin() as session:
             team = session.get(Team, team_id)
             if not team:
                 raise NotFoundError(f"Team not found by id: {team_id}")
@@ -146,7 +147,7 @@ class TeamService(BaseService):
         self, team_id: int, season_id: int, coach_ids: list[int]
     ) -> TeamPublic:
         """Set coaches for a team in a season (up to 3)."""
-        with self.get_session() as session:
+        with Session.begin() as session:
             team = session.get(Team, team_id)
             if not team:
                 raise NotFoundError(f"Team not found by id: {team_id}")
@@ -184,11 +185,11 @@ class TeamService(BaseService):
             return _public(session, team)
 
     def delete(self, team_id: int) -> None:
-        with self.get_session() as session:
+        with Session.begin() as session:
             Team.delete(session, team_id)
 
     def get(self, team_id: int) -> TeamPublic:
-        with self.get_session() as session:
+        with Session.begin() as session:
             # Eager load related entities, disable nested loading
             team = (
                 session.scalars(
@@ -212,7 +213,7 @@ class TeamService(BaseService):
         self, team_id: int, season_id: int
     ) -> TeamPublic:
         """One team with the season's roster, coaches and stats."""
-        with self.get_session() as session:
+        with Session.begin() as session:
             team = (
                 session.scalars(
                     select(Team)
@@ -227,7 +228,7 @@ class TeamService(BaseService):
             return _public(session, team)
 
     def get_icon(self, team_id: int) -> bytes | None:
-        with self.get_session() as session:
+        with Session.begin() as session:
             team = session.get(Team, team_id)
             if not team:
                 raise NotFoundError("Team not found")
@@ -248,7 +249,7 @@ class TeamService(BaseService):
         limit: int | None = None,
         offset: int = 0,
     ) -> list[TeamPublic]:
-        with self.get_session() as session:
+        with Session.begin() as session:
             result: list[TeamPublic] = []
             # Eager load related entities, disable nested loading
             statement = (
@@ -281,7 +282,7 @@ class TeamService(BaseService):
             return result
 
     def get_all(self, limit: int | None = None, offset: int = 0) -> list[TeamPublic]:
-        with self.get_session() as session:
+        with Session.begin() as session:
             result: list[TeamPublic] = []
             # Eager load related entities, disable nested loading
             statement = select(Team).options(
@@ -308,7 +309,7 @@ class TeamService(BaseService):
         self, limit: int | None = None, offset: int = 0
     ) -> list[TeamPublic]:
         """Get all teams with basic info only (no users, no seasons)"""
-        with self.get_session() as session:
+        with Session.begin() as session:
             result: list[TeamPublic] = []
             # Explicitly prevent loading of all relationships
             statement = select(Team).options(noload("*"))
@@ -327,7 +328,7 @@ class TeamService(BaseService):
         self, season_id: int, limit: int | None = None, offset: int = 0
     ) -> list[TeamPublic]:
         """Get all teams for a season with season_info but without users"""
-        with self.get_session() as session:
+        with Session.begin() as session:
             result: list[TeamPublic] = []
             # An EXISTS, not a join: a join multiplies the rows a page counts
             statement = (
@@ -358,7 +359,7 @@ class TeamService(BaseService):
         load. Roster and coach users answer empty signup_seasons, and
         coaches empty gnl_stats; no consumer reads them on this route.
         """
-        with self.get_session() as session:
+        with Session.begin() as session:
             result: list[TeamPublic] = []
             statement = (
                 select(Team)

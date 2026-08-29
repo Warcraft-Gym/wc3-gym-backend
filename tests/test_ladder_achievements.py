@@ -322,6 +322,7 @@ def test_the_answer_carries_the_badges_and_adds_their_points(
         "name": "I am the danger!",
         "description": "Win your first GNL game",
         "icon": "mdi-redhat",
+        "achieved_at": INSIDE.isoformat(),
     }
 
 
@@ -430,3 +431,24 @@ def test_the_user_answer_costs_thirteen_statements(league: dict[str, Any]) -> No
 
     assert answer.games == 4
     assert tally[0] == 13
+
+
+def test_a_badge_names_the_match_that_turned_its_rule_on() -> None:
+    rows = series([True] * 4 + [False] + [True] * 5)
+    at = {
+        item.id: item.achieved_at
+        for item in achievements.earned(rows, 500, achievements.DEFAULT_PAID)
+    }
+    assert at["win_first"] == rows[0].start_time
+    # The streak completes on the tenth match, not the last one
+    assert at["win_streak"] == rows[9].start_time
+    # 3 a win, 1 a loss: the 168th match of the series carries the goal over 500
+    long = series([True] * 200)
+    goal = next(
+        item
+        for item in achievements.earned(long, 600, achievements.DEFAULT_PAID)
+        if item.id == "ladder_goal"
+    )
+    assert goal.achieved_at == long[166].start_time
+    # A catalogue entry has no date
+    assert achievements.WIN_FIRST.achieved_at is None
