@@ -90,5 +90,5 @@ class PlayerCareerStatsPublic(PlayerCareerStatsBase):
     def to_dict(self) -> dict[str, Any]:
         result = self.model_dump(mode="json")
         for key in _FLOAT_FIELDS:
-            result[key] = result[key] if result[key] else 0.0
+            result[key] = result[key] or 0.0
         return result
