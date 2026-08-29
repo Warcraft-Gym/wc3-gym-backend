@@ -35,6 +35,10 @@ lint:
     uv run ruff format --check .
     uv run ruff check .
 
+# Type-check with ty. CI runs this recipe too, as its own job.
+typecheck:
+    uv run ty check app tests
+
 # Format the code and apply the lint fixes ruff can make.
 fmt:
     uv run ruff format .

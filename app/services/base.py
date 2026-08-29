@@ -1,6 +1,5 @@
 """Base class for the services that read and write the database."""
 
-from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from contextlib import contextmanager
 
@@ -9,7 +8,7 @@ from sqlalchemy.orm import Session as OrmSession
 from app.core.db import Session
 
 
-class BaseService(ABC):
+class BaseService:
     """All services share the engine and session factory of the process,
     in app/core/db.py."""
 
@@ -22,20 +21,3 @@ class BaseService(ABC):
         answers with a fixed message and logs what the database said."""
         with Session.begin() as session:
             yield session
-
-    # Each service types these four for its own entity
-    @abstractmethod
-    def add(self, **kwargs: object) -> object:
-        pass
-
-    @abstractmethod
-    def update(self, obj_id: object, **kwargs: object) -> object:
-        pass
-
-    @abstractmethod
-    def delete(self, obj_id: object) -> object:
-        pass
-
-    @abstractmethod
-    def get(self, obj_id: object) -> object:
-        pass

@@ -29,6 +29,7 @@ dev = [
     "pytest",
     "ruff>=0.16.3",
     "rust-just>=1.58.0",
+    "ty>=0.0.75",
 ]
 
 [tool.ruff.lint]
@@ -49,3 +50,17 @@ ignore = [
 
 [tool.pytest]
 testpaths = ["tests"]
+
+# ty ratchet: rules at "ignore" still fail today; flip each to "error" once its
+# diagnostics are fixed. The first three are SQLModel typing class attributes as
+# instance values (User.id is `int | None`, not a column); the fix is sqlmodel.col().
+[tool.ty.rules]
+invalid-argument-type = "ignore"
+unresolved-attribute = "ignore"
+no-matching-overload = "ignore"
+invalid-return-type = "ignore"
+invalid-assignment = "ignore"
+not-subscriptable = "ignore"
+unsupported-operator = "ignore"
+missing-argument = "ignore"
+deprecated = "ignore"

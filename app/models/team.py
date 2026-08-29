@@ -85,10 +85,7 @@ class TeamPublic(TeamReduced):
     seasons_info: Annotated[list[SeasonInfoPublic], NoneToList] = []
 
     @classmethod
-    def from_team(cls, team: Team | None) -> Self | None:
-        if not team:
-            return None
-
+    def from_team(cls, team: Team) -> Self:
         players = {}
         coaches = {}
         seasons_info = (
