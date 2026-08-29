@@ -186,9 +186,7 @@ class UserService(BaseService):
         try:
             return w3c_service.validate_player(battle_tag)
         except Exception as e:
-            logging.getLogger(__name__).debug(
-                f"BattleTag validation failed for {battle_tag}: {e!s}"
-            )
+            logger.debug(f"BattleTag validation failed for {battle_tag}: {e!s}")
             return False
 
     def update_w3c_stats(self, user: UserReduced) -> None:

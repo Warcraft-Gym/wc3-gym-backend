@@ -139,17 +139,10 @@ def update_player_series(
 
     # Handle file uploads - prepare for Discord transmission
     uploaded_files = {}
-    allowed_extensions = {"w3g"}
-
-    def allowed_file(filename: str) -> bool:
-        return (
-            "." in filename and filename.rsplit(".", 1)[1].lower() in allowed_extensions
-        )
-
     for file_key in ["game1", "game2", "game3"]:
         if file_key in files and files[file_key]["filename"]:
             file = files[file_key]
-            if allowed_file(file["filename"]):
+            if file["filename"].lower().endswith(".w3g"):
                 uploaded_files[file_key] = {
                     "filename": secure_filename(file["filename"]),
                     "data": file["data"],
@@ -237,7 +230,7 @@ def update_player_series(
     updated_series = series_service.update(series_id, SeriesUpdate(**changes))
 
     # Determine notification action based on what was updated
-    player_name = user.name if hasattr(user, "name") else discord_tag
+    player_name = user.name
 
     # Check if scores were updated
     scores_updated = (original_p1_score != updated_series.player1_score) or (

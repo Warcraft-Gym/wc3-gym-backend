@@ -12,21 +12,10 @@ the whole league and not only on the player.
 
 from collections.abc import Mapping, Sequence
 
-# GNL Rating calculation constants
-GNL_RATING_MATCH_WIN_VALUE = 1.0
-GNL_RATING_MATCH_LOSS_VALUE = 0.5
-GNL_RATING_SEASON_PLAYED_VALUE = 1.0
-GNL_RATING_DECAY_RATE_PER_SEASON = (
-    0.15  # Every season remove 15% of each players' points
-)
-GNL_RATING_FLAT_MULTIPLIER = 100.0  # Creates separation between scores
-
 
 def season_points(won: int, played: int) -> float:
     """The points one season pays, before the participation bonus."""
-    return (
-        won * GNL_RATING_MATCH_WIN_VALUE + (played - won) * GNL_RATING_MATCH_LOSS_VALUE
-    )
+    return won + (played - won) * 0.5
 
 
 def rating(
@@ -38,16 +27,18 @@ def rating(
     played pay."""
     baseline = historical_rating or 0
     # The stored historical rating is scaled, so divide it back to raw points
-    value = baseline / GNL_RATING_FLAT_MULTIPLIER if baseline > 0 else 0.0
+    value = baseline / 100.0 if baseline > 0 else 0.0
 
     for season_id in system_seasons:
-        value *= 1.0 - GNL_RATING_DECAY_RATE_PER_SEASON
+        # Every season takes 15% off the points a player carries
+        value *= 0.85
         points = points_by_season.get(season_id, 0.0)
         value += points
         if points > 0:
-            value += GNL_RATING_SEASON_PLAYED_VALUE
+            value += 1.0
 
-    return int(value * GNL_RATING_FLAT_MULTIPLIER)
+    # The scale creates separation between scores
+    return int(value * 100.0)
 
 
 def winrate(won: int, lost: int) -> float:

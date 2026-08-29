@@ -115,11 +115,3 @@ def auth_headers(client: Client) -> dict[str, str]:
     assert resp.status_code == 200
     token = resp.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}
-
-
-@pytest.fixture
-def refresh_headers(client: Client) -> dict[str, str]:
-    resp = client.post("/login", json={"token": "test-admin-token"})
-    assert resp.status_code == 200
-    token = resp.json()["refresh_token"]
-    return {"Authorization": f"Bearer {token}"}
