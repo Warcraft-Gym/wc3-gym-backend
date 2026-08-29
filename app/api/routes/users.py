@@ -77,9 +77,12 @@ def search_users(
 
 
 @router.post("/users/{user_id}/w3c-sync", dependencies=[Depends(require_admin)])
-def sync_w3c_user(user_id: int, service: UserServiceDep) -> UserPublic:
-    """Sync w3c information for a user_id"""
-    return service.update_w3c_stats_by_id(user_id)
+def sync_w3c_user(
+    user_id: int, service: UserServiceDep, ladder: LadderServiceDep
+) -> UserPublic:
+    """Sync this player's stats, and his matches of the season running today."""
+    ladder.sync_user(user_id)
+    return service.get(user_id)
 
 
 @router.get("/users/{user_id}/ladder", dependencies=[Depends(require_admin)])

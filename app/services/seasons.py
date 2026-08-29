@@ -14,9 +14,8 @@ from app.models.season import Season, SeasonCreate, SeasonPublic, SeasonUpdate
 from app.models.team import Team
 from app.models.team_season import DBTeamSeason
 from app.models.user import User, UserListPublic
-from app.models.w3c_stats import W3CSyncResult
 from app.services.base import BaseService
-from app.services.users import SYNC_MAX_AGE, UserService
+from app.services.users import UserService
 
 logger = logging.getLogger(__name__)
 
@@ -300,8 +299,3 @@ class SeasonService(BaseService):
                         result.append(user_public)
 
             return result
-
-    def sync_w3c_stats_season(self, season_id: int) -> W3CSyncResult:
-        """Sync every player signed up for the season and report each one."""
-        users = self.get_signed_up_users(season_id)
-        return self.user_app_service.sync_w3c_stats_users(users, SYNC_MAX_AGE)
