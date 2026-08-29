@@ -11,6 +11,8 @@ import pytest
 from fastapi import FastAPI
 from httpx2 import Client
 
+from app.models.base import ident
+
 
 @pytest.fixture
 def koth(app: FastAPI, seeded: dict[str, Any]) -> dict[str, Any]:
@@ -23,7 +25,7 @@ def koth(app: FastAPI, seeded: dict[str, Any]) -> dict[str, Any]:
     with Session() as session:
         event = session.query(KothEvent).filter_by(name="KOTH 1").one()
         one = KothSignup(
-            event_id=event.id,
+            event_id=ident(event),
             twitch_username="player_one",
             battle_tag="P1#1111",
             w3c_name="P1",
@@ -32,7 +34,7 @@ def koth(app: FastAPI, seeded: dict[str, Any]) -> dict[str, Any]:
             bracket=1,
         )
         two = KothSignup(
-            event_id=event.id,
+            event_id=ident(event),
             twitch_username="player_two",
             battle_tag="P2#2222",
             w3c_name="P2",
@@ -57,7 +59,7 @@ def w3c_mmr(monkeypatch: pytest.MonkeyPatch) -> None:
         W3CService,
         "get_player_stats",
         lambda self, bnet_name, season_override=None: [
-            W3CStatsCreate(wc3_season=season_override, mmr=1400, race=Race.HU)
+            W3CStatsCreate(wc3_season=season_override or 0, mmr=1400, race=Race.HU)
         ],
     )
     monkeypatch.setattr(
@@ -212,8 +214,9 @@ def test_a_second_signup_of_the_same_race_adds_no_row(
 ) -> None:
     """The second of two signups that arrive together answers the duplicate."""
     from app.services.koth import KothService
+    from app.services.settings import SettingsService
 
-    service = KothService()
+    service = KothService(SettingsService())
     first = service.create_signup_from_twitch("player_three", "P3#3333", "human")
     assert first.race == "HU"
 
@@ -360,7 +363,7 @@ def test_an_admin_signup_needs_no_w3c_configuration(
     ) -> list[W3CStatsCreate]:
         asked["stats_base"] = self.base_url()
         asked["season"] = season_override
-        return [W3CStatsCreate(wc3_season=season_override, mmr=1400, race=Race.HU)]
+        return [W3CStatsCreate(wc3_season=season_override or 0, mmr=1400, race=Race.HU)]
 
     monkeypatch.setattr(W3CService, "send_request", fake_send_request)
     monkeypatch.setattr(W3CService, "get_player_stats", fake_stats)

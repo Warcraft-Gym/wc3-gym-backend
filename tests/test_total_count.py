@@ -16,6 +16,7 @@ from typing import Any
 import pytest
 from httpx2 import Client
 
+from app.models.base import ident
 from tests.seed import add_fantasy_teams
 
 
@@ -42,7 +43,7 @@ def add_series_for_player(
             session.flush()
             session.add(
                 Series(
-                    match_id=match.id,
+                    match_id=ident(match),
                     player1_id=player_id,
                     player2_id=opponent_id,
                     host_player_id=player_id,
@@ -278,14 +279,14 @@ def test_player_series_count_holds_to_the_season_of_the_token(
         match = Match(
             team1_id=seeded["team_a_id"],
             team2_id=seeded["team_b_id"],
-            season_id=other.id,
+            season_id=ident(other),
             playday=1,
         )
         session.add(match)
         session.flush()
         session.add(
             Series(
-                match_id=match.id,
+                match_id=ident(match),
                 player1_id=seeded["player_ids"][0],
                 player2_id=seeded["player_ids"][2],
                 host_player_id=seeded["player_ids"][0],

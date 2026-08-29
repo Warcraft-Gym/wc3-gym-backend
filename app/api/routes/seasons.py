@@ -58,7 +58,7 @@ def add_teams(
     season_id: int, data: Annotated[dict, Body()], service: SeasonServiceDep
 ) -> SeasonPublic:
     """Add teams to season by providing a list of team ids."""
-    return service.add_teams(season_id, data.get("team_ids"))
+    return service.add_teams(season_id, data["team_ids"])
 
 
 @router.delete("/seasons/{season_id}/teams", dependencies=[Depends(require_admin)])
@@ -66,7 +66,7 @@ def remove_teams(
     season_id: int, data: Annotated[dict, Body()], service: SeasonServiceDep
 ) -> SeasonPublic:
     """Remove teams from season by providing a list of team ids."""
-    return service.remove_teams(season_id, data.get("team_ids"))
+    return service.remove_teams(season_id, data["team_ids"])
 
 
 @router.get("/seasons")
@@ -98,7 +98,7 @@ def add_maps(
     season_id: int, data: Annotated[dict, Body()], service: SeasonServiceDep
 ) -> SeasonPublic:
     """Add maps to season by providing a list of map ids."""
-    return service.add_maps(season_id, data.get("map_ids"))
+    return service.add_maps(season_id, data["map_ids"])
 
 
 @router.delete("/seasons/{season_id}/maps", dependencies=[Depends(require_admin)])
@@ -106,7 +106,7 @@ def remove_maps(
     season_id: int, data: Annotated[dict, Body()], service: SeasonServiceDep
 ) -> SeasonPublic:
     """Remove maps from season by providing a list of map ids."""
-    return service.remove_maps(season_id, data.get("map_ids"))
+    return service.remove_maps(season_id, data["map_ids"])
 
 
 @router.post("/seasons/{season_id}/signups", dependencies=[Depends(require_admin)])
@@ -117,7 +117,7 @@ def add_user_signup(
 
     An optional "race" names the race they registered on for this season.
     """
-    return service.add_user_signup(season_id, data.get("user_ids"), data.get("race"))
+    return service.add_user_signup(season_id, data["user_ids"], data.get("race"))
 
 
 @router.delete("/seasons/{season_id}/signups", dependencies=[Depends(require_admin)])
@@ -125,7 +125,7 @@ def remove_user_signup(
     season_id: int, data: Annotated[dict, Body()], service: SeasonServiceDep
 ) -> SeasonPublic:
     """Remove signup users from season by providing a list of user ids."""
-    return service.remove_user_signup(season_id, data.get("user_ids"))
+    return service.remove_user_signup(season_id, data["user_ids"])
 
 
 @router.get("/seasons/{season_id}/signups")

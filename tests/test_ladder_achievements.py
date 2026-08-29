@@ -60,26 +60,27 @@ class Row:
 
 
 def run(
-    rows: Sequence[achievements.AchievementRow], points: int = 0, **kwargs: object
+    rows: Sequence[achievements.AchievementRow],
+    points: int = 0,
+    opponents: frozenset[str] = frozenset(),
+    coaches: frozenset[str] = frozenset(),
+    is_coach: bool = False,
 ) -> set[str]:
     """The ids of the rules these rows earn."""
-    return {
-        item.id
-        for item in achievements.earned(
-            rows, points, achievements.DEFAULT_PAID, **kwargs
-        )
-    }
+    found = achievements.earned(
+        rows, points, achievements.DEFAULT_PAID, opponents, coaches, is_coach
+    )
+    return {item.id for item in found}
 
 
 def paid(
-    rows: Sequence[achievements.AchievementRow], rule_id: str, **kwargs: object
+    rows: Sequence[achievements.AchievementRow],
+    rule_id: str,
+    opponents: frozenset[str] = frozenset(),
 ) -> Achievement:
     """The earned rule itself, for the ones that pay a variable amount."""
-    return next(
-        item
-        for item in achievements.earned(rows, 0, achievements.DEFAULT_PAID, **kwargs)
-        if item.id == rule_id
-    )
+    found = achievements.earned(rows, 0, achievements.DEFAULT_PAID, opponents)
+    return next(item for item in found if item.id == rule_id)
 
 
 def series(results: list[bool]) -> list[Row]:

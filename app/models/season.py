@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Annotated, Any, Self
 from sqlalchemy import Index, text
 from sqlmodel import Field, Relationship, SQLModel
 
-from app.models.base import DBModel
+from app.models.base import DBModel, ident
 from app.models.map import MapPublic
 from app.models.types import IsoDate, LenientDate, NoneToList, NumToStr
 
@@ -80,7 +80,7 @@ class SeasonPublic(SeasonBase):
     @classmethod
     def from_season(cls, season: Season) -> Self:
         return cls(
-            id=season.id,
+            id=ident(season),
             name=season.name,
             number_weeks=season.number_weeks,
             series_per_week=season.series_per_week,
@@ -100,13 +100,13 @@ class SeasonPublic(SeasonBase):
     def from_season_reduced(cls, season: Season) -> Self:
         """The name and the id only. Used where a season is a label on
         another object rather than the subject of the response."""
-        return cls(id=season.id, name=season.name)
+        return cls(id=ident(season), name=season.name)
 
     @classmethod
     def from_season_without_maps(cls, season: Season) -> Self:
         """Every scalar field of the season, without the map pool."""
         return cls(
-            id=season.id,
+            id=ident(season),
             name=season.name,
             number_weeks=season.number_weeks,
             series_per_week=season.series_per_week,

@@ -62,8 +62,7 @@ def search_maps(
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[MapPublic]:
     """Search maps by criteria using a custom query format."""
-    query_param = query
-    query = QueryUtil.parse_query(query_param)
-    if not query or not query.elementA:
-        raise BadRequestError(f"No valid query found: {query_param}")
-    return service.search(query, limit=limit, offset=offset)
+    parsed = QueryUtil.parse_query(query)
+    if not parsed or not parsed.elementA:
+        raise BadRequestError(f"No valid query found: {query}")
+    return service.search(parsed, limit=limit, offset=offset)

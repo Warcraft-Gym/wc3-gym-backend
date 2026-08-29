@@ -12,12 +12,19 @@ worker can start at the same time.
 """
 
 import os
+from typing import Any
 
 from sqlalchemy import Engine, create_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import InstrumentedAttribute, sessionmaker
 
 # Unbound until init_engine runs; the services import this name at import time
 Session = sessionmaker()
+
+
+def rel(attr: Any) -> InstrumentedAttribute[Any]:  # noqa: ANN401
+    """The relationship twin of sqlmodel.col(): the loader options want the
+    instrumented attribute, and SQLModel types the class attribute as its value."""
+    return attr
 
 
 def init_engine(db_url: str | None = None) -> Engine:

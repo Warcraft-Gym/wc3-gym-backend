@@ -197,7 +197,7 @@ def update_signup_bracket(
     signup_id: int, data: Annotated[dict, Body()], service: KothServiceDep
 ) -> KothSignupPublic:
     """Manually update a player's bracket assignment."""
-    return service.update_signup_bracket(signup_id, data.get("bracket"))
+    return service.update_signup_bracket(signup_id, data["bracket"])
 
 
 @router.post("/koth/signups/{signup_id}/king", dependencies=[Depends(require_admin)])
@@ -275,7 +275,7 @@ def update_match_result(
     match_id: int, data: Annotated[dict, Body()], service: KothServiceDep
 ) -> KothMatchPublic:
     """Set the winning team and update all team members as kings."""
-    return service.update_match_result(match_id, data.get("winner_team_number"))
+    return service.update_match_result(match_id, data["winner_team_number"])
 
 
 @router.delete(

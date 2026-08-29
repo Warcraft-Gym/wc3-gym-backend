@@ -10,7 +10,7 @@ rows.
 from collections.abc import Iterable
 from typing import NamedTuple, Protocol
 
-from sqlalchemy import Case, ColumnElement, and_, case, literal
+from sqlalchemy import Case, ColumnElement, SQLColumnExpression, and_, case, literal
 
 # A match this short or shorter is a drop, not a game
 MIN_DURATION_S = 120
@@ -58,12 +58,14 @@ def totals(rows: Iterable[LadderRow]) -> Totals:
     return Totals(games=games, wins=wins, losses=games - wins, points=score)
 
 
-def counted_clause(duration_s: ColumnElement[int]) -> ColumnElement[bool]:
+def counted_clause(duration_s: SQLColumnExpression[int]) -> ColumnElement[bool]:
     """The rule of counted() as SQL, over a duration column."""
     return duration_s > MIN_DURATION_S
 
 
-def points_case(won: ColumnElement[bool], duration_s: ColumnElement[int]) -> Case[int]:
+def points_case(
+    won: SQLColumnExpression[bool], duration_s: SQLColumnExpression[int]
+) -> Case[int]:
     """The rule of points() as SQL, over a result and a duration column."""
     return case(
         (and_(counted_clause(duration_s), won), literal(WIN_POINTS)),

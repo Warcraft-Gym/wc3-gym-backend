@@ -46,7 +46,7 @@ def import_season(
     if file is None:
         raise BadRequestError("No file part")
 
-    if file.filename == "" or not file.filename.endswith((".xlsx", ".xls")):
+    if not file.filename or not file.filename.endswith((".xlsx", ".xls")):
         raise BadRequestError("No selected file or invalid file type")
 
     imported = import_season_workbook(
@@ -201,9 +201,9 @@ def export_season(
             matches_sheet.append(
                 [
                     match.id,
-                    match.team1.id,
-                    match.team2.id,
-                    match.season.id,
+                    match.team1_id,
+                    match.team2_id,
+                    match.season_id,
                     match.playday,
                     match.team1_score or "",
                     match.team2_score or "",
@@ -244,9 +244,9 @@ def export_season(
                 series_sheet.append(
                     [
                         series.id,
-                        series.match.id,
-                        series.player1.id,
-                        series.player2.id,
+                        series.match_id,
+                        series.player1_id,
+                        series.player2_id,
                         series.player1_score
                         if series.player1_score is not None
                         else "",
@@ -384,7 +384,7 @@ def _workbook_bytes(file: UploadFile | None) -> bytes:
     """The bytes of an uploaded workbook."""
     if file is None:
         raise BadRequestError("No file part")
-    if file.filename == "":
+    if not file.filename:
         raise BadRequestError("No selected file")
     if not file.filename.endswith((".xlsx", ".xls")):
         raise BadRequestError("File type not allowed")

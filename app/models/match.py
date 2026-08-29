@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING, Annotated, Self
 from sqlalchemy import Index
 from sqlmodel import Field, Relationship, SQLModel
 
-from app.models.base import DBModel
+from app.models.base import DBModel, ident
 from app.models.map import Map, MapPublic
 from app.models.season import SeasonPublic
 from app.models.team_reduced import TeamReduced
@@ -83,7 +83,7 @@ class MatchPublic(MatchBase):
     @classmethod
     def from_match(cls, match: Match) -> Self:
         return cls(
-            id=match.id,
+            id=ident(match),
             team1_id=match.team1_id,
             team1=TeamReduced.from_team(match.team1) if match.team1 else None,
             team2_id=match.team2_id,

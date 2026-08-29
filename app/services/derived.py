@@ -214,7 +214,9 @@ def fill_standings(session: Session, teams: Iterable[TeamPublic | None]) -> None
     if not infos:
         return
 
-    rules = _rules_by_season(session, {info.season_id for _, info in infos})
+    rules = _rules_by_season(
+        session, {info.season_id for _, info in infos if info.season_id is not None}
+    )
     sums = _sums_by_team(session, rules)
 
     for team_id, info in infos:
@@ -342,8 +344,8 @@ def fill_gnl_stats(session: Session, users: Iterable[UserPublic | None]) -> None
     if not rows:
         return
 
-    user_ids = {stat.user_id for stat in rows}
-    season_ids = {stat.season_id for stat in rows}
+    user_ids = {stat.user_id for stat in rows if stat.user_id is not None}
+    season_ids = {stat.season_id for stat in rows if stat.season_id is not None}
     tallies = _gnl_tallies(session, user_ids, season_ids)
     matchups = _gnl_matchups(session, user_ids, season_ids)
 
@@ -785,13 +787,16 @@ def public_series(series: SeriesPublic | None) -> fantasy.Series | None:
     )
 
 
-def public_bet(bet: FantasyBetPublic) -> fantasy.Bet:
-    """One answered bet, as the fantasy rules read it."""
+def public_bet(bet: FantasyBetPublic) -> fantasy.Bet | None:
+    """One answered bet, as the fantasy rules read it; None without its series."""
+    series = public_series(bet.series)
+    if series is None:
+        return None
     return fantasy.Bet(
         points=bet.bet_points,
         winner_id=bet.winner_id,
         winner_name=bet.winner.name if bet.winner else None,
-        series=public_series(bet.series),
+        series=series,
     )
 
 

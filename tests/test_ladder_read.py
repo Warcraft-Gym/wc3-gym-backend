@@ -57,7 +57,7 @@ def set_signup_race(season_id: int, user_id: int, race: Race) -> None:
 def second_season(season_id: int) -> int:
     """Another season over the same days, so only the signup race differs."""
     with Session() as session:
-        first = session.get(Season, season_id)
+        first = session.get_one(Season, season_id)
         other = Season(
             name="Signup fallback",
             number_weeks=first.number_weeks,
@@ -99,8 +99,8 @@ def add_match(
                 start_time=start_time,
                 duration_s=duration_s,
                 map_name="Last Refuge",
-                race=race or session.get(User, user_id).race,
-                played_race=played_race or race or session.get(User, user_id).race,
+                race=race or session.get_one(User, user_id).race,
+                played_race=played_race or race or session.get_one(User, user_id).race,
                 opp_battletag=opp_battletag,
                 opp_race=opp_race,
                 opp_played_race=opp_played_race or opp_race,
@@ -588,6 +588,7 @@ def test_every_rule_the_migration_seeded_is_in_the_catalogue() -> None:
         )
     )
     spec = importlib.util.spec_from_file_location("ladder_achievements_seed", path)
+    assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
 

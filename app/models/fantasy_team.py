@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING, Annotated, Any, Self
 from sqlalchemy import Index, text
 from sqlmodel import Field, Relationship, SQLModel
 
-from app.models.base import DBModel
+from app.models.base import DBModel, ident
 from app.models.enums import Race
 from app.models.season import SeasonPublic
 from app.models.team import Team, TeamPublic
@@ -105,7 +105,7 @@ class FantasyTeamPublic(FantasyTeamBase):
                     drafted_players.append(user)
 
         return cls(
-            id=fteam.id,
+            id=ident(fteam),
             name=fteam.name,
             season_id=fteam.season_id,
             season=SeasonPublic.from_season(fteam.season) if fteam.season else None,

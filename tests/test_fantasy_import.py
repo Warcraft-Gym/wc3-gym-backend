@@ -354,7 +354,7 @@ def test_a_bet_sheet_the_import_cannot_read_writes_nothing(
             select(FantasyBet).where(col(FantasyBet.user_id) == seeded["player_ids"][1])
         ).all()
         assert stored == []
-        series = session.get(Series, seeded["series_played_id"])
+        series = session.get_one(Series, seeded["series_played_id"])
         assert not series.is_fantasy_match
 
 

@@ -5,7 +5,7 @@ from sqlalchemy import Index
 from sqlalchemy.orm import Session
 from sqlmodel import Field, Relationship, SQLModel
 
-from app.models.base import DBModel
+from app.models.base import DBModel, ident
 from app.models.season_info import SeasonInfoPublic
 from app.models.team_reduced import TeamReduced
 from app.models.types import NoneToList, NumToStr
@@ -111,7 +111,7 @@ class TeamPublic(TeamReduced):
                         if gnl_stat.season_id == ut.season_id:
                             user.gnl_stats = [gnl_stat]
                             break
-                    players.get(ut.season_id).append(user)
+                    players[ut.season_id].append(user)
 
         # Load coaches from team_season entries
         if team.season_info:
@@ -131,7 +131,7 @@ class TeamPublic(TeamReduced):
                     coaches[season_info.season_id] = season_coaches
 
         return cls(
-            id=team.id,
+            id=ident(team),
             name=team.name,
             long_name=team.long_name,
             discord_role=team.discord_role,

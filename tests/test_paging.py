@@ -21,6 +21,7 @@ from sqlalchemy import event, select
 from sqlmodel import col
 
 from app.core.db import Session
+from app.models.base import ident
 
 # The path templates take the ids of the seeded league
 PAGED_ROUTES = [
@@ -176,8 +177,9 @@ def test_a_page_carries_whole_rows(client: Client, league: dict[str, Any]) -> No
 def test_the_limit_reaches_the_statement(league: dict[str, Any]) -> None:
     """The service asks the database for one row, it does not slice a list."""
     from app.services.teams import TeamService
+    from app.services.users import UserService
 
-    service = TeamService(user_app_service=None)
+    service = TeamService(UserService())
     with capture_sql() as statements:
         teams = service.get_all(limit=1)
     assert len(teams) == 1
@@ -428,14 +430,14 @@ def seed_more_series(league: dict[str, Any]) -> None:
                     host_player_id=players[0],
                 ),
                 Series(
-                    match_id=later[0].id,
+                    match_id=ident(later[0]),
                     date_time=datetime(2026, 1, 14, 19, 0),
                     player1_id=players[0],
                     player2_id=players[2],
                     host_player_id=players[0],
                 ),
                 Series(
-                    match_id=later[1].id,
+                    match_id=ident(later[1]),
                     date_time=None,
                     player1_id=players[0],
                     player2_id=players[3],

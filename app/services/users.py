@@ -9,8 +9,8 @@ from sqlalchemy.orm import Session as OrmSession
 from sqlalchemy.orm import joinedload, noload, selectinload
 from sqlmodel import col
 
-from app.core.db import Session
-from app.core.exceptions import NotFoundError, W3CThrottledError
+from app.core.db import Session, rel
+from app.core.exceptions import BadRequestError, NotFoundError, W3CThrottledError
 from app.core.query import QueryElement, QueryUtil
 from app.models.relationships import DBUserSeasonSignup
 from app.models.user import (
@@ -60,15 +60,15 @@ class UserService:
 
     def add(self, user: UserCreate) -> UserPublic:
         with Session.begin() as session:
-            user = User.add(session, user.model_dump())
-            return _public(session, user)
+            row = User.add(session, user.model_dump())
+            return _public(session, row)
 
     def update(self, user_id: int, user: UserUpdate) -> UserPublic:
         with Session.begin() as session:
-            user = User.update(session, user_id, **user.model_dump(exclude_unset=True))
-            if not user:
+            row = User.update(session, user_id, **user.model_dump(exclude_unset=True))
+            if not row:
                 raise NotFoundError("User not found")
-            return _public(session, user)
+            return _public(session, row)
 
     def delete(self, user_id: int) -> None:
         with Session.begin() as session:
@@ -81,8 +81,8 @@ class UserService:
                 session.scalars(
                     select(User)
                     .options(
-                        joinedload(User.team_seasons).noload("*"),
-                        joinedload(User.w3c_stats),
+                        joinedload(rel(User.team_seasons)).noload("*"),
+                        joinedload(rel(User.w3c_stats)),
                     )
                     .where(col(User.id) == user_id)
                 )
@@ -125,16 +125,18 @@ class UserService:
         limit: int | None = None,
         offset: int = 0,
     ) -> list[UserListPublic]:
+        if filter is None:
+            return []
         with Session.begin() as session:
             result = []
             # The list row has no gnl_stats, so the link rows stay out
             statement = (
                 select(User)
                 .options(
-                    noload(User.team_seasons),
-                    joinedload(User.w3c_stats),
-                    selectinload(User.signup_seasons).joinedload(
-                        DBUserSeasonSignup.season
+                    noload(rel(User.team_seasons)),
+                    joinedload(rel(User.w3c_stats)),
+                    selectinload(rel(User.signup_seasons)).joinedload(
+                        rel(DBUserSeasonSignup.season)
                     ),
                 )
                 .where(filter)
@@ -164,9 +166,11 @@ class UserService:
             result = []
             # The list row has no gnl_stats, so the link rows stay out
             statement = select(User).options(
-                noload(User.team_seasons),
-                joinedload(User.w3c_stats),
-                selectinload(User.signup_seasons).joinedload(DBUserSeasonSignup.season),
+                noload(rel(User.team_seasons)),
+                joinedload(rel(User.w3c_stats)),
+                selectinload(rel(User.signup_seasons)).joinedload(
+                    rel(DBUserSeasonSignup.season)
+                ),
             )
             # Offset paging is deterministic only with a fixed order
             statement = statement.order_by(col(User.id)).offset(offset)
@@ -201,6 +205,8 @@ class UserService:
             logger.warning(f"No W3C season to sync {user.battleTag} against: {e}")
             raise
 
+        if not user.battleTag:
+            raise BadRequestError(f"User {user.id} has no battle tag to sync")
         seasons = (current_season, current_season - 1)
         all_stats = []
         refusals: list[Exception] = []

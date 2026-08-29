@@ -13,6 +13,7 @@ from sqlalchemy import func, select
 from sqlmodel import col
 
 from app.core.db import Session
+from app.models.base import ident
 from app.models.map import Map
 from app.models.season import Season
 from app.models.team import Team
@@ -329,7 +330,9 @@ def test_the_fantasy_users_sheet_maps_a_captain_and_creates_a_missing_one(
     assert created.name == "Newcomer"
     assert created.discordTag == "new"
     assert created.discordId == "8"
-    assert sorted(team.captain_id for team in teams) == sorted([captain.id, created.id])
+    assert sorted(team.captain_id for team in teams) == sorted(
+        [ident(captain), ident(created)]
+    )
 
 
 def test_an_import_without_the_fantasy_users_sheet_still_writes_the_season(

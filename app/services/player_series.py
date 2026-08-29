@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 def _notify_discord_series_update(
     series: SeriesPublic,
-    player_name: str,
+    player_name: str | None,
     action: str,
     uploaded_files: dict[str, dict[str, Any]] | None = None,
 ) -> bool:
@@ -39,10 +39,7 @@ def _notify_discord_series_update(
             # Create multipart form data manually using requests
             files_dict = {}
 
-            series_json = json.dumps(
-                series.to_dict() if hasattr(series, "to_dict") else series,
-                sort_keys=True,
-            )
+            series_json = json.dumps(series.to_dict(), sort_keys=True)
 
             data_dict = {
                 "series": series_json,
@@ -172,8 +169,8 @@ def update_player_series(
 
         # Determine if game3 is required based on provided scores
         try:
-            p1 = int(data.get("player1_score"))
-            p2 = int(data.get("player2_score"))
+            p1 = int(data["player1_score"])
+            p2 = int(data["player2_score"])
         except Exception:
             # If scores are missing or invalid, reject
             return JSONResponse(
@@ -240,22 +237,15 @@ def update_player_series(
     # Check if date/time was updated
     datetime_updated = original_datetime != updated_series.date_time
 
-    # Prepare notification data - convert to dict for Discord serialization
-    notification_data = (
-        updated_series.to_dict()
-        if hasattr(updated_series, "to_dict")
-        else updated_series
-    )
-
     # Attempt Discord notifications (non-blocking - app continues regardless of success/failure)
     discord_notified = False
     if scores_updated:
         discord_notified = _notify_discord_series_update(
-            notification_data, player_name, "score_updated", uploaded_files
+            updated_series, player_name, "score_updated", uploaded_files
         )
     elif datetime_updated:
         discord_notified = _notify_discord_series_update(
-            notification_data, player_name, "scheduled", uploaded_files
+            updated_series, player_name, "scheduled", uploaded_files
         )
 
     # Convert to dict only for JSON response

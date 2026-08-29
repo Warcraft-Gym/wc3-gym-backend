@@ -6,7 +6,7 @@ faces read the same rule, so a value the database computes equals the value Pyth
 computes for the same scores.
 """
 
-from sqlalchemy import Case, ColumnElement, and_, case, literal
+from sqlalchemy import Case, SQLColumnExpression, and_, case, literal
 
 MAX_POINTS = {"standard": 3, "helpstone": 4}
 DEFAULT_SYSTEM = "standard"
@@ -38,8 +38,8 @@ def points(own: int | None, opp: int | None, system: str) -> int | None:
 
 
 def points_case(
-    own: ColumnElement[int | None],
-    opp: ColumnElement[int | None],
+    own: SQLColumnExpression[int | None],
+    opp: SQLColumnExpression[int | None],
     system: str,
 ) -> Case[int]:
     """The rule of points() as SQL, over two map score columns."""

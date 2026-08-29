@@ -19,21 +19,21 @@ logger = logging.getLogger(__name__)
 class DraftSeriesService:
     def add(self, draft_series: DraftSeriesCreate) -> DraftSeriesPublic:
         with Session.begin() as session:
-            draft_series = DraftSeries.add(session, draft_series.model_dump())
-            return DraftSeriesPublic.from_draft_series(draft_series)
+            row = DraftSeries.add(session, draft_series.model_dump())
+            return DraftSeriesPublic.from_draft_series(row)
 
     def update(
         self, draft_series_id: int, draft_series: DraftSeriesUpdate
     ) -> DraftSeriesPublic:
         with Session.begin() as session:
-            draft_series = DraftSeries.update(
+            row = DraftSeries.update(
                 session,
                 draft_series_id,
                 **draft_series.model_dump(exclude_unset=True),
             )
-            if not draft_series:
+            if not row:
                 raise NotFoundError("Draft series not found")
-            return DraftSeriesPublic.from_draft_series(draft_series)
+            return DraftSeriesPublic.from_draft_series(row)
 
     def delete(self, draft_series_id: int) -> None:
         with Session.begin() as session:
@@ -77,16 +77,20 @@ class DraftSeriesService:
                 delete(DraftSeries).where(col(DraftSeries.match_id) == match_id)
             )
 
-    def convert_to_series(self, draft_series: DraftSeries) -> SeriesCreate:
+    def convert_to_series(self, draft_series_id: int) -> SeriesCreate:
         """Build the SeriesCreate for a draft series. SeriesService writes the row."""
-        return SeriesCreate(
-            match_id=draft_series.match_id,
-            date_time=draft_series.date_time,
-            caster=draft_series.caster,
-            player1_id=draft_series.player1_id,
-            player2_id=draft_series.player2_id,
-            player1_score=draft_series.player1_score or 0,
-            player2_score=draft_series.player2_score or 0,
-            host_player_id=draft_series.host_player_id,
-            is_fantasy_match=draft_series.is_fantasy_match,
-        )
+        with Session.begin() as session:
+            draft_series = session.get(DraftSeries, draft_series_id)
+            if not draft_series:
+                raise NotFoundError("Draft series not found")
+            return SeriesCreate(
+                match_id=draft_series.match_id,
+                date_time=draft_series.date_time,
+                caster=draft_series.caster,
+                player1_id=draft_series.player1_id,
+                player2_id=draft_series.player2_id,
+                player1_score=draft_series.player1_score or 0,
+                player2_score=draft_series.player2_score or 0,
+                host_player_id=draft_series.host_player_id,
+                is_fantasy_match=draft_series.is_fantasy_match,
+            )

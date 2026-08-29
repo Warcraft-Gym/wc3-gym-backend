@@ -16,7 +16,7 @@ answer the same numbers from the same rule.
 """
 
 from collections.abc import Mapping, Sequence
-from typing import Any, NamedTuple
+from typing import Any, Literal, NamedTuple, overload
 
 from app.core.exceptions import BadRequestError
 
@@ -105,6 +105,18 @@ def series_points(own: int, opp: int) -> int:
         return 0
 
 
+@overload
+def race_points(
+    number_weeks: int | None,
+    series_by_week: SeriesByWeek,
+    include_weekly_details: Literal[False] = False,
+) -> RacePoints: ...
+@overload
+def race_points(
+    number_weeks: int | None,
+    series_by_week: SeriesByWeek,
+    include_weekly_details: Literal[True],
+) -> tuple[RacePoints, RaceStats, RaceWeeklyDetails]: ...
 # include_weekly_details also changes the return type
 def race_points(
     number_weeks: int | None,
@@ -274,7 +286,7 @@ def team_scores(
     Returns:
         dict: Score totals and optional breakdown details
     """
-    result = {
+    result: dict[str, Any] = {
         "player_points": 0,
         "bench_points": 0,
         "team_points": 0,
@@ -290,7 +302,7 @@ def team_scores(
     # Player and bench points
     for player in drafted_players:
         player_total = 0
-        player_data = None
+        player_data: dict[str, Any] = {}
 
         if include_breakdown:
             player_data = {
@@ -308,7 +320,7 @@ def team_scores(
             ]
 
             week_points = 0
-            week_data = None
+            week_data: dict[str, Any] = {}
 
             if include_breakdown:
                 week_data = {
@@ -400,6 +412,8 @@ def team_scores(
             continue
 
         series_winner = bet.series.winner()
+        if series_winner is None:
+            continue
         won_bet = bet.winner_id == series_winner.id
         result["bet_points"] += points
 

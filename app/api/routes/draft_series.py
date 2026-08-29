@@ -95,11 +95,7 @@ def promote_draft_series(
     series_service: SeriesServiceDep,
 ) -> SeriesPublic:
     """Convert a draft series to a real published series and delete the draft"""
-    # Get the draft series
-    draft_series = service.get(draft_series_id)
-
-    # Convert to a SeriesCreate
-    series_create = service.convert_to_series(draft_series)
+    series_create = service.convert_to_series(draft_series_id)
 
     # Create as real series (this will trigger all calculations)
     created_series = series_service.add(series_create)

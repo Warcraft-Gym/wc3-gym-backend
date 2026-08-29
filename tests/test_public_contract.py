@@ -25,6 +25,8 @@ import pytest
 from fastapi import FastAPI
 from httpx2 import Client
 
+from app.models.base import ident
+
 # The image route serves the stored bytes back untouched, so any bytes work.
 TEAM_ICON = b"\x89PNG\r\n\x1a\npublic-contract-test"
 
@@ -80,12 +82,12 @@ def public_seed(app: FastAPI) -> dict[str, Any]:
 
         # Alpha plays two seasons; Beta plays one. The score columns stay
         # empty, because the standings are summed from the series.
-        session.add(DBTeamSeason(team_id=ids["team_a_id"], season_id=season_2.id))
+        session.add(DBTeamSeason(team_id=ids["team_a_id"], season_id=ident(season_2)))
         session.add(
             DBUserTeamSeason(
                 user_id=ids["player_ids"][3],
                 team_id=ids["team_a_id"],
-                season_id=season_2.id,
+                season_id=ident(season_2),
             )
         )
 

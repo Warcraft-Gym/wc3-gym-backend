@@ -380,7 +380,7 @@ def test_a_player_with_no_matches_is_stamped(
     LadderService().sync_users([thanks], SINCE)
 
     with Session() as session:
-        assert session.get(User, thanks.id).ladder_synced_at is not None
+        assert session.get_one(User, thanks.id).ladder_synced_at is not None
     assert stored() == []
 
 
@@ -746,7 +746,9 @@ def test_one_sync_writes_the_stats_and_the_matches_of_a_player(
         W3CService,
         "get_player_stats",
         lambda self, tag, season_override=None: [
-            W3CStatsCreate(wc3_season=season_override, race=Race.HU, mmr=1500, games=20)
+            W3CStatsCreate(
+                wc3_season=season_override or 0, race=Race.HU, mmr=1500, games=20
+            )
         ],
     )
 
@@ -757,7 +759,7 @@ def test_one_sync_writes_the_stats_and_the_matches_of_a_player(
         stats = session.scalars(
             select(W3CStats).where(col(W3CStats.user_id) == player)
         ).all()
-        user = session.get(User, player)
+        user = session.get_one(User, player)
     assert [row.mmr for row in stats] == [1500, 1500]
     assert len(stored()) == 2
     assert user.w3c_synced_at is not None

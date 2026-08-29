@@ -4,11 +4,12 @@ from typing import Annotated, Any, Literal, Self
 
 from sqlalchemy import ColumnElement, ColumnExpressionArgument, Index, and_, select
 from sqlalchemy.orm import Session
-from sqlalchemy.sql.base import ExecutableOption
+from sqlalchemy.orm.interfaces import ORMOption
 from sqlmodel import Field, Relationship, SQLModel, col
 
+from app.core.db import rel
 from app.core.ordering import SortOrder, ordered
-from app.models.base import DBModel
+from app.models.base import DBModel, ident
 from app.models.match import Match, MatchPublic
 from app.models.types import IsoDateTime, NumToStr
 from app.models.user import User, UserPublic
@@ -103,34 +104,34 @@ class Series(SeriesBase, DBModel, table=True):
         return session.scalars(stmt).all()
 
     @classmethod
-    def _list_eager_options(cls) -> tuple[ExecutableOption, ...]:
+    def _list_eager_options(cls) -> tuple[ORMOption, ...]:
         """The to-one relations the reduced public series reads."""
         from sqlalchemy.orm import joinedload
 
         return (
-            joinedload(cls.match).joinedload(Match.team1),
-            joinedload(cls.match).joinedload(Match.team2),
-            joinedload(cls.match).joinedload(Match.season),
-            joinedload(cls.match).joinedload(Match.fixed_map),
-            joinedload(cls.player1),
-            joinedload(cls.player2),
+            joinedload(rel(cls.match)).joinedload(rel(Match.team1)),
+            joinedload(rel(cls.match)).joinedload(rel(Match.team2)),
+            joinedload(rel(cls.match)).joinedload(rel(Match.season)),
+            joinedload(rel(cls.match)).joinedload(rel(Match.fixed_map)),
+            joinedload(rel(cls.player1)),
+            joinedload(rel(cls.player2)),
         )
 
     @classmethod
-    def _eager_options(cls) -> tuple[ExecutableOption, ...]:
+    def _eager_options(cls) -> tuple[ORMOption, ...]:
         """The rows a season report reads off every series."""
         from sqlalchemy.orm import joinedload
 
         return (
-            joinedload(cls.match).joinedload(Match.team1),
-            joinedload(cls.match).joinedload(Match.team2),
-            joinedload(cls.match).joinedload(Match.season),
-            joinedload(cls.player1).selectinload(User.w3c_stats),
-            joinedload(cls.player1).selectinload(User.team_seasons),
-            joinedload(cls.player1).selectinload(User.signup_seasons),
-            joinedload(cls.player2).selectinload(User.w3c_stats),
-            joinedload(cls.player2).selectinload(User.team_seasons),
-            joinedload(cls.player2).selectinload(User.signup_seasons),
+            joinedload(rel(cls.match)).joinedload(rel(Match.team1)),
+            joinedload(rel(cls.match)).joinedload(rel(Match.team2)),
+            joinedload(rel(cls.match)).joinedload(rel(Match.season)),
+            joinedload(rel(cls.player1)).selectinload(rel(User.w3c_stats)),
+            joinedload(rel(cls.player1)).selectinload(rel(User.team_seasons)),
+            joinedload(rel(cls.player1)).selectinload(rel(User.signup_seasons)),
+            joinedload(rel(cls.player2)).selectinload(rel(User.w3c_stats)),
+            joinedload(rel(cls.player2)).selectinload(rel(User.team_seasons)),
+            joinedload(rel(cls.player2)).selectinload(rel(User.signup_seasons)),
         )
 
 
@@ -177,7 +178,7 @@ class SeriesPublic(SeriesBase):
     @classmethod
     def from_series(cls, series: Series) -> Self:
         return cls(
-            id=series.id,
+            id=ident(series),
             match_id=series.match_id,
             match=MatchPublic.from_match(series.match) if series.match else None,
             date_time=series.date_time,
@@ -196,7 +197,7 @@ class SeriesPublic(SeriesBase):
     def from_series_reduced(cls, series: Series) -> Self:
         """The series with reduced players, so no player collection loads."""
         return cls(
-            id=series.id,
+            id=ident(series),
             match_id=series.match_id,
             match=MatchPublic.from_match(series.match) if series.match else None,
             date_time=series.date_time,

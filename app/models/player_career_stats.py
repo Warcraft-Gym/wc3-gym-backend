@@ -1,9 +1,10 @@
 from typing import Any, Self
 
 from sqlalchemy.orm import joinedload
-from sqlalchemy.sql.base import ExecutableOption
+from sqlalchemy.orm.interfaces import ORMOption
 from sqlmodel import Field, Relationship, SQLModel
 
+from app.core.db import rel
 from app.models.base import DBModel
 from app.models.user import User, UserReduced
 
@@ -37,9 +38,9 @@ class PlayerCareerStats(PlayerCareerStatsBase, DBModel, table=True):
     user: User | None = Relationship(back_populates="career_stats")
 
     @classmethod
-    def eager_options(cls) -> tuple[ExecutableOption, ...]:
+    def eager_options(cls) -> tuple[ORMOption, ...]:
         """Every relation the public career row reads."""
-        return (joinedload(cls.user),)
+        return (joinedload(rel(cls.user)),)
 
 
 class PlayerCareerStatsUpdate(SQLModel):

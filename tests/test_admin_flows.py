@@ -543,7 +543,7 @@ def test_a_write_without_a_token_is_refused(
 def stamped_at(user_id: int) -> datetime | None:
     """When the last sync of this player reached w3champions."""
     with Session() as session:
-        return session.get(User, user_id).w3c_synced_at
+        return session.get_one(User, user_id).w3c_synced_at
 
 
 def stamp(user_id: int, minutes_ago: float) -> None:
@@ -589,7 +589,9 @@ def test_a_w3c_sync_names_the_player_it_could_not_update(
         if bnet_name == "P2#2222":
             raise Exception("Request failed with status code 404: player not found")
         return [
-            W3CStatsCreate(wc3_season=season_override, race=Race.HU, mmr=1500, games=20)
+            W3CStatsCreate(
+                wc3_season=season_override or 0, race=Race.HU, mmr=1500, games=20
+            )
         ]
 
     monkeypatch.setattr(W3CService, "get_player_stats", player_stats)
