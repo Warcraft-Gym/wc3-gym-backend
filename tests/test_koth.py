@@ -337,6 +337,14 @@ def test_bad_koth_input_answers_400(
     assert "Winner team number" in resp.json()["error"]
 
 
+def test_a_result_without_a_winner_is_refused(
+    client: Client, auth_headers: dict[str, str], koth: dict[str, Any]
+) -> None:
+    resp = client.put("/koth/matches/1/result", headers=auth_headers, json={})
+    assert resp.status_code == 422
+    assert "winner_team_number" in resp.json()["error"]
+
+
 def test_an_admin_signup_needs_no_w3c_configuration(
     client: Client,
     auth_headers: dict[str, str],

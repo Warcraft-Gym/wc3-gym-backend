@@ -11,6 +11,7 @@ from app.models.koth_match import (
     KothMatchCreate,
     KothMatchCreateRequest,
     KothMatchPublic,
+    KothMatchResult,
     KothMatchUpdate,
 )
 from app.models.koth_signup import KothSignupPublic
@@ -272,10 +273,10 @@ def update_match(
 
 @router.put("/koth/matches/{match_id}/result", dependencies=[Depends(require_admin)])
 def update_match_result(
-    match_id: int, data: Annotated[dict, Body()], service: KothServiceDep
+    match_id: int, data: KothMatchResult, service: KothServiceDep
 ) -> KothMatchPublic:
     """Set the winning team and update all team members as kings."""
-    return service.update_match_result(match_id, data["winner_team_number"])
+    return service.update_match_result(match_id, data.winner_team_number)
 
 
 @router.delete(

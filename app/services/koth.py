@@ -41,6 +41,15 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# The full tree KothEventPublic serializes; without it every event lazy-loads
+# its signups and matches one query at a time
+EVENT_TREE = (
+    joinedload(rel(KothEvent.signups)),
+    joinedload(rel(KothEvent.matches))
+    .joinedload(rel(KothMatch.participants))
+    .joinedload(rel(KothMatchParticipant.signup)),
+)
+
 
 class KothService:
     def __init__(self, settings_app_service: "SettingsService") -> None:
@@ -70,12 +79,7 @@ class KothService:
             event = (
                 session.scalars(
                     select(KothEvent)
-                    .options(
-                        joinedload(rel(KothEvent.signups)),
-                        joinedload(rel(KothEvent.matches))
-                        .joinedload(rel(KothMatch.participants))
-                        .joinedload(rel(KothMatchParticipant.signup)),
-                    )
+                    .options(*EVENT_TREE)
                     .where(col(KothEvent.id) == event_id)
                 )
                 .unique()
@@ -87,7 +91,9 @@ class KothService:
 
     def get_all_events(self) -> list[KothEventPublic]:
         with Session.begin() as session:
-            events = session.scalars(select(KothEvent)).unique().all()
+            events = (
+                session.scalars(select(KothEvent).options(*EVENT_TREE)).unique().all()
+            )
             return [KothEventPublic.model_validate(e) for e in events]
 
     def get_active_event(self) -> KothEventPublic:
@@ -102,12 +108,7 @@ class KothService:
             event = (
                 session.scalars(
                     select(KothEvent)
-                    .options(
-                        joinedload(rel(KothEvent.signups)),
-                        joinedload(rel(KothEvent.matches))
-                        .joinedload(rel(KothMatch.participants))
-                        .joinedload(rel(KothMatchParticipant.signup)),
-                    )
+                    .options(*EVENT_TREE)
                     .where(col(KothEvent.id) == active_event_id)
                 )
                 .unique()

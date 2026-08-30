@@ -52,6 +52,12 @@ class KothMatchCreateRequest(KothMatchCreate):
     participants: list[KothMatchParticipantRef] = []
 
 
+class KothMatchResult(SQLModel):
+    """The result body: which team won."""
+
+    winner_team_number: int
+
+
 class KothMatchUpdate(SQLModel):
     event_id: int | None = None
     bracket: int | None = None
