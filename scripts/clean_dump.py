@@ -50,7 +50,7 @@ SEASON_TABLES = (
     "user_team_season",
     "user_season_signup",
     "team_season",
-    "team_season_coach",
+    "team_season_captain",
     "map_season",
     "fantasy_bets",
     "fantasy_teams",

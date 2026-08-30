@@ -120,17 +120,17 @@ def remove_players(
 
 
 @router.put(
-    "/teams/{team_id}/seasons/{season_id}/coaches",
+    "/teams/{team_id}/seasons/{season_id}/captains",
     dependencies=[Depends(require_admin)],
 )
-def set_coaches(
+def set_captains(
     team_id: int,
     season_id: int,
     data: Annotated[dict, Body()],
     service: TeamServiceDep,
 ) -> TeamPublic:
-    """Replace the coaches a team has in a season, however many that is."""
-    return service.set_coaches(team_id, season_id, data.get("coach_ids", []))
+    """Replace the captains a team has in a season, however many that is."""
+    return service.set_captains(team_id, season_id, data.get("captain_ids", []))
 
 
 @router.get("/teams")

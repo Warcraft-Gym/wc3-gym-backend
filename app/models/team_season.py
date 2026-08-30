@@ -1,7 +1,7 @@
 """One team's run through one season: the team_season table.
 
-The row links a team and a season. The coaches of that season are the
-team_season_coach rows. season_info.py holds the shape the API sends for it.
+The row links a team and a season. The captains of that season are the
+team_season_captain rows. season_info.py holds the shape the API sends for it.
 """
 
 from typing import TYPE_CHECKING

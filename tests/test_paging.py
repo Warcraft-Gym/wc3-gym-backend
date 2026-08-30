@@ -96,23 +96,31 @@ def league(seeded: dict[str, Any]) -> dict[str, Any]:
 
 @pytest.mark.parametrize(("method", "path"), PAGED_ROUTES)
 def test_a_limit_outside_the_range_is_rejected(
-    client: Client, league: dict[str, Any], method: str, path: str
+    client: Client,
+    auth_headers: dict[str, str],
+    league: dict[str, Any],
+    method: str,
+    path: str,
 ) -> None:
     """limit 0 and limit 501 answer 422; the cap is 500."""
     for params in ({"limit": 0}, {"limit": 501}, {"offset": -1}):
         url = build(path, league, **params)
-        resp = client.request(method, url)
+        resp = client.request(method, url, headers=auth_headers)
         assert resp.status_code == 422, f"{method} {url}"
 
 
 @pytest.mark.parametrize(("method", "path"), PAGED_ROUTES)
 def test_the_cap_itself_is_accepted(
-    client: Client, league: dict[str, Any], method: str, path: str
+    client: Client,
+    auth_headers: dict[str, str],
+    league: dict[str, Any],
+    method: str,
+    path: str,
 ) -> None:
     """limit 1 and limit 500 pass validation on every paged route."""
     for params in ({"limit": 1}, {"limit": 500, "offset": 0}):
         url = build(path, league, **params)
-        resp = client.request(method, url)
+        resp = client.request(method, url, headers=auth_headers)
         assert resp.status_code != 422, f"{method} {url}"
 
 
@@ -205,7 +213,7 @@ DEFAULT_ORDER = {
     # The last fragment orders the matchup history of the season record
     "GET /teams/season/{season_id}": [
         "teams.id",
-        "anon_1.id, team_season_coach_1.user_id",
+        "anon_1.id, team_season_captain_1.user_id",
         "anon_1.playday, anon_1.series_id",
     ],
     "GET /teams/season/{season_id}/basic": ["teams.id", "anon_1.id"],
@@ -267,6 +275,7 @@ def order_fragments(statements: list[str]) -> list[str]:
 @pytest.mark.parametrize(("method", "path"), PAGED_ROUTES)
 def test_the_default_order_holds_without_a_sort(
     client: Client,
+    auth_headers: dict[str, str],
     league: dict[str, Any],
     dashboard_token: Callable[..., str],
     method: str,
@@ -276,7 +285,9 @@ def test_the_default_order_holds_without_a_sort(
     url = build(path, league).rstrip("?&")
     url = url.replace("token=none", f"token={dashboard_token()}")
     with capture_sql() as statements:
-        resp = client.request(method, url)
+        resp = client.request(
+            method, url, headers=auth_headers if "/draft-series" in path else {}
+        )
     assert resp.status_code == 200, url
     assert order_fragments(statements) == DEFAULT_ORDER[f"{method} {path}"]
 

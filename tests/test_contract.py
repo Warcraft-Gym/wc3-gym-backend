@@ -305,4 +305,4 @@ def test_teams_list_keeps_scalars_and_standings(
     assert isinstance(team["seasons_info"], list) and team["seasons_info"]
     assert "final_score" in team["seasons_info"][0]
     assert team["player_by_season"] == {}
-    assert team["coaches_by_season"] == {}
+    assert team["captains_by_season"] == {}

@@ -10,7 +10,7 @@ A rule reads the same rows the ladder totals read: the player's matches on
 his league race, longer than core.ladder.MIN_DURATION_S, inside the window,
 oldest first. Four rules read more than that and take it as arguments: the
 player's ladder points, the tags of the players on the other teams, the tags
-of the season's coaches, and whether the player coaches himself.
+of the season's captains, and whether the player captains himself.
 
 Three rules pay a variable amount, exactly as the bundle does: duck_hunting
 adds 5 per kill and the race rule adds 1 per win, both on top of the base,
@@ -345,13 +345,13 @@ def earned(
     points: int,
     paid: PaidSet,
     opponents: frozenset[str] = frozenset(),
-    coaches: frozenset[str] = frozenset(),
-    is_coach: bool = False,
+    captains: frozenset[str] = frozenset(),
+    is_captain: bool = False,
 ) -> list[Achievement]:
     """Every achievement one player earned, oldest first.
 
     `rows` are his scoped matches oldest first, `points` his ladder points,
-    `paid` what this scope pays for each rule, and `opponents` and `coaches`
+    `paid` what this scope pays for each rule, and `opponents` and `captains`
     are battle tags in lower case. A rule the scope does not pay is not
     evaluated into the answer, so a season keeps only the rules it defines.
     Each badge names the match that turned its rule on.
@@ -397,8 +397,8 @@ def earned(
     if kills:
         kill = first(row for row in wins if _tag(row) in opponents)
         pay(DUCK_HUNTING, kill, 5 * kills, f" - {kills} kill(s)")
-    if not is_coach:
-        pay(I_AM_THE_CAPTAIN_NOW, first(row for row in wins if _tag(row) in coaches))
+    if not is_captain:
+        pay(I_AM_THE_CAPTAIN_NOW, first(row for row in wins if _tag(row) in captains))
     # Only the race beaten most pays, and only above 10 wins, not at 10
     if race is not None and race[1] > 10 and race[0] in RACE_ACHIEVEMENTS:
         eleventh = nth(

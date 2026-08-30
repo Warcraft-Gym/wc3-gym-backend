@@ -29,12 +29,12 @@ class DBUserSeasonSignup(DBModel, table=True):
     season: "Season" = Relationship(back_populates="signup_users")
 
 
-class DBTeamSeasonCoach(DBModel, table=True):
-    __tablename__ = "team_season_coach"
+class DBTeamSeasonCaptain(DBModel, table=True):
+    __tablename__ = "team_season_captain"
     team_id: int = Field(foreign_key="teams.id", primary_key=True)
     season_id: int = Field(index=True, foreign_key="seasons.id", primary_key=True)
     user_id: int = Field(index=True, foreign_key="users.id", primary_key=True)
-    team: "Team" = Relationship(back_populates="coach_seasons")
+    team: "Team" = Relationship(back_populates="captain_seasons")
     user: "User" = Relationship()
 
 

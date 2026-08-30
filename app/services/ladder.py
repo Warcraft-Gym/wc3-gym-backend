@@ -40,7 +40,7 @@ from app.models.base import ident
 from app.models.enums import Race
 from app.models.ladder_achievement import LadderAchievement
 from app.models.ladder_sync import LadderSync
-from app.models.relationships import DBTeamSeasonCoach, DBUserSeasonSignup
+from app.models.relationships import DBTeamSeasonCaptain, DBUserSeasonSignup
 from app.models.season import Season
 from app.models.team import Team
 from app.models.types import utcnow
@@ -100,7 +100,7 @@ class LadderService:
         w3champions seasons the window sits in, the sync stamps of the roster,
         one group each for the totals, the MMR spans, the player days, the
         races, the hours and the season days, then the matches the
-        achievements read and the season's coaches.
+        achievements read and the season's captains.
         """
         with Session.begin() as session:
             season = session.get(Season, season_id)
@@ -148,7 +148,7 @@ class LadderService:
         A season names the window; without one the answer is his whole
         history. Nine statements, thirteen with a season, which adds the
         season, the w3champions seasons its window sits in, its roster and its
-        coaches for the achievements that read a team.
+        captains for the achievements that read a team.
         """
         with Session.begin() as session:
             user = session.execute(
@@ -905,12 +905,12 @@ def _match_rows(
     return rows
 
 
-def _coach_tags(session: OrmSession, season_id: int) -> frozenset[str]:
-    """The battle tags of every coach of the season, in lower case."""
+def _captain_tags(session: OrmSession, season_id: int) -> frozenset[str]:
+    """The battle tags of every captain of the season, in lower case."""
     tags = session.scalars(
         select(col(User.battleTag))
-        .join(DBTeamSeasonCoach, col(DBTeamSeasonCoach.user_id) == col(User.id))
-        .where(col(DBTeamSeasonCoach.season_id) == season_id)
+        .join(DBTeamSeasonCaptain, col(DBTeamSeasonCaptain.user_id) == col(User.id))
+        .where(col(DBTeamSeasonCaptain.season_id) == season_id)
     )
     return frozenset(tag.lower() for tag in tags if tag)
 
@@ -965,13 +965,15 @@ def _earned(
     """Every player's achievements, over the rows the totals already read.
 
     Two statements whatever the number of players: the matches and the
-    coaches. A player with no match earns nothing.
+    captains. A player with no match earns nothing.
     """
     rows = _match_rows(session, scope)
     if not rows:
         return {}
     opponents = _opponents(roster)
-    coaches = _coach_tags(session, season_id) if season_id is not None else frozenset()
+    captains = (
+        _captain_tags(session, season_id) if season_id is not None else frozenset()
+    )
     tags = {row.user_id: (row.battleTag or "").lower() for row in roster}
     return {
         user_id: achievements.earned(
@@ -979,8 +981,8 @@ def _earned(
             int(totals[user_id].points or 0) if user_id in totals else 0,
             paid,
             opponents.get(user_id, frozenset()),
-            coaches,
-            tags.get(user_id, "") in coaches,
+            captains,
+            tags.get(user_id, "") in captains,
         )
         for user_id, matches in rows.items()
     }

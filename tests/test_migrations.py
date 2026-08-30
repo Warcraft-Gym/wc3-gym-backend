@@ -19,8 +19,8 @@ from tests.test_models import import_all_models
 BEFORE_SCORE_SYSTEM = "658616cf0c2b"
 # The revision before the w3c stats are unique per user, race and season
 BEFORE_W3C_STATS_UNIQUE = "9f4b7c1d2ae5"
-# The revision before the coaches of a team season are their own rows
-BEFORE_COACH_TABLE = "5f4a1a4d88d3"
+# The revision before the captains of a team season are their own rows
+BEFORE_CAPTAIN_TABLE = "5f4a1a4d88d3"
 # The revision before every app-owned Discord role is a binding row
 BEFORE_ROLE_BINDINGS = "b3f9d7c21a48"
 # The revision before the season setting is spelled w3c
@@ -154,10 +154,10 @@ def test_the_migrations_have_one_head() -> None:
     assert len(ScriptDirectory.from_config(Config("alembic.ini")).get_heads()) == 1
 
 
-def test_the_coach_slots_move_into_the_table_and_back(tmp_path: Path) -> None:
+def test_the_captain_slots_move_into_the_table_and_back(tmp_path: Path) -> None:
     """Three filled slots become three rows; a downgrade keeps the first three."""
-    url = fresh_database(tmp_path, "coaches")
-    upgrade_to(url, BEFORE_COACH_TABLE)
+    url = fresh_database(tmp_path, "captains")
+    upgrade_to(url, BEFORE_CAPTAIN_TABLE)
 
     engine = create_engine(url)
     users = table(
@@ -195,25 +195,25 @@ def test_the_coach_slots_move_into_the_table_and_back(tmp_path: Path) -> None:
 
     upgrade_to(url, "head")
     with engine.begin() as connection:
-        # A user in two slots is one coach
+        # A user in two slots is one captain
         assert connection.execute(
-            text("SELECT user_id FROM team_season_coach ORDER BY user_id")
+            text("SELECT user_id FROM team_season_captain ORDER BY user_id")
         ).all() == [(1,), (3,)]
         connection.execute(
             text(
-                "INSERT INTO team_season_coach (team_id, season_id, user_id) "
+                "INSERT INTO team_season_captain (team_id, season_id, user_id) "
                 "VALUES (1, 1, 2), (1, 1, 4)"
             )
         )
 
-    downgrade_to(url, BEFORE_COACH_TABLE)
+    downgrade_to(url, BEFORE_CAPTAIN_TABLE)
     with engine.connect() as connection:
         assert connection.execute(
             text("SELECT coach_1_id, coach_2_id, coach_3_id FROM team_season")
         ).all() == [(1, 2, 3)]
 
 
-def test_the_team_roles_and_the_coach_role_become_bindings(tmp_path: Path) -> None:
+def test_the_team_roles_and_the_captain_role_become_bindings(tmp_path: Path) -> None:
     """The column and the settings row seed the table; the downgrade puts the
     team roles back in the column."""
     url = fresh_database(tmp_path, "bindings")
@@ -240,7 +240,7 @@ def test_the_team_roles_and_the_coach_role_become_bindings(tmp_path: Path) -> No
             text(
                 "SELECT kind, team_id, discord_role FROM discord_role_binding ORDER BY id"
             )
-        ).all() == [("coach", None, "coach-role"), ("team", 1, "7788")]
+        ).all() == [("captain", None, "coach-role"), ("team", 1, "7788")]
 
     downgrade_to(url, BEFORE_ROLE_BINDINGS)
     with engine.connect() as connection:

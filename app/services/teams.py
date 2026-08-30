@@ -10,7 +10,7 @@ from sqlmodel import col
 from app.core.db import Session, rel
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.core.query import QueryElement, QueryUtil
-from app.models.relationships import DBTeamSeasonCoach
+from app.models.relationships import DBTeamSeasonCaptain
 from app.models.season import Season
 from app.models.team import Team, TeamCreate, TeamPublic, TeamUpdate
 from app.models.team_season import DBTeamSeason
@@ -44,11 +44,13 @@ def _public(session: OrmSession, team: Team) -> TeamPublic:
 
 
 def _season_loads(season_id: int) -> list[Any]:
-    """Loader options for one season of a team: roster, coaches and stats."""
+    """Loader options for one season of a team: roster, captains and stats."""
     roster = rel(Team.user_seasons).and_(col(DBUserTeamSeason.season_id) == season_id)
     info = rel(Team.season_info).and_(col(DBTeamSeason.season_id) == season_id)
     stats = rel(User.team_seasons).and_(col(DBUserTeamSeason.season_id) == season_id)
-    seats = rel(Team.coach_seasons).and_(col(DBTeamSeasonCoach.season_id) == season_id)
+    seats = rel(Team.captain_seasons).and_(
+        col(DBTeamSeasonCaptain.season_id) == season_id
+    )
     return [
         joinedload(roster)
         .joinedload(rel(DBUserTeamSeason.user))
@@ -60,7 +62,7 @@ def _season_loads(season_id: int) -> list[Any]:
         joinedload(roster).noload(rel(DBUserTeamSeason.team)),
         joinedload(info),
         joinedload(seats)
-        .joinedload(rel(DBTeamSeasonCoach.user))
+        .joinedload(rel(DBTeamSeasonCaptain.user))
         .options(
             selectinload(rel(User.w3c_stats)),
             noload(rel(User.team_seasons)),
@@ -149,10 +151,10 @@ class TeamService:
         discord_roles.sync(player_ids)
         return public
 
-    def set_coaches(
-        self, team_id: int, season_id: int, coach_ids: list[int]
+    def set_captains(
+        self, team_id: int, season_id: int, captain_ids: list[int]
     ) -> TeamPublic:
-        """Replace the coaches a team has in a season. Any number of them."""
+        """Replace the captains a team has in a season. Any number of them."""
         with Session.begin() as session:
             team = session.get(Team, team_id)
             if not team:
@@ -161,11 +163,11 @@ class TeamService:
             if not season:
                 raise NotFoundError(f"Season not found by id: {season_id}")
 
-            for user_id in coach_ids:
+            for user_id in captain_ids:
                 if not session.get(User, user_id):
                     raise NotFoundError(f"User not found by id: {user_id}")
 
-            # A team fields a season even before it has a coach in it
+            # A team fields a season even before it has a captain in it
             if not session.get(
                 DBTeamSeason, {"team_id": team_id, "season_id": season_id}
             ):
@@ -173,14 +175,14 @@ class TeamService:
 
             before = {
                 seat.user_id
-                for seat in team.coach_seasons
+                for seat in team.captain_seasons
                 if seat.season_id == season_id
             }
-            after = set(coach_ids)
+            after = set(captain_ids)
             for user_id in before - after:
                 session.delete(
                     session.get(
-                        DBTeamSeasonCoach,
+                        DBTeamSeasonCaptain,
                         {
                             "team_id": team_id,
                             "season_id": season_id,
@@ -190,14 +192,14 @@ class TeamService:
                 )
             for user_id in after - before:
                 session.add(
-                    DBTeamSeasonCoach(
+                    DBTeamSeasonCaptain(
                         team_id=team_id, season_id=season_id, user_id=user_id
                     )
                 )
 
             session.flush()
-            # The rows were written by id, so the team reads its coaches again
-            session.expire(team, ["coach_seasons"])
+            # The rows were written by id, so the team reads its captains again
+            session.expire(team, ["captain_seasons"])
             public = _public(session, team)
 
         # Discord mirrors the database, and the chip says what the guild lacks
@@ -209,8 +211,10 @@ class TeamService:
         ]
         return public
 
-    def coach_seat(self, discord_id: str, season: str | None) -> tuple[int, int] | None:
-        """The team and season this Discord account coaches now, or None.
+    def captain_seat(
+        self, discord_id: str, season: str | None
+    ) -> tuple[int, int] | None:
+        """The team and season this Discord account captains now, or None.
 
         The season is the `current_gnl_season` setting, or the newest season,
         as the admin pages resolve it.
@@ -224,11 +228,13 @@ class TeamService:
             if season_id is None:
                 return None
             seat = session.execute(
-                select(col(DBTeamSeasonCoach.team_id), col(DBTeamSeasonCoach.season_id))
-                .join(User, col(DBTeamSeasonCoach.user_id) == col(User.id))
+                select(
+                    col(DBTeamSeasonCaptain.team_id), col(DBTeamSeasonCaptain.season_id)
+                )
+                .join(User, col(DBTeamSeasonCaptain.user_id) == col(User.id))
                 .where(
                     col(User.discordId) == discord_id,
-                    col(DBTeamSeasonCoach.season_id) == season_id,
+                    col(DBTeamSeasonCaptain.season_id) == season_id,
                 )
             ).first()
             return (seat.team_id, seat.season_id) if seat else None
@@ -245,8 +251,8 @@ class TeamService:
                     select(Team)
                     .options(
                         joinedload(rel(Team.user_seasons)).noload("*"),
-                        joinedload(rel(Team.coach_seasons)).joinedload(
-                            rel(DBTeamSeasonCoach.user)
+                        joinedload(rel(Team.captain_seasons)).joinedload(
+                            rel(DBTeamSeasonCaptain.user)
                         ),
                     )
                     .where(col(Team.id) == team_id)
@@ -261,7 +267,7 @@ class TeamService:
     def get_with_nested_users_by_season(
         self, team_id: int, season_id: int
     ) -> TeamPublic:
-        """One team with the season's roster, coaches and stats."""
+        """One team with the season's roster, captains and stats."""
         with Session.begin() as session:
             team = (
                 session.scalars(
@@ -308,7 +314,7 @@ class TeamService:
                 .options(
                     # noload alone; a joined link table multiplies the rows
                     noload(rel(Team.user_seasons)),
-                    noload(rel(Team.coach_seasons)),
+                    noload(rel(Team.captain_seasons)),
                     selectinload(rel(Team.season_info)),
                 )
                 .where(filter)
@@ -336,7 +342,7 @@ class TeamService:
             statement = select(Team).options(
                 # noload alone; a joined link table multiplies the rows
                 noload(rel(Team.user_seasons)),
-                noload(rel(Team.coach_seasons)),
+                noload(rel(Team.captain_seasons)),
                 selectinload(rel(Team.season_info)),
             )
             if limit is not None or offset:
@@ -380,7 +386,7 @@ class TeamService:
                 select(Team)
                 .options(
                     noload(rel(Team.user_seasons)),
-                    noload(rel(Team.coach_seasons)),
+                    noload(rel(Team.captain_seasons)),
                     joinedload(rel(Team.season_info)).noload("*"),
                 )
                 .where(col(Team.season_info).any(season_id=season_id))
@@ -399,11 +405,11 @@ class TeamService:
     def get_teams_season(
         self, season_id: int, limit: int | None = None, offset: int = 0
     ) -> list[TeamPublic]:
-        """The season's teams with the season's rosters and coaches.
+        """The season's teams with the season's rosters and captains.
 
         The season sits in the query, so only that season's link rows
-        load. Roster and coach users answer empty signup_seasons, and
-        coaches empty gnl_stats; no consumer reads them on this route.
+        load. Roster and captain users answer empty signup_seasons, and
+        captains empty gnl_stats; no consumer reads them on this route.
         """
         with Session.begin() as session:
             result: list[TeamPublic] = []

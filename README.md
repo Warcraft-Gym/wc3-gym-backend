@@ -204,7 +204,7 @@ The backend reads its configuration from the environment. `just up` passes devel
 
 `.env` is gitignored; copy `.env.example` to `.env` and fill in what you use. `create_app` calls `load_dotenv`, so its values arrive on their own; each has a default in the code. The deployment secrets are passed in by the stack.
 
-More values live in the `settings` table, not the environment, and are edited on the admin Config page: `w3c_url` (wins over the `W3C_URL` variable when present), `current_w3c_season` (the w3champions season the MMR columns read; when the row is missing the backend takes the newest season from w3champions), `KOTH_NIGHTBOT_TOKEN`, and `current_gnl_season` (the season the coach check and the role sync read; when the row is missing they take the newest season). The Discord roles the app owns are rows of `discord_role_binding`, not settings; `admin_role` stays a setting because login reads it and no sync writes it. `GET /config/w3c` shows the URL and season the backend resolved.
+More values live in the `settings` table, not the environment, and are edited on the admin Config page: `w3c_url` (wins over the `W3C_URL` variable when present), `current_w3c_season` (the w3champions season the MMR columns read; when the row is missing the backend takes the newest season from w3champions), `KOTH_NIGHTBOT_TOKEN`, and `current_gnl_season` (the season the captain check and the role sync read; when the row is missing they take the newest season). The Discord roles the app owns are rows of `discord_role_binding`, not settings; `admin_role` stays a setting because login reads it and no sync writes it. `GET /config/w3c` shows the URL and season the backend resolved.
 
 **Key environment variables:**
 

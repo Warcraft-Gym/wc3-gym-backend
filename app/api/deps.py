@@ -83,11 +83,11 @@ def _clerk_claims(request: Request) -> dict[str, Any]:
         ),
         "token": tokens[0].token,
     }
-    # A coach is one the database names on a current-season team, never a Discord role.
+    # A captain is one the database names on a current-season team, never a Discord role.
     if claims["role"] == "member":
-        seat = team_service.coach_seat(discord_id, settings.get("current_gnl_season"))
+        seat = team_service.captain_seat(discord_id, settings.get("current_gnl_season"))
         if seat:
-            claims |= {"role": "coach", "team_id": seat[0], "season_id": seat[1]}
+            claims |= {"role": "captain", "team_id": seat[0], "season_id": seat[1]}
     return claims
 
 
@@ -125,17 +125,17 @@ def require_admin(request: Request, credentials: Credentials) -> str:
     return claims["sub"]
 
 
-def require_coach(request: Request, credentials: Credentials) -> dict[str, Any]:
-    """Admit a coach of the current season, or an admin."""
+def require_captain(request: Request, credentials: Credentials) -> dict[str, Any]:
+    """Admit a captain of the current season, or an admin."""
     claims = require_login(request, credentials)
-    if claims.get("role") not in ("coach", "admin") and claims["sub"] != "admin":
-        raise ApiError(403, {"error": "Coaches only"})
+    if claims.get("role") not in ("captain", "admin") and claims["sub"] != "admin":
+        raise ApiError(403, {"error": "Captains only"})
     return claims
 
 
 RequireLogin = Annotated[dict[str, Any], Depends(require_login)]
 RequireMember = Annotated[dict[str, Any], Depends(require_member)]
-RequireCoach = Annotated[dict[str, Any], Depends(require_coach)]
+RequireCaptain = Annotated[dict[str, Any], Depends(require_captain)]
 
 
 settings_service = SettingsService()

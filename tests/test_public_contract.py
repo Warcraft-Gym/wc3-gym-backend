@@ -47,7 +47,7 @@ def public_seed(app: FastAPI) -> dict[str, Any]:
     from app.core.db import Session
     from app.models.enums import Race
     from app.models.fantasy_team import FantasyTeam
-    from app.models.relationships import DBFantasyTeamPlayer, DBTeamSeasonCoach
+    from app.models.relationships import DBFantasyTeamPlayer, DBTeamSeasonCaptain
     from app.models.season import Season
     from app.models.settings import Settings
     from app.models.team import Team
@@ -68,7 +68,7 @@ def public_seed(app: FastAPI) -> dict[str, Any]:
             start_date=date(2026, 3, 2),
             end_date=date(2026, 4, 24),
         )
-        coach = User(
+        captain = User(
             name="C1",
             battleTag="C1#9999",
             discordTag="c1",
@@ -77,7 +77,7 @@ def public_seed(app: FastAPI) -> dict[str, Any]:
             mmr=1700,
             country="PL",
         )
-        session.add_all([season_2, coach])
+        session.add_all([season_2, captain])
         session.flush()
 
         # Alpha plays two seasons; Beta plays one. The score columns stay
@@ -93,8 +93,8 @@ def public_seed(app: FastAPI) -> dict[str, Any]:
 
         for team_id in (ids["team_a_id"], ids["team_b_id"]):
             session.add(
-                DBTeamSeasonCoach(
-                    team_id=team_id, season_id=ids["season_id"], user_id=ident(coach)
+                DBTeamSeasonCaptain(
+                    team_id=team_id, season_id=ids["season_id"], user_id=ident(captain)
                 )
             )
 
@@ -152,7 +152,7 @@ def public_seed(app: FastAPI) -> dict[str, Any]:
         session.flush()
 
         ids["season_2_id"] = season_2.id
-        ids["coach_id"] = coach.id
+        ids["captain_id"] = captain.id
         ids["empty_fantasy_team_id"] = empty_team.id
         session.commit()
 
@@ -248,9 +248,9 @@ def test_teams_season_carries_the_standings_and_roster_fields(
         ) == expected[team["name"]]
         # Both maps are keyed by season id, not by position.
         assert isinstance(team["player_by_season"], dict)
-        assert isinstance(team["coaches_by_season"], dict)
+        assert isinstance(team["captains_by_season"], dict)
         assert team["player_by_season"][str(season_id)]
-        assert team["coaches_by_season"][str(season_id)]
+        assert team["captains_by_season"][str(season_id)]
 
 
 def test_teams_season_carries_the_person_row_fields(
@@ -261,7 +261,7 @@ def test_teams_season_carries_the_person_row_fields(
     people = [
         person
         for team in teams
-        for group in ("player_by_season", "coaches_by_season")
+        for group in ("player_by_season", "captains_by_season")
         for person in team[group][str(season_id)]
     ]
     assert people
@@ -468,7 +468,7 @@ def test_teams_season_roster_users_carry_no_signup_seasons(
         # No consumer reads these on this route
         assert player["signup_seasons"] == []
     for team in teams:
-        for coaches in team["coaches_by_season"].values():
-            for coach in coaches:
-                assert coach["gnl_stats"] == []
-                assert coach["signup_seasons"] == []
+        for captains in team["captains_by_season"].values():
+            for captain in captains:
+                assert captain["gnl_stats"] == []
+                assert captain["signup_seasons"] == []

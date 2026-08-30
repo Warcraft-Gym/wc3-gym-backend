@@ -1,6 +1,6 @@
 """The Discord roles the database says an account earns, and the sync to the guild.
 
-The database is the source: a coach seat, a roster row, a fantasy team or a
+The database is the source: a captain seat, a roster row, a fantasy team or a
 champion binding earns the role a discord_role_binding names. Sync grants what
 is missing and takes back only bound roles the account no longer earns; a role
 no binding names is left alone. Every write that changes an expectation calls
@@ -29,7 +29,7 @@ from app.models.discord_role_binding import (
 )
 from app.models.enums import RoleKind
 from app.models.fantasy_team import FantasyTeam
-from app.models.relationships import DBTeamSeasonCoach
+from app.models.relationships import DBTeamSeasonCaptain
 from app.models.season import Season
 from app.models.settings import Settings
 from app.models.user import User
@@ -58,12 +58,12 @@ def expected_roles(user: User, session: OrmSession) -> set[str]:
         )
     }
     played = {team_id for team_id, season in rosters if season == season_id}
-    coached = {
+    captained = {
         row.team_id
         for row in session.scalars(
-            select(DBTeamSeasonCoach).where(
-                col(DBTeamSeasonCoach.user_id) == user.id,
-                col(DBTeamSeasonCoach.season_id) == season_id,
+            select(DBTeamSeasonCaptain).where(
+                col(DBTeamSeasonCaptain.user_id) == user.id,
+                col(DBTeamSeasonCaptain.season_id) == season_id,
             )
         )
     }
@@ -83,10 +83,10 @@ def expected_roles(user: User, session: OrmSession) -> set[str]:
             earned = (binding.team_id, binding.season_id) in rosters
         elif binding.season_id is not None and binding.season_id != season_id:
             earned = False
-        elif binding.kind is RoleKind.coach:
-            earned = bool(coached)
+        elif binding.kind is RoleKind.captain:
+            earned = bool(captained)
         elif binding.kind is RoleKind.team:
-            earned = binding.team_id in played | coached
+            earned = binding.team_id in played | captained
         elif binding.kind is RoleKind.gnl_participant:
             earned = bool(played)
         else:
