@@ -4,8 +4,9 @@ from typing import Annotated
 
 from fastapi import APIRouter, Body, Depends
 
-from app.api.deps import SettingsServiceDep, require_admin
+from app.api.deps import RequireAdmin, SettingsServiceDep, require_admin
 from app.core.exceptions import BadRequestError
+from app.models.admin_grant import AdminGrantCreate, AdminPublic
 from app.models.discord_role_binding import (
     DiscordRoleBindingCreate,
     DiscordRoleBindingPublic,
@@ -22,7 +23,7 @@ from app.models.settings import (
     SettingUpdated,
     W3CConfig,
 )
-from app.services import discord_roles
+from app.services import admins, discord_roles
 from app.services.w3c import W3CService
 
 logger = logging.getLogger(__name__)
@@ -117,6 +118,24 @@ def get_nightbot_token(service: SettingsServiceDep) -> NightbotToken:
     # get_setting raises NotFoundError, which answers 404
     setting = service.get_setting("KOTH_NIGHTBOT_TOKEN")
     return NightbotToken(token=setting.get("value"), exists=True)
+
+
+@router.get("/config/admins", dependencies=[Depends(require_admin)])
+def get_admins() -> list[AdminPublic]:
+    """Every account that administers the site, from the environment and the table."""
+    return admins.admins()
+
+
+@router.post("/config/admins", status_code=201)
+def add_admin(data: AdminGrantCreate, granted_by: RequireAdmin) -> AdminPublic:
+    """Make that Discord account an admin, and mirror the grant to the guild."""
+    return admins.grant(data.discord_id, granted_by, data.name)
+
+
+@router.delete("/config/admins/{discord_id}", status_code=204)
+def delete_admin(discord_id: str, by: RequireAdmin) -> None:
+    """Take a grant back. The environment ids and the caller's own grant stay."""
+    admins.revoke(discord_id, by)
 
 
 @router.get("/config/discord-role-bindings", dependencies=[Depends(require_admin)])

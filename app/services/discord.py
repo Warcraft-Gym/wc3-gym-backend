@@ -1,7 +1,8 @@
-"""The Discord calls and the role a logged-in account gets.
+"""The Discord calls and the guild membership behind a login.
 
 The account's Discord token comes from Clerk and only identifies the
-account (`identify` scope); the bot reads the guild.
+account (`identify` scope); the bot reads the guild. Membership is all the
+guild decides: app.services.admins says who administers the site.
 """
 
 import logging
@@ -19,9 +20,6 @@ API_URL = "https://discord.com/api/v10"
 
 # Seconds a Discord call can hold the thread before it fails.
 REQUEST_TIMEOUT = 10
-
-# The Discord permission bit that makes a role a guild administrator.
-ADMINISTRATOR = 0x8
 
 
 def _user_get(access_token: str, path: str) -> requests.Response:
@@ -62,8 +60,8 @@ def _bot_get(path: str) -> requests.Response | None:
         return None
 
 
-def role_for(discord_id: str, admin_role: str | None = None) -> str:
-    """The account's role as the bot sees it: "admin", "member", or "guest" outside the guild."""
+def role_for(discord_id: str) -> str:
+    """The account's role as the bot sees it: "member", or "guest" outside the guild."""
     guild_id = os.getenv("DISCORD_GUILD_ID", "")
     member = _bot_get(f"/guilds/{guild_id}/members/{discord_id}")
     if member is not None and member.status_code == 404:
@@ -71,23 +69,7 @@ def role_for(discord_id: str, admin_role: str | None = None) -> str:
         return "guest"
     if member is None or not member.ok:
         raise ApiError(502, {"error": "Discord refused the membership check"})
-    roles = set(member.json().get("roles", []))
-
-    allowlist = os.getenv("ADMIN_DISCORD_IDS", "").replace(" ", "").split(",")
-    if discord_id in allowlist or (admin_role and admin_role in roles):
-        return "admin"
-    guild = _bot_get(f"/guilds/{guild_id}")
-    if guild is None or not guild.ok:
-        return "member"
-    data = guild.json()
-    if str(data.get("owner_id")) == discord_id:
-        return "admin"
-    admin_roles = {
-        row["id"]
-        for row in data.get("roles", [])
-        if int(row.get("permissions", 0)) & ADMINISTRATOR
-    }
-    return "admin" if roles & admin_roles else "member"
+    return "member"
 
 
 def _bot_headers() -> dict[str, str] | None:

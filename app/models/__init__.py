@@ -20,6 +20,7 @@ SQLModel.metadata.naming_convention = {
 }
 
 from app.models import (
+    admin_grant,
     base,
     discord_role_binding,
     draft_series,

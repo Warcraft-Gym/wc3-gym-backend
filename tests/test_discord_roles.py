@@ -11,9 +11,11 @@ import pytest
 from httpx2 import Client
 
 from app.core.db import Session
+from app.models.admin_grant import AdminGrant
+from app.models.base import ident
 from app.models.discord_role_binding import DiscordRoleBinding
 from app.models.enums import RoleKind
-from app.models.relationships import DBTeamSeasonCaptain
+from app.models.relationships import DBTeamSeasonCaptain, DBUserSeasonSignup
 from app.models.season import Season
 from app.models.settings import Settings
 from app.models.user import User
@@ -58,6 +60,52 @@ def _guild(
     monkeypatch.setenv("DISCORD_GUILD_ID", GUILD_ID)
     monkeypatch.setattr(discord.requests, "request", request)
     return calls
+
+
+def test_a_grant_earns_the_admin_role(seeded: dict[str, Any]) -> None:
+    """The app names the admins, and the guild role only mirrors them."""
+    _bind(RoleKind.admin, "admin-role")
+    with Session() as session:
+        session.add(AdminGrant(discord_id="1", granted_by="admin"))
+        session.commit()
+
+    assert _expected(seeded["player_ids"][0]) == {"admin-role"}
+    assert _expected(seeded["player_ids"][1]) == set()
+
+
+def test_granting_an_admin_writes_the_guild_role(
+    client: Client,
+    monkeypatch: pytest.MonkeyPatch,
+    auth_headers: dict[str, str],
+    seeded: dict[str, Any],
+) -> None:
+    """The grant takes its name from the users row and mirrors the bound role."""
+    _bind(RoleKind.admin, "admin-role")
+    calls = _guild(monkeypatch, {})
+
+    resp = client.post("/config/admins", json={"discord_id": "1"}, headers=auth_headers)
+
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["name"] == "P1"
+    assert calls == [("GET", f"{MEMBERS}/1"), ("PUT", f"{MEMBERS}/1/roles/admin-role")]
+
+
+def test_a_signup_earns_the_participant_role(seeded: dict[str, Any]) -> None:
+    """A player signed up for the season earns it with no roster row."""
+    _bind(RoleKind.gnl_participant, "gnl")
+    with Session() as session:
+        waiting = User(
+            name="Sub", battleTag="Sub#8", discordTag="sub", discordId="8", race="HU"
+        )
+        session.add(waiting)
+        session.commit()
+        waiting_id = ident(waiting)
+        session.add(
+            DBUserSeasonSignup(user_id=waiting_id, season_id=seeded["season_id"])
+        )
+        session.commit()
+
+    assert _expected(waiting_id) == {"gnl"}
 
 
 def test_a_captain_seat_earns_the_captain_role_and_the_team_role(
