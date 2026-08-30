@@ -1,7 +1,7 @@
 """The Discord calls and the role a logged-in account gets.
 
-The account's Discord token comes from Clerk, so the Clerk Discord
-connection must request the `identify guilds guilds.members.read` scopes.
+The account's Discord token comes from Clerk and only identifies the
+account (`identify` scope); the bot reads the guild.
 """
 
 import logging
@@ -48,32 +48,46 @@ def avatar_url(account: dict[str, Any]) -> str | None:
     return f"https://cdn.discordapp.com/avatars/{account['id']}/{avatar}.png"
 
 
-def role_for(access_token: str, discord_id: str, admin_role: str | None = None) -> str:
-    """The account's role: "admin", "member", or "guest" outside the guild.
+def _bot_get(path: str) -> requests.Response | None:
+    """A guild read as the bot; None with no bot token or when Discord is unreachable."""
+    headers = _bot_headers()
+    if not headers:
+        return None
+    try:
+        return requests.request(
+            "GET", f"{API_URL}{path}", headers=headers, timeout=REQUEST_TIMEOUT
+        )
+    except requests.RequestException as error:
+        logger.warning("Discord read failed for %s: %s", path, error)
+        return None
 
-    Everything is read with the account's own token, so the app needs no bot
-    in the guild.
-    """
+
+def role_for(discord_id: str, admin_role: str | None = None) -> str:
+    """The account's role as the bot sees it: "admin", "member", or "guest" outside the guild."""
     guild_id = os.getenv("DISCORD_GUILD_ID", "")
-    guilds = _user_get(access_token, "/users/@me/guilds")
-    if not guilds.ok:
-        raise ApiError(502, {"error": "Discord refused the membership check"})
-    guild = next((row for row in guilds.json() if str(row.get("id")) == guild_id), None)
-    if guild is None:
+    member = _bot_get(f"/guilds/{guild_id}/members/{discord_id}")
+    if member is not None and member.status_code == 404:
         # A guest logs in and sees the public pages; the routes of a player refuse it.
         return "guest"
+    if member is None or not member.ok:
+        raise ApiError(502, {"error": "Discord refused the membership check"})
+    roles = set(member.json().get("roles", []))
 
     allowlist = os.getenv("ADMIN_DISCORD_IDS", "").replace(" ", "").split(",")
-    if discord_id in allowlist:
+    if discord_id in allowlist or (admin_role and admin_role in roles):
         return "admin"
-    if guild.get("owner") or int(guild.get("permissions", 0)) & ADMINISTRATOR:
-        return "admin"
-    if not admin_role:
+    guild = _bot_get(f"/guilds/{guild_id}")
+    if guild is None or not guild.ok:
         return "member"
-
-    member = _user_get(access_token, f"/users/@me/guilds/{guild_id}/member")
-    roles = set(member.json().get("roles", [])) if member.ok else set()
-    return "admin" if admin_role in roles else "member"
+    data = guild.json()
+    if str(data.get("owner_id")) == discord_id:
+        return "admin"
+    admin_roles = {
+        row["id"]
+        for row in data.get("roles", [])
+        if int(row.get("permissions", 0)) & ADMINISTRATOR
+    }
+    return "admin" if roles & admin_roles else "member"
 
 
 def _bot_headers() -> dict[str, str] | None:
@@ -112,19 +126,9 @@ def member_roles(discord_id: str) -> set[str] | None:
     None is the answer with no bot token, for an account outside the guild,
     and for a refused read: the caller leaves that account alone.
     """
-    headers = _bot_headers()
-    if not headers:
-        return None
     guild_id = os.getenv("DISCORD_GUILD_ID", "")
-    url = f"{API_URL}/guilds/{guild_id}/members/{discord_id}"
-    try:
-        response = requests.request(
-            "GET", url, headers=headers, timeout=REQUEST_TIMEOUT
-        )
-    except requests.RequestException as error:
-        logger.warning("Discord member read failed for %s: %s", discord_id, error)
-        return None
-    if response.status_code == 404:
+    response = _bot_get(f"/guilds/{guild_id}/members/{discord_id}")
+    if response is None or response.status_code == 404:
         return None
     if not response.ok:
         logger.warning(

@@ -78,9 +78,7 @@ def _clerk_claims(request: Request) -> dict[str, Any]:
     settings = settings_service.get_settings_dict()
     claims: dict[str, Any] = {
         "sub": discord_id,
-        "role": discord.role_for(
-            tokens[0].token, discord_id, settings.get("admin_role")
-        ),
+        "role": discord.role_for(discord_id, settings.get("admin_role")),
         "token": tokens[0].token,
     }
     # A captain is one the database names on a current-season team, never a Discord role.
