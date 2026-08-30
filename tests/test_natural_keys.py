@@ -16,7 +16,8 @@ from sqlmodel import SQLModel
 from starlette.testclient import TestClient as Client
 
 from app.core.db import Session
-from app.models.enums import Race
+from app.models.discord_role_binding import DiscordRoleBinding
+from app.models.enums import Race, RoleKind
 from app.models.fantasy_team import FantasyTeam
 from app.models.map import Map
 from app.models.match import Match
@@ -52,9 +53,9 @@ REPEATS: dict[str, Rows] = {
         Season(name="Season 9", number_weeks=4, series_per_week=2),
         Season(name="season 9", number_weeks=4, series_per_week=2),
     ],
-    "teams.discord_role": lambda _: [
-        Team(name="One", discord_role="7788"),
-        Team(name="Two", discord_role="7788"),
+    "discord_role_binding.discord_role": lambda _: [
+        DiscordRoleBinding(kind=RoleKind.coach, discord_role="7788"),
+        DiscordRoleBinding(kind=RoleKind.fantasy, discord_role="7788"),
     ],
     "maps.shortname": lambda _: [
         Map(name="Echo Isles", shortname="EI"),
@@ -132,12 +133,10 @@ def test_a_blank_discord_tag_may_repeat(seeded: dict[str, Any]) -> None:
 
 
 def test_two_clubs_may_share_a_short_name(seeded: dict[str, Any]) -> None:
-    """A club is its Discord role, not its short name, so a short name a
-    folded club used is free for the next one."""
+    """A club is its Discord role binding, not its short name, so a short name
+    a folded club used is free for the next one."""
     with Session() as session:
-        session.add_all(
-            [Team(name="PP", discord_role="1"), Team(name="PP", discord_role="2")]
-        )
+        session.add_all([Team(name="PP"), Team(name="PP")])
         session.commit()
 
 

@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from app.models.fantasy_team import FantasyTeam
     from app.models.map import Map
     from app.models.season import Season
+    from app.models.team import Team
     from app.models.user import User
 
 
@@ -26,6 +27,15 @@ class DBUserSeasonSignup(DBModel, table=True):
     race: Race | None = None
     user: "User" = Relationship(back_populates="signup_seasons")
     season: "Season" = Relationship(back_populates="signup_users")
+
+
+class DBTeamSeasonCoach(DBModel, table=True):
+    __tablename__ = "team_season_coach"
+    team_id: int = Field(foreign_key="teams.id", primary_key=True)
+    season_id: int = Field(index=True, foreign_key="seasons.id", primary_key=True)
+    user_id: int = Field(index=True, foreign_key="users.id", primary_key=True)
+    team: "Team" = Relationship(back_populates="coach_seasons")
+    user: "User" = Relationship()
 
 
 class DBMapSeason(DBModel, table=True):

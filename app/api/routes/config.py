@@ -6,6 +6,12 @@ from fastapi import APIRouter, Body, Depends
 
 from app.api.deps import SettingsServiceDep, require_admin
 from app.core.exceptions import BadRequestError
+from app.models.discord_role_binding import (
+    DiscordRoleBindingCreate,
+    DiscordRoleBindingPublic,
+    DiscordRoleBindingUpdate,
+    DiscordRoleReport,
+)
 from app.models.responses import Message
 from app.models.settings import (
     GeneratedNightbotToken,
@@ -16,6 +22,7 @@ from app.models.settings import (
     SettingUpdated,
     W3CConfig,
 )
+from app.services import discord_roles
 from app.services.w3c import W3CService
 
 logger = logging.getLogger(__name__)
@@ -110,3 +117,56 @@ def get_nightbot_token(service: SettingsServiceDep) -> NightbotToken:
     # get_setting raises NotFoundError, which answers 404
     setting = service.get_setting("KOTH_NIGHTBOT_TOKEN")
     return NightbotToken(token=setting.get("value"), exists=True)
+
+
+@router.get("/config/discord-role-bindings", dependencies=[Depends(require_admin)])
+def get_discord_role_bindings() -> list[DiscordRoleBindingPublic]:
+    """Every Discord role the app owns, and what earns it."""
+    return discord_roles.bindings()
+
+
+@router.post(
+    "/config/discord-role-bindings",
+    status_code=201,
+    dependencies=[Depends(require_admin)],
+)
+def add_discord_role_binding(
+    data: DiscordRoleBindingCreate,
+) -> DiscordRoleBindingPublic:
+    """Bind a Discord role to a coach seat, a team, a fantasy team or a season."""
+    return discord_roles.add_binding(data)
+
+
+@router.put(
+    "/config/discord-role-bindings/{binding_id}",
+    dependencies=[Depends(require_admin)],
+)
+def update_discord_role_binding(
+    binding_id: int, data: DiscordRoleBindingUpdate
+) -> DiscordRoleBindingPublic:
+    """Update one binding."""
+    return discord_roles.update_binding(binding_id, data)
+
+
+@router.delete(
+    "/config/discord-role-bindings/{binding_id}",
+    status_code=204,
+    dependencies=[Depends(require_admin)],
+)
+def delete_discord_role_binding(binding_id: int) -> None:
+    """Unbind a role. The guild keeps it; sync stops touching it."""
+    discord_roles.delete_binding(binding_id)
+
+
+@router.get("/config/discord-roles", dependencies=[Depends(require_admin)])
+def get_discord_role_report() -> list[DiscordRoleReport]:
+    """Every account whose guild roles differ from what the database says."""
+    return discord_roles.report()
+
+
+@router.post("/config/discord-roles/sync", dependencies=[Depends(require_admin)])
+def sync_discord_roles(
+    data: Annotated[dict | None, Body()] = None,
+) -> list[DiscordRoleReport]:
+    """Apply the difference. Without user_ids, every account the report flags."""
+    return discord_roles.sync((data or {}).get("user_ids"))

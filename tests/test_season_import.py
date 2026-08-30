@@ -14,6 +14,8 @@ from sqlmodel import col
 
 from app.core.db import Session
 from app.models.base import ident
+from app.models.discord_role_binding import DiscordRoleBinding
+from app.models.enums import RoleKind
 from app.models.map import Map
 from app.models.season import Season
 from app.models.team import Team
@@ -282,9 +284,16 @@ def test_a_blank_cell_keeps_the_stored_value(
         stored_map = session.scalars(
             select(Map).where(col(Map.shortname) == "EI")
         ).one()
+        binding = session.scalars(select(DiscordRoleBinding)).one()
 
     assert (season.pick_ban, season.discordRole) == ("EI, LR", "9001")
-    assert (team.long_name, team.discord_role) == ("Team Alpha", "9001")
+    assert team.long_name == "Team Alpha"
+    # The Discord Role cell of a team binds the role, and a blank cell keeps it
+    assert (binding.kind, binding.team_id, binding.discord_role) == (
+        RoleKind.team,
+        team.id,
+        "9001",
+    )
     assert stored_map.image == "https://example.com/ei.png"
 
 

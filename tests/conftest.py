@@ -28,7 +28,6 @@ from httpx2 import Client
 os.environ["JWT_SECRET_KEY"] = "test-secret-key-of-at-least-32-bytes"
 os.environ["ADMIN_TOKEN"] = "test-admin-token"
 os.environ["TOKEN_TIME"] = "15"
-os.environ["REFRESH_TOKEN_TIME"] = "300"
 os.environ.pop("DB_URL", None)
 os.environ.pop("SCORE_SYSTEM", None)
 

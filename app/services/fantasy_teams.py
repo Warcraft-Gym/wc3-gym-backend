@@ -16,7 +16,7 @@ from app.models.fantasy_team import (
 )
 from app.models.relationships import DBFantasyTeamPlayer
 from app.models.user import User
-from app.services import derived
+from app.services import derived, discord_roles
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +27,10 @@ class FantasyTeamService:
             row = FantasyTeam.add(session, fantasy_team.model_dump())
             public = FantasyTeamPublic.from_fantasy_team(row)
             derived.fill_fantasy_teams(session, [public])
-            return public
+
+        # A captain earns the fantasy role, so the guild hears about the team
+        discord_roles.sync([fantasy_team.captain_id])
+        return public
 
     def update(
         self, fantasy_team_id: int, fantasy_team: FantasyTeamUpdate

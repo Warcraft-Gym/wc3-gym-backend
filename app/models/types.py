@@ -14,7 +14,9 @@ import difflib
 import enum
 import numbers
 from datetime import UTC, date, datetime
+from functools import cache
 from typing import Annotated
+from zoneinfo import available_timezones
 
 from pydantic import BeforeValidator, PlainSerializer
 from sqlalchemy import DateTime, Dialect
@@ -118,6 +120,20 @@ def _suggest_race[T](value: T) -> T:
     raise ValueError(f"'{value}' is not a race. Valid races are {known}.")
 
 
+@cache
+def _time_zones() -> frozenset[str]:
+    # available_timezones() walks the tzdata tree; the import validates hundreds of rows.
+    return frozenset(available_timezones())
+
+
+def _known_time_zone[T](value: T) -> T | None:
+    if value == "" or value is None:
+        return None
+    if value not in _time_zones():
+        raise ValueError(f"'{value}' is not an IANA time zone name")
+    return value
+
+
 def _round_to_int[T](value: T) -> int | T:
     # The w3champions API returns fractions for integer columns.
     if isinstance(value, float) and not value.is_integer():
@@ -148,5 +164,7 @@ AwareUTC = BeforeValidator(_aware_utc)
 EmptyStrToNone = BeforeValidator(_empty_str_to_none)
 # Input. Integer fields fed by the w3champions API, which sends fractions.
 RoundToInt = BeforeValidator(_round_to_int)
+# Input. Time zone fields, which take an IANA name and nothing else.
+KnownTimeZone = BeforeValidator(_known_time_zone)
 # Input. Race fields, where a rejected value names the member it resembles.
 SuggestRace = BeforeValidator(_suggest_race)

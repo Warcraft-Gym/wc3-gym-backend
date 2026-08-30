@@ -50,6 +50,7 @@ SEASON_TABLES = (
     "user_team_season",
     "user_season_signup",
     "team_season",
+    "team_season_coach",
     "map_season",
     "fantasy_bets",
     "fantasy_teams",
@@ -72,7 +73,9 @@ def main(src: str, dst: str, seasons: set[str]) -> None:
         return gone
 
     for t in SEASON_TABLES:
-        drop(t, "season_id", seasons)
+        # A dump taken before a table existed simply has no file for it
+        if t in tables:
+            drop(t, "season_id", seasons)
     matches = {r[0] for r in tables["matches"][1:]}
     tables["series"] = [tables["series"][0]] + [
         r for r in tables["series"][1:] if r[1] in matches

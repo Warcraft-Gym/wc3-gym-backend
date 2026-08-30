@@ -6,6 +6,7 @@ make the schema the code expects.
 """
 
 import os
+from collections.abc import Callable
 from pathlib import Path
 
 from alembic import command
@@ -20,18 +21,26 @@ def alembic_config() -> Config:
     return config
 
 
-def upgrade_to(db_url: str, revision: str) -> None:
+def _run(action: Callable[[Config, str], None], db_url: str, revision: str) -> None:
     # migrations/env.py reads DB_URL, the same variable the application
     # reads, so point it at the database under test.
     previous = os.environ.get("DB_URL")
     os.environ["DB_URL"] = db_url
     try:
-        command.upgrade(alembic_config(), revision)
+        action(alembic_config(), revision)
     finally:
         if previous is None:
             os.environ.pop("DB_URL", None)
         else:
             os.environ["DB_URL"] = previous
+
+
+def upgrade_to(db_url: str, revision: str) -> None:
+    _run(command.upgrade, db_url, revision)
+
+
+def downgrade_to(db_url: str, revision: str) -> None:
+    _run(command.downgrade, db_url, revision)
 
 
 def upgrade_to_head(db_url: str) -> None:

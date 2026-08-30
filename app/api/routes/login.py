@@ -4,10 +4,11 @@ from typing import Any
 from fastapi import APIRouter
 from fastapi.responses import RedirectResponse
 
-from app.api.deps import RequireRefresh
+from app.api.deps import RequireLogin, UserServiceDep
 from app.core.exceptions import ApiError
-from app.core.security import create_access_token, create_refresh_token
+from app.core.security import create_access_token
 from app.models.login import LoginRequest
+from app.services import discord
 
 router = APIRouter(tags=["Authentication"])
 
@@ -20,20 +21,24 @@ def index() -> RedirectResponse:
 
 @router.post("/login")
 def login(data: LoginRequest) -> dict[str, str]:
-    """Exchange the admin token for an access token and a refresh token."""
-    token_time = int(os.getenv("TOKEN_TIME", "60"))
-    refresh_token_time = int(os.getenv("REFRESH_TOKEN_TIME", "300"))
+    """Exchange the admin token for an access token."""
     if data.token != os.getenv("ADMIN_TOKEN"):
         raise ApiError(401, {"error": "Bad admin token"})
     return {
-        "access_token": create_access_token("admin", token_time),
-        "refresh_token": create_refresh_token("admin", refresh_token_time),
+        "access_token": create_access_token("admin", int(os.getenv("TOKEN_TIME", "60")))
     }
 
 
-@router.post("/refresh")
-def refresh(identity: RequireRefresh) -> dict[str, Any]:
-    """Exchange a refresh token for a new access token."""
-    token_time = int(os.getenv("TOKEN_TIME", "60"))
-    new_access_token = create_access_token(identity, token_time)
-    return {"access_token": new_access_token}
+@router.get("/me")
+def me(claims: RequireLogin, user_service: UserServiceDep) -> dict[str, Any]:
+    """The logged-in account and the users row linked to its Discord id."""
+    # The admin token carries no Discord account, so it reads no name.
+    account = discord.identify(claims["token"]) if "token" in claims else {}
+    users = user_service.find_by_discord_id(claims["sub"])
+    return {
+        "discord_id": claims["sub"],
+        "name": account.get("global_name") or account.get("username"),
+        "avatar": discord.avatar_url(account),
+        "role": claims.get("role", "admin"),
+        "user": users[0] if users else None,
+    }

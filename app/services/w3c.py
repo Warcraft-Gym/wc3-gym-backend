@@ -82,7 +82,7 @@ class W3CService:
 
     def current_season(self) -> int:
         """The configured season, or the newest one w3champions lists."""
-        season = self._setting("current_wc3_season")
+        season = self._setting("current_w3c_season")
         return int(season) if season else self.latest_season()
 
     def validate_player(self, bnet_name: str) -> bool:

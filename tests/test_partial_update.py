@@ -48,14 +48,14 @@ def test_a_team_update_keeps_the_fields_it_was_not_given(
     before = client.get(f"/teams/{team_id}").json()
 
     resp = client.put(
-        f"/teams/{team_id}", headers=auth_headers, json={"discord_role": "captains"}
+        f"/teams/{team_id}", headers=auth_headers, json={"long_name": "Alpha Club"}
     )
     assert resp.status_code == 200, resp.text
     after = resp.json()
 
-    assert after["discord_role"] == "captains"
+    assert after["long_name"] == "Alpha Club"
     assert after["name"] == before["name"]
-    assert after["long_name"] == before["long_name"]
+    assert after["seasons_info"] == before["seasons_info"]
 
 
 def test_a_map_update_keeps_the_fields_it_was_not_given(

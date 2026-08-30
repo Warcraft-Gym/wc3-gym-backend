@@ -31,7 +31,7 @@ up:
     docker run -d --name gnl-backend --network gnl-net -p 5002:5002 \
         -e DB_URL={{ container_db_url }} \
         -e ADMIN_TOKEN=devtoken -e JWT_SECRET_KEY=devsecret -e JWT_ALGORITHM=HS256 \
-        -e TOKEN_TIME=60 -e REFRESH_TOKEN_TIME=1440 \
+        -e TOKEN_TIME=60 \
         -e BOT_CLIENT_TOKEN=dummy -e BOT_WEBHOOK_URL=http://localhost:5002/nowhere \
         -e FRONTEND_URL=http://localhost:5003 \
         {{ image }}

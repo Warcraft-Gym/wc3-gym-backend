@@ -1,7 +1,7 @@
 import logging
 from typing import Any
 
-from sqlalchemy import ColumnElement, select
+from sqlalchemy import ColumnElement, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as OrmSession
 from sqlalchemy.orm import joinedload, noload, selectinload
@@ -10,12 +10,13 @@ from sqlmodel import col
 from app.core.db import Session, rel
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.core.query import QueryElement, QueryUtil
+from app.models.relationships import DBTeamSeasonCoach
 from app.models.season import Season
 from app.models.team import Team, TeamCreate, TeamPublic, TeamUpdate
 from app.models.team_season import DBTeamSeason
 from app.models.user import User, UserPublic
 from app.models.user_team_season import DBUserTeamSeason
-from app.services import derived
+from app.services import derived, discord_roles
 from app.services.users import UserService
 
 logger = logging.getLogger(__name__)
@@ -47,20 +48,7 @@ def _season_loads(season_id: int) -> list[Any]:
     roster = rel(Team.user_seasons).and_(col(DBUserTeamSeason.season_id) == season_id)
     info = rel(Team.season_info).and_(col(DBTeamSeason.season_id) == season_id)
     stats = rel(User.team_seasons).and_(col(DBUserTeamSeason.season_id) == season_id)
-    coach_loads = (
-        joinedload(info)
-        .joinedload(coach)
-        .options(
-            selectinload(rel(User.w3c_stats)),
-            noload(rel(User.team_seasons)),
-            noload(rel(User.signup_seasons)),
-        )
-        for coach in (
-            rel(DBTeamSeason.coach_1),
-            rel(DBTeamSeason.coach_2),
-            rel(DBTeamSeason.coach_3),
-        )
-    )
+    seats = rel(Team.coach_seasons).and_(col(DBTeamSeasonCoach.season_id) == season_id)
     return [
         joinedload(roster)
         .joinedload(rel(DBUserTeamSeason.user))
@@ -70,7 +58,14 @@ def _season_loads(season_id: int) -> list[Any]:
             noload(rel(User.signup_seasons)),
         ),
         joinedload(roster).noload(rel(DBUserTeamSeason.team)),
-        *coach_loads,
+        joinedload(info),
+        joinedload(seats)
+        .joinedload(rel(DBTeamSeasonCoach.user))
+        .options(
+            selectinload(rel(User.w3c_stats)),
+            noload(rel(User.team_seasons)),
+            noload(rel(User.signup_seasons)),
+        ),
     ]
 
 
@@ -120,7 +115,10 @@ class TeamService:
                 except IntegrityError:
                     logger.debug(f"User {user_id} is already in team {team_id}")
             session.flush()
-            return _public(session, team)
+            public = _public(session, team)
+
+        discord_roles.sync(player_ids)
+        return public
 
     def remove_players(
         self, team_id: int, season_id: int, player_ids: list[int]
@@ -146,12 +144,15 @@ class TeamService:
                     )
                 session.delete(user_team)
             session.flush()
-            return _public(session, team)
+            public = _public(session, team)
+
+        discord_roles.sync(player_ids)
+        return public
 
     def set_coaches(
         self, team_id: int, season_id: int, coach_ids: list[int]
     ) -> TeamPublic:
-        """Set coaches for a team in a season (up to 3)."""
+        """Replace the coaches a team has in a season. Any number of them."""
         with Session.begin() as session:
             team = session.get(Team, team_id)
             if not team:
@@ -160,34 +161,77 @@ class TeamService:
             if not season:
                 raise NotFoundError(f"Season not found by id: {season_id}")
 
-            # Validate coach limit
-            if len(coach_ids) > 3:
-                raise BadRequestError(
-                    "Cannot assign more than 3 coaches per team per season"
-                )
-
-            # Validate all users exist
             for user_id in coach_ids:
-                user = session.get(User, user_id)
-                if not user:
+                if not session.get(User, user_id):
                     raise NotFoundError(f"User not found by id: {user_id}")
 
-            # Get or create team_season entry
-            team_season = session.get(
+            # A team fields a season even before it has a coach in it
+            if not session.get(
                 DBTeamSeason, {"team_id": team_id, "season_id": season_id}
-            )
+            ):
+                session.add(DBTeamSeason(team_id=team_id, season_id=season_id))
 
-            if not team_season:
-                team_season = DBTeamSeason(team_id=team_id, season_id=season_id)
-                session.add(team_season)
-
-            # Set coaches (pad with None if less than 3)
-            team_season.coach_1_id = coach_ids[0] if len(coach_ids) > 0 else None
-            team_season.coach_2_id = coach_ids[1] if len(coach_ids) > 1 else None
-            team_season.coach_3_id = coach_ids[2] if len(coach_ids) > 2 else None
+            before = {
+                seat.user_id
+                for seat in team.coach_seasons
+                if seat.season_id == season_id
+            }
+            after = set(coach_ids)
+            for user_id in before - after:
+                session.delete(
+                    session.get(
+                        DBTeamSeasonCoach,
+                        {
+                            "team_id": team_id,
+                            "season_id": season_id,
+                            "user_id": user_id,
+                        },
+                    )
+                )
+            for user_id in after - before:
+                session.add(
+                    DBTeamSeasonCoach(
+                        team_id=team_id, season_id=season_id, user_id=user_id
+                    )
+                )
 
             session.flush()
-            return _public(session, team)
+            # The rows were written by id, so the team reads its coaches again
+            session.expire(team, ["coach_seasons"])
+            public = _public(session, team)
+
+        # Discord mirrors the database, and the chip says what the guild lacks
+        discord_roles.sync(before | after)
+        public.discord_role_missing = [
+            account.discord_id
+            for account in discord_roles.report(after)
+            if account.missing
+        ]
+        return public
+
+    def coach_seat(self, discord_id: str, season: str | None) -> tuple[int, int] | None:
+        """The team and season this Discord account coaches now, or None.
+
+        The season is the `current_gnl_season` setting, or the newest season,
+        as the admin pages resolve it.
+        """
+        with Session.begin() as session:
+            season_id = (
+                int(season)
+                if season and season.isdigit()
+                else session.scalar(select(func.max(col(Season.id))))
+            )
+            if season_id is None:
+                return None
+            seat = session.execute(
+                select(col(DBTeamSeasonCoach.team_id), col(DBTeamSeasonCoach.season_id))
+                .join(User, col(DBTeamSeasonCoach.user_id) == col(User.id))
+                .where(
+                    col(User.discordId) == discord_id,
+                    col(DBTeamSeasonCoach.season_id) == season_id,
+                )
+            ).first()
+            return (seat.team_id, seat.season_id) if seat else None
 
     def delete(self, team_id: int) -> None:
         with Session.begin() as session:
@@ -201,14 +245,8 @@ class TeamService:
                     select(Team)
                     .options(
                         joinedload(rel(Team.user_seasons)).noload("*"),
-                        joinedload(rel(Team.season_info)).joinedload(
-                            rel(DBTeamSeason.coach_1)
-                        ),
-                        joinedload(rel(Team.season_info)).joinedload(
-                            rel(DBTeamSeason.coach_2)
-                        ),
-                        joinedload(rel(Team.season_info)).joinedload(
-                            rel(DBTeamSeason.coach_3)
+                        joinedload(rel(Team.coach_seasons)).joinedload(
+                            rel(DBTeamSeasonCoach.user)
                         ),
                     )
                     .where(col(Team.id) == team_id)
@@ -270,11 +308,8 @@ class TeamService:
                 .options(
                     # noload alone; a joined link table multiplies the rows
                     noload(rel(Team.user_seasons)),
-                    selectinload(rel(Team.season_info)).options(
-                        noload(rel(DBTeamSeason.coach_1)),
-                        noload(rel(DBTeamSeason.coach_2)),
-                        noload(rel(DBTeamSeason.coach_3)),
-                    ),
+                    noload(rel(Team.coach_seasons)),
+                    selectinload(rel(Team.season_info)),
                 )
                 .where(filter)
             )
@@ -301,11 +336,8 @@ class TeamService:
             statement = select(Team).options(
                 # noload alone; a joined link table multiplies the rows
                 noload(rel(Team.user_seasons)),
-                selectinload(rel(Team.season_info)).options(
-                    noload(rel(DBTeamSeason.coach_1)),
-                    noload(rel(DBTeamSeason.coach_2)),
-                    noload(rel(DBTeamSeason.coach_3)),
-                ),
+                noload(rel(Team.coach_seasons)),
+                selectinload(rel(Team.season_info)),
             )
             if limit is not None or offset:
                 # Offset paging is deterministic only with a fixed order
@@ -348,6 +380,7 @@ class TeamService:
                 select(Team)
                 .options(
                     noload(rel(Team.user_seasons)),
+                    noload(rel(Team.coach_seasons)),
                     joinedload(rel(Team.season_info)).noload("*"),
                 )
                 .where(col(Team.season_info).any(season_id=season_id))

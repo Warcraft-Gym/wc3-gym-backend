@@ -18,6 +18,7 @@ from app.api.deps import (
 from app.core.exceptions import BadRequestError
 from app.core.query import QueryUtil
 from app.models.responses import Message
+from app.services import discord_roles
 from app.services.fantasy_import import (
     import_fantasy_bets_workbook,
     import_fantasy_teams_workbook,
@@ -131,13 +132,14 @@ def export_season(
     teams_sheet = workbook.create_sheet(title="Teams")
     teams_sheet.append(["ID", "Name", "Long Name", "Discord Role", "Icon URL"])
     season_teams = team_service.get_teams_season(season_id)
+    bound = discord_roles.team_roles()
     for team in season_teams:
         teams_sheet.append(
             [
                 team.id,
                 team.name,
                 team.long_name or "",
-                team.discord_role or "",
+                bound.get(team.id, ""),
                 "",  # no model carries an icon URL
             ]
         )

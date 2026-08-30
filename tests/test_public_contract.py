@@ -47,7 +47,7 @@ def public_seed(app: FastAPI) -> dict[str, Any]:
     from app.core.db import Session
     from app.models.enums import Race
     from app.models.fantasy_team import FantasyTeam
-    from app.models.relationships import DBFantasyTeamPlayer
+    from app.models.relationships import DBFantasyTeamPlayer, DBTeamSeasonCoach
     from app.models.season import Season
     from app.models.settings import Settings
     from app.models.team import Team
@@ -92,8 +92,11 @@ def public_seed(app: FastAPI) -> dict[str, Any]:
         )
 
         for team_id in (ids["team_a_id"], ids["team_b_id"]):
-            team_season = session.get(DBTeamSeason, (team_id, ids["season_id"]))
-            team_season.coach_1_id = coach.id
+            session.add(
+                DBTeamSeasonCoach(
+                    team_id=team_id, season_id=ids["season_id"], user_id=ident(coach)
+                )
+            )
 
         session.get(Team, ids["team_a_id"]).icon = TEAM_ICON
 
@@ -124,7 +127,7 @@ def public_seed(app: FastAPI) -> dict[str, Any]:
                     value=str(ids["season_id"]),
                     description="Season the shortcodes render",
                 ),
-                Settings(key="current_wc3_season", value=str(WC3_SEASON)),
+                Settings(key="current_w3c_season", value=str(WC3_SEASON)),
             ]
         )
 
@@ -205,7 +208,7 @@ def test_config_settings_carries_the_season_selector(
         assert "value" in setting
     # Every shortcode picks its season out of this key.
     assert by_key["current_gnl_season"]["value"] == str(public_seed["season_id"])
-    assert by_key["current_wc3_season"]["value"] == str(WC3_SEASON)
+    assert by_key["current_w3c_season"]["value"] == str(WC3_SEASON)
 
 
 # gnl-detailed-standings, gnl-teams-players

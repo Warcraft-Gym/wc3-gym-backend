@@ -1079,17 +1079,34 @@ def test_a_result_with_one_score_missing_is_refused(
     assert resp.status_code < 500
 
 
-def test_coaches_are_capped_at_three(
+def test_a_team_season_takes_any_number_of_coaches(
     client: Client, auth_headers: dict[str, str], league: dict[str, Any]
 ) -> None:
-    path = f"/teams/{league['team_a_id']}/seasons/{league['season_id']}/coaches"
-    resp = client.put(
-        path, json={"coach_ids": [league["player_a_id"]]}, headers=auth_headers
-    )
-    assert resp.status_code == 200, resp.text
+    """Three slots used to be the ceiling; the coach rows have none."""
+    everyone = [league["player_a_id"], league["player_b_id"]]
+    for number in (3, 4):
+        extra = post(
+            client,
+            auth_headers,
+            "/users",
+            {
+                "name": f"Coach {number}",
+                "battleTag": f"Coach#100{number}",
+                "discordTag": f"coach{number}",
+                "discordId": f"100{number}",
+                "race": "NE",
+            },
+        )
+        everyone.append(extra["id"])
 
-    resp = client.put(path, json={"coach_ids": [1, 2, 3, 4]}, headers=auth_headers)
-    assert resp.status_code == 400
-    assert resp.json() == {
-        "error": "Cannot assign more than 3 coaches per team per season"
-    }
+    path = f"/teams/{league['team_a_id']}/seasons/{league['season_id']}/coaches"
+    resp = client.put(path, json={"coach_ids": everyone}, headers=auth_headers)
+    assert resp.status_code == 200, resp.text
+    assert [
+        coach["id"]
+        for coach in resp.json()["coaches_by_season"][str(league["season_id"])]
+    ] == sorted(everyone)
+
+    resp = client.put(path, json={"coach_ids": []}, headers=auth_headers)
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["coaches_by_season"] == {}

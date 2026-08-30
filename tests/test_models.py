@@ -15,6 +15,7 @@ from sqlmodel import SQLModel
 import app.models
 
 TABLES = {
+    "discord_role_binding",
     "draft_series",
     "fantasy_bets",
     "fantasy_team_player",
@@ -33,6 +34,7 @@ TABLES = {
     "series",
     "settings",
     "team_season",
+    "team_season_coach",
     "teams",
     "user_season_signup",
     "user_team_season",

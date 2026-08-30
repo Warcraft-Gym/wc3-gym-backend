@@ -17,7 +17,6 @@ def test_login_with_admin_token(client: Client) -> None:
     assert resp.status_code == 200
     body = resp.json()
     assert "access_token" in body
-    assert "refresh_token" in body
 
 
 def test_login_with_bad_token(client: Client) -> None:
@@ -50,14 +49,6 @@ def test_guarded_route_with_token(
     resp = client.get("/config/koth/nightbot-token", headers=auth_headers)
     assert resp.status_code == 200
     assert resp.json()["token"] == "test-nightbot-token"
-
-
-def test_refresh_rejects_access_token(
-    client: Client, auth_headers: dict[str, str]
-) -> None:
-    # /refresh takes the refresh token, not the access token.
-    resp = client.post("/refresh", headers=auth_headers)
-    assert resp.status_code == 422
 
 
 def test_team_w3c_sync_needs_a_token(client: Client, seeded: dict[str, Any]) -> None:
