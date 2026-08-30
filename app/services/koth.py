@@ -2,7 +2,7 @@ import logging
 from collections import defaultdict
 from typing import TYPE_CHECKING
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as OrmSession
 from sqlalchemy.orm import joinedload
@@ -36,6 +36,7 @@ from app.models.koth_signup import (
     KothSignupPublic,
     KothSignupUpdate,
 )
+from app.models.user import User
 from app.services.w3c import W3CService
 
 if TYPE_CHECKING:
@@ -89,7 +90,9 @@ class KothService:
             )
             if not event:
                 raise NotFoundError(f"KOTH Event not found by Id: {event_id}")
-            return KothEventPublic.model_validate(event)
+            public = KothEventPublic.model_validate(event)
+            self._add_countries(session, public.signups)
+            return public
 
     def get_all_events(self) -> list[KothEventSummary]:
         with Session.begin() as session:
@@ -116,7 +119,9 @@ class KothService:
             )
             if not event:
                 raise NotFoundError("No active KOTH event found")
-            return KothEventPublic.model_validate(event)
+            public = KothEventPublic.model_validate(event)
+            self._add_countries(session, public.signups)
+            return public
 
     def set_active_event(self, event_id: int) -> KothEventPublic:
         """Set an event as active and deactivate all others"""
@@ -176,7 +181,9 @@ class KothService:
                 if limit is not None:
                     statement = statement.limit(limit)
             signups = session.scalars(statement).unique().all()
-            return [KothSignupPublic.model_validate(s) for s in signups]
+            return self._add_countries(
+                session, [KothSignupPublic.model_validate(s) for s in signups]
+            )
 
     def create_signup_from_twitch(
         self, twitch_username: str, battle_tag: str, preferred_race: str | None = None
@@ -513,6 +520,24 @@ class KothService:
         return kings
 
     # ============ Helper Methods ============
+    @staticmethod
+    def _add_countries(
+        session: OrmSession, signups: list[KothSignupPublic]
+    ) -> list[KothSignupPublic]:
+        """Fill each signup's country from the users row with its battle tag."""
+        tags = {s.battle_tag.strip().lower() for s in signups if s.battle_tag}
+        if not tags:
+            return signups
+        folded = func.lower(func.trim(col(User.battleTag)))
+        rows = session.execute(
+            select(folded, col(User.country)).where(folded.in_(tags))
+        ).all()
+        countries = {tag: country for tag, country in rows}
+        for signup in signups:
+            if signup.battle_tag:
+                signup.country = countries.get(signup.battle_tag.strip().lower())
+        return signups
+
     def _check_duplicate_signup(
         self,
         session: OrmSession,
