@@ -66,6 +66,18 @@ class UserService:
                 raise NotFoundError("User not found")
             return _public(session, row)
 
+    def set_fantasy_tiers(self, tiers: dict[int, int]) -> None:
+        """Replace the whole allocation: listed players get their tier, the rest none."""
+        by_tier: dict[int, list[int]] = {}
+        for user_id, tier in tiers.items():
+            by_tier.setdefault(tier, []).append(user_id)
+        with Session.begin() as session:
+            session.execute(update(User).values(fantasy_tier=None))
+            for tier, ids in by_tier.items():
+                session.execute(
+                    update(User).where(col(User.id).in_(ids)).values(fantasy_tier=tier)
+                )
+
     def delete(self, user_id: int) -> None:
         with Session.begin() as session:
             User.delete(session, user_id)
