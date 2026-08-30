@@ -12,6 +12,7 @@ from fastapi import FastAPI
 from httpx2 import Client
 
 from app.models.base import ident
+from app.models.w3c_stats import W3CStatsCreate
 
 
 @pytest.fixture
@@ -386,3 +387,156 @@ def test_an_admin_signup_needs_no_w3c_configuration(
     assert asked["seasons_url"] == f"{DEFAULT_BASE_URL}/ladder/seasons"
     assert asked["stats_base"] == DEFAULT_BASE_URL
     assert asked["season"] == 25
+
+
+# ---------- The Nightbot signup flow (w3champions answered from memory) ----------
+
+SIGNUP = {
+    "client_token": "test-nightbot-token",
+    "twitch_username": "streamer",
+    "battle_tag": "S#1234",
+}
+
+
+@pytest.fixture
+def w3c_seasons(
+    monkeypatch: pytest.MonkeyPatch, seeded: dict[str, Any]
+) -> dict[int, list[W3CStatsCreate]]:
+    """get_player_stats answers from a season table; an empty season raises,
+    as the real service does. Fill the table per test."""
+    from app.services.w3c import W3CService
+
+    table: dict[int, list[W3CStatsCreate]] = {}
+
+    def fake(
+        self: W3CService, bnet_name: str, season_override: int | None = None
+    ) -> list[Any]:
+        stats = table.get(season_override or 0)
+        if not stats:
+            raise ValueError(f"No stats for {bnet_name} in season {season_override}")
+        return stats
+
+    monkeypatch.setattr(W3CService, "current_season", lambda self: 20)
+    monkeypatch.setattr(W3CService, "get_player_stats", fake)
+    monkeypatch.setattr(
+        W3CService,
+        "send_request",
+        lambda *args, **kwargs: pytest.fail("the signup reached w3champions"),
+    )
+    return table
+
+
+def stat(race_name: str, mmr: int, season: int) -> W3CStatsCreate:
+    from app.models.enums import Race
+
+    return W3CStatsCreate(wc3_season=season, mmr=mmr, race=Race[race_name])
+
+
+def test_a_wrong_signup_token_answers_401(
+    client: Client, seeded: dict[str, Any]
+) -> None:
+    resp = client.post("/koth/signups", json={**SIGNUP, "client_token": "wrong"})
+    assert resp.status_code == 401
+    resp = client.get(
+        "/koth/signup", params={"token": "wrong", "twitch": "s", "battletag": "S#1"}
+    )
+    assert resp.status_code == 401
+
+
+def test_a_signup_missing_a_field_answers_400(
+    client: Client, seeded: dict[str, Any]
+) -> None:
+    resp = client.post(
+        "/koth/signups",
+        json={"client_token": "test-nightbot-token", "twitch_username": "streamer"},
+    )
+    assert resp.status_code == 400
+    resp = client.get(
+        "/koth/signup", params={"token": "test-nightbot-token", "twitch": "streamer"}
+    )
+    assert resp.status_code == 400
+
+
+def test_an_unknown_race_answers_400(
+    client: Client, w3c_seasons: dict[int, list[W3CStatsCreate]]
+) -> None:
+    resp = client.post("/koth/signups", json={**SIGNUP, "race": "gnome"})
+    assert resp.status_code == 400
+    assert "Valid options" in resp.json()["error"]
+
+
+def test_a_signup_picks_the_highest_mmr_race(
+    client: Client, w3c_seasons: dict[int, list[W3CStatsCreate]]
+) -> None:
+    w3c_seasons[20] = [stat("HU", 1500, 20), stat("OC", 1555, 20)]
+    resp = client.post("/koth/signups", json=SIGNUP)
+    assert resp.status_code == 201, resp.text
+    signup = resp.json()
+    assert (signup["race"], signup["mmr"], signup["bracket"]) == ("OC", 1555, 2)
+
+
+def test_a_requested_race_takes_that_races_mmr(
+    client: Client, w3c_seasons: dict[int, list[W3CStatsCreate]]
+) -> None:
+    w3c_seasons[20] = [stat("HU", 1500, 20), stat("OC", 1555, 20)]
+    resp = client.post("/koth/signups", json={**SIGNUP, "race": "human"})
+    assert resp.status_code == 201, resp.text
+    signup = resp.json()
+    assert (signup["race"], signup["mmr"]) == ("HU", 1500)
+
+
+def test_the_brackets_cut_at_the_event_thresholds(
+    client: Client, w3c_seasons: dict[int, list[W3CStatsCreate]]
+) -> None:
+    """KOTH 1 cuts at 1450 and 1600: below, between, at-or-above."""
+    for name, mmr, bracket in (("low", 1449, 1), ("mid", 1599, 2), ("top", 1600, 3)):
+        w3c_seasons[20] = [stat("UD", mmr, 20)]
+        resp = client.post(
+            "/koth/signups",
+            json={**SIGNUP, "twitch_username": name, "battle_tag": f"{name}#1"},
+        )
+        assert resp.status_code == 201, resp.text
+        assert resp.json()["bracket"] == bracket
+
+
+def test_a_quiet_player_falls_back_two_seasons(
+    client: Client, w3c_seasons: dict[int, list[W3CStatsCreate]]
+) -> None:
+    """The last 3 seasons count, as every message says."""
+    w3c_seasons[18] = [stat("NE", 1700, 18)]
+    resp = client.post("/koth/signups", json=SIGNUP)
+    assert resp.status_code == 201, resp.text
+    assert (resp.json()["race"], resp.json()["mmr"]) == ("NE", 1700)
+
+
+def test_no_stats_in_three_seasons_answers_400_and_writes_no_row(
+    client: Client, w3c_seasons: dict[int, list[W3CStatsCreate]]
+) -> None:
+    w3c_seasons[17] = [stat("HU", 1500, 17)]  # one season too old
+    resp = client.post("/koth/signups", json=SIGNUP)
+    assert resp.status_code == 400
+    assert "No valid MMR data" in resp.json()["error"]
+    event = client.get("/koth/events/active").json()
+    assert SIGNUP["twitch_username"] not in [
+        s["twitch_username"] for s in event["signups"]
+    ]
+
+
+def test_the_nightbot_get_answers_a_chat_message(
+    client: Client, w3c_seasons: dict[int, list[W3CStatsCreate]]
+) -> None:
+    """Nightbot displays the body text in chat, so the shape stays."""
+    w3c_seasons[20] = [stat("HU", 1400, 20)]
+    resp = client.get(
+        "/koth/signup",
+        params={
+            "token": "test-nightbot-token",
+            "twitch": "streamer",
+            "battletag": "S#1234",
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == {
+        "success": True,
+        "message": "streamer signed up for Bracket 1 (1400 MMR)",
+    }
