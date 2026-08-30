@@ -543,3 +543,26 @@ def test_the_nightbot_get_answers_a_chat_message(
         "success": True,
         "message": "streamer signed up for Bracket 1 (1400 MMR)",
     }
+
+
+def test_a_failed_match_creation_writes_nothing(
+    client: Client, auth_headers: dict[str, str], koth: dict[str, Any]
+) -> None:
+    """One transaction: an unknown participant leaves no half-made match."""
+    one, _ = koth["signup_ids"]
+    resp = client.post(
+        "/koth/matches",
+        headers=auth_headers,
+        json={
+            "event_id": koth["event_id"],
+            "game_mode": "1v1",
+            "num_teams": 2,
+            "participants": [
+                {"signup_id": one, "team_number": 1},
+                {"signup_id": 99999, "team_number": 2},
+            ],
+        },
+    )
+    assert resp.status_code == 404
+    matches = client.get(f"/koth/events/{koth['event_id']}/matches").json()
+    assert matches == []

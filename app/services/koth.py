@@ -10,6 +10,7 @@ from sqlmodel import col
 
 from app.core.db import Session, rel
 from app.core.exceptions import BadRequestError, NotFoundError
+from app.models.base import ident
 from app.models.enums import Race
 from app.models.koth_event import (
     KothEvent,
@@ -303,9 +304,14 @@ class KothService:
 
     def set_king(self, signup_id: int) -> KothSignupPublic:
         """Set a player as king of their bracket (clears other kings in bracket)"""
-        signup = self.get_signup(signup_id)
-        self._clear_bracket_kings(signup.event_id, signup.bracket)
-        return self.update_signup(signup_id, KothSignupUpdate(is_king=1))
+        with Session.begin() as session:
+            signup = session.get(KothSignup, signup_id)
+            if not signup:
+                raise NotFoundError(f"Signup not found by Id: {signup_id}")
+            self._clear_bracket_kings(session, signup.event_id, signup.bracket)
+            signup.is_king = 1
+            session.flush()
+            return KothSignupPublic.model_validate(signup)
 
     def add_king(self, signup_id: int) -> KothSignupPublic:
         """Add a player as king of their bracket (keeps existing kings)"""
@@ -378,79 +384,102 @@ class KothService:
         self, match: KothMatchCreate, participant_signup_ids: list[dict[str, int]]
     ) -> KothMatchPublic:
         """
-        Create a team-based match with participants.
+        Create a team-based match with participants, in one transaction.
         participant_signup_ids: list of dicts with {'signup_id': int, 'team_number': int}
         """
-        # Validate all participants exist and are in the same bracket
-        signups = [
-            self.get_signup(participant["signup_id"])
-            for participant in participant_signup_ids
-        ]
+        with Session.begin() as session:
+            signups = []
+            for participant in participant_signup_ids:
+                signup = session.get(KothSignup, participant["signup_id"])
+                if not signup:
+                    raise NotFoundError(
+                        f"Signup not found by Id: {participant['signup_id']}"
+                    )
+                signups.append(signup)
 
-        # All must be in same bracket
-        if signups:
-            first_bracket = signups[0].bracket
-            if not all(s.bracket == first_bracket for s in signups):
-                raise BadRequestError("All participants must be in the same bracket")
-            match.bracket = first_bracket
+            # All must be in same bracket
+            if signups:
+                first_bracket = signups[0].bracket
+                if not all(s.bracket == first_bracket for s in signups):
+                    raise BadRequestError(
+                        "All participants must be in the same bracket"
+                    )
+                match.bracket = first_bracket
 
-        # Validate team configuration - each team must have at least 1 player
-        team_numbers = [p["team_number"] for p in participant_signup_ids]
-        unique_teams = set(team_numbers)
-
-        if len(unique_teams) != match.num_teams:
-            raise BadRequestError(
-                f"Expected {match.num_teams} teams, but participants are assigned to {len(unique_teams)} teams"
-            )
-
-        for team_num in range(1, match.num_teams + 1):
-            if team_num not in unique_teams:
-                raise BadRequestError(f"Team {team_num} has no participants")
-
-        # Create match
-        created_match = self.add_match(match)
-
-        # Add participants
-        for participant in participant_signup_ids:
-            self.add_participant(
-                KothMatchParticipantCreate(
-                    match_id=created_match.id,
-                    signup_id=participant["signup_id"],
-                    team_number=participant["team_number"],
+            # Validate team configuration - each team must have at least 1 player
+            unique_teams = {p["team_number"] for p in participant_signup_ids}
+            if len(unique_teams) != match.num_teams:
+                raise BadRequestError(
+                    f"Expected {match.num_teams} teams, but participants are assigned to {len(unique_teams)} teams"
                 )
-            )
+            for team_num in range(1, match.num_teams + 1):
+                if team_num not in unique_teams:
+                    raise BadRequestError(f"Team {team_num} has no participants")
+
+            db_match = KothMatch.add(session, match.model_dump())
+            session.flush()
+            match_id = ident(db_match)
+            for participant in participant_signup_ids:
+                KothMatchParticipant.add(
+                    session,
+                    KothMatchParticipantCreate(
+                        match_id=match_id,
+                        signup_id=participant["signup_id"],
+                        team_number=participant["team_number"],
+                    ).model_dump(),
+                )
 
         # Return match with participants loaded
-        return self.get_match(created_match.id)
+        return self.get_match(match_id)
 
     def update_match_result(
         self, match_id: int, winner_team_number: int
     ) -> KothMatchPublic:
         """Update match winner, set all winning team members as kings, and delete losing participant signups"""
-        match = self.get_match(match_id)
-        if winner_team_number < 1 or winner_team_number > match.num_teams:
-            raise BadRequestError(
-                f"Winner team number must be between 1 and {match.num_teams}"
-            )
+        with Session.begin() as session:
+            match = session.scalars(
+                select(KothMatch)
+                .options(joinedload(rel(KothMatch.participants)))
+                .where(col(KothMatch.id) == match_id)
+            ).first()
+            if not match:
+                raise NotFoundError(f"Match not found by Id: {match_id}")
+            if winner_team_number < 1 or winner_team_number > match.num_teams:
+                raise BadRequestError(
+                    f"Winner team number must be between 1 and {match.num_teams}"
+                )
 
-        updated_match = self.update_match(
-            match.id, KothMatchUpdate(winner_team_number=winner_team_number)
-        )
+            match.winner_team_number = winner_team_number
+            self._clear_bracket_kings(session, match.event_id, match.bracket)
 
-        # Get participants and set winners as kings
-        participants = self.get_participants_by_match(match_id)
+            # Winning team members become kings; losing signups go inactive
+            # so those players can sign up again
+            winners = [
+                p.signup_id
+                for p in match.participants
+                if p.team_number == winner_team_number
+            ]
+            losers = [
+                p.signup_id
+                for p in match.participants
+                if p.team_number != winner_team_number
+            ]
+            if winners:
+                session.execute(
+                    update(KothSignup)
+                    .where(col(KothSignup.id).in_(winners))
+                    .values(is_king=1),
+                    execution_options={"synchronize_session": False},
+                )
+            if losers:
+                session.execute(
+                    update(KothSignup)
+                    .where(col(KothSignup.id).in_(losers))
+                    .values(is_active=0),
+                    execution_options={"synchronize_session": False},
+                )
 
-        self._clear_bracket_kings(match.event_id, match.bracket)
-
-        # Set winning team members as kings and mark losing team signups as inactive
-        for participant in participants:
-            if participant.team_number == winner_team_number:
-                self.update_signup(participant.signup_id, KothSignupUpdate(is_king=1))
-            else:
-                # Mark signups of losing teams as inactive so they can sign up again
-                self.update_signup(participant.signup_id, KothSignupUpdate(is_active=0))
-
-        return updated_match
+        return self.get_match(match_id)
 
     # ============ Match Participant Methods ============
     def add_participant(
@@ -520,18 +549,19 @@ class KothService:
         self.get_signup(signup_id)  # 404 names the id
         return self.update_signup(signup_id, KothSignupUpdate(is_king=value))
 
-    def _clear_bracket_kings(self, event_id: int, bracket: int) -> None:
-        """Take the crown from every signup in the bracket."""
-        with Session.begin() as session:
-            session.execute(
-                update(KothSignup)
-                .where(
-                    col(KothSignup.event_id) == event_id,
-                    col(KothSignup.bracket) == bracket,
-                )
-                .values(is_king=0),
-                execution_options={"synchronize_session": False},
+    def _clear_bracket_kings(
+        self, session: OrmSession, event_id: int, bracket: int
+    ) -> None:
+        """Take the crown from every signup in the bracket, in the caller's transaction."""
+        session.execute(
+            update(KothSignup)
+            .where(
+                col(KothSignup.event_id) == event_id,
+                col(KothSignup.bracket) == bracket,
             )
+            .values(is_king=0),
+            execution_options={"synchronize_session": False},
+        )
 
     def _determine_bracket(self, mmr: int, event: KothEventPublic) -> int:
         """Determine bracket based on MMR thresholds"""
