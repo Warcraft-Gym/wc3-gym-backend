@@ -566,3 +566,17 @@ def test_a_failed_match_creation_writes_nothing(
     assert resp.status_code == 404
     matches = client.get(f"/koth/events/{koth['event_id']}/matches").json()
     assert matches == []
+
+
+def test_a_signup_carries_the_flag_of_its_player_row(
+    client: Client, koth: dict[str, Any]
+) -> None:
+    """P1#1111 is a seeded user from Germany; a signup with no users row has no flag."""
+    event = client.get(f"/koth/events/{koth['event_id']}").json()
+    by_tag = {s["battle_tag"]: s for s in event["signups"]}
+    assert by_tag["P1#1111"]["country"] == "DE"
+    signups = client.get(f"/koth/events/{koth['event_id']}/signups").json()
+    assert {s["battle_tag"]: s["country"] for s in signups} == {
+        "P1#1111": "DE",
+        "P2#2222": "US",
+    }

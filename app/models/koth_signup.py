@@ -104,6 +104,8 @@ class KothBracketUpdate(SQLModel):
 class KothSignupPublic(KothSignupBase):
     id: int
     race: Annotated[str | None, EnumValue] = None
+    # The flag of the users row with this battle tag, read at answer time
+    country: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return self.model_dump(mode="json")
