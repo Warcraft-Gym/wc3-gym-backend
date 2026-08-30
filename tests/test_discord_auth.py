@@ -22,8 +22,9 @@ ACCOUNT = {"id": "42", "username": "player", "global_name": "Player", "avatar": 
 
 GUILD_ID = "316390574808760322"
 
-# The guild as /users/@me/guilds lists it for a plain member.
-GUILD = {"id": GUILD_ID, "name": "WC3 Gym", "owner": False, "permissions": "0"}
+# The guild as the bot reads it: nobody in the tests owns it or holds an admin role.
+GUILD = {"id": GUILD_ID, "name": "WC3 Gym", "owner_id": "999", "roles": []}
+ADMIN_ROLE = {"id": "guild-admins", "permissions": "8"}
 
 SESSION = {"Authorization": "Bearer a-clerk-session-token"}
 
@@ -51,11 +52,9 @@ def stub_clerk(
     guild: dict[str, Any] | None = None,
     account: dict[str, Any] | None = None,
 ) -> None:
-    """Answer the Clerk session check and the two calls the account's token makes."""
-    guilds = [{"id": "1", "owner": True, "permissions": "8"}]
-    if a_member:
-        guilds.append({**GUILD, **(guild or {})})
+    """Answer the Clerk session check, the account's own read, and the bot's guild reads."""
     who = account or ACCOUNT
+    guild_data = {**GUILD, **(guild or {})}
 
     def authenticate_request(
         self: Clerk, request: object, options: object
@@ -73,17 +72,24 @@ def stub_clerk(
         return [SimpleNamespace(token="discord-token", provider_user_id=who["id"])]
 
     def user_get(access_token: str, path: str) -> FakeResponse:
-        if path == "/users/@me":
-            return FakeResponse(200, who)
-        if path == "/users/@me/guilds":
-            return FakeResponse(200, guilds)
+        assert path == "/users/@me"
+        return FakeResponse(200, who)
+
+    def bot_get(path: str) -> FakeResponse:
+        if path == f"/guilds/{GUILD_ID}":
+            return FakeResponse(200, guild_data)
+        assert path == f"/guilds/{GUILD_ID}/members/{who['id']}"
+        if not a_member:
+            return FakeResponse(404, {"message": "Unknown Member"})
         return FakeResponse(200, {"roles": member_roles or []})
 
     monkeypatch.setenv("DISCORD_GUILD_ID", GUILD_ID)
+    monkeypatch.setenv("DISCORD_BOT_TOKEN", "a-bot-token")
     monkeypatch.setenv("ADMIN_DISCORD_IDS", "220202568490418179")
     monkeypatch.setattr(Clerk, "authenticate_request", authenticate_request)
     monkeypatch.setattr(Users, "get_o_auth_access_token", oauth_token)
     monkeypatch.setattr(discord, "_user_get", user_get)
+    monkeypatch.setattr(discord, "_bot_get", bot_get)
 
 
 def test_a_request_without_a_bearer_is_refused(client: Client) -> None:
@@ -185,7 +191,7 @@ def test_the_allowlist_makes_an_admin(
 def test_the_guild_owner_is_an_admin(
     client: Client, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    stub_clerk(monkeypatch, guild={"owner": True})
+    stub_clerk(monkeypatch, guild={"owner_id": ACCOUNT["id"]})
     resp = client.get("/me", headers=SESSION)
     assert resp.json()["role"] == "admin"
 
@@ -193,7 +199,9 @@ def test_the_guild_owner_is_an_admin(
 def test_an_administrator_role_makes_an_admin(
     client: Client, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    stub_clerk(monkeypatch, guild={"permissions": "8"})
+    stub_clerk(
+        monkeypatch, guild={"roles": [ADMIN_ROLE]}, member_roles=[ADMIN_ROLE["id"]]
+    )
     resp = client.get("/me", headers=SESSION)
     assert resp.json()["role"] == "admin"
 
