@@ -443,14 +443,17 @@ def test_a_wrong_signup_token_answers_401(
     assert resp.status_code == 401
 
 
-def test_a_signup_missing_a_field_answers_400(
+def test_a_signup_missing_a_field_is_refused(
     client: Client, seeded: dict[str, Any]
 ) -> None:
+    # The body model refuses before the handler runs, so the POST answers 422
     resp = client.post(
         "/koth/signups",
         json={"client_token": "test-nightbot-token", "twitch_username": "streamer"},
     )
-    assert resp.status_code == 400
+    assert resp.status_code == 422
+    assert "battle_tag" in resp.json()["error"]
+    # The GET keeps its optional query params and the handler's 400
     resp = client.get(
         "/koth/signup", params={"token": "test-nightbot-token", "twitch": "streamer"}
     )
