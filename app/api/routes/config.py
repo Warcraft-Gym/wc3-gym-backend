@@ -23,7 +23,7 @@ from app.models.settings import (
     SettingUpdated,
     W3CConfig,
 )
-from app.services import admins, discord_roles
+from app.services import admins, discord, discord_roles
 from app.services.w3c import W3CService
 
 logger = logging.getLogger(__name__)
@@ -181,6 +181,12 @@ def delete_discord_role_binding(binding_id: int) -> None:
 def get_discord_role_report() -> list[DiscordRoleReport]:
     """Every account whose guild roles differ from what the database says."""
     return discord_roles.report()
+
+
+@router.get("/config/discord-guild-roles", dependencies=[Depends(require_admin)])
+def get_discord_guild_roles() -> dict[str, str]:
+    """The name of every guild role by id, for the pages that show role ids."""
+    return discord.guild_roles()
 
 
 @router.post("/config/discord-roles/sync", dependencies=[Depends(require_admin)])

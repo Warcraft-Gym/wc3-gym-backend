@@ -12,6 +12,7 @@ a no-op that returns empty results.
 """
 
 import logging
+from collections import defaultdict
 from collections.abc import Iterable, Sequence
 
 from sqlalchemy import func, select
@@ -57,7 +58,14 @@ def current_season() -> int | None:
 
 
 def expected_roles(user: User, session: OrmSession) -> set[str]:
-    """The bound roles this account earns right now.
+    """The bound roles this account earns right now."""
+    return expected_roles_of([user], session)[ident(user)]
+
+
+def expected_roles_of(
+    users: Sequence[User], session: OrmSession
+) -> dict[int, set[str]]:
+    """The bound roles each of those accounts earns right now, in a handful of queries.
 
     admin is a grant or an environment id, captain a seat of the current
     season, team a roster row or a captain seat of that team,
@@ -65,58 +73,62 @@ def expected_roles(user: User, session: OrmSession) -> set[str]:
     champion a roster row of the team and season the binding names.
     """
     season_id = _current_season(session)
-    rosters = {
-        (row.team_id, row.season_id)
-        for row in session.scalars(
-            select(DBUserTeamSeason).where(col(DBUserTeamSeason.user_id) == user.id)
+    ids = [ident(user) for user in users]
+    rosters: dict[int, set[tuple[int, int]]] = defaultdict(set)
+    for row in session.scalars(
+        select(DBUserTeamSeason).where(col(DBUserTeamSeason.user_id).in_(ids))
+    ):
+        rosters[row.user_id].add((row.team_id, row.season_id))
+    captained: dict[int, set[int]] = defaultdict(set)
+    for row in session.scalars(
+        select(DBTeamSeasonCaptain).where(
+            col(DBTeamSeasonCaptain.user_id).in_(ids),
+            col(DBTeamSeasonCaptain.season_id) == season_id,
         )
-    }
-    played = {team_id for team_id, season in rosters if season == season_id}
-    captained = {
-        row.team_id
-        for row in session.scalars(
-            select(DBTeamSeasonCaptain).where(
-                col(DBTeamSeasonCaptain.user_id) == user.id,
-                col(DBTeamSeasonCaptain.season_id) == season_id,
+    ):
+        captained[row.user_id].add(row.team_id)
+    signed_up = set(
+        session.scalars(
+            select(col(DBUserSeasonSignup.user_id)).where(
+                col(DBUserSeasonSignup.user_id).in_(ids),
+                col(DBUserSeasonSignup.season_id) == season_id,
             )
         )
-    }
-    signed_up = bool(
-        season_id is not None
-        and session.get(
-            DBUserSeasonSignup, {"user_id": user.id, "season_id": season_id}
+    )
+    drafted = set(
+        session.scalars(
+            select(col(FantasyTeam.captain_id)).where(
+                col(FantasyTeam.captain_id).in_(ids),
+                col(FantasyTeam.season_id) == season_id,
+            )
         )
     )
-    drafted = session.scalar(
-        select(func.count())
-        .select_from(FantasyTeam)
-        .where(
-            col(FantasyTeam.captain_id) == user.id,
-            col(FantasyTeam.season_id) == season_id,
-        )
-    )
+    admins = env_ids() | set(session.scalars(select(col(AdminGrant.discord_id))))
+    bindings = session.scalars(select(DiscordRoleBinding)).all()
 
-    roles: set[str] = set()
-    for binding in session.scalars(select(DiscordRoleBinding)):
-        if binding.kind is RoleKind.champion:
-            # No column names a season winner, so a champion row names the team
-            earned = (binding.team_id, binding.season_id) in rosters
-        elif binding.season_id is not None and binding.season_id != season_id:
-            earned = False
-        elif binding.kind is RoleKind.admin:
-            earned = user.discordId in env_ids() or bool(
-                session.get(AdminGrant, user.discordId)
-            )
-        elif binding.kind is RoleKind.captain:
-            earned = bool(captained)
-        elif binding.kind is RoleKind.team:
-            earned = binding.team_id in played | captained
-        elif binding.kind is RoleKind.gnl_participant:
-            earned = bool(played or signed_up)
-        else:
-            earned = bool(drafted)
-        if earned:
-            roles.add(binding.discord_role)
+    roles: dict[int, set[str]] = {}
+    for user in users:
+        played = {team for team, season in rosters[ident(user)] if season == season_id}
+        earned_roles: set[str] = set()
+        for binding in bindings:
+            if binding.kind is RoleKind.champion:
+                # No column names a season winner, so a champion row names the team
+                earned = (binding.team_id, binding.season_id) in rosters[ident(user)]
+            elif binding.season_id is not None and binding.season_id != season_id:
+                earned = False
+            elif binding.kind is RoleKind.admin:
+                earned = user.discordId in admins
+            elif binding.kind is RoleKind.captain:
+                earned = bool(captained[ident(user)])
+            elif binding.kind is RoleKind.team:
+                earned = binding.team_id in played | captained[ident(user)]
+            elif binding.kind is RoleKind.gnl_participant:
+                earned = bool(played or ident(user) in signed_up)
+            else:
+                earned = ident(user) in drafted
+            if earned:
+                earned_roles.add(binding.discord_role)
+        roles[ident(user)] = earned_roles
     return roles
 
 
@@ -133,12 +145,18 @@ def _diffs(session: OrmSession, users: Sequence[User]) -> list[DiscordRoleReport
     bound = {
         binding.discord_role for binding in session.scalars(select(DiscordRoleBinding))
     }
+    expected_of = expected_roles_of(users, session)
+    # A full report reads the guild once; a named few read their own members
+    guild = discord.guild_members() if len(users) > 5 else None
     reports = []
     for user in users:
-        actual = discord.member_roles(user.discordId)
+        if guild is not None:
+            actual = guild.get(user.discordId)
+        else:
+            actual = discord.member_roles(user.discordId)
         if actual is None:
             continue
-        expected = expected_roles(user, session)
+        expected = expected_of[ident(user)]
         missing = sorted(expected - actual)
         extra = sorted(bound & (actual - expected))
         if missing or extra:
@@ -156,8 +174,6 @@ def _diffs(session: OrmSession, users: Sequence[User]) -> list[DiscordRoleReport
 
 def report(user_ids: Iterable[int] | None = None) -> list[DiscordRoleReport]:
     """Every account the guild disagrees with, or those the caller names."""
-    # ponytail: one guild read per account with a Discord id, one after the
-    # other; an admin page on a 1 GiB box. Page it if the guild outgrows that.
     with Session.begin() as session:
         return _diffs(session, _accounts(session, user_ids))
 

@@ -102,6 +102,41 @@ def set_role(discord_ids: Iterable[str], role_id: str, grant: bool) -> None:
             )
 
 
+def guild_members() -> dict[str, set[str]] | None:
+    """The roles every guild member holds, by account id; None when the guild has no answer.
+
+    One paged listing instead of one read per account. Needs the Server
+    Members intent on the bot; a refusal answers None and the caller falls
+    back to member reads.
+    """
+    guild_id = os.getenv("DISCORD_GUILD_ID", "")
+    members: dict[str, set[str]] = {}
+    after = "0"
+    while True:
+        response = _bot_get(f"/guilds/{guild_id}/members?limit=1000&after={after}")
+        if response is None or not response.ok:
+            if response is not None:
+                logger.warning(
+                    "Discord refused the member list: %s", response.status_code
+                )
+            return None
+        page = response.json()
+        for member in page:
+            members[member["user"]["id"]] = set(member.get("roles", []))
+        if len(page) < 1000:
+            return members
+        after = page[-1]["user"]["id"]
+
+
+def guild_roles() -> dict[str, str]:
+    """The name of every guild role by id; empty when the guild has no answer."""
+    guild_id = os.getenv("DISCORD_GUILD_ID", "")
+    response = _bot_get(f"/guilds/{guild_id}/roles")
+    if response is None or not response.ok:
+        return {}
+    return {role["id"]: role["name"] for role in response.json()}
+
+
 def member_roles(discord_id: str) -> set[str] | None:
     """The guild roles that account holds, or None when the guild has no answer.
 

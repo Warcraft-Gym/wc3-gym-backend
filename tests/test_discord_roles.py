@@ -54,6 +54,12 @@ def _guild(
 
     def request(method: str, url: str, **kwargs: object) -> FakeResponse:
         calls.append((method, url))
+        if url.startswith(f"{MEMBERS}?"):
+            return FakeResponse(
+                200, [{"user": {"id": id}, "roles": held} for id, held in roles.items()]
+            )
+        if url.endswith("/roles"):
+            return FakeResponse(200, [{"id": "team-a", "name": "Team A"}])
         return FakeResponse(200, {"roles": roles.get(url.rsplit("/", 1)[-1], [])})
 
     monkeypatch.setenv("DISCORD_BOT_TOKEN", "a-bot-token")
@@ -227,6 +233,45 @@ def test_the_report_names_every_account_the_guild_disagrees_with(
             "extra": [],
         }
     ]
+
+
+def test_a_full_report_reads_the_guild_once(
+    monkeypatch: pytest.MonkeyPatch, seeded: dict[str, Any]
+) -> None:
+    """Six or more accounts list the guild instead of reading each member."""
+    _bind(RoleKind.team, "team-a", team_id=seeded["team_a_id"])
+    with Session() as session:
+        for n in range(6):
+            session.add(
+                User(
+                    name=f"U{n}",
+                    battleTag=f"U{n}#1",
+                    discordTag=f"u{n}",
+                    discordId=f"9{n}",
+                    race="HU",
+                )
+            )
+        session.commit()
+    calls = _guild(monkeypatch, {"1": ["team-a"], "2": [], "90": ["team-a"]})
+
+    reports = discord_roles.report()
+
+    assert calls == [("GET", f"{MEMBERS}?limit=1000&after=0")]
+    assert [(one.discord_id, one.missing, one.extra) for one in reports] == [
+        ("2", ["team-a"], []),
+        ("90", [], ["team-a"]),
+    ]
+
+
+def test_the_guild_role_names_route(
+    client: Client,
+    monkeypatch: pytest.MonkeyPatch,
+    auth_headers: dict[str, str],
+) -> None:
+    _guild(monkeypatch, {})
+    resp = client.get("/config/discord-guild-roles", headers=auth_headers)
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == {"team-a": "Team A"}
 
 
 def test_the_report_route_admits_admins_only(
