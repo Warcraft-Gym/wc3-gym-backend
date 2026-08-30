@@ -144,6 +144,7 @@ def test_a_member_reads_me(client: Client, monkeypatch: pytest.MonkeyPatch) -> N
         "superadmin": False,
         "signed_up": False,
         "season_id": None,
+        "team": None,
     }
 
 
@@ -329,7 +330,9 @@ def test_a_captain_slot_makes_a_captain(
     assert claims["role"] == "captain"
     assert claims["team_id"] == seeded["team_a_id"]
     assert claims["season_id"] == seeded["season_id"]
-    assert client.get("/me", headers=SESSION).json()["role"] == "captain"
+    me = client.get("/me", headers=SESSION).json()
+    assert me["role"] == "captain"
+    assert me["team"]["id"] == seeded["team_a_id"]
 
 
 def test_the_discord_role_alone_is_no_captain(
