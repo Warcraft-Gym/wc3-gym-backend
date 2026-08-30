@@ -1,11 +1,10 @@
 import logging
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Body, Depends, Query
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Depends, Query
 
 from app.api.deps import KothServiceDep, require_admin
-from app.core.exceptions import BadRequestError
+from app.core.exceptions import ApiError, BadRequestError
 from app.models.koth_event import KothEventCreate, KothEventPublic, KothEventUpdate
 from app.models.koth_match import (
     KothMatchCreate,
@@ -14,11 +13,25 @@ from app.models.koth_match import (
     KothMatchResult,
     KothMatchUpdate,
 )
-from app.models.koth_signup import KothSignupPublic
+from app.models.koth_signup import (
+    KothBracketUpdate,
+    KothSignupAdminRequest,
+    KothSignupPublic,
+    KothSignupRequest,
+)
+from app.services.koth import KothService
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["koth"])
+
+
+def _check_nightbot_token(service: KothService, token: str | None) -> None:
+    """401 unless the caller carries the Nightbot token (chat bots, not admins)."""
+    setting = service.settings_app_service.get_setting("KOTH_NIGHTBOT_TOKEN")
+    expected = setting.get("value") if setting else None
+    if not expected or str(token) != str(expected):
+        raise ApiError(401, {"error": "Unauthorized - invalid client token"})
 
 
 # ============ Event Endpoints ============
@@ -89,46 +102,31 @@ def get_event_signups(
     return service.get_signups_by_event(event_id, limit=limit, offset=offset)
 
 
-@router.post("/koth/signups", status_code=201, response_model=None)
-def create_signup(
-    data: Annotated[dict, Body()], service: KothServiceDep
-) -> JSONResponse | dict[str, Any] | None:
+@router.post("/koth/signups", status_code=201)
+def create_signup(data: KothSignupRequest, service: KothServiceDep) -> KothSignupPublic:
     """Create a signup (Twitch/Nightbot endpoint).
 
     Create a KOTH signup with automatic W3C MMR validation and bracket
     assignment. Requires KOTH_NIGHTBOT_TOKEN for authentication.
     """
-    # Verify KOTH_NIGHTBOT_TOKEN from settings
-    client_token = data.get("client_token")
-    setting = service.settings_app_service.get_setting("KOTH_NIGHTBOT_TOKEN")
-    expected = setting.get("value") if setting else None
-
-    if not expected or str(client_token) != str(expected):
-        return JSONResponse(
-            {"error": "Unauthorized - invalid client token"}, status_code=401
-        )
-
-    twitch_username = data.get("twitch_username")
-    battle_tag = data.get("battle_tag")
-    race = data.get("race")  # Optional
-
-    if not twitch_username or not battle_tag:
+    _check_nightbot_token(service, data.client_token)
+    if not data.twitch_username or not data.battle_tag:
         raise BadRequestError("Missing required fields")
-
-    signup = service.create_signup_from_twitch(
-        twitch_username=twitch_username, battle_tag=battle_tag, preferred_race=race
+    return service.create_signup_from_twitch(
+        twitch_username=data.twitch_username,
+        battle_tag=data.battle_tag,
+        preferred_race=data.race,
     )
-    return signup.to_dict()
 
 
-@router.get("/koth/signup", response_model=None)
+@router.get("/koth/signup")
 def create_signup_nightbot(
     service: KothServiceDep,
     token: str | None = None,
     twitch: str | None = None,
     battletag: str | None = None,
     race: str | None = None,
-) -> JSONResponse | dict[str, Any] | None:
+) -> dict[str, Any]:
     """Create a signup via URL parameters (Nightbot compatible).
 
     Create a KOTH signup using query parameters. Compatible with Nightbot
@@ -136,30 +134,17 @@ def create_signup_nightbot(
     KOTH_NIGHTBOT_TOKEN for authentication.
     Usage: GET /koth/signup?token=KOTH_TOKEN&twitch=username&battletag=Name%231234
     """
-    client_token = token
-    twitch_username = twitch
-    battle_tag = battletag
-
-    # Verify KOTH_NIGHTBOT_TOKEN from settings
-    setting = service.settings_app_service.get_setting("KOTH_NIGHTBOT_TOKEN")
-    expected = setting.get("value") if setting else None
-
-    if not expected or str(client_token) != str(expected):
-        return JSONResponse(
-            {"error": "Unauthorized - invalid client token"}, status_code=401
-        )
-
-    if not twitch_username or not battle_tag:
+    _check_nightbot_token(service, token)
+    if not twitch or not battletag:
         raise BadRequestError("Missing required parameters: token, twitch, battletag")
 
     signup = service.create_signup_from_twitch(
-        twitch_username=twitch_username, battle_tag=battle_tag, preferred_race=race
+        twitch_username=twitch, battle_tag=battletag, preferred_race=race
     )
-
-    # Return simple success message for chat display
+    # Nightbot displays the body text in chat, so the shape stays
     return {
         "success": True,
-        "message": f"{twitch_username} signed up for Bracket {signup.bracket} ({signup.mmr} MMR)",
+        "message": f"{twitch} signed up for Bracket {signup.bracket} ({signup.mmr} MMR)",
     }
 
 
@@ -167,27 +152,20 @@ def create_signup_nightbot(
     "/koth/signups/admin",
     status_code=201,
     dependencies=[Depends(require_admin)],
-    response_model=None,
 )
 def create_signup_admin(
-    data: Annotated[dict, Body()], service: KothServiceDep
-) -> JSONResponse | dict[str, Any] | None:
+    data: KothSignupAdminRequest, service: KothServiceDep
+) -> KothSignupPublic:
     """Create a signup manually (Admin).
 
     Manually create a KOTH signup with automatic W3C MMR validation and
     bracket assignment. For admin UI use.
     """
-    twitch_username = data.get("twitch_username", "")
-    battle_tag = data.get("battle_tag")
-    race = data.get("race")
-
-    if not battle_tag:
-        raise BadRequestError("BattleTag is required")
-
-    signup = service.create_signup_from_twitch(
-        twitch_username=twitch_username, battle_tag=battle_tag, preferred_race=race
+    return service.create_signup_from_twitch(
+        twitch_username=data.twitch_username,
+        battle_tag=data.battle_tag,
+        preferred_race=data.race,
     )
-    return signup.to_dict()
 
 
 @router.put(
@@ -195,10 +173,10 @@ def create_signup_admin(
     dependencies=[Depends(require_admin)],
 )
 def update_signup_bracket(
-    signup_id: int, data: Annotated[dict, Body()], service: KothServiceDep
+    signup_id: int, data: KothBracketUpdate, service: KothServiceDep
 ) -> KothSignupPublic:
     """Manually update a player's bracket assignment."""
-    return service.update_signup_bracket(signup_id, data["bracket"])
+    return service.update_signup_bracket(signup_id, data.bracket)
 
 
 @router.post("/koth/signups/{signup_id}/king", dependencies=[Depends(require_admin)])

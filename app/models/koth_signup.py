@@ -77,6 +77,30 @@ class KothSignupUpdate(SQLModel):
     is_active: int | None = None
 
 
+class KothSignupRequest(SQLModel):
+    """The Nightbot signup body. The token rides in the body, so the route
+    checks it itself; the Discord bot may also send this shape."""
+
+    client_token: str
+    twitch_username: str
+    battle_tag: str
+    race: str | None = None
+
+
+class KothSignupAdminRequest(SQLModel):
+    """The admin signup body: the admin may leave the Twitch name blank."""
+
+    twitch_username: str = ""
+    battle_tag: str
+    race: str | None = None
+
+
+class KothBracketUpdate(SQLModel):
+    """The bracket body; the service keeps the 1-3 check."""
+
+    bracket: int
+
+
 class KothSignupPublic(KothSignupBase):
     id: int
     race: Annotated[str | None, EnumValue] = None
