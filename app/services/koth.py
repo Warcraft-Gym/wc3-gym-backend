@@ -213,7 +213,7 @@ class KothService:
         w3c_name = battle_tag
 
         current_season = w3c_service.current_season()
-        for season_offset in range(2):
+        for season_offset in range(3):
             season = current_season - season_offset
             try:
                 stats = w3c_service.get_player_stats(battle_tag, season_override=season)
