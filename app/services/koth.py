@@ -16,6 +16,7 @@ from app.models.koth_event import (
     KothEvent,
     KothEventCreate,
     KothEventPublic,
+    KothEventSummary,
     KothEventUpdate,
 )
 from app.models.koth_match import (
@@ -90,12 +91,10 @@ class KothService:
                 raise NotFoundError(f"KOTH Event not found by Id: {event_id}")
             return KothEventPublic.model_validate(event)
 
-    def get_all_events(self) -> list[KothEventPublic]:
+    def get_all_events(self) -> list[KothEventSummary]:
         with Session.begin() as session:
-            events = (
-                session.scalars(select(KothEvent).options(*EVENT_TREE)).unique().all()
-            )
-            return [KothEventPublic.model_validate(e) for e in events]
+            events = session.scalars(select(KothEvent)).all()
+            return [KothEventSummary.model_validate(e) for e in events]
 
     def get_active_event(self) -> KothEventPublic:
         with Session.begin() as session:

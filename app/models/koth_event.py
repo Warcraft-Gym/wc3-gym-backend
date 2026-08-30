@@ -50,6 +50,12 @@ class KothEventUpdate(SQLModel):
     bracket_2_threshold: int | None = None
 
 
+class KothEventSummary(KothEventBase):
+    """One row of the events list. The detail routes carry the full tree."""
+
+    id: int
+
+
 class KothEventPublic(KothEventBase):
     id: int
     event_date: datetime | None = None

@@ -5,7 +5,12 @@ from fastapi import APIRouter, Depends, Query
 
 from app.api.deps import KothServiceDep, require_admin
 from app.core.exceptions import ApiError, BadRequestError
-from app.models.koth_event import KothEventCreate, KothEventPublic, KothEventUpdate
+from app.models.koth_event import (
+    KothEventCreate,
+    KothEventPublic,
+    KothEventSummary,
+    KothEventUpdate,
+)
 from app.models.koth_match import (
     KothMatchCreate,
     KothMatchCreateRequest,
@@ -36,8 +41,8 @@ def _check_nightbot_token(service: KothService, token: str | None) -> None:
 
 # ============ Event Endpoints ============
 @router.get("/koth/events")
-def get_all_events(service: KothServiceDep) -> list[KothEventPublic]:
-    """Retrieve all King of the Hill events."""
+def get_all_events(service: KothServiceDep) -> list[KothEventSummary]:
+    """Retrieve all King of the Hill events, without their signups and matches."""
     return service.get_all_events()
 
 
