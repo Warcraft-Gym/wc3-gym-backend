@@ -1,32 +1,20 @@
 name: Vercel staging database
 
 # The staging Supabase project follows main: wc3gym_template and wc3gym_staging migrate on every
-# push to main, and a branch's own copy is dropped when the branch is deleted. See docs/PREVIEW-DATABASES.md.
+# push to main. A branch's own copy is dropped by vercel-staging-db-drop.yml. See docs/PREVIEW-DATABASES.md.
 on:
   push:
     branches: [main]
-  delete:
   workflow_dispatch:
 
 jobs:
   migrate:
-    if: github.repository == 'Warcraft-Gym/wc3-gym-backend' && github.event_name != 'delete'
+    if: github.repository == 'Warcraft-Gym/wc3-gym-backend'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
       - run: uv sync --frozen
       - run: uv run python scripts/vercel_staging_db.py migrate
-        env:
-          DB_URL: ${{ secrets.VERCEL_STAGING_DB_URL }}
-
-  drop:
-    if: github.repository == 'Warcraft-Gym/wc3-gym-backend' && github.event_name == 'delete' && github.event.ref_type == 'branch'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
-      - run: uv sync --frozen
-      - run: uv run python scripts/vercel_staging_db.py drop-branch "${{ github.event.ref }}"
         env:
           DB_URL: ${{ secrets.VERCEL_STAGING_DB_URL }}
