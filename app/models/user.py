@@ -40,7 +40,8 @@ class UserBase(SQLModel):
 class User(UserBase, DBModel, table=True):
     __tablename__ = "users"
     # The importers match a player by battle tag and a bettor by Discord tag,
-    # and neither service is case sensitive. A blank Discord tag means unknown.
+    # and neither service is case sensitive. A Clerk session matches a player by
+    # Discord id. A blank Discord tag or id means unknown.
     __table_args__ = (
         Index("uq_users_battle_tag", text('lower(trim("battleTag"))'), unique=True),
         Index(
@@ -49,6 +50,13 @@ class User(UserBase, DBModel, table=True):
             unique=True,
             sqlite_where=text("trim(\"discordTag\") <> ''"),
             postgresql_where=text("trim(\"discordTag\") <> ''"),
+        ),
+        Index(
+            "uq_users_discord_id",
+            text('trim("discordId")'),
+            unique=True,
+            sqlite_where=text("trim(\"discordId\") <> ''"),
+            postgresql_where=text("trim(\"discordId\") <> ''"),
         ),
     )
 

@@ -35,7 +35,7 @@ def user(tag: str, **kwargs: Any) -> User:  # noqa: ANN401  # model fields
         name=kwargs.pop("name", tag),
         battleTag=tag,
         discordTag=kwargs.pop("discordTag", tag),
-        discordId="0",
+        discordId=kwargs.pop("discordId", tag),
         race=Race.HU,
         **kwargs,
     )
@@ -48,6 +48,10 @@ REPEATS: dict[str, Rows] = {
     "users.discordTag": lambda _: [
         user("A#1", discordTag="Dup"),
         user("B#2", discordTag="dup"),
+    ],
+    "users.discordId": lambda _: [
+        user("A#1", discordId="42"),
+        user("B#2", discordId=" 42 "),
     ],
     "seasons.name": lambda _: [
         Season(name="Season 9", number_weeks=4, series_per_week=2),
@@ -122,12 +126,15 @@ def test_the_database_refuses_a_repeated_natural_key(
             session.flush()
 
 
-def test_a_blank_discord_tag_may_repeat(seeded: dict[str, Any]) -> None:
-    """An import writes a blank tag for a bettor who has none, and blank
+def test_a_blank_discord_tag_or_id_may_repeat(seeded: dict[str, Any]) -> None:
+    """An import writes a blank tag or id for a player who has none, and blank
     means unknown, so it names nobody and cannot repeat anybody."""
     with Session() as session:
         session.add_all(
-            [user("Blank#1", discordTag=""), user("Blank#2", discordTag="")]
+            [
+                user("Blank#1", discordTag="", discordId=""),
+                user("Blank#2", discordTag="", discordId=""),
+            ]
         )
         session.commit()
 
