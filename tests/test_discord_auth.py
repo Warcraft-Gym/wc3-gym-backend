@@ -51,8 +51,13 @@ def stub_clerk(
     member_roles: list[str] | None = None,
     guild: dict[str, Any] | None = None,
     account: dict[str, Any] | None = None,
+    calls: list[str] | None = None,
 ) -> None:
-    """Answer the Clerk session check, the account's own read, and the bot's guild reads."""
+    """Answer the Clerk session check, the account's own read, and the bot's guild reads.
+
+    Every path the bot reads is appended to `calls`, so a test can assert
+    that a login read the guild, or that it did not.
+    """
     who = account or ACCOUNT
     guild_data = {**GUILD, **(guild or {})}
 
@@ -76,6 +81,8 @@ def stub_clerk(
         return FakeResponse(200, who)
 
     def bot_get(path: str) -> FakeResponse:
+        if calls is not None:
+            calls.append(path)
         if path == f"/guilds/{GUILD_ID}":
             return FakeResponse(200, guild_data)
         assert path == f"/guilds/{GUILD_ID}/members/{who['id']}"
@@ -90,6 +97,14 @@ def stub_clerk(
     monkeypatch.setattr(Users, "get_o_auth_access_token", oauth_token)
     monkeypatch.setattr(discord, "_user_get", user_get)
     monkeypatch.setattr(discord, "_bot_get", bot_get)
+
+
+def _grant(client: Client, headers: dict[str, str], discord_id: str) -> None:
+    """Make that Discord account an admin, the way the Config page does."""
+    resp = client.post(
+        "/config/admins", json={"discord_id": discord_id}, headers=headers
+    )
+    assert resp.status_code == 201, resp.text
 
 
 def test_a_request_without_a_bearer_is_refused(client: Client) -> None:
@@ -126,6 +141,9 @@ def test_a_member_reads_me(client: Client, monkeypatch: pytest.MonkeyPatch) -> N
         "avatar": "https://cdn.discordapp.com/avatars/42/abc.png",
         "role": "member",
         "user": None,
+        "superadmin": False,
+        "signed_up": False,
+        "season_id": None,
     }
 
 
@@ -180,35 +198,58 @@ def test_a_guest_passes_no_player_route(
     }
 
 
-def test_the_allowlist_makes_an_admin(
+def test_the_allowlist_makes_an_admin_without_a_guild_read(
     client: Client, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    stub_clerk(monkeypatch, account={**ACCOUNT, "id": "220202568490418179"})
+    """The environment answers, so the login asks Discord nothing."""
+    calls: list[str] = []
+    stub_clerk(
+        monkeypatch, account={**ACCOUNT, "id": "220202568490418179"}, calls=calls
+    )
     resp = client.get("/me", headers=SESSION)
     assert resp.json()["role"] == "admin"
+    assert calls == []
 
 
-def test_the_guild_owner_is_an_admin(
+def test_a_grant_makes_an_admin(
+    client: Client, monkeypatch: pytest.MonkeyPatch, auth_headers: dict[str, str]
+) -> None:
+    _grant(client, auth_headers, ACCOUNT["id"])
+    stub_clerk(monkeypatch)
+    assert client.get("/me", headers=SESSION).json()["role"] == "admin"
+
+
+def test_a_granted_account_outside_the_guild_is_an_admin(
+    client: Client, monkeypatch: pytest.MonkeyPatch, auth_headers: dict[str, str]
+) -> None:
+    """The grant is the app's, so guild membership decides nothing for it."""
+    _grant(client, auth_headers, ACCOUNT["id"])
+    stub_clerk(monkeypatch, a_member=False)
+    assert client.get("/me", headers=SESSION).json()["role"] == "admin"
+
+
+def test_the_guild_owner_is_no_admin(
     client: Client, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     stub_clerk(monkeypatch, guild={"owner_id": ACCOUNT["id"]})
     resp = client.get("/me", headers=SESSION)
-    assert resp.json()["role"] == "admin"
+    assert resp.json()["role"] == "member"
 
 
-def test_an_administrator_role_makes_an_admin(
+def test_an_administrator_role_is_no_admin(
     client: Client, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     stub_clerk(
         monkeypatch, guild={"roles": [ADMIN_ROLE]}, member_roles=[ADMIN_ROLE["id"]]
     )
     resp = client.get("/me", headers=SESSION)
-    assert resp.json()["role"] == "admin"
+    assert resp.json()["role"] == "member"
 
 
-def test_the_admin_role_setting_makes_an_admin(
+def test_the_admin_role_setting_is_no_admin(
     client: Client, monkeypatch: pytest.MonkeyPatch, auth_headers: dict[str, str]
 ) -> None:
+    """The bot still reads the setting for its own commands; the site does not."""
     resp = client.put(
         "/config/settings/admin_role",
         json={"value": "gym-admins"},
@@ -217,7 +258,7 @@ def test_the_admin_role_setting_makes_an_admin(
     assert resp.status_code == 200, resp.json()
     stub_clerk(monkeypatch, member_roles=["gym-admins"])
     resp = client.get("/me", headers=SESSION)
-    assert resp.json()["role"] == "admin"
+    assert resp.json()["role"] == "member"
 
 
 def test_a_member_session_is_no_admin_token(

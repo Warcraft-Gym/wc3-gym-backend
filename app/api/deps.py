@@ -17,7 +17,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.core.exceptions import ApiError
 from app.core.security import decode_token
-from app.services import discord
+from app.services import admins, discord
 from app.services.draft_series import DraftSeriesService
 from app.services.fantasy_bets import FantasyBetService
 from app.services.fantasy_scores import FantasyScoreService
@@ -46,13 +46,14 @@ def _clerk() -> Clerk:
 
 
 def _clerk_claims(request: Request) -> dict[str, Any]:
-    """The Discord identity and guild role behind the request's Clerk session.
+    """The Discord identity and the role behind the request's Clerk session.
 
-    Clerk verifies the session token and holds the account's Discord token;
-    the guild and its roles are read with that token, as before.
+    Clerk verifies the session token and names the Discord account. An admin
+    is one the database or ADMIN_DISCORD_IDS names, so it needs no guild read;
+    everyone else is a member of the guild or a guest.
     """
-    # ponytail: one Clerk call and up to two Discord calls per request; cache
-    # them on the Clerk session id if the latency shows.
+    # ponytail: one Clerk call and one Discord call per request; cache them on
+    # the Clerk session id if the latency shows.
     parties = os.getenv("CLERK_AUTHORIZED_PARTIES", "http://localhost:5173")
     state = _clerk().authenticate_request(
         request,
@@ -75,14 +76,16 @@ def _clerk_claims(request: Request) -> dict[str, Any]:
         raise ApiError(401, {"error": "No Discord account on this login"})
 
     discord_id = tokens[0].provider_user_id
-    settings = settings_service.get_settings_dict()
     claims: dict[str, Any] = {
         "sub": discord_id,
-        "role": discord.role_for(discord_id, settings.get("admin_role")),
+        "role": "admin"
+        if admins.is_admin(discord_id)
+        else discord.role_for(discord_id),
         "token": tokens[0].token,
     }
     # A captain is one the database names on a current-season team, never a Discord role.
     if claims["role"] == "member":
+        settings = settings_service.get_settings_dict()
         seat = team_service.captain_seat(discord_id, settings.get("current_gnl_season"))
         if seat:
             claims |= {"role": "captain", "team_id": seat[0], "season_id": seat[1]}
@@ -131,6 +134,7 @@ def require_captain(request: Request, credentials: Credentials) -> dict[str, Any
     return claims
 
 
+RequireAdmin = Annotated[str, Depends(require_admin)]
 RequireLogin = Annotated[dict[str, Any], Depends(require_login)]
 RequireMember = Annotated[dict[str, Any], Depends(require_member)]
 RequireCaptain = Annotated[dict[str, Any], Depends(require_captain)]

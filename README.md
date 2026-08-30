@@ -204,7 +204,7 @@ The backend reads its configuration from the environment. `just up` passes devel
 
 `.env` is gitignored; copy `.env.example` to `.env` and fill in what you use. `create_app` calls `load_dotenv`, so its values arrive on their own; each has a default in the code. The deployment secrets are passed in by the stack.
 
-More values live in the `settings` table, not the environment, and are edited on the admin Config page: `w3c_url` (wins over the `W3C_URL` variable when present), `current_w3c_season` (the w3champions season the MMR columns read; when the row is missing the backend takes the newest season from w3champions), `KOTH_NIGHTBOT_TOKEN`, and `current_gnl_season` (the season the captain check and the role sync read; when the row is missing they take the newest season). The Discord roles the app owns are rows of `discord_role_binding`, not settings; `admin_role` stays a setting because login reads it and no sync writes it. `GET /config/w3c` shows the URL and season the backend resolved.
+More values live in the `settings` table, not the environment, and are edited on the admin Config page: `w3c_url` (wins over the `W3C_URL` variable when present), `current_w3c_season` (the w3champions season the MMR columns read; when the row is missing the backend takes the newest season from w3champions), `KOTH_NIGHTBOT_TOKEN`, and `current_gnl_season` (the season the captain check and the role sync read; when the row is missing they take the newest season). The Discord roles the app owns are rows of `discord_role_binding`, not settings, and the site admins are rows of `admin_grant`, managed under Config -> Access with `ADMIN_DISCORD_IDS` as the bootstrap. Discord grants no site admin: the guild owner, a role with the ADMINISTRATOR bit and the `admin_role` setting all read as members, and `admin_role` stays a setting because the Discord bot reads it for its own commands. `GET /config/w3c` shows the URL and season the backend resolved.
 
 **Key environment variables:**
 
@@ -235,7 +235,7 @@ BOT_WEBHOOK_URL="http://host.docker.internal:3001/webhook/series-updated"
 | `CLERK_SECRET_KEY` | Clerk instance secret; verifies the session token and reads the account's Discord token | `sk_test_...` |
 | `CLERK_AUTHORIZED_PARTIES` | Comma-separated origins Clerk accepts the session from | `http://localhost:5173` |
 | `DISCORD_GUILD_ID` | The WC3 Gym Discord server; an account outside it logs in as a guest and reaches no player route | `316390574808760322` |
-| `ADMIN_DISCORD_IDS` | Comma-separated Discord ids that always get the admin role | `220202568490418179` |
+| `ADMIN_DISCORD_IDS` | Comma-separated Discord ids that administer the site with no grant row and cannot be revoked; the bootstrap for Config -> Access | `220202568490418179` |
 | `DISCORD_BOT_TOKEN` | Optional bot token; when set, the app mirrors the roles of `discord_role_binding` into the guild and Config -> Discord roles reports the difference. Unset, every sync is a no-op | `MTIz...` |
 
 **Important Notes:**
