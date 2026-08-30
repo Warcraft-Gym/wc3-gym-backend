@@ -54,11 +54,12 @@ def _clerk_claims(request: Request) -> dict[str, Any]:
     """
     # ponytail: one Clerk call and one Discord call per request; cache them on
     # the Clerk session id if the latency shows.
+    # production lists its exact origins; Vercel previews set it empty because their origin changes per branch
     parties = os.getenv("CLERK_AUTHORIZED_PARTIES", "http://localhost:5173")
     state = _clerk().authenticate_request(
         request,
         AuthenticateRequestOptions(
-            authorized_parties=parties.replace(" ", "").split(",")
+            authorized_parties=parties.replace(" ", "").split(",") if parties else None
         ),
     )
     if not state.is_signed_in or state.payload is None:
