@@ -2,12 +2,14 @@ import logging
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Query, Response
+from pydantic import PositiveInt
 
 from app.api.deps import (
     FantasyBetServiceDep,
     FantasyScoreServiceDep,
     FantasyTeamServiceDep,
     SeasonServiceDep,
+    UserServiceDep,
     require_admin,
 )
 from app.core.exceptions import BadRequestError
@@ -30,6 +32,12 @@ from app.services.fantasy_bets import BetSort
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["fantasy"])
+
+
+@router.put("/fantasy/tiers", status_code=204, dependencies=[Depends(require_admin)])
+def set_fantasy_tiers(tiers: dict[int, PositiveInt], service: UserServiceDep) -> None:
+    """Replace the tier allocation in one transaction, unlisted players lose theirs."""
+    service.set_fantasy_tiers(tiers)
 
 
 # Team endpoints

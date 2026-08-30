@@ -206,3 +206,30 @@ def test_bets_search_pages_by_id_and_counts_the_filtered_set(
         assert resp.headers["X-Total-Count"] == "4"
         paged += [bet["id"] for bet in resp.json()]
     assert paged == sorted(ids)
+
+
+def test_tier_allocation_replaces_the_whole_map_at_once(
+    client: Client, seeded: dict[str, Any], auth_headers: dict[str, str]
+) -> None:
+    """One PUT sets every listed tier and clears every unlisted one."""
+    p1, p2 = seeded["player_ids"][:2]
+
+    resp = client.put(
+        "/fantasy/tiers", json={str(p1): 1, str(p2): 3}, headers=auth_headers
+    )
+    assert resp.status_code == 204
+    assert get_json(client, f"/users/{p1}")["fantasy_tier"] == 1
+    assert get_json(client, f"/users/{p2}")["fantasy_tier"] == 3
+
+    resp = client.put("/fantasy/tiers", json={str(p2): 2}, headers=auth_headers)
+    assert resp.status_code == 204
+    assert get_json(client, f"/users/{p1}")["fantasy_tier"] is None
+    assert get_json(client, f"/users/{p2}")["fantasy_tier"] == 2
+
+    assert (
+        client.put(
+            "/fantasy/tiers", json={str(p1): 0}, headers=auth_headers
+        ).status_code
+        == 422
+    )
+    assert client.put("/fantasy/tiers", json={str(p1): 1}).status_code in (401, 403)
