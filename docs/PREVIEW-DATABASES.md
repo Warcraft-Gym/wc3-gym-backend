@@ -32,7 +32,7 @@ The database name is `wc3gym_<slug>_<hash>`: the slug is the branch name lower-c
 
 ## When a copy is removed
 
-Exactly one trigger: GitHub reports the branch deleted. The workflow drops `wc3gym_<branch>` if it exists. There is no schedule; a database is only ever removed because its branch is gone. A branch that is kept after its pull request closes keeps its copy; `just db list vercel staging` shows it and `just db drop vercel staging <database>` removes it.
+Exactly one trigger: GitHub reports the branch deleted. The `Vercel staging database drop` workflow drops `wc3gym_<branch>` if it exists. A merge alone deletes nothing, so the repo has delete-branch-on-merge on; the drop is a separate run on the `delete` event and never shows in a commit's checks. There is no schedule; a database is only ever removed because its branch is gone. A branch that is kept after its pull request closes keeps its copy; `just db list vercel staging` shows it and `just db drop vercel staging <database>` removes it.
 
 ## Every case
 
@@ -62,7 +62,7 @@ A Supabase project is one Postgres instance. Extra databases work through the po
 | Choose or create the branch database, migrate it | `api/preview_db.py`, called from `vercel.json` | Preview build |
 | Point the app at its database | `api/index.py` | Cold start |
 | Migrate template and shared database | `.github/workflows/vercel-staging-db.yml` → `scripts/vercel_staging_db.py migrate` | Push to `main` |
-| Drop a branch's copy | same workflow → `scripts/vercel_staging_db.py drop-branch <branch>` | Branch deleted |
+| Drop a branch's copy | `.github/workflows/vercel-staging-db-drop.yml` → `scripts/vercel_staging_db.py drop-branch <branch>` | Branch deleted |
 | Single migration head | `tests/test_migrations.py` | Every pull request |
 | Reseed, list, manual drop | `just db seed vercel staging`, `just db list vercel staging`, `just db drop vercel staging <database>` | By hand |
 
