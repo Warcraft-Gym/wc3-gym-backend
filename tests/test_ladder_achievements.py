@@ -19,7 +19,7 @@ from app.core import achievements
 from app.core.achievements import Achievement
 from app.core.db import Session
 from app.models.enums import Race
-from app.models.relationships import DBTeamSeasonCoach
+from app.models.relationships import DBTeamSeasonCaptain
 from app.models.w3c_ladder_match import W3CLadderMatch
 from tests.test_ladder_read import INSIDE, add_match, ladder_of, player_of, sign_up
 from tests.test_query_budget import count_statements
@@ -62,12 +62,12 @@ def run(
     rows: Sequence[achievements.AchievementRow],
     points: int = 0,
     opponents: frozenset[str] = frozenset(),
-    coaches: frozenset[str] = frozenset(),
-    is_coach: bool = False,
+    captains: frozenset[str] = frozenset(),
+    is_captain: bool = False,
 ) -> set[str]:
     """The ids of the rules these rows earn."""
     found = achievements.earned(
-        rows, points, achievements.DEFAULT_PAID, opponents, coaches, is_coach
+        rows, points, achievements.DEFAULT_PAID, opponents, captains, is_captain
     )
     return {item.id for item in found}
 
@@ -279,18 +279,18 @@ def test_duck_hunting_pays_five_a_kill() -> None:
     assert hunt.description.endswith("2 kill(s)")
 
 
-def test_i_am_the_captain_now_wants_a_win_over_a_coach() -> None:
-    coaches = frozenset({"coach#1"})
-    lost = [Row(won=False, opp_battletag="Coach#1")]
-    assert "i_am_the_captain_now" not in run(lost, coaches=coaches)
-    won = [Row(opp_battletag="Coach#1")]
-    assert "i_am_the_captain_now" in run(won, coaches=coaches)
+def test_i_am_the_captain_now_wants_a_win_over_a_captain() -> None:
+    captains = frozenset({"captain#1"})
+    lost = [Row(won=False, opp_battletag="Captain#1")]
+    assert "i_am_the_captain_now" not in run(lost, captains=captains)
+    won = [Row(opp_battletag="Captain#1")]
+    assert "i_am_the_captain_now" in run(won, captains=captains)
 
 
-def test_a_coach_earns_nothing_for_beating_a_coach() -> None:
-    won = [Row(opp_battletag="Coach#1")]
-    coaches = frozenset({"coach#1", "me#1"})
-    assert "i_am_the_captain_now" not in run(won, coaches=coaches, is_coach=True)
+def test_a_captain_earns_nothing_for_beating_a_captain() -> None:
+    won = [Row(opp_battletag="Captain#1")]
+    captains = frozenset({"captain#1", "me#1"})
+    assert "i_am_the_captain_now" not in run(won, captains=captains, is_captain=True)
 
 
 # The registry and the answer.
@@ -344,11 +344,11 @@ def test_the_badges_come_oldest_first(
 def test_the_roster_rules_read_the_season(
     client: Client, auth_headers: dict[str, str], league: dict[str, Any]
 ) -> None:
-    """P1 on Alpha beats P3 on Beta, who coaches Beta."""
+    """P1 on Alpha beats P3 on Beta, who captains Beta."""
     one, three = league["player_ids"][0], league["player_ids"][2]
     with Session() as session:
         session.add(
-            DBTeamSeasonCoach(
+            DBTeamSeasonCaptain(
                 team_id=league["team_b_id"],
                 season_id=league["season_id"],
                 user_id=three,

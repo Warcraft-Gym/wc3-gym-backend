@@ -13,7 +13,7 @@ from httpx2 import Client
 from app.core.db import Session
 from app.models.discord_role_binding import DiscordRoleBinding
 from app.models.enums import RoleKind
-from app.models.relationships import DBTeamSeasonCoach
+from app.models.relationships import DBTeamSeasonCaptain
 from app.models.season import Season
 from app.models.settings import Settings
 from app.models.user import User
@@ -36,10 +36,10 @@ def _expected(user_id: int) -> set[str]:
         return discord_roles.expected_roles(user, session)
 
 
-def _coach(team_id: int, season_id: int, user_id: int) -> None:
+def _captain(team_id: int, season_id: int, user_id: int) -> None:
     with Session() as session:
         session.add(
-            DBTeamSeasonCoach(team_id=team_id, season_id=season_id, user_id=user_id)
+            DBTeamSeasonCaptain(team_id=team_id, season_id=season_id, user_id=user_id)
         )
         session.commit()
 
@@ -60,15 +60,15 @@ def _guild(
     return calls
 
 
-def test_a_coach_seat_earns_the_coach_role_and_the_team_role(
+def test_a_captain_seat_earns_the_captain_role_and_the_team_role(
     seeded: dict[str, Any],
 ) -> None:
-    """P3 coaches Alpha without playing for it, so both roles follow."""
-    _bind(RoleKind.coach, "coach-role")
+    """P3 captains Alpha without playing for it, so both roles follow."""
+    _bind(RoleKind.captain, "captain-role")
     _bind(RoleKind.team, "team-a", team_id=seeded["team_a_id"])
-    _coach(seeded["team_a_id"], seeded["season_id"], seeded["player_ids"][2])
+    _captain(seeded["team_a_id"], seeded["season_id"], seeded["player_ids"][2])
 
-    assert _expected(seeded["player_ids"][2]) == {"coach-role", "team-a"}
+    assert _expected(seeded["player_ids"][2]) == {"captain-role", "team-a"}
 
 
 def test_a_roster_earns_the_team_role_and_the_participant_role(
@@ -82,10 +82,10 @@ def test_a_roster_earns_the_team_role_and_the_participant_role(
     assert _expected(seeded["player_ids"][2]) == {"gnl"}
 
 
-def test_a_coach_earns_no_participant_role(seeded: dict[str, Any]) -> None:
+def test_a_captain_earns_no_participant_role(seeded: dict[str, Any]) -> None:
     """The participant role is for players; a captain sitting out earns none."""
     _bind(RoleKind.gnl_participant, "gnl")
-    _bind(RoleKind.coach, "coach-role")
+    _bind(RoleKind.captain, "captain-role")
     with Session() as session:
         outsider = User(
             name="Cap", battleTag="Cap#7", discordTag="cap", discordId="7", race="HU"
@@ -94,9 +94,9 @@ def test_a_coach_earns_no_participant_role(seeded: dict[str, Any]) -> None:
         session.commit()
         outsider_id = outsider.id
     assert outsider_id
-    _coach(seeded["team_a_id"], seeded["season_id"], outsider_id)
+    _captain(seeded["team_a_id"], seeded["season_id"], outsider_id)
 
-    assert _expected(outsider_id) == {"coach-role"}
+    assert _expected(outsider_id) == {"captain-role"}
 
 
 def test_a_fantasy_captain_earns_the_fantasy_role(seeded: dict[str, Any]) -> None:
@@ -142,18 +142,18 @@ def test_sync_grants_what_is_missing_and_removes_only_bound_roles(
 ) -> None:
     """A role no binding names is the guild's business, not the app's."""
     _bind(RoleKind.team, "team-a", team_id=seeded["team_a_id"])
-    _bind(RoleKind.coach, "coach-role")
-    calls = _guild(monkeypatch, {"1": ["coach-role", "unbound-role"]})
+    _bind(RoleKind.captain, "captain-role")
+    calls = _guild(monkeypatch, {"1": ["captain-role", "unbound-role"]})
 
     reports = discord_roles.sync([seeded["player_ids"][0]])
 
     assert [(one.missing, one.extra) for one in reports] == [
-        (["team-a"], ["coach-role"])
+        (["team-a"], ["captain-role"])
     ]
     assert calls == [
         ("GET", f"{MEMBERS}/1"),
         ("PUT", f"{MEMBERS}/1/roles/team-a"),
-        ("DELETE", f"{MEMBERS}/1/roles/coach-role"),
+        ("DELETE", f"{MEMBERS}/1/roles/captain-role"),
     ]
 
 

@@ -54,7 +54,7 @@ REPEATS: dict[str, Rows] = {
         Season(name="season 9", number_weeks=4, series_per_week=2),
     ],
     "discord_role_binding.discord_role": lambda _: [
-        DiscordRoleBinding(kind=RoleKind.coach, discord_role="7788"),
+        DiscordRoleBinding(kind=RoleKind.captain, discord_role="7788"),
         DiscordRoleBinding(kind=RoleKind.fantasy, discord_role="7788"),
     ],
     "maps.shortname": lambda _: [

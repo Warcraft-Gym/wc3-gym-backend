@@ -11,7 +11,7 @@ from app.models.types import NoneToList, NumToStr
 from app.models.user import UserPublic
 
 if TYPE_CHECKING:
-    from app.models.relationships import DBTeamSeasonCoach
+    from app.models.relationships import DBTeamSeasonCaptain
     from app.models.team_season import DBTeamSeason
     from app.models.user_team_season import DBUserTeamSeason
 
@@ -49,11 +49,11 @@ class Team(TeamBase, DBModel, table=True):
     season_info: list["DBTeamSeason"] = Relationship(
         back_populates="team", sa_relationship_kwargs={"cascade": "all, delete"}
     )
-    coach_seasons: list["DBTeamSeasonCoach"] = Relationship(
+    captain_seasons: list["DBTeamSeasonCaptain"] = Relationship(
         back_populates="team",
         sa_relationship_kwargs={
             "cascade": "all, delete",
-            "order_by": "DBTeamSeasonCoach.user_id",
+            "order_by": "DBTeamSeasonCaptain.user_id",
         },
     )
 
@@ -76,22 +76,22 @@ class TeamUpdate(SQLModel):
 
 
 class TeamPublic(TeamReduced):
-    """A team plus who played and coached for it, season by season.
+    """A team plus who played and captained for it, season by season.
 
     The lists are assembled from the link rows rather than read off the
     team, so this one is built by from_team, not by model_validate.
     """
 
     player_by_season: Annotated[dict[int, list[UserPublic]], SeasonLists] = {}
-    coaches_by_season: Annotated[dict[int, list[UserPublic]], SeasonLists] = {}
+    captains_by_season: Annotated[dict[int, list[UserPublic]], SeasonLists] = {}
     seasons_info: Annotated[list[SeasonInfoPublic], NoneToList] = []
-    # Coaches whose Discord account still lacks a bound role; only Save Coaches fills it
+    # Captains whose Discord account still lacks a bound role; only Save Captains fills it
     discord_role_missing: Annotated[list[str], NoneToList] = []
 
     @classmethod
     def from_team(cls, team: Team) -> Self:
         players = {}
-        coaches = {}
+        captains = {}
         seasons_info = (
             [
                 s
@@ -117,17 +117,17 @@ class TeamPublic(TeamReduced):
                             break
                     players[ut.season_id].append(user)
 
-        # Load coaches from the team_season_coach rows
-        for seat in team.coach_seasons:
+        # Load captains from the team_season_captain rows
+        for seat in team.captain_seasons:
             built = UserPublic.from_user(seat.user) if seat.user else None
             if built:
-                coaches.setdefault(seat.season_id, []).append(built)
+                captains.setdefault(seat.season_id, []).append(built)
 
         return cls(
             id=ident(team),
             name=team.name,
             long_name=team.long_name,
             player_by_season=players,
-            coaches_by_season=coaches,
+            captains_by_season=captains,
             seasons_info=seasons_info,
         )

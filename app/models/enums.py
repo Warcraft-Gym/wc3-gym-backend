@@ -32,7 +32,7 @@ _RACE_NAMES = {
 class RoleKind(enum.Enum):
     """What earns a bound Discord role. The name is the stored value."""
 
-    coach = "coach"
+    captain = "captain"
     team = "team"
     fantasy = "fantasy"
     gnl_participant = "gnl_participant"

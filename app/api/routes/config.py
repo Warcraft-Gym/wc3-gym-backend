@@ -133,7 +133,7 @@ def get_discord_role_bindings() -> list[DiscordRoleBindingPublic]:
 def add_discord_role_binding(
     data: DiscordRoleBindingCreate,
 ) -> DiscordRoleBindingPublic:
-    """Bind a Discord role to a coach seat, a team, a fantasy team or a season."""
+    """Bind a Discord role to a captain seat, a team, a fantasy team or a season."""
     return discord_roles.add_binding(data)
 
 

@@ -34,7 +34,7 @@ TABLES = {
     "series",
     "settings",
     "team_season",
-    "team_season_coach",
+    "team_season_captain",
     "teams",
     "user_season_signup",
     "user_team_season",
