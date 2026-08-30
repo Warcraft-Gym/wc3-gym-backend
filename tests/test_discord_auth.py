@@ -12,8 +12,11 @@ from clerk_backend_api import Clerk
 from clerk_backend_api.security.types import AuthStatus, RequestState
 from clerk_backend_api.users import Users
 from httpx2 import Client
+from sqlalchemy import delete
 from starlette.requests import Request
 
+from app.core.db import Session
+from app.models.clerk_account import ClerkAccount
 from app.services import discord
 
 CLERK_USER_ID = "user_2abcdefghijklmnop"
@@ -90,6 +93,8 @@ def stub_clerk(
             return FakeResponse(404, {"message": "Unknown Member"})
         return FakeResponse(200, {"roles": member_roles or []})
 
+    with Session.begin() as session:  # every test names its own account
+        session.execute(delete(ClerkAccount))
     monkeypatch.setenv("DISCORD_GUILD_ID", GUILD_ID)
     monkeypatch.setenv("DISCORD_BOT_TOKEN", "a-bot-token")
     monkeypatch.setenv("ADMIN_DISCORD_IDS", "220202568490418179")
@@ -146,6 +151,41 @@ def test_a_member_reads_me(client: Client, monkeypatch: pytest.MonkeyPatch) -> N
         "season_id": None,
         "team": None,
     }
+
+
+def test_clerk_names_the_account_once(
+    client: Client, monkeypatch: pytest.MonkeyPatch, seeded: dict[str, Any]
+) -> None:
+    """The first request stores the Discord id; later ones never ask Clerk."""
+    stub_clerk(monkeypatch)
+    assert client.get("/me", headers=SESSION).status_code == 200
+
+    def no_clerk(self: Users, **kwargs: str) -> list[SimpleNamespace]:
+        raise AssertionError("Clerk was asked again")
+
+    monkeypatch.setattr(Users, "get_o_auth_access_token", no_clerk)
+    resp = client.get(f"/draft-series/match/{seeded['match_id']}", headers=SESSION)
+    assert resp.status_code == 403  # a member, known without Clerk
+
+
+def test_a_relinked_discord_account_shows_at_the_next_login(
+    client: Client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    stub_clerk(monkeypatch)
+    assert client.get("/me", headers=SESSION).json()["discord_id"] == "42"
+    with (
+        Session.begin() as session
+    ):  # the same Clerk user now answers with another account
+        session.merge(ClerkAccount(clerk_user_id=CLERK_USER_ID, discord_id="42"))
+    monkeypatch.setattr(
+        Users,
+        "get_o_auth_access_token",
+        lambda self, **kwargs: [SimpleNamespace(token="t", provider_user_id="43")],
+    )
+    monkeypatch.setattr(
+        discord, "_bot_get", lambda path: FakeResponse(200, {"roles": []})
+    )
+    assert client.get("/me", headers=SESSION).json()["discord_id"] == "43"
 
 
 def test_me_carries_the_linked_user(
@@ -414,6 +454,8 @@ def test_saving_captains_writes_the_guild_role(
         return FakeResponse(200, {"roles": ["role-1"] if url == f"{members}/1" else []})
 
     monkeypatch.setenv("DISCORD_BOT_TOKEN", "a-bot-token")
+    with Session.begin() as session:  # every test names its own account
+        session.execute(delete(ClerkAccount))
     monkeypatch.setenv("DISCORD_GUILD_ID", GUILD_ID)
     monkeypatch.setattr(discord.requests, "request", request)
     team = _set_captains(

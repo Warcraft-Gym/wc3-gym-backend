@@ -16,6 +16,7 @@ import app.models
 
 TABLES = {
     "admin_grant",
+    "clerk_account",
     "discord_role_binding",
     "draft_series",
     "fantasy_bets",

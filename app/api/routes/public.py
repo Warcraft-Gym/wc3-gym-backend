@@ -17,6 +17,7 @@ from app.api.deps import (
     SeriesServiceDep,
     SettingsServiceDep,
     UserServiceDep,
+    discord_token,
     require_member,
 )
 from app.core.exceptions import ApiError, BadRequestError, NotFoundError
@@ -57,7 +58,7 @@ def _identity(
         claims = require_member(request, credentials)
         if claims["sub"] == "admin":
             raise ApiError(401, {"error": "not_a_discord_member"})
-        account = discord.identify(claims["token"])
+        account = discord.identify(discord_token(claims["clerk_user_id"]).token)
         return {
             "discord_id": str(claims["sub"]),
             "discord_tag": account.get("global_name")

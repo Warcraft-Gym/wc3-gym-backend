@@ -12,11 +12,14 @@ from typing import Annotated, Any
 
 import jwt
 from clerk_backend_api import AuthenticateRequestOptions, Clerk
+from clerk_backend_api.models import OAuthAccessToken
 from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
+from app.core.db import Session
 from app.core.exceptions import ApiError
 from app.core.security import decode_token
+from app.models.clerk_account import ClerkAccount
 from app.services import admins, discord
 from app.services.draft_series import DraftSeriesService
 from app.services.fantasy_bets import FantasyBetService
@@ -45,15 +48,17 @@ def _clerk() -> Clerk:
     return Clerk(bearer_auth=os.getenv("CLERK_SECRET_KEY"))
 
 
-def _clerk_claims(request: Request) -> dict[str, Any]:
+def clerk_claims(request: Request) -> dict[str, Any]:
     """The Discord identity and the role behind the request's Clerk session.
 
-    Clerk verifies the session token and names the Discord account. An admin
-    is one the database or ADMIN_DISCORD_IDS names, so it needs no guild read;
-    everyone else is a member of the guild or a guest.
+    Clerk verifies the session token locally (its JWKS is cached). The Discord
+    account behind the Clerk user is read from clerk_account, filled on the
+    first request. An admin is one the database or ADMIN_DISCORD_IDS names, so
+    it needs no guild read; everyone else is a member of the guild or a guest.
+    A captain is one the database names on a current-season team, never a
+    Discord role. Every check is live, so a kick, grant or seat change shows
+    on the next request.
     """
-    # ponytail: one Clerk call and one Discord call per request; cache them on
-    # the Clerk session id if the latency shows.
     # production lists its exact origins; Vercel previews set it empty because their origin changes per branch
     parties = os.getenv("CLERK_AUTHORIZED_PARTIES", "http://localhost:5173")
     state = _clerk().authenticate_request(
@@ -70,27 +75,47 @@ def _clerk_claims(request: Request) -> dict[str, Any]:
         )
         raise ApiError(401, {"error": state.message or "Not signed in"})
 
-    tokens = _clerk().users.get_o_auth_access_token(
-        user_id=str(state.payload["sub"]), provider="oauth_discord"
-    )
-    if not tokens:
-        raise ApiError(401, {"error": "No Discord account on this login"})
-
-    discord_id = tokens[0].provider_user_id
-    claims: dict[str, Any] = {
-        "sub": discord_id,
-        "role": "admin"
-        if admins.is_admin(discord_id)
-        else discord.role_for(discord_id),
-        "token": tokens[0].token,
-    }
-    # A captain is one the database names on a current-season team, never a Discord role.
+    clerk_user_id = str(state.payload["sub"])
+    discord_id = _discord_id(clerk_user_id)
+    claims: dict[str, Any] = {"sub": discord_id, "clerk_user_id": clerk_user_id}
+    if admins.is_admin(discord_id):
+        return claims | {"role": "admin"}
+    claims["role"] = discord.role_for(discord_id)
     if claims["role"] == "member":
         settings = settings_service.get_settings_dict()
         seat = team_service.captain_seat(discord_id, settings.get("current_gnl_season"))
         if seat:
             claims |= {"role": "captain", "team_id": seat[0], "season_id": seat[1]}
     return claims
+
+
+def _discord_id(clerk_user_id: str) -> str:
+    """The Discord id behind a Clerk user: one row, written by its first request."""
+    with Session.begin() as session:
+        account = session.get(ClerkAccount, clerk_user_id)
+        if account:
+            return account.discord_id
+    return discord_token(clerk_user_id).provider_user_id
+
+
+def discord_token(clerk_user_id: str) -> OAuthAccessToken:
+    """The Discord OAuth token Clerk holds for that user, for reads as the account.
+
+    Every answer rewrites the clerk_account row, so a Discord account relinked
+    in Clerk is picked up by the next login (/me reads the token every time).
+    """
+    tokens = _clerk().users.get_o_auth_access_token(
+        user_id=clerk_user_id, provider="oauth_discord"
+    )
+    if not tokens:
+        raise ApiError(401, {"error": "No Discord account on this login"})
+    with Session.begin() as session:
+        session.merge(
+            ClerkAccount(
+                clerk_user_id=clerk_user_id, discord_id=tokens[0].provider_user_id
+            )
+        )
+    return tokens[0]
 
 
 def require_login(request: Request, credentials: Credentials) -> dict[str, Any]:
@@ -103,7 +128,7 @@ def require_login(request: Request, credentials: Credentials) -> dict[str, Any]:
     try:
         claims = decode_token(credentials.credentials)
     except jwt.InvalidTokenError:
-        return _clerk_claims(request)
+        return clerk_claims(request)
     if claims.get("type") != "access":
         raise ApiError(422, {"error": "Only access tokens are allowed"})
     return claims

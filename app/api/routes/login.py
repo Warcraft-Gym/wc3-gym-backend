@@ -1,10 +1,16 @@
 import os
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import RedirectResponse
 
-from app.api.deps import RequireLogin, TeamServiceDep, UserServiceDep
+from app.api.deps import (
+    RequireLogin,
+    TeamServiceDep,
+    UserServiceDep,
+    clerk_claims,
+    discord_token,
+)
 from app.core.exceptions import ApiError
 from app.core.security import create_access_token
 from app.models.login import LoginRequest
@@ -31,12 +37,22 @@ def login(data: LoginRequest) -> dict[str, str]:
 
 @router.get("/me")
 def me(
-    claims: RequireLogin, user_service: UserServiceDep, team_service: TeamServiceDep
+    request: Request,
+    claims: RequireLogin,
+    user_service: UserServiceDep,
+    team_service: TeamServiceDep,
 ) -> dict[str, Any]:
     """The logged-in account, the users row linked to its Discord id, and the season."""
     # The admin token carries no Discord account, so it reads no name.
-    superadmin = "token" not in claims
-    account = {} if superadmin else discord.identify(claims["token"])
+    superadmin = "clerk_user_id" not in claims
+    account: dict[str, Any] = {}
+    if not superadmin:
+        token = discord_token(claims["clerk_user_id"])
+        if token.provider_user_id != claims["sub"]:
+            # the frontend keeps this answer all session, so a Discord account
+            # relinked in Clerk must show now, not one request later
+            claims = clerk_claims(request)
+        account = discord.identify(token.token)
     users = user_service.find_by_discord_id(claims["sub"])
     user = users[0] if users else None
     season_id = discord_roles.current_season()
