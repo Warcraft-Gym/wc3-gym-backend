@@ -3,7 +3,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Query
 
-from app.api.deps import KothServiceDep, require_admin
+from app.api.deps import KothServiceDep, RequireLogin, UserServiceDep, require_admin
 from app.core.exceptions import ApiError, BadRequestError
 from app.models.koth_event import (
     KothEventCreate,
@@ -21,6 +21,7 @@ from app.models.koth_match import (
 from app.models.koth_signup import (
     KothBracketUpdate,
     KothSignupAdminRequest,
+    KothSignupMeRequest,
     KothSignupPublic,
     KothSignupRequest,
 )
@@ -117,11 +118,12 @@ def create_signup(data: KothSignupRequest, service: KothServiceDep) -> KothSignu
     _check_nightbot_token(service, data.client_token)
     if not data.twitch_username or not data.battle_tag:
         raise BadRequestError("Missing required fields")
-    return service.create_signup_from_twitch(
+    signups = service.create_signups(
         twitch_username=data.twitch_username,
         battle_tag=data.battle_tag,
-        preferred_race=data.race,
+        races=[data.race] if data.race else None,
     )
+    return signups[0]
 
 
 @router.get("/koth/signup")
@@ -143,9 +145,10 @@ def create_signup_nightbot(
     if not twitch or not battletag:
         raise BadRequestError("Missing required parameters: token, twitch, battletag")
 
-    signup = service.create_signup_from_twitch(
-        twitch_username=twitch, battle_tag=battletag, preferred_race=race
+    signups = service.create_signups(
+        twitch_username=twitch, battle_tag=battletag, races=[race] if race else None
     )
+    signup = signups[0]
     # Nightbot displays the body text in chat, so the shape stays
     return {
         "success": True,
@@ -160,16 +163,36 @@ def create_signup_nightbot(
 )
 def create_signup_admin(
     data: KothSignupAdminRequest, service: KothServiceDep
-) -> KothSignupPublic:
+) -> list[KothSignupPublic]:
     """Create a signup manually (Admin).
 
     Manually create a KOTH signup with automatic W3C MMR validation and
-    bracket assignment. For admin UI use.
+    bracket assignment, one signup per race named. For admin UI use.
     """
-    return service.create_signup_from_twitch(
+    return service.create_signups(
         twitch_username=data.twitch_username,
         battle_tag=data.battle_tag,
-        preferred_race=data.race,
+        races=data.races,
+    )
+
+
+@router.post("/koth/signups/me", status_code=201)
+def create_signup_me(
+    data: KothSignupMeRequest,
+    claims: RequireLogin,
+    service: KothServiceDep,
+    user_service: UserServiceDep,
+) -> list[KothSignupPublic]:
+    """Sign the logged-in player up for the active event, one signup per race.
+
+    The battle tag comes from the player's profile, so the player names only
+    the races they want to play.
+    """
+    users = user_service.find_by_discord_id(claims["sub"])
+    if not users or not users[0].battleTag:
+        raise BadRequestError("Your profile carries no battle tag")
+    return service.create_signups(
+        twitch_username="", battle_tag=users[0].battleTag, races=data.races
     )
 
 
