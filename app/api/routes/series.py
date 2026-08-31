@@ -4,7 +4,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query
 
 from app.api.deps import SeriesServiceDep, require_admin
-from app.core.exceptions import BadRequestError
+from app.api.search import SearchQuery
 from app.core.query import QueryUtil
 from app.models.series import SeriesCreate, SeriesPublic, SeriesUpdate
 
@@ -53,15 +53,12 @@ def get_series(series_id: int, service: SeriesServiceDep) -> SeriesPublic:
 @router.post("/series/search")
 def search_series(
     service: SeriesServiceDep,
-    query: str = "",
+    query: SearchQuery,
     limit: Annotated[int, Query(ge=1, le=500)] = 500,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[SeriesPublic]:
     """Search series by criteria using a custom query format."""
-    parsed_query = QueryUtil.parse_query(query)
-    if not parsed_query or not parsed_query.elementA:
-        raise BadRequestError(f"No valid query found: {query}")
-    return service.search(parsed_query, limit=limit, offset=offset)
+    return service.search(query, limit=limit, offset=offset)
 
 
 @router.post("/series/season/{season_id}/playday/{playday}/search")

@@ -44,14 +44,8 @@ def import_season(
     Imports ALL season data (season, maps, teams, players, matches, series)
     from Excel file. score_system overrides the one the workbook carries.
     """
-    if file is None:
-        raise BadRequestError("No file part")
-
-    if not file.filename or not file.filename.endswith((".xlsx", ".xls")):
-        raise BadRequestError("No selected file or invalid file type")
-
     imported = import_season_workbook(
-        file.file.read(), create_new.lower() == "true", score_system
+        _workbook_bytes(file), create_new.lower() == "true", score_system
     )
 
     return {
@@ -81,6 +75,7 @@ def export_season(
     """
     # get raises NotFoundError, which answers 404
     season = season_service.get(season_id)
+    season_query = QueryUtil.parse_query(f"season_id=={season_id}")
 
     # write_only keeps one row in memory at a time instead of the whole sheet
     workbook = openpyxl.Workbook(write_only=True)
@@ -195,24 +190,21 @@ def export_season(
             "Date Frame",
         ]
     )
-    q_string = f"season_id=={season_id}"
-    query = QueryUtil.parse_query(q_string)
-    if query and query.elementA:
-        all_matches = match_service.search(query)
-        for match in all_matches:
-            matches_sheet.append(
-                [
-                    match.id,
-                    match.team1_id,
-                    match.team2_id,
-                    match.season_id,
-                    match.playday,
-                    match.team1_score or "",
-                    match.team2_score or "",
-                    match.fixed_map.id if match.fixed_map else "",
-                    match.date_frame or "",
-                ]
-            )
+    all_matches = match_service.search(season_query)
+    for match in all_matches:
+        matches_sheet.append(
+            [
+                match.id,
+                match.team1_id,
+                match.team2_id,
+                match.season_id,
+                match.playday,
+                match.team1_score or "",
+                match.team2_score or "",
+                match.fixed_map.id if match.fixed_map else "",
+                match.date_frame or "",
+            ]
+        )
 
     # ===== Sheet 6: Series =====
     series_sheet = workbook.create_sheet(title="Series")
@@ -232,37 +224,31 @@ def export_season(
             "Is Fantasy Match",
         ]
     )
-    for match in all_matches if "all_matches" in locals() else []:
-        q_string = f"match_id=={match.id}"
-        query = QueryUtil.parse_query(q_string)
-        if query and query.elementA:
-            series_list = series_service.search(query)
-            for series in series_list:
-                date_time_str = (
-                    series.date_time.strftime("%Y-%m-%d %H:%M:%S")
-                    if series.date_time
-                    else ""
-                )
-                series_sheet.append(
-                    [
-                        series.id,
-                        series.match_id,
-                        series.player1_id,
-                        series.player2_id,
-                        series.player1_score
-                        if series.player1_score is not None
-                        else "",
-                        series.player2_score
-                        if series.player2_score is not None
-                        else "",
-                        series.player1_points or "",
-                        series.player2_points or "",
-                        series.host_player_id,
-                        date_time_str,
-                        series.caster or "",
-                        series.is_fantasy_match or False,
-                    ]
-                )
+    for match in all_matches:
+        for series in series_service.search(
+            QueryUtil.parse_query(f"match_id=={match.id}")
+        ):
+            date_time_str = (
+                series.date_time.strftime("%Y-%m-%d %H:%M:%S")
+                if series.date_time
+                else ""
+            )
+            series_sheet.append(
+                [
+                    series.id,
+                    series.match_id,
+                    series.player1_id,
+                    series.player2_id,
+                    series.player1_score if series.player1_score is not None else "",
+                    series.player2_score if series.player2_score is not None else "",
+                    series.player1_points or "",
+                    series.player2_points or "",
+                    series.host_player_id,
+                    date_time_str,
+                    series.caster or "",
+                    series.is_fantasy_match or False,
+                ]
+            )
 
     # The captains, drafted players and bettors, for the Fantasy Users sheet below
     fantasy_user_ids: set[int | None] = set()
@@ -285,33 +271,30 @@ def export_season(
             "Total Points",
         ]
     )
-    q_string = f"season_id=={season_id}"
-    query = QueryUtil.parse_query(q_string)
-    if query and query.elementA:
-        fantasy_teams, _ = fantasy_team_service.search(query)
-        for fteam in fantasy_teams:
-            fantasy_user_ids.add(fteam.captain_id)
-            fantasy_teams_sheet.append(
-                [
-                    fteam.id,
-                    fteam.name,
-                    fteam.season_id,
-                    fteam.captain_id,
-                    fteam.drafted_team_id or "",
-                    fteam.drafted_race or "",
-                    fteam.player_points or 0,
-                    fteam.bench_points or 0,
-                    fteam.team_points or 0,
-                    fteam.race_points or 0,
-                    fteam.bet_points or 0,
-                    fteam.total_points or 0,
-                ]
-            )
+    fantasy_teams, _ = fantasy_team_service.search(season_query)
+    for fteam in fantasy_teams:
+        fantasy_user_ids.add(fteam.captain_id)
+        fantasy_teams_sheet.append(
+            [
+                fteam.id,
+                fteam.name,
+                fteam.season_id,
+                fteam.captain_id,
+                fteam.drafted_team_id or "",
+                fteam.drafted_race or "",
+                fteam.player_points or 0,
+                fteam.bench_points or 0,
+                fteam.team_points or 0,
+                fteam.race_points or 0,
+                fteam.bet_points or 0,
+                fteam.total_points or 0,
+            ]
+        )
 
     # ===== Sheet 8: Fantasy Team Players (many-to-many) =====
     fantasy_players_sheet = workbook.create_sheet(title="Fantasy Team Players")
     fantasy_players_sheet.append(["Fantasy Team ID", "Player ID"])
-    for fteam in fantasy_teams if "fantasy_teams" in locals() else []:
+    for fteam in fantasy_teams:
         if fteam.drafted_players:
             for player in fteam.drafted_players:
                 fantasy_user_ids.add(player.id)
@@ -330,28 +313,29 @@ def export_season(
             "Bet Result",
         ]
     )
-    if query and query.elementA:
-        # A season holds the most bets of anything here, so it is read by page
-        offset = 0
-        while True:
-            page, _ = fantasy_bet_service.search(query, limit=BET_PAGE, offset=offset)
-            for fbet in page:
-                fantasy_user_ids.add(fbet.user_id)
-                fantasy_user_ids.add(fbet.winner_id)
-                fantasy_bets_sheet.append(
-                    [
-                        fbet.id,
-                        fbet.season_id,
-                        fbet.series_id,
-                        fbet.user_id,
-                        fbet.winner_id,
-                        fbet.bet_points,
-                        fbet.bet_result or "",
-                    ]
-                )
-            if len(page) < BET_PAGE:
-                break
-            offset += BET_PAGE
+    # A season holds the most bets of anything here, so it is read by page
+    offset = 0
+    while True:
+        page, _ = fantasy_bet_service.search(
+            season_query, limit=BET_PAGE, offset=offset
+        )
+        for fbet in page:
+            fantasy_user_ids.add(fbet.user_id)
+            fantasy_user_ids.add(fbet.winner_id)
+            fantasy_bets_sheet.append(
+                [
+                    fbet.id,
+                    fbet.season_id,
+                    fbet.series_id,
+                    fbet.user_id,
+                    fbet.winner_id,
+                    fbet.bet_points,
+                    fbet.bet_result or "",
+                ]
+            )
+        if len(page) < BET_PAGE:
+            break
+        offset += BET_PAGE
 
     # ===== Sheet 10: Fantasy Users =====
     # The users of the sheets above who are on no roster, so not in Players

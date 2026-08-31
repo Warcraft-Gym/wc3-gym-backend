@@ -64,10 +64,9 @@ class W3CService:
         if not self.settings_app_service:
             return None
         try:
-            setting = self.settings_app_service.get_setting(key)
+            return self.settings_app_service.get_by_key(key).value
         except NotFoundError:
             return None
-        return setting.get("value") if setting else None
 
     def base_url(self) -> str:
         """The w3champions API base: the setting, then the environment, then the default."""

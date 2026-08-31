@@ -12,8 +12,8 @@ from app.api.deps import (
     UserServiceDep,
     require_admin,
 )
+from app.api.search import SearchQuery
 from app.core.exceptions import ApiError, BadRequestError, NotFoundError
-from app.core.query import QueryUtil
 from app.models.team import TeamCreate, TeamPublic, TeamUpdate
 from app.models.user_season_availability import (
     TeamAvailabilityWrite,
@@ -202,15 +202,12 @@ def get_all_teams(
 @router.post("/teams/search")
 def search_teams(
     service: TeamServiceDep,
-    query: str = "",
+    query: SearchQuery,
     limit: Annotated[int, Query(ge=1, le=500)] = 500,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[TeamPublic]:
     """Search teams by criteria using a custom query format."""
-    parsed_query = QueryUtil.parse_query(query)
-    if not parsed_query or not parsed_query.elementA:
-        raise BadRequestError(f"No valid query found: {query}")
-    return service.search(parsed_query, limit=limit, offset=offset)
+    return service.search(query, limit=limit, offset=offset)
 
 
 @router.post(
