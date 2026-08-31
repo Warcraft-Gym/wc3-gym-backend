@@ -18,6 +18,7 @@ from app.api.deps import (
 from app.core.exceptions import BadRequestError
 from app.core.query import QueryUtil
 from app.models.settings import Message
+from app.models.types import EmptyStrToNone
 from app.services import discord_roles
 from app.services.fantasy_import import (
     import_fantasy_bets_workbook,
@@ -36,7 +37,7 @@ BET_PAGE = 500  # how many bets the export reads per statement
 @router.post("/import", dependencies=[Depends(require_admin)])
 def import_season(
     file: Annotated[UploadFile | None, File()] = None,
-    create_new: str = "false",
+    create_new: bool = False,
     score_system: str | None = None,
 ) -> dict[str, Any]:
     """Import complete season data from Excel.
@@ -44,9 +45,7 @@ def import_season(
     Imports ALL season data (season, maps, teams, players, matches, series)
     from Excel file. score_system overrides the one the workbook carries.
     """
-    imported = import_season_workbook(
-        _workbook_bytes(file), create_new.lower() == "true", score_system
-    )
+    imported = import_season_workbook(_workbook_bytes(file), create_new, score_system)
 
     return {
         "message": "Season imported successfully",
@@ -380,30 +379,26 @@ def _workbook_bytes(file: UploadFile | None) -> bytes:
 @router.post("/fantasy/import/teams", dependencies=[Depends(require_admin)])
 def import_fantasy_teams(
     file: Annotated[UploadFile | None, File()] = None,
-    season_id: str | None = None,
+    season_id: Annotated[int | None, EmptyStrToNone] = None,
     season_name: str | None = None,
 ) -> Message:
     """Import a xlsx with the information for a GNL fantasy season.
 
     Updates the database based on the import sheet.
     """
-    import_fantasy_teams_workbook(
-        _workbook_bytes(file), int(season_id) if season_id else None, season_name
-    )
+    import_fantasy_teams_workbook(_workbook_bytes(file), season_id, season_name)
     return Message(message="File uploaded successfully and data inserted into database")
 
 
 @router.post("/fantasy/import/bets", dependencies=[Depends(require_admin)])
 def import_fantasy_bets(
     file: Annotated[UploadFile | None, File()] = None,
-    season_id: str | None = None,
+    season_id: Annotated[int | None, EmptyStrToNone] = None,
     season_name: str | None = None,
 ) -> Message:
     """Import a xlsx with the information for a GNL fantasy season.
 
     Updates the database based on the import sheet.
     """
-    import_fantasy_bets_workbook(
-        _workbook_bytes(file), int(season_id) if season_id else None, season_name
-    )
+    import_fantasy_bets_workbook(_workbook_bytes(file), season_id, season_name)
     return Message(message="File uploaded successfully and data inserted into database")

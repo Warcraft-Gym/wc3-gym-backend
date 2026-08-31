@@ -122,6 +122,19 @@ class FantasyBetUpdate(SQLModel):
     bet_points: Annotated[int | None, EmptyStrToNone] = None
 
 
+class PublicFantasyBetWrite(SQLModel):
+    """A bet placed or edited from the public page; the token names the bettor.
+
+    An update keeps whatever field the body leaves out, so read it unset-aware.
+    """
+
+    token: str | None = None
+    series_id: int | None = None
+    season_id: int | None = None
+    winner_id: int | None = None
+    bet_points: Annotated[int | None, EmptyStrToNone] = None
+
+
 class FantasyBetPublic(FantasyBetBase, PublicModel):
     # app.services.derived.fill_bet_results answers this one; no column holds it
     bet_result: int | None = None

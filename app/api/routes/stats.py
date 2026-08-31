@@ -3,7 +3,7 @@ import io
 import logging
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Body, Depends, File, Query, Response, UploadFile
+from fastapi import APIRouter, Depends, File, Query, Response, UploadFile
 
 from app.api.deps import StatsServiceDep, require_admin
 from app.core.exceptions import BadRequestError, NotFoundError
@@ -53,11 +53,10 @@ def get_career_stats_by_user(stat_id: int, service: StatsServiceDep) -> dict[str
 
 @router.put("/stats/career/{stat_id}", dependencies=[Depends(require_admin)])
 def update_career_stats(
-    stat_id: int, data: Annotated[dict, Body()], service: StatsServiceDep
+    stat_id: int, data: PlayerCareerStatsUpdate, service: StatsServiceDep
 ) -> dict[str, Any]:
     """Update historical baseline values and user link for career stats."""
-    update = PlayerCareerStatsUpdate(**data)
-    stat = service.update_career_stats(stat_id, update)
+    stat = service.update_career_stats(stat_id, data)
     if not stat:
         raise NotFoundError("Stats not found")
     return stat.to_dict()

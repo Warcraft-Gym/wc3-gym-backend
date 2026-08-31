@@ -8,6 +8,7 @@ from app.models.base import DBModel, PublicModel, ident
 from app.models.enums import Race
 from app.models.season import SeasonPublic
 from app.models.types import (
+    EmptyStrToNone,
     EnumValue,
     KnownTimeZone,
     NoneToList,
@@ -97,6 +98,21 @@ class UserUpdate(SQLModel):
     country: Annotated[str | None, NumToStr] = None
     timezone: Annotated[str | None, KnownTimeZone] = None
     fantasy_tier: int | None = None
+
+
+class PublicSignupWrite(SQLModel):
+    """The public signup form. The Discord identity comes from the token or the
+    session, never from here, and UserCreate is what rejects a bad profile."""
+
+    token: str | None = None
+    name: Annotated[str | None, NumToStr] = None
+    battleTag: Annotated[str | None, NumToStr] = None
+    race: str | None = None
+    mmr: int | None = None
+    country: Annotated[str | None, NumToStr] = None
+    timezone: str | None = None
+    season_id: Annotated[int | None, EmptyStrToNone] = None
+    seasonId: Annotated[int | None, EmptyStrToNone] = None
 
 
 class UserReduced(UserBase, PublicModel):

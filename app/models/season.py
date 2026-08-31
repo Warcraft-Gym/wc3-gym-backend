@@ -84,6 +84,25 @@ class SeasonUpdate(SQLModel):
     score_system: str | None = None
 
 
+class SeasonTeamIds(SQLModel):
+    team_ids: list[int]
+
+
+class SeasonMapIds(SQLModel):
+    map_ids: list[int]
+
+
+class SeasonLadderMapNames(SQLModel):
+    names: list[str]
+
+
+class SeasonSignupWrite(SQLModel):
+    """The users to sign up or remove. A removal ignores the race."""
+
+    user_ids: list[int]
+    race: str | None = None
+
+
 class SeasonPublic(SeasonBase):
     id: int
     # The short form of a season carries only the name, so these read null
