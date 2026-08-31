@@ -7,7 +7,6 @@ a Race member, so the import has to translate.
 import io
 from typing import Any
 
-import pandas as pd
 import pytest
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -20,6 +19,7 @@ from app.models.fantasy_bet import FantasyBet
 from app.models.fantasy_team import FantasyTeam
 from app.models.series import Series
 from app.models.user import User
+from tests.conftest import write_workbook
 from tests.test_query_budget import count_statements
 
 
@@ -54,25 +54,17 @@ DRAFTED = ["P1", "P2", "P3", "P4", "P1", "P2", "P3", "P4"]
 
 def _teams_sheet(rows: list[list[Any]]) -> io.BytesIO:
     """A "Formatted Responses" sheet. The import reads columns by position."""
-    frame = pd.DataFrame(rows, columns=[f"c{i}" for i in range(12)])
-    stream = io.BytesIO()
-    frame.to_excel(stream, sheet_name="Formatted Responses", index=False)
-    stream.seek(0)
-    return stream
+    return write_workbook({"Formatted Responses": ([f"c{i}" for i in range(12)], rows)})
 
 
 def _bets_sheets(matches: list[list[Any]], bets: list[list[Any]]) -> io.BytesIO:
     """A "Betting Matches" and a "Bets" sheet. Columns read by position."""
-    stream = io.BytesIO()
-    with pd.ExcelWriter(stream) as writer:
-        pd.DataFrame(matches, columns=[f"c{i}" for i in range(3)]).to_excel(
-            writer, sheet_name="Betting Matches", index=False
-        )
-        pd.DataFrame(bets, columns=[f"c{i}" for i in range(4)]).to_excel(
-            writer, sheet_name="Bets", index=False
-        )
-    stream.seek(0)
-    return stream
+    return write_workbook(
+        {
+            "Betting Matches": ([f"c{i}" for i in range(3)], matches),
+            "Bets": ([f"c{i}" for i in range(4)], bets),
+        }
+    )
 
 
 def test_import_fantasy_teams_reads_the_race(

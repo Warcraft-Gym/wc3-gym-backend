@@ -7,7 +7,6 @@ wrote, or an error envelope when the pipeline raises.
 import io
 from typing import Any
 
-import pandas as pd
 from httpx2 import Client, Response
 from sqlalchemy import func, select
 from sqlmodel import col
@@ -20,6 +19,7 @@ from app.models.map import Map
 from app.models.season import Season
 from app.models.team import Team
 from app.models.user import User
+from tests.conftest import write_workbook
 from tests.test_query_budget import count_statements
 
 SHEETS: dict[str, tuple[list[str], list[list[Any]]]] = {
@@ -128,18 +128,15 @@ def _workbook(
     """A season export. `without` drops one sheet the pipeline reads,
     `season_id` names the season it writes into instead of a new one, and
     `extra` adds sheets the default workbook does not carry."""
-    stream = io.BytesIO()
-    with pd.ExcelWriter(stream) as writer:
-        for name, (columns, rows) in {**SHEETS, **(extra or {})}.items():
-            if name == without:
-                continue
-            if name == "Season" and season_id is not None:
-                rows = [[season_id, *rows[0][1:]]]
-            pd.DataFrame(rows, columns=columns).to_excel(
-                writer, sheet_name=name, index=False
-            )
-    stream.seek(0)
-    return stream
+    sheets = {
+        name: sheet
+        for name, sheet in {**SHEETS, **(extra or {})}.items()
+        if name != without
+    }
+    if season_id is not None:
+        columns, rows = sheets["Season"]
+        sheets["Season"] = (columns, [[season_id, *rows[0][1:]]])
+    return write_workbook(sheets)
 
 
 def _post(client: Client, book: io.BytesIO, headers: dict[str, str]) -> Response:
