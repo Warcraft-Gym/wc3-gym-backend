@@ -21,6 +21,7 @@ from app.core.exceptions import ApiError
 from app.core.security import decode_token
 from app.models.clerk_account import ClerkAccount
 from app.services import admins, discord
+from app.services.availability import AvailabilityService
 from app.services.draft_series import DraftSeriesService
 from app.services.fantasy_bets import FantasyBetService
 from app.services.fantasy_scores import FantasyScoreService
@@ -184,6 +185,7 @@ fantasy_score_service = FantasyScoreService(
 koth_service = KothService(settings_app_service=settings_service)
 ladder_service = LadderService(settings_app_service=settings_service)
 stats_service = PlayerCareerStatsService()
+availability_service = AvailabilityService()
 
 
 def get_settings_service() -> SettingsService:
@@ -242,6 +244,10 @@ def get_stats_service() -> PlayerCareerStatsService:
     return stats_service
 
 
+def get_availability_service() -> AvailabilityService:
+    return availability_service
+
+
 SettingsServiceDep = Annotated[SettingsService, Depends(get_settings_service)]
 UserServiceDep = Annotated[UserService, Depends(get_user_service)]
 TeamServiceDep = Annotated[TeamService, Depends(get_team_service)]
@@ -258,3 +264,6 @@ FantasyScoreServiceDep = Annotated[
 KothServiceDep = Annotated[KothService, Depends(get_koth_service)]
 LadderServiceDep = Annotated[LadderService, Depends(get_ladder_service)]
 StatsServiceDep = Annotated[PlayerCareerStatsService, Depends(get_stats_service)]
+AvailabilityServiceDep = Annotated[
+    AvailabilityService, Depends(get_availability_service)
+]

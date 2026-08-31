@@ -38,6 +38,7 @@ TABLES = {
     "team_season",
     "team_season_captain",
     "teams",
+    "user_season_availability",
     "user_season_signup",
     "user_team_season",
     "users",
