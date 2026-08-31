@@ -214,6 +214,29 @@ def test_a_week_outside_the_season_takes_no_map(
     assert resp.json() == {"error": "playday must be between 1 and 4"}
 
 
+def test_a_map_leaving_the_pool_takes_its_week_with_it(
+    client: Client,
+    seeded: dict[str, Any],
+    three_maps: list[int],
+    auth_headers: dict[str, str],
+) -> None:
+    client.put(
+        f"/seasons/{seeded['season_id']}/week-maps",
+        json={"playday": 1, "map_id": three_maps[1]},
+        headers=auth_headers,
+    )
+
+    resp = client.request(
+        "DELETE",
+        f"/seasons/{seeded['season_id']}/maps",
+        json={"map_ids": [three_maps[1]]},
+        headers=auth_headers,
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["week_maps"] == []
+
+
 def test_a_map_outside_the_pool_is_not_a_week_map(
     client: Client, seeded: dict[str, Any], auth_headers: dict[str, str]
 ) -> None:

@@ -266,7 +266,12 @@ class SeasonService:
                         f"Map not part of the season, map id: {map_id}, season id {season_id}"
                     )
                 session.delete(map_season)
+            # A week map has to come from the pool, so it leaves with its map.
+            for week_map in list(season.week_maps):
+                if week_map.map_id in map_ids:
+                    session.delete(week_map)
             session.flush()
+            session.refresh(season)
             return SeasonPublic.from_season(season)
 
     def add_user_signup(
