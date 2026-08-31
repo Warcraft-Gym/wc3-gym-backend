@@ -167,10 +167,7 @@ def sync_ladder_season_signups(
     return service.sync_season(season_id, offset=offset, limit=limit)
 
 
-@router.get(
-    "/seasons/{season_id}/ladder",
-    dependencies=[Depends(require_admin)],
-)
+@router.get("/seasons/{season_id}/ladder")
 def get_season_ladder(season_id: int, service: LadderServiceDep) -> SeasonLadder:
     """The ladder of a season: its teams, its players and its hours."""
     return service.season_ladder(season_id)

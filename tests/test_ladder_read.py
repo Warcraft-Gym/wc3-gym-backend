@@ -762,10 +762,8 @@ def test_the_match_list_pages_like_every_other_list(
 # Auth and unknown ids.
 
 
-def test_the_season_ladder_needs_a_token_and_the_user_ladder_does_not(
-    client: Client, league: dict[str, Any]
-) -> None:
-    assert client.get(f"/seasons/{league['season_id']}/ladder").status_code == 401
+def test_the_ladder_reads_need_no_token(client: Client, league: dict[str, Any]) -> None:
+    assert client.get(f"/seasons/{league['season_id']}/ladder").status_code == 200
     assert client.get(f"/users/{league['player_ids'][0]}/ladder").status_code == 200
 
 
