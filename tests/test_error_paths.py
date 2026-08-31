@@ -65,6 +65,7 @@ def call(client: Client, method: str, path: str, token: str | None = None) -> Re
 # Every public route that spends a one-time token.
 TOKEN_ROUTES = [
     ("POST", "/signup"),
+    ("GET", "/player-history"),
     ("GET", "/player-series"),
     ("PUT", "/player-series/1"),
     ("GET", "/user-info"),

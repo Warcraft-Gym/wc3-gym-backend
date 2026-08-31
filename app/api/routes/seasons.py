@@ -6,6 +6,8 @@ from fastapi import APIRouter, Body, Depends, Query
 from app.api.deps import LadderServiceDep, SeasonServiceDep, require_admin
 from app.core.exceptions import BadRequestError
 from app.core.query import QueryUtil
+from app.models.map import LadderMapRow
+from app.models.relationships import SeasonWeekMapWrite
 from app.models.season import SeasonCreate, SeasonPublic, SeasonUpdate
 from app.models.user import UserListPublic
 from app.models.w3c_ladder_match import LadderSyncResult, SeasonLadder
@@ -109,6 +111,42 @@ def remove_maps(
     return service.remove_maps(season_id, data["map_ids"])
 
 
+@router.get(
+    "/seasons/{season_id}/maps/ladder-import", dependencies=[Depends(require_admin)]
+)
+def preview_ladder_import(
+    season_id: int, service: SeasonServiceDep
+) -> list[LadderMapRow]:
+    """List every 1v1 ladder map, matched against the maps the app holds."""
+    return service.ladder_import_preview(season_id)
+
+
+@router.post(
+    "/seasons/{season_id}/maps/ladder-import", dependencies=[Depends(require_admin)]
+)
+def apply_ladder_import(
+    season_id: int, data: Annotated[dict, Body()], service: SeasonServiceDep
+) -> SeasonPublic:
+    """Add the named ladder maps to the pool, creating the ones the app misses."""
+    return service.import_ladder_maps(season_id, data["names"])
+
+
+@router.put("/seasons/{season_id}/maps/order", dependencies=[Depends(require_admin)])
+def set_map_order(
+    season_id: int, data: Annotated[dict, Body()], service: SeasonServiceDep
+) -> SeasonPublic:
+    """Reorder the map pool by listing every map id of it, in the new order."""
+    return service.set_map_order(season_id, data["map_ids"])
+
+
+@router.put("/seasons/{season_id}/week-maps", dependencies=[Depends(require_admin)])
+def set_week_map(
+    season_id: int, data: SeasonWeekMapWrite, service: SeasonServiceDep
+) -> SeasonPublic:
+    """Name the game 1 map of one playday. A null map clears the playday."""
+    return service.set_week_map(season_id, data.playday, data.map_id)
+
+
 @router.post("/seasons/{season_id}/signups", dependencies=[Depends(require_admin)])
 def add_user_signup(
     season_id: int, data: Annotated[dict, Body()], service: SeasonServiceDep
@@ -167,10 +205,7 @@ def sync_ladder_season_signups(
     return service.sync_season(season_id, offset=offset, limit=limit)
 
 
-@router.get(
-    "/seasons/{season_id}/ladder",
-    dependencies=[Depends(require_admin)],
-)
+@router.get("/seasons/{season_id}/ladder")
 def get_season_ladder(season_id: int, service: LadderServiceDep) -> SeasonLadder:
     """The ladder of a season: its teams, its players and its hours."""
     return service.season_ladder(season_id)

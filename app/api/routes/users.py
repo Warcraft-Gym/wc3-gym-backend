@@ -85,7 +85,7 @@ def sync_w3c_user(
     return service.get(user_id)
 
 
-@router.get("/users/{user_id}/ladder", dependencies=[Depends(require_admin)])
+@router.get("/users/{user_id}/ladder")
 def get_user_ladder(
     user_id: int,
     service: LadderServiceDep,

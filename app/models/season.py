@@ -6,10 +6,15 @@ from sqlmodel import Field, Relationship, SQLModel
 
 from app.models.base import DBModel, ident
 from app.models.map import MapPublic
-from app.models.types import IsoDate, LenientDate, NoneToList, NumToStr
+from app.models.relationships import SeasonWeekMapPublic
+from app.models.types import IsoDate, LenientDate, MapRules, NoneToList, NumToStr
 
 if TYPE_CHECKING:
-    from app.models.relationships import DBMapSeason, DBUserSeasonSignup
+    from app.models.relationships import (
+        DBMapSeason,
+        DBSeasonWeekMap,
+        DBUserSeasonSignup,
+    )
     from app.models.team_season import DBTeamSeason
     from app.models.user_team_season import DBUserTeamSeason
 
@@ -22,6 +27,8 @@ class SeasonBase(SQLModel):
     start_date: Annotated[date | None, LenientDate] = None
     end_date: Annotated[date | None, LenientDate] = None
     discordRole: Annotated[str | None, NumToStr] = Field(default=None, max_length=50)
+    # One rule per game of a series: veto, loser, host or week
+    map_rules: Annotated[str | None, MapRules] = Field(default=None, max_length=100)
     # The scale the series points use: "standard" or "helpstone"
     score_system: str = Field(
         default="standard",
@@ -43,7 +50,18 @@ class Season(SeasonBase, DBModel, table=True):
         back_populates="season", sa_relationship_kwargs={"cascade": "all, delete"}
     )
     maps: list["DBMapSeason"] = Relationship(
-        back_populates="season", sa_relationship_kwargs={"cascade": "all, delete"}
+        back_populates="season",
+        sa_relationship_kwargs={
+            "cascade": "all, delete",
+            "order_by": "DBMapSeason.position",
+        },
+    )
+    week_maps: list["DBSeasonWeekMap"] = Relationship(
+        back_populates="season",
+        sa_relationship_kwargs={
+            "cascade": "all, delete",
+            "order_by": "DBSeasonWeekMap.playday",
+        },
     )
     signup_users: list["DBUserSeasonSignup"] = Relationship(
         back_populates="season", sa_relationship_kwargs={"cascade": "all, delete"}
@@ -62,6 +80,7 @@ class SeasonUpdate(SQLModel):
     start_date: Annotated[date | None, LenientDate] = None
     end_date: Annotated[date | None, LenientDate] = None
     discordRole: Annotated[str | None, NumToStr] = None
+    map_rules: Annotated[str | None, MapRules] = None
     score_system: str | None = None
 
 
@@ -74,6 +93,7 @@ class SeasonPublic(SeasonBase):
     start_date: Annotated[IsoDate | None, LenientDate] = None
     end_date: Annotated[IsoDate | None, LenientDate] = None
     maps: Annotated[list[MapPublic], NoneToList] = []
+    week_maps: Annotated[list[SeasonWeekMapPublic], NoneToList] = []
     # Always empty; the public pages read this field
     user_signup: Annotated[list[Any], NoneToList] = []
 
@@ -92,7 +112,11 @@ class SeasonPublic(SeasonBase):
                 for map_season in (season.maps or [])
                 if map_season and map_season.map
             ],
+            week_maps=[
+                SeasonWeekMapPublic.from_row(row) for row in (season.week_maps or [])
+            ],
             discordRole=season.discordRole,
+            map_rules=season.map_rules,
             score_system=season.score_system,
         )
 
@@ -114,5 +138,6 @@ class SeasonPublic(SeasonBase):
             start_date=season.start_date,
             end_date=season.end_date,
             discordRole=season.discordRole,
+            map_rules=season.map_rules,
             score_system=season.score_system,
         )
