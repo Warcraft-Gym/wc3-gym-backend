@@ -35,6 +35,7 @@ TABLES = {
     "season_week_map",
     "seasons",
     "series",
+    "series_veto_step",
     "settings",
     "team_season",
     "team_season_captain",

@@ -41,6 +41,7 @@ from app.models import (
     season,
     season_info,
     series,
+    series_veto_step,
     settings,
     team,
     team_reduced,

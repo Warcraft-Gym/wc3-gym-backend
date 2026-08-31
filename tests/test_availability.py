@@ -5,38 +5,13 @@ same row, so the tests drive both paths and check who the row names as its
 writer. The seeded season runs four weeks.
 """
 
-from collections.abc import Callable, Iterator
-from datetime import UTC, datetime, timedelta
+from collections.abc import Callable
 from typing import Any
 
 import pytest
 from httpx2 import Client
 
 from tests.test_discord_auth import SESSION, stub_clerk
-
-
-@pytest.fixture
-def dashboard_token() -> Iterator[Callable[..., str]]:
-    """A factory for dashboard tokens of a seeded player."""
-    from app.api.routes.public import _token_store
-
-    issued: list[str] = []
-
-    def issue(discord_id: str = "1", season_id: int | None = 1) -> str:
-        token = f"availability-token-{len(issued)}"
-        _token_store[token] = {
-            "discord_id": discord_id,
-            "discord_tag": f"p{discord_id}",
-            "season_id": str(season_id) if season_id else None,
-            "access_type": "dashboard",
-            "expires_at": datetime.now(UTC) + timedelta(minutes=5),
-        }
-        issued.append(token)
-        return token
-
-    yield issue
-    for token in issued:
-        _token_store.pop(token, None)
 
 
 def write(client: Client, token: str, playday: int, available: bool | None) -> Any:  # noqa: ANN401  # a JSON body

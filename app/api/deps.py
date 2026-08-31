@@ -33,6 +33,7 @@ from app.services.matches import MatchService
 from app.services.player_career_stats import PlayerCareerStatsService
 from app.services.seasons import SeasonService
 from app.services.series import SeriesService
+from app.services.series_veto import SeriesVetoService
 from app.services.settings import SettingsService
 from app.services.teams import TeamService
 from app.services.users import UserService
@@ -195,6 +196,7 @@ team_service = TeamService(user_app_service=user_service)
 match_service = MatchService()
 season_service = SeasonService(user_app_service=user_service)
 series_service = SeriesService()
+series_veto_service = SeriesVetoService()
 draft_series_service = DraftSeriesService()
 map_service = MapService()
 fantasy_bet_service = FantasyBetService(settings_app_service=settings_service)
@@ -232,6 +234,10 @@ def get_season_service() -> SeasonService:
 
 def get_series_service() -> SeriesService:
     return series_service
+
+
+def get_series_veto_service() -> SeriesVetoService:
+    return series_veto_service
 
 
 def get_draft_series_service() -> DraftSeriesService:
@@ -276,6 +282,7 @@ TeamServiceDep = Annotated[TeamService, Depends(get_team_service)]
 MatchServiceDep = Annotated[MatchService, Depends(get_match_service)]
 SeasonServiceDep = Annotated[SeasonService, Depends(get_season_service)]
 SeriesServiceDep = Annotated[SeriesService, Depends(get_series_service)]
+SeriesVetoServiceDep = Annotated[SeriesVetoService, Depends(get_series_veto_service)]
 DraftSeriesServiceDep = Annotated[DraftSeriesService, Depends(get_draft_series_service)]
 MapServiceDep = Annotated[MapService, Depends(get_map_service)]
 FantasyBetServiceDep = Annotated[FantasyBetService, Depends(get_fantasy_bet_service)]
