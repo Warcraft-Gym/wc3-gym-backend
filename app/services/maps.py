@@ -54,6 +54,18 @@ class MapService:
                 return []
             return [MapPublic.model_validate(map) for map in maps]
 
+    def update_icon(self, map_id: int, file: bytes) -> None:
+        with Session.begin() as session:
+            if not Map.update(session, map_id, icon=file):
+                raise NotFoundError(f"Map not found by Id: {map_id}")
+
+    def get_icon(self, map_id: int) -> bytes | None:
+        with Session.begin() as session:
+            map = Map.get_by_id(session, map_id)
+            if not map:
+                raise NotFoundError(f"Map not found by Id: {map_id}")
+            return map.icon
+
     def get_all(self, limit: int | None = None, offset: int = 0) -> list[MapPublic]:
         with Session.begin() as session:
             maps = Map.get_all(session, limit=limit, offset=offset)

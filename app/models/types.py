@@ -134,6 +134,23 @@ def _known_time_zone[T](value: T) -> T | None:
     return value
 
 
+MAP_RULES = ("veto", "loser", "host", "week")
+
+
+def _map_rules[T](value: T) -> T | None:
+    """One rule per game of a series, comma separated."""
+    if value == "" or value is None:
+        return None
+    if isinstance(value, str):
+        for token in value.split(","):
+            if token.strip() not in MAP_RULES:
+                known = ", ".join(MAP_RULES)
+                raise ValueError(
+                    f"'{token.strip()}' is not a map rule. Valid rules are {known}."
+                )
+    return value
+
+
 def _round_to_int[T](value: T) -> int | T:
     # The w3champions API returns fractions for integer columns.
     if isinstance(value, float) and not value.is_integer():
@@ -168,3 +185,5 @@ RoundToInt = BeforeValidator(_round_to_int)
 KnownTimeZone = BeforeValidator(_known_time_zone)
 # Input. Race fields, where a rejected value names the member it resembles.
 SuggestRace = BeforeValidator(_suggest_race)
+# Input. The map rules of a season, which take the four rule names and nothing else.
+MapRules = BeforeValidator(_map_rules)
