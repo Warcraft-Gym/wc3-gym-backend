@@ -129,18 +129,19 @@ class FantasyBetService:
     ) -> tuple[list[FantasyBetPublic], int | None]:
         """The bets and, when a page is asked for, the total count."""
         with Session.begin() as session:
-            statement = select(FantasyBet).options(*FantasyBet.list_eager_options())
             total = None
             if limit is not None or offset:
-                # Offset paging is deterministic only with a fixed order
                 total = session.scalar(select(func.count()).select_from(FantasyBet))
-                statement = statement.order_by(col(FantasyBet.id)).offset(offset)
-                if limit is not None:
-                    statement = statement.limit(limit)
-            result = []
+            # Offset paging is deterministic only with a fixed order
+            statement = (
+                select(FantasyBet)
+                .options(*FantasyBet.list_eager_options())
+                .order_by(col(FantasyBet.id))
+                .offset(offset)
+                .limit(limit)
+            )
             fbet = session.scalars(statement).unique().all()
-            for single_fbet in fbet:
-                result.append(FantasyBetPublic.from_fantasy_bet_reduced(single_fbet))
+            result = [FantasyBetPublic.from_fantasy_bet_reduced(row) for row in fbet]
             derived.fill_series(session, [bet.series for bet in result])
             derived.fill_bet_results(result)
             return result, total
@@ -159,11 +160,10 @@ class FantasyBetService:
         sort names a column of BET_SORTS and the bet id breaks its ties.
         """
         with Session.begin() as session:
-            result = []
             filter = QueryUtil.convert_query_to_db_filter(FantasyBet, query)
             if filter is None:
                 logger.debug(f"No fantasy bets found by searchcriteria: {query}")
-                return result, None
+                return [], None
             total = None
             statement = (
                 select(FantasyBet)
@@ -185,24 +185,20 @@ class FantasyBetService:
                 .where(filter)
             )
             if limit is not None or offset:
-                # Offset paging is deterministic only with a fixed order
                 total = session.scalar(
                     select(func.count()).select_from(FantasyBet).where(filter)
                 )
-                if sort == "captain":
-                    # A bet links to users twice, so the join names its own condition
-                    statement = statement.join(User, col(User.id) == FantasyBet.user_id)
-                statement = ordered(
-                    statement, BET_SORTS, sort, order, col(FantasyBet.id)
-                ).offset(offset)
-                if limit is not None:
-                    statement = statement.limit(limit)
+            if sort == "captain":
+                # A bet links to users twice, so the join names its own condition
+                statement = statement.join(User, col(User.id) == FantasyBet.user_id)
+            # Offset paging is deterministic only with a fixed order
+            statement = (
+                ordered(statement, BET_SORTS, sort, order, col(FantasyBet.id))
+                .offset(offset)
+                .limit(limit)
+            )
             fbets = session.scalars(statement).unique().all()
-            if not fbets:
-                logger.debug(f"No fantasy bets found by searchcriteria: {query}")
-                return result, total
-            for fbet in fbets:
-                result.append(FantasyBetPublic.from_fantasy_bet(fbet))
+            result = [FantasyBetPublic.from_fantasy_bet(fbet) for fbet in fbets]
             derived.fill_series(session, [bet.series for bet in result])
             derived.fill_bet_results(result)
             return result, total

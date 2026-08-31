@@ -9,10 +9,10 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 default:
     @just --list
 
-# The Docker stack on this machine: up, down, logs, psql, serve, migrate, seed.
+# The Docker stack on this machine: up, down, logs, psql, serve, alembic, seed.
 mod local './just/local.just'
 
-# The Terraform staging box, over SSH: deploy, logs, status, migrate, seed.
+# The Terraform staging box, over SSH: deploy, logs, status, alembic, seed.
 mod azure './just/azure.just'
 
 # The Vercel project, prod or staging: deploy, logs, status, migrate, seed, list, drop.

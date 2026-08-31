@@ -54,7 +54,8 @@ One code, two mechanisms, three places you can reach from a laptop. Docker runs 
 | Runs | the image, built from your working tree | the published GHCR image | `api/index.py` as a function |
 | `deploy` | — build with `up` | pins the box to an image tag | `vercel deploy`, prod or a preview |
 | `logs`, `status` | `docker logs`, `docker ps` | `compose logs`, `compose ps` over SSH | `vercel logs`, `vercel ls` |
-| `migrate`, `alembic` | against `LOCAL_DB_URL` | inside the backend container | against the pooler URL |
+| `alembic` | against `LOCAL_DB_URL` | inside the backend container | against the pooler URL |
+| `migrate` | — | — | against the pooler URL |
 | `seed` | the private seed repo | the seed repo, loaded in the container | the seed repo |
 | Only here | `up`, `down`, `restart`, `psql`, `serve`, `import-xlsx`, `revision`, `reset` | — | `list`, `drop` (the preview databases), `url` |
 
@@ -284,7 +285,7 @@ The image is tagged `gnl-backend:local`. The tag means what it says: `just up` b
 
 The container starts with development-only values (`ADMIN_TOKEN=devtoken`, `JWT_SECRET_KEY=devsecret`). Log in with `devtoken`. Do not use these values outside local development. The backend accepts connections about 30 seconds after `up` returns.
 
-`serve` is the other way to run the code: `uvicorn api.index:app` from the working tree, with `DB_URL` from `.env`, no image and no migration at start. It is what Vercel runs, so use it to reproduce a Vercel-only fault. Migrate first with `just local migrate`.
+`serve` is the other way to run the code: `uvicorn api.index:app` from the working tree, with `DB_URL` from `.env`, no image and no migration at start. It is what Vercel runs, so use it to reproduce a Vercel-only fault. Migrate first with `just local alembic upgrade head`.
 
 If `just` is installed system-wide, the `uv run` prefix is optional.
 
@@ -324,7 +325,7 @@ uv run alembic current             # show the revision the database is on
 uv run alembic history             # list the revisions
 ```
 
-Each place wraps these in its own module: `just local migrate`, `just local alembic history`, `just vercel migrate staging`, `just azure migrate`. The URLs come from `.env` (`LOCAL_DB_URL`, `VERCEL_PROD_DB_URL`, `VERCEL_STAGING_DB_URL`), gitignored, copied from `.env.example`; `just vercel url staging` prints one. The Azure box has no URL reachable from a laptop, so its recipes run alembic and the seed script inside the backend container over SSH.
+Each place wraps these in its own module: `just local alembic upgrade head`, `just local alembic history`, `just vercel migrate staging`, `just azure alembic upgrade head`. The URLs come from `.env` (`LOCAL_DB_URL`, `VERCEL_PROD_DB_URL`, `VERCEL_STAGING_DB_URL`), gitignored, copied from `.env.example`; `just vercel url staging` prints one. The Azure box has no URL reachable from a laptop, so its recipes run alembic and the seed script inside the backend container over SSH.
 
 ### DB_URL names the same database twice
 

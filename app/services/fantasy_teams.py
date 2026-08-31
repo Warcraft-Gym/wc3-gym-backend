@@ -83,15 +83,16 @@ class FantasyTeamService:
         """The teams, or one page of them, and the total row count."""
         with Session.begin() as session:
             total = session.scalar(select(func.count()).select_from(FantasyTeam)) or 0
-            result = []
-            statement = select(FantasyTeam).options(*self._reduced_options)
             # Offset paging is deterministic only with a fixed order
-            statement = statement.order_by(col(FantasyTeam.id)).offset(offset)
-            if limit is not None:
-                statement = statement.limit(limit)
+            statement = (
+                select(FantasyTeam)
+                .options(*self._reduced_options)
+                .order_by(col(FantasyTeam.id))
+                .offset(offset)
+                .limit(limit)
+            )
             fteams = session.scalars(statement).unique().all()
-            for fteam in fteams:
-                result.append(FantasyTeamPublic.from_fantasy_team(fteam))
+            result = [FantasyTeamPublic.from_fantasy_team(fteam) for fteam in fteams]
             derived.fill_fantasy_teams(session, result)
             derived.fill_gnl_stats(
                 session, [player for team in result for player in team.drafted_players]
@@ -103,30 +104,26 @@ class FantasyTeamService:
     ) -> tuple[list[FantasyTeamPublic], int | None]:
         """The matching teams and, when a page is asked for, the total count."""
         with Session.begin() as session:
-            result = []
             filter = QueryUtil.convert_query_to_db_filter(FantasyTeam, query)
             if filter is None:
                 logger.debug(f"No fantasy team found by searchcriteria: {query}")
-                return result, None
-            # Eager load only the relations the response model reads
-            statement = (
-                select(FantasyTeam).options(*self._reduced_options).where(filter)
-            )
+                return [], None
             total = None
             if limit is not None or offset:
-                # Offset paging is deterministic only with a fixed order
                 total = session.scalar(
                     select(func.count()).select_from(FantasyTeam).where(filter)
                 )
-                statement = statement.order_by(col(FantasyTeam.id)).offset(offset)
-                if limit is not None:
-                    statement = statement.limit(limit)
+            # Offset paging is deterministic only with a fixed order
+            statement = (
+                select(FantasyTeam)
+                .options(*self._reduced_options)
+                .where(filter)
+                .order_by(col(FantasyTeam.id))
+                .offset(offset)
+                .limit(limit)
+            )
             fteams = session.scalars(statement).unique().all()
-            if not fteams:
-                logger.debug(f"No fantasy team found by searchcriteria: {query}")
-                return result, total
-            for fteam in fteams:
-                result.append(FantasyTeamPublic.from_fantasy_team(fteam))
+            result = [FantasyTeamPublic.from_fantasy_team(fteam) for fteam in fteams]
             derived.fill_fantasy_teams(session, result)
             derived.fill_gnl_stats(
                 session, [player for team in result for player in team.drafted_players]

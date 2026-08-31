@@ -78,11 +78,7 @@ import-xlsx api="http://localhost:5002" token="devtoken":
         curl -fsS -X POST "{{ api }}/import?create_new=true" -H "Authorization: Bearer $access" -F "file=@$f"; echo
     done
 
-# Bring the database to the latest migration.
-migrate:
-    DB_URL="{{ db_url }}" uv run alembic upgrade head
-
-# Run any alembic command against the database, for example `just local alembic current`.
+# Run any alembic command against the database, for example `just local alembic upgrade head`.
 alembic *args:
     DB_URL="{{ db_url }}" uv run alembic {{ args }}
 

@@ -173,12 +173,11 @@ class KothService:
                 select(KothSignup)
                 .where(col(KothSignup.event_id) == event_id)
                 .order_by(col(KothSignup.bracket), col(KothSignup.mmr).desc())
-            )
-            if limit is not None or offset:
                 # The id breaks the ties the bracket and mmr order leaves
-                statement = statement.order_by(col(KothSignup.id)).offset(offset)
-                if limit is not None:
-                    statement = statement.limit(limit)
+                .order_by(col(KothSignup.id))
+                .offset(offset)
+                .limit(limit)
+            )
             signups = session.scalars(statement).unique().all()
             return self._add_countries(
                 session, [KothSignupPublic.model_validate(s) for s in signups]
@@ -358,11 +357,9 @@ class KothService:
                 )
                 .where(col(KothMatch.event_id) == event_id)
                 .order_by(col(KothMatch.bracket), col(KothMatch.id))
+                .offset(offset)
+                .limit(limit)
             )
-            if limit is not None or offset:
-                statement = statement.offset(offset)
-                if limit is not None:
-                    statement = statement.limit(limit)
             matches = session.scalars(statement).unique().all()
             return [KothMatchPublic.model_validate(m) for m in matches]
 

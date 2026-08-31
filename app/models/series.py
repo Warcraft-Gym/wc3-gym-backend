@@ -9,7 +9,7 @@ from sqlmodel import Field, Relationship, SQLModel, col
 
 from app.core.db import rel
 from app.core.ordering import SortOrder, ordered
-from app.models.base import DBModel, ident
+from app.models.base import DBModel, PublicModel, ident
 from app.models.match import Match, MatchPublic
 from app.models.types import AwareUTC, NumToStr, UTCDateTime
 from app.models.user import User, UserPublic
@@ -73,11 +73,8 @@ class Series(SeriesBase, DBModel, table=True):
         )
         if filters is not None:
             stmt = stmt.where(filters)
-        if limit is not None or offset:
-            # Offset paging is deterministic only with a fixed order
-            stmt = stmt.order_by(col(cls.id)).offset(offset)
-            if limit is not None:
-                stmt = stmt.limit(limit)
+        # Offset paging is deterministic only with a fixed order
+        stmt = stmt.order_by(col(cls.id)).offset(offset).limit(limit)
         return session.scalars(stmt).all()
 
     @classmethod
@@ -96,13 +93,14 @@ class Series(SeriesBase, DBModel, table=True):
         stmt = stmt.where(col(cls.match).has(col(Match.season_id) == season_id))
         if filters is not None:
             stmt = stmt.where(filters)
-        if limit is not None or offset:
-            # Offset paging is deterministic only with a fixed order
-            if sort == "week":
-                stmt = stmt.join(Match, col(Match.id) == cls.match_id)
-            stmt = ordered(stmt, SERIES_SORTS, sort, order, col(cls.id)).offset(offset)
-            if limit is not None:
-                stmt = stmt.limit(limit)
+        if sort == "week":
+            stmt = stmt.join(Match, col(Match.id) == cls.match_id)
+        # Offset paging is deterministic only with a fixed order
+        stmt = (
+            ordered(stmt, SERIES_SORTS, sort, order, col(cls.id))
+            .offset(offset)
+            .limit(limit)
+        )
         return session.scalars(stmt).all()
 
     @classmethod
@@ -159,7 +157,7 @@ class SeriesUpdate(SQLModel):
     is_fantasy_match: bool | None = None
 
 
-class SeriesPublic(SeriesBase):
+class SeriesPublic(SeriesBase, PublicModel):
     id: int
     match_id: int | None = None
     player1_id: int | None = None
@@ -213,6 +211,3 @@ class SeriesPublic(SeriesBase):
             host_player_id=series.host_player_id,
             is_fantasy_match=series.is_fantasy_match,
         )
-
-    def to_dict(self) -> dict[str, Any]:
-        return self.model_dump(mode="json")

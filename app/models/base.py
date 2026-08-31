@@ -21,6 +21,13 @@ def ident(row: Stored) -> int:
     return row.id
 
 
+class PublicModel(SQLModel):
+    """A response model that also answers a plain JSON dict."""
+
+    def to_dict(self) -> dict[str, Any]:
+        return self.model_dump(mode="json")
+
+
 class DBModel(SQLModel):
     """Shared query helpers for the mapped classes. It has no table of its own."""
 
@@ -35,20 +42,14 @@ class DBModel(SQLModel):
     def update(
         cls, session: Session, obj_id: int | None, **kwargs: object
     ) -> Self | None:
-        obj = cls.get_by_id(session, obj_id)
-        if obj:
-            for key, value in kwargs.items():
-                setattr(obj, key, value)
-            session.flush()
-        return obj
+        return cls.update_object(session, cls.get_by_id(session, obj_id), **kwargs)
 
     @classmethod
     def update_object(
         cls, session: Session, obj: Self | None, **kwargs: object
     ) -> Self | None:
         if obj:
-            for key, value in kwargs.items():
-                setattr(obj, key, value)
+            obj.sqlmodel_update(kwargs)
             session.flush()
         return obj
 
@@ -70,28 +71,27 @@ class DBModel(SQLModel):
     ) -> Sequence[Self]:
         if filters is None:
             raise BadRequestError("No search criteria was defined!")
-        statement = select(cls).where(filters)
-        if limit is not None or offset:
-            # Offset paging is deterministic only with a fixed order
-            statement = statement.order_by(*class_mapper(cls).primary_key).offset(
-                offset
-            )
-            if limit is not None:
-                statement = statement.limit(limit)
+        # Offset paging is deterministic only with a fixed order
+        statement = (
+            select(cls)
+            .where(filters)
+            .order_by(*class_mapper(cls).primary_key)
+            .offset(offset)
+            .limit(limit)
+        )
         return session.scalars(statement).unique().all()
 
     @classmethod
     def get_all(
         cls, session: Session, limit: int | None = None, offset: int = 0
     ) -> Sequence[Self]:
-        statement = select(cls)
-        if limit is not None or offset:
-            # Offset paging is deterministic only with a fixed order
-            statement = statement.order_by(*class_mapper(cls).primary_key).offset(
-                offset
-            )
-            if limit is not None:
-                statement = statement.limit(limit)
+        # Offset paging is deterministic only with a fixed order
+        statement = (
+            select(cls)
+            .order_by(*class_mapper(cls).primary_key)
+            .offset(offset)
+            .limit(limit)
+        )
         return session.scalars(statement).unique().all()
 
     @classmethod

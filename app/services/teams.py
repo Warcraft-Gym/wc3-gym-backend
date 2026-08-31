@@ -1,7 +1,7 @@
 import logging
 from typing import Any
 
-from sqlalchemy import ColumnElement, func, select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as OrmSession
 from sqlalchemy.orm import joinedload, noload, selectinload
@@ -69,6 +69,15 @@ def _season_loads(season_id: int) -> list[Any]:
             noload(rel(User.signup_seasons)),
         ),
     ]
+
+
+# A team list reads the season rows and no people; noload alone, because a
+# joined link table multiplies the rows.
+_LIST_OPTIONS = (
+    noload(rel(Team.user_seasons)),
+    noload(rel(Team.captain_seasons)),
+    selectinload(rel(Team.season_info)),
+)
 
 
 class TeamService:
@@ -292,67 +301,36 @@ class TeamService:
     def search(
         self, query: QueryElement | None, limit: int | None = None, offset: int = 0
     ) -> list[TeamPublic]:
-        return self._where(
-            QueryUtil.convert_query_to_db_filter(Team, query),
-            limit=limit,
-            offset=offset,
-        )
-
-    def _where(
-        self,
-        filter: ColumnElement[bool] | None,
-        limit: int | None = None,
-        offset: int = 0,
-    ) -> list[TeamPublic]:
+        filter = QueryUtil.convert_query_to_db_filter(Team, query)
         if filter is None:
             return []
         with Session.begin() as session:
-            result: list[TeamPublic] = []
-            # Eager load related entities, disable nested loading
+            # Offset paging is deterministic only with a fixed order
             statement = (
                 select(Team)
-                .options(
-                    # noload alone; a joined link table multiplies the rows
-                    noload(rel(Team.user_seasons)),
-                    noload(rel(Team.captain_seasons)),
-                    selectinload(rel(Team.season_info)),
-                )
+                .options(*_LIST_OPTIONS)
                 .where(filter)
+                .order_by(col(Team.id))
+                .offset(offset)
+                .limit(limit)
             )
-            if limit is not None or offset:
-                # Offset paging is deterministic only with a fixed order
-                statement = statement.order_by(col(Team.id)).offset(offset)
-                if limit is not None:
-                    statement = statement.limit(limit)
-            teams = (
-                session.scalars(statement).unique().all() if filter is not None else []
-            )
-            if not teams:
-                logger.debug(f"No teams found by searchcriteria: {filter}")
-                return result
-            for team in teams:
-                result.append(TeamPublic.from_team(team))
+            teams = session.scalars(statement).unique().all()
+            result = [TeamPublic.from_team(team) for team in teams]
             _fill(session, result)
             return result
 
     def get_all(self, limit: int | None = None, offset: int = 0) -> list[TeamPublic]:
         with Session.begin() as session:
-            result: list[TeamPublic] = []
-            # Eager load related entities, disable nested loading
-            statement = select(Team).options(
-                # noload alone; a joined link table multiplies the rows
-                noload(rel(Team.user_seasons)),
-                noload(rel(Team.captain_seasons)),
-                selectinload(rel(Team.season_info)),
+            # Offset paging is deterministic only with a fixed order
+            statement = (
+                select(Team)
+                .options(*_LIST_OPTIONS)
+                .order_by(col(Team.id))
+                .offset(offset)
+                .limit(limit)
             )
-            if limit is not None or offset:
-                # Offset paging is deterministic only with a fixed order
-                statement = statement.order_by(col(Team.id)).offset(offset)
-                if limit is not None:
-                    statement = statement.limit(limit)
             teams = session.scalars(statement).unique().all()
-            for team in teams:
-                result.append(TeamPublic.from_team(team))
+            result = [TeamPublic.from_team(team) for team in teams]
             _fill(session, result)
             return result
 
@@ -361,44 +339,17 @@ class TeamService:
     ) -> list[TeamPublic]:
         """Get all teams with basic info only (no users, no seasons)"""
         with Session.begin() as session:
-            result: list[TeamPublic] = []
-            # Explicitly prevent loading of all relationships
-            statement = select(Team).options(noload("*"))
-            if limit is not None or offset:
-                # Offset paging is deterministic only with a fixed order
-                statement = statement.order_by(col(Team.id)).offset(offset)
-                if limit is not None:
-                    statement = statement.limit(limit)
-            teams = session.scalars(statement).unique().all()
-            for team in teams:
-                result.append(TeamPublic.from_team(team))
-            _fill(session, result)
-            return result
-
-    def get_all_by_season(
-        self, season_id: int, limit: int | None = None, offset: int = 0
-    ) -> list[TeamPublic]:
-        """Get all teams for a season with season_info but without users"""
-        with Session.begin() as session:
-            result: list[TeamPublic] = []
-            # An EXISTS, not a join: a join multiplies the rows a page counts
+            # noload("*") keeps every relationship out
+            # Offset paging is deterministic only with a fixed order
             statement = (
                 select(Team)
-                .options(
-                    noload(rel(Team.user_seasons)),
-                    noload(rel(Team.captain_seasons)),
-                    joinedload(rel(Team.season_info)).noload("*"),
-                )
-                .where(col(Team.season_info).any(season_id=season_id))
+                .options(noload("*"))
+                .order_by(col(Team.id))
+                .offset(offset)
+                .limit(limit)
             )
-            if limit is not None or offset:
-                # Offset paging is deterministic only with a fixed order
-                statement = statement.order_by(col(Team.id)).offset(offset)
-                if limit is not None:
-                    statement = statement.limit(limit)
             teams = session.scalars(statement).unique().all()
-            for team in teams:
-                result.append(TeamPublic.from_team(team))
+            result = [TeamPublic.from_team(team) for team in teams]
             _fill(session, result)
             return result
 
@@ -412,41 +363,49 @@ class TeamService:
         captains empty gnl_stats; no consumer reads them on this route.
         """
         with Session.begin() as session:
-            result: list[TeamPublic] = []
+            # Offset paging is deterministic only with a fixed order
             statement = (
                 select(Team)
                 .where(
                     col(Team.season_info).any(col(DBTeamSeason.season_id) == season_id)
                 )
                 .options(*_season_loads(season_id))
+                .order_by(col(Team.id))
+                .offset(offset)
+                .limit(limit)
             )
-            if limit is not None or offset:
-                # Offset paging is deterministic only with a fixed order
-                statement = statement.order_by(col(Team.id)).offset(offset)
-                if limit is not None:
-                    statement = statement.limit(limit)
             teams = session.scalars(statement).unique().all()
-            for team in teams:
-                result.append(TeamPublic.from_team(team))
+            result = [TeamPublic.from_team(team) for team in teams]
             _fill(session, result)
             return result
 
     def get_teams_season_basic(
         self, season_id: int, limit: int | None = None, offset: int = 0
     ) -> list[TeamPublic]:
-        """Get teams for a season with season_info but without users (for list views)"""
-        teams_data = self.get_all_by_season(season_id, limit=limit, offset=offset)
-        result: list[TeamPublic] = []
-        if teams_data:
-            for team_data in teams_data:
-                # Filter season_info to only include the requested season
-                team_data.seasons_info = [
-                    s_inf
-                    for s_inf in team_data.seasons_info
-                    if s_inf.season_id == season_id
-                ]
-                result.append(team_data)
-        return result
+        """The season's teams with that season's info and no users, for list views.
+
+        The season sits in the loader, so seasons_info holds that season alone.
+        """
+        with Session.begin() as session:
+            info = rel(Team.season_info).and_(col(DBTeamSeason.season_id) == season_id)
+            # An EXISTS, not a join: a join multiplies the rows a page counts
+            # Offset paging is deterministic only with a fixed order
+            statement = (
+                select(Team)
+                .options(
+                    noload(rel(Team.user_seasons)),
+                    noload(rel(Team.captain_seasons)),
+                    joinedload(info).noload("*"),
+                )
+                .where(col(Team.season_info).any(season_id=season_id))
+                .order_by(col(Team.id))
+                .offset(offset)
+                .limit(limit)
+            )
+            teams = session.scalars(statement).unique().all()
+            result = [TeamPublic.from_team(team) for team in teams]
+            _fill(session, result)
+            return result
 
     def season_players(self, team_id: int, season_id: int) -> list[UserPublic]:
         """The players this team fielded in this season."""

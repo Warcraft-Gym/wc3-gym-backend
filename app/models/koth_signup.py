@@ -1,9 +1,9 @@
-from typing import TYPE_CHECKING, Annotated, Any
+from typing import TYPE_CHECKING, Annotated
 
 from sqlalchemy import Column, Computed, Index
 from sqlmodel import AutoString, Field, Relationship, SQLModel
 
-from app.models.base import DBModel
+from app.models.base import DBModel, PublicModel
 from app.models.enums import Race
 from app.models.types import EnumValue, SuggestRace
 
@@ -127,11 +127,8 @@ class KothBracketUpdate(SQLModel):
     bracket: int
 
 
-class KothSignupPublic(KothSignupBase):
+class KothSignupPublic(KothSignupBase, PublicModel):
     id: int
     race: Annotated[str | None, EnumValue] = None
     # The flag of the users row with this battle tag, read at answer time
     country: str | None = None
-
-    def to_dict(self) -> dict[str, Any]:
-        return self.model_dump(mode="json")
