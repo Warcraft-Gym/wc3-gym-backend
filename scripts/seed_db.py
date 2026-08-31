@@ -4,6 +4,7 @@ usage: uv run python scripts/seed_db.py <dir> <postgresql://url>
 
 Copies every column the target table still has, keeps the ids, then sets every
 sequence. FK checks are off during the copy, so table order does not matter.
+The seeded seasons get the achievement catalogue at catalogue prices.
 """
 
 import ast
@@ -13,6 +14,8 @@ import sys
 from pathlib import Path
 
 import psycopg
+
+from app.core.achievements import DEFAULT_PAID
 
 csv.field_size_limit(sys.maxsize)
 
@@ -28,7 +31,9 @@ def main(seed_dir: str, url: str) -> None:
     with psycopg.connect(url, autocommit=False) as conn, conn.cursor() as cur:
         cur.execute("SET session_replication_role = replica")
         tables = [f.stem for f in files]
-        cur.execute("TRUNCATE " + ", ".join(f'"{t}"' for t in tables))
+        # CASCADE: tables outside the seed set reference these (ladder_achievements,
+        # ladder_sync, w3c_ladder_matches, team_season_captain, discord_role_binding)
+        cur.execute("TRUNCATE " + ", ".join(f'"{t}"' for t in tables) + " CASCADE")
         for table, path in zip(tables, files):
             rows = list(csv.reader(path.open(encoding="utf-8")))
             header, body = rows[0], rows[1:]
@@ -63,6 +68,11 @@ def main(seed_dir: str, url: str) -> None:
         cur.execute(
             "UPDATE seasons SET score_system = 'helpstone'"
         )  # MySQL kept it in settings, one value for every season
+        cur.executemany(  # the prices the migration seeded went with the CASCADE
+            "INSERT INTO ladder_achievements (season_id, rule_id, points)"
+            " SELECT id, %s, %s FROM seasons",
+            list(DEFAULT_PAID.items()),
+        )
         cur.execute(
             "SELECT table_name, column_name FROM information_schema.columns"
             " WHERE table_schema = 'public' AND column_default LIKE 'nextval%'"
