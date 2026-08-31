@@ -7,7 +7,6 @@ from pydantic import PositiveInt
 from app.api.deps import (
     Credentials,
     FantasyBetServiceDep,
-    FantasyScoreServiceDep,
     FantasyTeamServiceDep,
     SeasonServiceDep,
     UserServiceDep,
@@ -30,6 +29,7 @@ from app.models.fantasy_team import (
     FantasyTeamUpdate,
 )
 from app.services.fantasy_bets import BetSort
+from app.services.fantasy_scores import team_score_breakdown
 
 logger = logging.getLogger(__name__)
 
@@ -249,7 +249,8 @@ def get_fantasy_team_breakdown(
     team_id: int,
     season_id: int,
     season_service: SeasonServiceDep,
-    fantasy_score_service: FantasyScoreServiceDep,
+    fantasy_team_service: FantasyTeamServiceDep,
+    fantasy_bet_service: FantasyBetServiceDep,
 ) -> dict[str, Any]:
     """Get detailed score breakdown for a fantasy team.
 
@@ -258,4 +259,6 @@ def get_fantasy_team_breakdown(
     """
     # get raises NotFoundError, which answers 404
     season = season_service.get(season_id)
-    return fantasy_score_service.get_team_score_breakdown(team_id, season)
+    return team_score_breakdown(
+        fantasy_team_service, fantasy_bet_service, team_id, season
+    )
