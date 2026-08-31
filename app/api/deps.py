@@ -79,13 +79,35 @@ def clerk_claims(request: Request) -> dict[str, Any]:
     discord_id = _discord_id(clerk_user_id)
     claims: dict[str, Any] = {"sub": discord_id, "clerk_user_id": clerk_user_id}
     if admins.is_admin(discord_id):
-        return claims | {"role": "admin"}
+        return _view_as(request, claims | {"role": "admin"})
     claims["role"] = discord.role_for(discord_id)
     if claims["role"] == "member":
         settings = settings_service.get_settings_dict()
         seat = team_service.captain_seat(discord_id, settings.get("current_gnl_season"))
         if seat:
             claims |= {"role": "captain", "team_id": seat[0], "season_id": seat[1]}
+    return claims
+
+
+def _view_as(request: Request, claims: dict[str, Any]) -> dict[str, Any]:
+    """The role an admin's X-View-As header asks to be seen as, for debugging.
+
+    The rewrite happens where every guard reads the role, so an admin viewing
+    as a member meets the same 403s a member would. The real role stays in
+    actual_role, which /me answers so the switch stays visible. A viewed
+    captain names its team with X-View-Team; the season is the
+    current_gnl_season setting, as captain_seat reads it.
+    """
+    role = request.headers.get("x-view-as")
+    if role not in ("captain", "member", "guest"):
+        return claims
+    claims |= {"role": role, "actual_role": "admin"}
+    team = request.headers.get("x-view-team", "")
+    if role == "captain" and team.isdigit():
+        season = settings_service.get_settings_dict().get("current_gnl_season")
+        claims["team_id"] = int(team)
+        if season and season.isdigit():
+            claims["season_id"] = int(season)
     return claims
 
 
