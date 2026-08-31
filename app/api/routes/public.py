@@ -28,6 +28,7 @@ from app.core.ordering import SortOrder
 from app.core.query import QueryUtil
 from app.models.fantasy_bet import FantasyBetCreate, FantasyBetUpdate
 from app.models.fantasy_team import FantasyTeamCreate, FantasyTeamUpdate
+from app.models.player_history import PlayerHistory
 from app.models.series import SeriesSort
 from app.models.series_veto_step import SeriesVetoPublic, SeriesVetoWrite
 from app.models.user import UserCreate, UserUpdate
@@ -35,7 +36,7 @@ from app.models.user_season_availability import (
     PlayerAvailabilityWrite,
     UserSeasonAvailabilityPublic,
 )
-from app.services import discord, discord_roles, player_series
+from app.services import discord, discord_roles, player_history, player_series
 
 logger = logging.getLogger(__name__)
 
@@ -370,6 +371,22 @@ def set_player_availability(
     return availability_service.set(
         user.id, int(season_id), data.playday, data.available, set_by_user_id=user.id
     )
+
+
+@router.get("/player-history")
+def get_player_history(
+    user_service: UserServiceDep,
+    request: Request,
+    credentials: Credentials,
+    token: str | None = None,
+) -> PlayerHistory:
+    """Every GNL season this player took part in, and every opponent they met."""
+    entry = _identity(request, credentials, token, "dashboard")
+
+    users = user_service.find_by_discord_id(str(entry.get("discord_id")))
+    if not users:
+        raise NotFoundError("player_not_found")
+    return player_history.history(users[0].id)
 
 
 @router.put("/player-series/{series_id}", response_model=None)

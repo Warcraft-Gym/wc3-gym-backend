@@ -21,6 +21,7 @@ ROUTES = [
     ("/koth/events/active", 200),
     ("/koth/signup", 401),  # needs the nightbot token parameter
     ("/maps", 200),
+    ("/player-history", 400),  # needs a token parameter
     ("/player-series", 400),  # needs battleTag and token parameters
     ("/seasons", 200),
     ("/stats/career", 200),
