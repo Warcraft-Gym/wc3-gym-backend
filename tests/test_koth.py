@@ -218,11 +218,11 @@ def test_a_second_signup_of_the_same_race_adds_no_row(
     from app.services.settings import SettingsService
 
     service = KothService(SettingsService())
-    first = service.create_signup_from_twitch("player_three", "P3#3333", "human")
-    assert first.race == "HU"
+    first = service.create_signups("player_three", "P3#3333", ["human"])
+    assert [s.race for s in first] == ["HU"]
 
     with pytest.raises(Exception, match="already has an active signup"):
-        service.create_signup_from_twitch("player_three", "P3#3333", "human")
+        service.create_signups("player_three", "P3#3333", ["human"])
 
     signups = service.get_signups_by_event(koth["event_id"])
     assert [s.twitch_username for s in signups].count("player_three") == 1
@@ -566,6 +566,93 @@ def test_a_failed_match_creation_writes_nothing(
     assert resp.status_code == 404
     matches = client.get(f"/koth/events/{koth['event_id']}/matches").json()
     assert matches == []
+
+
+@pytest.fixture
+def w3c_two_races(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A player with a bracket-1 Human MMR and a bracket-3 Night Elf MMR."""
+    from app.models.enums import Race
+    from app.services.w3c import W3CService
+
+    monkeypatch.setattr(W3CService, "current_season", lambda self: 20)
+    monkeypatch.setattr(
+        W3CService,
+        "get_player_stats",
+        lambda self, bnet_name, season_override=None: [
+            W3CStatsCreate(wc3_season=season_override or 0, mmr=1400, race=Race.HU),
+            W3CStatsCreate(wc3_season=season_override or 0, mmr=1700, race=Race.NE),
+        ],
+    )
+    monkeypatch.setattr(
+        W3CService,
+        "send_request",
+        lambda *args, **kwargs: pytest.fail("the signup reached w3champions"),
+    )
+
+
+def test_two_races_of_one_player_sign_up_into_their_own_brackets(
+    app: FastAPI, koth: dict[str, Any], w3c_two_races: None
+) -> None:
+    """Each race carries its own MMR, so one player sits in two brackets."""
+    from app.services.koth import KothService
+    from app.services.settings import SettingsService
+
+    service = KothService(SettingsService())
+    signups = service.create_signups("player_three", "P3#3333", ["human", "nightelf"])
+
+    assert [(s.race, s.bracket, s.mmr) for s in signups] == [
+        ("HU", 1, 1400),
+        ("NE", 3, 1700),
+    ]
+    assert {s.battle_tag for s in signups} == {"P3#3333"}
+
+
+def test_one_battle_tag_takes_a_race_once_whatever_the_twitch_name(
+    app: FastAPI, koth: dict[str, Any], w3c_two_races: None
+) -> None:
+    """The battle tag is the player, so a second Twitch name signs up no twin."""
+    from app.services.koth import KothService
+    from app.services.settings import SettingsService
+
+    service = KothService(SettingsService())
+    service.create_signups("player_three", "P3#3333", ["human"])
+
+    with pytest.raises(Exception, match="already has an active signup with race HU"):
+        service.create_signups("another_name", "p3#3333 ", ["human"])
+
+    signups = service.get_signups_by_event(koth["event_id"])
+    assert [s.battle_tag for s in signups].count("P3#3333") == 1
+
+
+def test_the_profile_signup_reads_the_battle_tag_of_the_logged_in_player(
+    client: Client,
+    koth: dict[str, Any],
+    w3c_two_races: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A logged-in player names races only; the battle tag comes from his row."""
+    from sqlalchemy import update
+
+    from app.core.db import Session
+    from app.models.user import User
+    from tests.test_discord_auth import ACCOUNT, SESSION, stub_clerk
+
+    stub_clerk(monkeypatch)
+    with Session.begin() as session:
+        session.execute(
+            update(User)
+            .where(User.battleTag == "P4#4444")
+            .values(discordId=ACCOUNT["id"])
+        )
+
+    resp = client.post(
+        "/koth/signups/me", json={"races": ["human", "nightelf"]}, headers=SESSION
+    )
+    assert resp.status_code == 201, resp.text
+    assert [(s["battle_tag"], s["race"], s["bracket"]) for s in resp.json()] == [
+        ("P4#4444", "HU", 1),
+        ("P4#4444", "NE", 3),
+    ]
 
 
 def test_a_signup_carries_the_flag_of_its_player_row(

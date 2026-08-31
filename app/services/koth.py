@@ -185,118 +185,104 @@ class KothService:
                 session, [KothSignupPublic.model_validate(s) for s in signups]
             )
 
-    def create_signup_from_twitch(
-        self, twitch_username: str, battle_tag: str, preferred_race: str | None = None
-    ) -> KothSignupPublic:
+    def create_signups(
+        self,
+        twitch_username: str,
+        battle_tag: str,
+        races: list[str] | None = None,
+    ) -> list[KothSignupPublic]:
+        """Sign a player up for the active event, one signup per race.
+
+        Each race carries its own W3C MMR and lands in the bracket that MMR
+        cuts into, so one player can sit in several brackets. An empty race
+        list lets the W3C stats pick the player's highest-MMR race.
         """
-        Create a signup from Twitch/Nightbot with automatic W3C validation and bracket assignment.
-        Only allows signup if no active signup exists for this twitch username.
-        If preferred_race is provided, only considers MMR for that race.
-        Returns the created signup or raises an exception.
-        """
-        signup_race = None
-        if preferred_race:
+        signup_races: list[str] = []
+        for race in races or []:
             try:
-                signup_race = Race.from_text(preferred_race).value
+                value = Race.from_text(race).value
             except ValueError as error:
                 raise BadRequestError(
-                    f"Invalid race '{preferred_race}'. Valid options: orc, human, undead, nightelf, random"
+                    f"Invalid race '{race}'. Valid options: orc, human, undead, nightelf, random"
                 ) from error
+            if value not in signup_races:
+                signup_races.append(value)
 
-        # Get active event
         event = self.get_active_event()
 
         # The W3C calls below take seconds, so the insert checks this again
         with Session.begin() as session:
-            self._check_duplicate_signup(
-                session, event.id, twitch_username, signup_race
+            self._check_duplicate_signup(session, event.id, battle_tag, signup_races)
+
+        race_mmr = self._read_race_mmr(battle_tag, signup_races)
+
+        if signup_races:
+            missing = [race for race in signup_races if race not in race_mmr]
+            if missing:
+                raise BadRequestError(
+                    f"No W3Champions statistics found for {battle_tag} with race"
+                    f" {', '.join(missing)} in the last 3 seasons"
+                )
+            chosen = signup_races
+        else:
+            if not race_mmr:
+                raise BadRequestError(
+                    f"No valid MMR data found for {battle_tag} in the last 3 seasons"
+                )
+            chosen = [max(race_mmr, key=lambda race: race_mmr[race])]
+
+        new_signups = [
+            KothSignupCreate(
+                event_id=event.id,
+                twitch_username=twitch_username,
+                battle_tag=battle_tag,
+                w3c_name=battle_tag,
+                race=race,
+                mmr=race_mmr[race],
+                bracket=self._determine_bracket(race_mmr[race], event),
+                is_king=0,
+                is_active=1,
             )
+            for race in chosen
+        ]
 
-        # Validate and get W3C stats
+        with Session.begin() as session:
+            self._check_duplicate_signup(session, event.id, battle_tag, signup_races)
+            try:
+                rows = [
+                    KothSignup.add(session, signup.model_dump())
+                    for signup in new_signups
+                ]
+            except IntegrityError as error:
+                # The unique index holds where the check cannot: two signups at once
+                raise BadRequestError(
+                    f"Player {battle_tag} already has an active signup with race"
+                    f" {', '.join(chosen)}"
+                ) from error
+            return [KothSignupPublic.model_validate(row) for row in rows]
+
+    def _read_race_mmr(self, battle_tag: str, races: list[str]) -> dict[str, int]:
+        """The MMR of each race the player has played, taken from the newest of
+        the last 3 seasons that names it."""
         w3c_service = W3CService(settings_app_service=self.settings_app_service)
-
-        # Get stats from the most recent season (within last 3 seasons)
-        race_mmr_data: dict[str, int] = {}  # {race: mmr} for the found season
-        w3c_name = battle_tag
-
+        race_mmr: dict[str, int] = {}
         current_season = w3c_service.current_season()
         for season_offset in range(3):
             season = current_season - season_offset
             try:
                 stats = w3c_service.get_player_stats(battle_tag, season_override=season)
-                if stats:
-                    for stat in stats:
-                        if stat.race and stat.mmr and stat.mmr > 0:
-                            # Race is an object, get the value string
-                            race_mmr_data[stat.race.value] = stat.mmr
-
-                    # Stop checking older seasons if we found the required stats
-                    if signup_race:
-                        # If a specific race was requested, only stop if we found that race
-                        if signup_race in race_mmr_data:
-                            logger.debug(
-                                f"Found W3C stats for {battle_tag} with race {signup_race} in season {season}"
-                            )
-                            break
-                    else:
-                        # If no race specified, stop as soon as we find any stats
-                        if race_mmr_data:
-                            logger.debug(
-                                f"Found W3C stats for {battle_tag} in season {season}"
-                            )
-                            break
-            except Exception as e:
-                logger.debug(f"No stats for {battle_tag} in season {season}: {e}")
+            except Exception as error:
+                logger.debug(f"No stats for {battle_tag} in season {season}: {error}")
                 continue
-
-        # Determine final race and MMR
-        if signup_race:
-            # Race was specified (including RANDOM)
-            if signup_race not in race_mmr_data:
-                raise BadRequestError(
-                    f"No W3Champions statistics found for {battle_tag} with race {signup_race} in the last 3 seasons"
-                )
-            avg_mmr = race_mmr_data[signup_race]
-            final_race = signup_race
-        else:
-            # No race specified - find race with highest MMR
-            if not race_mmr_data:
-                raise BadRequestError(
-                    f"No valid MMR data found for {battle_tag} in the last 3 seasons"
-                )
-
-            highest_race = max(race_mmr_data, key=lambda race: race_mmr_data[race])
-            avg_mmr = race_mmr_data[highest_race]
-            final_race = highest_race
-
-        # Determine bracket
-        bracket = self._determine_bracket(avg_mmr, event)
-
-        # Create signup
-        signup = KothSignupCreate(
-            event_id=event.id,
-            twitch_username=twitch_username,
-            battle_tag=battle_tag,
-            w3c_name=w3c_name,
-            race=final_race,
-            mmr=avg_mmr,
-            bracket=bracket,
-            is_king=0,
-            is_active=1,
-        )
-
-        with Session.begin() as session:
-            self._check_duplicate_signup(
-                session, event.id, twitch_username, signup_race
-            )
-            try:
-                db_signup = KothSignup.add(session, signup.model_dump())
-            except IntegrityError as error:
-                # The unique index holds where the check cannot: two signups at once
-                raise BadRequestError(
-                    f"Player {twitch_username} already has an active signup with race {final_race}"
-                ) from error
-            return KothSignupPublic.model_validate(db_signup)
+            for stat in stats or []:
+                if stat.race and stat.mmr and stat.mmr > 0:
+                    race_mmr.setdefault(stat.race.value, stat.mmr)
+            if races:
+                if all(race in race_mmr for race in races):
+                    break
+            elif race_mmr:
+                break
+        return race_mmr
 
     def update_signup_bracket(
         self, signup_id: int, new_bracket: int
@@ -542,30 +528,37 @@ class KothService:
         self,
         session: OrmSession,
         event_id: int,
-        twitch_username: str,
-        race: str | None,
+        battle_tag: str,
+        races: list[str],
     ) -> None:
-        """Raise when the player already has an active signup for this race.
+        """Raise when the player already has an active signup for one of these races.
 
-        Without a race the player may hold one active signup only, because
-        the race the W3C stats pick would repeat the signup they have.
+        The battle tag is the player, because a Twitch name is blank on an admin
+        or profile signup. Without a race the player may hold one active signup
+        only, because the race the W3C stats pick would repeat the signup they have.
         """
         active = session.scalars(
             select(KothSignup).where(
                 col(KothSignup.event_id) == event_id,
-                col(KothSignup.twitch_username) == twitch_username,
+                func.lower(func.trim(col(KothSignup.battle_tag)))
+                == battle_tag.strip().lower(),
                 col(KothSignup.is_active) == 1,
             )
         ).all()
         if not active:
             return
-        if not race:
+        if not races:
             raise BadRequestError(
-                f"Player {twitch_username} already has an active signup. Specify a race to signup with a different race."
+                f"Player {battle_tag} already has an active signup. Specify a race to signup with a different race."
             )
-        if any(signup.race == Race(race) for signup in active):
+        taken = [
+            race
+            for race in races
+            if any(signup.race == Race(race) for signup in active)
+        ]
+        if taken:
             raise BadRequestError(
-                f"Player {twitch_username} already has an active signup with race {race}"
+                f"Player {battle_tag} already has an active signup with race {', '.join(taken)}"
             )
 
     def _set_king(self, signup_id: int, value: int) -> KothSignupPublic:

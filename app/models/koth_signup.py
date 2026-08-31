@@ -12,6 +12,9 @@ ACTIVE_TWITCH_USERNAME = (
     "CASE WHEN is_active = 1 AND twitch_username <> '' THEN twitch_username END"
 )
 
+# The battle tag of an active signup, folded the way the users table folds it
+ACTIVE_BATTLE_TAG = "CASE WHEN is_active = 1 THEN lower(trim(battle_tag)) END"
+
 if TYPE_CHECKING:
     from app.models.koth_event import KothEvent
     from app.models.koth_match_participant import KothMatchParticipant
@@ -39,6 +42,13 @@ class KothSignup(KothSignupBase, DBModel, table=True):
             "race",
             unique=True,
         ),
+        Index(
+            "uq_koth_signups_active_battle_tag_race",
+            "event_id",
+            "active_battle_tag",
+            "race",
+            unique=True,
+        ),
     )
 
     id: int | None = Field(default=None, primary_key=True)
@@ -49,6 +59,14 @@ class KothSignup(KothSignupBase, DBModel, table=True):
         sa_column=Column(
             AutoString(length=50),
             Computed(ACTIVE_TWITCH_USERNAME),
+            nullable=True,
+        ),
+    )
+    active_battle_tag: str | None = Field(
+        default=None,
+        sa_column=Column(
+            AutoString(length=50),
+            Computed(ACTIVE_BATTLE_TAG),
             nullable=True,
         ),
     )
@@ -88,11 +106,19 @@ class KothSignupRequest(SQLModel):
 
 
 class KothSignupAdminRequest(SQLModel):
-    """The admin signup body: the admin may leave the Twitch name blank."""
+    """The admin signup body: the admin may leave the Twitch name blank, and
+    an empty race list lets the W3C stats pick the best race."""
 
     twitch_username: str = ""
     battle_tag: str
-    race: str | None = None
+    races: list[str] = []
+
+
+class KothSignupMeRequest(SQLModel):
+    """The signup body of a logged-in player: the battle tag comes from the
+    profile, and an empty race list lets the W3C stats pick the best race."""
+
+    races: list[str] = []
 
 
 class KothBracketUpdate(SQLModel):
