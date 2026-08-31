@@ -1,4 +1,4 @@
-from typing import Annotated, Any, Self
+from typing import Annotated, Self
 
 from sqlalchemy import Index
 from sqlalchemy.orm import joinedload
@@ -6,7 +6,7 @@ from sqlalchemy.orm.interfaces import ORMOption
 from sqlmodel import Field, Relationship, SQLModel
 
 from app.core.db import rel
-from app.models.base import DBModel, ident
+from app.models.base import DBModel, PublicModel, ident
 from app.models.match import Match
 from app.models.relationships import DBMapSeason, DBUserSeasonSignup
 from app.models.season import Season, SeasonPublic
@@ -122,7 +122,7 @@ class FantasyBetUpdate(SQLModel):
     bet_points: Annotated[int | None, EmptyStrToNone] = None
 
 
-class FantasyBetPublic(FantasyBetBase):
+class FantasyBetPublic(FantasyBetBase, PublicModel):
     # app.services.derived.fill_bet_results answers this one; no column holds it
     bet_result: int | None = None
     id: int
@@ -170,6 +170,3 @@ class FantasyBetPublic(FantasyBetBase):
             winner=UserPublic.from_user_reduced(fbet.winner) if fbet.winner else None,
             bet_points=fbet.bet_points,
         )
-
-    def to_dict(self) -> dict[str, Any]:
-        return self.model_dump(mode="json")

@@ -1,9 +1,9 @@
-from typing import TYPE_CHECKING, Annotated, Any, Self
+from typing import TYPE_CHECKING, Annotated, Self
 
 from sqlalchemy import Index, text
 from sqlmodel import Field, Relationship, SQLModel
 
-from app.models.base import DBModel, ident
+from app.models.base import DBModel, PublicModel, ident
 from app.models.enums import Race
 from app.models.season import SeasonPublic
 from app.models.team import Team, TeamPublic
@@ -77,7 +77,7 @@ class FantasyTeamUpdate(SQLModel):
     drafted_race: Annotated[Race | None, SuggestRace] = None
 
 
-class FantasyTeamPublic(FantasyTeamBase):
+class FantasyTeamPublic(FantasyTeamBase, PublicModel):
     # app.services.derived.fill_fantasy_teams answers these six; no column holds them
     player_points: int | None = None
     bench_points: int | None = None
@@ -118,6 +118,3 @@ class FantasyTeamPublic(FantasyTeamBase):
             drafted_race=fteam.drafted_race,
             drafted_players=drafted_players,
         )
-
-    def to_dict(self) -> dict[str, Any]:
-        return self.model_dump(mode="json")

@@ -1,13 +1,7 @@
-import logging
-
-from sqlalchemy import ColumnElement
-
 from app.core.db import Session
 from app.core.exceptions import NotFoundError
 from app.core.query import QueryElement, QueryUtil
 from app.models.map import Map, MapCreate, MapPublic, MapUpdate
-
-logger = logging.getLogger(__name__)
 
 
 class MapService:
@@ -37,21 +31,13 @@ class MapService:
     def search(
         self, query: QueryElement | None, limit: int | None = None, offset: int = 0
     ) -> list[MapPublic]:
-        return self._where(
-            QueryUtil.convert_query_to_db_filter(Map, query), limit=limit, offset=offset
-        )
-
-    def _where(
-        self,
-        filter: ColumnElement[bool] | None,
-        limit: int | None = None,
-        offset: int = 0,
-    ) -> list[MapPublic]:
         with Session.begin() as session:
-            maps = Map.search(session, filter, limit=limit, offset=offset)
-            if not maps:
-                logger.debug(f"No maps found by searchcriteria: {filter}")
-                return []
+            maps = Map.search(
+                session,
+                QueryUtil.convert_query_to_db_filter(Map, query),
+                limit=limit,
+                offset=offset,
+            )
             return [MapPublic.model_validate(map) for map in maps]
 
     def update_icon(self, map_id: int, file: bytes) -> None:

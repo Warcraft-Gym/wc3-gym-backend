@@ -1,10 +1,10 @@
-from typing import Annotated, Any, Self
+from typing import Annotated, Self
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from sqlmodel import Field, SQLModel, col
 
-from app.models.base import DBModel
+from app.models.base import DBModel, PublicModel
 from app.models.types import NumToStr
 
 
@@ -42,11 +42,8 @@ class SettingsUpdate(SQLModel):
     description: str | None = None
 
 
-class SettingsPublic(SettingsBase):
+class SettingsPublic(SettingsBase, PublicModel):
     id: int
-
-    def to_dict(self) -> dict[str, Any]:
-        return self.model_dump(mode="json")
 
 
 class SettingsList(SQLModel):

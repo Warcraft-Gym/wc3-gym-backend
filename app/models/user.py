@@ -1,10 +1,10 @@
 from datetime import datetime
-from typing import TYPE_CHECKING, Annotated, Any, Self
+from typing import TYPE_CHECKING, Annotated, Self
 
 from sqlalchemy import Index, text
 from sqlmodel import Field, Relationship, SQLModel
 
-from app.models.base import DBModel, ident
+from app.models.base import DBModel, PublicModel, ident
 from app.models.enums import Race
 from app.models.season import SeasonPublic
 from app.models.types import (
@@ -99,7 +99,7 @@ class UserUpdate(SQLModel):
     fantasy_tier: int | None = None
 
 
-class UserReduced(UserBase):
+class UserReduced(UserBase, PublicModel):
     """The scalar fields of a user, without the per-season collections."""
 
     id: int
@@ -129,9 +129,6 @@ class UserReduced(UserBase):
             w3c_synced_at=user.w3c_synced_at,
             ladder_synced_at=user.ladder_synced_at,
         )
-
-    def to_dict(self) -> dict[str, Any]:
-        return self.model_dump(mode="json")
 
 
 class UserListPublic(UserReduced):

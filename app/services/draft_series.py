@@ -54,21 +54,19 @@ class DraftSeriesService:
         self, match_id: int, limit: int | None = None, offset: int = 0
     ) -> list[DraftSeriesPublic]:
         with Session.begin() as session:
-            result = []
+            # Offset paging is deterministic only with a fixed order
             statement = (
                 select(DraftSeries)
                 .options(*DraftSeries._eager_options())
                 .where(col(DraftSeries.match_id) == match_id)
+                .order_by(col(DraftSeries.id))
+                .offset(offset)
+                .limit(limit)
             )
-            if limit is not None or offset:
-                # Offset paging is deterministic only with a fixed order
-                statement = statement.order_by(col(DraftSeries.id)).offset(offset)
-                if limit is not None:
-                    statement = statement.limit(limit)
-            draft_series_list = session.scalars(statement).all()
-            for single_draft_series in draft_series_list:
-                result.append(DraftSeriesPublic.from_draft_series(single_draft_series))
-            return result
+            return [
+                DraftSeriesPublic.from_draft_series(row)
+                for row in session.scalars(statement).all()
+            ]
 
     def delete_by_match_id(self, match_id: int) -> None:
         """Delete all draft series for a given match"""

@@ -309,7 +309,7 @@ def get_player_series(
             sort=sort,
             order=order,
         )
-        total = series_service.count_for_season(season_id, query)
+        total = series_service.count(query, season_id=season_id)
     else:
         # Search all series for this user
         query = QueryUtil.parse_query(

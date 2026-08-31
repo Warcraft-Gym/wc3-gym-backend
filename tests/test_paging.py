@@ -238,7 +238,8 @@ DEFAULT_ORDER = {
         "koth_matches.bracket, koth_matches.id",
         "anon_1.bracket, anon_1.id",
     ],
-    "GET /player-series?token=none": ["series.id"],
+    # The first two order the user lookup the route resolves the token with
+    "GET /player-series?token=none": ["users.id", "anon_1.id", "series.id"],
 }
 
 ORDER_BY = re.compile(r"ORDER BY (.+?)(?:\s+LIMIT|\s*$)", re.DOTALL)

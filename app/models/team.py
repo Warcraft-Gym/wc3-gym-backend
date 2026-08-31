@@ -92,17 +92,9 @@ class TeamPublic(TeamReduced):
     def from_team(cls, team: Team) -> Self:
         players = {}
         captains = {}
-        seasons_info = (
-            [
-                s
-                for s in (
-                    SeasonInfoPublic.from_team_season(info) for info in team.season_info
-                )
-                if s
-            ]
-            if team.season_info
-            else []
-        )
+        seasons_info = [
+            SeasonInfoPublic(season_id=info.season_id) for info in team.season_info
+        ]
 
         if team.user_seasons:
             for ut in team.user_seasons:

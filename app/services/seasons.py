@@ -1,6 +1,6 @@
 import logging
 
-from sqlalchemy import ColumnElement, select
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import joinedload, noload, selectinload
 from sqlmodel import col
@@ -25,6 +25,17 @@ from app.services import ladder_maps
 from app.services.users import UserService
 
 logger = logging.getLogger(__name__)
+
+
+# A season answers its map pool and its week maps and nothing else; noload
+# alone, because a joined link table multiplies the rows.
+_SEASON_OPTIONS = (
+    noload(rel(Season.user_teams)),
+    noload(rel(Season.teams)),
+    selectinload(rel(Season.maps)).joinedload(rel(DBMapSeason.map)),
+    selectinload(rel(Season.week_maps)),
+    noload(rel(Season.signup_users)),
+)
 
 
 class SeasonService:
@@ -54,18 +65,10 @@ class SeasonService:
 
     def get(self, season_id: int) -> SeasonPublic:
         with Session.begin() as session:
-            # Eager load related entities, disable nested loading except for maps
             season = (
                 session.scalars(
                     select(Season)
-                    .options(
-                        # noload alone; a joined link table multiplies the rows
-                        noload(rel(Season.user_teams)),
-                        noload(rel(Season.teams)),
-                        selectinload(rel(Season.maps)).joinedload(rel(DBMapSeason.map)),
-                        selectinload(rel(Season.week_maps)),
-                        noload(rel(Season.signup_users)),
-                    )
+                    .options(*_SEASON_OPTIONS)
                     .where(col(Season.id) == season_id)
                 )
                 .unique()
@@ -77,25 +80,16 @@ class SeasonService:
 
     def get_all(self, limit: int | None = None, offset: int = 0) -> list[SeasonPublic]:
         with Session.begin() as session:
-            result = []
-            # Eager load related entities, disable nested loading except for maps
-            statement = select(Season).options(
-                # noload alone; a joined link table multiplies the rows
-                noload(rel(Season.user_teams)),
-                noload(rel(Season.teams)),
-                selectinload(rel(Season.maps)).joinedload(rel(DBMapSeason.map)),
-                selectinload(rel(Season.week_maps)),
-                noload(rel(Season.signup_users)),
+            # Offset paging is deterministic only with a fixed order
+            statement = (
+                select(Season)
+                .options(*_SEASON_OPTIONS)
+                .order_by(col(Season.id))
+                .offset(offset)
+                .limit(limit)
             )
-            if limit is not None or offset:
-                # Offset paging is deterministic only with a fixed order
-                statement = statement.order_by(col(Season.id)).offset(offset)
-                if limit is not None:
-                    statement = statement.limit(limit)
             seasons = session.scalars(statement).unique().all()
-            for season in seasons:
-                result.append(SeasonPublic.from_season(season))
-            return result
+            return [SeasonPublic.from_season(season) for season in seasons]
 
     def add_teams(self, season_id: int, team_ids: list[int]) -> SeasonPublic:
         with Session.begin() as session:
@@ -118,49 +112,21 @@ class SeasonService:
     def search(
         self, query: QueryElement | None, limit: int | None = None, offset: int = 0
     ) -> list[SeasonPublic]:
-        return self._where(
-            QueryUtil.convert_query_to_db_filter(Season, query),
-            limit=limit,
-            offset=offset,
-        )
-
-    def _where(
-        self,
-        filter: ColumnElement[bool] | None,
-        limit: int | None = None,
-        offset: int = 0,
-    ) -> list[SeasonPublic]:
+        filter = QueryUtil.convert_query_to_db_filter(Season, query)
         if filter is None:
             return []
         with Session.begin() as session:
-            result = []
-            # Eager load related entities, disable nested loading except for maps
+            # Offset paging is deterministic only with a fixed order
             statement = (
                 select(Season)
-                .options(
-                    # noload alone; a joined link table multiplies the rows
-                    noload(rel(Season.user_teams)),
-                    noload(rel(Season.teams)),
-                    selectinload(rel(Season.maps)).joinedload(rel(DBMapSeason.map)),
-                    selectinload(rel(Season.week_maps)),
-                    noload(rel(Season.signup_users)),
-                )
+                .options(*_SEASON_OPTIONS)
                 .where(filter)
+                .order_by(col(Season.id))
+                .offset(offset)
+                .limit(limit)
             )
-            if limit is not None or offset:
-                # Offset paging is deterministic only with a fixed order
-                statement = statement.order_by(col(Season.id)).offset(offset)
-                if limit is not None:
-                    statement = statement.limit(limit)
-            seasons = (
-                session.scalars(statement).unique().all() if filter is not None else []
-            )
-            if not seasons:
-                logger.debug(f"No seasons found by searchcriteria: {filter}")
-                return result
-            for season in seasons:
-                result.append(SeasonPublic.from_season(season))
-            return result
+            seasons = session.scalars(statement).unique().all()
+            return [SeasonPublic.from_season(season) for season in seasons]
 
     def remove_teams(self, season_id: int, team_ids: list[int]) -> SeasonPublic:
         with Session.begin() as session:
@@ -419,14 +385,11 @@ class SeasonService:
                     ),
                 )
                 .where(col(DBUserSeasonSignup.season_id) == season_id)
-            )
-            if limit is not None or offset:
                 # Offset paging is deterministic only with a fixed order
-                statement = statement.order_by(col(DBUserSeasonSignup.user_id)).offset(
-                    offset
-                )
-                if limit is not None:
-                    statement = statement.limit(limit)
+                .order_by(col(DBUserSeasonSignup.user_id))
+                .offset(offset)
+                .limit(limit)
+            )
 
             result = []
             for signup in session.scalars(statement).unique().all():

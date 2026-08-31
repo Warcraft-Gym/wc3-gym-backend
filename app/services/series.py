@@ -1,5 +1,3 @@
-import logging
-
 from sqlalchemy import func, select
 from sqlmodel import col
 
@@ -18,8 +16,6 @@ from app.models.series import (
     SeriesUpdate,
 )
 from app.services import derived
-
-logger = logging.getLogger(__name__)
 
 
 class SeriesService:
@@ -71,50 +67,37 @@ class SeriesService:
 
         sort names a column of SERIES_SORTS and the series id breaks its ties.
         """
+        filter = QueryUtil.convert_query_to_db_filter(Series, query)
+        if filter is None:
+            return []
         with Session.begin() as session:
-            result = []
-            filter = QueryUtil.convert_query_to_db_filter(Series, query)
-            if filter is None:
-                return []
             statement = (
                 select(Series).options(*Series._list_eager_options()).where(filter)
             )
-            if limit is not None or offset:
-                # Offset paging is deterministic only with a fixed order
-                if sort == "week":
-                    statement = statement.join(Match, col(Match.id) == Series.match_id)
-                statement = ordered(
-                    statement, SERIES_SORTS, sort, order, col(Series.id)
-                ).offset(offset)
-                if limit is not None:
-                    statement = statement.limit(limit)
-            series_list = session.scalars(statement).all() if filter is not None else []
-            if not series_list:
-                logger.debug(f"No series found by searchcriteria: {query}")
-                return result
-            for series in series_list:
-                result.append(SeriesPublic.from_series_reduced(series))
+            if sort == "week":
+                statement = statement.join(Match, col(Match.id) == Series.match_id)
+            # Offset paging is deterministic only with a fixed order
+            statement = (
+                ordered(statement, SERIES_SORTS, sort, order, col(Series.id))
+                .offset(offset)
+                .limit(limit)
+            )
+            series_list = session.scalars(statement).all()
+            result = [SeriesPublic.from_series_reduced(s) for s in series_list]
             derived.fill_series(session, result)
             return result
 
-    def count(self, query: QueryElement | None) -> int:
-        """The number of series that match the query."""
+    def count(self, query: QueryElement | None, season_id: int | None = None) -> int:
+        """The number of series that match the query, in one season or in all."""
         with Session.begin() as session:
             filter = QueryUtil.convert_query_to_db_filter(Series, query)
-            if filter is None:
+            if filter is None and season_id is None:
                 return 0
-            statement = select(func.count()).select_from(Series).where(filter)
-            return session.scalar(statement) or 0
-
-    def count_for_season(self, season_id: int, query: QueryElement | None) -> int:
-        """The number of series in one season that match the query."""
-        with Session.begin() as session:
-            filter = QueryUtil.convert_query_to_db_filter(Series, query)
-            statement = (
-                select(func.count())
-                .select_from(Series)
-                .where(col(Series.match).has(col(Match.season_id) == season_id))
-            )
+            statement = select(func.count()).select_from(Series)
+            if season_id is not None:
+                statement = statement.where(
+                    col(Series.match).has(col(Match.season_id) == season_id)
+                )
             if filter is not None:
                 statement = statement.where(filter)
             return session.scalar(statement) or 0
@@ -135,16 +118,11 @@ class SeriesService:
         offset: int = 0,
     ) -> list[SeriesPublic]:
         with Session.begin() as session:
-            result = []
             filter = QueryUtil.convert_query_to_db_filter(Series, query)
             series_list = Series.search_for_season_and_playday(
                 session, season_id, playday, filter, limit=limit, offset=offset
             )
-            if not series_list:
-                logger.debug(f"No series found by searchcriteria: {query}")
-                return result
-            for series in series_list:
-                result.append(SeriesPublic.from_series_reduced(series))
+            result = [SeriesPublic.from_series_reduced(s) for s in series_list]
             derived.fill_series(session, result)
             return result
 
@@ -163,7 +141,6 @@ class SeriesService:
         sort names a column of SERIES_SORTS and the series id breaks its ties.
         """
         with Session.begin() as session:
-            result = []
             filter = QueryUtil.convert_query_to_db_filter(Series, query)
             series_list = Series.search_for_season(
                 session,
@@ -174,10 +151,6 @@ class SeriesService:
                 sort=sort,
                 order=order,
             )
-            if not series_list:
-                logger.debug(f"No series found by searchcriteria: {query}")
-                return result
-            for series in series_list:
-                result.append(SeriesPublic.from_series_reduced(series))
+            result = [SeriesPublic.from_series_reduced(s) for s in series_list]
             derived.fill_series(session, result)
             return result

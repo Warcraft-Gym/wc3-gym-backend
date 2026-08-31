@@ -43,6 +43,14 @@ W3C_SYNC_WORKERS = 4
 SYNC_MAX_AGE = timedelta(minutes=10)
 
 
+# The list row has no gnl_stats, so the link rows stay out
+_LIST_OPTIONS = (
+    noload(rel(User.team_seasons)),
+    joinedload(rel(User.w3c_stats)),
+    selectinload(rel(User.signup_seasons)).joinedload(rel(DBUserSeasonSignup.season)),
+)
+
+
 def _public(session: OrmSession, user: User) -> UserPublic:
     """One user, with the season record of every team he played for."""
     public = UserPublic.from_user(user)
@@ -136,34 +144,17 @@ class UserService:
         if filter is None:
             return []
         with Session.begin() as session:
-            result = []
-            # The list row has no gnl_stats, so the link rows stay out
+            # Offset paging is deterministic only with a fixed order
             statement = (
                 select(User)
-                .options(
-                    noload(rel(User.team_seasons)),
-                    joinedload(rel(User.w3c_stats)),
-                    selectinload(rel(User.signup_seasons)).joinedload(
-                        rel(DBUserSeasonSignup.season)
-                    ),
-                )
+                .options(*_LIST_OPTIONS)
                 .where(filter)
+                .order_by(col(User.id))
+                .offset(offset)
+                .limit(limit)
             )
-            if limit is not None or offset:
-                # Offset paging is deterministic only with a fixed order
-                statement = statement.order_by(col(User.id)).offset(offset)
-                if limit is not None:
-                    statement = statement.limit(limit)
-            users = (
-                session.scalars(statement).unique().all() if filter is not None else []
-            )
-            if not users:
-                logger.debug(f"No users found by searchcriteria: {filter}")
-                return result
-
-            for user in users:
-                result.append(UserListPublic.from_user(user))
-            return result
+            users = session.scalars(statement).unique().all()
+            return [UserListPublic.from_user(user) for user in users]
 
     def get_all(
         self, limit: int | None = None, offset: int = 0
@@ -171,24 +162,16 @@ class UserService:
         """The users, or one page of them, and the total row count."""
         with Session.begin() as session:
             total = session.scalar(select(func.count()).select_from(User)) or 0
-            result = []
-            # The list row has no gnl_stats, so the link rows stay out
-            statement = select(User).options(
-                noload(rel(User.team_seasons)),
-                joinedload(rel(User.w3c_stats)),
-                selectinload(rel(User.signup_seasons)).joinedload(
-                    rel(DBUserSeasonSignup.season)
-                ),
-            )
             # Offset paging is deterministic only with a fixed order
-            statement = statement.order_by(col(User.id)).offset(offset)
-            if limit is not None:
-                statement = statement.limit(limit)
+            statement = (
+                select(User)
+                .options(*_LIST_OPTIONS)
+                .order_by(col(User.id))
+                .offset(offset)
+                .limit(limit)
+            )
             users = session.scalars(statement).unique().all()
-
-            for user in users:
-                result.append(UserListPublic.from_user(user))
-            return result, total
+            return [UserListPublic.from_user(user) for user in users], total
 
     def validate_battle_tag(self, battle_tag: str) -> bool:
         """

@@ -65,12 +65,11 @@ class MatchService:
     def search(
         self, query: QueryElement | None, limit: int | None = None, offset: int = 0
     ) -> list[MatchPublic]:
+        filter = QueryUtil.convert_query_to_db_filter(Match, query)
+        if filter is None:
+            return []
         with Session.begin() as session:
-            result: list[MatchPublic] = []
-            filter = QueryUtil.convert_query_to_db_filter(Match, query)
-            if filter is None:
-                return []
-            # Eager load only what we need, explicitly disable other relationships
+            # Offset paging is deterministic only with a fixed order
             statement = (
                 select(Match)
                 .options(
@@ -80,19 +79,11 @@ class MatchService:
                     joinedload(rel(Match.fixed_map)),
                 )
                 .where(filter)
+                .order_by(col(Match.id))
+                .offset(offset)
+                .limit(limit)
             )
-            if limit is not None or offset:
-                # Offset paging is deterministic only with a fixed order
-                statement = statement.order_by(col(Match.id)).offset(offset)
-                if limit is not None:
-                    statement = statement.limit(limit)
-            matches = (
-                session.scalars(statement).unique().all() if filter is not None else []
-            )
-            if not matches:
-                logger.debug(f"No matches found by searchcriteria: {query}")
-                return result
-            for match in matches:
-                result.append(MatchPublic.from_match(match))
+            matches = session.scalars(statement).unique().all()
+            result = [MatchPublic.from_match(match) for match in matches]
             derived.fill_matches(session, result)
             return result

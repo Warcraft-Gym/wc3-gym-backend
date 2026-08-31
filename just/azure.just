@@ -59,16 +59,12 @@ status: _host
     curl -fsS "{{ api }}/health" && echo
     ssh {{ box }} 'grep ^BACKEND_IMAGE /opt/gnl/.env; cd /opt/gnl && sudo docker compose ps backend'
 
-# Bring the database to the latest migration, inside the backend container.
-migrate: _host
-    ssh {{ box }} 'cd /opt/gnl && sudo docker compose exec -T backend alembic upgrade head'
-
-# Run any alembic command inside the backend container, for example `just azure alembic current`.
+# Run any alembic command inside the backend container, for example `just azure alembic upgrade head`.
 alembic *args: _host
     ssh {{ box }} 'cd /opt/gnl && sudo docker compose exec -T backend alembic {{ args }}'
 
 # Migrate, then load the private seed repo. The image carries scripts/seed_db.py, so only the CSVs travel.
-seed: _host migrate
+seed: _host (alembic "upgrade head")
     #!/usr/bin/env bash
     set -euo pipefail
     seed=$(mktemp -d)
