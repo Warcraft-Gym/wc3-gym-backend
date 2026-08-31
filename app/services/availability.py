@@ -1,7 +1,7 @@
 """Which weeks of a season a player cannot play.
 
 A row is an answer, and no row is no answer, so clearing an answer deletes the
-row. The player and his captain write the same row and the last write wins.
+row. The player and their captain write the same row and the last write wins.
 """
 
 from sqlalchemy import ColumnExpressionArgument, select

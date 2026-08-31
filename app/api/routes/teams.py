@@ -28,7 +28,7 @@ router = APIRouter(tags=["teams"])
 
 
 def _own_team(claims: dict[str, Any], team_id: int) -> None:
-    """A captain reaches his own team; an admin reaches any."""
+    """A captain reaches their own team; an admin reaches any."""
     if claims.get("role") == "admin" or claims["sub"] == "admin":
         return
     if claims.get("team_id") != team_id:
@@ -109,7 +109,7 @@ def set_team_availability(
     service: AvailabilityServiceDep,
     user_service: UserServiceDep,
 ) -> list[UserSeasonAvailabilityPublic]:
-    """Answer one week for a player of the team, as his captain."""
+    """Answer one week for a player of the team, as their captain."""
     _own_team(claims, team_id)
     if not service.on_roster(team_id, season_id, data.user_id):
         raise BadRequestError(f"Player {data.user_id} is not on this team this season")

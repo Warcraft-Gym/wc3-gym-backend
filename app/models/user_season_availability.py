@@ -1,8 +1,8 @@
 """One player's answer for one week of a season: the user_season_availability table.
 
 No row is no answer, and no answer counts as available. The player writes the
-row from his dashboard and his captain writes the same row, so the last write
-wins and set_by_user_id names whoever wrote it.
+row from the dashboard and their captain writes the same row, so the last
+write wins and set_by_user_id names whoever wrote it.
 """
 
 from typing import Self
