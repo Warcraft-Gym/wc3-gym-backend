@@ -111,8 +111,8 @@ def test_the_two_players_ban_and_pick_until_the_veto_is_complete(
     body = taken(client, series_id, side_b, pool[2])
     assert (body["viewer_side"], body["on_turn"]) == ("B", False)
 
-    taken(client, series_id, side_a, pool[3])
-    body = taken(client, series_id, side_b, pool[4])
+    # A's pick leaves one map to the one entry left, so B's pick applies itself
+    body = taken(client, series_id, side_a, pool[3])
 
     assert [
         (step["side"], step["action"], step["shortname"]) for step in body["steps"]
@@ -128,6 +128,28 @@ def test_the_two_players_ban_and_pick_until_the_veto_is_complete(
     resp = write(client, series_id, side_a, map_id=pool[0])
     assert resp.status_code == 400, resp.text
     assert resp.json() == {"error": "The veto is complete"}
+
+
+def test_a_pick_with_maps_to_spare_forces_nothing(
+    client: Client,
+    seeded: dict[str, Any],
+    pool: list[int],
+    dashboard_token: Callable[..., str],
+) -> None:
+    from app.core.db import Session
+    from app.models.season import Season
+
+    with Session.begin() as session:
+        season = session.get(Season, seeded["season_id"])
+        assert season
+        season.pick_ban = "Pick_A|Pick_B"
+
+    series_id = seeded["series_open_id"]
+    body = taken(client, series_id, dashboard_token(discord_id="2"), pool[1])
+
+    # Three maps are left to B's one entry, so B still chooses
+    assert [step["side"] for step in body["steps"]] == ["A"]
+    assert body["complete"] is False
 
 
 def test_a_player_cannot_take_the_other_sides_turn(
