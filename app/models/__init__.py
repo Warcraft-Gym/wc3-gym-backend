@@ -47,6 +47,7 @@ from app.models import (
     team_season,
     types,
     user,
+    user_season_availability,
     user_team_season,
     w3c_ladder_match,
     w3c_stats,

@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
 from app.api.deps import (
+    AvailabilityServiceDep,
     Credentials,
     FantasyBetServiceDep,
     FantasyTeamServiceDep,
@@ -27,6 +28,10 @@ from app.models.fantasy_bet import FantasyBetCreate, FantasyBetUpdate
 from app.models.fantasy_team import FantasyTeamCreate, FantasyTeamUpdate
 from app.models.series import SeriesSort
 from app.models.user import UserCreate, UserUpdate
+from app.models.user_season_availability import (
+    PlayerAvailabilityWrite,
+    UserSeasonAvailabilityPublic,
+)
 from app.services import discord, discord_roles, player_series
 
 logger = logging.getLogger(__name__)
@@ -263,6 +268,7 @@ def public_create_user(
 def get_player_series(
     user_service: UserServiceDep,
     series_service: SeriesServiceDep,
+    availability_service: AvailabilityServiceDep,
     response: Response,
     request: Request,
     credentials: Credentials,
@@ -285,9 +291,9 @@ def get_player_series(
     user = users[0]
 
     # Get series where user is player1 or player2
-    if entry.get("season_id"):
-        # The token stores the season id as text
-        season_id = int(entry["season_id"])
+    # The token stores the season id as text
+    season_id = int(entry["season_id"]) if entry.get("season_id") else None
+    if season_id:
         query = QueryUtil.parse_query(
             f"player1_id == {user.id} or player2_id == {user.id}"
         )
@@ -321,7 +327,46 @@ def get_player_series(
         "season_id": entry.get("season_id"),
         "discord_id": entry.get("discord_id"),
         "discord_tag": entry.get("discord_tag"),
+        "availability": availability_service.for_user(user.id, season_id)
+        if season_id
+        else [],
+        "number_weeks": availability_service.season_weeks(season_id)
+        if season_id
+        else None,
     }
+
+
+@router.put("/player-availability")
+def set_player_availability(
+    availability_service: AvailabilityServiceDep,
+    settings_service: SettingsServiceDep,
+    user_service: UserServiceDep,
+    request: Request,
+    credentials: Credentials,
+    data: PlayerAvailabilityWrite,
+) -> list[UserSeasonAvailabilityPublic]:
+    """Write the identified player's answer for one week of a season.
+
+    A null answer clears the week, which puts the player back to available.
+    """
+    entry = _identity(request, credentials, data.token, "dashboard")
+
+    users = user_service.find_by_discord_id(str(entry.get("discord_id")))
+    if not users:
+        raise NotFoundError("player_not_found")
+    user = users[0]
+
+    season_id = (
+        entry.get("season_id")
+        or data.season_id
+        or settings_service.get_settings_dict().get("current_gnl_season")
+    )
+    if not season_id:
+        raise BadRequestError("missing season_id")
+
+    return availability_service.set(
+        user.id, int(season_id), data.playday, data.available, set_by_user_id=user.id
+    )
 
 
 @router.put("/player-series/{series_id}", response_model=None)
