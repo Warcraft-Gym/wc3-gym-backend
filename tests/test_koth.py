@@ -632,6 +632,7 @@ def test_the_profile_signup_reads_the_battle_tag_of_the_logged_in_player(
 ) -> None:
     """A logged-in player names races only; the battle tag comes from his row."""
     from sqlalchemy import update
+    from sqlmodel import col
 
     from app.core.db import Session
     from app.models.user import User
@@ -641,7 +642,7 @@ def test_the_profile_signup_reads_the_battle_tag_of_the_logged_in_player(
     with Session.begin() as session:
         session.execute(
             update(User)
-            .where(User.battleTag == "P4#4444")
+            .where(col(User.battleTag) == "P4#4444")
             .values(discordId=ACCOUNT["id"])
         )
 
