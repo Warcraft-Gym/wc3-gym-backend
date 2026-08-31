@@ -189,9 +189,7 @@ def _events(
     return events
 
 
-def _series_maps(
-    session: OrmSession, series_ids: set[int]
-) -> dict[int, list[str]]:
+def _series_maps(session: OrmSession, series_ids: set[int]) -> dict[int, list[str]]:
     """The maps of every played series: the match's fixed map, then the picks.
 
     Which game ran on which map, and who won it, is stored nowhere, so the

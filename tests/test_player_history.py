@@ -254,11 +254,17 @@ def test_a_meeting_carries_the_fixed_map_and_the_picks(
         session.add_all(
             [
                 DBSeriesVetoStep(
-                    series_id=ident(series), step_no=1, side="A", action="ban",
+                    series_id=ident(series),
+                    step_no=1,
+                    side="A",
+                    action="ban",
                     map_id=ident(banned),
                 ),
                 DBSeriesVetoStep(
-                    series_id=ident(series), step_no=2, side="B", action="pick",
+                    series_id=ident(series),
+                    step_no=2,
+                    side="B",
+                    action="pick",
                     map_id=ident(picked),
                 ),
             ]
