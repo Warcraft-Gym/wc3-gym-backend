@@ -24,7 +24,6 @@ from app.services import admins, discord
 from app.services.availability import AvailabilityService
 from app.services.draft_series import DraftSeriesService
 from app.services.fantasy_bets import FantasyBetService
-from app.services.fantasy_scores import FantasyScoreService
 from app.services.fantasy_teams import FantasyTeamService
 from app.services.koth import KothService
 from app.services.ladder import LadderService
@@ -200,98 +199,34 @@ draft_series_service = DraftSeriesService()
 map_service = MapService()
 fantasy_bet_service = FantasyBetService(settings_app_service=settings_service)
 fantasy_team_service = FantasyTeamService()
-fantasy_score_service = FantasyScoreService(
-    fantasy_team_service=fantasy_team_service,
-    fantasy_bet_service=fantasy_bet_service,
-    series_app_service=series_service,
-)
 koth_service = KothService(settings_app_service=settings_service)
 ladder_service = LadderService(settings_app_service=settings_service)
 stats_service = PlayerCareerStatsService()
 availability_service = AvailabilityService()
 
 
-def get_settings_service() -> SettingsService:
-    return settings_service
-
-
-def get_user_service() -> UserService:
-    return user_service
-
-
-def get_team_service() -> TeamService:
-    return team_service
-
-
-def get_match_service() -> MatchService:
-    return match_service
-
-
-def get_season_service() -> SeasonService:
-    return season_service
-
-
-def get_series_service() -> SeriesService:
-    return series_service
-
-
-def get_series_veto_service() -> SeriesVetoService:
-    return series_veto_service
-
-
-def get_draft_series_service() -> DraftSeriesService:
-    return draft_series_service
-
-
-def get_map_service() -> MapService:
-    return map_service
-
-
-def get_fantasy_bet_service() -> FantasyBetService:
-    return fantasy_bet_service
-
-
-def get_fantasy_team_service() -> FantasyTeamService:
-    return fantasy_team_service
-
-
-def get_fantasy_score_service() -> FantasyScoreService:
-    return fantasy_score_service
-
-
-def get_koth_service() -> KothService:
-    return koth_service
-
-
-def get_ladder_service() -> LadderService:
-    return ladder_service
-
-
-def get_stats_service() -> PlayerCareerStatsService:
-    return stats_service
-
-
-def get_availability_service() -> AvailabilityService:
-    return availability_service
-
-
-SettingsServiceDep = Annotated[SettingsService, Depends(get_settings_service)]
-UserServiceDep = Annotated[UserService, Depends(get_user_service)]
-TeamServiceDep = Annotated[TeamService, Depends(get_team_service)]
-MatchServiceDep = Annotated[MatchService, Depends(get_match_service)]
-SeasonServiceDep = Annotated[SeasonService, Depends(get_season_service)]
-SeriesServiceDep = Annotated[SeriesService, Depends(get_series_service)]
-SeriesVetoServiceDep = Annotated[SeriesVetoService, Depends(get_series_veto_service)]
-DraftSeriesServiceDep = Annotated[DraftSeriesService, Depends(get_draft_series_service)]
-MapServiceDep = Annotated[MapService, Depends(get_map_service)]
-FantasyBetServiceDep = Annotated[FantasyBetService, Depends(get_fantasy_bet_service)]
-FantasyTeamServiceDep = Annotated[FantasyTeamService, Depends(get_fantasy_team_service)]
-FantasyScoreServiceDep = Annotated[
-    FantasyScoreService, Depends(get_fantasy_score_service)
+SettingsServiceDep = Annotated[SettingsService, Depends(lambda: settings_service)]
+UserServiceDep = Annotated[UserService, Depends(lambda: user_service)]
+TeamServiceDep = Annotated[TeamService, Depends(lambda: team_service)]
+MatchServiceDep = Annotated[MatchService, Depends(lambda: match_service)]
+SeasonServiceDep = Annotated[SeasonService, Depends(lambda: season_service)]
+SeriesServiceDep = Annotated[SeriesService, Depends(lambda: series_service)]
+SeriesVetoServiceDep = Annotated[
+    SeriesVetoService, Depends(lambda: series_veto_service)
 ]
-KothServiceDep = Annotated[KothService, Depends(get_koth_service)]
-LadderServiceDep = Annotated[LadderService, Depends(get_ladder_service)]
-StatsServiceDep = Annotated[PlayerCareerStatsService, Depends(get_stats_service)]
+DraftSeriesServiceDep = Annotated[
+    DraftSeriesService, Depends(lambda: draft_series_service)
+]
+MapServiceDep = Annotated[MapService, Depends(lambda: map_service)]
+FantasyBetServiceDep = Annotated[
+    FantasyBetService, Depends(lambda: fantasy_bet_service)
+]
+FantasyTeamServiceDep = Annotated[
+    FantasyTeamService, Depends(lambda: fantasy_team_service)
+]
+KothServiceDep = Annotated[KothService, Depends(lambda: koth_service)]
+LadderServiceDep = Annotated[LadderService, Depends(lambda: ladder_service)]
+StatsServiceDep = Annotated[PlayerCareerStatsService, Depends(lambda: stats_service)]
 AvailabilityServiceDep = Annotated[
-    AvailabilityService, Depends(get_availability_service)
+    AvailabilityService, Depends(lambda: availability_service)
 ]

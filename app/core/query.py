@@ -9,7 +9,7 @@ for a value the caller supplies; keep this for a query a client wrote.
 import enum
 import re
 from datetime import date, datetime
-from typing import Self, cast
+from typing import cast
 
 from sqlalchemy import ColumnElement, Enum, String, and_, func, or_
 from sqlmodel import AutoString
@@ -19,31 +19,10 @@ from app.models.base import DBModel
 from app.models.types import _aware_utc
 
 
-class ConcatenationType:
-    # The three members below, assigned right after the class body.
-    OR: "ConcatenationType"
-    QUERY: "ConcatenationType"
-    AND: "ConcatenationType"
-
-    _instances: dict[str, "ConcatenationType"] = {}
-    value: str
-
-    def __new__(cls, value: str, *args: object, **kwargs: object) -> Self:
-        if value not in cls._instances:
-            instance = super().__new__(cls, *args, **kwargs)
-            instance.value = value
-            cls._instances[value] = instance
-        # The shared cache holds a cls only because nothing subclasses this
-        return cast(Self, cls._instances[value])
-
-    def __repr__(self) -> str:
-        return f"ConcatenationType({self.value})"
-
-
-# Predefined instances
-ConcatenationType.OR = ConcatenationType("OR")
-ConcatenationType.QUERY = ConcatenationType("QUERY")
-ConcatenationType.AND = ConcatenationType("AND")
+class ConcatenationType(enum.Enum):
+    OR = "OR"
+    QUERY = "QUERY"
+    AND = "AND"
 
 
 class QueryElement:
@@ -172,23 +151,15 @@ class QueryUtil:
     ) -> ColumnElement[bool] | None:
         if not query:
             return None
-        return QueryUtil.convert_query_to_db_filter_rec(cls, query)
-
-    @staticmethod
-    def convert_query_to_db_filter_rec(
-        cls: type[DBModel], query: QueryElement | None
-    ) -> ColumnElement[bool] | None:
-        if not query:
-            return None
         # QUERY nodes hold a condition, AND/OR nodes hold two QueryElements
         if query.type == ConcatenationType.QUERY:
             return QueryUtil.create_class_query(
                 cls, cast(QueryCondition, query.elementA)
             )
-        query_a = QueryUtil.convert_query_to_db_filter_rec(
+        query_a = QueryUtil.convert_query_to_db_filter(
             cls, cast(QueryElement | None, query.elementA)
         )
-        query_b = QueryUtil.convert_query_to_db_filter_rec(
+        query_b = QueryUtil.convert_query_to_db_filter(
             cls, cast(QueryElement | None, query.elementB)
         )
         if query_a is None or query_b is None:
