@@ -25,6 +25,8 @@ class Map(MapBase, DBModel, table=True):
     )
 
     id: int | None = Field(default=None, primary_key=True)
+    # The uploaded picture of the map; MapBase.image is the url the xlsx import fills
+    icon: bytes | None = None
     seasons: list["DBMapSeason"] = Relationship(
         back_populates="map", sa_relationship_kwargs={"cascade": "all, delete"}
     )
@@ -40,3 +42,17 @@ class MapUpdate(MapBase):
 
 class MapPublic(MapBase):
     id: int
+
+
+class LadderMapRow(SQLModel):
+    """One map of the w3champions ladder, as the import preview lists it.
+
+    status is `in_pool` when the season already plays it, `no_match` when
+    warcraft3.info knows no map of that name and version, else `new`.
+    """
+
+    w3c_name: str
+    matched_name: str | None = None
+    shortname: str | None = None
+    image_url: str | None = None
+    status: str = "new"

@@ -21,6 +21,7 @@ from app.core.exceptions import ApiError
 from app.core.security import decode_token
 from app.models.clerk_account import ClerkAccount
 from app.services import admins, discord
+from app.services.availability import AvailabilityService
 from app.services.draft_series import DraftSeriesService
 from app.services.fantasy_bets import FantasyBetService
 from app.services.fantasy_scores import FantasyScoreService
@@ -32,6 +33,7 @@ from app.services.matches import MatchService
 from app.services.player_career_stats import PlayerCareerStatsService
 from app.services.seasons import SeasonService
 from app.services.series import SeriesService
+from app.services.series_veto import SeriesVetoService
 from app.services.settings import SettingsService
 from app.services.teams import TeamService
 from app.services.users import UserService
@@ -79,13 +81,35 @@ def clerk_claims(request: Request) -> dict[str, Any]:
     discord_id = _discord_id(clerk_user_id)
     claims: dict[str, Any] = {"sub": discord_id, "clerk_user_id": clerk_user_id}
     if admins.is_admin(discord_id):
-        return claims | {"role": "admin"}
+        return _view_as(request, claims | {"role": "admin"})
     claims["role"] = discord.role_for(discord_id)
     if claims["role"] == "member":
         settings = settings_service.get_settings_dict()
         seat = team_service.captain_seat(discord_id, settings.get("current_gnl_season"))
         if seat:
             claims |= {"role": "captain", "team_id": seat[0], "season_id": seat[1]}
+    return claims
+
+
+def _view_as(request: Request, claims: dict[str, Any]) -> dict[str, Any]:
+    """The role an admin's X-View-As header asks to be seen as, for debugging.
+
+    The rewrite happens where every guard reads the role, so an admin viewing
+    as a member meets the same 403s a member would. The real role stays in
+    actual_role, which /me answers so the switch stays visible. A viewed
+    captain names its team with X-View-Team; the season is the
+    current_gnl_season setting, as captain_seat reads it.
+    """
+    role = request.headers.get("x-view-as")
+    if role not in ("captain", "member", "guest"):
+        return claims
+    claims |= {"role": role, "actual_role": "admin"}
+    team = request.headers.get("x-view-team", "")
+    if role == "captain" and team.isdigit():
+        season = settings_service.get_settings_dict().get("current_gnl_season")
+        claims["team_id"] = int(team)
+        if season and season.isdigit():
+            claims["season_id"] = int(season)
     return claims
 
 
@@ -172,6 +196,7 @@ team_service = TeamService(user_app_service=user_service)
 match_service = MatchService()
 season_service = SeasonService(user_app_service=user_service)
 series_service = SeriesService()
+series_veto_service = SeriesVetoService()
 draft_series_service = DraftSeriesService()
 map_service = MapService()
 fantasy_bet_service = FantasyBetService(settings_app_service=settings_service)
@@ -184,6 +209,7 @@ fantasy_score_service = FantasyScoreService(
 koth_service = KothService(settings_app_service=settings_service)
 ladder_service = LadderService(settings_app_service=settings_service)
 stats_service = PlayerCareerStatsService()
+availability_service = AvailabilityService()
 
 
 def get_settings_service() -> SettingsService:
@@ -208,6 +234,10 @@ def get_season_service() -> SeasonService:
 
 def get_series_service() -> SeriesService:
     return series_service
+
+
+def get_series_veto_service() -> SeriesVetoService:
+    return series_veto_service
 
 
 def get_draft_series_service() -> DraftSeriesService:
@@ -242,12 +272,17 @@ def get_stats_service() -> PlayerCareerStatsService:
     return stats_service
 
 
+def get_availability_service() -> AvailabilityService:
+    return availability_service
+
+
 SettingsServiceDep = Annotated[SettingsService, Depends(get_settings_service)]
 UserServiceDep = Annotated[UserService, Depends(get_user_service)]
 TeamServiceDep = Annotated[TeamService, Depends(get_team_service)]
 MatchServiceDep = Annotated[MatchService, Depends(get_match_service)]
 SeasonServiceDep = Annotated[SeasonService, Depends(get_season_service)]
 SeriesServiceDep = Annotated[SeriesService, Depends(get_series_service)]
+SeriesVetoServiceDep = Annotated[SeriesVetoService, Depends(get_series_veto_service)]
 DraftSeriesServiceDep = Annotated[DraftSeriesService, Depends(get_draft_series_service)]
 MapServiceDep = Annotated[MapService, Depends(get_map_service)]
 FantasyBetServiceDep = Annotated[FantasyBetService, Depends(get_fantasy_bet_service)]
@@ -258,3 +293,6 @@ FantasyScoreServiceDep = Annotated[
 KothServiceDep = Annotated[KothService, Depends(get_koth_service)]
 LadderServiceDep = Annotated[LadderService, Depends(get_ladder_service)]
 StatsServiceDep = Annotated[PlayerCareerStatsService, Depends(get_stats_service)]
+AvailabilityServiceDep = Annotated[
+    AvailabilityService, Depends(get_availability_service)
+]
