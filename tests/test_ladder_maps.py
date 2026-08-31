@@ -5,8 +5,9 @@ by name alone picks the stale one: "Autumn Leaves v2" is "Autumn Leaves 2.0",
 not "Autumn Leaves". The version decides, and when the display name carries
 none the file path does.
 
-The import only adds. A map the season already plays keeps its short name
-and its picture.
+The w3champions name is the truth: a map the app knows under an older name
+or spelling of the same lineage is renamed in place, keeping its id and
+short name; a missing picture is filled.
 """
 
 from typing import Any
@@ -149,8 +150,9 @@ def test_the_preview_says_which_maps_the_season_already_plays(
     auth_headers: dict[str, str],
     sources: list[str],
 ) -> None:
+    # The stored name drifted from the ladder's, but it is the same lineage
     with Session.begin() as session:
-        Map.update(session, seeded["map_id"], name="Autumn Leaves v2")
+        Map.update(session, seeded["map_id"], name="Autumn Leaves")
 
     listed = rows(client, seeded["season_id"], auth_headers)
 
@@ -159,8 +161,8 @@ def test_the_preview_says_which_maps_the_season_already_plays(
     assert listed["Echo Isles v2"]["shortname"] == "EI2"
     assert listed["Echo Isles v2"]["image_url"].endswith("/echo.png")
     assert listed["Nonesuch"]["status"] == "no_match"
-    # The preview writes nothing
-    assert [map["name"] for map in client.get("/maps").json()] == ["Autumn Leaves v2"]
+    # The preview writes nothing, not even the rename
+    assert [map["name"] for map in client.get("/maps").json()] == ["Autumn Leaves"]
 
 
 def test_the_import_creates_the_maps_and_stores_their_pictures(
@@ -191,7 +193,7 @@ def test_the_import_creates_the_maps_and_stores_their_pictures(
     assert client.get(f"/maps/{pool[2]['id']}/image").status_code == 404
 
 
-def test_the_import_leaves_a_map_the_season_already_plays_alone(
+def test_the_import_keeps_a_known_map_and_fills_its_missing_picture(
     client: Client,
     seeded: dict[str, Any],
     auth_headers: dict[str, str],
@@ -212,6 +214,54 @@ def test_the_import_leaves_a_map_the_season_already_plays_alone(
         (seeded["map_id"], "CH"),
         (pool[1]["id"], "N"),
     ]
+    icon = client.get(f"/maps/{seeded['map_id']}/image")
+    assert icon.status_code == 200 and icon.content == PICTURE
+
+
+def test_the_import_renames_a_drifted_map_instead_of_creating_a_twin(
+    client: Client,
+    seeded: dict[str, Any],
+    auth_headers: dict[str, str],
+    sources: list[str],
+) -> None:
+    """The app says "Echo Isles", the ladder "Echo Isles v2": one lineage."""
+    new_map("Echo Isles", "EI")
+
+    resp = client.post(
+        f"/seasons/{seeded['season_id']}/maps/ladder-import",
+        json={"names": ["Echo Isles v2"]},
+        headers=auth_headers,
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert [(map["name"], map["shortname"]) for map in resp.json()["maps"]] == [
+        ("Concealed Hill", "CH"),
+        ("Echo Isles v2", "EI"),
+    ]
+    # Renamed in place: no twin row appeared
+    assert sorted(map["name"] for map in client.get("/maps").json()) == [
+        "Concealed Hill",
+        "Echo Isles v2",
+    ]
+
+
+def test_a_map_with_its_picture_keeps_it_unfetched(
+    client: Client,
+    seeded: dict[str, Any],
+    auth_headers: dict[str, str],
+    sources: list[str],
+) -> None:
+    with Session.begin() as session:
+        Map.update(session, seeded["map_id"], name="Echo Isles v2", icon=b"mine")
+
+    resp = client.post(
+        f"/seasons/{seeded['season_id']}/maps/ladder-import",
+        json={"names": ["Echo Isles v2"]},
+        headers=auth_headers,
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert client.get(f"/maps/{seeded['map_id']}/image").content == b"mine"
     assert not [url for url in sources if "cloudfront" in url]
 
 
