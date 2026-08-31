@@ -10,7 +10,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, NamedTuple
 
-import pandas as pd
+import openpyxl
 from pydantic import ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session as OrmSession
@@ -39,7 +39,9 @@ from app.models.user_team_season import DBUserTeamSeason
 
 logger = logging.getLogger(__name__)
 
-type Sheets = dict[str, pd.DataFrame]
+type Cells = tuple[Any, ...]
+type Row = dict[str, Any]
+type Sheets = dict[str, list[Row]]
 
 
 class ImportedSeason(NamedTuple):
@@ -58,59 +60,73 @@ class Users:
     by_tag: dict[str, User] = field(default_factory=dict)
 
 
-def strip_text(frame: pd.DataFrame) -> pd.DataFrame:
-    """A sheet with the spaces around every text cell dropped, so a lookup
-    by name matches the value the workbook carries."""
-    return frame.map(lambda value: value.strip() if isinstance(value, str) else value)
-
-
 def folded[T](value: T) -> T | str:
     """The key a lookup matches on. Text folds to lower case, so a cell
     finds the stored row whatever the case it was typed in."""
     return value.strip().lower() if isinstance(value, str) else value
 
 
-def cell_value[T](value: T) -> T | None:
-    """Read a spreadsheet cell. An empty cell reads as None, not as NaN."""
-    if pd.isna(value):
-        return None
-    return value
-
-
 def whole_number(value: str | float | None) -> int | None:
     """Read a cell that holds a whole number."""
-    value = cell_value(value)
     if value is None or value == "":
         return None
     return int(float(value)) if isinstance(value, str) else int(value)
+
+
+def read_workbook(file_bytes: bytes) -> dict[str, list[Cells]]:
+    """Every sheet of the workbook as rows of cells, the header row first.
+    Text cells are stripped, empty cells read None, short rows are padded
+    to the width of the sheet."""
+    workbook = openpyxl.load_workbook(
+        io.BytesIO(file_bytes), read_only=True, data_only=True
+    )
+    sheets: dict[str, list[Cells]] = {}
+    for worksheet in workbook.worksheets:
+        rows = [
+            tuple(value.strip() if isinstance(value, str) else value for value in row)
+            for row in worksheet.iter_rows(values_only=True)
+        ]
+        width = max(map(len, rows), default=0)
+        sheets[worksheet.title] = [row + (None,) * (width - len(row)) for row in rows]
+    workbook.close()
+    return sheets
+
+
+def load_sheets(file_bytes: bytes) -> Sheets:
+    """Every sheet of the workbook as one dict per data row, keyed by the
+    header row."""
+    return {
+        name: [dict(zip(rows[0], row, strict=True)) for row in rows[1:]] if rows else []
+        for name, rows in read_workbook(file_bytes).items()
+    }
 
 
 def import_season_workbook(
     file_bytes: bytes, create_new: bool, score_system: str | None = None
 ) -> ImportedSeason:
     """Read the workbook and write the season it holds."""
-    # sheet_name=None reads every sheet, so the workbook is parsed once
-    frames = pd.read_excel(io.BytesIO(file_bytes), sheet_name=None)
-    sheets = {name: strip_text(frame) for name, frame in frames.items()}
+    sheets = load_sheets(file_bytes)
     with Session.begin() as session:
         return _write(session, sheets, create_new, score_system)
 
 
-def _rows(frame: pd.DataFrame | None, required: list[str]) -> list[pd.Series]:
+def _rows(rows: list[Row] | None, required: list[str]) -> list[Row]:
     """The rows of a sheet that carry every column the import reads. A
     workbook without an optional sheet answers no rows."""
-    if frame is None:
+    if rows is None:
         return []
-    return [row for _, row in frame.dropna(subset=required).iterrows()]
+    return [
+        row for row in rows if all(row.get(column) is not None for column in required)
+    ]
 
 
-def _cells(row: pd.Series, columns: dict[str, str]) -> dict[str, Any]:
+def _cells(row: Row, columns: dict[str, str]) -> dict[str, Any]:
     """The fields the row carries. An empty cell leaves its field unset, so a
     re-import keeps the value the database already holds."""
     return {
         name: row[column]
         for name, column in columns.items()
-        if cell_value(row[column]) is not None
+        if row.get(column) is not None
     }
 
 
@@ -141,22 +157,37 @@ def _known_system(system: str) -> str:
     return system
 
 
+def _numeric(value: str | float | None) -> float | None:
+    """The number a cell holds, or None for text and empty cells."""
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _detected_system(sheets: Sheets) -> str:
     """The score system the played series imply. A series pays 3 points
     across both sides under standard and 4 under helpstone."""
-    frame = sheets.get("Series")
     columns = ["Player1 Points", "Player2 Points"]
-    if frame is None or not all(column in frame.columns for column in columns):
-        logger.info(f"Score system {DEFAULT_SYSTEM}: the workbook carries no points")
-        return DEFAULT_SYSTEM
-
     # A losing side writes an empty cell, so a played row carries one value
-    played = frame[columns].apply(pd.to_numeric, errors="coerce").dropna(how="all")
-    if played.empty:
+    played = [
+        points
+        for row in sheets.get("Series", [])
+        if (
+            points := [
+                value
+                for column in columns
+                if (value := _numeric(row.get(column))) is not None
+            ]
+        )
+    ]
+    if not played:
         logger.info(f"Score system {DEFAULT_SYSTEM}: the workbook has no played series")
         return DEFAULT_SYSTEM
 
-    mean = float(played.fillna(0).sum(axis=1).mean())
+    mean = sum(sum(points) for points in played) / len(played)
     system = "helpstone" if mean >= 3.5 else DEFAULT_SYSTEM
     logger.info(
         f"Score system {system}: {len(played)} played series mean {mean:.2f} points"
@@ -171,8 +202,8 @@ def _score_system(sheets: Sheets, override: str | None) -> str:
         logger.info(f"Score system {override}: named by the request")
         return _known_system(override)
 
-    row = sheets["Season"].iloc[0]
-    if "Score System" in row.index and cell_value(row["Score System"]) is not None:
+    row = sheets["Season"][0]
+    if row.get("Score System") is not None:
         system = str(row["Score System"])
         logger.info(f"Score system {system}: named by the Season sheet")
         return _known_system(system)
@@ -185,7 +216,7 @@ def _season(
 ) -> Season:
     """The season row. Its name matches it, because the id the file carries
     belongs to the database the file was exported from."""
-    row = sheets["Season"].iloc[0]
+    row = sheets["Season"][0]
     values = SeasonCreate(
         name=row["Name"],
         number_weeks=whole_number(row["Number of Weeks"]) or 0,
@@ -364,7 +395,7 @@ def _teams(session: OrmSession, sheets: Sheets, season: Season) -> dict[int, int
     return {old_id: team.id for old_id, team in old_ids.items() if team.id is not None}
 
 
-def _player_values(row: pd.Series) -> UserCreate:
+def _player_values(row: Row) -> UserCreate:
     """A player of the Players sheet. An empty cell leaves the field unset,
     so a column the workbook does not carry writes nothing."""
     columns = {
@@ -475,8 +506,8 @@ def _matches(
             team2_id=team2_id,
             season_id=ident(season),
             playday=playday,
-            fixed_map_id=maps.get(whole_number(row["Fixed Map ID"])),
-            date_frame=cell_value(row["Date Frame"]),
+            fixed_map_id=maps.get(whole_number(row.get("Fixed Map ID"))),
+            date_frame=row.get("Date Frame"),
         )
         key = (team1_id, team2_id, values.playday)
         match = stored.get(key)
@@ -497,7 +528,7 @@ def _matches(
 
 
 def _series_values(
-    row: pd.Series, match_id: int, player1: User, player2: User, host: User
+    row: Row, match_id: int, player1: User, player2: User, host: User
 ) -> SeriesCreate:
     """A series of the Series sheet. An empty date leaves the field unset,
     so a stored series keeps the time it already holds."""
@@ -505,13 +536,13 @@ def _series_values(
         "match_id": match_id,
         "player1_id": player1.id,
         "player2_id": player2.id,
-        "player1_score": whole_number(row["Player1 Score"]),
-        "player2_score": whole_number(row["Player2 Score"]),
+        "player1_score": whole_number(row.get("Player1 Score")),
+        "player2_score": whole_number(row.get("Player2 Score")),
         "host_player_id": host.id,
-        "caster": cell_value(row["Caster"]),
-        "is_fantasy_match": bool(cell_value(row["Is Fantasy Match"])),
+        "caster": row.get("Caster"),
+        "is_fantasy_match": bool(row.get("Is Fantasy Match")),
     }
-    if cell_value(row["Date Time"]) is not None:
+    if row.get("Date Time") is not None:
         data["date_time"] = row["Date Time"]
     return SeriesCreate(**data)
 
@@ -570,9 +601,9 @@ def _fantasy_users(session: OrmSession, sheets: Sheets, users: Users) -> None:
             battleTag=row["Battle Tag"],
             # A fantasy user plays no series, and the sheet carries no race
             race=Race.RANDOM,
-            name=cell_value(row["Name"]) or row["Battle Tag"],
-            discordTag=cell_value(row["Discord Tag"]) or "",
-            discordId=cell_value(row["Discord ID"]) or "",
+            name=row.get("Name") or row["Battle Tag"],
+            discordTag=row.get("Discord Tag") or "",
+            discordId=row.get("Discord ID") or "",
         )
         for row in rows
     ]
@@ -630,7 +661,7 @@ def _fantasy_teams(
             season_id=ident(season),
             captain_id=ident(captain),
             drafted_team_id=teams.get(whole_number(row["Drafted Team ID"])),
-            drafted_race=cell_value(row["Drafted Race"]),
+            drafted_race=row.get("Drafted Race"),
         )
         fteam = stored.get(captain.id)
         if fteam:

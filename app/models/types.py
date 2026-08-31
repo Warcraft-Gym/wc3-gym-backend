@@ -1,7 +1,7 @@
 """Field types that reproduce the request and response shapes of the API.
 
 Two groups. The input ones accept what the producers actually send: the
-xlsx import passes raw pandas cells, the w3champions sync sends fractions
+xlsx import passes raw spreadsheet cells, the w3champions sync sends fractions
 for integer columns, and the admin forms send an empty string for a
 cleared field. The output ones pin what the consumers already read: the
 JSON of the response models is a public contract, because the leaderboard

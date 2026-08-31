@@ -14,11 +14,13 @@ The suite opens no socket: no_third_party_calls fails any call the tests
 did not stand in for.
 """
 
+import io
 import os
 from collections.abc import Callable, Generator
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+import openpyxl
 import pytest
 import requests
 from fastapi import FastAPI
@@ -33,6 +35,23 @@ os.environ.pop("DB_URL", None)
 os.environ.pop("SCORE_SYSTEM", None)
 
 from app.main import create_app
+
+type SheetSpec = tuple[list[str], list[list[Any]]]
+
+
+def write_workbook(sheets: dict[str, SheetSpec]) -> io.BytesIO:
+    """An xlsx stream with one (header, rows) sheet per entry."""
+    workbook = openpyxl.Workbook()
+    workbook.remove(workbook.worksheets[0])
+    for name, (columns, rows) in sheets.items():
+        sheet = workbook.create_sheet(name)
+        sheet.append(columns)
+        for row in rows:
+            sheet.append(row)
+    stream = io.BytesIO()
+    workbook.save(stream)
+    stream.seek(0)
+    return stream
 
 
 @pytest.fixture(scope="session")

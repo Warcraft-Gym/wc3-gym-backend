@@ -5,12 +5,10 @@ table the sheets name, then the inserts and updates those sheets need. A
 failure leaves the database as it was.
 """
 
-import io
 import logging
 from collections.abc import Callable, Iterable
 from typing import NamedTuple
 
-import pandas as pd
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session as OrmSession
 from sqlmodel import col
@@ -30,9 +28,9 @@ from app.models.team import Team
 from app.models.user import User, UserCreate
 from app.services.fantasy_bets import resolve_bet_points
 from app.services.season_import import (
-    cell_value,
+    Cells,
     folded,
-    strip_text,
+    read_workbook,
     whole_number,
 )
 
@@ -53,10 +51,7 @@ def import_fantasy_teams_workbook(
     file_bytes: bytes, season_id: int | None, season_name: str | None
 ) -> None:
     """Read the "Formatted Responses" sheet and write the fantasy teams."""
-    frame = strip_text(
-        pd.read_excel(io.BytesIO(file_bytes), sheet_name="Formatted Responses")
-    )
-    rows = _rows(frame)
+    rows = _rows(read_workbook(file_bytes)["Formatted Responses"])
     with Session.begin() as session:
         _teams(session, rows, _season_id(session, season_id, season_name))
 
@@ -65,19 +60,17 @@ def import_fantasy_bets_workbook(
     file_bytes: bytes, season_id: int | None, season_name: str | None
 ) -> None:
     """Read the "Betting Matches" and "Bets" sheets and write the bets."""
-    # sheet_name=None reads both sheets, so the workbook is parsed once
-    frames = pd.read_excel(io.BytesIO(file_bytes), sheet_name=None)
-    sheets = {name: strip_text(frame) for name, frame in frames.items()}
+    sheets = read_workbook(file_bytes)
     with Session.begin() as session:
         season = _season_id(session, season_id, season_name)
         matches, series = _fantasy_matches(session, sheets["Betting Matches"], season)
         _bets(session, sheets["Bets"], season, matches, series)
 
 
-def _rows(frame: pd.DataFrame) -> list[pd.Series]:
-    """The rows of a sheet that carry a first cell. A sheet ends where that
-    cell is empty."""
-    return [row for _, row in frame.iterrows() if cell_value(row.iloc[0])]
+def _rows(sheet: list[Cells]) -> list[Cells]:
+    """The data rows of a sheet that carry a first cell. The header row is
+    skipped, and the sheet ends where the first cell is empty."""
+    return [row for row in sheet[1:] if row and row[0]]
 
 
 def _by_key[K, V](values: Iterable[V], key: Callable[[V], K]) -> dict[K, list[V]]:
@@ -88,9 +81,9 @@ def _by_key[K, V](values: Iterable[V], key: Callable[[V], K]) -> dict[K, list[V]
     return grouped
 
 
-def _column(rows: list[pd.Series], index: int) -> set[object]:
+def _column(rows: list[Cells], index: int) -> set[object]:
     """The keys one column of the sheet holds, without its empty cells."""
-    return {folded(value) for row in rows if (value := cell_value(row.iloc[index]))}
+    return {folded(value) for row in rows if (value := row[index])}
 
 
 def _season_id(
@@ -113,7 +106,7 @@ def _season_id(
 
 def _drafts(
     session: OrmSession,
-    rows: list[pd.Series],
+    rows: list[Cells],
     season_id: int,
     stored: dict[int, list[FantasyTeam]],
 ) -> tuple[list[Draft], list[User]]:
@@ -125,9 +118,7 @@ def _drafts(
         ),
         lambda user: folded(user.discordTag),
     )
-    names = {
-        folded(name) for row in rows for name in row.iloc[2:10] if cell_value(name)
-    }
+    names = {folded(name) for row in rows for name in row[2:10] if name}
     by_name = _by_key(
         session.scalars(select(User).where(func.lower(User.name).in_(names))),
         lambda user: folded(user.name),
@@ -141,8 +132,8 @@ def _drafts(
     drafts: list[Draft] = []
     captains: list[User] = []
     for row in rows:
-        name = cell_value(row.iloc[0])
-        tag = cell_value(row.iloc[1])
+        name = row[0]
+        tag = row[1]
         if not name:
             raise BadRequestError("Team without name")
         if not tag:
@@ -169,7 +160,7 @@ def _drafts(
             captains.append(captain)
             by_tag[folded(tag)] = [captain]
 
-        team_name = cell_value(row.iloc[10])
+        team_name = row[10]
         if not team_name:
             raise BadRequestError(f"No GNL team defined for team: {name}")
         found_teams = teams.get(folded(team_name), [])
@@ -178,10 +169,10 @@ def _drafts(
                 f"No or multiple teams found for gnl team name[{team_name} ]: {found_teams}"
             )
 
-        if not cell_value(row.iloc[11]):
-            raise BadRequestError(f"No Race defined for team: {row.iloc[11]}")
+        if not row[11]:
+            raise BadRequestError(f"No Race defined for team: {row[11]}")
         try:
-            race = Race.from_text(str(row.iloc[11]))
+            race = Race.from_text(str(row[11]))
         except ValueError as error:
             raise BadRequestError(str(error)) from error
 
@@ -192,7 +183,7 @@ def _drafts(
             )
 
         players = []
-        for cell in row.iloc[2:10]:
+        for cell in row[2:10]:
             if not cell:
                 raise BadRequestError(f"Player missing for team: {name}")
             found_players = by_name.get(folded(cell), [])
@@ -203,7 +194,7 @@ def _drafts(
     return drafts, captains
 
 
-def _teams(session: OrmSession, rows: list[pd.Series], season_id: int) -> None:
+def _teams(session: OrmSession, rows: list[Cells], season_id: int) -> None:
     """Write one fantasy team per row of the sheet, matched by captain."""
     stored = _by_key(
         session.scalars(
@@ -271,11 +262,11 @@ def _drafted_players(
 
 
 def _fantasy_matches(
-    session: OrmSession, frame: pd.DataFrame, season_id: int
+    session: OrmSession, sheet: list[Cells], season_id: int
 ) -> tuple[dict[int, list[Match]], dict[int, list[Series]]]:
     """Flag the series the "Betting Matches" sheet names, and answer the
     matches and series of the season for the sheet that follows."""
-    rows = _rows(frame)
+    rows = _rows(sheet)
     matches = _by_key(
         session.scalars(select(Match).where(col(Match.season_id) == season_id)),
         lambda match: match.playday,
@@ -296,15 +287,15 @@ def _fantasy_matches(
     for row in rows:
         players = []
         for index in (1, 2):
-            found = by_name.get(folded(cell_value(row.iloc[index])), [])
+            found = by_name.get(folded(row[index]), [])
             if len(found) != 1:
                 raise BadRequestError(
-                    f"No or multiple users found for bet player[{row.iloc[1]}]: {found}"
+                    f"No or multiple users found for bet player[{row[1]}]: {found}"
                 )
             players.append(found[0])
         pair = {players[0].id, players[1].id}
         played = None
-        for match in matches.get(whole_number(row.iloc[0]), []):
+        for match in matches.get(whole_number(row[0]), []):
             # A match holding more than one such series names none of them
             found_series = [
                 one
@@ -315,23 +306,21 @@ def _fantasy_matches(
                 played = found_series[0]
                 break
         if not played:
-            raise BadRequestError(
-                f"Could not identfy series for player: {row.iloc[1]}!"
-            )
+            raise BadRequestError(f"Could not identfy series for player: {row[1]}!")
         played.is_fantasy_match = True
     return matches, series
 
 
 def _bets(
     session: OrmSession,
-    frame: pd.DataFrame,
+    sheet: list[Cells],
     season_id: int,
     matches: dict[int, list[Match]],
     series: dict[int, list[Series]],
 ) -> None:
     """Write one bet per row of the "Bets" sheet, matched by series and
     bettor."""
-    rows = _rows(frame)
+    rows = _rows(sheet)
     by_tag = _by_key(
         session.scalars(
             select(User).where(func.lower(User.discordTag).in_(_column(rows, 1)))
@@ -354,26 +343,26 @@ def _bets(
 
     written: list[FantasyBet] = []
     for row in rows:
-        if not cell_value(row.iloc[1]):
-            raise BadRequestError(f"Captain not defined: {row.iloc[1]}")
-        found = by_tag.get(folded(cell_value(row.iloc[1])), [])
+        if not row[1]:
+            raise BadRequestError(f"Captain not defined: {row[1]}")
+        found = by_tag.get(folded(row[1]), [])
         if len(found) != 1:
             raise BadRequestError(
-                f"No or multiple users found for captain[{row.iloc[1]}]: {found}"
+                f"No or multiple users found for captain[{row[1]}]: {found}"
             )
         captain = found[0]
 
-        if not cell_value(row.iloc[2]):
-            raise BadRequestError(f"Bet Player not defined: {row.iloc[2]}")
-        found = by_name.get(folded(cell_value(row.iloc[2])), [])
+        if not row[2]:
+            raise BadRequestError(f"Bet Player not defined: {row[2]}")
+        found = by_name.get(folded(row[2]), [])
         if len(found) != 1:
             raise BadRequestError(
-                f"No or multiple users found for bet player[{row.iloc[2]}]: {found}"
+                f"No or multiple users found for bet player[{row[2]}]: {found}"
             )
         bet_player = found[0]
 
         played = None
-        for match in matches.get(whole_number(row.iloc[0]), []):
+        for match in matches.get(whole_number(row[0]), []):
             # A match holding more than one such series names none of them
             found_series = [
                 one
@@ -389,9 +378,9 @@ def _bets(
                 f"Could not identfy series for player: {bet_player.name}!"
             )
 
-        if not cell_value(row.iloc[3]):
-            raise BadRequestError(f"Bet Points not defined: {row.iloc[3]}")
-        points = resolve_bet_points(settings, whole_number(row.iloc[3]))
+        if not row[3]:
+            raise BadRequestError(f"Bet Points not defined: {row[3]}")
+        points = resolve_bet_points(settings, whole_number(row[3]))
 
         key = (played.id, captain.id)
         found_bets = stored.get(key, [])
