@@ -1,8 +1,9 @@
-"""Who administers the site, and the Discord role that mirrors it.
+"""Who administers the site.
 
 An admin is a row of admin_grant or an id in ADMIN_DISCORD_IDS. The
 environment ids are the bootstrap: they need no row and no grant can take
-them back. Every change syncs the account's bound roles.
+them back. The admin Discord role is hand-managed in the guild; a grant
+changes nothing there.
 """
 
 from sqlalchemy import select
@@ -12,7 +13,6 @@ from app.core.db import Session
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.models.admin_grant import AdminGrant, AdminPublic, env_ids
 from app.models.user import User
-from app.services import discord_roles
 
 BY_ENVIRONMENT = "Already an admin by environment"
 
@@ -61,10 +61,7 @@ def grant(discord_id: str, granted_by: str, name: str = "") -> AdminPublic:
             )
             session.add(row)
             session.flush()
-        public = AdminPublic(**row.model_dump(), source="app")
-        user_id = user.id if user else None
-    _mirror(user_id)
-    return public
+        return AdminPublic(**row.model_dump(), source="app")
 
 
 def revoke(discord_id: str, by: str) -> None:
@@ -78,15 +75,3 @@ def revoke(discord_id: str, by: str) -> None:
         if not row:
             raise NotFoundError(f"Admin not found by Discord id: {discord_id}")
         session.delete(row)
-        user = session.scalars(
-            select(User).where(col(User.discordId) == discord_id)
-        ).first()
-        user_id = user.id if user else None
-    _mirror(user_id)
-
-
-def _mirror(user_id: int | None) -> None:
-    """Push the account's bound roles to the guild, once the grant is committed."""
-    # ponytail: an admin with no users row gets no Discord role; link the account to mirror it
-    if user_id:
-        discord_roles.sync([user_id])

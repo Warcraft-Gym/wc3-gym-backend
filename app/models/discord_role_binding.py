@@ -2,11 +2,13 @@
 
 The app owns every bound role: app.services.discord_roles derives who earns
 which one and pushes the difference to the guild. A role no binding names is
-nobody's business but the guild's, and sync never touches it.
+nobody's business but the guild's, and sync never touches it — nor any admin
+binding, whose role stays hand-managed in the guild.
 
-A null season means the binding holds in every season, a null team in every
-team. A champion binding names both, and the roster of that team in that
-season is who earns it.
+A team or captain binding follows the current season. A participant or
+fantasy binding that names a season follows that season's records for good;
+one that names none follows the current season. A champion binding names only
+a season, and the roster of the team that tops its standings earns it.
 """
 
 from typing import Annotated
