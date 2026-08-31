@@ -61,4 +61,4 @@ def search_match(
     parsed_query = QueryUtil.parse_query(query)
     if not parsed_query or not parsed_query.elementA:
         raise BadRequestError(f"No valid query found: {query}")
-    return service.search(parsed_query, limit=limit, offset=offset) or []
+    return service.search(parsed_query, limit=limit, offset=offset)

@@ -74,7 +74,7 @@ def get_draft_series_by_match(
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[DraftSeriesPublic]:
     """Return one page of the draft series of a match, at most 500."""
-    return service.get_by_match_id(match_id, limit=limit, offset=offset) or []
+    return service.get_by_match_id(match_id, limit=limit, offset=offset)
 
 
 @router.delete(

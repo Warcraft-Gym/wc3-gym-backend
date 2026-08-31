@@ -7,26 +7,21 @@ Importing app.models registers every table on SQLModel.metadata, which is
 what autogenerate compares the live database against.
 """
 
-import importlib
 import logging
 import os
-import pkgutil
 
 from alembic import context
 from dotenv import load_dotenv
 from sqlalchemy import engine_from_config, pool
 from sqlmodel import SQLModel
 
-import app.models
+import app.models  # noqa: F401  # the import is the registration
 
 load_dotenv()
 
 config = context.config
 
 logging.basicConfig(level=logging.INFO)
-
-for module in pkgutil.iter_modules(app.models.__path__):
-    importlib.import_module(f"app.models.{module.name}")
 
 target_metadata = SQLModel.metadata
 
@@ -36,19 +31,6 @@ def get_url() -> str:
     if not url:
         raise RuntimeError("DB_URL is not set. See the variable table in README.md.")
     return url
-
-
-def run_migrations_offline() -> None:
-    """Emit the SQL of a migration without connecting."""
-    context.configure(
-        url=get_url(),
-        target_metadata=target_metadata,
-        literal_binds=True,
-        dialect_opts={"paramstyle": "named"},
-    )
-
-    with context.begin_transaction():
-        context.run_migrations()
 
 
 def run_migrations_online() -> None:
@@ -66,7 +48,4 @@ def run_migrations_online() -> None:
             context.run_migrations()
 
 
-if context.is_offline_mode():
-    run_migrations_offline()
-else:
-    run_migrations_online()
+run_migrations_online()

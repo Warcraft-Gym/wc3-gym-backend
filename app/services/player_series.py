@@ -66,7 +66,7 @@ def _notify_discord_series_update(
         else:
             # Send regular JSON payload
             payload = {
-                "series": series.to_dict() if hasattr(series, "to_dict") else series,
+                "series": series.to_dict(),
                 "player_name": player_name,
                 "action": action,
                 "auth_token": bot_client_token,
@@ -248,11 +248,7 @@ def update_player_series(
         )
 
     # Convert to dict only for JSON response
-    result = (
-        updated_series.to_dict()
-        if hasattr(updated_series, "to_dict")
-        else updated_series
-    )
+    result = updated_series.to_dict()
     if uploaded_files:
         result["uploaded_files"] = {k: v["filename"] for k, v in uploaded_files.items()}
 

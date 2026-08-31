@@ -323,10 +323,10 @@ def get_player_series(
     response.headers["X-Total-Count"] = str(total)
 
     # Convert to dict format
-    series_data = [s.to_dict() if hasattr(s, "to_dict") else s for s in series]
+    series_data = [s.to_dict() for s in series]
 
     return {
-        "player": user.to_dict() if hasattr(user, "to_dict") else user,
+        "player": user.to_dict(),
         "series": series_data,
         "season_id": entry.get("season_id"),
         "discord_id": entry.get("discord_id"),
@@ -507,7 +507,7 @@ def get_user_info(
 
     user = users[0]
     return {
-        "user": user.to_dict() if hasattr(user, "to_dict") else user,
+        "user": user.to_dict(),
         "discord_id": entry.get("discord_id"),
         "discord_tag": entry.get("discord_tag"),
         "season_id": entry.get("season_id"),
@@ -623,7 +623,7 @@ def create_fantasy_team(
 
     # Return created/updated team
     final_team = fantasy_team_service.get(team_id)
-    return final_team.to_dict() if hasattr(final_team, "to_dict") else final_team
+    return final_team.to_dict()
 
 
 @router.post("/fantasy-bet", status_code=201, response_model=None)
@@ -666,7 +666,7 @@ def create_fantasy_bet(
         logger.error(f"Validation error creating bet: {e}")
         raise ApiError(400, {"error": "validation_error", "message": str(e)}) from e
 
-    return bet.to_dict() if hasattr(bet, "to_dict") else bet
+    return bet.to_dict()
 
 
 @router.put("/fantasy-bet/{bet_id}", response_model=None)
@@ -721,7 +721,7 @@ def update_fantasy_bet(
         logger.error(f"Validation error updating bet: {e}")
         raise ApiError(400, {"error": "validation_error", "message": str(e)}) from e
 
-    return bet.to_dict() if hasattr(bet, "to_dict") else bet
+    return bet.to_dict()
 
 
 @router.delete("/fantasy-bet/{bet_id}", status_code=204, response_model=None)

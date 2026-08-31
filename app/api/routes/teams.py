@@ -71,7 +71,7 @@ def get_all_teams_basic(
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[TeamPublic]:
     """Retrieve one page of teams, at most 500, with basic information only (id, name, long_name, discord_role). No user or season data included."""
-    return service.get_all_basic(limit=limit, offset=offset) or []
+    return service.get_all_basic(limit=limit, offset=offset)
 
 
 @router.get("/teams/{team_id}")
@@ -133,7 +133,7 @@ def get_all_teams_season(
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[TeamPublic]:
     """Retrieve one page of the teams of a season, at most 500, with all information related to that season"""
-    return service.get_teams_season(season_id, limit=limit, offset=offset) or []
+    return service.get_teams_season(season_id, limit=limit, offset=offset)
 
 
 @router.get("/teams/season/{season_id}/basic")
@@ -144,7 +144,7 @@ def get_all_teams_season_basic(
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[TeamPublic]:
     """Retrieve one page of the teams of a season, at most 500, with season info but without user data"""
-    return service.get_teams_season_basic(season_id, limit=limit, offset=offset) or []
+    return service.get_teams_season_basic(season_id, limit=limit, offset=offset)
 
 
 @router.post(
@@ -196,7 +196,7 @@ def get_all_teams(
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[TeamPublic]:
     """Retrieve one page of teams, at most 500."""
-    return service.get_all(limit=limit, offset=offset) or []
+    return service.get_all(limit=limit, offset=offset)
 
 
 @router.post("/teams/search")
@@ -210,7 +210,7 @@ def search_teams(
     parsed_query = QueryUtil.parse_query(query)
     if not parsed_query or not parsed_query.elementA:
         raise BadRequestError(f"No valid query found: {query}")
-    return service.search(parsed_query, limit=limit, offset=offset) or []
+    return service.search(parsed_query, limit=limit, offset=offset)
 
 
 @router.post(

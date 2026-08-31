@@ -28,7 +28,6 @@ from app.models.koth_match import (
 from app.models.koth_match_participant import (
     KothMatchParticipant,
     KothMatchParticipantCreate,
-    KothMatchParticipantPublic,
 )
 from app.models.koth_signup import (
     KothSignup,
@@ -314,11 +313,6 @@ class KothService:
         return self._set_king(signup_id, 0)
 
     # ============ Match Methods ============
-    def add_match(self, match: KothMatchCreate) -> KothMatchPublic:
-        with Session.begin() as session:
-            db_match = KothMatch.add(session, match.model_dump())
-            return KothMatchPublic.model_validate(db_match)
-
     def update_match(self, match_id: int, match: KothMatchUpdate) -> KothMatchPublic:
         with Session.begin() as session:
             db_match = KothMatch.update(
@@ -472,30 +466,6 @@ class KothService:
                 )
 
         return self.get_match(match_id)
-
-    # ============ Match Participant Methods ============
-    def add_participant(
-        self, participant: KothMatchParticipantCreate
-    ) -> KothMatchParticipantPublic:
-        with Session.begin() as session:
-            db_participant = KothMatchParticipant.add(session, participant.model_dump())
-            return KothMatchParticipantPublic.model_validate(db_participant)
-
-    def get_participants_by_match(
-        self, match_id: int
-    ) -> list[KothMatchParticipantPublic]:
-        with Session.begin() as session:
-            participants = (
-                session.scalars(
-                    select(KothMatchParticipant)
-                    .options(joinedload(rel(KothMatchParticipant.signup)))
-                    .where(col(KothMatchParticipant.match_id) == match_id)
-                    .order_by(col(KothMatchParticipant.team_number))
-                )
-                .unique()
-                .all()
-            )
-            return [KothMatchParticipantPublic.model_validate(p) for p in participants]
 
     def get_bracket_kings(self, event_id: int) -> dict[int, list[KothSignupPublic]]:
         """Get all kings for each bracket"""

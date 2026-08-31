@@ -78,7 +78,7 @@ def get_all(
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[SeasonPublic]:
     """Return one page of seasons, at most 500."""
-    return service.get_all(limit=limit, offset=offset) or []
+    return service.get_all(limit=limit, offset=offset)
 
 
 @router.post("/seasons/search")
@@ -92,7 +92,7 @@ def search_seasons(
     parsed_query = QueryUtil.parse_query(query)
     if not parsed_query or not parsed_query.elementA:
         raise BadRequestError(f"No valid query found: {query}")
-    return service.search(parsed_query, limit=limit, offset=offset) or []
+    return service.search(parsed_query, limit=limit, offset=offset)
 
 
 @router.post("/seasons/{season_id}/maps", dependencies=[Depends(require_admin)])
@@ -174,7 +174,7 @@ def get_season_signups(
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[UserListPublic]:
     """Retrieve one page of the users signed up for a season, at most 500."""
-    return service.get_signed_up_users(season_id, limit=limit, offset=offset) or []
+    return service.get_signed_up_users(season_id, limit=limit, offset=offset)
 
 
 @router.post("/seasons/{season_id}/w3c-sync", dependencies=[Depends(require_admin)])

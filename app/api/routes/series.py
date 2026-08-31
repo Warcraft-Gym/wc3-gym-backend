@@ -61,7 +61,7 @@ def search_series(
     parsed_query = QueryUtil.parse_query(query)
     if not parsed_query or not parsed_query.elementA:
         raise BadRequestError(f"No valid query found: {query}")
-    return service.search(parsed_query, limit=limit, offset=offset) or []
+    return service.search(parsed_query, limit=limit, offset=offset)
 
 
 @router.post("/series/season/{season_id}/playday/{playday}/search")
@@ -75,11 +75,8 @@ def search_series_by_season_and_playday(
 ) -> list[SeriesPublic]:
     """Return series matching the search query for a specific season and a specific playday"""
     parsed_query = QueryUtil.parse_query(query)
-    return (
-        service.search_for_season_and_playday(
-            season_id, playday, parsed_query, limit=limit, offset=offset
-        )
-        or []
+    return service.search_for_season_and_playday(
+        season_id, playday, parsed_query, limit=limit, offset=offset
     )
 
 
@@ -91,7 +88,7 @@ def get_series_by_season(
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[SeriesPublic]:
     """Return one page of the series of a season, at most 500."""
-    return service.search_for_season(season_id, None, limit=limit, offset=offset) or []
+    return service.search_for_season(season_id, None, limit=limit, offset=offset)
 
 
 @router.post("/series/season/{season_id}/search")
@@ -104,7 +101,6 @@ def search_series_by_season(
 ) -> list[SeriesPublic]:
     """Return series matching the search query for a specific season"""
     parsed_query = QueryUtil.parse_query(query)
-    return (
-        service.search_for_season(season_id, parsed_query, limit=limit, offset=offset)
-        or []
+    return service.search_for_season(
+        season_id, parsed_query, limit=limit, offset=offset
     )

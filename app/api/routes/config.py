@@ -13,9 +13,9 @@ from app.models.discord_role_binding import (
     DiscordRoleBindingUpdate,
     DiscordRoleReport,
 )
-from app.models.responses import Message
 from app.models.settings import (
     GeneratedNightbotToken,
+    Message,
     NightbotToken,
     SettingsList,
     SettingsPublic,
