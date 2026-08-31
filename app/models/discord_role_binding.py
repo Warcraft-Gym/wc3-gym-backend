@@ -58,6 +58,12 @@ class DiscordRoleBindingPublic(DiscordRoleBindingBase):
     id: int
 
 
+class DiscordRoleSyncWrite(SQLModel):
+    """Whom to sync. Without user_ids, every account the report flags."""
+
+    user_ids: list[int] | None = None
+
+
 class DiscordRoleReport(SQLModel):
     """One account's diff: bound roles it earns and lacks, and holds and does not."""
 

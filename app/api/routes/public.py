@@ -4,7 +4,7 @@ import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Body, Depends, Query, Request, Response, UploadFile
+from fastapi import APIRouter, Depends, Query, Request, Response, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
@@ -26,12 +26,27 @@ from app.api.deps import (
 from app.core.exceptions import ApiError, BadRequestError, NotFoundError
 from app.core.ordering import SortOrder
 from app.core.query import QueryUtil
-from app.models.fantasy_bet import FantasyBetCreate, FantasyBetPublic, FantasyBetUpdate
-from app.models.fantasy_team import FantasyTeamCreate, FantasyTeamUpdate
+from app.models.fantasy_bet import (
+    FantasyBetCreate,
+    FantasyBetPublic,
+    FantasyBetUpdate,
+    PublicFantasyBetWrite,
+)
+from app.models.fantasy_team import (
+    FantasyTeamCreate,
+    FantasyTeamUpdate,
+    PublicFantasyTeamWrite,
+)
+from app.models.login import PublicAccessRequest
 from app.models.player_history import PlayerHistory
 from app.models.series import SeriesSort
 from app.models.series_veto_step import SeriesVetoPublic, SeriesVetoWrite
-from app.models.user import UserCreate, UserListPublic, UserUpdate
+from app.models.user import (
+    PublicSignupWrite,
+    UserCreate,
+    UserListPublic,
+    UserUpdate,
+)
 from app.models.user_season_availability import (
     PlayerAvailabilityWrite,
     UserSeasonAvailabilityPublic,
@@ -140,7 +155,7 @@ def _owned_bet(
 @router.post("/public-access-helper", response_model=None)
 def create_public_access_helper(
     request: Request,
-    data: Annotated[dict | None, Body()] = None,
+    data: PublicAccessRequest | None = None,
     client_token: str | None = None,
     discord_id: str | None = None,
     discord_tag: str | None = None,
@@ -149,17 +164,17 @@ def create_public_access_helper(
     ttl_minutes: str | None = None,
 ) -> dict[str, Any]:
     """Protected endpoint for the Discord bot to request a one-time public access URL. Requires BOT client token."""
-    data = data or {}
-    client_token = data.get("client_token") or client_token
+    data = data or PublicAccessRequest()
+    client_token = data.client_token or client_token
     expected = os.getenv("BOT_CLIENT_TOKEN") or ""
     if not expected or str(client_token) != str(expected):
         raise ApiError(401, {"error": "unauthorized"})
 
-    discord_id = data.get("discord_id") or discord_id
-    discord_tag = data.get("discord_tag") or discord_tag
-    season_id = data.get("season_id") or season_id
-    access_type = data.get("access_type") or access_type
-    ttl = int(data.get("ttl_minutes") or ttl_minutes or 30)
+    discord_id = data.discord_id or discord_id
+    discord_tag = data.discord_tag or discord_tag
+    season_id = data.season_id or season_id
+    access_type = data.access_type or access_type
+    ttl = int(data.ttl_minutes or ttl_minutes or 30)
 
     if not discord_id or not discord_tag or not access_type:
         raise BadRequestError("missing parameters")
@@ -224,7 +239,7 @@ def public_create_user(
     season_service: SeasonServiceDep,
     request: Request,
     credentials: Credentials,
-    data: Annotated[dict | None, Body()] = None,
+    data: PublicSignupWrite | None = None,
 ) -> dict[str, Any]:
     """Create user and optionally assign to season for the signed-in Discord member."""
     # A missing signups_enabled row leaves signups open
@@ -241,20 +256,20 @@ def public_create_user(
             },
         )
 
-    data = data or {}
-    token = data.get("token")
+    data = data or PublicSignupWrite()
+    token = data.token
     entry = _identity(request, credentials, token, "signup")
 
     # Build user payload. Force discord fields from the identity to avoid spoofing.
     user_payload: dict[str, Any] = {
-        "name": data.get("name"),
-        "battleTag": data.get("battleTag"),
+        "name": data.name,
+        "battleTag": data.battleTag,
         "discordId": entry.get("discord_id"),
         "discordTag": entry.get("discord_tag"),
-        "race": data.get("race"),
-        "mmr": data.get("mmr"),
-        "country": data.get("country"),
-        "timezone": data.get("timezone"),
+        "race": data.race,
+        "mmr": data.mmr,
+        "country": data.country,
+        "timezone": data.timezone,
     }
 
     # Basic validation
@@ -298,7 +313,7 @@ def public_create_user(
         user = user_service.add(user_create)
 
     # Add to season if specified
-    season_id = entry.get("season_id") or data.get("season_id") or data.get("seasonId")
+    season_id = entry.get("season_id") or data.season_id or data.seasonId
     if season_id:
         season_service.add_user_signup(int(season_id), [user.id])
 
@@ -547,7 +562,7 @@ def create_fantasy_team(
     fantasy_team_service: FantasyTeamServiceDep,
     request: Request,
     credentials: Credentials,
-    data: Annotated[dict | None, Body()] = None,
+    data: PublicFantasyTeamWrite | None = None,
 ) -> dict[str, Any]:
     """Create or update fantasy team, creating user if needed."""
     # A missing fantasy_team_creation_enabled row leaves creation open
@@ -566,14 +581,14 @@ def create_fantasy_team(
             },
         )
 
-    data = data or {}
-    entry = _identity(request, credentials, data.get("token"))
+    data = data or PublicFantasyTeamWrite()
+    entry = _identity(request, credentials, data.token)
 
     # Validate required fields
-    season_id = data.get("season_id")
-    drafted_team_id = data.get("drafted_team_id")
-    drafted_race = data.get("drafted_race")
-    player_ids = data.get("player_ids", [])
+    season_id = data.season_id
+    drafted_team_id = data.drafted_team_id
+    drafted_race = data.drafted_race
+    player_ids = data.player_ids
 
     if not season_id or not drafted_team_id or not drafted_race:
         raise BadRequestError("missing required fields")
@@ -583,8 +598,8 @@ def create_fantasy_team(
 
     if not users or len(users) == 0:
         # Create minimal user without battle tag validation (not a player)
-        user_name = data.get("user_name") or entry.get("discord_tag")
-        battle_tag = data.get("battle_tag") or entry.get("discord_tag")
+        user_name = data.user_name or entry.get("discord_tag")
+        battle_tag = data.battle_tag or entry.get("discord_tag")
 
         user_payload: dict[str, Any] = {
             "name": user_name,
@@ -605,10 +620,9 @@ def create_fantasy_team(
     )
     existing_teams, _ = fantasy_team_service.search(team_query)
 
-    team_data = {
-        "name": data.get(
-            "name", user.name
-        ),  # Use provided name or default to user name
+    team_data: dict[str, Any] = {
+        # Use provided name or default to user name
+        "name": data.name if "name" in data.model_fields_set else user.name,
         "season_id": season_id,
         "captain_id": user.id,
         "drafted_team_id": drafted_team_id,
@@ -660,11 +674,11 @@ def create_fantasy_bet(
     fantasy_bet_service: FantasyBetServiceDep,
     request: Request,
     credentials: Credentials,
-    data: Annotated[dict | None, Body()] = None,
+    data: PublicFantasyBetWrite | None = None,
 ) -> dict[str, Any] | None:
     """Create a fantasy bet for the identified player."""
-    data = data or {}
-    entry = _identity(request, credentials, data.get("token"))
+    data = data or PublicFantasyBetWrite()
+    entry = _identity(request, credentials, data.token)
 
     # Get or create user based on discord info
     existing_users = user_service.find_by_discord_id(str(entry.get("discord_id")))
@@ -681,11 +695,11 @@ def create_fantasy_bet(
 
     # Create the bet
     bet_payload: dict[str, Any] = {
-        "series_id": data.get("series_id"),
-        "season_id": data.get("season_id"),
+        "series_id": data.series_id,
+        "season_id": data.season_id,
         "user_id": user.id,
-        "winner_id": data.get("winner_id"),
-        "bet_points": data.get("bet_points"),
+        "winner_id": data.winner_id,
+        "bet_points": data.bet_points,
     }
 
     try:
@@ -704,17 +718,18 @@ def update_fantasy_bet(
     fantasy_bet_service: FantasyBetServiceDep,
     request: Request,
     credentials: Credentials,
-    data: Annotated[dict | None, Body()] = None,
+    data: PublicFantasyBetWrite | None = None,
 ) -> dict[str, Any] | None:
     """Update a fantasy bet of the identified player."""
-    data = data or {}
+    data = data or PublicFantasyBetWrite()
+    patch = data.model_dump(exclude_unset=True)
     existing_bet = _owned_bet(
         request,
         credentials,
         user_service,
         fantasy_bet_service,
         bet_id,
-        data.get("token"),
+        data.token,
         "update",
     )
 
@@ -723,8 +738,8 @@ def update_fantasy_bet(
         "series_id": existing_bet.series_id,
         "season_id": existing_bet.season_id,
         "user_id": existing_bet.user_id,
-        "winner_id": data.get("winner_id", existing_bet.winner_id),
-        "bet_points": data.get("bet_points", existing_bet.bet_points),
+        "winner_id": patch.get("winner_id", existing_bet.winner_id),
+        "bet_points": patch.get("bet_points", existing_bet.bet_points),
     }
 
     try:

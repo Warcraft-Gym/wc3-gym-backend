@@ -65,6 +65,22 @@ class FantasyTeamPlayerIds(SQLModel):
     player_ids: list[int]
 
 
+class PublicFantasyTeamWrite(SQLModel):
+    """The public fantasy registration form; the token names the captain.
+
+    A name the body leaves out falls back to the captain's own.
+    """
+
+    token: str | None = None
+    name: Annotated[str | None, NumToStr] = None
+    season_id: int | None = None
+    drafted_team_id: int | None = None
+    drafted_race: str | None = None
+    player_ids: list[int] = []
+    user_name: Annotated[str | None, NumToStr] = None
+    battle_tag: Annotated[str | None, NumToStr] = None
+
+
 class FantasyTeamCreate(FantasyTeamBase):
     drafted_race: Annotated[Race | None, SuggestRace] = None
 

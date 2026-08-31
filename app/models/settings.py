@@ -42,6 +42,16 @@ class SettingsUpdate(SQLModel):
     description: str | None = None
 
 
+class SettingsWrite(SQLModel):
+    # The admin page sends every value as text; the xlsx-shaped callers send numbers
+    settings: dict[str, Annotated[str | None, NumToStr]] = {}
+
+
+class SettingWrite(SQLModel):
+    value: Annotated[str | None, NumToStr] = None
+    description: str | None = None
+
+
 class SettingsPublic(SettingsBase, PublicModel):
     id: int
 
