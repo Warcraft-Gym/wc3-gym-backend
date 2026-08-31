@@ -236,7 +236,7 @@ BOT_WEBHOOK_URL="http://host.docker.internal:3001/webhook/series-updated"
 | `CLERK_AUTHORIZED_PARTIES` | Comma-separated origins Clerk accepts the session from | `http://localhost:5173` |
 | `DISCORD_GUILD_ID` | The WC3 Gym Discord server; an account outside it logs in as a guest and reaches no player route | `316390574808760322` |
 | `ADMIN_DISCORD_IDS` | Comma-separated Discord ids that administer the site with no grant row and cannot be revoked; the bootstrap for Config -> Access | `220202568490418179` |
-| `DISCORD_BOT_TOKEN` | Optional bot token; when set, the app mirrors the roles of `discord_role_binding` into the guild and Config -> Discord roles reports the difference. Unset, every sync is a no-op | `MTIz...` |
+| `DISCORD_BOT_TOKEN` | Optional bot token; when set, the app mirrors the roles of `discord_role_binding` into the guild (admin bindings excepted: those roles are hand-managed) and Config -> Discord roles reports the difference. Unset, every sync is a no-op | `MTIz...` |
 
 **Important Notes:**
 - `host.docker.internal` is a special DNS name that resolves to the host machine from within a Docker container

@@ -17,7 +17,6 @@ from app.models.discord_role_binding import DiscordRoleBinding
 from app.models.enums import RoleKind
 from app.models.relationships import DBTeamSeasonCaptain, DBUserSeasonSignup
 from app.models.season import Season
-from app.models.settings import Settings
 from app.models.user import User
 from app.services import discord, discord_roles
 from tests.test_discord_auth import GUILD_ID, FakeResponse
@@ -68,24 +67,28 @@ def _guild(
     return calls
 
 
-def test_a_grant_earns_the_admin_role(seeded: dict[str, Any]) -> None:
-    """The app names the admins, and the guild role only mirrors them."""
+def test_an_admin_binding_is_never_synced(
+    monkeypatch: pytest.MonkeyPatch, seeded: dict[str, Any]
+) -> None:
+    """The admin role is hand-managed: a grant earns nothing, a held role stays."""
     _bind(RoleKind.admin, "admin-role")
     with Session() as session:
         session.add(AdminGrant(discord_id="1", granted_by="admin"))
         session.commit()
 
-    assert _expected(seeded["player_ids"][0]) == {"admin-role"}
-    assert _expected(seeded["player_ids"][1]) == set()
+    assert _expected(seeded["player_ids"][0]) == set()
+    calls = _guild(monkeypatch, {"2": ["admin-role"]})
+    assert discord_roles.sync([seeded["player_ids"][1]]) == []
+    assert calls == [("GET", f"{MEMBERS}/2")]
 
 
-def test_granting_an_admin_writes_the_guild_role(
+def test_granting_an_admin_writes_no_guild_role(
     client: Client,
     monkeypatch: pytest.MonkeyPatch,
     auth_headers: dict[str, str],
     seeded: dict[str, Any],
 ) -> None:
-    """The grant takes its name from the users row and mirrors the bound role."""
+    """The grant takes its name from the users row and leaves the guild alone."""
     _bind(RoleKind.admin, "admin-role")
     calls = _guild(monkeypatch, {})
 
@@ -93,7 +96,7 @@ def test_granting_an_admin_writes_the_guild_role(
 
     assert resp.status_code == 201, resp.text
     assert resp.json()["name"] == "P1"
-    assert calls == [("GET", f"{MEMBERS}/1"), ("PUT", f"{MEMBERS}/1/roles/admin-role")]
+    assert calls == []
 
 
 def test_a_signup_earns_the_participant_role(seeded: dict[str, Any]) -> None:
@@ -161,34 +164,32 @@ def test_a_fantasy_captain_earns_the_fantasy_role(seeded: dict[str, Any]) -> Non
     assert _expected(seeded["player_ids"][1]) == set()
 
 
-def test_a_champion_binding_reads_the_roster_of_the_season_it_names(
+def test_a_champion_binding_crowns_the_seasons_standings_winner(
     seeded: dict[str, Any],
 ) -> None:
-    """No column names a season winner, so the binding names the team."""
-    _bind(
-        RoleKind.champion,
-        "champion",
-        team_id=seeded["team_b_id"],
-        season_id=seeded["season_id"],
-    )
+    """Alpha won the seeded season 2-1, so its roster earns the role."""
+    _bind(RoleKind.champion, "champion", season_id=seeded["season_id"])
 
-    assert _expected(seeded["player_ids"][2]) == {"champion"}
-    assert _expected(seeded["player_ids"][0]) == set()
+    assert _expected(seeded["player_ids"][0]) == {"champion"}
+    assert _expected(seeded["player_ids"][2]) == set()
 
 
-def test_a_binding_of_another_season_is_not_earned(seeded: dict[str, Any]) -> None:
-    """The current season is the settings row, and only its bindings count."""
+def test_a_season_binding_outlives_its_season(seeded: dict[str, Any]) -> None:
+    """Season 2 is current, but P1's season 1 roles are kept, not stripped."""
     with Session() as session:
         later = Season(name="Season 2", number_weeks=4, series_per_week=2)
         session.add(later)
-        session.add(Settings(key="current_gnl_season", value=str(seeded["season_id"])))
         session.commit()
         later_id = later.id
     assert later_id
     _bind(RoleKind.gnl_participant, "gnl-1", season_id=seeded["season_id"])
     _bind(RoleKind.gnl_participant, "gnl-2", season_id=later_id)
+    _bind(RoleKind.fantasy, "fantasy-1", season_id=seeded["season_id"])
+    _bind(RoleKind.champion, "champion-1", season_id=seeded["season_id"])
+    _bind(RoleKind.team, "team-a", team_id=seeded["team_a_id"])
 
-    assert _expected(seeded["player_ids"][0]) == {"gnl-1"}
+    # P1 played, drafted and won in season 1; the team role alone follows the season
+    assert _expected(seeded["player_ids"][0]) == {"gnl-1", "fantasy-1", "champion-1"}
 
 
 def test_sync_grants_what_is_missing_and_removes_only_bound_roles(
@@ -342,3 +343,45 @@ def test_an_unknown_binding_answers_404(
     resp = client.delete("/config/discord-role-bindings/404", headers=auth_headers)
     assert resp.status_code == 404
     assert resp.json() == {"error": "Discord role binding not found by id: 404"}
+
+
+@pytest.mark.parametrize(
+    ("body", "error"),
+    [
+        (
+            {"kind": "admin", "discord_role": "a"},
+            "Admin roles are hand-managed in Discord, not synced",
+        ),
+        ({"kind": "team", "discord_role": "a"}, "A team binding needs the team"),
+        (
+            {"kind": "champion", "discord_role": "a"},
+            "A champion binding needs the season",
+        ),
+        (
+            {"kind": "champion", "discord_role": "a", "season_id": 1, "team_id": 1},
+            "The champion team is derived from the standings",
+        ),
+    ],
+)
+def test_a_binding_nobody_could_earn_answers_400(
+    client: Client,
+    auth_headers: dict[str, str],
+    seeded: dict[str, Any],
+    body: dict[str, Any],
+    error: str,
+) -> None:
+    resp = client.post("/config/discord-role-bindings", json=body, headers=auth_headers)
+    assert resp.status_code == 400, resp.text
+    assert error in resp.json()["error"]
+
+
+def test_the_binding_list_names_the_derived_champion(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """The winner is not stored, but the list carries it for the page."""
+    _bind(RoleKind.champion, "champion", season_id=seeded["season_id"])
+
+    rows = client.get("/config/discord-role-bindings", headers=auth_headers).json()
+    assert [(row["kind"], row["team_id"]) for row in rows] == [
+        ("champion", seeded["team_a_id"])
+    ]
