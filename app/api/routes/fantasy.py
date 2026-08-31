@@ -13,9 +13,9 @@ from app.api.deps import (
     require_admin,
     require_login,
 )
-from app.core.exceptions import ApiError, BadRequestError
+from app.api.search import SearchQuery
+from app.core.exceptions import ApiError
 from app.core.ordering import SortOrder
-from app.core.query import QueryUtil
 from app.models.fantasy_bet import (
     FantasyBetCreate,
     FantasyBetPublic,
@@ -150,15 +150,12 @@ def get_all_teams(
 def search_teams(
     service: FantasyTeamServiceDep,
     response: Response,
-    query: str = "",
+    query: SearchQuery,
     limit: Annotated[int, Query(ge=1, le=500)] = 500,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[FantasyTeamPublic]:
     """Search teams by criteria, one page at a time, at most 500."""
-    parsed = QueryUtil.parse_query(query)
-    if not parsed or not parsed.elementA:
-        raise BadRequestError(f"No valid query found: {query}")
-    teams, total = service.search(parsed, limit=limit, offset=offset)
+    teams, total = service.search(query, limit=limit, offset=offset)
     if total is not None:
         response.headers["X-Total-Count"] = str(total)
     return teams
@@ -220,7 +217,7 @@ def get_all_bets(
 def search_bets(
     service: FantasyBetServiceDep,
     response: Response,
-    query: str = "",
+    query: SearchQuery,
     limit: Annotated[int, Query(ge=1, le=500)] = 500,
     offset: Annotated[int, Query(ge=0)] = 0,
     sort: BetSort | None = None,
@@ -230,11 +227,8 @@ def search_bets(
 
     sort names the field the page is ordered by, and the bet id breaks its ties.
     """
-    parsed = QueryUtil.parse_query(query)
-    if not parsed or not parsed.elementA:
-        raise BadRequestError(f"No valid query found: {query}")
     bets, total = service.search(
-        parsed, limit=limit, offset=offset, sort=sort, order=order
+        query, limit=limit, offset=offset, sort=sort, order=order
     )
     if total is not None:
         response.headers["X-Total-Count"] = str(total)

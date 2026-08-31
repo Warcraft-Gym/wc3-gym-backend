@@ -4,8 +4,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query
 
 from app.api.deps import MatchServiceDep, require_admin
-from app.core.exceptions import BadRequestError
-from app.core.query import QueryUtil
+from app.api.search import SearchQuery
 from app.models.match import MatchCreate, MatchPublic, MatchUpdate
 
 logger = logging.getLogger(__name__)
@@ -53,12 +52,9 @@ def get_match(match_id: int, service: MatchServiceDep) -> MatchPublic:
 @router.post("/matches/search")
 def search_match(
     service: MatchServiceDep,
-    query: str = "",
+    query: SearchQuery,
     limit: Annotated[int, Query(ge=1, le=500)] = 500,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[MatchPublic]:
     """Search matches by criteria using a custom query format."""
-    parsed_query = QueryUtil.parse_query(query)
-    if not parsed_query or not parsed_query.elementA:
-        raise BadRequestError(f"No valid query found: {query}")
-    return service.search(parsed_query, limit=limit, offset=offset)
+    return service.search(query, limit=limit, offset=offset)

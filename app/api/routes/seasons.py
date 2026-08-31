@@ -4,8 +4,7 @@ from typing import Annotated
 from fastapi import APIRouter, Body, Depends, Query
 
 from app.api.deps import LadderServiceDep, SeasonServiceDep, require_admin
-from app.core.exceptions import BadRequestError
-from app.core.query import QueryUtil
+from app.api.search import SearchQuery
 from app.models.map import LadderMapRow
 from app.models.relationships import SeasonWeekMapWrite
 from app.models.season import SeasonCreate, SeasonPublic, SeasonUpdate
@@ -84,15 +83,12 @@ def get_all(
 @router.post("/seasons/search")
 def search_seasons(
     service: SeasonServiceDep,
-    query: str = "",
+    query: SearchQuery,
     limit: Annotated[int, Query(ge=1, le=500)] = 500,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[SeasonPublic]:
     """Search seasons by criteria using a custom query format."""
-    parsed_query = QueryUtil.parse_query(query)
-    if not parsed_query or not parsed_query.elementA:
-        raise BadRequestError(f"No valid query found: {query}")
-    return service.search(parsed_query, limit=limit, offset=offset)
+    return service.search(query, limit=limit, offset=offset)
 
 
 @router.post("/seasons/{season_id}/maps", dependencies=[Depends(require_admin)])

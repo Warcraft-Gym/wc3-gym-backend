@@ -34,7 +34,7 @@ router = APIRouter(tags=["config"])
 @router.get("/config/settings")
 def get_settings(service: SettingsServiceDep) -> SettingsList:
     """Retrieve all configuration settings from database."""
-    return SettingsList(settings=service.get_all_settings())
+    return SettingsList(settings=service.get_all())
 
 
 @router.get("/config/w3c")
@@ -115,9 +115,9 @@ def generate_nightbot_token(service: SettingsServiceDep) -> GeneratedNightbotTok
 @router.get("/config/koth/nightbot-token", dependencies=[Depends(require_admin)])
 def get_nightbot_token(service: SettingsServiceDep) -> NightbotToken:
     """Get the current KOTH Nightbot token"""
-    # get_setting raises NotFoundError, which answers 404
-    setting = service.get_setting("KOTH_NIGHTBOT_TOKEN")
-    return NightbotToken(token=setting.get("value"), exists=True)
+    # get_by_key raises NotFoundError, which answers 404
+    setting = service.get_by_key("KOTH_NIGHTBOT_TOKEN")
+    return NightbotToken(token=setting.value, exists=True)
 
 
 @router.get("/config/admins", dependencies=[Depends(require_admin)])

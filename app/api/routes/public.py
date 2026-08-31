@@ -4,7 +4,7 @@ import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Body, Query, Request, Response, UploadFile
+from fastapi import APIRouter, Body, Depends, Query, Request, Response, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
@@ -26,12 +26,12 @@ from app.api.deps import (
 from app.core.exceptions import ApiError, BadRequestError, NotFoundError
 from app.core.ordering import SortOrder
 from app.core.query import QueryUtil
-from app.models.fantasy_bet import FantasyBetCreate, FantasyBetUpdate
+from app.models.fantasy_bet import FantasyBetCreate, FantasyBetPublic, FantasyBetUpdate
 from app.models.fantasy_team import FantasyTeamCreate, FantasyTeamUpdate
 from app.models.player_history import PlayerHistory
 from app.models.series import SeriesSort
 from app.models.series_veto_step import SeriesVetoPublic, SeriesVetoWrite
-from app.models.user import UserCreate, UserUpdate
+from app.models.user import UserCreate, UserListPublic, UserUpdate
 from app.models.user_season_availability import (
     PlayerAvailabilityWrite,
     UserSeasonAvailabilityPublic,
@@ -85,6 +85,56 @@ def _identity(
     if access_type and entry.get("access_type") != access_type:
         raise BadRequestError("invalid_token_type")
     return entry
+
+
+def dashboard_player(
+    request: Request,
+    credentials: Credentials,
+    user_service: UserServiceDep,
+    token: str | None = None,
+) -> tuple[dict[str, Any], UserListPublic]:
+    """The identity behind a dashboard request, and the player row it names.
+
+    As a dependency it reads the token off the query string; a route whose
+    token arrives in the body calls it instead.
+    """
+    entry = _identity(request, credentials, token, "dashboard")
+    users = user_service.find_by_discord_id(str(entry.get("discord_id")))
+    if not users:
+        raise NotFoundError("player_not_found")
+    return entry, users[0]
+
+
+DashboardPlayer = Annotated[
+    tuple[dict[str, Any], UserListPublic], Depends(dashboard_player)
+]
+
+
+def _owned_bet(
+    request: Request,
+    credentials: Credentials,
+    user_service: UserServiceDep,
+    fantasy_bet_service: FantasyBetServiceDep,
+    bet_id: int,
+    token: str | None,
+    verb: str,
+) -> FantasyBetPublic:
+    """The bet the identified player placed. Someone else's bet answers 403."""
+    entry = _identity(request, credentials, token)
+    users = user_service.find_by_discord_id(str(entry.get("discord_id")))
+    if not users:
+        raise NotFoundError("user_not_found")
+    # get raises NotFoundError, which answers 404
+    bet = fantasy_bet_service.get(bet_id)
+    if bet.user_id != users[0].id:
+        raise ApiError(
+            403,
+            {
+                "error": "unauthorized",
+                "message": f"You can only {verb} your own bets",
+            },
+        )
+    return bet
 
 
 @router.post("/public-access-helper", response_model=None)
@@ -179,10 +229,10 @@ def public_create_user(
     """Create user and optionally assign to season for the signed-in Discord member."""
     # A missing signups_enabled row leaves signups open
     try:
-        signup_enabled = settings_service.get_setting("signups_enabled")
+        signups_enabled = settings_service.get_by_key("signups_enabled").value
     except NotFoundError:
-        signup_enabled = None
-    if signup_enabled and signup_enabled.get("value", "true").lower() == "false":
+        signups_enabled = None
+    if signups_enabled and signups_enabled.lower() == "false":
         raise ApiError(
             403,
             {
@@ -286,13 +336,8 @@ def get_player_series(
 
     sort names the field the page is ordered by, and the series id breaks its ties.
     """
-    entry = _identity(request, credentials, token, "dashboard")
-
-    # Find the user by discord_id
-    users = user_service.find_by_discord_id(str(entry.get("discord_id")))
-    if not users:
-        raise NotFoundError("player_not_found")
-    user = users[0]
+    # not a dependency: that would identify the player before limit is checked
+    entry, user = dashboard_player(request, credentials, user_service, token)
 
     # Get series where user is player1 or player2
     # The token stores the season id as text
@@ -353,12 +398,7 @@ def set_player_availability(
 
     A null answer clears the week, which puts the player back to available.
     """
-    entry = _identity(request, credentials, data.token, "dashboard")
-
-    users = user_service.find_by_discord_id(str(entry.get("discord_id")))
-    if not users:
-        raise NotFoundError("player_not_found")
-    user = users[0]
+    entry, user = dashboard_player(request, credentials, user_service, data.token)
 
     season_id = (
         entry.get("season_id")
@@ -374,19 +414,9 @@ def set_player_availability(
 
 
 @router.get("/player-history")
-def get_player_history(
-    user_service: UserServiceDep,
-    request: Request,
-    credentials: Credentials,
-    token: str | None = None,
-) -> PlayerHistory:
+def get_player_history(player: DashboardPlayer) -> PlayerHistory:
     """Every GNL season this player took part in, and every opponent they met."""
-    entry = _identity(request, credentials, token, "dashboard")
-
-    users = user_service.find_by_discord_id(str(entry.get("discord_id")))
-    if not users:
-        raise NotFoundError("player_not_found")
-    return player_history.history(users[0].id)
+    return player_history.history(player[1].id)
 
 
 @router.put("/player-series/{series_id}", response_model=None)
@@ -446,11 +476,7 @@ def _veto_viewer(
         claims = require_login(request, credentials)
         if claims.get("role") == "admin" or claims.get("sub") == "admin":
             return None
-    entry = _identity(request, credentials, token, "dashboard")
-    users = user_service.find_by_discord_id(str(entry.get("discord_id")))
-    if not users:
-        raise NotFoundError("player_not_found")
-    return users[0].id
+    return dashboard_player(request, credentials, user_service, token)[1].id
 
 
 @router.get("/player-series/{series_id}/veto")
@@ -526,10 +552,12 @@ def create_fantasy_team(
     """Create or update fantasy team, creating user if needed."""
     # A missing fantasy_team_creation_enabled row leaves creation open
     try:
-        fantasy_enabled = settings_service.get_setting("fantasy_team_creation_enabled")
+        fantasy_enabled = settings_service.get_by_key(
+            "fantasy_team_creation_enabled"
+        ).value
     except NotFoundError:
         fantasy_enabled = None
-    if fantasy_enabled and fantasy_enabled.get("value", "true").lower() == "false":
+    if fantasy_enabled and fantasy_enabled.lower() == "false":
         raise ApiError(
             403,
             {
@@ -680,35 +708,21 @@ def update_fantasy_bet(
 ) -> dict[str, Any] | None:
     """Update a fantasy bet of the identified player."""
     data = data or {}
-    entry = _identity(request, credentials, data.get("token"))
-
-    # Get user based on discord info
-    existing_users = user_service.find_by_discord_id(str(entry.get("discord_id")))
-    user = existing_users[0] if existing_users else None
-
-    if not user:
-        raise NotFoundError("user_not_found")
-
-    # Get the existing bet to verify ownership
-    existing_bet = fantasy_bet_service.get(bet_id)
-    if not existing_bet:
-        raise NotFoundError("bet_not_found")
-
-    # Verify that the bet belongs to this user
-    if existing_bet.user_id != user.id:
-        raise ApiError(
-            403,
-            {
-                "error": "unauthorized",
-                "message": "You can only update your own bets",
-            },
-        )
+    existing_bet = _owned_bet(
+        request,
+        credentials,
+        user_service,
+        fantasy_bet_service,
+        bet_id,
+        data.get("token"),
+        "update",
+    )
 
     # Update the bet
     bet_payload = {
         "series_id": existing_bet.series_id,
         "season_id": existing_bet.season_id,
-        "user_id": user.id,
+        "user_id": existing_bet.user_id,
         "winner_id": data.get("winner_id", existing_bet.winner_id),
         "bet_points": data.get("bet_points", existing_bet.bet_points),
     }
@@ -734,29 +748,7 @@ def delete_fantasy_bet(
     token: str | None = None,
 ) -> None:
     """Delete a fantasy bet of the identified player."""
-    entry = _identity(request, credentials, token)
-
-    # Get user based on discord info
-    existing_users = user_service.find_by_discord_id(str(entry.get("discord_id")))
-    user = existing_users[0] if existing_users else None
-
-    if not user:
-        raise NotFoundError("user_not_found")
-
-    # Get the existing bet to verify ownership
-    existing_bet = fantasy_bet_service.get(bet_id)
-    if not existing_bet:
-        raise NotFoundError("bet_not_found")
-
-    # Verify that the bet belongs to this user
-    if existing_bet.user_id != user.id:
-        raise ApiError(
-            403,
-            {
-                "error": "unauthorized",
-                "message": "You can only delete your own bets",
-            },
-        )
-
-    # Delete the bet
+    _owned_bet(
+        request, credentials, user_service, fantasy_bet_service, bet_id, token, "delete"
+    )
     fantasy_bet_service.delete(bet_id)

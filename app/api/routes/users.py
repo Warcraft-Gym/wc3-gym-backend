@@ -4,8 +4,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query, Response
 
 from app.api.deps import LadderServiceDep, UserServiceDep, require_admin
-from app.core.exceptions import BadRequestError
-from app.core.query import QueryUtil
+from app.api.search import SearchQuery
 from app.models.user import UserCreate, UserListPublic, UserPublic, UserUpdate
 from app.models.w3c_ladder_match import UserLadder
 
@@ -65,15 +64,12 @@ def get_all_users(
 @router.post("/users/search")
 def search_users(
     service: UserServiceDep,
-    query: str = "",
+    query: SearchQuery,
     limit: Annotated[int, Query(ge=1, le=500)] = 500,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[UserListPublic]:
     """Search users by criteria using a custom query format."""
-    parsed_query = QueryUtil.parse_query(query)
-    if not parsed_query or not parsed_query.elementA:
-        raise BadRequestError(f"No valid query found: {query}")
-    return service.search(parsed_query, limit=limit, offset=offset)
+    return service.search(query, limit=limit, offset=offset)
 
 
 @router.post("/users/{user_id}/w3c-sync", dependencies=[Depends(require_admin)])
