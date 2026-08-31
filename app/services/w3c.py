@@ -277,9 +277,7 @@ class W3CService:
     ) -> Any:  # noqa: ANN401  # the w3champions body has no fixed shape
         try:
             # Send the request
-            response = _session.request(
-                "GET", url, params=params, timeout=REQUEST_TIMEOUT
-            )
+            response = _session.get(url, params=params, timeout=REQUEST_TIMEOUT)
 
             if _is_throttled(response):
                 raise W3CThrottledError(THROTTLED_MESSAGE)
@@ -290,13 +288,9 @@ class W3CService:
                     return response.json()  # Parse JSON response
                 except ValueError:
                     raise ExternalServiceError(response.text)
-            if response.status_code == 204:
-                return response.text
-            else:
-                # Log or raise an error for non-200 status codes
-                raise ExternalServiceError(
-                    f"Request failed with status code {response.status_code}: {response.text}"
-                )
+            raise ExternalServiceError(
+                f"Request failed with status code {response.status_code}: {response.text}"
+            )
 
         except requests.exceptions.RequestException as e:
             # Handle network-related errors

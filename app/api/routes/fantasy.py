@@ -143,7 +143,7 @@ def get_all_teams(
     """Retrieve one page of fantasy teams, at most 500, ordered by id."""
     teams, total = service.get_all(limit=limit, offset=offset)
     response.headers["X-Total-Count"] = str(total)
-    return teams or []
+    return teams
 
 
 @router.post("/fantasy/teams/search")
@@ -161,7 +161,7 @@ def search_teams(
     teams, total = service.search(parsed, limit=limit, offset=offset)
     if total is not None:
         response.headers["X-Total-Count"] = str(total)
-    return teams or []
+    return teams
 
 
 # Bet endpoints
@@ -213,7 +213,7 @@ def get_all_bets(
     bets, total = service.get_all(limit=limit, offset=offset)
     if total is not None:
         response.headers["X-Total-Count"] = str(total)
-    return bets or []
+    return bets
 
 
 @router.post("/fantasy/bets/search")
@@ -238,7 +238,7 @@ def search_bets(
     )
     if total is not None:
         response.headers["X-Total-Count"] = str(total)
-    return bets or []
+    return bets
 
 
 @router.get(

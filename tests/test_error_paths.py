@@ -276,7 +276,7 @@ def test_a_plain_w3c_failure_answers_502_with_its_message(
             raise ValueError("no JSON here")
 
     class Session:
-        def request(self, *args: object, **kwargs: object) -> NotJson:
+        def get(self, *args: object, **kwargs: object) -> NotJson:
             return NotJson()
 
     monkeypatch.setattr(w3c, "_session", Session())

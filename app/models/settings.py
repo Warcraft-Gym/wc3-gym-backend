@@ -59,6 +59,10 @@ class W3CConfig(SQLModel):
     current_season: int | None
 
 
+class Message(SQLModel):
+    message: str
+
+
 class SettingsUpdated(SQLModel):
     message: str
     updated: list[SettingsPublic]

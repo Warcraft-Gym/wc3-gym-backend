@@ -81,11 +81,6 @@ def _season_winners(session: OrmSession, season_ids: set[int]) -> dict[int, int]
     return {season_id: team_id for season_id, (_, _, team_id) in best.items()}
 
 
-def expected_roles(user: User, session: OrmSession) -> set[str]:
-    """The bound roles this account earns right now."""
-    return expected_roles_of([user], session)[ident(user)]
-
-
 def expected_roles_of(
     users: Sequence[User], session: OrmSession
 ) -> dict[int, set[str]]:

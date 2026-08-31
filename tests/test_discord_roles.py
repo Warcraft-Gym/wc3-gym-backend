@@ -34,7 +34,7 @@ def _expected(user_id: int) -> set[str]:
     with Session() as session:
         user = session.get(User, user_id)
         assert user
-        return discord_roles.expected_roles(user, session)
+        return discord_roles.expected_roles_of([user], session)[ident(user)]
 
 
 def _captain(team_id: int, season_id: int, user_id: int) -> None:

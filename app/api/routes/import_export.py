@@ -17,7 +17,7 @@ from app.api.deps import (
 )
 from app.core.exceptions import BadRequestError
 from app.core.query import QueryUtil
-from app.models.responses import Message
+from app.models.settings import Message
 from app.services import discord_roles
 from app.services.fantasy_import import (
     import_fantasy_bets_workbook,

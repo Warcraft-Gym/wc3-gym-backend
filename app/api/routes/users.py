@@ -59,7 +59,7 @@ def get_all_users(
     """Retrieve one page of users, at most 500, ordered by id."""
     users, total = service.get_all(limit=limit, offset=offset)
     response.headers["X-Total-Count"] = str(total)
-    return users or []
+    return users
 
 
 @router.post("/users/search")
@@ -73,7 +73,7 @@ def search_users(
     parsed_query = QueryUtil.parse_query(query)
     if not parsed_query or not parsed_query.elementA:
         raise BadRequestError(f"No valid query found: {query}")
-    return service.search(parsed_query, limit=limit, offset=offset) or []
+    return service.search(parsed_query, limit=limit, offset=offset)
 
 
 @router.post("/users/{user_id}/w3c-sync", dependencies=[Depends(require_admin)])

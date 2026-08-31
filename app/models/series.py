@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Annotated, Any, Literal, Self
 
 from sqlalchemy import ColumnElement, ColumnExpressionArgument, Index, and_, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.orm.interfaces import ORMOption
 from sqlmodel import Field, Relationship, SQLModel, col
 
@@ -108,8 +108,6 @@ class Series(SeriesBase, DBModel, table=True):
     @classmethod
     def _list_eager_options(cls) -> tuple[ORMOption, ...]:
         """The to-one relations the reduced public series reads."""
-        from sqlalchemy.orm import joinedload
-
         return (
             joinedload(rel(cls.match)).joinedload(rel(Match.team1)),
             joinedload(rel(cls.match)).joinedload(rel(Match.team2)),
@@ -122,8 +120,6 @@ class Series(SeriesBase, DBModel, table=True):
     @classmethod
     def _eager_options(cls) -> tuple[ORMOption, ...]:
         """The rows a season report reads off every series."""
-        from sqlalchemy.orm import joinedload
-
         return (
             joinedload(rel(cls.match)).joinedload(rel(Match.team1)),
             joinedload(rel(cls.match)).joinedload(rel(Match.team2)),

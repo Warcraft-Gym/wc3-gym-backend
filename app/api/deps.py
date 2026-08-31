@@ -186,7 +186,6 @@ def require_captain(request: Request, credentials: Credentials) -> dict[str, Any
 
 RequireAdmin = Annotated[str, Depends(require_admin)]
 RequireLogin = Annotated[dict[str, Any], Depends(require_login)]
-RequireMember = Annotated[dict[str, Any], Depends(require_member)]
 RequireCaptain = Annotated[dict[str, Any], Depends(require_captain)]
 
 

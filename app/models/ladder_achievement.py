@@ -47,10 +47,6 @@ class LadderAchievement(LadderAchievementBase, DBModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
 
 
-class LadderAchievementPublic(LadderAchievementBase):
-    id: int
-
-
 def default_rows(season_id: int | None) -> list["LadderAchievement"]:
     """A scope's instances of every rule in the catalogue, at catalogue prices.
 

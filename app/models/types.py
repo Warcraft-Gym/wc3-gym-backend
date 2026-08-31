@@ -11,7 +11,6 @@ Each type says which group it is in.
 """
 
 import difflib
-import enum
 import numbers
 from datetime import UTC, date, datetime
 from functools import cache
@@ -22,11 +21,8 @@ from pydantic import BeforeValidator, PlainSerializer
 from sqlalchemy import DateTime, Dialect
 from sqlalchemy.types import TypeDecorator
 
+from app.core.fantasy import race_value
 from app.models.enums import Race
-
-
-def _enum_to_value[T](value: T) -> str | T:
-    return value.value if isinstance(value, enum.Enum) else value
 
 
 def _none_to_list[T](value: T) -> list | T:
@@ -167,7 +163,7 @@ IsoDate = Annotated[
 ]
 
 # Output. The ORM holds an enum member; the API sends the plain value.
-EnumValue = BeforeValidator(_enum_to_value)
+EnumValue = BeforeValidator(race_value)
 # Output. Null reads as an empty list.
 NoneToList = BeforeValidator(_none_to_list)
 
