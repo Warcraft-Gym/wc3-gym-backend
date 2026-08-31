@@ -1,19 +1,38 @@
 import hashlib
 import logging
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Body, Depends, File, Query, Request, Response, UploadFile
 
-from app.api.deps import LadderServiceDep, TeamServiceDep, require_admin
-from app.core.exceptions import BadRequestError, NotFoundError
+from app.api.deps import (
+    AvailabilityServiceDep,
+    LadderServiceDep,
+    RequireCaptain,
+    TeamServiceDep,
+    UserServiceDep,
+    require_admin,
+)
+from app.core.exceptions import ApiError, BadRequestError, NotFoundError
 from app.core.query import QueryUtil
 from app.models.team import TeamCreate, TeamPublic, TeamUpdate
+from app.models.user_season_availability import (
+    TeamAvailabilityWrite,
+    UserSeasonAvailabilityPublic,
+)
 from app.models.w3c_stats import W3CSyncResult
 from app.services.users import SYNC_MAX_AGE
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["teams"])
+
+
+def _own_team(claims: dict[str, Any], team_id: int) -> None:
+    """A captain reaches their own team; an admin reaches any."""
+    if claims.get("role") == "admin" or claims["sub"] == "admin":
+        return
+    if claims.get("team_id") != team_id:
+        raise ApiError(403, {"error": "Captains only"})
 
 
 @router.post(
@@ -67,6 +86,43 @@ def get_team_season(
 ) -> TeamPublic:
     """Retrieve a team by its ID with all information related to a specific season"""
     return service.get_with_nested_users_by_season(team_id, season_id)
+
+
+@router.get("/teams/{team_id}/seasons/{season_id}/availability")
+def get_team_availability(
+    team_id: int,
+    season_id: int,
+    claims: RequireCaptain,
+    service: AvailabilityServiceDep,
+) -> list[UserSeasonAvailabilityPublic]:
+    """The weeks the players of that team season have answered for."""
+    _own_team(claims, team_id)
+    return service.for_team(team_id, season_id)
+
+
+@router.put("/teams/{team_id}/seasons/{season_id}/availability")
+def set_team_availability(
+    team_id: int,
+    season_id: int,
+    data: TeamAvailabilityWrite,
+    claims: RequireCaptain,
+    service: AvailabilityServiceDep,
+    user_service: UserServiceDep,
+) -> list[UserSeasonAvailabilityPublic]:
+    """Answer one week for a player of the team, as their captain."""
+    _own_team(claims, team_id)
+    if not service.on_roster(team_id, season_id, data.user_id):
+        raise BadRequestError(f"Player {data.user_id} is not on this team this season")
+    callers = user_service.find_by_discord_id(str(claims["sub"]))
+    if not callers:
+        raise NotFoundError("user_not_found")
+    return service.set(
+        data.user_id,
+        season_id,
+        data.playday,
+        data.available,
+        set_by_user_id=callers[0].id,
+    )
 
 
 @router.get("/teams/season/{season_id}")
