@@ -233,6 +233,50 @@ def test_meetings_read_newest_first_and_carry_both_scores(
     assert meetings[0]["date_time"].startswith("2026-03-07")
 
 
+def test_a_meeting_carries_the_fixed_map_and_the_picks(
+    client: Client, seeded: dict[str, Any], token_for: Callable[[str], str]
+) -> None:
+    """The seeded series gets a fixed map and one veto pick; bans stay out."""
+    from app.core.db import Session
+    from app.models.base import ident
+    from app.models.map import Map
+    from app.models.series import Series
+    from app.models.series_veto_step import DBSeriesVetoStep
+
+    with Session() as session:
+        picked = Map(name="Echo Isles", shortname="EI")
+        banned = Map(name="Turtle Rock", shortname="TR")
+        session.add_all([picked, banned])
+        session.flush()
+        series = session.get(Series, seeded["series_played_id"])
+        assert series is not None
+        series.match.fixed_map_id = seeded["map_id"]
+        session.add_all(
+            [
+                DBSeriesVetoStep(
+                    series_id=ident(series),
+                    step_no=1,
+                    side="A",
+                    action="ban",
+                    map_id=ident(banned),
+                ),
+                DBSeriesVetoStep(
+                    series_id=ident(series),
+                    step_no=2,
+                    side="B",
+                    action="pick",
+                    map_id=ident(picked),
+                ),
+            ]
+        )
+        session.commit()
+
+    resp = client.get("/player-history", params={"token": token_for("1")})
+
+    meeting = resp.json()["opponents"][0]["meetings"][0]
+    assert meeting["maps"] == ["Concealed Hill", "Echo Isles"]
+
+
 def test_an_unplayed_series_is_no_meeting(
     client: Client, two_seasons: dict[str, Any], token_for: Callable[[str], str]
 ) -> None:
@@ -280,7 +324,7 @@ def test_a_player_with_no_history_answers_two_empty_lists(
     assert resp.json() == {"events": [], "opponents": []}
 
 
-def test_the_answer_costs_six_statements_however_long_the_career(
+def test_the_answer_costs_eight_statements_however_long_the_career(
     seeded: dict[str, Any],
 ) -> None:
     """HARD GATE: neither block loops. One season and one opponent cost what
@@ -294,7 +338,7 @@ def test_the_answer_costs_six_statements_however_long_the_career(
     with count_statements() as two_seasons:
         history(seeded["player_ids"][0])
 
-    assert one_season[0] == two_seasons[0] == 6
+    assert one_season[0] == two_seasons[0] == 8
 
 
 def test_an_unknown_player_answers_404(

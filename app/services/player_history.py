@@ -1,10 +1,11 @@
 """What one player did in the league, derived at read time.
 
-Six statements answer the whole page, and none of them grows with the number
+Eight statements answer the whole page, and none of them grows with the number
 of seasons or opponents: one reads every series the player stood in with its
 season and its opponent, one the teams they were rostered on, one the teams
-each of those seasons held, one the current season setting, and the last pair
-is the score system and the points of every team, borrowed from
+each of those seasons held, one the current season setting, a pair reads the
+maps of the played series (the fixed map and the veto picks), and the last
+pair is the score system and the points of every team, borrowed from
 app.services.derived.
 
 A series with no map score is unplayed: it pays no record and shows in no
@@ -21,6 +22,7 @@ from sqlalchemy.orm import aliased
 from sqlmodel import col
 
 from app.core.db import Session
+from app.models.map import Map
 from app.models.match import Match
 from app.models.player_history import (
     HistoryEvent,
@@ -30,6 +32,7 @@ from app.models.player_history import (
 )
 from app.models.season import Season
 from app.models.series import Series
+from app.models.series_veto_step import DBSeriesVetoStep
 from app.models.settings import Settings
 from app.models.team import Team
 from app.models.team_season import DBTeamSeason
@@ -186,7 +189,40 @@ def _events(
     return events
 
 
-def _opponents(rows: Sequence[Row[Any]]) -> list[HistoryOpponent]:
+def _series_maps(session: OrmSession, series_ids: set[int]) -> dict[int, list[str]]:
+    """The maps of every played series: the match's fixed map, then the picks.
+
+    Which game ran on which map, and who won it, is stored nowhere, so the
+    names are all there is to tell.
+    """
+    if not series_ids:
+        return {}
+    maps: dict[int, list[str]] = {}
+    fixed = session.execute(
+        select(col(Series.id), col(Map.name))
+        .join(Match, col(Match.id) == Series.match_id)
+        .join(Map, col(Map.id) == Match.fixed_map_id)
+        .where(col(Series.id).in_(series_ids))
+    ).all()
+    for series_id, name in fixed:
+        maps.setdefault(series_id, []).append(name)
+    picks = session.execute(
+        select(col(DBSeriesVetoStep.series_id), col(Map.name))
+        .join(Map, col(Map.id) == DBSeriesVetoStep.map_id)
+        .where(
+            col(DBSeriesVetoStep.series_id).in_(series_ids),
+            col(DBSeriesVetoStep.action) == "pick",
+        )
+        .order_by(col(DBSeriesVetoStep.series_id), col(DBSeriesVetoStep.step_no))
+    ).all()
+    for series_id, name in picks:
+        maps.setdefault(series_id, []).append(name)
+    return maps
+
+
+def _opponents(
+    rows: Sequence[Row[Any]], maps: dict[int, list[str]]
+) -> list[HistoryOpponent]:
     """One row per opponent the player ever played, most met first.
 
     The rows arrive newest first, so the first one an opponent shows in is the
@@ -224,6 +260,7 @@ def _opponents(rows: Sequence[Row[Any]]) -> list[HistoryOpponent]:
                 my_score=row.own,
                 their_score=row.opp,
                 date_time=row.date_time,
+                maps=maps.get(row.series_id, []),
             )
         )
     return sorted(opponents.values(), key=lambda one: (-one.played, one.name or ""))
@@ -235,6 +272,7 @@ def history(user_id: int) -> PlayerHistory:
         rows = _meetings(session, user_id)
         rosters = _rosters(session, user_id)
         season_ids = {row.season_id for row in rows} | set(rosters)
+        played_ids = {row.series_id for row in rows if row.own or row.opp}
         current = Settings.get_by_key(session, "current_gnl_season")
         value = current.value if current else None
         return PlayerHistory(
@@ -244,5 +282,5 @@ def history(user_id: int) -> PlayerHistory:
                 _places(session, season_ids),
                 int(value) if value and value.isdigit() else None,
             ),
-            opponents=_opponents(rows),
+            opponents=_opponents(rows, _series_maps(session, played_ids)),
         )
