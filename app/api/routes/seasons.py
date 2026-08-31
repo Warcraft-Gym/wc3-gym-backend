@@ -6,6 +6,7 @@ from fastapi import APIRouter, Body, Depends, Query
 from app.api.deps import LadderServiceDep, SeasonServiceDep, require_admin
 from app.core.exceptions import BadRequestError
 from app.core.query import QueryUtil
+from app.models.map import LadderMapRow
 from app.models.relationships import SeasonWeekMapWrite
 from app.models.season import SeasonCreate, SeasonPublic, SeasonUpdate
 from app.models.user import UserListPublic
@@ -108,6 +109,26 @@ def remove_maps(
 ) -> SeasonPublic:
     """Remove maps from season by providing a list of map ids."""
     return service.remove_maps(season_id, data["map_ids"])
+
+
+@router.get(
+    "/seasons/{season_id}/maps/ladder-import", dependencies=[Depends(require_admin)]
+)
+def preview_ladder_import(
+    season_id: int, service: SeasonServiceDep
+) -> list[LadderMapRow]:
+    """List every 1v1 ladder map, matched against the maps the app holds."""
+    return service.ladder_import_preview(season_id)
+
+
+@router.post(
+    "/seasons/{season_id}/maps/ladder-import", dependencies=[Depends(require_admin)]
+)
+def apply_ladder_import(
+    season_id: int, data: Annotated[dict, Body()], service: SeasonServiceDep
+) -> SeasonPublic:
+    """Add the named ladder maps to the pool, creating the ones the app misses."""
+    return service.import_ladder_maps(season_id, data["names"])
 
 
 @router.put("/seasons/{season_id}/maps/order", dependencies=[Depends(require_admin)])
