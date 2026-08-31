@@ -43,6 +43,27 @@ def test_the_captain_edits_and_drafts_its_own_team(
     assert resp.json()["drafted_players"] == []
 
 
+def test_the_list_answers_the_drafted_players_stats(
+    client: Client, seeded: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The leaderboard shows MMR and GNL record from the list answer alone."""
+    stub_clerk(monkeypatch, account={**ACCOUNT, "id": "1"})
+    resp = client.post(
+        f"/fantasy/teams/{seeded['fantasy_team_id']}/players",
+        json={"player_ids": [seeded["player_ids"][0]]},
+        headers=SESSION,
+    )
+    assert resp.status_code == 200, resp.text
+
+    resp = client.post("/fantasy/teams/search?query=season_id > 0")
+    assert resp.status_code == 200
+    player = resp.json()[0]["drafted_players"][0]
+    assert player["w3c_stats"] == []
+    # P1 won the one played series, and the derived fill counts it
+    gnl = player["gnl_stats"][0]
+    assert (gnl["wins"], gnl["losses"], gnl["games"]) == (1, 0, 1)
+
+
 def test_a_member_who_is_not_the_captain_is_refused(
     client: Client, seeded: dict[str, Any], monkeypatch: pytest.MonkeyPatch
 ) -> None:

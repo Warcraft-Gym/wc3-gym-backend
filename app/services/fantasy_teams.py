@@ -2,7 +2,7 @@ import logging
 
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import joinedload, noload
 from sqlmodel import col
 
 from app.core.db import Session, rel
@@ -61,14 +61,20 @@ class FantasyTeamService:
             derived.fill_fantasy_teams(session, [public])
             return public
 
-    # Every relation the list answer reads; the sub-collections stay empty
+    # Every relation the list answer reads; the other sub-collections stay
+    # empty. The drafted players carry their stats so the leaderboard shows
+    # MMR and GNL record without one request per player.
     _reduced_options = (
         joinedload(rel(FantasyTeam.season)).noload("*"),
         joinedload(rel(FantasyTeam.drafted_team)).noload("*"),
         joinedload(rel(FantasyTeam.captain)).noload("*"),
         joinedload(rel(FantasyTeam.drafted_players))
         .joinedload(rel(DBFantasyTeamPlayer.users))
-        .noload("*"),
+        .options(
+            joinedload(rel(User.team_seasons)).noload("*"),
+            joinedload(rel(User.w3c_stats)),
+            noload("*"),
+        ),
     )
 
     def get_all(
@@ -87,6 +93,9 @@ class FantasyTeamService:
             for fteam in fteams:
                 result.append(FantasyTeamPublic.from_fantasy_team(fteam))
             derived.fill_fantasy_teams(session, result)
+            derived.fill_gnl_stats(
+                session, [player for team in result for player in team.drafted_players]
+            )
             return result, total
 
     def search(
@@ -119,6 +128,9 @@ class FantasyTeamService:
             for fteam in fteams:
                 result.append(FantasyTeamPublic.from_fantasy_team(fteam))
             derived.fill_fantasy_teams(session, result)
+            derived.fill_gnl_stats(
+                session, [player for team in result for player in team.drafted_players]
+            )
             return result, total
 
     def add_players(self, team_id: int, player_ids: list[int]) -> FantasyTeamPublic:
