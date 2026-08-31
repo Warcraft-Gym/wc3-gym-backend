@@ -66,6 +66,8 @@ def me(
         else account.get("global_name") or account.get("username"),
         "avatar": discord.avatar_url(account),
         "role": claims.get("role", "admin"),
+        # the role behind an X-View-As switch, so the frontend keeps the switch visible
+        "actual_role": claims.get("actual_role", claims.get("role", "admin")),
         "user": user,
         "superadmin": superadmin,
         "signed_up": bool(

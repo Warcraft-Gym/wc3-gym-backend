@@ -145,6 +145,7 @@ def test_a_member_reads_me(client: Client, monkeypatch: pytest.MonkeyPatch) -> N
         "name": "Player",
         "avatar": "https://cdn.discordapp.com/avatars/42/abc.png",
         "role": "member",
+        "actual_role": "member",
         "user": None,
         "superadmin": False,
         "signed_up": False,
@@ -320,6 +321,52 @@ def test_the_admin_token_login_still_admits(
     resp = client.get("/me", headers=auth_headers)
     assert resp.status_code == 200
     assert resp.json()["role"] == "admin"
+
+
+def test_view_as_lowers_an_admin_for_the_request(
+    client: Client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The header rewrites the role where the guards read it, so the 403 is real."""
+    stub_clerk(monkeypatch, account={**ACCOUNT, "id": "220202568490418179"})
+    viewing = SESSION | {"X-View-As": "member"}
+    me = client.get("/me", headers=viewing).json()
+    assert me["role"] == "member"
+    assert me["actual_role"] == "admin"
+    resp = client.get("/config/koth/nightbot-token", headers=viewing)
+    assert resp.status_code == 403
+    # without the header the same session is the admin again
+    assert client.get("/me", headers=SESSION).json()["role"] == "admin"
+
+
+def test_view_as_captain_names_the_chosen_team(
+    client: Client, monkeypatch: pytest.MonkeyPatch, seeded: dict[str, Any]
+) -> None:
+    stub_clerk(monkeypatch, account={**ACCOUNT, "id": "220202568490418179"})
+    viewing = SESSION | {
+        "X-View-As": "captain",
+        "X-View-Team": str(seeded["team_a_id"]),
+    }
+    me = client.get("/me", headers=viewing).json()
+    assert me["role"] == "captain"
+    assert me["team"]["id"] == seeded["team_a_id"]
+
+
+def test_view_as_is_ignored_for_a_member(
+    client: Client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    stub_clerk(monkeypatch)
+    me = client.get("/me", headers=SESSION | {"X-View-As": "guest"}).json()
+    assert me["role"] == "member"
+    assert me["actual_role"] == "member"
+
+
+def test_view_as_ignores_a_nonsense_role(
+    client: Client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """admin is not a target either: the header only lowers, never restores."""
+    stub_clerk(monkeypatch, account={**ACCOUNT, "id": "220202568490418179"})
+    me = client.get("/me", headers=SESSION | {"X-View-As": "superuser"}).json()
+    assert me["role"] == "admin"
 
 
 def _login() -> dict[str, Any]:
