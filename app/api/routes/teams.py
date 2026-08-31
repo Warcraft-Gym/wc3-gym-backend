@@ -2,7 +2,7 @@ import hashlib
 import logging
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Body, Depends, File, Query, Request, Response, UploadFile
+from fastapi import APIRouter, Depends, File, Query, Request, Response, UploadFile
 
 from app.api.deps import (
     AvailabilityServiceDep,
@@ -12,9 +12,15 @@ from app.api.deps import (
     UserServiceDep,
     require_admin,
 )
+from app.api.search import SearchQuery
 from app.core.exceptions import ApiError, BadRequestError, NotFoundError
-from app.core.query import QueryUtil
-from app.models.team import TeamCreate, TeamPublic, TeamUpdate
+from app.models.team import (
+    TeamCaptainIds,
+    TeamCreate,
+    TeamPlayerIds,
+    TeamPublic,
+    TeamUpdate,
+)
 from app.models.user_season_availability import (
     TeamAvailabilityWrite,
     UserSeasonAvailabilityPublic,
@@ -154,11 +160,11 @@ def get_all_teams_season_basic(
 def add_players(
     team_id: int,
     season_id: int,
-    data: Annotated[dict, Body()],
+    data: TeamPlayerIds,
     service: TeamServiceDep,
 ) -> TeamPublic:
     """Add players to a team for a season using their IDs."""
-    return service.add_players(team_id, season_id, data["player_ids"])
+    return service.add_players(team_id, season_id, data.player_ids)
 
 
 @router.delete(
@@ -168,11 +174,11 @@ def add_players(
 def remove_players(
     team_id: int,
     season_id: int,
-    data: Annotated[dict, Body()],
+    data: TeamPlayerIds,
     service: TeamServiceDep,
 ) -> TeamPublic:
     """Removes players from a team for a season using their IDs."""
-    return service.remove_players(team_id, season_id, data["player_ids"])
+    return service.remove_players(team_id, season_id, data.player_ids)
 
 
 @router.put(
@@ -182,11 +188,11 @@ def remove_players(
 def set_captains(
     team_id: int,
     season_id: int,
-    data: Annotated[dict, Body()],
+    data: TeamCaptainIds,
     service: TeamServiceDep,
 ) -> TeamPublic:
     """Replace the captains a team has in a season, however many that is."""
-    return service.set_captains(team_id, season_id, data.get("captain_ids", []))
+    return service.set_captains(team_id, season_id, data.captain_ids)
 
 
 @router.get("/teams")
@@ -202,15 +208,12 @@ def get_all_teams(
 @router.post("/teams/search")
 def search_teams(
     service: TeamServiceDep,
-    query: str = "",
+    query: SearchQuery,
     limit: Annotated[int, Query(ge=1, le=500)] = 500,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[TeamPublic]:
     """Search teams by criteria using a custom query format."""
-    parsed_query = QueryUtil.parse_query(query)
-    if not parsed_query or not parsed_query.elementA:
-        raise BadRequestError(f"No valid query found: {query}")
-    return service.search(parsed_query, limit=limit, offset=offset)
+    return service.search(query, limit=limit, offset=offset)
 
 
 @router.post(

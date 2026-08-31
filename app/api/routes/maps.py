@@ -5,8 +5,8 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, File, Query, Request, Response, UploadFile
 
 from app.api.deps import MapServiceDep, require_admin
+from app.api.search import SearchQuery
 from app.core.exceptions import BadRequestError, NotFoundError
-from app.core.query import QueryUtil
 from app.models.map import MapCreate, MapPublic, MapUpdate
 
 logger = logging.getLogger(__name__)
@@ -67,15 +67,12 @@ def get_all_maps(
 @router.post("/maps/search", response_model=list[MapPublic])
 def search_maps(
     service: MapServiceDep,
-    query: str = "",
+    query: SearchQuery,
     limit: Annotated[int, Query(ge=1, le=500)] = 500,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[MapPublic]:
     """Search maps by criteria using a custom query format."""
-    parsed = QueryUtil.parse_query(query)
-    if not parsed or not parsed.elementA:
-        raise BadRequestError(f"No valid query found: {query}")
-    return service.search(parsed, limit=limit, offset=offset)
+    return service.search(query, limit=limit, offset=offset)
 
 
 @router.post("/maps/{map_id}/image", dependencies=[Depends(require_admin)])

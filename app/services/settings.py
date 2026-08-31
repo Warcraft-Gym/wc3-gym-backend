@@ -68,14 +68,6 @@ class SettingsService:
                 raise NotFoundError(f"Setting with key '{key}' not found")
             return SettingsPublic.model_validate(setting)
 
-    def get_setting(self, key: str) -> dict[str, Any]:
-        """Get a single setting by key"""
-        return self.get_by_key(key).to_dict()
-
-    def get_all_settings(self) -> list[dict[str, Any]]:
-        """Get all settings"""
-        return [setting.to_dict() for setting in self.get_all()]
-
     def update_setting(
         self, key: str, value: str | None, description: str | None = None
     ) -> dict[str, Any]:

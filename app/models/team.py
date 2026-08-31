@@ -75,6 +75,15 @@ class TeamUpdate(SQLModel):
     long_name: Annotated[str | None, NumToStr] = None
 
 
+class TeamPlayerIds(SQLModel):
+    player_ids: list[int]
+
+
+class TeamCaptainIds(SQLModel):
+    # An empty list clears the captains, so a missing key reads as one
+    captain_ids: list[int] = []
+
+
 class TeamPublic(TeamReduced):
     """A team plus who played and captained for it, season by season.
 

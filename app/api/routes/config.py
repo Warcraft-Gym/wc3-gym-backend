@@ -1,8 +1,7 @@
 import logging
 import secrets
-from typing import Annotated
 
-from fastapi import APIRouter, Body, Depends
+from fastapi import APIRouter, Depends
 
 from app.api.deps import RequireAdmin, SettingsServiceDep, require_admin
 from app.core.exceptions import BadRequestError
@@ -12,6 +11,7 @@ from app.models.discord_role_binding import (
     DiscordRoleBindingPublic,
     DiscordRoleBindingUpdate,
     DiscordRoleReport,
+    DiscordRoleSyncWrite,
 )
 from app.models.settings import (
     GeneratedNightbotToken,
@@ -20,7 +20,9 @@ from app.models.settings import (
     SettingsList,
     SettingsPublic,
     SettingsUpdated,
+    SettingsWrite,
     SettingUpdated,
+    SettingWrite,
     W3CConfig,
 )
 from app.services import admins, discord, discord_roles
@@ -34,7 +36,7 @@ router = APIRouter(tags=["config"])
 @router.get("/config/settings")
 def get_settings(service: SettingsServiceDep) -> SettingsList:
     """Retrieve all configuration settings from database."""
-    return SettingsList(settings=service.get_all_settings())
+    return SettingsList(settings=service.get_all())
 
 
 @router.get("/config/w3c")
@@ -58,10 +60,10 @@ def get_setting(key: str, service: SettingsServiceDep) -> SettingsPublic:
 
 @router.put("/config/settings", dependencies=[Depends(require_admin)])
 def update_settings(
-    data: Annotated[dict, Body()], service: SettingsServiceDep
+    data: SettingsWrite, service: SettingsServiceDep
 ) -> SettingsUpdated:
     """Update one or more configuration settings."""
-    settings = data.get("settings", {})
+    settings = data.settings
 
     if not settings:
         raise BadRequestError("No settings provided")
@@ -72,11 +74,11 @@ def update_settings(
 
 @router.put("/config/settings/{key}", dependencies=[Depends(require_admin)])
 def update_setting(
-    key: str, data: Annotated[dict, Body()], service: SettingsServiceDep
+    key: str, data: SettingWrite, service: SettingsServiceDep
 ) -> SettingUpdated:
     """Update a specific setting by key."""
-    value = data.get("value")
-    description = data.get("description")
+    value = data.value
+    description = data.description
 
     if value is None:
         raise BadRequestError("Value is required")
@@ -115,9 +117,9 @@ def generate_nightbot_token(service: SettingsServiceDep) -> GeneratedNightbotTok
 @router.get("/config/koth/nightbot-token", dependencies=[Depends(require_admin)])
 def get_nightbot_token(service: SettingsServiceDep) -> NightbotToken:
     """Get the current KOTH Nightbot token"""
-    # get_setting raises NotFoundError, which answers 404
-    setting = service.get_setting("KOTH_NIGHTBOT_TOKEN")
-    return NightbotToken(token=setting.get("value"), exists=True)
+    # get_by_key raises NotFoundError, which answers 404
+    setting = service.get_by_key("KOTH_NIGHTBOT_TOKEN")
+    return NightbotToken(token=setting.value, exists=True)
 
 
 @router.get("/config/admins", dependencies=[Depends(require_admin)])
@@ -191,7 +193,7 @@ def get_discord_guild_roles() -> dict[str, str]:
 
 @router.post("/config/discord-roles/sync", dependencies=[Depends(require_admin)])
 def sync_discord_roles(
-    data: Annotated[dict | None, Body()] = None,
+    data: DiscordRoleSyncWrite | None = None,
 ) -> list[DiscordRoleReport]:
     """Apply the difference. Without user_ids, every account the report flags."""
-    return discord_roles.sync((data or {}).get("user_ids"))
+    return discord_roles.sync(data.user_ids if data else None)

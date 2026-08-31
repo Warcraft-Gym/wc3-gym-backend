@@ -212,9 +212,9 @@ def sync(user_ids: Iterable[int] | None = None) -> list[DiscordRoleReport]:
         reports = _diffs(session, _accounts(session, user_ids))
     for account in reports:
         for role in account.missing:
-            discord.set_role([account.discord_id], role, grant=True)
+            discord.set_role(account.discord_id, role, grant=True)
         for role in account.extra:
-            discord.set_role([account.discord_id], role, grant=False)
+            discord.set_role(account.discord_id, role, grant=False)
     return reports
 
 

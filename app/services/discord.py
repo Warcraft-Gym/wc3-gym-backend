@@ -7,7 +7,6 @@ guild decides: app.services.admins says who administers the site.
 
 import logging
 import os
-from collections.abc import Iterable
 from typing import Any
 
 import requests
@@ -78,28 +77,27 @@ def _bot_headers() -> dict[str, str] | None:
     return {"Authorization": f"Bot {token}"} if token else None
 
 
-def set_role(discord_ids: Iterable[str], role_id: str, grant: bool) -> None:
+def set_role(discord_id: str, role_id: str, grant: bool) -> None:
     """Grant or revoke a guild role. Discord refusing it is a warning, not a failure."""
     headers = _bot_headers()
     if not headers or not role_id:
         return
     guild_id = os.getenv("DISCORD_GUILD_ID", "")
     method = "PUT" if grant else "DELETE"
-    for discord_id in discord_ids:
-        url = f"{API_URL}/guilds/{guild_id}/members/{discord_id}/roles/{role_id}"
-        try:
-            response = requests.request(
-                method, url, headers=headers, timeout=REQUEST_TIMEOUT
-            )
-        except requests.RequestException as error:
-            logger.warning("Discord role write failed for %s: %s", discord_id, error)
-            continue
-        if not response.ok:
-            logger.warning(
-                "Discord refused the role write for %s: %s",
-                discord_id,
-                response.status_code,
-            )
+    url = f"{API_URL}/guilds/{guild_id}/members/{discord_id}/roles/{role_id}"
+    try:
+        response = requests.request(
+            method, url, headers=headers, timeout=REQUEST_TIMEOUT
+        )
+    except requests.RequestException as error:
+        logger.warning("Discord role write failed for %s: %s", discord_id, error)
+        return
+    if not response.ok:
+        logger.warning(
+            "Discord refused the role write for %s: %s",
+            discord_id,
+            response.status_code,
+        )
 
 
 def guild_members() -> dict[str, set[str]] | None:
