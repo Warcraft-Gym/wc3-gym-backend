@@ -32,6 +32,7 @@ TABLES = {
     "maps",
     "matches",
     "player_career_stats",
+    "season_week_map",
     "seasons",
     "series",
     "settings",

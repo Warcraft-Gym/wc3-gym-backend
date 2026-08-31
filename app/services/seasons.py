@@ -11,7 +11,11 @@ from app.core.query import QueryElement, QueryUtil
 from app.models.enums import Race
 from app.models.ladder_achievement import default_rows
 from app.models.map import Map
-from app.models.relationships import DBMapSeason, DBUserSeasonSignup
+from app.models.relationships import (
+    DBMapSeason,
+    DBSeasonWeekMap,
+    DBUserSeasonSignup,
+)
 from app.models.season import Season, SeasonCreate, SeasonPublic, SeasonUpdate
 from app.models.team import Team
 from app.models.team_season import DBTeamSeason
@@ -57,6 +61,7 @@ class SeasonService:
                         noload(rel(Season.user_teams)),
                         noload(rel(Season.teams)),
                         selectinload(rel(Season.maps)).joinedload(rel(DBMapSeason.map)),
+                        selectinload(rel(Season.week_maps)),
                         noload(rel(Season.signup_users)),
                     )
                     .where(col(Season.id) == season_id)
@@ -77,6 +82,7 @@ class SeasonService:
                 noload(rel(Season.user_teams)),
                 noload(rel(Season.teams)),
                 selectinload(rel(Season.maps)).joinedload(rel(DBMapSeason.map)),
+                selectinload(rel(Season.week_maps)),
                 noload(rel(Season.signup_users)),
             )
             if limit is not None or offset:
@@ -134,6 +140,7 @@ class SeasonService:
                     noload(rel(Season.user_teams)),
                     noload(rel(Season.teams)),
                     selectinload(rel(Season.maps)).joinedload(rel(DBMapSeason.map)),
+                    selectinload(rel(Season.week_maps)),
                     noload(rel(Season.signup_users)),
                 )
                 .where(filter)
@@ -178,6 +185,8 @@ class SeasonService:
             season = session.get(Season, season_id)
             if not season:
                 raise NotFoundError(f"Season not found by id: {season_id}")
+            # A new map joins the pool behind the ones already in it
+            position = max((link.position for link in season.maps), default=-1) + 1
             for map_id in map_ids:
                 map = session.get(Map, map_id)
                 if not map:
@@ -185,10 +194,59 @@ class SeasonService:
                 try:
                     # The primary key decides: a duplicate link is already there
                     with session.begin_nested():
-                        session.add(DBMapSeason(season=season, map=map))
+                        session.add(
+                            DBMapSeason(season=season, map=map, position=position)
+                        )
+                    position += 1
                 except IntegrityError:
                     logger.debug(f"Map {map_id} is already in season {season_id}")
             session.flush()
+            return SeasonPublic.from_season(season)
+
+    def set_map_order(self, season_id: int, map_ids: list[int]) -> SeasonPublic:
+        """Reorder the whole pool. The ids given are exactly the ids in it."""
+        with Session.begin() as session:
+            season = session.get(Season, season_id)
+            if not season:
+                raise NotFoundError(f"Season not found by id: {season_id}")
+            pool = {link.map_id: link for link in season.maps}
+            if sorted(map_ids) != sorted(pool):
+                raise BadRequestError(
+                    f"The order must name every map of the pool once, season id {season_id}"
+                )
+            for position, map_id in enumerate(map_ids):
+                pool[map_id].position = position
+            session.flush()
+            # The loaded collection keeps its old order until it is read again
+            session.expire(season, ["maps"])
+            return SeasonPublic.from_season(season)
+
+    def set_week_map(
+        self, season_id: int, playday: int, map_id: int | None
+    ) -> SeasonPublic:
+        """Name the game 1 map of one playday, or clear it with a null map."""
+        with Session.begin() as session:
+            season = session.get(Season, season_id)
+            if not season:
+                raise NotFoundError(f"Season not found by id: {season_id}")
+            if not 1 <= playday <= season.number_weeks:
+                raise BadRequestError(
+                    f"playday must be between 1 and {season.number_weeks}"
+                )
+            if map_id is None:
+                row = session.get(DBSeasonWeekMap, (season_id, playday))
+                if row:
+                    session.delete(row)
+            elif map_id not in {link.map_id for link in season.maps}:
+                raise BadRequestError(
+                    f"Map not part of the season, map id: {map_id}, season id {season_id}"
+                )
+            else:
+                session.merge(
+                    DBSeasonWeekMap(season_id=season_id, playday=playday, map_id=map_id)
+                )
+            session.flush()
+            session.expire(season, ["week_maps"])
             return SeasonPublic.from_season(season)
 
     def remove_maps(self, season_id: int, map_ids: list[int]) -> SeasonPublic:

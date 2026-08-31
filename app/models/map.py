@@ -25,6 +25,8 @@ class Map(MapBase, DBModel, table=True):
     )
 
     id: int | None = Field(default=None, primary_key=True)
+    # The uploaded picture of the map; MapBase.image is the url the xlsx import fills
+    icon: bytes | None = None
     seasons: list["DBMapSeason"] = Relationship(
         back_populates="map", sa_relationship_kwargs={"cascade": "all, delete"}
     )

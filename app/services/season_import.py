@@ -266,12 +266,19 @@ def _maps(session: OrmSession, sheets: Sheets, season: Season) -> dict[int, int]
                 )
             )
         )
-        session.add_all(
-            [
-                DBMapSeason(season_id=ident(season), map_id=map_id)
-                for map_id in {ident(map_obj) for map_obj in pool} - linked
-            ]
+        # A map the sheet adds joins the pool behind the ones already in it
+        position = session.scalar(
+            select(func.coalesce(func.max(col(DBMapSeason.position)), -1)).where(
+                col(DBMapSeason.season_id) == season.id
+            )
         )
+        for map_id in dict.fromkeys(ident(map_obj) for map_obj in pool):
+            if map_id in linked:
+                continue
+            position += 1
+            session.add(
+                DBMapSeason(season_id=ident(season), map_id=map_id, position=position)
+            )
     return {
         old_id: map_obj.id
         for old_id, map_obj in old_ids.items()

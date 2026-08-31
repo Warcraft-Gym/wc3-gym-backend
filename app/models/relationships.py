@@ -4,9 +4,9 @@ The link tables with a model's worth of columns are in their own files:
 team_season.py and user_team_season.py.
 """
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Self
 
-from sqlmodel import Field, Relationship
+from sqlmodel import Field, Relationship, SQLModel
 
 from app.models.base import DBModel
 from app.models.enums import Race
@@ -42,8 +42,36 @@ class DBMapSeason(DBModel, table=True):
     __tablename__ = "map_season"
     map_id: int = Field(foreign_key="maps.id", primary_key=True)
     season_id: int = Field(index=True, foreign_key="seasons.id", primary_key=True)
+    # The place of the map in the pool; the season service appends at the end
+    position: int = Field(default=0, sa_column_kwargs={"server_default": "0"})
     season: "Season" = Relationship(back_populates="maps")
     map: "Map" = Relationship(back_populates="seasons")
+
+
+class DBSeasonWeekMap(DBModel, table=True):
+    """The map game 1 of every series of one playday is played on."""
+
+    __tablename__ = "season_week_map"
+    season_id: int = Field(foreign_key="seasons.id", primary_key=True)
+    playday: int = Field(primary_key=True)
+    map_id: int = Field(index=True, foreign_key="maps.id")
+    season: "Season" = Relationship(back_populates="week_maps")
+
+
+class SeasonWeekMapPublic(SQLModel):
+    playday: int
+    map_id: int
+
+    @classmethod
+    def from_row(cls, row: DBSeasonWeekMap) -> Self:
+        return cls(playday=row.playday, map_id=row.map_id)
+
+
+class SeasonWeekMapWrite(SQLModel):
+    """One playday's map. A null map clears the playday."""
+
+    playday: int
+    map_id: int | None = None
 
 
 class DBFantasyTeamPlayer(DBModel, table=True):

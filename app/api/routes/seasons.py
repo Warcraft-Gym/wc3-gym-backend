@@ -6,6 +6,7 @@ from fastapi import APIRouter, Body, Depends, Query
 from app.api.deps import LadderServiceDep, SeasonServiceDep, require_admin
 from app.core.exceptions import BadRequestError
 from app.core.query import QueryUtil
+from app.models.relationships import SeasonWeekMapWrite
 from app.models.season import SeasonCreate, SeasonPublic, SeasonUpdate
 from app.models.user import UserListPublic
 from app.models.w3c_ladder_match import LadderSyncResult, SeasonLadder
@@ -107,6 +108,22 @@ def remove_maps(
 ) -> SeasonPublic:
     """Remove maps from season by providing a list of map ids."""
     return service.remove_maps(season_id, data["map_ids"])
+
+
+@router.put("/seasons/{season_id}/maps/order", dependencies=[Depends(require_admin)])
+def set_map_order(
+    season_id: int, data: Annotated[dict, Body()], service: SeasonServiceDep
+) -> SeasonPublic:
+    """Reorder the map pool by listing every map id of it, in the new order."""
+    return service.set_map_order(season_id, data["map_ids"])
+
+
+@router.put("/seasons/{season_id}/week-maps", dependencies=[Depends(require_admin)])
+def set_week_map(
+    season_id: int, data: SeasonWeekMapWrite, service: SeasonServiceDep
+) -> SeasonPublic:
+    """Name the game 1 map of one playday. A null map clears the playday."""
+    return service.set_week_map(season_id, data.playday, data.map_id)
 
 
 @router.post("/seasons/{season_id}/signups", dependencies=[Depends(require_admin)])
