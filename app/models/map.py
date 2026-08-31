@@ -42,3 +42,17 @@ class MapUpdate(MapBase):
 
 class MapPublic(MapBase):
     id: int
+
+
+class LadderMapRow(SQLModel):
+    """One map of the w3champions ladder, as the import preview lists it.
+
+    status is `in_pool` when the season already plays it, `no_match` when
+    warcraft3.info knows no map of that name and version, else `new`.
+    """
+
+    w3c_name: str
+    matched_name: str | None = None
+    shortname: str | None = None
+    image_url: str | None = None
+    status: str = "new"

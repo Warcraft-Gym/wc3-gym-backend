@@ -8,9 +8,10 @@ from sqlmodel import col
 from app.core.db import Session, rel
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.core.query import QueryElement, QueryUtil
+from app.models.base import ident
 from app.models.enums import Race
 from app.models.ladder_achievement import default_rows
-from app.models.map import Map
+from app.models.map import LadderMapRow, Map
 from app.models.relationships import (
     DBMapSeason,
     DBSeasonWeekMap,
@@ -20,6 +21,7 @@ from app.models.season import Season, SeasonCreate, SeasonPublic, SeasonUpdate
 from app.models.team import Team
 from app.models.team_season import DBTeamSeason
 from app.models.user import User, UserListPublic
+from app.services import ladder_maps
 from app.services.users import UserService
 
 logger = logging.getLogger(__name__)
@@ -202,6 +204,69 @@ class SeasonService:
                     logger.debug(f"Map {map_id} is already in season {season_id}")
             session.flush()
             return SeasonPublic.from_season(season)
+
+    def ladder_import_preview(self, season_id: int) -> list[LadderMapRow]:
+        """Every 1v1 ladder map, and whether the season already plays it."""
+        with Session.begin() as session:
+            season = session.get(Season, season_id)
+            if not season:
+                raise NotFoundError(f"Season not found by id: {season_id}")
+            pool = {
+                link.map.name.lower()
+                for link in season.maps
+                if link.map and link.map.name
+            }
+        rows = ladder_maps.ladder_maps()
+        for row in rows:
+            if row.w3c_name.lower() in pool:
+                row.status = "in_pool"
+        return rows
+
+    def import_ladder_maps(self, season_id: int, names: list[str]) -> SeasonPublic:
+        """Add these ladder maps to the pool, creating the ones the app misses.
+
+        The import only adds: a map the season already plays is left alone,
+        picture and short name included.
+        """
+        wanted = {
+            row.w3c_name: row
+            for row in ladder_maps.ladder_maps()
+            if row.w3c_name in set(names)
+        }
+        with Session.begin() as session:
+            if not session.get(Season, season_id):
+                raise NotFoundError(f"Season not found by id: {season_id}")
+            maps = Map.get_all(session)
+            by_name = {map.name.lower(): ident(map) for map in maps if map.name}
+            taken = {map.shortname.lower() for map in maps if map.shortname}
+        # The pictures are read outside the session, so no write waits on them
+        icons = {
+            name: ladder_maps.fetch_image(row.image_url)
+            for name, row in wanted.items()
+            if row.image_url and name.lower() not in by_name
+        }
+        map_ids = []
+        with Session.begin() as session:
+            for name in names:
+                row = wanted.get(name)
+                if not row:
+                    continue
+                map_id = by_name.get(name.lower())
+                if map_id is None:
+                    shortname = ladder_maps.free_shortname(row.shortname, name, taken)
+                    taken.add(shortname.lower())
+                    map = Map.add(
+                        session,
+                        {
+                            "name": name,
+                            "shortname": shortname,
+                            "icon": icons.get(name),
+                        },
+                    )
+                    map_id = ident(map)
+                    by_name[name.lower()] = map_id
+                map_ids.append(map_id)
+        return self.add_maps(season_id, map_ids)
 
     def set_map_order(self, season_id: int, map_ids: list[int]) -> SeasonPublic:
         """Reorder the whole pool. The ids given are exactly the ids in it."""
