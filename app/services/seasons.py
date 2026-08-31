@@ -178,21 +178,22 @@ class SeasonService:
             if not season:
                 raise NotFoundError(f"Season not found by id: {season_id}")
             pool = {
-                link.map.name.lower()
+                ladder_maps.folded_base(link.map.name)
                 for link in season.maps
                 if link.map and link.map.name
             }
         rows = ladder_maps.ladder_maps()
         for row in rows:
-            if row.w3c_name.lower() in pool:
+            if ladder_maps.folded_base(row.w3c_name) in pool:
                 row.status = "in_pool"
         return rows
 
     def import_ladder_maps(self, season_id: int, names: list[str]) -> SeasonPublic:
-        """Add these ladder maps to the pool, creating the ones the app misses.
+        """Add these ladder maps to the pool; the w3champions name is the truth.
 
-        The import only adds: a map the season already plays is left alone,
-        picture and short name included.
+        A map the app knows under an older name or spelling of the same lineage
+        is renamed to the ladder name and keeps its id, results and short name;
+        a missing picture is filled. Only a map with no lineage here is created.
         """
         wanted = {
             row.w3c_name: row
@@ -204,12 +205,27 @@ class SeasonService:
                 raise NotFoundError(f"Season not found by id: {season_id}")
             maps = Map.get_all(session)
             by_name = {map.name.lower(): ident(map) for map in maps if map.name}
+            by_base: dict[str, list[int]] = {}
+            for map in maps:
+                if map.name:
+                    base = ladder_maps.folded_base(map.name)
+                    by_base.setdefault(base, []).append(ident(map))
+            pictured = {ident(map) for map in maps if map.icon}
             taken = {map.shortname.lower() for map in maps if map.shortname}
+
+        def known(name: str) -> int | None:
+            """The map behind a ladder name: exact, else its one lineage twin."""
+            exact = by_name.get(name.lower())
+            if exact is not None:
+                return exact
+            lineage = by_base.get(ladder_maps.folded_base(name), [])
+            return lineage[0] if len(lineage) == 1 else None
+
         # The pictures are read outside the session, so no write waits on them
         icons = {
             name: ladder_maps.fetch_image(row.image_url)
             for name, row in wanted.items()
-            if row.image_url and name.lower() not in by_name
+            if row.image_url and known(name) not in pictured
         }
         map_ids = []
         with Session.begin() as session:
@@ -217,7 +233,7 @@ class SeasonService:
                 row = wanted.get(name)
                 if not row:
                     continue
-                map_id = by_name.get(name.lower())
+                map_id = known(name)
                 if map_id is None:
                     shortname = ladder_maps.free_shortname(row.shortname, name, taken)
                     taken.add(shortname.lower())
@@ -231,6 +247,10 @@ class SeasonService:
                     )
                     map_id = ident(map)
                     by_name[name.lower()] = map_id
+                elif map_id not in pictured and icons.get(name):
+                    Map.update(session, map_id, name=name, icon=icons[name])
+                else:
+                    Map.update(session, map_id, name=name)
                 map_ids.append(map_id)
         return self.add_maps(season_id, map_ids)
 

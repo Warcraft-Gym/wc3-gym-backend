@@ -71,6 +71,11 @@ def _newest_file(entry: dict) -> str:
     )
 
 
+def folded_base(name: str) -> str:
+    """The name folded to its lineage: case, spacing and the version word dropped."""
+    return _split_version(name)[0].replace(" ", "")
+
+
 def initials(name: str) -> str:
     """The short name a map falls back to: the initials of its base name."""
     base = _split_version(name)[0]

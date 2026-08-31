@@ -113,6 +113,24 @@ def _take_step(
             map_id=map_id,
         )
     )
+    # The final step takes itself when one entry and one map remain: no choice is left
+    taken = {step.map_id for step in steps} | {map_id}
+    left = [
+        link.map_id
+        for link in season.maps
+        if link.map_id not in taken
+        and link.map_id != _week_map_id(session, season, series.match.playday)
+    ]
+    if len(order) - len(steps) == 2 and len(left) == 1:
+        session.add(
+            DBSeriesVetoStep(
+                series_id=ident(series),
+                step_no=len(steps) + 2,
+                side=_side(order[-1]),
+                action=order[-1].split("_")[0].lower(),
+                map_id=left[0],
+            )
+        )
 
 
 def _board(
