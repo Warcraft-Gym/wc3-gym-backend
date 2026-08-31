@@ -15,7 +15,8 @@ did not stand in for.
 """
 
 import os
-from collections.abc import Generator
+from collections.abc import Callable, Generator
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
@@ -107,6 +108,30 @@ def seeded(app: FastAPI) -> dict[str, Any]:
         ids = seed_league(session)
         session.commit()
     return ids
+
+
+@pytest.fixture
+def dashboard_token() -> Generator[Callable[..., str]]:
+    """A factory for dashboard tokens of a seeded player."""
+    from app.api.routes.public import _token_store
+
+    issued: list[str] = []
+
+    def issue(discord_id: str = "1", season_id: int | None = 1) -> str:
+        token = f"dashboard-token-{len(issued)}"
+        _token_store[token] = {
+            "discord_id": discord_id,
+            "discord_tag": f"p{discord_id}",
+            "season_id": str(season_id) if season_id else None,
+            "access_type": "dashboard",
+            "expires_at": datetime.now(UTC) + timedelta(minutes=5),
+        }
+        issued.append(token)
+        return token
+
+    yield issue
+    for token in issued:
+        _token_store.pop(token, None)
 
 
 @pytest.fixture

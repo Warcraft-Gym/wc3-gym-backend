@@ -16,9 +16,11 @@ from app.api.deps import (
     FantasyTeamServiceDep,
     SeasonServiceDep,
     SeriesServiceDep,
+    SeriesVetoServiceDep,
     SettingsServiceDep,
     UserServiceDep,
     discord_token,
+    require_login,
     require_member,
 )
 from app.core.exceptions import ApiError, BadRequestError, NotFoundError
@@ -27,6 +29,7 @@ from app.core.query import QueryUtil
 from app.models.fantasy_bet import FantasyBetCreate, FantasyBetUpdate
 from app.models.fantasy_team import FantasyTeamCreate, FantasyTeamUpdate
 from app.models.series import SeriesSort
+from app.models.series_veto_step import SeriesVetoPublic, SeriesVetoWrite
 from app.models.user import UserCreate, UserUpdate
 from app.models.user_season_availability import (
     PlayerAvailabilityWrite,
@@ -413,6 +416,54 @@ async def update_player_series(
         user_service=user_service,
         series_service=series_service,
     )
+
+
+def _veto_viewer(
+    request: Request,
+    credentials: Credentials,
+    token: str | None,
+    user_service: UserServiceDep,
+) -> int | None:
+    """The player behind the request, or null for an admin, who only reads."""
+    if credentials is not None:
+        claims = require_login(request, credentials)
+        if claims.get("role") == "admin" or claims.get("sub") == "admin":
+            return None
+    entry = _identity(request, credentials, token, "dashboard")
+    users = user_service.find_by_discord_id(str(entry.get("discord_id")))
+    if not users:
+        raise NotFoundError("player_not_found")
+    return users[0].id
+
+
+@router.get("/player-series/{series_id}/veto")
+def get_player_series_veto(
+    series_id: int,
+    user_service: UserServiceDep,
+    veto_service: SeriesVetoServiceDep,
+    request: Request,
+    credentials: Credentials,
+    token: str | None = None,
+) -> SeriesVetoPublic:
+    """The map veto board of a series, read by either player or by an admin."""
+    viewer = _veto_viewer(request, credentials, token, user_service)
+    return veto_service.board(series_id, viewer)
+
+
+@router.put("/player-series/{series_id}/veto")
+def set_player_series_veto(
+    series_id: int,
+    user_service: UserServiceDep,
+    veto_service: SeriesVetoServiceDep,
+    request: Request,
+    credentials: Credentials,
+    data: SeriesVetoWrite,
+) -> SeriesVetoPublic:
+    """Take the next step of the veto, or take back your own last one."""
+    viewer = _veto_viewer(request, credentials, data.token, user_service)
+    if viewer is None:
+        raise ApiError(403, {"error": "not_authorized_for_this_series"})
+    return veto_service.take(series_id, viewer, data.action, data.map_id)
 
 
 @router.get("/user-info", response_model=None)
