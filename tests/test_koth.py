@@ -432,11 +432,20 @@ def stat(race_name: str, mmr: int, season: int) -> W3CStatsCreate:
     return W3CStatsCreate(wc3_season=season, mmr=mmr, race=Race[race_name])
 
 
-def test_a_wrong_signup_token_answers_401(
+def test_the_signup_post_ignores_the_token(
+    client: Client, koth: dict[str, Any], w3c_two_races: None
+) -> None:
+    """The POST is open by decision; a wrong token no longer blocks a signup."""
+    resp = client.post(
+        "/koth/signups",
+        json={**SIGNUP, "battle_tag": "S#5678", "client_token": "wrong"},
+    )
+    assert resp.status_code == 201, resp.text
+
+
+def test_a_wrong_nightbot_query_token_answers_401(
     client: Client, seeded: dict[str, Any]
 ) -> None:
-    resp = client.post("/koth/signups", json={**SIGNUP, "client_token": "wrong"})
-    assert resp.status_code == 401
     resp = client.get(
         "/koth/signup", params={"token": "wrong", "twitch": "s", "battletag": "S#1"}
     )
