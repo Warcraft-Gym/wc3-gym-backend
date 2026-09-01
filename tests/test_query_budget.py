@@ -163,12 +163,12 @@ def test_the_season_record_costs_two_statements(league: dict[str, Any]) -> None:
     assert users[0].gnl_stats[0].games == 1
 
 
-def test_draft_series_by_match_costs_seven_statements(league: dict[str, Any]) -> None:
+def test_draft_series_by_match_costs_eight_statements(league: dict[str, Any]) -> None:
     service = DraftSeriesService()
     with count_statements() as tally:
         draft_list = service.get_by_match_id(league["match_id"])
     assert len(draft_list) == 1
-    assert tally[0] == 7
+    assert tally[0] == 8
 
 
 def test_statement_count_holds_when_the_collections_grow(

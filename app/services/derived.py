@@ -40,6 +40,7 @@ from sqlmodel import col
 from app.core import career, fantasy
 from app.core.ordering import SortOrder
 from app.core.scoring import DEFAULT_SYSTEM, max_points, points, points_case
+from app.models.draft_series import DraftSeriesPublic
 from app.models.fantasy_bet import FantasyBet, FantasyBetPublic
 from app.models.fantasy_team import FantasyTeamPublic
 from app.models.match import Match, MatchPublic
@@ -126,6 +127,29 @@ def _signup_races(
     }
 
 
+def fill_signup_races(
+    session: Session, rows: Iterable[SeriesPublic | DraftSeriesPublic | None]
+) -> None:
+    """Fill the signup race of both players for the season of each row's match."""
+    filled = [row for row in rows if row is not None]
+    races = _signup_races(
+        session,
+        {
+            (player.id, row.match.season_id)
+            for row in filled
+            if row.match and row.match.season_id
+            for player in (row.player1, row.player2)
+            if player
+        },
+    )
+    for row in filled:
+        if not (row.match and row.match.season_id):
+            continue
+        for player in (row.player1, row.player2):
+            if player:
+                player.signup_race = races.get((player.id, row.match.season_id))
+
+
 def fill_series(session: Session, series_list: Iterable[SeriesPublic | None]) -> None:
     """Fill the points of every series, the score of the match it carries, the
     signup race and the season record of its two players."""
@@ -148,22 +172,7 @@ def fill_series(session: Session, series_list: Iterable[SeriesPublic | None]) ->
         if series.match:
             _fill_match(series.match, scores)
 
-    races = _signup_races(
-        session,
-        {
-            (player.id, series.match.season_id)
-            for series in rows
-            if series.match and series.match.season_id
-            for player in (series.player1, series.player2)
-            if player
-        },
-    )
-    for series in rows:
-        if not (series.match and series.match.season_id):
-            continue
-        for player in (series.player1, series.player2):
-            if player:
-                player.signup_race = races.get((player.id, series.match.season_id))
+    fill_signup_races(session, rows)
 
     fill_gnl_stats(
         session,
