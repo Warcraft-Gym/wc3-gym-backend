@@ -42,6 +42,7 @@ from app.models.player_history import PlayerHistory
 from app.models.series import SeriesSort
 from app.models.series_veto_step import SeriesVetoPublic, SeriesVetoWrite
 from app.models.user import (
+    ProfileUpdate,
     PublicSignupWrite,
     UserCreate,
     UserListPublic,
@@ -553,6 +554,37 @@ def get_user_info(
         "discord_tag": entry.get("discord_tag"),
         "season_id": entry.get("season_id"),
     }
+
+
+@router.put("/user-info", response_model=None)
+def update_user_info(
+    user_service: UserServiceDep,
+    request: Request,
+    credentials: Credentials,
+    data: ProfileUpdate,
+) -> dict[str, Any]:
+    """A member edits their own profile; open signups are not required for this."""
+    entry = _identity(request, credentials, None, "profile")
+    users = user_service.find_by_discord_id(str(entry.get("discord_id")))
+    if not users:
+        raise NotFoundError("No profile for this account")
+
+    fields = data.model_dump(exclude_unset=True)
+    if not fields:
+        raise BadRequestError("No fields provided")
+    tag = fields.get("battleTag")
+    if tag and not user_service.validate_battle_tag(tag):
+        raise BadRequestError(
+            f"BattleNet name '{tag}' is not valid - no W3Champions stats found"
+        )
+
+    user = user_service.update(users[0].id, UserUpdate(**fields))
+    if tag:
+        try:  # a refused sync must not fail the edit
+            user_service.update_w3c_stats_by_id(user.id)
+        except Exception as we:
+            logger.warning(f"W3C sync failed after profile edit for {user.id}: {we}")
+    return {"user": user.to_dict()}
 
 
 @router.post("/fantasy-team", status_code=201, response_model=None)
