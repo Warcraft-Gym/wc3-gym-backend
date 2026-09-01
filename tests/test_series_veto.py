@@ -98,6 +98,7 @@ def test_the_two_players_ban_and_pick_until_the_veto_is_complete(
             "side": "A",
             "action": "ban",
             "map_id": pool[1],
+            "entered_by": seeded["player_ids"][1],
             "shortname": "EI",
             "name": "EI",
         }
@@ -232,6 +233,53 @@ def test_a_player_takes_back_only_their_own_last_step(
 
     assert resp.status_code == 400, resp.text
     assert resp.json() == {"error": "The last step is not yours to take back"}
+
+
+def test_one_player_records_a_veto_that_happened_elsewhere(
+    client: Client,
+    seeded: dict[str, Any],
+    pool: list[int],
+    dashboard_token: Callable[..., str],
+) -> None:
+    """A veto done in a chat is typed in by one player for both sides, in the
+    season's order, and every step names who entered it."""
+    series_id = seeded["series_open_id"]
+    side_b = dashboard_token(discord_id="4")
+
+    # B enters A's ban, out of turn for a live step
+    resp = write(client, series_id, side_b, action="record", map_id=pool[1])
+    assert resp.status_code == 200, resp.text
+    assert [(step["side"], step["entered_by"]) for step in resp.json()["steps"]] == [
+        ("A", seeded["player_ids"][3])
+    ]
+
+    # The step entered for the other side is the enterer's to take back
+    resp = write(client, series_id, side_b, action="undo")
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["steps"] == []
+
+    for map_id in (pool[1], pool[2]):
+        resp = write(client, series_id, side_b, action="record", map_id=map_id)
+        assert resp.status_code == 200, resp.text
+    resp = write(client, series_id, side_b, action="record", map_id=pool[3])
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+
+    # The rules of a live veto hold, and the forced final step names nobody
+    assert [
+        (step["side"], step["action"], step["shortname"], step["entered_by"])
+        for step in body["steps"]
+    ] == [
+        ("A", "ban", "EI", seeded["player_ids"][3]),
+        ("B", "ban", "TS", seeded["player_ids"][3]),
+        ("A", "pick", "LR", seeded["player_ids"][3]),
+        ("B", "pick", "AL", None),
+    ]
+    assert body["complete"] is True
+
+    resp = write(client, series_id, side_b, action="record", map_id=pool[0])
+    assert resp.status_code == 400, resp.text
+    assert resp.json() == {"error": "The veto is complete"}
 
 
 def test_an_admin_reads_the_board_and_writes_none_of_it(

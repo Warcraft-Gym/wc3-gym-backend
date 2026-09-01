@@ -32,17 +32,29 @@ class SeriesVetoService:
     def take(
         self, series_id: int, user_id: int, action: str, map_id: int | None
     ) -> SeriesVetoPublic:
-        """Take the step the order names next, or take back the viewer's last one."""
+        """Take the step the order names next, record it for whichever side the
+        order names when the veto happened elsewhere, or take back the last step
+        the viewer entered."""
         with Session.begin() as session:
             series = _series(session, series_id, user_id)
             steps = _steps(session, series_id)
             side = "A" if user_id == series.player1_id else "B"
             if action == "undo":
-                if not steps or steps[-1].side != side:
+                if not steps or user_id not in (
+                    steps[-1].entered_by,
+                    series.player1_id if steps[-1].side == "A" else series.player2_id,
+                ):
                     raise BadRequestError("The last step is not yours to take back")
                 session.delete(steps[-1])
             else:
-                _take_step(session, series, steps, side, map_id)
+                _take_step(
+                    session,
+                    series,
+                    steps,
+                    None if action == "record" else side,
+                    map_id,
+                    user_id,
+                )
             session.flush()
             return _board(session, series, user_id)
 
@@ -88,14 +100,16 @@ def _take_step(
     session: OrmSession,
     series: Series,
     steps: list[DBSeriesVetoStep],
-    side: str,
+    side: str | None,
     map_id: int | None,
+    user_id: int,
 ) -> None:
+    """A null side records the step for whichever side the order names next."""
     season = series.match.season
     order = _order(season)
     if len(steps) >= len(order):
         raise BadRequestError("The veto is complete")
-    if _side(order[len(steps)]) != side:
+    if side is not None and _side(order[len(steps)]) != side:
         raise BadRequestError("It is not your turn")
     if map_id not in {link.map_id for link in season.maps}:
         raise BadRequestError(f"Map not part of the season, map id: {map_id}")
@@ -107,10 +121,11 @@ def _take_step(
         DBSeriesVetoStep(
             series_id=ident(series),
             step_no=len(steps) + 1,
-            side=side,
+            side=_side(order[len(steps)]),
             # The order names the action; the client only names the map
             action=order[len(steps)].split("_")[0].lower(),
             map_id=map_id,
+            entered_by=user_id,
         )
     )
     # The final step takes itself when one entry and one map remain: no choice is left

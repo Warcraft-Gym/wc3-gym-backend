@@ -23,6 +23,10 @@ class DBSeriesVetoStep(DBModel, table=True):
     side: str = Field(max_length=1)
     action: str = Field(max_length=4)
     map_id: int = Field(foreign_key="maps.id")
+    # Who typed the step in; null when the final step took itself
+    entered_by: int | None = Field(
+        default=None, foreign_key="users.id", ondelete="SET NULL"
+    )
 
 
 class SeriesVetoStepPublic(SQLModel):
@@ -30,6 +34,7 @@ class SeriesVetoStepPublic(SQLModel):
     side: str
     action: str
     map_id: int
+    entered_by: int | None = None
     shortname: str | None = None
     name: str | None = None
 
@@ -40,6 +45,7 @@ class SeriesVetoStepPublic(SQLModel):
             side=row.side,
             action=row.action,
             map_id=row.map_id,
+            entered_by=row.entered_by,
             shortname=map.shortname if map else None,
             name=map.name if map else None,
         )
@@ -67,8 +73,9 @@ class SeriesVetoPublic(SQLModel):
 
 
 class SeriesVetoWrite(SQLModel):
-    """One move: take the step the order names next, or take back your last one."""
+    """One move: take the step the order names next, record it for either side
+    when the veto happened elsewhere, or take back the last step you entered."""
 
     token: str | None = None
-    action: Literal["step", "undo"]
+    action: Literal["step", "record", "undo"]
     map_id: int | None = None
