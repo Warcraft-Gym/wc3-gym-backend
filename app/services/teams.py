@@ -23,17 +23,17 @@ logger = logging.getLogger(__name__)
 
 
 def _fill(session: OrmSession, teams: list[TeamPublic]) -> None:
-    """The standings of every team, and the season record of every player."""
+    """The standings of every team, and the signup race and the season record of
+    every player."""
     derived.fill_standings(session, teams)
-    derived.fill_gnl_stats(
-        session,
-        [
-            player
-            for team in teams
-            for players in team.player_by_season.values()
-            for player in players
-        ],
-    )
+    roster = [
+        (player, season_id)
+        for team in teams
+        for season_id, players in team.player_by_season.items()
+        for player in players
+    ]
+    derived.fill_user_signup_races(session, roster)
+    derived.fill_gnl_stats(session, [player for player, _ in roster])
 
 
 def _public(session: OrmSession, team: Team) -> TeamPublic:

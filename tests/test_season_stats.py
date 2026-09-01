@@ -5,7 +5,9 @@ player stands in it, and pays a win or a loss once both map scores are in
 and they are not both zero. The player who took two games won it.
 
 matchup_history reads playday then series id, so the list follows the
-order the season was played rather than the order the rows went in.
+order the season was played rather than the order the rows went in. It names
+the race the opponent registered on for the season, and null where he holds
+no signup.
 """
 
 from datetime import datetime
@@ -19,10 +21,25 @@ from app.core.db import Session
 from app.models.base import ident
 from app.models.enums import Race
 from app.models.match import Match
+from app.models.relationships import DBUserSeasonSignup
 from app.models.series import Series
 from app.models.user import User, UserPublic
 from app.models.user_team_season import UserTeamSeasonStatsPublic
 from app.services import derived
+
+
+@pytest.fixture(autouse=True)
+def signups(seeded: dict[str, Any]) -> None:
+    """Every seeded player registered for the season on the race he plays."""
+    with Session() as session:
+        for user_id in seeded["player_ids"]:
+            user = session.get_one(User, user_id)
+            session.add(
+                DBUserSeasonSignup(
+                    user_id=user_id, season_id=seeded["season_id"], race=user.race
+                )
+            )
+        session.commit()
 
 
 def record(user_id: int, season_id: int) -> UserTeamSeasonStatsPublic:
@@ -132,6 +149,35 @@ def test_a_player_with_no_series_in_the_season_counts_nothing(
     stats = record(stranger_id, seeded["season_id"])
     assert (stats.games, stats.wins, stats.losses) == (0, 0, 0)
     assert stats.matchup_history == []
+
+
+def test_an_opponent_with_no_signup_reads_null(
+    app: FastAPI, seeded: dict[str, Any]
+) -> None:
+    """No signup, no icon, and the entry stays in the list."""
+    with Session() as session:
+        stranger = User(
+            name="P5",
+            battleTag="P5#5555",
+            discordTag="p5",
+            discordId="5",
+            race=Race.HU,
+        )
+        session.add(stranger)
+        session.commit()
+        stranger_id = ident(stranger)
+
+    add_series(
+        match_id=seeded["match_id"],
+        player1_id=seeded["player_ids"][0],
+        player2_id=stranger_id,
+        player1_score=2,
+        player2_score=0,
+        host_player_id=seeded["player_ids"][0],
+    )
+
+    stats = record(seeded["player_ids"][0], seeded["season_id"])
+    assert stats.matchup_history == [Race.NE.value, None]
 
 
 @pytest.mark.parametrize("route", ["user", "team"])

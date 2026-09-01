@@ -24,7 +24,7 @@ from app.models.ladder_achievement import default_rows
 from app.models.map import Map
 from app.models.match import Match
 from app.models.player_career_stats import PlayerCareerStats
-from app.models.relationships import DBMapSeason
+from app.models.relationships import DBFantasyTeamPlayer, DBMapSeason
 from app.models.season import Season
 from app.models.series import Series
 from app.models.settings import Settings
@@ -243,7 +243,8 @@ def add_fantasy_teams(seeded: dict[str, Any], count: int) -> None:
     """More fantasy teams in the seeded season.
 
     One captain holds one fantasy team per season, so every extra team is
-    drafted by a captain of its own.
+    drafted by a captain of its own, and every one of them drafts the first
+    seeded player, so a per-team fill of the drafted players is visible.
     """
     from app.core.db import Session as AppSession  # the factory, not the type
 
@@ -260,16 +261,22 @@ def add_fantasy_teams(seeded: dict[str, Any], count: int) -> None:
         ]
         session.add_all(captains)
         session.flush()
+        teams = [
+            FantasyTeam(
+                name=f"Extra {index}",
+                season_id=seeded["season_id"],
+                captain_id=ident(captain),
+                drafted_team_id=seeded["team_a_id"],
+                drafted_race=Race.HU,
+            )
+            for index, captain in enumerate(captains)
+        ]
+        session.add_all(teams)
+        session.flush()
         session.add_all(
-            [
-                FantasyTeam(
-                    name=f"Extra {index}",
-                    season_id=seeded["season_id"],
-                    captain_id=ident(captain),
-                    drafted_team_id=seeded["team_a_id"],
-                    drafted_race=Race.HU,
-                )
-                for index, captain in enumerate(captains)
-            ]
+            DBFantasyTeamPlayer(
+                fantasy_team_id=ident(team), user_id=seeded["player_ids"][0]
+            )
+            for team in teams
         )
         session.commit()

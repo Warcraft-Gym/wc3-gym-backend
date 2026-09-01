@@ -49,7 +49,7 @@ from app.models.relationships import DBUserSeasonSignup
 from app.models.season import Season
 from app.models.series import Series, SeriesPublic
 from app.models.team import TeamPublic
-from app.models.user import User, UserPublic, UserReduced
+from app.models.user import User, UserListPublic, UserPublic, UserReduced
 
 type MatchScores = dict[int, tuple[int, int]]
 # score system, series per week and number of weeks, per season
@@ -127,27 +127,30 @@ def _signup_races(
     }
 
 
+def fill_user_signup_races(
+    session: Session, pairs: Iterable[tuple[UserListPublic, int | None]]
+) -> None:
+    """Fill the signup race of every player for the season he is named with."""
+    named = [(player, season_id) for player, season_id in pairs if season_id]
+    races = _signup_races(session, {(player.id, season) for player, season in named})
+    for player, season_id in named:
+        player.signup_race = races.get((player.id, season_id))
+
+
 def fill_signup_races(
     session: Session, rows: Iterable[SeriesPublic | DraftSeriesPublic | None]
 ) -> None:
     """Fill the signup race of both players for the season of each row's match."""
-    filled = [row for row in rows if row is not None]
-    races = _signup_races(
+    fill_user_signup_races(
         session,
-        {
-            (player.id, row.match.season_id)
-            for row in filled
-            if row.match and row.match.season_id
+        [
+            (player, row.match.season_id)
+            for row in rows
+            if row is not None and row.match
             for player in (row.player1, row.player2)
             if player
-        },
+        ],
     )
-    for row in filled:
-        if not (row.match and row.match.season_id):
-            continue
-        for player in (row.player1, row.player2):
-            if player:
-                player.signup_race = races.get((player.id, row.match.season_id))
 
 
 def fill_series(session: Session, series_list: Iterable[SeriesPublic | None]) -> None:
@@ -340,33 +343,45 @@ def _gnl_tallies(
 
 def _gnl_matchups(
     session: Session, user_ids: set[int], season_ids: set[int]
-) -> dict[tuple[int, int], list[str]]:
-    """The race every opponent of every named player played, in one statement.
+) -> dict[tuple[int, int], list[str | None]]:
+    """The race every opponent of every named player registered on, in one
+    statement.
 
     The opponent is the other player of the series, so the two sides union
     again. Playday then series id, so the list reads in the order the season
-    was played.
+    was played. An opponent the season holds no signup for reads null, and the
+    entry stays in the list so it keeps the length of the season.
     """
-    opponent1, opponent2 = aliased(User), aliased(User)
+    signup1, signup2 = aliased(DBUserSeasonSignup), aliased(DBUserSeasonSignup)
     sides = union_all(
         select(
             col(Series.player1_id).label("user_id"),
             col(Match.season_id).label("season_id"),
             col(Match.playday).label("playday"),
             col(Series.id).label("series_id"),
-            col(opponent1.race).label("race"),
+            col(signup1.race).label("race"),
         )
         .join(Match, col(Match.id) == Series.match_id)
-        .join(opponent1, col(opponent1.id) == Series.player2_id),
+        .join(
+            signup1,
+            (col(signup1.user_id) == Series.player2_id)
+            & (col(signup1.season_id) == Match.season_id),
+            isouter=True,
+        ),
         select(
             col(Series.player2_id),
             col(Match.season_id),
             col(Match.playday),
             col(Series.id),
-            col(opponent2.race),
+            col(signup2.race),
         )
         .join(Match, col(Match.id) == Series.match_id)
-        .join(opponent2, col(opponent2.id) == Series.player1_id),
+        .join(
+            signup2,
+            (col(signup2.user_id) == Series.player1_id)
+            & (col(signup2.season_id) == Match.season_id),
+            isouter=True,
+        ),
     ).subquery()
 
     rows = session.execute(
@@ -375,9 +390,11 @@ def _gnl_matchups(
         .order_by(sides.c.playday, sides.c.series_id)
     ).all()
 
-    history: dict[tuple[int, int], list[str]] = {}
+    history: dict[tuple[int, int], list[str | None]] = {}
     for user_id, season_id, race in rows:
-        history.setdefault((user_id, season_id), []).append(race.value)
+        history.setdefault((user_id, season_id), []).append(
+            race.value if race else None
+        )
     return history
 
 
@@ -877,12 +894,16 @@ def _drafted_standing(
 def fill_fantasy_teams(
     session: Session, teams: Iterable[FantasyTeamPublic | None]
 ) -> None:
-    """Fill the six score fields of every fantasy team, each against the season
-    it names."""
+    """Fill the six score fields of every fantasy team and the signup race of
+    every drafted player, each against the season the team names."""
     rows = [team for team in teams if team is not None]
     if not rows:
         return
 
+    fill_user_signup_races(
+        session,
+        [(player, team.season_id) for team in rows for player in team.drafted_players],
+    )
     season_ids = {team.season_id for team in rows if team.season_id is not None}
     rules = _rules_by_season(session, season_ids)
     sums = _sums_by_team(session, rules)
