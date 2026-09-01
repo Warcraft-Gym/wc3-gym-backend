@@ -665,6 +665,45 @@ def test_the_profile_signup_reads_the_battle_tag_of_the_logged_in_player(
     ]
 
 
+def test_a_player_withdraws_their_own_signups(
+    client: Client,
+    koth: dict[str, Any],
+    w3c_two_races: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Withdraw one race, then the rest; a third call has nothing left."""
+    from sqlalchemy import update
+    from sqlmodel import col
+
+    from app.core.db import Session
+    from app.models.user import User
+    from tests.test_discord_auth import ACCOUNT, SESSION, stub_clerk
+
+    stub_clerk(monkeypatch)
+    with Session.begin() as session:
+        session.execute(
+            update(User)
+            .where(col(User.battleTag) == "P4#4444")
+            .values(discordId=ACCOUNT["id"])
+        )
+    resp = client.post(
+        "/koth/signups/me", json={"races": ["human", "nightelf"]}, headers=SESSION
+    )
+    assert resp.status_code == 201, resp.text
+
+    resp = client.delete("/koth/signups/me?race=human", headers=SESSION)
+    assert resp.status_code == 204, resp.text
+    signups = client.get(f"/koth/events/{koth['event_id']}/signups").json()
+    mine = [s["race"] for s in signups if s["battle_tag"] == "P4#4444"]
+    assert mine == ["NE"]
+
+    resp = client.delete("/koth/signups/me", headers=SESSION)
+    assert resp.status_code == 204, resp.text
+
+    resp = client.delete("/koth/signups/me", headers=SESSION)
+    assert resp.status_code == 404, resp.text
+
+
 def test_a_signup_carries_the_flag_of_its_player_row(
     client: Client, koth: dict[str, Any]
 ) -> None:

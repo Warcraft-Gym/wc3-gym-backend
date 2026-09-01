@@ -195,6 +195,20 @@ def create_signup_me(
     )
 
 
+@router.delete("/koth/signups/me", status_code=204)
+def delete_signup_me(
+    claims: RequireLogin,
+    service: KothServiceDep,
+    user_service: UserServiceDep,
+    race: str | None = None,
+) -> None:
+    """Withdraw the logged-in player's active signups: one race, or all of them."""
+    users = user_service.find_by_discord_id(claims["sub"])
+    if not users or not users[0].battleTag:
+        raise BadRequestError("Your profile carries no battle tag")
+    service.withdraw_signups(users[0].battleTag, race)
+
+
 @router.put(
     "/koth/signups/{signup_id}/bracket",
     dependencies=[Depends(require_admin)],
