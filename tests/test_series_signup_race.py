@@ -6,6 +6,7 @@ signup_race stays null when the season holds no signup for the player, and the
 frontend falls back to the profile race then.
 """
 
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
@@ -42,6 +43,38 @@ def test_a_series_answer_carries_the_signup_race(
     assert series["player1"]["race"] == "HU"
     # No signup row for player2: null, the profile race is the fallback
     assert series["player2"]["signup_race"] is None
+
+
+def test_the_public_signup_stores_the_signup_race(
+    client: Client, league: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A GNL season signup records the form's race on the signup row."""
+    from app.api.routes.public import _token_store
+    from app.core.db import Session
+    from app.models.relationships import DBUserSeasonSignup
+    from app.services.users import UserService
+
+    monkeypatch.setattr(UserService, "validate_battle_tag", lambda self, tag: True)
+    monkeypatch.setattr(UserService, "update_w3c_stats_by_id", lambda self, uid: None)
+    _token_store["t"] = {
+        "discord_id": "99",
+        "discord_tag": "p9",
+        "season_id": league["season_id"],
+        "access_type": "signup",
+        "expires_at": datetime.now(UTC) + timedelta(minutes=5),
+    }
+    resp = client.post(
+        "/signup",
+        json={"token": "t", "name": "P9", "battleTag": "P9#1234", "race": "NE"},
+    )
+    assert resp.status_code == 201, resp.text
+    with Session() as session:
+        signup = session.get(
+            DBUserSeasonSignup,
+            {"user_id": resp.json()["id"], "season_id": league["season_id"]},
+        )
+        assert signup is not None
+        assert signup.race == Race.NE
 
 
 def test_a_series_list_carries_the_signup_race(
