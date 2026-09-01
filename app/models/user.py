@@ -115,6 +115,16 @@ class PublicSignupWrite(SQLModel):
     seasonId: Annotated[int | None, EmptyStrToNone] = None
 
 
+class ProfileUpdate(SQLModel):
+    """The fields a member may change on their own profile."""
+
+    name: Annotated[str | None, NumToStr] = None
+    battleTag: Annotated[str | None, NumToStr] = None
+    race: Annotated[Race | None, SuggestRace] = None
+    country: Annotated[str | None, NumToStr] = None
+    timezone: Annotated[str | None, KnownTimeZone] = None
+
+
 class UserReduced(UserBase, PublicModel):
     """The scalar fields of a user, without the per-season collections."""
 
