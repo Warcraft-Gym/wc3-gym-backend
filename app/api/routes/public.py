@@ -312,10 +312,10 @@ def public_create_user(
         # create new user
         user = user_service.add(user_create)
 
-    # Add to season if specified
+    # Add to season if specified, on the race the form names
     season_id = entry.get("season_id") or data.season_id or data.seasonId
     if season_id:
-        season_service.add_user_signup(int(season_id), [user.id])
+        season_service.add_user_signup(int(season_id), [user.id], data.race)
 
     # trigger W3C stats sync for the newly created/updated user (non-blocking)
     try:
