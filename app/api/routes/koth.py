@@ -109,12 +109,12 @@ def get_event_signups(
 
 @router.post("/koth/signups", status_code=201)
 def create_signup(data: KothSignupRequest, service: KothServiceDep) -> KothSignupPublic:
-    """Create a signup (Twitch/Nightbot endpoint).
+    """Create a signup with automatic W3C MMR validation and bracket assignment.
 
-    Create a KOTH signup with automatic W3C MMR validation and bracket
-    assignment. Requires KOTH_NIGHTBOT_TOKEN for authentication.
+    Open by decision: Twitch chat signups are permissionless anyway, and the
+    token this route used to require was readable by any visitor. A sent
+    client_token is accepted and ignored, so Nightbot keeps working.
     """
-    _check_nightbot_token(service, data.client_token)
     if not data.twitch_username or not data.battle_tag:
         raise BadRequestError("Missing required fields")
     signups = service.create_signups(
