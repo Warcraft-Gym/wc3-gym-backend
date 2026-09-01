@@ -4,10 +4,11 @@ import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Query, Request, Response, UploadFile
+from fastapi import APIRouter, Depends, Query, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
+from starlette.datastructures import UploadFile
 
 from app.api.deps import (
     AvailabilityServiceDep,
