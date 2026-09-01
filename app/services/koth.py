@@ -158,6 +158,31 @@ class KothService:
         with Session.begin() as session:
             KothSignup.delete(session, signup_id)
 
+    def withdraw_signups(self, battle_tag: str, race: str | None = None) -> int:
+        """Delete the player's active signups on the active event: one race, or all."""
+        value = None
+        if race:
+            try:
+                value = Race.from_text(race).value
+            except ValueError as error:
+                raise BadRequestError(f"Invalid race '{race}'") from error
+        event = self.get_active_event()
+        with Session.begin() as session:
+            statement = select(KothSignup).where(
+                col(KothSignup.event_id) == event.id,
+                func.lower(func.trim(col(KothSignup.battle_tag)))
+                == battle_tag.strip().lower(),
+                col(KothSignup.is_active) == 1,
+            )
+            if value:
+                statement = statement.where(col(KothSignup.race) == value)
+            rows = session.scalars(statement).all()
+            if not rows:
+                raise NotFoundError("No active signup to withdraw")
+            for row in rows:
+                session.delete(row)
+            return len(rows)
+
     def get_signup(self, signup_id: int) -> KothSignupPublic:
         with Session.begin() as session:
             signup = session.get(KothSignup, signup_id)
