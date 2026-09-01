@@ -12,6 +12,7 @@ from app.models.draft_series import (
     DraftSeriesUpdate,
 )
 from app.models.series import SeriesCreate
+from app.services import derived
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +21,9 @@ class DraftSeriesService:
     def add(self, draft_series: DraftSeriesCreate) -> DraftSeriesPublic:
         with Session.begin() as session:
             row = DraftSeries.add(session, draft_series.model_dump())
-            return DraftSeriesPublic.from_draft_series(row)
+            public = DraftSeriesPublic.from_draft_series(row)
+            derived.fill_signup_races(session, [public])
+            return public
 
     def update(
         self, draft_series_id: int, draft_series: DraftSeriesUpdate
@@ -33,7 +36,9 @@ class DraftSeriesService:
             )
             if not row:
                 raise NotFoundError("Draft series not found")
-            return DraftSeriesPublic.from_draft_series(row)
+            public = DraftSeriesPublic.from_draft_series(row)
+            derived.fill_signup_races(session, [public])
+            return public
 
     def delete(self, draft_series_id: int) -> None:
         with Session.begin() as session:
@@ -48,7 +53,9 @@ class DraftSeriesService:
             ).first()
             if not draft_series:
                 raise NotFoundError("Draft series not found")
-            return DraftSeriesPublic.from_draft_series(draft_series)
+            public = DraftSeriesPublic.from_draft_series(draft_series)
+            derived.fill_signup_races(session, [public])
+            return public
 
     def get_by_match_id(
         self, match_id: int, limit: int | None = None, offset: int = 0
@@ -63,10 +70,12 @@ class DraftSeriesService:
                 .offset(offset)
                 .limit(limit)
             )
-            return [
+            result = [
                 DraftSeriesPublic.from_draft_series(row)
                 for row in session.scalars(statement).all()
             ]
+            derived.fill_signup_races(session, result)
+            return result
 
     def delete_by_match_id(self, match_id: int) -> None:
         """Delete all draft series for a given match"""

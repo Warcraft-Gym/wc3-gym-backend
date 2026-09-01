@@ -91,3 +91,26 @@ def test_a_series_list_carries_the_signup_race(
     open_series = entries[league["series_open_id"]]
     assert open_series["player1"]["signup_race"] is None
     assert open_series["player2"]["signup_race"] is None
+
+
+def test_a_draft_series_answer_carries_the_signup_race(
+    league: dict[str, Any],
+) -> None:
+    from app.core.db import Session
+    from app.models.draft_series import DraftSeries
+    from app.services.draft_series import DraftSeriesService
+
+    with Session.begin() as session:
+        session.add(
+            DraftSeries(
+                match_id=league["match_id"],
+                player1_id=league["player_ids"][0],
+                player2_id=league["player_ids"][2],
+                host_player_id=league["player_ids"][0],
+            )
+        )
+    drafts = DraftSeriesService().get_by_match_id(league["match_id"])
+    assert drafts[0].player1 is not None
+    assert drafts[0].player1.signup_race == "UD"
+    assert drafts[0].player2 is not None
+    assert drafts[0].player2.signup_race is None
