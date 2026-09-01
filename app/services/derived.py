@@ -9,7 +9,8 @@ final_score, points_against or points_available.
 Two statements answer a whole response: one resolves the score system of every
 match or season in it, and one sums the series on that system. points_case
 reads the system and not the season, so seasons that share a system share a
-statement, and there are two systems.
+statement, and there are two systems. A series answer pays one more statement
+for the race every player in it registered on for the season of its match.
 
 A career answer costs two more statements: one groups the series of every
 player by season, one names the seasons the league has played. Both are
@@ -32,7 +33,7 @@ A team with no played series stands at zero, not at null.
 from collections.abc import Callable, Iterable
 from typing import Any, Literal, NamedTuple
 
-from sqlalchemy import case, func, or_, select, union_all
+from sqlalchemy import case, func, or_, select, tuple_, union_all
 from sqlalchemy.orm import Session, aliased
 from sqlmodel import col
 
@@ -43,6 +44,7 @@ from app.models.fantasy_bet import FantasyBet, FantasyBetPublic
 from app.models.fantasy_team import FantasyTeamPublic
 from app.models.match import Match, MatchPublic
 from app.models.player_career_stats import PlayerCareerStatsPublic
+from app.models.relationships import DBUserSeasonSignup
 from app.models.season import Season
 from app.models.series import Series, SeriesPublic
 from app.models.team import TeamPublic
@@ -102,9 +104,31 @@ def _fill_match(match: MatchPublic, scores: MatchScores) -> None:
     match.team1_score, match.team2_score = scores.get(match.id, (0, 0))
 
 
+def _signup_races(
+    session: Session, pairs: set[tuple[int, int]]
+) -> dict[tuple[int, int], str]:
+    """The registered race of every (player, season) pair, in one statement."""
+    if not pairs:
+        return {}
+    rows = session.execute(
+        select(
+            col(DBUserSeasonSignup.user_id),
+            col(DBUserSeasonSignup.season_id),
+            col(DBUserSeasonSignup.race),
+        ).where(
+            tuple_(
+                col(DBUserSeasonSignup.user_id), col(DBUserSeasonSignup.season_id)
+            ).in_(pairs)
+        )
+    ).all()
+    return {
+        (user_id, season_id): race.value for user_id, season_id, race in rows if race
+    }
+
+
 def fill_series(session: Session, series_list: Iterable[SeriesPublic | None]) -> None:
-    """Fill the points of every series, the score of the match it carries and
-    the season record of its two players."""
+    """Fill the points of every series, the score of the match it carries, the
+    signup race and the season record of its two players."""
     rows = [series for series in series_list if series is not None]
     if not rows:
         return
@@ -123,6 +147,23 @@ def fill_series(session: Session, series_list: Iterable[SeriesPublic | None]) ->
         )
         if series.match:
             _fill_match(series.match, scores)
+
+    races = _signup_races(
+        session,
+        {
+            (player.id, series.match.season_id)
+            for series in rows
+            if series.match and series.match.season_id
+            for player in (series.player1, series.player2)
+            if player
+        },
+    )
+    for series in rows:
+        if not (series.match and series.match.season_id):
+            continue
+        for player in (series.player1, series.player2):
+            if player:
+                player.signup_race = races.get((player.id, series.match.season_id))
 
     fill_gnl_stats(
         session,
