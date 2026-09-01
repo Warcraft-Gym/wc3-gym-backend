@@ -1,60 +1,89 @@
 import logging
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Query
 
 from app.api.deps import (
     DraftSeriesServiceDep,
+    MatchServiceDep,
     SeriesServiceDep,
     require_admin,
     require_captain,
 )
+from app.core.exceptions import ApiError
 from app.models.draft_series import (
     DraftSeriesCreate,
     DraftSeriesPublic,
     DraftSeriesUpdate,
 )
 from app.models.series import SeriesPublic
+from app.services.matches import MatchService
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["draft-series"])
+
+RequireCaptain = Annotated[dict[str, Any], Depends(require_captain)]
+
+
+def _own_match(
+    claims: dict[str, Any], match_id: int | None, matches: MatchService
+) -> None:
+    """A captain drafts the matches their team plays; an admin drafts any."""
+    if claims.get("role") == "admin" or claims["sub"] == "admin":
+        return
+    match = matches.get(match_id) if match_id is not None else None
+    if match is None or claims.get("team_id") not in (match.team1_id, match.team2_id):
+        raise ApiError(403, {"error": "Your team does not play this match"})
 
 
 @router.post(
     "/draft-series",
     status_code=201,
     response_model=DraftSeriesPublic,
-    dependencies=[Depends(require_admin)],
 )
 def add_draft_series(
-    data: DraftSeriesCreate, service: DraftSeriesServiceDep
+    data: DraftSeriesCreate,
+    service: DraftSeriesServiceDep,
+    matches: MatchServiceDep,
+    claims: RequireCaptain,
 ) -> DraftSeriesPublic:
-    """Create a new draft series (visible in admin UI only)"""
+    """Create a new draft series for a match the caller's team plays."""
+    _own_match(claims, data.match_id, matches)
     return service.add(data)
 
 
 @router.put(
     "/draft-series/{draft_series_id}",
     response_model=DraftSeriesPublic,
-    dependencies=[Depends(require_admin)],
 )
 def update_draft_series(
     draft_series_id: int,
     data: DraftSeriesUpdate,
     service: DraftSeriesServiceDep,
+    matches: MatchServiceDep,
+    claims: RequireCaptain,
 ) -> DraftSeriesPublic:
-    """Update the data of an existing draft series"""
+    """Update a draft series of a match the caller's team plays."""
+    existing = service.get(draft_series_id)
+    _own_match(claims, existing.match_id, matches)
+    if data.match_id is not None and data.match_id != existing.match_id:
+        _own_match(claims, data.match_id, matches)
     return service.update(draft_series_id, data)
 
 
 @router.delete(
     "/draft-series/{draft_series_id}",
     status_code=204,
-    dependencies=[Depends(require_admin)],
 )
-def delete_draft_series(draft_series_id: int, service: DraftSeriesServiceDep) -> None:
-    """Delete a draft series by its ID."""
+def delete_draft_series(
+    draft_series_id: int,
+    service: DraftSeriesServiceDep,
+    matches: MatchServiceDep,
+    claims: RequireCaptain,
+) -> None:
+    """Delete a draft series of a match the caller's team plays."""
+    _own_match(claims, service.get(draft_series_id).match_id, matches)
     service.delete(draft_series_id)
 
 
