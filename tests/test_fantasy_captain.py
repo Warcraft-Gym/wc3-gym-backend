@@ -74,7 +74,7 @@ def test_a_member_who_is_not_the_captain_is_refused(
         headers=SESSION,
     )
     assert resp.status_code == 403
-    assert resp.json() == {"error": "Admins or the fantasy team's captain only"}
+    assert resp.json() == {"error": "Admins or the fantasy team's owner only"}
 
 
 def test_the_captain_cannot_reseat_the_team(
@@ -88,7 +88,7 @@ def test_the_captain_cannot_reseat_the_team(
         f"/fantasy/teams/{team_id}", json={"captain_id": p2}, headers=SESSION
     )
     assert resp.status_code == 403
-    assert resp.json() == {"error": "Only admins reassign captain or season"}
+    assert resp.json() == {"error": "Only admins reassign the owner or season"}
 
     # The unchanged seat passes, so the frontend may echo the whole form
     resp = client.put(

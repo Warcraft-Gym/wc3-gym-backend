@@ -184,7 +184,7 @@ def test_a_captain_reaches_only_his_own_team(
     )
 
     assert resp.status_code == 403, resp.text
-    assert resp.json() == {"error": "Captains only"}
+    assert resp.json() == {"error": "Not your team"}
 
 
 def test_the_player_writes_over_his_captains_answer(

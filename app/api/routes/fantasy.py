@@ -36,14 +36,14 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["fantasy"])
 
 
-def require_admin_or_captain(
+def require_admin_or_owner(
     team_id: int,
     request: Request,
     credentials: Credentials,
     service: FantasyTeamServiceDep,
     users: UserServiceDep,
 ) -> bool:
-    """Admit an admin (True) or the fantasy team's own captain (False)."""
+    """Admit an admin (True) or the member who owns the fantasy team (False)."""
     claims = require_login(request, credentials)
     if claims.get("role") == "admin" or claims["sub"] == "admin":
         return True
@@ -54,7 +54,7 @@ def require_admin_or_captain(
         and service.get(team_id).captain_id == rows[0].id
     ):
         return False
-    raise ApiError(403, {"error": "Admins or the fantasy team's captain only"})
+    raise ApiError(403, {"error": "Admins or the fantasy team's owner only"})
 
 
 @router.put("/fantasy/tiers", status_code=204, dependencies=[Depends(require_admin)])
@@ -85,15 +85,17 @@ def update_team(
     team_id: int,
     data: FantasyTeamUpdate,
     service: FantasyTeamServiceDep,
-    is_admin: Annotated[bool, Depends(require_admin_or_captain)],
+    is_admin: Annotated[bool, Depends(require_admin_or_owner)],
 ) -> FantasyTeamPublic:
-    """Update an existing fantasy team. The captain edits it, an admin reseats it."""
+    """Update an existing fantasy team. The owner edits it, an admin reseats it."""
     if not is_admin:
         current = service.get(team_id)
         changed = data.model_dump(exclude_unset=True)
         for field in ("captain_id", "season_id"):
             if field in changed and changed[field] != getattr(current, field):
-                raise ApiError(403, {"error": "Only admins reassign captain or season"})
+                raise ApiError(
+                    403, {"error": "Only admins reassign the owner or season"}
+                )
     return service.update(team_id, data)
 
 
@@ -113,7 +115,7 @@ def get_team(team_id: int, service: FantasyTeamServiceDep) -> FantasyTeamPublic:
 
 @router.post(
     "/fantasy/teams/{team_id}/players",
-    dependencies=[Depends(require_admin_or_captain)],
+    dependencies=[Depends(require_admin_or_owner)],
 )
 def add_players(
     team_id: int, data: FantasyTeamPlayerIds, service: FantasyTeamServiceDep
@@ -124,7 +126,7 @@ def add_players(
 
 @router.delete(
     "/fantasy/teams/{team_id}/players",
-    dependencies=[Depends(require_admin_or_captain)],
+    dependencies=[Depends(require_admin_or_owner)],
 )
 def remove_players(
     team_id: int, data: FantasyTeamPlayerIds, service: FantasyTeamServiceDep

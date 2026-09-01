@@ -38,7 +38,7 @@ def _own_team(claims: dict[str, Any], team_id: int) -> None:
     if claims.get("role") == "admin" or claims["sub"] == "admin":
         return
     if claims.get("team_id") != team_id:
-        raise ApiError(403, {"error": "Captains only"})
+        raise ApiError(403, {"error": "Not your team"})
 
 
 @router.post(
