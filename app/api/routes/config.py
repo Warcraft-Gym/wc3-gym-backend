@@ -4,7 +4,7 @@ import secrets
 from fastapi import APIRouter, Depends
 
 from app.api.deps import RequireAdmin, SettingsServiceDep, require_admin
-from app.core.exceptions import BadRequestError
+from app.core.exceptions import BadRequestError, NotFoundError
 from app.models.admin_grant import AdminGrantCreate, AdminPublic
 from app.models.discord_role_binding import (
     DiscordRoleBindingCreate,
@@ -32,11 +32,16 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["config"])
 
+# Secrets never leave through the open settings reads; admins use the dedicated routes
+SECRET_SETTINGS = frozenset({"KOTH_NIGHTBOT_TOKEN"})
+
 
 @router.get("/config/settings")
 def get_settings(service: SettingsServiceDep) -> SettingsList:
     """Retrieve all configuration settings from database."""
-    return SettingsList(settings=service.get_all())
+    return SettingsList(
+        settings=[s for s in service.get_all() if s.key not in SECRET_SETTINGS]
+    )
 
 
 @router.get("/config/w3c")
@@ -54,6 +59,8 @@ def get_w3c_config(service: SettingsServiceDep) -> W3CConfig:
 @router.get("/config/settings/{key}")
 def get_setting(key: str, service: SettingsServiceDep) -> SettingsPublic:
     """Retrieve a specific setting by key."""
+    if key in SECRET_SETTINGS:
+        raise NotFoundError(f"Setting with key '{key}' not found")
     # get_by_key raises NotFoundError for an unknown key.
     return service.get_by_key(key)
 
