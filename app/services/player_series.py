@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 from app.core.security import secure_filename
 from app.models.series import SeriesPublic, SeriesUpdate
 from app.services.series import SeriesService
+from app.services.series_veto import SeriesVetoService
 from app.services.users import UserService
 
 logger = logging.getLogger(__name__)
@@ -156,6 +157,18 @@ def update_player_series(
 
     # Determine action: 'score_updated' or 'scheduled'. Frontend may send 'action'.
     action = data.get("action")
+
+    # A result carries its veto: the record is what the map stats are made of
+    reporting = action == "score_updated" or any(
+        key in data for key in ("player1_score", "player2_score")
+    )
+    if reporting and not SeriesVetoService().is_complete(series_id):
+        return JSONResponse(
+            {
+                "error": "The map veto is not complete. Enter it on the veto board first."
+            },
+            status_code=400,
+        )
 
     # If the action explicitly indicates a result report, enforce file requirements.
     if action == "score_updated":
