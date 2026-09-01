@@ -189,6 +189,10 @@ class LadderService:
                 earned.get(user_id, []),
                 stamps.get(user_id),
             )
+            if season_id is not None:
+                # A season reads the race he registered on, null when he did not
+                signed = next((r for r in roster if r.user_id == user_id), None)
+                answer.race = signed.race.value if signed and signed.race else None
             answer.matches = _matches(session, scope, limit, offset)
             return answer
 
@@ -598,14 +602,15 @@ def _walk_start(session: OrmSession, end: datetime) -> int | None:
 
 
 def _roster(session: OrmSession, season_id: int) -> Sequence[Row]:
-    """Everyone signed up for the season, with the team he plays for."""
+    """Everyone signed up for the season, with the team he plays for and the
+    race he registered on."""
     return session.execute(
         select(
             col(User.id).label("user_id"),
             col(User.name).label("name"),
             col(User.battleTag).label("battleTag"),
             col(User.country).label("country"),
-            col(User.race).label("race"),
+            col(DBUserSeasonSignup.race).label("race"),
             col(Team.id).label("team_id"),
             col(Team.name).label("team_name"),
             col(Team.long_name).label("team_long_name"),
@@ -633,18 +638,19 @@ def _league_race(season_id: int | None) -> ColumnElement[bool]:
     registered on a normal race gets no random pick that rolled it. This is
     the rule wc3.no scores by, proven by tests/test_ladder_oracle.
 
-    The race is the one he signed up with that season, so a past season keeps
-    its numbers when he registers on another race later. A signup that names
-    no race falls back to `users.race`, and so does the all-time answer, which
-    spans seasons and has no signup to read.
+    A season scores the race he signed up with that season, so a past season
+    keeps its numbers when he registers on another race later, and a season
+    that holds no race for him scores nothing. The all-time answer spans
+    seasons and has no signup to read, so it scores `users.race`.
     """
-    race = (
-        select(col(User.race))
-        .where(col(User.id) == W3CLadderMatch.user_id)
-        .scalar_subquery()
-    )
-    if season_id is not None:
-        signup = (
+    if season_id is None:
+        race = (
+            select(col(User.race))
+            .where(col(User.id) == W3CLadderMatch.user_id)
+            .scalar_subquery()
+        )
+    else:
+        race = (
             select(col(DBUserSeasonSignup.race))
             .where(
                 col(DBUserSeasonSignup.user_id) == W3CLadderMatch.user_id,
@@ -652,7 +658,6 @@ def _league_race(season_id: int | None) -> ColumnElement[bool]:
             )
             .scalar_subquery()
         )
-        race = func.coalesce(signup, race)
     return col(W3CLadderMatch.race) == race
 
 

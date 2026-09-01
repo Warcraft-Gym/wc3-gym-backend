@@ -38,10 +38,16 @@ INSIDE = datetime(2026, 1, 7, 14, 30, tzinfo=UTC)
 
 
 def sign_up(season_id: int, user_ids: list[int], race: Race | None = None) -> None:
+    """Register the players for the season; without a race each registers on
+    the race of his profile, which is the race add_match plays."""
     with Session() as session:
         for user_id in user_ids:
             session.add(
-                DBUserSeasonSignup(user_id=user_id, season_id=season_id, race=race)
+                DBUserSeasonSignup(
+                    user_id=user_id,
+                    season_id=season_id,
+                    race=race or session.get_one(User, user_id).race,
+                )
             )
         session.commit()
 
@@ -59,7 +65,7 @@ def second_season(season_id: int) -> int:
     with Session() as session:
         first = session.get_one(Season, season_id)
         other = Season(
-            name="Signup fallback",
+            name="Second season",
             number_weeks=first.number_weeks,
             series_per_week=first.series_per_week,
             start_date=first.start_date,
@@ -798,9 +804,7 @@ def test_a_random_player_scores_his_random_picks_alone(
 ) -> None:
     """The rule reads the selected race, so RANDOM means the random picks."""
     player = league["player_ids"][0]
-    with Session() as session:
-        session.get(User, player).race = Race.RANDOM
-        session.commit()
+    set_signup_race(league["season_id"], player, Race.RANDOM)
     add_match(player, "rolled", race=Race.RANDOM, played_race=Race.NE)
     add_match(player, "picked", race=Race.NE, start_time=INSIDE + timedelta(hours=1))
 
@@ -846,23 +850,42 @@ def test_vs_race_buckets_a_random_opponent_under_random(
 def test_the_signup_race_scores_the_season_it_belongs_to(
     client: Client, auth_headers: dict[str, str], league: dict[str, Any]
 ) -> None:
-    """A season scores on the race its signup names, and users.race decides
-    only where the signup names none. So re-registering on another race later
-    leaves every past season where it stands."""
-    player = league["player_ids"][0]  # registered HU on the user row
+    """A season scores on the race its own signup names, so re-registering on
+    another race later leaves every past season where it stands."""
+    player = league["player_ids"][0]  # HU on the profile and on the second season
     add_match(player, "undead", race=Race.UD)
     add_match(player, "human", race=Race.HU, start_time=INSIDE + timedelta(hours=1))
     set_signup_race(league["season_id"], player, Race.UD)
-    fallback = second_season(league["season_id"])
-    sign_up(fallback, [player])
+    other = second_season(league["season_id"])
+    sign_up(other, [player])
 
-    on_signup = matches_of(client, auth_headers, player, league["season_id"])
-    on_user = matches_of(client, auth_headers, player, fallback)
+    on_undead = matches_of(client, auth_headers, player, league["season_id"])
+    on_human = matches_of(client, auth_headers, player, other)
 
-    assert on_signup == ["undead"]
-    assert on_user == ["human"]
+    assert on_undead == ["undead"]
+    assert on_human == ["human"]
     assert ladder_of(client, auth_headers, league["season_id"])["total_games"] == 1
-    assert ladder_of(client, auth_headers, fallback)["total_games"] == 1
+    assert ladder_of(client, auth_headers, other)["total_games"] == 1
+
+
+def test_a_signup_that_names_no_race_scores_nothing(
+    client: Client, auth_headers: dict[str, str], league: dict[str, Any]
+) -> None:
+    """The season race is the signup race and nothing else, so a signup with no
+    race on it scores no match and the answer names no race."""
+    player = league["player_ids"][0]
+    other = second_season(league["season_id"])
+    with Session() as session:
+        session.add(DBUserSeasonSignup(user_id=player, season_id=other, race=None))
+        session.commit()
+    add_match(player, "human")  # played on the profile race, HU
+
+    resp = client.get(f"/users/{player}/ladder?season_id={other}", headers=auth_headers)
+    assert resp.status_code == 200, resp.text
+
+    assert resp.json()["race"] is None
+    assert resp.json()["matches"] == []
+    assert ladder_of(client, auth_headers, other)["total_games"] == 0
 
 
 def test_the_all_time_answer_reads_the_race_of_the_player(

@@ -416,7 +416,9 @@ class SeasonService:
                 if signup.user:
                     user_public = UserListPublic.from_user(signup.user)
                     if user_public:
-                        user_public.signup_race = signup.race
+                        user_public.signup_race = (
+                            signup.race.value if signup.race else None
+                        )
                         result.append(user_public)
 
             return result

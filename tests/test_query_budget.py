@@ -18,7 +18,9 @@ It also names the race every player registered on for the season of its
 match, one more statement that does not grow with the answer.
 
 A team answer derives its standings the same way, and the two statements it
-adds do not grow with the number of teams in the answer.
+adds do not grow with the number of teams in the answer. It also names the
+race every player on a roster registered on for the season of that roster,
+one more statement that does not grow with the answer.
 
 A user, a team roster or a full series answer also derives the season record of
 every player it carries, which costs two more statements: one groups the series
@@ -34,7 +36,9 @@ A fantasy team answer derives its six score fields from four more statements:
 the standings pair, one for the series of every season in the answer and one
 for the bets of its captains. None of the four grows with the number of teams.
 A bet result costs nothing, because the map scores of its series already ride
-in the answer.
+in the answer. A team that drafts players pays three more: one for the race
+they registered on and two for their season record. None of the three grows
+with the number of teams.
 """
 
 from collections.abc import Iterator
@@ -271,7 +275,7 @@ def test_the_fantasy_team_list_costs_six_statements(league: dict[str, Any]) -> N
 
 
 def test_the_fantasy_count_holds_when_the_teams_grow(league: dict[str, Any]) -> None:
-    """Four more fantasy teams, the same six statements."""
+    """Four more fantasy teams, each drafting a player, the same nine."""
     add_fantasy_teams(league, 4)
 
     service = FantasyTeamService()
@@ -279,11 +283,12 @@ def test_the_fantasy_count_holds_when_the_teams_grow(league: dict[str, Any]) -> 
         teams, total = service.get_all()
     assert len(teams) == 5
     assert total == 5
-    assert tally[0] == 6
+    assert tally[0] == 9
 
 
-def test_the_fantasy_team_search_costs_five_statements(league: dict[str, Any]) -> None:
-    """The season-scoped search the leaderboards call pays the same five."""
+def test_the_fantasy_team_search_costs_eight_statements(league: dict[str, Any]) -> None:
+    """The season-scoped search the leaderboards call pays the list's nine less
+    the count."""
     add_fantasy_teams(league, 4)
 
     service = FantasyTeamService()
@@ -292,7 +297,7 @@ def test_the_fantasy_team_search_costs_five_statements(league: dict[str, Any]) -
         teams, total = service.search(query)
     assert len(teams) == 5
     assert total is None
-    assert tally[0] == 5
+    assert tally[0] == 8
 
 
 def test_career_stats_cost_four_statements(league: dict[str, Any]) -> None:
@@ -401,28 +406,28 @@ def add_teams_to_the_season(season_id: int, count: int) -> None:
         session.commit()
 
 
-def test_the_teams_of_a_season_cost_seven_statements(league: dict[str, Any]) -> None:
-    """Three for the teams and their people, two for the standings and two for
-    the season record of every player."""
+def test_the_teams_of_a_season_cost_eight_statements(league: dict[str, Any]) -> None:
+    """Three for the teams and their people, two for the standings, one for the
+    signup race of every player and two for his season record."""
     service = TeamService(UserService())
     with count_statements() as tally:
         teams = service.get_teams_season(league["season_id"])
     assert len(teams) == 2
     assert teams[0].seasons_info[0].final_score is not None
-    assert tally[0] == 7
+    assert tally[0] == 8
 
 
 def test_the_standings_count_holds_when_the_teams_grow(
     league: dict[str, Any],
 ) -> None:
-    """Four more teams in the season, the same seven statements."""
+    """Four more teams in the season, the same eight statements."""
     add_teams_to_the_season(league["season_id"], 4)
 
     service = TeamService(UserService())
     with count_statements() as tally:
         teams = service.get_teams_season(league["season_id"])
     assert len(teams) == 6
-    assert tally[0] == 7
+    assert tally[0] == 8
 
 
 def test_career_options_cover_the_player_graph(league: dict[str, Any]) -> None:
