@@ -12,6 +12,9 @@ from app.core.exceptions import BadRequestError
 from app.services import blob
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 64
+JPEG = b"\xff\xd8\xff\xe0" + b"0" * 64
+# bound at collection, before the blob_store fixture replaces the module attribute
+REAL_PUT_ICON = blob.put_icon
 
 
 def upload(
@@ -99,7 +102,29 @@ def test_a_jpeg_is_accepted(
     blob_store: dict[str, bytes],
 ) -> None:
     """Three of the ten production logos are JPEGs that were stored as image/png."""
-    jpeg = b"\xff\xd8\xff\xe0" + b"0" * 64
-    resp = upload(client, seeded["team_a_id"], auth_headers, jpeg)
+    resp = upload(client, seeded["team_a_id"], auth_headers, JPEG)
     assert resp.status_code == 200
-    assert list(blob_store.values()) == [jpeg]
+    assert list(blob_store.values()) == [JPEG]
+
+
+def test_put_icon_follows_the_bytes(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The conftest stub replaces put_icon wholesale, so the pathname and content type it chooses
+    are only covered here, by standing in for the SDK instead."""
+    from vercel import blob as sdk
+
+    seen: dict[str, object] = {}
+
+    class Result:
+        url = "https://blob.test/x"
+
+    def fake_put(path: str, body: bytes, **kwargs: object) -> Result:
+        seen["path"] = path
+        seen["content_type"] = kwargs["content_type"]
+        return Result()
+
+    monkeypatch.setattr(sdk, "put", fake_put)
+    REAL_PUT_ICON(7, JPEG)
+    assert seen == {"path": "teams/7.jpg", "content_type": "image/jpeg"}
+
+    REAL_PUT_ICON(7, PNG)
+    assert seen == {"path": "teams/7.png", "content_type": "image/png"}
