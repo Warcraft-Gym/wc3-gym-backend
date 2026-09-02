@@ -103,7 +103,7 @@ class TeamService:
         # the store is not part of the transaction, so the put happens first: a put that is never
         # committed leaves an unreferenced blob, which is cheap, while a committed row pointing at
         # a blob that was never written is a broken image
-        url = blob.put_icon(team_id, file)
+        url = blob.put_icon(f"teams/{team_id}", file)
         with Session.begin() as session:
             # locked: two uploads for one team would otherwise read the same previous URL, and the
             # loser's blob would be left behind with nothing pointing at it

@@ -4,10 +4,8 @@ The database bills every byte it sends, and a picture on a mapped row rides alon
 of that row. Deferring the column keeps it out of every read that does not serve the image itself.
 """
 
-from sqlalchemy import LargeBinary, inspect
+from sqlalchemy import LargeBinary
 from sqlmodel import SQLModel
-
-from app.models.map import Map
 
 
 def _blob_columns() -> list[tuple[str, str, bool]]:
@@ -27,7 +25,7 @@ def test_every_binary_column_is_deferred() -> None:
     )
 
 
-def test_the_map_picture_is_a_binary_column() -> None:
-    """The test above passes vacuously once no column is binary, so pin that this one still is."""
-    assert ("Map", "icon", True) in _blob_columns()
-    assert inspect(Map).get_property("icon").deferred
+def test_no_picture_is_stored_in_the_database() -> None:
+    """The test above passes vacuously now that no column is binary, which is the state to hold:
+    a team logo and a map picture are both a URL into Vercel Blob."""
+    assert _blob_columns() == []

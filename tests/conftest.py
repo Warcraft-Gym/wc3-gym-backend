@@ -116,8 +116,9 @@ def blob_store(monkeypatch: pytest.MonkeyPatch) -> dict[str, bytes]:
     # a counter, not len(stored): a delete would otherwise let the next URL repeat one already used
     serial = itertools.count()
 
-    def put_icon(team_id: int, data: bytes) -> str:
-        url = f"https://blob.test/teams/{team_id}-{next(serial)}.png"
+    def put_icon(name: str, data: bytes) -> str:
+        # the real host, because blob.ours() reads it to tell our picture from a published one
+        url = f"https://test.public.blob.vercel-storage.com/{name}-{next(serial)}.png"
         stored[url] = data
         return url
 

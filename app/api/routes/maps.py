@@ -1,8 +1,7 @@
-import hashlib
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Query, Request, Response, UploadFile
+from fastapi import APIRouter, Depends, File, Query, UploadFile
 from fastapi.responses import RedirectResponse
 
 from app.api.deps import MapServiceDep, require_admin
@@ -13,15 +12,6 @@ from app.models.map import MapCreate, MapPublic, MapUpdate
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["maps"])
-
-
-def _media_type(image: bytes) -> str:
-    """What the first bytes of the upload say the picture is."""
-    if image.startswith(b"\xff\xd8"):
-        return "image/jpeg"
-    if image.startswith(b"\x89PN"):
-        return "image/png"
-    return "application/octet-stream"
 
 
 @router.post(
@@ -82,7 +72,7 @@ def upload_map_image(
     service: MapServiceDep,
     image: Annotated[UploadFile | None, File()] = None,
 ) -> dict[str, str]:
-    """Upload or replace the picture of a map, stored in binary format."""
+    """Upload or replace the picture of a map, which is stored in Vercel Blob."""
     if image is None:
         raise BadRequestError("No image provided")
 
@@ -92,22 +82,11 @@ def upload_map_image(
 
 
 @router.get("/maps/{map_id}/image")
-def get_map_image(map_id: int, request: Request, service: MapServiceDep) -> Response:
-    """Fetch the picture of a map: the bytes an admin uploaded, else where it is published."""
-    icon = service.get_icon(map_id)
-    if not icon:
-        published = service.get_image_url(map_id)
-        if not published:
-            raise NotFoundError("Image not found")
-        # not cacheable, for the reason the team logo redirect is not: the target can change
-        return RedirectResponse(published, headers={"Cache-Control": "no-store"})
-
-    # The tag is the content, so a replaced picture answers a new one.
-    etag = f'"{hashlib.sha256(icon).hexdigest()}"'
-    headers = {"Cache-Control": "public, max-age=86400", "ETag": etag}
-    if etag in [
-        tag.strip() for tag in request.headers.get("if-none-match", "").split(",")
-    ]:
-        return Response(status_code=304, headers=headers)
-
-    return Response(content=icon, media_type=_media_type(icon), headers=headers)
+def get_map_image(map_id: int, service: MapServiceDep) -> RedirectResponse:
+    """Send the caller to where the picture of the map lives."""
+    url = service.get_image_url(map_id)
+    if not url:
+        raise NotFoundError("Image not found")
+    # Not cacheable, for the reason the team logo redirect is not: an upload replaces the blob
+    # this points at and deletes it. Callers reading image off the map answer skip the hop.
+    return RedirectResponse(url, headers={"Cache-Control": "no-store"})
