@@ -221,9 +221,7 @@ def test_tier_allocation_replaces_the_whole_map_at_once(
     season = seeded["season_id"]
     p1, p2 = seeded["player_ids"][:2]
     client.post(
-        f"/seasons/{season}/signups",
-        json={"user_ids": [p1, p2]},
-        headers=auth_headers,
+        f"/seasons/{season}/signups", json={"user_ids": [p1, p2]}, headers=auth_headers
     )
 
     resp = client.put(
@@ -291,8 +289,12 @@ def test_tiers_are_refused_for_players_not_signed_up(
     client: Client, seeded: dict[str, Any], auth_headers: dict[str, str]
 ) -> None:
     """The tier lives on the signup row, so a player without one is a bad request."""
-    season = seeded["season_id"]
     p1 = seeded["player_ids"][0]
+    season = client.post(
+        "/seasons",
+        json={"name": "No signups", "number_weeks": 1, "series_per_week": 1},
+        headers=auth_headers,
+    ).json()["id"]
     resp = client.put(
         f"/fantasy/tiers?season_id={season}", json={str(p1): 1}, headers=auth_headers
     )
