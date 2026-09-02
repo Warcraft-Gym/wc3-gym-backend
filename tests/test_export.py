@@ -173,16 +173,15 @@ def set_score_system(season_id: int, system: str) -> None:
 def test_the_season_sheet_carries_the_score_system(
     client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
 ) -> None:
-    """The column is the last of the sheet, so the import reads back the
-    scale the season was played on."""
+    """The sheet names the scale the season was played on, so the import
+    reads it back."""
     set_score_system(seeded["season_id"], "helpstone")
 
     resp = client.post(f"/export?season_id={seeded['season_id']}", headers=auth_headers)
     assert resp.status_code == 200
 
     rows = list(workbook_of(resp.content)["Season"].values)
-    assert rows[0][-1] == "Score System"
-    assert rows[1][-1] == "helpstone"
+    assert rows[1][rows[0].index("Score System")] == "helpstone"
 
 
 def test_an_exported_helpstone_season_imports_as_helpstone(
@@ -255,3 +254,80 @@ def test_the_fantasy_users_sheet_holds_a_drafted_player_on_no_roster(
 
     rows = list(workbook_of(resp.content)["Fantasy Users"].values)[1:]
     assert [row[0] for row in rows] == [drafted_id]
+
+
+def set_tier_count(season_id: int, tiers: int) -> None:
+    """Put one tier count on the seeded season."""
+    from app.core.db import Session
+    from app.models.season import Season
+
+    with Session() as session:
+        session.get_one(Season, season_id).fantasy_tiers = tiers
+        session.commit()
+
+
+def test_the_season_sheet_carries_the_tier_count_and_imports_it_back(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """The count is the last column of the Season sheet, and the workbook of
+    a four-tier season writes a four-tier season back."""
+    from app.core.db import Session
+    from app.models.season import Season
+
+    set_tier_count(seeded["season_id"], 4)
+    resp = client.post(f"/export?season_id={seeded['season_id']}", headers=auth_headers)
+    assert resp.status_code == 200
+    rows = list(workbook_of(resp.content)["Season"].values)
+    assert rows[0][-1] == "Fantasy Tiers"
+    assert rows[1][-1] == 4
+
+    set_tier_count(seeded["season_id"], 6)
+    imported = client.post(
+        "/import",
+        files={
+            "file": ("season.xlsx", BytesIO(resp.content), "application/vnd.ms-excel")
+        },
+        headers=auth_headers,
+    )
+    assert imported.status_code == 200, imported.text
+    with Session() as session:
+        assert session.get_one(Season, seeded["season_id"]).fantasy_tiers == 4
+
+
+def test_the_players_sheet_carries_no_tier(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """The tier is one season's allocation, and the import writes none."""
+    resp = client.post(f"/export?season_id={seeded['season_id']}", headers=auth_headers)
+    assert resp.status_code == 200
+
+    header = next(workbook_of(resp.content)["Players"].values)
+    assert "Fantasy Tier" not in header
+
+
+def test_the_players_sheet_carries_the_signup_race(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """A player registered on a race for the season exports on it; one with
+    no signup race exports on the profile's main race."""
+    from app.core.db import Session
+    from app.models.enums import Race
+    from app.models.relationships import DBUserSeasonSignup
+
+    registered, unregistered = seeded["player_ids"][:2]
+    with Session() as session:
+        session.add(
+            DBUserSeasonSignup(
+                user_id=registered, season_id=seeded["season_id"], race=Race.UD
+            )
+        )
+        session.commit()
+
+    resp = client.post(f"/export?season_id={seeded['season_id']}", headers=auth_headers)
+    assert resp.status_code == 200
+
+    rows = list(workbook_of(resp.content)["Players"].values)
+    race = rows[0].index("Race")
+    by_id = {row[0]: row[race] for row in rows[1:]}
+    assert by_id[registered] == "UD"
+    assert by_id[unregistered] in {"HU", "OC", "NE", "RANDOM"}
