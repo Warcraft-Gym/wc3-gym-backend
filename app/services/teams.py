@@ -97,7 +97,9 @@ class TeamService:
             return _public(session, row)
 
     def update_icon(self, team_id: int, file: bytes) -> TeamPublic:
-        blob.check_icon(file)
+        blob.icon_type(
+            file
+        )  # refuses anything that is not an image, before it is stored
         with Session.begin() as session:
             team = session.get(Team, team_id)
             if not team:

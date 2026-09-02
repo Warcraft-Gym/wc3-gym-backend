@@ -9,20 +9,25 @@ public blob is fetched by the browser straight from the store.
 
 from app.core.exceptions import BadRequestError
 
-PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
+# three of the ten logos in production are JPEGs that were stored and served as image/png;
+# browsers sniff the bytes, so nobody noticed. Both are accepted, and each is served as what it is.
+MAGIC = {b"\x89PNG\r\n\x1a\n": "image/png", b"\xff\xd8\xff": "image/jpeg"}
 MAX_ICON_BYTES = 2 * 1024 * 1024
 # the logo never changes under its own URL, because every upload gets a new random suffix
 ICON_CACHE_SECONDS = 31_536_000
 
 
-def check_icon(data: bytes) -> None:
-    """A logo becomes a public URL, so it is checked before it is stored, not after."""
+def icon_type(data: bytes) -> str:
+    """The media type of a logo, refusing anything that is not one. A logo becomes a public URL,
+    so this runs before it is stored, not after."""
     if not data:
         raise BadRequestError("No image provided")
     if len(data) > MAX_ICON_BYTES:
         raise BadRequestError(f"Image is larger than {MAX_ICON_BYTES // 1024} KB")
-    if not data.startswith(PNG_MAGIC):
-        raise BadRequestError("Image must be a PNG")
+    for magic, media_type in MAGIC.items():
+        if data.startswith(magic):
+            return media_type
+    raise BadRequestError("Image must be a PNG or a JPEG")
 
 
 def put_icon(team_id: int, data: bytes) -> str:

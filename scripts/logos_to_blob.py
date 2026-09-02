@@ -49,7 +49,7 @@ def main() -> int:
                 print(f"  {name}: would upload {len(icon)} bytes")
                 moved += 1
                 continue
-            blob.check_icon(icon)
+            blob.icon_type(icon)
             url = blob.put_icon(team_id, icon)
             session.execute(update(Team).where(Team.id == team_id).values(icon_url=url))
             session.commit()

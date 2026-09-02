@@ -17,6 +17,8 @@ dependencies = [
     "sqlmodel>=0.0.39",
     "alembic>=1.19.1",
     "clerk-backend-api>=7.0.0",
+    # team logos live in Vercel Blob; imported inside the upload path only
+    "vercel>=0.10.0",
 ]
 
 [build-system]
@@ -26,8 +28,6 @@ build-backend = "hatchling.build"
 [dependency-groups]
 dev = [
     "httpx2>=2.10.0",
-    # team logos live in Vercel Blob; imported only on the upload path
-    "vercel>=0.10.0",
     "pytest",
     "ruff>=0.16.3",
     "rust-just>=1.58.0",
