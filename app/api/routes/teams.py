@@ -253,8 +253,11 @@ def get_team_image(team_id: int, request: Request, service: TeamServiceDep) -> R
     """Answer the team logo: the blob it lives in, or the stored bytes until it has moved."""
     url = service.get_icon_url(team_id)
     if url:
-        # the blob is public, so the browser fetches the next one straight from the store
-        return RedirectResponse(url, headers={"Cache-Control": "public, max-age=3600"})
+        # Not cacheable: a replacement gets a new blob URL and deletes the old one, so a cached
+        # redirect would send every viewer to a blob that no longer exists until it expired. The
+        # blob itself carries a year, so only this hop is paid again. Callers reading icon_url
+        # from the team answer skip the hop entirely.
+        return RedirectResponse(url, headers={"Cache-Control": "no-store"})
 
     team_icon = service.get_icon(team_id)
     if not team_icon:
@@ -268,6 +271,7 @@ def get_team_image(team_id: int, request: Request, service: TeamServiceDep) -> R
     ]:
         return Response(status_code=304, headers=headers)
 
+    # a read must not fail on a type the upload would refuse: some stored rows predate any check
     return Response(
-        content=team_icon, media_type=blob.icon_type(team_icon), headers=headers
+        content=team_icon, media_type=blob.stored_type(team_icon), headers=headers
     )

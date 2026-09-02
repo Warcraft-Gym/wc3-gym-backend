@@ -96,26 +96,24 @@ class TeamService:
                 raise NotFoundError("Team not found")
             return _public(session, row)
 
-    def update_icon(self, team_id: int, file: bytes) -> TeamPublic:
-        blob.icon_type(
-            file
-        )  # refuses anything that is not an image, before it is stored
-        with Session.begin() as session:
-            team = session.get(Team, team_id)
-            if not team:
-                raise NotFoundError("Team not found")
-            previous = team.icon_url  # the deferred icon stays in the database
-        # outside the transaction: the store is not part of it, and a failed upload must not
-        # leave the row pointing at a blob that does not exist
+    def update_icon(self, team_id: int, file: bytes) -> None:
+        """Put the logo in the store, then point the row at it and drop the one it replaced."""
+        # at the boundary the bytes arrive at, so it holds whatever the store is or is stubbed to be
+        blob.icon_type(file)
+        # the store is not part of the transaction, so the put happens first: a put that is never
+        # committed leaves an unreferenced blob, which is cheap, while a committed row pointing at
+        # a blob that was never written is a broken image
         url = blob.put_icon(team_id, file)
         with Session.begin() as session:
-            team = Team.update_icon(session, team_id, url)
+            # locked: two uploads for one team would otherwise read the same previous URL, and the
+            # loser's blob would be left behind with nothing pointing at it
+            team = session.get(Team, team_id, with_for_update=True)
             if not team:
                 raise NotFoundError("Team not found")
-            public = _public(session, team)
+            previous = team.icon_url
+            team.icon_url = url
         if previous:
             blob.delete_icon(previous)
-        return public
 
     def add_players(
         self, team_id: int, season_id: int, player_ids: list[int]

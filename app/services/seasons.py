@@ -210,7 +210,10 @@ class SeasonService:
                 if map.name:
                     base = ladder_maps.folded_base(map.name)
                     by_base.setdefault(base, []).append(ident(map))
-            pictured = {ident(map) for map in maps if map.icon}
+            # the id alone: reading map.icon here is a deferred load of the whole picture per map
+            pictured = set(
+                session.scalars(select(col(Map.id)).where(col(Map.icon).is_not(None)))
+            )
             taken = {map.shortname.lower() for map in maps if map.shortname}
 
         def known(name: str) -> int | None:

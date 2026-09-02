@@ -128,3 +128,41 @@ def test_put_icon_follows_the_bytes(monkeypatch: pytest.MonkeyPatch) -> None:
 
     REAL_PUT_ICON(7, PNG)
     assert seen == {"path": "teams/7.png", "content_type": "image/png"}
+
+
+def test_the_image_route_redirects_once_a_logo_is_in_the_store(
+    client: Client,
+    seeded: dict[str, Any],
+    auth_headers: dict[str, str],
+    blob_store: dict[str, bytes],
+) -> None:
+    team_id = seeded["team_a_id"]
+    upload(client, team_id, auth_headers, PNG)
+    resp = client.get(f"/teams/{team_id}/image", follow_redirects=False)
+    assert resp.status_code == 307
+    assert resp.headers["location"] in blob_store
+    # a replacement deletes the blob this points at, so a cached redirect would 404 for its lifetime
+    assert resp.headers["cache-control"] == "no-store"
+
+
+def test_the_image_route_serves_the_stored_bytes_until_a_logo_moves(
+    client: Client, seeded: dict[str, Any]
+) -> None:
+    """A team whose logo has not been backfilled still answers from the column."""
+    from app.core.db import Session
+    from app.models.team import Team
+
+    team_id = seeded["team_a_id"]
+    with Session.begin() as session:
+        session.get(Team, team_id).icon = PNG  # type: ignore[union-attr]
+
+    resp = client.get(f"/teams/{team_id}/image", follow_redirects=False)
+    assert resp.status_code == 200
+    assert resp.content == PNG
+    assert resp.headers["content-type"] == "image/png"
+
+
+def test_a_team_with_no_logo_at_all_answers_not_found(
+    client: Client, seeded: dict[str, Any]
+) -> None:
+    assert client.get(f"/teams/{seeded['team_a_id']}/image").status_code == 404
