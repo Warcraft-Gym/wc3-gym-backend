@@ -71,6 +71,18 @@ seed env="prod":
         if [ -f "$seed/users.csv" ]; then uv run python scripts/seed_db.py "$seed" "$url"; fi
     fi
 
+# Build the review season on the shared staging database: you (the first ADMIN_DISCORD_IDS entry) against
+# the reviewer's Discord id: `just vercel review-season staging <reviewer discord id>`.
+review-season env reviewer me="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    url=$(just vercel url {{ env }})
+    if [ "{{ env }}" = staging ]; then
+        url=$(DB_URL="$url" uv run python -c 'import os; from api.preview_db import SHARED, with_database; print(with_database(os.environ["DB_URL"], SHARED))')
+    fi
+    me="{{ me }}"
+    DB_URL="$url" uv run python scripts/review_season.py "${me:-${ADMIN_DISCORD_IDS%%,*}}" "{{ reviewer }}"
+
 # List the staging databases: the template, the shared database and the branch copies.
 list:
     DB_URL="$(just vercel url staging)" uv run python scripts/vercel_staging_db.py list
