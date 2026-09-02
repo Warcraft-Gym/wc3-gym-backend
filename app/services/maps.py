@@ -1,3 +1,6 @@
+from sqlalchemy import select
+from sqlmodel import col
+
 from app.core.db import Session
 from app.core.exceptions import NotFoundError
 from app.core.query import QueryElement, QueryUtil
@@ -44,6 +47,11 @@ class MapService:
         with Session.begin() as session:
             if not Map.update(session, map_id, icon=file):
                 raise NotFoundError(f"Map not found by Id: {map_id}")
+
+    def get_image_url(self, map_id: int) -> str | None:
+        """Where the picture is published, or None while it is only stored bytes."""
+        with Session.begin() as session:
+            return session.scalar(select(col(Map.image)).where(col(Map.id) == map_id))
 
     def get_icon(self, map_id: int) -> bytes | None:
         with Session.begin() as session:
