@@ -26,7 +26,7 @@ BEFORE_ROLE_BINDINGS = "b3f9d7c21a48"
 # The revision before the season setting is spelled w3c
 BEFORE_W3C_SEASON_KEY = "5f4a1a4d88d3"
 # The revision before the fantasy tier lives on the season signup row
-BEFORE_PER_SEASON_TIERS = "c4d7e9f1a2b3"
+BEFORE_PER_SEASON_TIERS = "7764c747da5d"
 
 
 def comparable(

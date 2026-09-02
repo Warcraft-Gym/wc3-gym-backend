@@ -7,7 +7,7 @@ whose signups cover all of them and copies the tiers onto that season's rows. Se
 that do not cover them keep null, and users.fantasy_tier stays until it is dropped.
 
 Revision ID: d5e8b1c47a90
-Revises: c4d7e9f1a2b3
+Revises: 7764c747da5d
 Create Date: 2026-09-02 00:00:00.000000
 
 """
@@ -19,7 +19,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "d5e8b1c47a90"
-down_revision: str | Sequence[str] | None = "c4d7e9f1a2b3"
+down_revision: str | Sequence[str] | None = "7764c747da5d"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
