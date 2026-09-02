@@ -322,3 +322,48 @@ def test_a_player_of_another_series_reads_nothing(
 
     assert resp.status_code == 403, resp.text
     assert resp.json() == {"error": "not_authorized_for_this_series"}
+
+
+def test_a_result_is_reported_only_once_the_veto_is_complete(
+    client: Client,
+    seeded: dict[str, Any],
+    pool: list[int],
+    dashboard_token: Callable[..., str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The record is what the map stats are made of, so a score waits for it.
+    Scheduling does not."""
+    from app.services import player_series
+
+    monkeypatch.setattr(
+        player_series, "_notify_discord_series_update", lambda *a: False
+    )
+    series_id = seeded["series_open_id"]
+    side_a, side_b = dashboard_token(discord_id="2"), dashboard_token(discord_id="4")
+    replay = ("game.w3g", b"replay", "application/octet-stream")
+    scores = {
+        "token": side_a,
+        "action": "score_updated",
+        "player1_score": "2",
+        "player2_score": "0",
+    }
+    files = {"game1": replay, "game2": replay}
+
+    resp = client.put(f"/player-series/{series_id}", data=scores, files=files)
+    assert resp.status_code == 400, resp.text
+    assert resp.json() == {
+        "error": "The map veto is not complete. Enter it on the veto board first."
+    }
+
+    resp = client.put(
+        f"/player-series/{series_id}",
+        json={"token": side_a, "date_time": "2026-09-05 18:00:00"},
+    )
+    assert resp.status_code == 200, resp.text
+
+    taken(client, series_id, side_a, pool[1])
+    taken(client, series_id, side_b, pool[2])
+    taken(client, series_id, side_a, pool[3])
+    resp = client.put(f"/player-series/{series_id}", data=scores, files=files)
+    assert resp.status_code == 200, resp.text
+    assert (resp.json()["player1_score"], resp.json()["player2_score"]) == (2, 0)

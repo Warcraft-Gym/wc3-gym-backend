@@ -24,6 +24,15 @@ from app.models.series_veto_step import (
 
 
 class SeriesVetoService:
+    def is_complete(self, series_id: int) -> bool:
+        """Whether every step of the season's order is taken. A season with no
+        order has nothing to take."""
+        with Session() as session:
+            series = session.get(Series, series_id)
+            if not series:
+                raise NotFoundError(f"Series not found by id: {series_id}")
+            return len(_steps(session, series_id)) >= len(_order(series.match.season))
+
     def board(self, series_id: int, user_id: int | None) -> SeriesVetoPublic:
         """The board of one series. A null user is an admin, who reads any of them."""
         with Session.begin() as session:
