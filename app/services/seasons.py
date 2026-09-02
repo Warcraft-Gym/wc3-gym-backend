@@ -202,8 +202,8 @@ class SeasonService:
         is renamed to the ladder name and keeps its id, results and short name;
         a missing picture is filled. Only a map with no lineage here is created.
 
-        The picture is kept as the url it is published at. It used to be downloaded into the icon
-        column, which is the shape that took the database over its egress quota for team logos.
+        The picture is kept as the url warcraft3.info publishes it at, never copied into our own
+        store: those bytes are already served from a CDN and cost us nothing where they are.
         """
         wanted = {
             row.w3c_name: row
@@ -222,11 +222,7 @@ class SeasonService:
                     by_base.setdefault(base, []).append(ident(map))
             # a map that already has a picture, uploaded or published, is left alone
             pictured = set(
-                session.scalars(
-                    select(col(Map.id)).where(
-                        col(Map.icon).is_not(None) | col(Map.image).is_not(None)
-                    )
-                )
+                session.scalars(select(col(Map.id)).where(col(Map.image).is_not(None)))
             )
             taken = {map.shortname.lower() for map in maps if map.shortname}
 

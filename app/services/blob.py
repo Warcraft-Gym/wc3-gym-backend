@@ -1,4 +1,4 @@
-"""Team logos in Vercel Blob.
+"""The pictures the app owns, in Vercel Blob: team logos and map thumbnails.
 
 The SDK is imported inside each call, not at module scope: it carries its own httpx and a dozen
 other packages, and only the upload route ever needs them. Reads never come here at all, because a
@@ -35,13 +35,13 @@ def icon_type(data: bytes) -> str:
     raise BadRequestError("Image must be a PNG or a JPEG")
 
 
-def put_icon(team_id: int, data: bytes) -> str:
-    """Store the logo and answer its public URL."""
+def put_icon(name: str, data: bytes) -> str:
+    """Store the picture under this name, such as `teams/4`, and answer its public URL."""
     from vercel import blob
 
     media_type = icon_type(data)
     result = blob.put(
-        f"teams/{team_id}.{EXTENSION[media_type]}",
+        f"{name}.{EXTENSION[media_type]}",
         data,
         access="public",
         content_type=media_type,
@@ -50,6 +50,12 @@ def put_icon(team_id: int, data: bytes) -> str:
         cache_control_max_age=ICON_CACHE_SECONDS,
     )
     return result.url
+
+
+def ours(url: str) -> bool:
+    """Whether we wrote this picture. A map picture can be the url warcraft3.info publishes it
+    at, which is not ours to delete."""
+    return ".public.blob.vercel-storage.com/" in url
 
 
 def delete_icon(url: str) -> None:
@@ -73,6 +79,8 @@ def demo() -> None:
     assert icon_type(jpeg) == "image/jpeg"
     assert EXTENSION[icon_type(png)] == "png"
     assert EXTENSION[icon_type(jpeg)] == "jpg"
+    assert ours("https://abc.public.blob.vercel-storage.com/maps/8-x.png")
+    assert not ours("https://d3upx5peno0o6w.cloudfront.net/echo.png")
     print("ok")
 
 

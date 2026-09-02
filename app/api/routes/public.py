@@ -40,8 +40,9 @@ from app.models.fantasy_team import (
 )
 from app.models.login import PublicAccessRequest
 from app.models.player_history import PlayerHistory
-from app.models.series import SeriesSort
+from app.models.series import SeriesPublic, SeriesSort
 from app.models.series_veto_step import SeriesVetoPublic, SeriesVetoWrite
+from app.models.types import utcnow
 from app.models.user import (
     ProfileUpdate,
     PublicSignupWrite,
@@ -54,6 +55,7 @@ from app.models.user_season_availability import (
     UserSeasonAvailabilityPublic,
 )
 from app.services import discord, discord_roles, player_history, player_series
+from app.services.series import SeriesService
 
 logger = logging.getLogger(__name__)
 
@@ -125,6 +127,37 @@ def dashboard_player(
 DashboardPlayer = Annotated[
     tuple[dict[str, Any], UserListPublic], Depends(dashboard_player)
 ]
+
+
+def _refuse_started(series_service: SeriesService, series_id: int | None) -> None:
+    """A bet closes once its series has started, and reopens if the series moves later."""
+    if series_id is None:
+        return
+    series = series_service.get(series_id)
+    if series.date_time is not None and series.date_time <= utcnow():
+        raise ApiError(
+            403,
+            {
+                "error": "series_started",
+                "message": "Bets close once the series has started",
+            },
+        )
+
+
+def _refuse_ended(series_service: SeriesService, season_id: int) -> None:
+    """A season is over once every series is scored or past its time; an unplayed, unscheduled one keeps it open."""
+    series = series_service.search_for_season(season_id, None)
+    now = utcnow()
+
+    def done(s: SeriesPublic) -> bool:
+        scored = s.player1_score is not None and s.player2_score is not None
+        return scored or (s.date_time is not None and s.date_time <= now)
+
+    if series and all(done(s) for s in series):
+        raise ApiError(
+            403,
+            {"error": "season_ended", "message": "The season has ended"},
+        )
 
 
 def _owned_bet(
@@ -593,6 +626,7 @@ def create_fantasy_team(
     settings_service: SettingsServiceDep,
     user_service: UserServiceDep,
     fantasy_team_service: FantasyTeamServiceDep,
+    series_service: SeriesServiceDep,
     request: Request,
     credentials: Credentials,
     data: PublicFantasyTeamWrite | None = None,
@@ -625,6 +659,7 @@ def create_fantasy_team(
 
     if not season_id or not drafted_team_id or not drafted_race:
         raise BadRequestError("missing required fields")
+    _refuse_ended(series_service, season_id)
 
     # Find or create user
     users = user_service.find_by_discord_id(str(entry.get("discord_id")))
@@ -705,6 +740,7 @@ def create_fantasy_team(
 def create_fantasy_bet(
     user_service: UserServiceDep,
     fantasy_bet_service: FantasyBetServiceDep,
+    series_service: SeriesServiceDep,
     request: Request,
     credentials: Credentials,
     data: PublicFantasyBetWrite | None = None,
@@ -712,6 +748,7 @@ def create_fantasy_bet(
     """Create a fantasy bet for the identified player."""
     data = data or PublicFantasyBetWrite()
     entry = _identity(request, credentials, data.token)
+    _refuse_started(series_service, data.series_id)
 
     # Get or create user based on discord info
     existing_users = user_service.find_by_discord_id(str(entry.get("discord_id")))
@@ -749,6 +786,7 @@ def update_fantasy_bet(
     bet_id: int,
     user_service: UserServiceDep,
     fantasy_bet_service: FantasyBetServiceDep,
+    series_service: SeriesServiceDep,
     request: Request,
     credentials: Credentials,
     data: PublicFantasyBetWrite | None = None,
@@ -765,6 +803,7 @@ def update_fantasy_bet(
         data.token,
         "update",
     )
+    _refuse_started(series_service, existing_bet.series_id)
 
     # Update the bet
     bet_payload = {
@@ -791,12 +830,14 @@ def delete_fantasy_bet(
     bet_id: int,
     user_service: UserServiceDep,
     fantasy_bet_service: FantasyBetServiceDep,
+    series_service: SeriesServiceDep,
     request: Request,
     credentials: Credentials,
     token: str | None = None,
 ) -> None:
     """Delete a fantasy bet of the identified player."""
-    _owned_bet(
+    bet = _owned_bet(
         request, credentials, user_service, fantasy_bet_service, bet_id, token, "delete"
     )
+    _refuse_started(series_service, bet.series_id)
     fantasy_bet_service.delete(bet_id)

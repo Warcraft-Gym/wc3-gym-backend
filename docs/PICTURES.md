@@ -1,4 +1,4 @@
-# Team logos
+# Pictures
 
 ## Where they live
 
@@ -24,14 +24,16 @@ A `bytea` also crosses the wire as hex, so reading a 49 KB logo cost about 99 KB
 
 ## What still guards it
 
-`Map.icon` is deferred, via `__mapper_args__ = {"properties": {"icon": deferred(icon_column)}}`. SQLModel swallows both `sa_column=deferred(...)` and `mapped_column(deferred=True)`; the mapper-args form is the one that takes.
+`tests/test_blob_budget.py` walks `SQLModel._sa_registry.mappers` and fails when any mapped binary column is not deferred, and again when one exists at all. No model has one now, and that is the state to hold: a picture is a URL.
 
-`tests/test_blob_budget.py` walks `SQLModel._sa_registry.mappers` and fails when any mapped binary column is not deferred. It is what found `Map.icon`, which holds nothing in production and would cost the same the day someone uploaded a map picture. It guards the next binary column too.
+## Map pictures
+
+The same store, under `maps/<map id>`, reached by `POST /maps/{id}/image`. `maps.image` holds the URL, and it holds a second kind: the ladder import writes the URL warcraft3.info publishes the thumbnail at, which is a CDN that costs us nothing, so those bytes are never copied into our store. `blob.ours` tells the two apart, because a replacement deletes only a blob we wrote.
+
+An upload wins over an import: the import fills `image` only where it is empty. The map answer carries `image`, so the season pool page and the veto board render the picture without touching the backend again.
 
 ## Seeded databases
 
 A seeded database gets its logos from the seed repo, which carries `logos/<team id>.png` or `.jpg`. `just _load-seed` pushes each through `TeamService.update_icon` after the CSVs load, so the database owns its blobs and a replaced production logo cannot break it. Without `BLOB_READ_WRITE_TOKEN` the upload is skipped and teams show the default logo.
-
-`Map.icon` is empty in production and still written by `POST /maps/{id}/image`. `MapBase.image` is already a URL column, so whether maps follow is a separate and much smaller decision.
 
 The WordPress shortcodes are not part of this. They call `backend.warcraft-gym.com`, which is the Azure box running the older Flask app against MySQL, so they never read Supabase and never blocked any of it.

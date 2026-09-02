@@ -123,10 +123,10 @@ def test_put_icon_follows_the_bytes(monkeypatch: pytest.MonkeyPatch) -> None:
         return Result()
 
     monkeypatch.setattr(sdk, "put", fake_put)
-    REAL_PUT_ICON(7, JPEG)
+    REAL_PUT_ICON("teams/7", JPEG)
     assert seen == {"path": "teams/7.jpg", "content_type": "image/jpeg"}
 
-    REAL_PUT_ICON(7, PNG)
+    REAL_PUT_ICON("teams/7", PNG)
     assert seen == {"path": "teams/7.png", "content_type": "image/png"}
 
 
