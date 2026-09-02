@@ -3,7 +3,7 @@
 Every logo is served from Vercel Blob through `teams.icon_url`; the bytes column had no reader left.
 
 Revision ID: a9c2e4f7b1d6
-Revises: d5e8b1c47a90
+Revises: a7c3f0d2b915
 Create Date: 2026-09-02 21:30:00.000000
 
 """
@@ -15,7 +15,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "a9c2e4f7b1d6"
-down_revision: str | Sequence[str] | None = "d5e8b1c47a90"
+down_revision: str | Sequence[str] | None = "a7c3f0d2b915"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
