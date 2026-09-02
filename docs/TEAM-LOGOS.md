@@ -2,9 +2,9 @@
 
 ## Where they live
 
-In Vercel Blob, in the store `gnl-media`, connected to this project so `BLOB_READ_WRITE_TOKEN` is set. `teams.icon_url` holds the public URL and nothing else; the browser fetches the image from the store, so serving one costs no function invocation and no database read.
+In Vercel Blob, in the store `gnl-media`, connected to this project so `BLOB_READ_WRITE_TOKEN` is set. `teams.icon_url` holds the public URL and nothing else. A caller that reads `icon_url` off the team answer fetches the image straight from the store. A caller that still asks `GET /teams/{id}/image` pays one function invocation and one `SELECT icon_url` for the redirect, which is deliberately not cacheable: a replacement deletes the blob it replaced, so a cached redirect would point at something that no longer exists.
 
-`POST /teams/{id}/image` uploads. It checks the PNG magic bytes and a 2 MB cap first, because the file becomes a public URL. Every upload gets a new random suffix, so replacing a logo changes its URL and no browser holds the old one behind the year-long cache; the blob it replaced is deleted straight after.
+`POST /teams/{id}/image` uploads. It checks the magic bytes — PNG or JPEG, since three of the ten live logos are JPEGs that were stored as `image/png` — and a 2 MB cap, because the file becomes a public URL. Every upload gets a new random suffix, so replacing a logo changes its URL and no browser holds the old one behind the year-long cache; the blob it replaced is deleted straight after.
 
 Setting a logo is still picking a file in the admin UI. That is deliberate: a season is set up without a developer, and it has to stay that way.
 

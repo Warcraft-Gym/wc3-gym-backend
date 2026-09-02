@@ -7,7 +7,11 @@ public blob is fetched by the browser straight from the store.
 `BLOB_READ_WRITE_TOKEN` comes from the store connected to the Vercel project.
 """
 
+import logging
+
 from app.core.exceptions import BadRequestError
+
+logger = logging.getLogger(__name__)
 
 # three of the ten logos in production are JPEGs that were stored and served as image/png;
 # browsers sniff the bytes, so nobody noticed. Both are accepted, and each is served as what it is.
@@ -29,6 +33,14 @@ def icon_type(data: bytes) -> str:
         if data.startswith(magic):
             return media_type
     raise BadRequestError("Image must be a PNG or a JPEG")
+
+
+def stored_type(data: bytes) -> str:
+    """The media type of bytes already in the database, which predate any check on the way in."""
+    for magic, media_type in MAGIC.items():
+        if data.startswith(magic):
+            return media_type
+    return "application/octet-stream"
 
 
 def put_icon(team_id: int, data: bytes) -> str:
@@ -56,7 +68,9 @@ def delete_icon(url: str) -> None:
     try:
         blob.delete(url)
     except BlobError:
-        pass
+        # a blob that is already gone is fine, but a bad token or a suspended store also lands
+        # here and would otherwise leak a logo per replacement with nothing said
+        logger.warning("could not delete the replaced logo %s", url, exc_info=True)
 
 
 def demo() -> None:

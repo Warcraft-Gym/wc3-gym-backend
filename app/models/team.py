@@ -2,7 +2,7 @@ from typing import TYPE_CHECKING, Annotated, Any, Self
 
 from pydantic import BeforeValidator
 from sqlalchemy import Column, LargeBinary
-from sqlalchemy.orm import Session, deferred
+from sqlalchemy.orm import deferred
 from sqlmodel import Field, Relationship, SQLModel
 
 from app.models.base import DBModel, ident
@@ -64,14 +64,6 @@ class Team(TeamBase, DBModel, table=True):
             "order_by": "DBTeamSeasonCaptain.user_id",
         },
     )
-
-    @classmethod
-    def update_icon(cls, session: Session, obj_id: int, url: str) -> Self | None:
-        obj = session.get(cls, obj_id)
-        if obj:
-            obj.icon_url = url
-            session.flush()
-        return obj
 
 
 class TeamCreate(TeamBase):
