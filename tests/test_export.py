@@ -256,44 +256,6 @@ def test_the_fantasy_users_sheet_holds_a_drafted_player_on_no_roster(
     assert [row[0] for row in rows] == [drafted_id]
 
 
-def set_tier_count(season_id: int, tiers: int) -> None:
-    """Put one tier count on the seeded season."""
-    from app.core.db import Session
-    from app.models.season import Season
-
-    with Session() as session:
-        session.get_one(Season, season_id).fantasy_tiers = tiers
-        session.commit()
-
-
-def test_the_season_sheet_carries_the_tier_count_and_imports_it_back(
-    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
-) -> None:
-    """The count is the last column of the Season sheet, and the workbook of
-    a four-tier season writes a four-tier season back."""
-    from app.core.db import Session
-    from app.models.season import Season
-
-    set_tier_count(seeded["season_id"], 4)
-    resp = client.post(f"/export?season_id={seeded['season_id']}", headers=auth_headers)
-    assert resp.status_code == 200
-    rows = list(workbook_of(resp.content)["Season"].values)
-    assert rows[0][-1] == "Fantasy Tiers"
-    assert rows[1][-1] == 4
-
-    set_tier_count(seeded["season_id"], 6)
-    imported = client.post(
-        "/import",
-        files={
-            "file": ("season.xlsx", BytesIO(resp.content), "application/vnd.ms-excel")
-        },
-        headers=auth_headers,
-    )
-    assert imported.status_code == 200, imported.text
-    with Session() as session:
-        assert session.get_one(Season, seeded["season_id"]).fantasy_tiers == 4
-
-
 def test_the_players_sheet_carries_no_tier(
     client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
 ) -> None:

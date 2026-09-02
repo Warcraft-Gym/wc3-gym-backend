@@ -1,6 +1,7 @@
 import logging
 from collections.abc import Iterable
 from datetime import timedelta
+from itertools import pairwise
 from typing import TYPE_CHECKING
 
 from sqlalchemy import ColumnElement, Select, func, or_, select, update
@@ -90,12 +91,10 @@ class UserService:
             season = session.get(Season, season_id)
             if season is None:
                 raise NotFoundError("Season not found")
-            if tiers and max(tiers.values()) > season.fantasy_tiers:
-                raise BadRequestError(f"Season cuts only {season.fantasy_tiers} tiers")
-            if len(cuts) != season.fantasy_tiers - 1 or cuts != sorted(cuts):
-                raise BadRequestError(
-                    f"{season.fantasy_tiers} tiers need {season.fantasy_tiers - 1} ascending cuts"
-                )
+            if not 1 <= len(cuts) <= 5 or any(a >= b for a, b in pairwise(cuts)):
+                raise BadRequestError("Cuts must be 1 to 5 strictly ascending MMRs")
+            if tiers and max(tiers.values()) > len(cuts) + 1:
+                raise BadRequestError(f"The cuts make only {len(cuts) + 1} tiers")
             signed_up = set(
                 session.scalars(
                     select(col(DBUserSeasonSignup.user_id)).where(

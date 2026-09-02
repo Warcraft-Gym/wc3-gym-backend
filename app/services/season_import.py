@@ -233,7 +233,6 @@ def _season(
                 "discordRole": "Discord Role",
                 "start_date": "Start Date",
                 "end_date": "End Date",
-                "fantasy_tiers": "Fantasy Tiers",
             },
         ),
     )

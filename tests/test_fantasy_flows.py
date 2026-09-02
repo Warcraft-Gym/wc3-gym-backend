@@ -286,56 +286,37 @@ def test_a_tier_allocation_names_its_season(
     assert get_json(client, f"/users/{p1}")["fantasy_tier"] is None
 
 
-def test_a_season_cuts_only_as_many_tiers_as_it_sets(
+def test_the_cuts_make_the_tiers(
     client: Client, seeded: dict[str, Any], auth_headers: dict[str, str]
 ) -> None:
-    """The season owns the tier count, and a tier above it is refused."""
+    """The tier count is one more than the cuts, so a tier above it is refused, and
+    the cuts must be one to five strictly ascending MMRs."""
     season = seeded["season_id"]
     p1 = seeded["player_ids"][0]
     client.post(
         f"/seasons/{season}/signups", json={"user_ids": [p1]}, headers=auth_headers
     )
-    assert get_json(client, f"/seasons/{season}")["fantasy_tiers"] == 6
+    before = get_json(client, f"/seasons/{season}")
+    assert (before["fantasy_tiers"], before["fantasy_tier_cuts"]) == (0, [])
 
-    resp = client.put(
-        f"/seasons/{season}", json={"fantasy_tiers": 4}, headers=auth_headers
-    )
-    assert resp.status_code == 200
-    assert get_json(client, f"/seasons/{season}")["fantasy_tiers"] == 4
-    assert (
-        client.put(
-            f"/seasons/{season}", json={"fantasy_tiers": 7}, headers=auth_headers
+    def put(cuts: list[int], tier: int) -> int:
+        return client.put(
+            f"/fantasy/tiers?season_id={season}",
+            json={"cuts": cuts, "tiers": {str(p1): tier}},
+            headers=auth_headers,
         ).status_code
-        == 422
-    )
 
-    refused = client.put(
-        f"/fantasy/tiers?season_id={season}",
-        json={"cuts": CUTS[:3], "tiers": {str(p1): 5}},
-        headers=auth_headers,
-    )
-    assert refused.status_code == 400
+    assert put(CUTS[:3], 5) == 400
     assert _tier_of(client, season, p1) is None
-    assert get_json(client, f"/seasons/{season}")["fantasy_tier_cuts"] is None
+    for cuts in ([], CUTS + [1900], [900, 900, 1100], [1300, 1100, 900]):
+        assert put(cuts, 1) == 400, cuts
 
-    # Four tiers take three ascending cuts, and the season keeps the ones it took
-    for cuts in (CUTS, CUTS[:2], [1300, 1100, 900]):
-        refused = client.put(
-            f"/fantasy/tiers?season_id={season}",
-            json={"cuts": cuts, "tiers": {str(p1): 4}},
-            headers=auth_headers,
-        )
-        assert refused.status_code == 400
-    assert (
-        client.put(
-            f"/fantasy/tiers?season_id={season}",
-            json={"cuts": CUTS[:3], "tiers": {str(p1): 4}},
-            headers=auth_headers,
-        ).status_code
-        == 204
-    )
+    assert put(CUTS[:3], 4) == 204
     assert _tier_of(client, season, p1) == 4
-    assert get_json(client, f"/seasons/{season}")["fantasy_tier_cuts"] == CUTS[:3]
+    after = get_json(client, f"/seasons/{season}")
+    assert (after["fantasy_tiers"], after["fantasy_tier_cuts"]) == (4, CUTS[:3])
+    # A one-point tier is legal: exactly 1100 is its own tier
+    assert put([900, 1100, 1101], 4) == 204
 
 
 def test_tiers_are_refused_for_players_not_signed_up(

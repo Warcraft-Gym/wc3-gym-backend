@@ -92,7 +92,6 @@ def export_season(
             "End Date",
             "Discord Role",
             "Score System",
-            "Fantasy Tiers",
         ]
     )
     season_sheet.append(
@@ -106,7 +105,6 @@ def export_season(
             season.end_date.strftime("%Y-%m-%d") if season.end_date else "",
             season.discordRole or "",
             season.score_system,
-            season.fantasy_tiers,
         ]
     )
 

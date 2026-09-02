@@ -4,6 +4,7 @@
 a model without a migration is missing from the table in production.
 """
 
+import json
 from pathlib import Path
 
 import pytest
@@ -28,6 +29,8 @@ BEFORE_W3C_SEASON_KEY = "5f4a1a4d88d3"
 # The revision before the fantasy tier lives on the season signup row
 BEFORE_PER_SEASON_TIERS = "7764c747da5d"
 BEFORE_USER_TIER_DROP = "d5e8b1c47a90"
+# The revision before the tier count is derived from the cuts
+BEFORE_COUNT_DROP = "c4d1e7f9a2b3"
 
 
 def comparable(
@@ -336,10 +339,72 @@ def test_the_tier_backfill_picks_the_season_that_signed_up_every_tiered_player(
             )
         ).all()
         assert rows == [(1, 1, 1), (1, 2, 2), (2, 1, None)]
-        assert connection.scalars(text("SELECT fantasy_tiers FROM seasons")).all() == [
-            6,
-            6,
+        # Neither player has a synced MMR, so no cuts are rebuilt for either season
+        assert connection.scalars(
+            text("SELECT fantasy_tier_cuts FROM seasons")
+        ).all() == [None, None]
+
+
+def test_the_count_drop_rebuilds_the_cuts_from_the_tiers_and_the_mmr(
+    tmp_path: Path,
+) -> None:
+    """Each cut opens the tier above at its lowest synced MMR, made strictly
+    ascending past a player moved by hand, and the count comes back on downgrade."""
+    url = fresh_database(tmp_path, "count-drop")
+    upgrade_to(url, BEFORE_COUNT_DROP)
+
+    engine = create_engine(url)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO seasons (name, number_weeks, series_per_week, fantasy_tiers) "
+                "VALUES ('Cut', 4, 2, 3), ('Later', 4, 2, 6)"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO users (id, name, battleTag, discordTag, discordId, race) "
+                "VALUES (1, 'A', 'A#1', 'A', '1', 'Random'), "
+                "(2, 'B', 'B#1', 'B', '2', 'Random'), "
+                "(3, 'C', 'C#1', 'C', '3', 'Random'), "
+                "(4, 'D', 'D#1', 'D', '4', 'Random')"
+            )
+        )
+        # C was moved up to tier 1 by hand with D's tier-2 MMR, so the tier-1 cut is
+        # pushed one above the tier-2 cut; B's older season is ignored
+        connection.execute(
+            text(
+                "INSERT INTO w3cstats (user_id, race, wc3_season, mmr) VALUES "
+                "(1, 'HU', 25, 900), (2, 'HU', 25, 1100), (2, 'NE', 24, 800), "
+                "(3, 'HU', 25, 1000), (4, 'HU', 25, 1000)"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO user_season_signup (user_id, season_id, fantasy_tier) "
+                "VALUES (1, 1, 3), (2, 1, 2), (3, 1, 1), (4, 1, 2), (1, 2, NULL)"
+            )
+        )
+
+    upgrade_to(url, "head")
+    with engine.connect() as connection:
+        assert "fantasy_tiers" not in {
+            column["name"] for column in inspect(engine).get_columns("seasons")
+        }
+        cuts = connection.scalars(
+            text("SELECT fantasy_tier_cuts FROM seasons ORDER BY id")
+        ).all()
+        # SQLite hands the JSON back as text
+        assert [json.loads(c) if isinstance(c, str) else c for c in cuts] == [
+            [1000, 1001],
+            None,
         ]
+
+    downgrade_to(url, BEFORE_COUNT_DROP)
+    with engine.connect() as connection:
+        assert connection.scalars(
+            text("SELECT fantasy_tiers FROM seasons ORDER BY id")
+        ).all() == [3, 6]
 
 
 def test_the_users_tier_column_is_dropped_and_comes_back_on_downgrade(
