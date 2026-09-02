@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import (
     ColumnElement,
     Row,
+    Subquery,
     and_,
     case,
     distinct,
@@ -238,7 +239,7 @@ class LadderService:
             if season is None:
                 raise NotFoundError("Season not found")
             # A season without dates reads every match the walk reaches
-            since, end = _window(season)
+            since, end = _fetch_window(season)
             open_window = end >= utcnow()
             seasons = _w3c_seasons_for(session, season)
             # The bootstrap start: a closed window is dated by the matches
@@ -521,6 +522,83 @@ def _window(season: Season) -> tuple[datetime, datetime]:
     )
 
 
+def _fetch_window(season: Season) -> tuple[datetime, datetime]:
+    """What the sync reads: the season, reaching back to the fantasy tiers'
+    Apply date so the MMR each player held on it is on record."""
+    start, end = _window(season)
+    applied = season.fantasy_tiers_applied_at
+    return (min(start, applied) if applied else start, end)
+
+
+def mmr_on(
+    session: OrmSession, user_ids: Sequence[int], instant: datetime
+) -> dict[tuple[int, Race | None], int]:
+    """Each player's MMR on one instant, per race he selected: what he took
+    into his first rated match at or after it, else what his last rated match
+    before it left him with. A w3champions season opening between the two
+    resets the MMR, so the match before it is the one that counts then. No
+    rated match on a race means no MMR on it."""
+    rated = [
+        col(W3CLadderMatch.user_id).in_(user_ids),
+        col(W3CLadderMatch.mmr_before).is_not(None),
+        col(W3CLadderMatch.mmr_after).is_not(None),
+    ]
+    key = (col(W3CLadderMatch.user_id), col(W3CLadderMatch.race))
+    before = (
+        select(
+            *key,
+            col(W3CLadderMatch.wc3_season).label("wc3_season"),
+            col(W3CLadderMatch.mmr_after).label("mmr"),
+            func.row_number()
+            .over(
+                partition_by=key,
+                order_by=(
+                    col(W3CLadderMatch.start_time).desc(),
+                    col(W3CLadderMatch.id).desc(),
+                ),
+            )
+            .label("n"),
+        )
+        .where(*rated, col(W3CLadderMatch.start_time) < instant)
+        .subquery()
+    )
+    after = (
+        select(
+            *key,
+            col(W3CLadderMatch.wc3_season).label("wc3_season"),
+            col(W3CLadderMatch.mmr_before).label("mmr"),
+            func.row_number()
+            .over(
+                partition_by=key,
+                order_by=(col(W3CLadderMatch.start_time), col(W3CLadderMatch.id)),
+            )
+            .label("n"),
+        )
+        .where(*rated, col(W3CLadderMatch.start_time) >= instant)
+        .subquery()
+    )
+
+    def first(ranked: Subquery) -> dict[tuple[int, Race | None], tuple[int, int]]:
+        return {
+            (user_id, race): (wc3_season, mmr)
+            for user_id, race, wc3_season, mmr in session.execute(
+                select(
+                    ranked.c.user_id, ranked.c.race, ranked.c.wc3_season, ranked.c.mmr
+                ).where(ranked.c.n == 1)
+            )
+        }
+
+    last_before, first_after = first(before), first(after)
+    result: dict[tuple[int, Race | None], int] = {}
+    for player in last_before.keys() | first_after.keys():
+        opened, closed = first_after.get(player), last_before.get(player)
+        if opened and (closed is None or opened[0] == closed[0]):
+            result[player] = opened[1]
+        elif closed:
+            result[player] = closed[1]
+    return result
+
+
 def _read_to_the_end(row: Row | None, open_season: bool) -> bool:
     """A closed w3champions season read to its end is never read again.
 
@@ -541,7 +619,7 @@ def _w3c_seasons_for(session: OrmSession, season: Season) -> list[int]:
     A window is dated by the matches already stored in it, so a window with
     none names no season and the walk discovers them instead.
     """
-    start, end = _window(season)
+    start, end = _fetch_window(season)
     return list(
         session.scalars(
             select(col(W3CLadderMatch.wc3_season))

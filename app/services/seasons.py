@@ -17,11 +17,18 @@ from app.models.relationships import (
     DBSeasonWeekMap,
     DBUserSeasonSignup,
 )
-from app.models.season import Season, SeasonCreate, SeasonPublic, SeasonUpdate
+from app.models.season import (
+    Season,
+    SeasonCreate,
+    SeasonPublic,
+    SeasonUpdate,
+    tier_of,
+)
 from app.models.team import Team
 from app.models.team_season import DBTeamSeason
 from app.models.user import User, UserListPublic
 from app.services import ladder_maps
+from app.services.ladder import mmr_on
 from app.services.users import UserService
 
 logger = logging.getLogger(__name__)
@@ -389,12 +396,8 @@ class SeasonService:
         self, season_id: int, limit: int | None = None, offset: int = 0
     ) -> list[UserListPublic]:
         with Session.begin() as session:
-            if (
-                session.scalar(
-                    select(col(Season.id)).where(col(Season.id) == season_id)
-                )
-                is None
-            ):
+            season = session.get(Season, season_id)
+            if season is None:
                 raise NotFoundError("Season not found")
 
             # The signup row has no gnl_stats, so the link rows stay out
@@ -415,15 +418,29 @@ class SeasonService:
                 .limit(limit)
             )
 
+            signups = session.scalars(statement).unique().all()
+            cuts, applied = season.fantasy_tier_cuts, season.fantasy_tiers_applied_at
+            # An unpinned tier is the band the player's MMR on the Apply date falls in
+            mmrs = (
+                mmr_on(session, [signup.user_id for signup in signups], applied)
+                if cuts and applied
+                else {}
+            )
             result = []
-            for signup in session.scalars(statement).unique().all():
+            for signup in signups:
                 if signup.user:
                     user_public = UserListPublic.from_user(signup.user)
                     if user_public:
                         user_public.signup_race = (
                             signup.race.value if signup.race else None
                         )
-                        user_public.fantasy_tier = signup.fantasy_tier
+                        user_public.fantasy_tier_pinned = (
+                            signup.fantasy_tier is not None
+                        )
+                        mmr = mmrs.get((signup.user_id, signup.race))
+                        user_public.fantasy_tier = signup.fantasy_tier or (
+                            tier_of(mmr, cuts) if mmr is not None and cuts else None
+                        )
                         result.append(user_public)
 
             return result

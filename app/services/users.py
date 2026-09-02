@@ -107,6 +107,7 @@ class UserService:
                     f"{len(missing)} players are not signed up for this season"
                 )
             season.fantasy_tier_cuts = cuts
+            season.fantasy_tiers_applied_at = utcnow()
             session.execute(signups.values(fantasy_tier=None))
             for tier, ids in by_tier.items():
                 session.execute(

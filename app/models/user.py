@@ -162,6 +162,8 @@ class UserListPublic(UserReduced):
     # The race and tier of one signup, filled by the signups answer of a single season
     signup_race: Annotated[str | None, EnumValue] = None
     fantasy_tier: int | None = None
+    # Set by hand on the signup row; an unpinned tier derives from the MMR
+    fantasy_tier_pinned: bool = False
 
     @classmethod
     def from_user(cls, user: User) -> Self:

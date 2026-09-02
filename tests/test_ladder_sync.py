@@ -500,6 +500,24 @@ def test_a_throttle_keeps_the_seasons_read_before_it(
     assert W3C_SEASON - 1 not in ledger
 
 
+def test_the_window_reaches_back_to_the_fantasy_apply_date(
+    app: FastAPI, seeded: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The MMR on the Apply date must be on record, so a read starts there
+    when the tiers were applied before the season."""
+    player = seeded["player_ids"][0]
+    sign_up(seeded["season_id"], player)
+    applied = datetime(2025, 12, 20, tzinfo=UTC)
+    with Session() as session:
+        session.get_one(Season, seeded["season_id"]).fantasy_tiers_applied_at = applied
+        session.commit()
+    fake = serve(monkeypatch, {})
+
+    LadderService().sync_season(seeded["season_id"])
+
+    assert fake.since[W3C_SEASON] == applied
+
+
 def test_the_open_season_is_read_again_from_its_own_stamp(
     app: FastAPI, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from typing import TYPE_CHECKING, Annotated, Any, Self
 
 from pydantic import PositiveInt
@@ -8,7 +8,15 @@ from sqlmodel import Field, Relationship, SQLModel
 from app.models.base import DBModel, ident
 from app.models.map import MapPublic
 from app.models.relationships import SeasonWeekMapPublic
-from app.models.types import IsoDate, LenientDate, MapRules, NoneToList, NumToStr
+from app.models.types import (
+    AwareUTC,
+    IsoDate,
+    LenientDate,
+    MapRules,
+    NoneToList,
+    NumToStr,
+    UTCDateTime,
+)
 
 if TYPE_CHECKING:
     from app.models.relationships import (
@@ -43,6 +51,11 @@ def tier_count(cuts: list[int] | None) -> int:
     return len(cuts) + 1 if cuts else 0
 
 
+def tier_of(mmr: int, cuts: list[int]) -> int:
+    """The tier an MMR falls in: tier 1 opens at the last cut, the lowest below the first."""
+    return len(cuts) + 1 - sum(mmr >= cut for cut in cuts)
+
+
 class Season(SeasonBase, DBModel, table=True):
     __tablename__ = "seasons"
     # The import matches a season by name, so two seasons cannot share one
@@ -51,6 +64,10 @@ class Season(SeasonBase, DBModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     # The ascending MMR each fantasy tier opens at; the tier count is one more
     fantasy_tier_cuts: list[int] | None = Field(default=None, sa_type=JSON)
+    # When the tiers were applied; an unpinned tier derives from the MMR on this date
+    fantasy_tiers_applied_at: Annotated[datetime | None, AwareUTC] = Field(
+        default=None, sa_type=UTCDateTime
+    )
     user_teams: list["DBUserTeamSeason"] = Relationship(
         back_populates="season", sa_relationship_kwargs={"cascade": "all, delete"}
     )
@@ -127,6 +144,7 @@ class SeasonPublic(SeasonBase):
     # Derived: one more than the cuts, 0 until the season is allocated
     fantasy_tiers: int | None = None
     fantasy_tier_cuts: Annotated[list[int], NoneToList] = []
+    fantasy_tiers_applied_at: Annotated[datetime | None, AwareUTC] = None
     start_date: Annotated[IsoDate | None, LenientDate] = None
     end_date: Annotated[IsoDate | None, LenientDate] = None
     maps: Annotated[list[MapPublic], NoneToList] = []
@@ -157,6 +175,7 @@ class SeasonPublic(SeasonBase):
             score_system=season.score_system,
             fantasy_tiers=tier_count(season.fantasy_tier_cuts),
             fantasy_tier_cuts=season.fantasy_tier_cuts or [],
+            fantasy_tiers_applied_at=season.fantasy_tiers_applied_at,
         )
 
     @classmethod
@@ -181,4 +200,5 @@ class SeasonPublic(SeasonBase):
             score_system=season.score_system,
             fantasy_tiers=tier_count(season.fantasy_tier_cuts),
             fantasy_tier_cuts=season.fantasy_tier_cuts or [],
+            fantasy_tiers_applied_at=season.fantasy_tiers_applied_at,
         )
