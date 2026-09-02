@@ -424,6 +424,25 @@ def test_a_w3c_season_opening_after_the_apply_date_keeps_the_mmr_before_it(
     assert (rows[p1], rows[p2]) == (2, 1)
 
 
+def test_a_tier_stored_before_any_apply_date_is_not_a_pin(
+    client: Client, seeded: dict[str, Any], auth_headers: dict[str, str]
+) -> None:
+    """A season allocated before the Apply date existed stored every tier, so
+    the tier page must not restore them all as hand moves."""
+    from app.core.db import Session
+    from app.models.relationships import DBUserSeasonSignup
+
+    season = seeded["season_id"]
+    p1 = seeded["player_ids"][0]
+    with Session() as session:
+        session.add(DBUserSeasonSignup(user_id=p1, season_id=season, fantasy_tier=3))
+        session.commit()
+    row = next(
+        r for r in get_json(client, f"/seasons/{season}/signups") if r["id"] == p1
+    )
+    assert (row["fantasy_tier"], row["fantasy_tier_pinned"]) == (3, False)
+
+
 def test_tiers_are_refused_for_players_not_signed_up(
     client: Client, seeded: dict[str, Any], auth_headers: dict[str, str]
 ) -> None:

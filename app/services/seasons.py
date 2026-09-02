@@ -434,8 +434,10 @@ class SeasonService:
                         user_public.signup_race = (
                             signup.race.value if signup.race else None
                         )
+                        # A season allocated before it had an Apply date stored every
+                        # tier, so those read as the allocation, not as pins
                         user_public.fantasy_tier_pinned = (
-                            signup.fantasy_tier is not None
+                            signup.fantasy_tier is not None and applied is not None
                         )
                         mmr = mmrs.get((signup.user_id, signup.race))
                         user_public.fantasy_tier = signup.fantasy_tier or (
