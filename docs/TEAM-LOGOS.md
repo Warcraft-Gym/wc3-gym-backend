@@ -30,7 +30,7 @@ A `bytea` also crosses the wire as hex, so reading a 49 KB logo cost about 99 KB
 
 ## What is left
 
-1. Run `scripts/logos_to_blob.py` against each database. It is resumable and takes `--dry-run`.
+1. Run `scripts/logos_to_blob.py` against production. It is resumable and takes `--dry-run`. Every other database gets its logos from the seed: the seed repo carries `logos/<team id>.png` or `.jpg`, and `just _load-seed` pushes each through `TeamService.update_icon` after the CSVs load, so a seeded database owns its blobs and a replaced production logo cannot break it. Without `BLOB_READ_WRITE_TOKEN` the upload is skipped and teams show the default logo.
 2. Point the frontend at `icon_url` rather than building `/teams/{id}/image`; the route redirects to the blob until then.
 3. Drop `teams.icon`, in its own migration, once 1 and 2 are done everywhere.
 

@@ -99,4 +99,4 @@ seed:
     trap 'rm -rf "$seed"' EXIT
     just _fetch-seed "$seed"
     DB_URL="{{ db_url }}" uv run alembic upgrade head
-    if [ -f "$seed/users.csv" ]; then uv run python scripts/seed_db.py "$seed" "{{ db_url }}"; fi
+    if [ -f "$seed/users.csv" ]; then just _load-seed "$seed" "{{ db_url }}"; fi
