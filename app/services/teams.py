@@ -304,18 +304,11 @@ class TeamService:
             return _public(session, team)
 
     def get_icon_url(self, team_id: int) -> str | None:
-        """Where the logo lives, or None while it is still a column."""
+        """Where the logo lives, or None for a team without one."""
         with Session.begin() as session:
             return session.scalar(
                 select(col(Team.icon_url)).where(col(Team.id) == team_id)
             )
-
-    def get_icon(self, team_id: int) -> bytes | None:
-        with Session.begin() as session:
-            team = session.get(Team, team_id)
-            if not team:
-                raise NotFoundError("Team not found")
-            return team.icon
 
     def search(
         self, query: QueryElement | None, limit: int | None = None, offset: int = 0

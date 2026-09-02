@@ -27,8 +27,8 @@ from httpx2 import Client
 
 from app.models.base import ident
 
-# The image route serves the stored bytes back untouched, so any bytes work.
-TEAM_ICON = b"\x89PNG\r\n\x1a\npublic-contract-test"
+# The image route redirects to it untouched, so any URL works.
+TEAM_ICON_URL = "https://blob.test/teams/public-contract-test.png"
 
 # The w3champions season the shortcodes select w3c_stats rows by.
 WC3_SEASON = 20
@@ -98,7 +98,7 @@ def public_seed(app: FastAPI) -> dict[str, Any]:
                 )
             )
 
-        session.get(Team, ids["team_a_id"]).icon = TEAM_ICON
+        session.get(Team, ids["team_a_id"]).icon_url = TEAM_ICON_URL
 
         for user_id, mmr, race in zip(
             ids["player_ids"],
@@ -304,29 +304,14 @@ def test_teams_season_seasons_info_holds_only_the_requested_season(
     assert list(alpha["player_by_season"]) == [str(season_id)]
 
 
-def test_team_image_serves_an_image(
+def test_team_image_sends_the_caller_to_the_logo(
     client: Client, public_seed: dict[str, Any]
 ) -> None:
-    resp = client.get(f"/teams/{public_seed['team_a_id']}/image")
-    assert resp.status_code == 200
-    assert resp.headers["content-type"].startswith("image/")
-    assert resp.content == TEAM_ICON
-
-
-def test_team_image_is_cached_by_its_content(
-    client: Client, public_seed: dict[str, Any]
-) -> None:
-    """A day of browser cache, a tag of the bytes, and 304 on a repeat."""
-    path = f"/teams/{public_seed['team_a_id']}/image"
-    resp = client.get(path)
-    assert resp.headers["cache-control"] == "public, max-age=86400"
-    etag = resp.headers["etag"]
-    assert etag
-
-    again = client.get(path, headers={"If-None-Match": etag})
-    assert again.status_code == 304
-    assert again.content == b""
-    assert again.headers["etag"] == etag
+    resp = client.get(
+        f"/teams/{public_seed['team_a_id']}/image", follow_redirects=False
+    )
+    assert resp.status_code == 307
+    assert resp.headers["location"] == TEAM_ICON_URL
 
 
 # gnl-detailed-standings

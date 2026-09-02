@@ -176,7 +176,7 @@ The import writes no ids of its own. A season matches by name, a player by battl
 
 `tests/data/` holds the real S17 and S18 exports; `just import-xlsx` imports both into a running backend (S18 first, so shared players keep the newer attributes) and the suite round-trips them.
 
-Ten sheets travel. These tables do not: `settings`, `w3cstats`, `player_career_stats`, `user_season_signup`, `koth_events`, `koth_matches`, `koth_match_participants`, `koth_signups`, `draft_series`, and the `icon` column of `teams`. Carry those over another way.
+Ten sheets travel. These tables do not: `settings`, `w3cstats`, `player_career_stats`, `user_season_signup`, `koth_events`, `koth_matches`, `koth_match_participants`, `koth_signups`, `draft_series`, and the `icon_url` column of `teams`. Carry those over another way.
 
 ## Project Setup
 

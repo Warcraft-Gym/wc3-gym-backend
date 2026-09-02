@@ -35,14 +35,6 @@ def icon_type(data: bytes) -> str:
     raise BadRequestError("Image must be a PNG or a JPEG")
 
 
-def stored_type(data: bytes) -> str:
-    """The media type of bytes already in the database, which predate any check on the way in."""
-    for magic, media_type in MAGIC.items():
-        if data.startswith(magic):
-            return media_type
-    return "application/octet-stream"
-
-
 def put_icon(team_id: int, data: bytes) -> str:
     """Store the logo and answer its public URL."""
     from vercel import blob
