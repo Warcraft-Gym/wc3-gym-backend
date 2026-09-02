@@ -25,6 +25,8 @@ class DBUserSeasonSignup(DBModel, table=True):
     season_id: int = Field(index=True, foreign_key="seasons.id", primary_key=True)
     # The race the player registered on for this season, null when not recorded
     race: Race | None = None
+    # The fantasy tier this season cut the player into, null when not allocated
+    fantasy_tier: int | None = None
     user: "User" = Relationship(back_populates="signup_seasons")
     season: "Season" = Relationship(back_populates="signup_users")
 

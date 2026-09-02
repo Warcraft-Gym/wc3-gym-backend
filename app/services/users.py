@@ -13,6 +13,7 @@ from app.core.db import Session, rel
 from app.core.exceptions import BadRequestError, NotFoundError, W3CThrottledError
 from app.core.query import QueryElement, QueryUtil
 from app.models.relationships import DBUserSeasonSignup
+from app.models.season import Season
 from app.models.types import utcnow
 from app.models.user import (
     User,
@@ -74,14 +75,40 @@ class UserService:
                 raise NotFoundError("User not found")
             return _public(session, row)
 
-    def set_fantasy_tiers(self, tiers: dict[int, int]) -> None:
-        """Replace the whole allocation: listed players get their tier, the rest none."""
+    def set_fantasy_tiers(self, season_id: int, tiers: dict[int, int]) -> None:
+        """Replace one season's whole allocation: listed players get their tier, the
+        rest none. Writes users.fantasy_tier too until that column is dropped."""
         by_tier: dict[int, list[int]] = {}
         for user_id, tier in tiers.items():
             by_tier.setdefault(tier, []).append(user_id)
+        signups = update(DBUserSeasonSignup).where(
+            col(DBUserSeasonSignup.season_id) == season_id
+        )
         with Session.begin() as session:
+            season = session.get(Season, season_id)
+            if season is None:
+                raise NotFoundError("Season not found")
+            if tiers and max(tiers.values()) > season.fantasy_tiers:
+                raise BadRequestError(f"Season cuts only {season.fantasy_tiers} tiers")
+            signed_up = set(
+                session.scalars(
+                    select(col(DBUserSeasonSignup.user_id)).where(
+                        col(DBUserSeasonSignup.season_id) == season_id
+                    )
+                )
+            )
+            if missing := set(tiers) - signed_up:
+                raise BadRequestError(
+                    f"{len(missing)} players are not signed up for this season"
+                )
+            session.execute(signups.values(fantasy_tier=None))
             session.execute(update(User).values(fantasy_tier=None))
             for tier, ids in by_tier.items():
+                session.execute(
+                    signups.where(col(DBUserSeasonSignup.user_id).in_(ids)).values(
+                        fantasy_tier=tier
+                    )
+                )
                 session.execute(
                     update(User).where(col(User.id).in_(ids)).values(fantasy_tier=tier)
                 )

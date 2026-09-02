@@ -419,6 +419,7 @@ class SeasonService:
                         user_public.signup_race = (
                             signup.race.value if signup.race else None
                         )
+                        user_public.fantasy_tier = signup.fantasy_tier
                         result.append(user_public)
 
             return result
