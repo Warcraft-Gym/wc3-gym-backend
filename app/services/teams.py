@@ -16,7 +16,7 @@ from app.models.team import Team, TeamCreate, TeamPublic, TeamUpdate
 from app.models.team_season import DBTeamSeason
 from app.models.user import User, UserPublic
 from app.models.user_team_season import DBUserTeamSeason
-from app.services import derived, discord_roles
+from app.services import blob, derived, discord_roles
 from app.services.users import UserService
 
 logger = logging.getLogger(__name__)
@@ -96,12 +96,24 @@ class TeamService:
                 raise NotFoundError("Team not found")
             return _public(session, row)
 
-    def update_icon(self, team_id: int, file: bytes) -> TeamPublic:
+    def update_icon(self, team_id: int, file: bytes) -> None:
+        """Put the logo in the store, then point the row at it and drop the one it replaced."""
+        # at the boundary the bytes arrive at, so it holds whatever the store is or is stubbed to be
+        blob.icon_type(file)
+        # the store is not part of the transaction, so the put happens first: a put that is never
+        # committed leaves an unreferenced blob, which is cheap, while a committed row pointing at
+        # a blob that was never written is a broken image
+        url = blob.put_icon(team_id, file)
         with Session.begin() as session:
-            team = Team.update_icon(session, team_id, file)
+            # locked: two uploads for one team would otherwise read the same previous URL, and the
+            # loser's blob would be left behind with nothing pointing at it
+            team = session.get(Team, team_id, with_for_update=True)
             if not team:
                 raise NotFoundError("Team not found")
-            return _public(session, team)
+            previous = team.icon_url
+            team.icon_url = url
+        if previous:
+            blob.delete_icon(previous)
 
     def add_players(
         self, team_id: int, season_id: int, player_ids: list[int]
@@ -290,6 +302,13 @@ class TeamService:
             if not team:
                 raise NotFoundError("Team not found")
             return _public(session, team)
+
+    def get_icon_url(self, team_id: int) -> str | None:
+        """Where the logo lives, or None while it is still a column."""
+        with Session.begin() as session:
+            return session.scalar(
+                select(col(Team.icon_url)).where(col(Team.id) == team_id)
+            )
 
     def get_icon(self, team_id: int) -> bytes | None:
         with Session.begin() as session:

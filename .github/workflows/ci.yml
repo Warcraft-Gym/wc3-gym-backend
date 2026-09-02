@@ -22,6 +22,16 @@ jobs:
       - run: uv sync --frozen
       - run: uv run just typecheck
 
+  # The deployed function installs only the project dependencies, so a runtime import that lives in
+  # a dependency group passes every other job here and then 500s in production. It did once.
+  runtime-deps:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --frozen --no-dev
+      - run: uv run --no-dev python -c "import app.main, vercel.blob"
+
   test:
     runs-on: ubuntu-latest
     steps:

@@ -15,6 +15,7 @@ did not stand in for.
 """
 
 import io
+import itertools
 import os
 from collections.abc import Callable, Generator
 from datetime import UTC, datetime, timedelta
@@ -35,6 +36,7 @@ os.environ.pop("DB_URL", None)
 os.environ.pop("SCORE_SYSTEM", None)
 
 from app.main import create_app
+from app.services import blob
 
 type SheetSpec = tuple[list[str], list[list[Any]]]
 
@@ -104,6 +106,24 @@ def clean_db(app: FastAPI) -> Generator[None]:
     """Empty every table after each test."""
     yield
     empty_tables()
+
+
+@pytest.fixture(autouse=True)
+def blob_store(monkeypatch: pytest.MonkeyPatch) -> dict[str, bytes]:
+    """No test uploads to Vercel Blob. The uploads land in this dict instead, keyed by the URL
+    the fake store answers, so a test can read back what the route stored."""
+    stored: dict[str, bytes] = {}
+    # a counter, not len(stored): a delete would otherwise let the next URL repeat one already used
+    serial = itertools.count()
+
+    def put_icon(team_id: int, data: bytes) -> str:
+        url = f"https://blob.test/teams/{team_id}-{next(serial)}.png"
+        stored[url] = data
+        return url
+
+    monkeypatch.setattr(blob, "put_icon", put_icon)
+    monkeypatch.setattr(blob, "delete_icon", lambda url: stored.pop(url, None))
+    return stored
 
 
 @pytest.fixture(autouse=True)

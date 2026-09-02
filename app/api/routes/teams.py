@@ -3,6 +3,7 @@ import logging
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, File, Query, Request, Response, UploadFile
+from fastapi.responses import RedirectResponse
 
 from app.api.deps import (
     AvailabilityServiceDep,
@@ -26,6 +27,7 @@ from app.models.user_season_availability import (
     UserSeasonAvailabilityPublic,
 )
 from app.models.w3c_stats import W3CSyncResult
+from app.services import blob
 from app.services.users import SYNC_MAX_AGE
 
 logger = logging.getLogger(__name__)
@@ -248,7 +250,15 @@ def upload_team_image(
 
 @router.get("/teams/{team_id}/image")
 def get_team_image(team_id: int, request: Request, service: TeamServiceDep) -> Response:
-    """Fetches and returns the stored binary image for a team"""
+    """Answer the team logo: the blob it lives in, or the stored bytes until it has moved."""
+    url = service.get_icon_url(team_id)
+    if url:
+        # Not cacheable: a replacement gets a new blob URL and deletes the old one, so a cached
+        # redirect would send every viewer to a blob that no longer exists until it expired. The
+        # blob itself carries a year, so only this hop is paid again. Callers reading icon_url
+        # from the team answer skip the hop entirely.
+        return RedirectResponse(url, headers={"Cache-Control": "no-store"})
+
     team_icon = service.get_icon(team_id)
     if not team_icon:
         raise NotFoundError("Image not found")
@@ -261,4 +271,7 @@ def get_team_image(team_id: int, request: Request, service: TeamServiceDep) -> R
     ]:
         return Response(status_code=304, headers=headers)
 
-    return Response(content=team_icon, media_type="image/png", headers=headers)
+    # a read must not fail on a type the upload would refuse: some stored rows predate any check
+    return Response(
+        content=team_icon, media_type=blob.stored_type(team_icon), headers=headers
+    )

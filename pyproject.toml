@@ -17,6 +17,8 @@ dependencies = [
     "sqlmodel>=0.0.39",
     "alembic>=1.19.1",
     "clerk-backend-api>=7.0.0",
+    # team logos live in Vercel Blob; imported inside the upload path only
+    "vercel>=0.10.0",
 ]
 
 [build-system]
