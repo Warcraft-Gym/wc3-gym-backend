@@ -65,6 +65,7 @@ A Supabase project is one Postgres instance. Extra databases work through the po
 | Drop a branch's copy | `.github/workflows/vercel-staging-db-drop.yml` → `scripts/vercel_staging_db.py drop-branch <branch>` | Branch deleted |
 | Single migration head | `tests/test_migrations.py` | Every pull request |
 | Reseed, list, manual drop | `just db seed vercel staging`, `just db list vercel staging`, `just db drop vercel staging <database>` | By hand |
+| Reseed and build the review season from a runner | `.github/workflows/vercel-staging-db.yml`, the `seed` job; needs `SEED_REPO_TOKEN` and, for the logos, `BLOB_READ_WRITE_TOKEN` | Run workflow, both ids filled in |
 
 ## Configuration
 
