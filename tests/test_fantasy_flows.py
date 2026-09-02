@@ -363,6 +363,67 @@ def test_an_unpinned_tier_derives_from_the_mmr_on_the_apply_date(
     assert tiers()[p4] == (1, False)
 
 
+def test_a_w3c_season_opening_after_the_apply_date_keeps_the_mmr_before_it(
+    client: Client, seeded: dict[str, Any], auth_headers: dict[str, str]
+) -> None:
+    """The first match of a new w3champions season carries a fresh MMR, not the
+    one the admin cut from, so the last match of the old season counts instead."""
+    from tests.test_ladder_read import add_match, sign_up
+
+    season = seeded["season_id"]
+    p1, p2 = seeded["player_ids"][:2]
+    sign_up(season, [p1, p2], race=Race.HU)
+    before, after = utcnow() - timedelta(days=1), utcnow() + timedelta(minutes=5)
+    # p1 crosses a season boundary; p2 opens the same season he closed
+    add_match(
+        p1,
+        "p1-old",
+        before,
+        wc3_season=25,
+        mmr_before=1190,
+        mmr_after=1200,
+        race=Race.HU,
+    )
+    add_match(
+        p1,
+        "p1-new",
+        after,
+        wc3_season=26,
+        mmr_before=1500,
+        mmr_after=1510,
+        race=Race.HU,
+    )
+    add_match(
+        p2,
+        "p2-old",
+        before,
+        wc3_season=25,
+        mmr_before=1190,
+        mmr_after=1200,
+        race=Race.HU,
+    )
+    add_match(
+        p2,
+        "p2-new",
+        after,
+        wc3_season=25,
+        mmr_before=1350,
+        mmr_after=1360,
+        race=Race.HU,
+    )
+    resp = client.put(
+        f"/fantasy/tiers?season_id={season}",
+        json={"cuts": [1100, 1300], "tiers": {}},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 204
+    rows = {
+        row["id"]: row["fantasy_tier"]
+        for row in get_json(client, f"/seasons/{season}/signups")
+    }
+    assert (rows[p1], rows[p2]) == (2, 1)
+
+
 def test_tiers_are_refused_for_players_not_signed_up(
     client: Client, seeded: dict[str, Any], auth_headers: dict[str, str]
 ) -> None:

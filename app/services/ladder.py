@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import (
     ColumnElement,
     Row,
+    Subquery,
     and_,
     case,
     distinct,
@@ -534,7 +535,9 @@ def mmr_on(
 ) -> dict[tuple[int, Race | None], int]:
     """Each player's MMR on one instant, per race he selected: what he took
     into his first rated match at or after it, else what his last rated match
-    before it left him with. No rated match on a race means no MMR on it."""
+    before it left him with. A w3champions season opening between the two
+    resets the MMR, so the match before it is the one that counts then. No
+    rated match on a race means no MMR on it."""
     rated = [
         col(W3CLadderMatch.user_id).in_(user_ids),
         col(W3CLadderMatch.mmr_before).is_not(None),
@@ -544,6 +547,7 @@ def mmr_on(
     before = (
         select(
             *key,
+            col(W3CLadderMatch.wc3_season).label("wc3_season"),
             col(W3CLadderMatch.mmr_after).label("mmr"),
             func.row_number()
             .over(
@@ -561,6 +565,7 @@ def mmr_on(
     after = (
         select(
             *key,
+            col(W3CLadderMatch.wc3_season).label("wc3_season"),
             col(W3CLadderMatch.mmr_before).label("mmr"),
             func.row_number()
             .over(
@@ -572,13 +577,25 @@ def mmr_on(
         .where(*rated, col(W3CLadderMatch.start_time) >= instant)
         .subquery()
     )
+
+    def first(ranked: Subquery) -> dict[tuple[int, Race | None], tuple[int, int]]:
+        return {
+            (user_id, race): (wc3_season, mmr)
+            for user_id, race, wc3_season, mmr in session.execute(
+                select(
+                    ranked.c.user_id, ranked.c.race, ranked.c.wc3_season, ranked.c.mmr
+                ).where(ranked.c.n == 1)
+            )
+        }
+
+    last_before, first_after = first(before), first(after)
     result: dict[tuple[int, Race | None], int] = {}
-    # The match after the instant is read last, so it wins
-    for ranked in (before, after):
-        for user_id, race, mmr in session.execute(
-            select(ranked.c.user_id, ranked.c.race, ranked.c.mmr).where(ranked.c.n == 1)
-        ):
-            result[(user_id, race)] = mmr
+    for player in last_before.keys() | first_after.keys():
+        opened, closed = first_after.get(player), last_before.get(player)
+        if opened and (closed is None or opened[0] == closed[0]):
+            result[player] = opened[1]
+        elif closed:
+            result[player] = closed[1]
     return result
 
 
