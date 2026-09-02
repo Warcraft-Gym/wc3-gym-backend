@@ -30,7 +30,7 @@ A `bytea` also crosses the wire as hex, so reading a 49 KB logo cost about 99 KB
 
 ## Seeded databases
 
-The seed CSV carries `icon_url`, so a freshly seeded database points at the production blobs. A copy seeded before the column existed has no logo until it is seeded again; the browser shows the default logo for those.
+A seeded database gets its logos from the seed repo, which carries `logos/<team id>.png` or `.jpg`. `just _load-seed` pushes each through `TeamService.update_icon` after the CSVs load, so the database owns its blobs and a replaced production logo cannot break it. Without `BLOB_READ_WRITE_TOKEN` the upload is skipped and teams show the default logo.
 
 `Map.icon` is empty in production and still written by `POST /maps/{id}/image`. `MapBase.image` is already a URL column, so whether maps follow is a separate and much smaller decision.
 

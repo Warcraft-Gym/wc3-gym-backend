@@ -86,7 +86,7 @@ class SeasonUpdate(SQLModel):
     discordRole: Annotated[str | None, NumToStr] = None
     map_rules: Annotated[str | None, MapRules] = None
     score_system: str | None = None
-    fantasy_tiers: int | None = None
+    fantasy_tiers: int | None = Field(default=None, ge=2, le=6)
 
 
 class SeasonTeamIds(SQLModel):

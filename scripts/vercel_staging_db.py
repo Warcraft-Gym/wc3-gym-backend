@@ -66,12 +66,7 @@ def seed(seed_dir: str) -> None:
         try:
             upgrade(TEMPLATE)
             subprocess.run(
-                [
-                    sys.executable,
-                    "scripts/seed_db.py",
-                    seed_dir,
-                    with_database(base_url, TEMPLATE),
-                ],
+                ["just", "_load-seed", seed_dir, with_database(base_url, TEMPLATE)],
                 check=True,
             )
         finally:

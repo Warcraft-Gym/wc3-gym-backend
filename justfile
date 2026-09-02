@@ -57,3 +57,28 @@ _fetch-seed dir:
     else
         echo "seed: no access to Warcraft-Gym/wc3-gym-backend-db-seed, the database stays empty" >&2
     fi
+
+# Load a seed directory, then push its logos/<team id>.<ext> through the upload path, so the database
+# owns its blobs and a replaced production logo cannot break it. No token: teams keep the default logo.
+_load-seed dir url:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    export DB_URL="{{ url }}"
+    # the URLs the load is about to drop; deleted last, so a failed upload leaves an orphan, not a broken image
+    previous=$(uv run python -c 'from sqlalchemy import text; from app.core.db import Session, init_engine; init_engine(); print(*[u for (u,) in Session().execute(text("SELECT icon_url FROM teams WHERE icon_url IS NOT NULL"))])')
+    uv run python scripts/seed_db.py "{{ dir }}" "$DB_URL"
+    if [ -z "${BLOB_READ_WRITE_TOKEN:-}" ]; then echo "logos: BLOB_READ_WRITE_TOKEN is not set, teams keep the default logo" >&2; exit 0; fi
+    uv run python - "{{ dir }}/logos" $previous <<'PY'
+    import sys
+    from pathlib import Path
+    from app.api.deps import team_service
+    from app.core.db import init_engine
+    from app.services import blob
+    init_engine()
+    logos = sorted(Path(sys.argv[1]).glob("*.*")) if Path(sys.argv[1]).is_dir() else []
+    for file in logos:
+        team_service.update_icon(int(file.stem), file.read_bytes())
+    for url in sys.argv[2:]:
+        blob.delete_icon(url)
+    print(f"logos: {len(logos)} uploaded, {len(sys.argv) - 2} replaced")
+    PY

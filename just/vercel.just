@@ -68,7 +68,7 @@ seed env="prod":
         fi
     else
         DB_URL="$url" uv run alembic upgrade head
-        if [ -f "$seed/users.csv" ]; then uv run python scripts/seed_db.py "$seed" "$url"; fi
+        if [ -f "$seed/users.csv" ]; then just _load-seed "$seed" "$url"; fi
     fi
 
 # Build the review season on the shared staging database: you (the first ADMIN_DISCORD_IDS entry) against

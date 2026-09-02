@@ -29,7 +29,11 @@ from app.models.fantasy_bet import FantasyBet, FantasyBetCreate
 from app.models.fantasy_team import FantasyTeam, FantasyTeamCreate
 from app.models.map import Map, MapCreate
 from app.models.match import Match, MatchCreate
-from app.models.relationships import DBFantasyTeamPlayer, DBMapSeason
+from app.models.relationships import (
+    DBFantasyTeamPlayer,
+    DBMapSeason,
+    DBUserSeasonSignup,
+)
 from app.models.season import Season, SeasonCreate
 from app.models.series import Series, SeriesCreate
 from app.models.team import Team, TeamCreate
@@ -229,6 +233,7 @@ def _season(
                 "discordRole": "Discord Role",
                 "start_date": "Start Date",
                 "end_date": "End Date",
+                "fantasy_tiers": "Fantasy Tiers",
             },
         ),
     )
@@ -405,7 +410,6 @@ def _player_values(row: Row) -> UserCreate:
         "race": "Race",
         "mmr": "MMR",
         "country": "Country",
-        "fantasy_tier": "Fantasy Tier",
     }
     try:
         return UserCreate(battleTag=row["Battle Tag"], **_cells(row, columns))
@@ -420,7 +424,9 @@ def _players(
     session: OrmSession, sheets: Sheets, season: Season, teams: dict[int, int]
 ) -> Users:
     """The rostered players, matched by battle tag. A stored player is
-    reused as it stands, so the workbook overwrites no profile."""
+    reused as it stands, so the workbook overwrites no profile. A row signs
+    its player up for the season on the race it carries; a stored signup is
+    reused as it stands too."""
     rows = _rows(sheets["Players"], ["Battle Tag"])
     values = [_player_values(row) for row in rows]
     users = Users(
@@ -445,12 +451,25 @@ def _players(
     session.add_all(written)
     session.flush()
 
+    signups = {
+        signup.user_id: signup
+        for signup in session.scalars(
+            select(DBUserSeasonSignup).where(
+                col(DBUserSeasonSignup.season_id) == season.id
+            )
+        )
+    }
     roster: set[tuple[int, int]] = set()
     for row, value in zip(rows, values, strict=True):
+        user = users.by_tag[folded(value.battleTag)]
+        if ident(user) not in signups:
+            signups[ident(user)] = DBUserSeasonSignup(
+                user_id=ident(user), season_id=ident(season), race=value.race
+            )
+            session.add(signups[ident(user)])
         old_id = whole_number(row["ID"])
         if not old_id:
             continue
-        user = users.by_tag[folded(value.battleTag)]
         users.by_old_id[old_id] = user
         team_id = teams.get(whole_number(row["Team ID"]))
         if team_id:
