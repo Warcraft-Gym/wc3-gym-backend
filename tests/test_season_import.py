@@ -546,3 +546,52 @@ def test_a_score_system_column_the_scoring_rule_does_not_know_is_refused(
 
     assert response.status_code == 400, response.text
     assert response.json() == {"error": "Unknown score system: triple"}
+
+
+def _signups() -> dict[str, tuple[str | None, int | None]]:
+    """The season signups the import wrote, by battle tag."""
+    from app.models.relationships import DBUserSeasonSignup
+
+    with Session() as session:
+        rows = session.execute(
+            select(
+                col(User.battleTag),
+                col(DBUserSeasonSignup.race),
+                col(DBUserSeasonSignup.fantasy_tier),
+            ).join(DBUserSeasonSignup, col(DBUserSeasonSignup.user_id) == col(User.id))
+        ).all()
+    return {tag: (race.value if race else None, tier) for tag, race, tier in rows}
+
+
+def test_an_import_signs_the_rostered_players_up_on_their_race(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """Every Players row gets a signup row carrying its race and no tier: the
+    workbook's Fantasy Tier column was a copy of the global users column at
+    export time, not this season's allocation. A fantasy user on no roster
+    plays no series and gets no signup row."""
+    response = _post(client, _workbook(extra=FANTASY_SHEETS), auth_headers)
+    assert response.status_code == 200, response.text
+
+    assert _signups() == {"P1#1111": ("HU", None), "P2#2222": ("OC", None)}
+
+
+def _tier_count_sheet(tiers: int) -> dict[str, tuple[list[str], list[list[Any]]]]:
+    """The Season sheet of a newer export, which names its tier count."""
+    columns, rows = SHEETS["Season"]
+    return {"Season": ([*columns, "Fantasy Tiers"], [[*rows[0], tiers]])}
+
+
+def test_the_season_sheet_names_its_tier_count(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """A workbook with the column writes the count; one without keeps the default."""
+    response = _post(client, _workbook(extra=_tier_count_sheet(4)), auth_headers)
+    assert response.status_code == 200, response.text
+    with Session() as session:
+        assert session.get_one(Season, response.json()["season_id"]).fantasy_tiers == 4
+
+    response = _post(client, _workbook(season_id=None), auth_headers)
+    assert response.status_code == 200, response.text
+    with Session() as session:
+        assert session.get_one(Season, response.json()["season_id"]).fantasy_tiers == 4

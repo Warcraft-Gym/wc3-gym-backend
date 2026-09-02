@@ -92,6 +92,7 @@ def export_season(
             "End Date",
             "Discord Role",
             "Score System",
+            "Fantasy Tiers",
         ]
     )
     season_sheet.append(
@@ -105,6 +106,7 @@ def export_season(
             season.end_date.strftime("%Y-%m-%d") if season.end_date else "",
             season.discordRole or "",
             season.score_system,
+            season.fantasy_tiers,
         ]
     )
 
@@ -150,10 +152,14 @@ def export_season(
             "Race",
             "MMR",
             "Country",
-            "Fantasy Tier",
             "Team ID",
         ]
     )
+    # The race a player registered on this season, over the profile's main race
+    signup_race = {
+        signup.id: signup.signup_race
+        for signup in season_service.get_signed_up_users(season_id)
+    }
     roster_user_ids = set()
     for team in season_teams:
         players = team.player_by_season.get(season_id, [])
@@ -166,10 +172,9 @@ def export_season(
                     user.battleTag,
                     user.discordTag,
                     user.discordId or "",
-                    user.race,
+                    signup_race.get(user.id) or user.race,
                     user.mmr or "",
                     user.country or "",
-                    user.fantasy_tier or "",
                     team.id,
                 ]
             )
