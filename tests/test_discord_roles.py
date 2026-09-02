@@ -69,7 +69,9 @@ def _guild(
             return FakeResponse(
                 200, [{"user": {"id": id}, "roles": held} for id, held in roles.items()]
             )
-        if url == f"{MEMBERS}/@me":
+        if url == f"{discord.API_URL}/users/@me":
+            return FakeResponse(200, {"id": "bot"})
+        if url == f"{MEMBERS}/bot":
             return FakeResponse(200, {"roles": ["bot-role"]})
         if url.endswith("/roles"):
             return FakeResponse(200, ROLES)

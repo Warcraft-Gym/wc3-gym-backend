@@ -140,11 +140,17 @@ def guild_roles() -> list[GuildRole]:
         return []
     roles = [role for role in response.json() if role["id"] != guild_id]
     positions = {role["id"]: role["position"] for role in roles}
-    bot = _bot_get(f"/guilds/{guild_id}/members/@me")
-    held = bot.json().get("roles", []) if bot is not None and bot.ok else []
+    members = guild_members() or {}
+    # The bot is a member like any other; its own id comes from /users/@me
+    me = _bot_get("/users/@me")
+    bot_id = me.json().get("id", "") if me is not None and me.ok else ""
+    held = members.get(bot_id)
+    if held is None:
+        bot = _bot_get(f"/guilds/{guild_id}/members/{bot_id}") if bot_id else None
+        held = set(bot.json().get("roles", [])) if bot is not None and bot.ok else set()
     top = max((positions.get(role_id, 0) for role_id in held), default=0)
     counts = Counter(
-        role_id for member in (guild_members() or {}).values() for role_id in member
+        role_id for roles_held in members.values() for role_id in roles_held
     )
     return sorted(
         (
