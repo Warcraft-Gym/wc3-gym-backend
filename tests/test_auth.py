@@ -96,7 +96,10 @@ def test_team_image_upload_needs_a_token(
 
 
 def test_team_image_upload_works_with_a_token(
-    client: Client, seeded: dict[str, Any], auth_headers: dict[str, str]
+    client: Client,
+    seeded: dict[str, Any],
+    auth_headers: dict[str, str],
+    blob_store: dict[str, bytes],
 ) -> None:
     team_id = seeded["team_a_id"]
     resp = client.post(
@@ -106,9 +109,10 @@ def test_team_image_upload_works_with_a_token(
     )
     assert resp.status_code == 200
 
-    stored = client.get(f"/teams/{team_id}/image")
-    assert stored.status_code == 200
-    assert stored.content == PNG
+    # the logo now lives in the blob store, so the route points at it
+    stored = client.get(f"/teams/{team_id}/image", follow_redirects=False)
+    assert stored.status_code == 307
+    assert blob_store[stored.headers["location"]] == PNG
 
 
 def test_team_image_download_stays_public(
