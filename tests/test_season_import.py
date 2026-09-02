@@ -574,24 +574,3 @@ def test_an_import_signs_the_rostered_players_up_on_their_race(
     assert response.status_code == 200, response.text
 
     assert _signups() == {"P1#1111": ("HU", None), "P2#2222": ("OC", None)}
-
-
-def _tier_count_sheet(tiers: int) -> dict[str, tuple[list[str], list[list[Any]]]]:
-    """The Season sheet of a newer export, which names its tier count."""
-    columns, rows = SHEETS["Season"]
-    return {"Season": ([*columns, "Fantasy Tiers"], [[*rows[0], tiers]])}
-
-
-def test_the_season_sheet_names_its_tier_count(
-    client: Client, auth_headers: dict[str, str]
-) -> None:
-    """A workbook with the column writes the count; one without keeps the default."""
-    response = _post(client, _workbook(extra=_tier_count_sheet(4)), auth_headers)
-    assert response.status_code == 200, response.text
-    with Session() as session:
-        assert session.get_one(Season, response.json()["season_id"]).fantasy_tiers == 4
-
-    response = _post(client, _workbook(season_id=None), auth_headers)
-    assert response.status_code == 200, response.text
-    with Session() as session:
-        assert session.get_one(Season, response.json()["season_id"]).fantasy_tiers == 4

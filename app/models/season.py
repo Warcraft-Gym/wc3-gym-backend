@@ -1,7 +1,8 @@
 from datetime import date
 from typing import TYPE_CHECKING, Annotated, Any, Self
 
-from sqlalchemy import Index, text
+from pydantic import PositiveInt
+from sqlalchemy import JSON, Index, text
 from sqlmodel import Field, Relationship, SQLModel
 
 from app.models.base import DBModel, ident
@@ -35,10 +36,11 @@ class SeasonBase(SQLModel):
         max_length=20,
         sa_column_kwargs={"server_default": "standard"},
     )
-    # How many tiers the fantasy draft cuts this season's roster into
-    fantasy_tiers: int = Field(
-        default=6, ge=2, le=6, sa_column_kwargs={"server_default": "6"}
-    )
+
+
+def tier_count(cuts: list[int] | None) -> int:
+    """How many fantasy tiers the cuts make, 0 before the first allocation."""
+    return len(cuts) + 1 if cuts else 0
 
 
 class Season(SeasonBase, DBModel, table=True):
@@ -47,6 +49,8 @@ class Season(SeasonBase, DBModel, table=True):
     __table_args__ = (Index("uq_seasons_name", text("lower(trim(name))"), unique=True),)
 
     id: int | None = Field(default=None, primary_key=True)
+    # The ascending MMR each fantasy tier opens at; the tier count is one more
+    fantasy_tier_cuts: list[int] | None = Field(default=None, sa_type=JSON)
     user_teams: list["DBUserTeamSeason"] = Relationship(
         back_populates="season", sa_relationship_kwargs={"cascade": "all, delete"}
     )
@@ -86,7 +90,6 @@ class SeasonUpdate(SQLModel):
     discordRole: Annotated[str | None, NumToStr] = None
     map_rules: Annotated[str | None, MapRules] = None
     score_system: str | None = None
-    fantasy_tiers: int | None = Field(default=None, ge=2, le=6)
 
 
 class SeasonTeamIds(SQLModel):
@@ -99,6 +102,13 @@ class SeasonMapIds(SQLModel):
 
 class SeasonLadderMapNames(SQLModel):
     names: list[str]
+
+
+class FantasyTierAllocation(SQLModel):
+    """One season's whole tier allocation: the cuts and every tiered player."""
+
+    cuts: list[int]
+    tiers: dict[int, PositiveInt]
 
 
 class SeasonSignupWrite(SQLModel):
@@ -114,7 +124,9 @@ class SeasonPublic(SeasonBase):
     number_weeks: int | None = None
     series_per_week: int | None = None
     score_system: str | None = None
+    # Derived: one more than the cuts, 0 until the season is allocated
     fantasy_tiers: int | None = None
+    fantasy_tier_cuts: Annotated[list[int], NoneToList] = []
     start_date: Annotated[IsoDate | None, LenientDate] = None
     end_date: Annotated[IsoDate | None, LenientDate] = None
     maps: Annotated[list[MapPublic], NoneToList] = []
@@ -143,7 +155,8 @@ class SeasonPublic(SeasonBase):
             discordRole=season.discordRole,
             map_rules=season.map_rules,
             score_system=season.score_system,
-            fantasy_tiers=season.fantasy_tiers,
+            fantasy_tiers=tier_count(season.fantasy_tier_cuts),
+            fantasy_tier_cuts=season.fantasy_tier_cuts or [],
         )
 
     @classmethod
@@ -166,5 +179,6 @@ class SeasonPublic(SeasonBase):
             discordRole=season.discordRole,
             map_rules=season.map_rules,
             score_system=season.score_system,
-            fantasy_tiers=season.fantasy_tiers,
+            fantasy_tiers=tier_count(season.fantasy_tier_cuts),
+            fantasy_tier_cuts=season.fantasy_tier_cuts or [],
         )

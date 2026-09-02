@@ -1,6 +1,7 @@
 import logging
 from collections.abc import Iterable
 from datetime import timedelta
+from itertools import pairwise
 from typing import TYPE_CHECKING
 
 from sqlalchemy import ColumnElement, Select, func, or_, select, update
@@ -75,9 +76,11 @@ class UserService:
                 raise NotFoundError("User not found")
             return _public(session, row)
 
-    def set_fantasy_tiers(self, season_id: int, tiers: dict[int, int]) -> None:
-        """Replace one season's whole allocation: listed players get their tier, the
-        rest none."""
+    def set_fantasy_tiers(
+        self, season_id: int, cuts: list[int], tiers: dict[int, int]
+    ) -> None:
+        """Replace one season's whole allocation: the cuts, and listed players get
+        their tier, the rest none."""
         by_tier: dict[int, list[int]] = {}
         for user_id, tier in tiers.items():
             by_tier.setdefault(tier, []).append(user_id)
@@ -88,8 +91,10 @@ class UserService:
             season = session.get(Season, season_id)
             if season is None:
                 raise NotFoundError("Season not found")
-            if tiers and max(tiers.values()) > season.fantasy_tiers:
-                raise BadRequestError(f"Season cuts only {season.fantasy_tiers} tiers")
+            if not 1 <= len(cuts) <= 5 or any(a >= b for a, b in pairwise(cuts)):
+                raise BadRequestError("Cuts must be 1 to 5 strictly ascending MMRs")
+            if tiers and max(tiers.values()) > len(cuts) + 1:
+                raise BadRequestError(f"The cuts make only {len(cuts) + 1} tiers")
             signed_up = set(
                 session.scalars(
                     select(col(DBUserSeasonSignup.user_id)).where(
@@ -101,6 +106,7 @@ class UserService:
                 raise BadRequestError(
                     f"{len(missing)} players are not signed up for this season"
                 )
+            season.fantasy_tier_cuts = cuts
             session.execute(signups.values(fantasy_tier=None))
             for tier, ids in by_tier.items():
                 session.execute(
