@@ -35,7 +35,6 @@ class UserBase(SQLModel):
     country: Annotated[str | None, NumToStr] = Field(default=None, max_length=2)
     # IANA name, as the browser reports it: America/New_York
     timezone: Annotated[str | None, KnownTimeZone] = Field(default=None, max_length=64)
-    fantasy_tier: int | None = None
 
 
 class User(UserBase, DBModel, table=True):
@@ -97,7 +96,6 @@ class UserUpdate(SQLModel):
     mmr: int | None = None
     country: Annotated[str | None, NumToStr] = None
     timezone: Annotated[str | None, KnownTimeZone] = None
-    fantasy_tier: int | None = None
 
 
 class PublicSignupWrite(SQLModel):
@@ -151,7 +149,6 @@ class UserReduced(UserBase, PublicModel):
             mmr=user.mmr,
             country=user.country,
             timezone=user.timezone,
-            fantasy_tier=user.fantasy_tier,
             w3c_synced_at=user.w3c_synced_at,
             ladder_synced_at=user.ladder_synced_at,
         )
@@ -162,8 +159,9 @@ class UserListPublic(UserReduced):
 
     w3c_stats: Annotated[list[W3CStatsPublic], NoneToList] = []
     signup_seasons: Annotated[list[SeasonPublic], NoneToList] = []
-    # The race of one signup, filled by the signups answer of a single season
+    # The race and tier of one signup, filled by the signups answer of a single season
     signup_race: Annotated[str | None, EnumValue] = None
+    fantasy_tier: int | None = None
 
     @classmethod
     def from_user(cls, user: User) -> Self:
