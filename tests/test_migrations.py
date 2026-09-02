@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
-from sqlalchemy import Column, Index, column, create_engine, table, text
+from sqlalchemy import Column, Index, column, create_engine, inspect, table, text
 from sqlmodel import SQLModel
 
 from tests.migrate import downgrade_to, fresh_database, upgrade_to, upgrade_to_head
@@ -27,6 +27,7 @@ BEFORE_ROLE_BINDINGS = "b3f9d7c21a48"
 BEFORE_W3C_SEASON_KEY = "5f4a1a4d88d3"
 # The revision before the fantasy tier lives on the season signup row
 BEFORE_PER_SEASON_TIERS = "7764c747da5d"
+BEFORE_USER_TIER_DROP = "d5e8b1c47a90"
 
 
 def comparable(
@@ -339,3 +340,18 @@ def test_the_tier_backfill_picks_the_season_that_signed_up_every_tiered_player(
             6,
             6,
         ]
+
+
+def test_the_users_tier_column_is_dropped_and_comes_back_on_downgrade(
+    tmp_path: Path,
+) -> None:
+    url = fresh_database(tmp_path, "user-tier")
+    upgrade_to_head(url)
+    engine = create_engine(url)
+
+    def columns() -> set[str]:
+        return {column["name"] for column in inspect(engine).get_columns("users")}
+
+    assert "fantasy_tier" not in columns()
+    downgrade_to(url, BEFORE_USER_TIER_DROP)
+    assert "fantasy_tier" in columns()

@@ -28,7 +28,6 @@ from app.models.fantasy_team import (
     FantasyTeamPublic,
     FantasyTeamUpdate,
 )
-from app.services import discord_roles
 from app.services.fantasy_bets import BetSort
 from app.services.fantasy_scores import team_score_breakdown
 
@@ -60,15 +59,10 @@ def require_admin_or_owner(
 
 @router.put("/fantasy/tiers", status_code=204, dependencies=[Depends(require_admin)])
 def set_fantasy_tiers(
-    tiers: dict[int, PositiveInt],
-    service: UserServiceDep,
-    season_id: int | None = None,
+    tiers: dict[int, PositiveInt], service: UserServiceDep, season_id: int
 ) -> None:
     """Replace one season's tier allocation in one transaction, unlisted players lose theirs."""
-    season = season_id or discord_roles.current_season()
-    if season is None:
-        raise ApiError(404, {"error": "No season to allocate tiers for"})
-    service.set_fantasy_tiers(season, tiers)
+    service.set_fantasy_tiers(season_id, tiers)
 
 
 # Team endpoints

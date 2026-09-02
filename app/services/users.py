@@ -77,7 +77,7 @@ class UserService:
 
     def set_fantasy_tiers(self, season_id: int, tiers: dict[int, int]) -> None:
         """Replace one season's whole allocation: listed players get their tier, the
-        rest none. Writes users.fantasy_tier too until that column is dropped."""
+        rest none."""
         by_tier: dict[int, list[int]] = {}
         for user_id, tier in tiers.items():
             by_tier.setdefault(tier, []).append(user_id)
@@ -102,15 +102,11 @@ class UserService:
                     f"{len(missing)} players are not signed up for this season"
                 )
             session.execute(signups.values(fantasy_tier=None))
-            session.execute(update(User).values(fantasy_tier=None))
             for tier, ids in by_tier.items():
                 session.execute(
                     signups.where(col(DBUserSeasonSignup.user_id).in_(ids)).values(
                         fantasy_tier=tier
                     )
-                )
-                session.execute(
-                    update(User).where(col(User.id).in_(ids)).values(fantasy_tier=tier)
                 )
 
     def delete(self, user_id: int) -> None:

@@ -248,7 +248,30 @@ def test_tier_allocation_replaces_the_whole_map_at_once(
         ).status_code
         == 422
     )
-    assert client.put("/fantasy/tiers", json={str(p1): 1}).status_code in (401, 403)
+    assert client.put(
+        f"/fantasy/tiers?season_id={season}", json={str(p1): 1}
+    ).status_code in (401, 403)
+
+
+def test_a_tier_allocation_names_its_season(
+    client: Client, seeded: dict[str, Any], auth_headers: dict[str, str]
+) -> None:
+    """The tier lives on the signup row, so the season is required and an
+    allocation leaves the user answer's tier empty."""
+    season = seeded["season_id"]
+    p1 = seeded["player_ids"][0]
+    resp = client.put("/fantasy/tiers", json={str(p1): 1}, headers=auth_headers)
+    assert resp.status_code == 422
+
+    client.post(
+        f"/seasons/{season}/signups", json={"user_ids": [p1]}, headers=auth_headers
+    )
+    resp = client.put(
+        f"/fantasy/tiers?season_id={season}", json={str(p1): 1}, headers=auth_headers
+    )
+    assert resp.status_code == 204
+    assert _tier_of(client, season, p1) == 1
+    assert get_json(client, f"/users/{p1}")["fantasy_tier"] is None
 
 
 def test_a_season_cuts_only_as_many_tiers_as_it_sets(
@@ -267,6 +290,12 @@ def test_a_season_cuts_only_as_many_tiers_as_it_sets(
     )
     assert resp.status_code == 200
     assert get_json(client, f"/seasons/{season}")["fantasy_tiers"] == 4
+    assert (
+        client.put(
+            f"/seasons/{season}", json={"fantasy_tiers": 7}, headers=auth_headers
+        ).status_code
+        == 422
+    )
 
     refused = client.put(
         f"/fantasy/tiers?season_id={season}", json={str(p1): 5}, headers=auth_headers

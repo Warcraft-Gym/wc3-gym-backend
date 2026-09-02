@@ -55,7 +55,6 @@ def player_block(name: str) -> dict[str, Any]:
         "mmr": 1500,
         "country": None,
         "timezone": None,
-        "fantasy_tier": None,
         "id": number + 1,
         "race": "HU",
         "w3c_synced_at": None,
@@ -398,7 +397,6 @@ def test_the_row_player_carries_no_collection(
             "mmr",
             "country",
             "timezone",
-            "fantasy_tier",
             "w3c_synced_at",
             "ladder_synced_at",
         }
