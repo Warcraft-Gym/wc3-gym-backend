@@ -1,8 +1,8 @@
 """The public fantasy writes close with the schedule.
 
 A bet closes once its series has started and reopens if the series moves
-later. A fantasy team closes once the season's last scheduled series has
-started. The admin routes stay open, so a mistake is fixed there.
+later. A fantasy team closes once every series of the season is scored or
+past its time. The admin routes stay open, so a mistake is fixed there.
 """
 
 from datetime import UTC, datetime, timedelta
@@ -92,8 +92,16 @@ def test_a_team_closes_once_the_last_series_has_started(
     resp = client.post("/fantasy-team", json=team, headers=headers)
     assert (resp.status_code, resp.json()) == (403, ENDED), resp.text
 
-    # An unscheduled series keeps the season open
+    # An unplayed, unscheduled series keeps the season open
     schedule(seeded["series_open_id"], None)
     resp = client.post("/fantasy-team", json=team, headers=headers)
     assert resp.status_code == 201, resp.text
     assert resp.json()["name"] == "Late"
+
+    # A scored series is done whether or not it carries a time
+    with Session.begin() as session:
+        series = session.get(Series, seeded["series_open_id"])
+        assert series is not None
+        series.player1_score, series.player2_score = 2, 0
+    resp = client.post("/fantasy-team", json=team, headers=headers)
+    assert (resp.status_code, resp.json()) == (403, ENDED), resp.text
