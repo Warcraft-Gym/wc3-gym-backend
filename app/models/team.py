@@ -1,8 +1,6 @@
 from typing import TYPE_CHECKING, Annotated, Any, Self
 
 from pydantic import BeforeValidator
-from sqlalchemy import Column, LargeBinary
-from sqlalchemy.orm import deferred
 from sqlmodel import Field, Relationship, SQLModel
 
 from app.models.base import DBModel, ident
@@ -32,9 +30,6 @@ def _season_lists(value: Any) -> Any:  # noqa: ANN401  # a validator sees raw in
 
 SeasonLists = BeforeValidator(_season_lists)
 
-# a team logo is ~44 KB, so loading it with the row costs more than every other column together
-icon_column = Column("icon", LargeBinary)
-
 
 class TeamBase(SQLModel):
     # name and long_name also receive numeric cells from the xlsx import.
@@ -44,12 +39,9 @@ class TeamBase(SQLModel):
 
 class Team(TeamBase, DBModel, table=True):
     __tablename__ = "teams"
-    # deferred: only /teams/{id}/image reads the logo, every other team read leaves it in the database
-    __mapper_args__ = {"properties": {"icon": deferred(icon_column)}}
 
     id: int | None = Field(default=None, primary_key=True)
-    icon: bytes | None = Field(default=None, sa_column=icon_column)
-    # the blob the logo is served from; while it is None the icon column still serves
+    # the public blob the logo is served from
     icon_url: str | None = Field(default=None, max_length=500)
     user_seasons: list["DBUserTeamSeason"] = Relationship(
         back_populates="team", sa_relationship_kwargs={"cascade": "all, delete"}

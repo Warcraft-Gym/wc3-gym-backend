@@ -1,14 +1,13 @@
 """Pin that a binary column never loads with its row.
 
-A team logo is ~44 KB, so a select of every team carrying its icon reads 890 KB where the answer is
-2 KB, and a season of series reads 21 MB where the answer is 190 KB. The database bills those bytes.
-Deferring the column is what keeps them out of every read that does not serve the image itself.
+The database bills every byte it sends, and a picture on a mapped row rides along with every select
+of that row. Deferring the column keeps it out of every read that does not serve the image itself.
 """
 
 from sqlalchemy import LargeBinary, inspect
 from sqlmodel import SQLModel
 
-from app.models.team import Team
+from app.models.map import Map
 
 
 def _blob_columns() -> list[tuple[str, str, bool]]:
@@ -28,7 +27,7 @@ def test_every_binary_column_is_deferred() -> None:
     )
 
 
-def test_the_team_logo_is_a_binary_column() -> None:
-    """The test above passes vacuously if the icon stops being binary, so pin that it is one."""
-    assert ("Team", "icon", True) in _blob_columns()
-    assert inspect(Team).get_property("icon").deferred
+def test_the_map_picture_is_a_binary_column() -> None:
+    """The test above passes vacuously once no column is binary, so pin that this one still is."""
+    assert ("Map", "icon", True) in _blob_columns()
+    assert inspect(Map).get_property("icon").deferred
