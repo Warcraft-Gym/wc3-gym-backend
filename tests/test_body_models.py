@@ -15,6 +15,7 @@ import pytest
 from httpx2 import Client
 
 BOT_TOKEN = "bot-client-token"
+from tests.test_fantasy_locks import schedule
 
 
 @pytest.fixture(autouse=True)
@@ -59,6 +60,9 @@ def test_a_bet_update_without_the_points_keeps_the_stored_points(
 ) -> None:
     """A key the body leaves out is not a null; the bet keeps what it held."""
     bet = client.get("/fantasy/bets").json()[0]
+    schedule(
+        seeded["series_played_id"], datetime.now(UTC) + timedelta(days=1)
+    )  # the series is still open
     empty_store["t"] = {
         "discord_id": "1",
         "discord_tag": "p1",
