@@ -58,6 +58,9 @@ class FantasyRaceBreakdown(SQLModel):
 class FantasyBetOutcome(SQLModel):
     week: int | None
     series: str
+    player1: str
+    player2: str
+    score: str
     bet_on: str | None
     actual_winner: str | None
     bet_points: int
