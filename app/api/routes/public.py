@@ -40,7 +40,7 @@ from app.models.fantasy_team import (
 )
 from app.models.login import PublicAccessRequest
 from app.models.player_history import PlayerHistory
-from app.models.series import SeriesSort
+from app.models.series import SeriesPublic, SeriesSort
 from app.models.series_veto_step import SeriesVetoPublic, SeriesVetoWrite
 from app.models.types import utcnow
 from app.models.user import (
@@ -145,11 +145,15 @@ def _refuse_started(series_service: SeriesService, series_id: int | None) -> Non
 
 
 def _refuse_ended(series_service: SeriesService, season_id: int) -> None:
-    """A season is over once its last scheduled series has started; an unscheduled one keeps it open."""
+    """A season is over once every series is scored or past its time; an unplayed, unscheduled one keeps it open."""
     series = series_service.search_for_season(season_id, None)
-    if series and all(
-        s.date_time is not None and s.date_time <= utcnow() for s in series
-    ):
+    now = utcnow()
+
+    def done(s: SeriesPublic) -> bool:
+        scored = s.player1_score is not None and s.player2_score is not None
+        return scored or (s.date_time is not None and s.date_time <= now)
+
+    if series and all(done(s) for s in series):
         raise ApiError(
             403,
             {"error": "season_ended", "message": "The season has ended"},
