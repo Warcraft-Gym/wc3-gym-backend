@@ -248,14 +248,16 @@ def test_the_import_renames_a_drifted_map_instead_of_creating_a_twin(
     ]
 
 
-def test_a_map_with_its_picture_keeps_it_unfetched(
+def test_a_map_with_its_picture_keeps_it(
     client: Client,
     seeded: dict[str, Any],
     auth_headers: dict[str, str],
     sources: list[str],
 ) -> None:
+    """A picture an admin uploaded is not replaced by the one the ladder matched."""
+    mine = "https://test.public.blob.vercel-storage.com/maps/1-0.png"
     with Session.begin() as session:
-        Map.update(session, seeded["map_id"], name="Echo Isles v2", icon=b"mine")
+        Map.update(session, seeded["map_id"], name="Echo Isles v2", image=mine)
 
     resp = client.post(
         f"/seasons/{seeded['season_id']}/maps/ladder-import",
@@ -264,8 +266,8 @@ def test_a_map_with_its_picture_keeps_it_unfetched(
     )
 
     assert resp.status_code == 200, resp.text
-    assert client.get(f"/maps/{seeded['map_id']}/image").content == b"mine"
-    assert not [url for url in sources if "cloudfront" in url]
+    icon = client.get(f"/maps/{seeded['map_id']}/image", follow_redirects=False)
+    assert icon.headers["location"] == mine
 
 
 def test_a_taken_short_name_falls_back_to_the_initials(

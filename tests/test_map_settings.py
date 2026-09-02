@@ -2,16 +2,13 @@
 
 A season names one rule per game of a series, and a week rule reads its map
 from the playday. The pool is ordered, so the draft screens list it the way an
-admin arranged it. A map also carries an uploaded picture.
+admin arranged it. The upload of a map picture is covered by test_map_picture.
 """
 
 from typing import Any
 
 import pytest
 from httpx2 import Client
-
-PNG = b"\x89PNG\r\n\x1a\n" + b"png body"
-JPEG = b"\xff\xd8\xff\xe0" + b"jpeg body"
 
 
 def pool(client: Client, season_id: int) -> list[str]:
@@ -252,55 +249,6 @@ def test_a_map_outside_the_pool_is_not_a_week_map(
 
     assert resp.status_code == 400, resp.text
     assert "not part of the season" in resp.json()["error"]
-
-
-@pytest.mark.parametrize(
-    "image,media_type",
-    [(PNG, "image/png"), (JPEG, "image/jpeg"), (b"gif89a body", None)],
-)
-def test_a_map_carries_the_picture_that_was_uploaded_for_it(
-    client: Client,
-    seeded: dict[str, Any],
-    auth_headers: dict[str, str],
-    image: bytes,
-    media_type: str | None,
-) -> None:
-    """The first bytes name the type; an unknown one is sent as plain bytes."""
-    map_id = seeded["map_id"]
-    resp = client.post(
-        f"/maps/{map_id}/image",
-        files={"image": ("map.bin", image)},
-        headers=auth_headers,
-    )
-    assert resp.status_code == 200, resp.text
-
-    resp = client.get(f"/maps/{map_id}/image")
-
-    assert resp.status_code == 200, resp.text
-    assert resp.content == image
-    assert resp.headers["content-type"] == (media_type or "application/octet-stream")
-    assert resp.headers["cache-control"] == "public, max-age=86400"
-
-
-def test_a_client_that_holds_the_picture_is_told_it_is_unchanged(
-    client: Client, seeded: dict[str, Any], auth_headers: dict[str, str]
-) -> None:
-    map_id = seeded["map_id"]
-    client.post(
-        f"/maps/{map_id}/image", files={"image": ("m.png", PNG)}, headers=auth_headers
-    )
-    etag = client.get(f"/maps/{map_id}/image").headers["etag"]
-
-    resp = client.get(f"/maps/{map_id}/image", headers={"if-none-match": etag})
-    assert resp.status_code == 304
-
-    # A replaced picture is a new tag, so the client fetches it again
-    client.post(
-        f"/maps/{map_id}/image", files={"image": ("m.jpg", JPEG)}, headers=auth_headers
-    )
-    resp = client.get(f"/maps/{map_id}/image", headers={"if-none-match": etag})
-    assert resp.status_code == 200
-    assert resp.content == JPEG
 
 
 def test_a_map_without_a_picture_has_none_to_fetch(
