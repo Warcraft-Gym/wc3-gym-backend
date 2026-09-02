@@ -25,6 +25,8 @@ BEFORE_CAPTAIN_TABLE = "5f4a1a4d88d3"
 BEFORE_ROLE_BINDINGS = "b3f9d7c21a48"
 # The revision before the season setting is spelled w3c
 BEFORE_W3C_SEASON_KEY = "5f4a1a4d88d3"
+# The revision before the fantasy tier lives on the season signup row
+BEFORE_PER_SEASON_TIERS = "7764c747da5d"
 
 
 def comparable(
@@ -272,4 +274,68 @@ def test_the_w3c_season_setting_is_renamed_and_renamed_back(tmp_path: Path) -> N
     with engine.connect() as connection:
         assert connection.execute(text("SELECT key, value FROM settings")).all() == [
             ("current_wc3_season", "21")
+        ]
+
+
+def test_the_tier_backfill_picks_the_season_that_signed_up_every_tiered_player(
+    tmp_path: Path,
+) -> None:
+    """set_fantasy_tiers nulls everyone outside the pool, so the season holding all
+    tiered players is the one the last allocation wrote - not simply the newest."""
+    url = fresh_database(tmp_path, "tiers")
+    upgrade_to(url, BEFORE_PER_SEASON_TIERS)
+
+    engine = create_engine(url)
+    with engine.begin() as connection:
+        users = table(
+            "users",
+            *(
+                column(c)
+                for c in ("id", "name", "battleTag", "discordTag", "discordId", "race")
+            ),
+            column("fantasy_tier"),
+        )
+        connection.execute(
+            users.insert(),
+            [
+                {
+                    "id": i,
+                    "name": f"P{i}",
+                    "battleTag": f"P{i}#1",
+                    "discordTag": f"P{i}",
+                    "discordId": str(i),
+                    "race": "Random",
+                    "fantasy_tier": i,
+                }
+                for i in (1, 2)
+            ],
+        )
+        for name in ("Covering", "Newer"):
+            connection.execute(
+                text(
+                    "INSERT INTO seasons (name, number_weeks, series_per_week) "
+                    f"VALUES ('{name}', 4, 2)"
+                )
+            )
+        # Season 1 signed up both tiered players; season 2 is newer but signed up one
+        connection.execute(
+            text(
+                "INSERT INTO user_season_signup (user_id, season_id) "
+                "VALUES (1, 1), (2, 1), (1, 2)"
+            )
+        )
+
+    upgrade_to(url, "head")
+
+    with engine.connect() as connection:
+        rows = connection.execute(
+            text(
+                "SELECT season_id, user_id, fantasy_tier FROM user_season_signup "
+                "ORDER BY season_id, user_id"
+            )
+        ).all()
+        assert rows == [(1, 1, 1), (1, 2, 2), (2, 1, None)]
+        assert connection.scalars(text("SELECT fantasy_tiers FROM seasons")).all() == [
+            6,
+            6,
         ]

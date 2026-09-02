@@ -208,28 +208,122 @@ def test_bets_search_pages_by_id_and_counts_the_filtered_set(
     assert paged == sorted(ids)
 
 
+def _tier_of(client: Client, season_id: int, user_id: int) -> int | None:
+    """The tier the season's signup row carries for one player."""
+    rows = get_json(client, f"/seasons/{season_id}/signups")
+    return next(row["fantasy_tier"] for row in rows if row["id"] == user_id)
+
+
 def test_tier_allocation_replaces_the_whole_map_at_once(
     client: Client, seeded: dict[str, Any], auth_headers: dict[str, str]
 ) -> None:
-    """One PUT sets every listed tier and clears every unlisted one."""
+    """One PUT sets every listed tier on the season's signup rows and clears the rest."""
+    season = seeded["season_id"]
     p1, p2 = seeded["player_ids"][:2]
+    client.post(
+        f"/seasons/{season}/signups", json={"user_ids": [p1, p2]}, headers=auth_headers
+    )
 
     resp = client.put(
-        "/fantasy/tiers", json={str(p1): 1, str(p2): 3}, headers=auth_headers
+        f"/fantasy/tiers?season_id={season}",
+        json={str(p1): 1, str(p2): 3},
+        headers=auth_headers,
     )
     assert resp.status_code == 204
-    assert get_json(client, f"/users/{p1}")["fantasy_tier"] == 1
-    assert get_json(client, f"/users/{p2}")["fantasy_tier"] == 3
+    assert _tier_of(client, season, p1) == 1
+    assert _tier_of(client, season, p2) == 3
 
-    resp = client.put("/fantasy/tiers", json={str(p2): 2}, headers=auth_headers)
+    resp = client.put(
+        f"/fantasy/tiers?season_id={season}", json={str(p2): 2}, headers=auth_headers
+    )
     assert resp.status_code == 204
-    assert get_json(client, f"/users/{p1}")["fantasy_tier"] is None
-    assert get_json(client, f"/users/{p2}")["fantasy_tier"] == 2
+    assert _tier_of(client, season, p1) is None
+    assert _tier_of(client, season, p2) == 2
 
     assert (
         client.put(
-            "/fantasy/tiers", json={str(p1): 0}, headers=auth_headers
+            f"/fantasy/tiers?season_id={season}",
+            json={str(p1): 0},
+            headers=auth_headers,
         ).status_code
         == 422
     )
     assert client.put("/fantasy/tiers", json={str(p1): 1}).status_code in (401, 403)
+
+
+def test_a_season_cuts_only_as_many_tiers_as_it_sets(
+    client: Client, seeded: dict[str, Any], auth_headers: dict[str, str]
+) -> None:
+    """The season owns the tier count, and a tier above it is refused."""
+    season = seeded["season_id"]
+    p1 = seeded["player_ids"][0]
+    client.post(
+        f"/seasons/{season}/signups", json={"user_ids": [p1]}, headers=auth_headers
+    )
+    assert get_json(client, f"/seasons/{season}")["fantasy_tiers"] == 6
+
+    resp = client.put(
+        f"/seasons/{season}", json={"fantasy_tiers": 4}, headers=auth_headers
+    )
+    assert resp.status_code == 200
+    assert get_json(client, f"/seasons/{season}")["fantasy_tiers"] == 4
+
+    refused = client.put(
+        f"/fantasy/tiers?season_id={season}", json={str(p1): 5}, headers=auth_headers
+    )
+    assert refused.status_code == 400
+    assert _tier_of(client, season, p1) is None
+
+    assert (
+        client.put(
+            f"/fantasy/tiers?season_id={season}",
+            json={str(p1): 4},
+            headers=auth_headers,
+        ).status_code
+        == 204
+    )
+    assert _tier_of(client, season, p1) == 4
+
+
+def test_tiers_are_refused_for_players_not_signed_up(
+    client: Client, seeded: dict[str, Any], auth_headers: dict[str, str]
+) -> None:
+    """The tier lives on the signup row, so a player without one is a bad request."""
+    p1 = seeded["player_ids"][0]
+    season = client.post(
+        "/seasons",
+        json={"name": "No signups", "number_weeks": 1, "series_per_week": 1},
+        headers=auth_headers,
+    ).json()["id"]
+    resp = client.put(
+        f"/fantasy/tiers?season_id={season}", json={str(p1): 1}, headers=auth_headers
+    )
+    assert resp.status_code == 400
+    assert "not signed up" in str(resp.json()["error"])
+
+
+def test_each_season_keeps_its_own_tiers(
+    client: Client, seeded: dict[str, Any], auth_headers: dict[str, str]
+) -> None:
+    """Allocating one season leaves another season's tiers alone."""
+    first = seeded["season_id"]
+    p1 = seeded["player_ids"][0]
+    second = client.post(
+        "/seasons",
+        json={"name": "Second", "number_weeks": 1, "series_per_week": 1},
+        headers=auth_headers,
+    ).json()["id"]
+    for season in (first, second):
+        client.post(
+            f"/seasons/{season}/signups", json={"user_ids": [p1]}, headers=auth_headers
+        )
+
+    client.put(
+        f"/fantasy/tiers?season_id={first}", json={str(p1): 1}, headers=auth_headers
+    )
+    client.put(
+        f"/fantasy/tiers?season_id={second}", json={str(p1): 5}, headers=auth_headers
+    )
+
+    assert _tier_of(client, first, p1) == 1
+    assert _tier_of(client, second, p1) == 5

@@ -35,6 +35,10 @@ class SeasonBase(SQLModel):
         max_length=20,
         sa_column_kwargs={"server_default": "standard"},
     )
+    # How many tiers the fantasy draft cuts this season's roster into
+    fantasy_tiers: int = Field(
+        default=6, ge=2, le=6, sa_column_kwargs={"server_default": "6"}
+    )
 
 
 class Season(SeasonBase, DBModel, table=True):
@@ -82,6 +86,7 @@ class SeasonUpdate(SQLModel):
     discordRole: Annotated[str | None, NumToStr] = None
     map_rules: Annotated[str | None, MapRules] = None
     score_system: str | None = None
+    fantasy_tiers: int | None = None
 
 
 class SeasonTeamIds(SQLModel):
@@ -109,6 +114,7 @@ class SeasonPublic(SeasonBase):
     number_weeks: int | None = None
     series_per_week: int | None = None
     score_system: str | None = None
+    fantasy_tiers: int | None = None
     start_date: Annotated[IsoDate | None, LenientDate] = None
     end_date: Annotated[IsoDate | None, LenientDate] = None
     maps: Annotated[list[MapPublic], NoneToList] = []
@@ -137,6 +143,7 @@ class SeasonPublic(SeasonBase):
             discordRole=season.discordRole,
             map_rules=season.map_rules,
             score_system=season.score_system,
+            fantasy_tiers=season.fantasy_tiers,
         )
 
     @classmethod
@@ -159,4 +166,5 @@ class SeasonPublic(SeasonBase):
             discordRole=season.discordRole,
             map_rules=season.map_rules,
             score_system=season.score_system,
+            fantasy_tiers=season.fantasy_tiers,
         )
