@@ -72,6 +72,7 @@ dependencies = [
     { name = "sqlalchemy" },
     { name = "sqlmodel" },
     { name = "uvicorn" },
+    { name = "vercel" },
 ]
 
 [package.dev-dependencies]
@@ -81,7 +82,6 @@ dev = [
     { name = "ruff" },
     { name = "rust-just" },
     { name = "ty" },
-    { name = "vercel" },
 ]
 
 [package.metadata]
@@ -99,6 +99,7 @@ requires-dist = [
     { name = "sqlalchemy", specifier = ">=2,<3" },
     { name = "sqlmodel", specifier = ">=0.0.39" },
     { name = "uvicorn", specifier = ">=0.52.3" },
+    { name = "vercel", specifier = ">=0.10.0" },
 ]
 
 [package.metadata.requires-dev]
@@ -108,7 +109,6 @@ dev = [
     { name = "ruff", specifier = ">=0.16.3" },
     { name = "rust-just", specifier = ">=1.58.0" },
     { name = "ty", specifier = ">=0.0.75" },
-    { name = "vercel", specifier = ">=0.10.0" },
 ]
 
 [[package]]

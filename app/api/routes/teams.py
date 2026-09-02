@@ -27,6 +27,7 @@ from app.models.user_season_availability import (
     UserSeasonAvailabilityPublic,
 )
 from app.models.w3c_stats import W3CSyncResult
+from app.services import blob
 from app.services.users import SYNC_MAX_AGE
 
 logger = logging.getLogger(__name__)
@@ -267,4 +268,6 @@ def get_team_image(team_id: int, request: Request, service: TeamServiceDep) -> R
     ]:
         return Response(status_code=304, headers=headers)
 
-    return Response(content=team_icon, media_type="image/png", headers=headers)
+    return Response(
+        content=team_icon, media_type=blob.icon_type(team_icon), headers=headers
+    )

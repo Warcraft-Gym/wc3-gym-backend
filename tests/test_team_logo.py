@@ -86,7 +86,20 @@ def test_the_team_answer_carries_the_logo_url(
     assert blob_store[url] == PNG
 
 
-@pytest.mark.parametrize("data", [b"", b"not a png at all"])
-def test_check_icon_refuses_junk(data: bytes) -> None:
+@pytest.mark.parametrize("data", [b"", b"not an image at all"])
+def test_icon_type_refuses_junk(data: bytes) -> None:
     with pytest.raises(BadRequestError):
-        blob.check_icon(data)
+        blob.icon_type(data)
+
+
+def test_a_jpeg_is_accepted(
+    client: Client,
+    seeded: dict[str, Any],
+    auth_headers: dict[str, str],
+    blob_store: dict[str, bytes],
+) -> None:
+    """Three of the ten production logos are JPEGs that were stored as image/png."""
+    jpeg = b"\xff\xd8\xff\xe0" + b"0" * 64
+    resp = upload(client, seeded["team_a_id"], auth_headers, jpeg)
+    assert resp.status_code == 200
+    assert list(blob_store.values()) == [jpeg]
