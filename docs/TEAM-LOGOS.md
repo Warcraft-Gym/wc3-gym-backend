@@ -24,24 +24,23 @@ Browser caching cannot help with any of this, because the browser never asked fo
 
 ## What the deferral does not fix
 
-- Serving a logo still reads it out of Postgres, about 99 KB per logo per browser per day.
-- The ETag is computed from the blob, so even a 304 reads the whole icon first.
+- Serving a logo still reads it out of Postgres when the Vercel CDN does not already hold it. The response carries `Cache-Control: public, max-age=86400` and the CDN does cache it (`x-vercel-cache: HIT`), so a repeat costs nothing; a cold edge costs one read.
+- The ETag is computed from the blob, so a read that ends in a 304 still pulled the whole thing first.
+- A `bytea` value crosses the wire as hex, so a 49 KB logo costs about 99 KB of egress when it is read.
 - The database still carries binary data, which is what the free Supabase plan assumes it will not.
+
+## Who reads these logos
+
+Only the Vue app, through `wc3-gym-backend-snowy.vercel.app`. The WordPress shortcodes call `backend.warcraft-gym.com`, which is the Azure box running the older Flask app against MySQL (`server: Caddy`/`gunicorn`, `etag: team-5`), so they never touch Supabase and are not part of this. That matters for sequencing: nothing in WordPress blocks changing how the app stores logos.
 
 ## Moving them out
 
-Two constraints, and they pull in opposite directions: a non-developer has to be able to set a logo, and the database should not carry binary data.
+Two constraints pulling in opposite directions: a non-developer has to be able to set a logo, and the database should not carry binary data.
 
-**Supabase Storage does not solve the egress half.** The 5 GB is a [unified egress quota](https://supabase.com/docs/guides/platform/manage-your-usage/egress) covering Database, Auth, Storage, Realtime, Edge Functions and Log Drains. Moving the bytes from the database to a Supabase bucket moves them between meters inside the same pool.
-
-Anything hosted outside Supabase does solve it:
-
-| option | keeps the upload button | egress cost |
+| option | keeps the upload button | notes |
 |---|---|---|
-| object storage with an upload route (Cloudflare R2, Vercel Blob) | yes | R2 charges nothing for egress |
-| a URL column, image uploaded to the WordPress media library | no, it becomes upload-then-paste | none, WordPress already hosts it |
-| bundled in the frontend build | no, a logo change becomes a pull request | none |
+| Vercel Blob with an upload route | yes | official Python SDK (`vercel` on PyPI); Hobby includes 1 GB storage and 10 GB transfer, and exceeding it removes Blob for 30 days rather than billing |
+| Supabase Storage bucket | yes | served through the Smart CDN this counts as *cached* egress, a [separate 5 GB quota](https://supabase.com/docs/guides/platform/manage-your-usage/egress) from the 5 GB the database draws on, so it does help |
+| a URL column, image hosted elsewhere | no, it becomes upload-then-paste | none |
 
-Object storage is the only one of the three that keeps the workflow intact: the app keeps its upload button, writes the file to the bucket instead of the column, and stores the key. `MapBase.image` is already a URL column, so the shape exists in the codebase.
-
-Whatever replaces it, `gym_website_scripts` reads `backend.warcraft-gym.com/teams/<id>/image` too, so the route and the column stay until that moves as well.
+`MapBase.image` is already a URL column, so the shape exists in the codebase. Whichever store is chosen, the upload route keeps its signature so the workflow does not change, and `teams.icon` can be dropped once the ten existing logos are copied across.
