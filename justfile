@@ -52,7 +52,7 @@ clean-dump zip out_dir *seasons:
 _fetch-seed dir:
     #!/usr/bin/env bash
     set -euo pipefail
-    if gh repo clone Warcraft-Gym/wc3-gym-backend-db-seed "{{ dir }}" -- -q --depth 1 2>/dev/null; then
+    if git clone -q --depth 1 git@github.com:Warcraft-Gym/wc3-gym-backend-db-seed.git "{{ dir }}" 2>/dev/null; then
         echo "seed: $(ls "{{ dir }}"/*.csv | wc -l) tables from Warcraft-Gym/wc3-gym-backend-db-seed"
     else
         echo "seed: no access to Warcraft-Gym/wc3-gym-backend-db-seed, the database stays empty" >&2
