@@ -75,9 +75,11 @@ class UserService:
                 raise NotFoundError("User not found")
             return _public(session, row)
 
-    def set_fantasy_tiers(self, season_id: int, tiers: dict[int, int]) -> None:
-        """Replace one season's whole allocation: listed players get their tier, the
-        rest none."""
+    def set_fantasy_tiers(
+        self, season_id: int, cuts: list[int], tiers: dict[int, int]
+    ) -> None:
+        """Replace one season's whole allocation: the cuts, and listed players get
+        their tier, the rest none."""
         by_tier: dict[int, list[int]] = {}
         for user_id, tier in tiers.items():
             by_tier.setdefault(tier, []).append(user_id)
@@ -90,6 +92,10 @@ class UserService:
                 raise NotFoundError("Season not found")
             if tiers and max(tiers.values()) > season.fantasy_tiers:
                 raise BadRequestError(f"Season cuts only {season.fantasy_tiers} tiers")
+            if len(cuts) != season.fantasy_tiers - 1 or cuts != sorted(cuts):
+                raise BadRequestError(
+                    f"{season.fantasy_tiers} tiers need {season.fantasy_tiers - 1} ascending cuts"
+                )
             signed_up = set(
                 session.scalars(
                     select(col(DBUserSeasonSignup.user_id)).where(
@@ -101,6 +107,7 @@ class UserService:
                 raise BadRequestError(
                     f"{len(missing)} players are not signed up for this season"
                 )
+            season.fantasy_tier_cuts = cuts
             session.execute(signups.values(fantasy_tier=None))
             for tier, ids in by_tier.items():
                 session.execute(

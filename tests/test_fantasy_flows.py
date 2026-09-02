@@ -208,6 +208,10 @@ def test_bets_search_pages_by_id_and_counts_the_filtered_set(
     assert paged == sorted(ids)
 
 
+# Five ascending boundaries cut a six-tier season
+CUTS = [900, 1100, 1300, 1500, 1700]
+
+
 def _tier_of(client: Client, season_id: int, user_id: int) -> int | None:
     """The tier the season's signup row carries for one player."""
     rows = get_json(client, f"/seasons/{season_id}/signups")
@@ -226,7 +230,7 @@ def test_tier_allocation_replaces_the_whole_map_at_once(
 
     resp = client.put(
         f"/fantasy/tiers?season_id={season}",
-        json={str(p1): 1, str(p2): 3},
+        json={"cuts": CUTS, "tiers": {str(p1): 1, str(p2): 3}},
         headers=auth_headers,
     )
     assert resp.status_code == 204
@@ -234,7 +238,9 @@ def test_tier_allocation_replaces_the_whole_map_at_once(
     assert _tier_of(client, season, p2) == 3
 
     resp = client.put(
-        f"/fantasy/tiers?season_id={season}", json={str(p2): 2}, headers=auth_headers
+        f"/fantasy/tiers?season_id={season}",
+        json={"cuts": CUTS, "tiers": {str(p2): 2}},
+        headers=auth_headers,
     )
     assert resp.status_code == 204
     assert _tier_of(client, season, p1) is None
@@ -243,13 +249,13 @@ def test_tier_allocation_replaces_the_whole_map_at_once(
     assert (
         client.put(
             f"/fantasy/tiers?season_id={season}",
-            json={str(p1): 0},
+            json={"cuts": CUTS, "tiers": {str(p1): 0}},
             headers=auth_headers,
         ).status_code
         == 422
     )
     assert client.put(
-        f"/fantasy/tiers?season_id={season}", json={str(p1): 1}
+        f"/fantasy/tiers?season_id={season}", json={"cuts": CUTS, "tiers": {str(p1): 1}}
     ).status_code in (401, 403)
 
 
@@ -260,14 +266,20 @@ def test_a_tier_allocation_names_its_season(
     allocation leaves the user answer's tier empty."""
     season = seeded["season_id"]
     p1 = seeded["player_ids"][0]
-    resp = client.put("/fantasy/tiers", json={str(p1): 1}, headers=auth_headers)
+    resp = client.put(
+        "/fantasy/tiers",
+        json={"cuts": CUTS, "tiers": {str(p1): 1}},
+        headers=auth_headers,
+    )
     assert resp.status_code == 422
 
     client.post(
         f"/seasons/{season}/signups", json={"user_ids": [p1]}, headers=auth_headers
     )
     resp = client.put(
-        f"/fantasy/tiers?season_id={season}", json={str(p1): 1}, headers=auth_headers
+        f"/fantasy/tiers?season_id={season}",
+        json={"cuts": CUTS, "tiers": {str(p1): 1}},
+        headers=auth_headers,
     )
     assert resp.status_code == 204
     assert _tier_of(client, season, p1) == 1
@@ -298,20 +310,32 @@ def test_a_season_cuts_only_as_many_tiers_as_it_sets(
     )
 
     refused = client.put(
-        f"/fantasy/tiers?season_id={season}", json={str(p1): 5}, headers=auth_headers
+        f"/fantasy/tiers?season_id={season}",
+        json={"cuts": CUTS[:3], "tiers": {str(p1): 5}},
+        headers=auth_headers,
     )
     assert refused.status_code == 400
     assert _tier_of(client, season, p1) is None
+    assert get_json(client, f"/seasons/{season}")["fantasy_tier_cuts"] is None
 
+    # Four tiers take three ascending cuts, and the season keeps the ones it took
+    for cuts in (CUTS, CUTS[:2], [1300, 1100, 900]):
+        refused = client.put(
+            f"/fantasy/tiers?season_id={season}",
+            json={"cuts": cuts, "tiers": {str(p1): 4}},
+            headers=auth_headers,
+        )
+        assert refused.status_code == 400
     assert (
         client.put(
             f"/fantasy/tiers?season_id={season}",
-            json={str(p1): 4},
+            json={"cuts": CUTS[:3], "tiers": {str(p1): 4}},
             headers=auth_headers,
         ).status_code
         == 204
     )
     assert _tier_of(client, season, p1) == 4
+    assert get_json(client, f"/seasons/{season}")["fantasy_tier_cuts"] == CUTS[:3]
 
 
 def test_tiers_are_refused_for_players_not_signed_up(
@@ -325,7 +349,9 @@ def test_tiers_are_refused_for_players_not_signed_up(
         headers=auth_headers,
     ).json()["id"]
     resp = client.put(
-        f"/fantasy/tiers?season_id={season}", json={str(p1): 1}, headers=auth_headers
+        f"/fantasy/tiers?season_id={season}",
+        json={"cuts": CUTS, "tiers": {str(p1): 1}},
+        headers=auth_headers,
     )
     assert resp.status_code == 400
     assert "not signed up" in str(resp.json()["error"])
@@ -348,10 +374,14 @@ def test_each_season_keeps_its_own_tiers(
         )
 
     client.put(
-        f"/fantasy/tiers?season_id={first}", json={str(p1): 1}, headers=auth_headers
+        f"/fantasy/tiers?season_id={first}",
+        json={"cuts": CUTS, "tiers": {str(p1): 1}},
+        headers=auth_headers,
     )
     client.put(
-        f"/fantasy/tiers?season_id={second}", json={str(p1): 5}, headers=auth_headers
+        f"/fantasy/tiers?season_id={second}",
+        json={"cuts": CUTS, "tiers": {str(p1): 5}},
+        headers=auth_headers,
     )
 
     assert _tier_of(client, first, p1) == 1

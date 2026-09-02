@@ -1,7 +1,8 @@
 from datetime import date
 from typing import TYPE_CHECKING, Annotated, Any, Self
 
-from sqlalchemy import Index, text
+from pydantic import PositiveInt
+from sqlalchemy import JSON, Index, text
 from sqlmodel import Field, Relationship, SQLModel
 
 from app.models.base import DBModel, ident
@@ -47,6 +48,8 @@ class Season(SeasonBase, DBModel, table=True):
     __table_args__ = (Index("uq_seasons_name", text("lower(trim(name))"), unique=True),)
 
     id: int | None = Field(default=None, primary_key=True)
+    # The ascending MMR boundaries the tiers were cut at, one fewer than fantasy_tiers
+    fantasy_tier_cuts: list[int] | None = Field(default=None, sa_type=JSON)
     user_teams: list["DBUserTeamSeason"] = Relationship(
         back_populates="season", sa_relationship_kwargs={"cascade": "all, delete"}
     )
@@ -101,6 +104,13 @@ class SeasonLadderMapNames(SQLModel):
     names: list[str]
 
 
+class FantasyTierAllocation(SQLModel):
+    """One season's whole tier allocation: the cuts and every tiered player."""
+
+    cuts: list[int]
+    tiers: dict[int, PositiveInt]
+
+
 class SeasonSignupWrite(SQLModel):
     """The users to sign up or remove. A removal ignores the race."""
 
@@ -115,6 +125,7 @@ class SeasonPublic(SeasonBase):
     series_per_week: int | None = None
     score_system: str | None = None
     fantasy_tiers: int | None = None
+    fantasy_tier_cuts: list[int] | None = None
     start_date: Annotated[IsoDate | None, LenientDate] = None
     end_date: Annotated[IsoDate | None, LenientDate] = None
     maps: Annotated[list[MapPublic], NoneToList] = []
@@ -144,6 +155,7 @@ class SeasonPublic(SeasonBase):
             map_rules=season.map_rules,
             score_system=season.score_system,
             fantasy_tiers=season.fantasy_tiers,
+            fantasy_tier_cuts=season.fantasy_tier_cuts,
         )
 
     @classmethod
@@ -167,4 +179,5 @@ class SeasonPublic(SeasonBase):
             map_rules=season.map_rules,
             score_system=season.score_system,
             fantasy_tiers=season.fantasy_tiers,
+            fantasy_tier_cuts=season.fantasy_tier_cuts,
         )
