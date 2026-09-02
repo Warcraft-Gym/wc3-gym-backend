@@ -422,6 +422,9 @@ def team_scores(
                 {
                     "week": bet.series.week,
                     "series": f"{bet.series.player1.name} vs {bet.series.player2.name}",
+                    "player1": bet.series.player1.name,
+                    "player2": bet.series.player2.name,
+                    "score": f"{bet.series.player1_score}-{bet.series.player2_score}",
                     "bet_on": bet.winner_name,
                     "actual_winner": series_winner.name,
                     "bet_points": bet.points,

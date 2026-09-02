@@ -5,9 +5,12 @@ race_breakdown.race straight into the markup and passes it to RaceIcon,
 where it is matched against the ids in the frontend's races.js. A value
 carrying the enum repr, "Race.HU", printed as that text and matched
 nothing, so the icon rendered as blank.
+
+The rest of the file pins the other shapes the breakdown page reads.
 """
 
 import json
+import re
 from typing import Any
 
 from httpx2 import Client
@@ -65,3 +68,14 @@ def test_no_route_that_carries_a_race_writes_the_repr(
         resp = client.get(path)
         assert resp.status_code == 200, (path, resp.status_code)
         assert "Race." not in resp.text, path
+
+
+def test_a_bet_row_carries_the_two_players_and_the_score(
+    client: Client, seeded: dict[str, Any]
+) -> None:
+    """The bet tab draws both sides and the series score, so the row carries
+    them as fields rather than the page splitting `series` on " vs "."""
+    row = breakdown(client, seeded)["bet_breakdown"][0]
+
+    assert row["series"] == f"{row['player1']} vs {row['player2']}"
+    assert re.fullmatch(r"\d+-\d+", row["score"])
