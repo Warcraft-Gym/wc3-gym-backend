@@ -12,6 +12,8 @@ from app.models.discord_role_binding import (
     DiscordRoleBindingUpdate,
     DiscordRoleReport,
     DiscordRoleSyncWrite,
+    GuildRole,
+    RoleGroup,
 )
 from app.models.settings import (
     GeneratedNightbotToken,
@@ -193,9 +195,15 @@ def get_discord_role_report() -> list[DiscordRoleReport]:
 
 
 @router.get("/config/discord-guild-roles", dependencies=[Depends(require_admin)])
-def get_discord_guild_roles() -> dict[str, str]:
-    """The name of every guild role by id, for the pages that show role ids."""
+def get_discord_guild_roles() -> list[GuildRole]:
+    """Every guild role the page lists, highest in the Discord list first."""
     return discord.guild_roles()
+
+
+@router.get("/config/discord-role-groups", dependencies=[Depends(require_admin)])
+def get_discord_role_groups(season_id: int | None = None) -> list[RoleGroup]:
+    """Every group of accounts a binding can name, and how many earn it now."""
+    return discord_roles.role_groups(season_id)
 
 
 @router.post("/config/discord-roles/sync", dependencies=[Depends(require_admin)])
@@ -203,4 +211,6 @@ def sync_discord_roles(
     data: DiscordRoleSyncWrite | None = None,
 ) -> list[DiscordRoleReport]:
     """Apply the difference. Without user_ids, every account the report flags."""
-    return discord_roles.sync(data.user_ids if data else None)
+    return discord_roles.sync(
+        data.user_ids if data else None, data.role_ids if data else None
+    )

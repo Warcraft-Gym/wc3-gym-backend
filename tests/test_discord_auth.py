@@ -381,10 +381,10 @@ def _login() -> dict[str, Any]:
 
 
 def _bind_captain_role(client: Client, headers: dict[str, str]) -> None:
-    """Bind role-1 to the captain seat, the way the config page does."""
+    """Bind role-1 to the captain seat and sync it, the way the config page does."""
     resp = client.post(
         "/config/discord-role-bindings",
-        json={"kind": "captain", "discord_role": "role-1"},
+        json={"kind": "captain", "discord_role": "role-1", "synced": True},
         headers=headers,
     )
     assert resp.status_code == 201, resp.json()

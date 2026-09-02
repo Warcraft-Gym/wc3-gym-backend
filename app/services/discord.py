@@ -7,11 +7,13 @@ guild decides: app.services.admins says who administers the site.
 
 import logging
 import os
+from collections import Counter
 from typing import Any
 
 import requests
 
 from app.core.exceptions import ApiError
+from app.models.discord_role_binding import GuildRole
 
 logger = logging.getLogger(__name__)
 
@@ -126,13 +128,39 @@ def guild_members() -> dict[str, set[str]] | None:
         after = page[-1]["user"]["id"]
 
 
-def guild_roles() -> dict[str, str]:
-    """The name of every guild role by id; empty when the guild has no answer."""
+def guild_roles() -> list[GuildRole]:
+    """Every guild role but @everyone, highest first; empty when the guild has no answer.
+
+    A role is manageable when it sits below the bot's own highest role and
+    Discord does not manage it itself, which is exactly what the bot can grant.
+    """
     guild_id = os.getenv("DISCORD_GUILD_ID", "")
     response = _bot_get(f"/guilds/{guild_id}/roles")
     if response is None or not response.ok:
-        return {}
-    return {role["id"]: role["name"] for role in response.json()}
+        return []
+    roles = [role for role in response.json() if role["id"] != guild_id]
+    positions = {role["id"]: role["position"] for role in roles}
+    bot = _bot_get(f"/guilds/{guild_id}/members/@me")
+    held = bot.json().get("roles", []) if bot is not None and bot.ok else []
+    top = max((positions.get(role_id, 0) for role_id in held), default=0)
+    counts = Counter(
+        role_id for member in (guild_members() or {}).values() for role_id in member
+    )
+    return sorted(
+        (
+            GuildRole(
+                id=role["id"],
+                name=role["name"],
+                color=f"#{role['color']:06x}" if role.get("color") else None,
+                position=role["position"],
+                members=counts[role["id"]],
+                manageable=role["position"] < top and not role.get("managed", False),
+            )
+            for role in roles
+        ),
+        key=lambda role: role.position,
+        reverse=True,
+    )
 
 
 def member_roles(discord_id: str) -> set[str] | None:

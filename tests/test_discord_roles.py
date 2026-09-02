@@ -23,11 +23,23 @@ from tests.test_discord_auth import GUILD_ID, FakeResponse
 
 MEMBERS = f"{discord.API_URL}/guilds/{GUILD_ID}/members"
 
+# The guild list the bot reads: it holds bot-role, so only what sits under it is its to grant.
+ROLES = [
+    {"id": GUILD_ID, "name": "@everyone", "position": 0, "color": 0},
+    {"id": "team-a", "name": "Team A", "position": 2, "color": 5793266},
+    {"id": "bot-role", "name": "The Bot", "position": 5, "color": 0, "managed": True},
+    {"id": "above-the-bot", "name": "Above", "position": 9, "color": 0},
+]
 
-def _bind(kind: RoleKind, role: str, **columns: int) -> None:
+
+def _bind(kind: RoleKind, role: str, synced: bool = True, **columns: int) -> int:
     with Session() as session:
-        session.add(DiscordRoleBinding(kind=kind, discord_role=role, **columns))
+        binding = DiscordRoleBinding(
+            kind=kind, discord_role=role, synced=synced, **columns
+        )
+        session.add(binding)
         session.commit()
+        return ident(binding)
 
 
 def _expected(user_id: int) -> set[str]:
@@ -57,8 +69,10 @@ def _guild(
             return FakeResponse(
                 200, [{"user": {"id": id}, "roles": held} for id, held in roles.items()]
             )
+        if url == f"{MEMBERS}/@me":
+            return FakeResponse(200, {"roles": ["bot-role"]})
         if url.endswith("/roles"):
-            return FakeResponse(200, [{"id": "team-a", "name": "Team A"}])
+            return FakeResponse(200, ROLES)
         return FakeResponse(200, {"roles": roles.get(url.rsplit("/", 1)[-1], [])})
 
     monkeypatch.setenv("DISCORD_BOT_TOKEN", "a-bot-token")
@@ -264,15 +278,191 @@ def test_a_full_report_reads_the_guild_once(
     ]
 
 
-def test_the_guild_role_names_route(
+def test_the_guild_roles_route_lists_the_guild_top_first(
     client: Client,
     monkeypatch: pytest.MonkeyPatch,
     auth_headers: dict[str, str],
 ) -> None:
-    _guild(monkeypatch, {})
+    """A role above the bot cannot be managed, and @everyone is not a role to bind."""
+    _guild(monkeypatch, {"1": ["team-a"], "2": ["team-a", "above-the-bot"]})
+
     resp = client.get("/config/discord-guild-roles", headers=auth_headers)
+
     assert resp.status_code == 200, resp.text
-    assert resp.json() == {"team-a": "Team A"}
+    assert resp.json() == [
+        {
+            "id": "above-the-bot",
+            "name": "Above",
+            "color": None,
+            "position": 9,
+            "members": 1,
+            "manageable": False,
+        },
+        {
+            "id": "bot-role",
+            "name": "The Bot",
+            "color": None,
+            "position": 5,
+            "members": 0,
+            "manageable": False,
+        },
+        {
+            "id": "team-a",
+            "name": "Team A",
+            "color": "#5865f2",
+            "position": 2,
+            "members": 2,
+            "manageable": True,
+        },
+    ]
+
+
+def test_a_binding_to_a_role_above_the_bot_answers_400(
+    client: Client,
+    monkeypatch: pytest.MonkeyPatch,
+    auth_headers: dict[str, str],
+    seeded: dict[str, Any],
+) -> None:
+    """The bot could never grant it, so the binding is refused at the write."""
+    _guild(monkeypatch, {})
+
+    resp = client.post(
+        "/config/discord-role-bindings",
+        json={"kind": "captain", "discord_role": "above-the-bot"},
+        headers=auth_headers,
+    )
+
+    assert resp.status_code == 400, resp.text
+    assert resp.json() == {
+        "error": "The bot cannot manage that role: it sits above the bot in Discord"
+    }
+
+
+def test_an_unsynced_binding_is_left_to_the_guild(
+    monkeypatch: pytest.MonkeyPatch, seeded: dict[str, Any]
+) -> None:
+    """P1 earns the team role, but nobody asked the app to manage it."""
+    _bind(RoleKind.team, "team-a", synced=False, team_id=seeded["team_a_id"])
+    calls = _guild(monkeypatch, {"1": []})
+
+    assert discord_roles.report([seeded["player_ids"][0]]) == []
+    assert discord_roles.sync([seeded["player_ids"][0]]) == []
+    assert calls == [("GET", f"{MEMBERS}/1"), ("GET", f"{MEMBERS}/1")]
+
+
+def test_a_new_binding_starts_unsynced_until_an_admin_says_so(
+    client: Client,
+    monkeypatch: pytest.MonkeyPatch,
+    auth_headers: dict[str, str],
+    seeded: dict[str, Any],
+) -> None:
+    """The page creates the binding first and turns the sync on after."""
+    created = client.post(
+        "/config/discord-role-bindings",
+        json={"kind": "team", "team_id": seeded["team_a_id"], "discord_role": "team-a"},
+        headers=auth_headers,
+    )
+    assert created.status_code == 201, created.text
+    assert created.json()["synced"] is False
+
+    updated = client.put(
+        f"/config/discord-role-bindings/{created.json()['id']}",
+        json={"synced": True},
+        headers=auth_headers,
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["synced"] is True
+
+    calls = _guild(monkeypatch, {"1": []})
+    assert [one.missing for one in discord_roles.sync([seeded["player_ids"][0]])] == [
+        ["team-a"]
+    ]
+    assert calls == [("GET", f"{MEMBERS}/1"), ("PUT", f"{MEMBERS}/1/roles/team-a")]
+
+
+def test_an_admin_binding_cannot_be_marked_synced(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """The admin role stays hand-managed however the page asks."""
+    binding_id = _bind(RoleKind.admin, "admin-role", synced=False)
+
+    resp = client.put(
+        f"/config/discord-role-bindings/{binding_id}",
+        json={"synced": True},
+        headers=auth_headers,
+    )
+
+    assert resp.status_code == 400, resp.text
+    assert resp.json() == {
+        "error": "Admin roles are hand-managed in Discord, not synced"
+    }
+
+
+def test_a_sync_of_named_roles_leaves_every_other_binding_alone(
+    monkeypatch: pytest.MonkeyPatch, seeded: dict[str, Any]
+) -> None:
+    """P1 earns the team role and holds the captain role; only the team role is asked for."""
+    _bind(RoleKind.team, "team-a", team_id=seeded["team_a_id"])
+    _bind(RoleKind.captain, "captain-role")
+    calls = _guild(monkeypatch, {"1": ["captain-role"]})
+
+    reports = discord_roles.sync([seeded["player_ids"][0]], ["team-a"])
+
+    assert [(one.missing, one.extra) for one in reports] == [(["team-a"], [])]
+    assert calls == [("GET", f"{MEMBERS}/1"), ("PUT", f"{MEMBERS}/1/roles/team-a")]
+
+
+def test_the_role_groups_route_counts_who_earns_each_group(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """The seeded league: four players, one bettor, Alpha champion, no captain seat."""
+    resp = client.get("/config/discord-role-groups", headers=auth_headers)
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == [
+        {
+            "kind": "captain",
+            "season_id": None,
+            "team_id": None,
+            "label": "Captains",
+            "count": 0,
+        },
+        {
+            "kind": "gnl_participant",
+            "season_id": seeded["season_id"],
+            "team_id": None,
+            "label": "Players",
+            "count": 4,
+        },
+        {
+            "kind": "fantasy",
+            "season_id": seeded["season_id"],
+            "team_id": None,
+            "label": "Bettors",
+            "count": 1,
+        },
+        {
+            "kind": "champion",
+            "season_id": seeded["season_id"],
+            "team_id": None,
+            "label": "Champions",
+            "count": 2,
+        },
+        {
+            "kind": "team",
+            "season_id": None,
+            "team_id": seeded["team_a_id"],
+            "label": "Alpha",
+            "count": 2,
+        },
+        {
+            "kind": "team",
+            "season_id": None,
+            "team_id": seeded["team_b_id"],
+            "label": "Beta",
+            "count": 2,
+        },
+    ]
 
 
 def test_the_report_route_admits_admins_only(
@@ -315,6 +505,7 @@ def test_a_binding_is_created_read_and_deleted(
         "season_id": None,
         "team_id": seeded["team_a_id"],
         "discord_role": "team-a",
+        "synced": False,
     }
 
     updated = client.put(

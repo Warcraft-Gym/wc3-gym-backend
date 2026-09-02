@@ -5,10 +5,11 @@ which one and pushes the difference to the guild. A role no binding names is
 nobody's business but the guild's, and sync never touches it — nor any admin
 binding, whose role stays hand-managed in the guild.
 
-A team or captain binding follows the current season. A participant or
-fantasy binding that names a season follows that season's records for good;
-one that names none follows the current season. A champion binding names only
-a season, and the roster of the team that tops its standings earns it.
+A binding is synced only when its synced flag is set. A team or captain
+binding follows the current season. A participant or fantasy binding that
+names a season follows that season's records for good; one that names none
+follows the current season. A champion binding names only a season, and the
+roster of the team that tops its standings earns it.
 """
 
 from typing import Annotated
@@ -31,6 +32,7 @@ class DiscordRoleBindingBase(SQLModel):
     )
     # The xlsx import sends numeric cells, and a role id is a snowflake
     discord_role: Annotated[str, NumToStr] = Field(max_length=50)
+    synced: bool = Field(default=False)
 
 
 class DiscordRoleBinding(DiscordRoleBindingBase, DBModel, table=True):
@@ -52,6 +54,7 @@ class DiscordRoleBindingUpdate(SQLModel):
     season_id: int | None = None
     team_id: int | None = None
     discord_role: Annotated[str | None, NumToStr] = None
+    synced: bool | None = None
 
 
 class DiscordRoleBindingPublic(DiscordRoleBindingBase):
@@ -59,9 +62,32 @@ class DiscordRoleBindingPublic(DiscordRoleBindingBase):
 
 
 class DiscordRoleSyncWrite(SQLModel):
-    """Whom to sync. Without user_ids, every account the report flags."""
+    """Whom to sync. Without user_ids every flagged account, without role_ids every bound role."""
 
     user_ids: list[int] | None = None
+    role_ids: list[str] | None = None
+
+
+class GuildRole(SQLModel):
+    """One role of the guild, as the Discord role page lists it."""
+
+    id: str
+    name: str
+    color: str | None = None
+    position: int
+    members: int
+    manageable: bool
+
+
+class RoleGroup(SQLModel):
+    """One group of accounts a binding can name, and how many earn it now."""
+
+    kind: RoleKind
+    season_id: int | None = None
+    team_id: int | None = None
+    label: str
+    # Filled by discord_roles.role_groups once the earning rules have run
+    count: int = 0
 
 
 class DiscordRoleReport(SQLModel):
