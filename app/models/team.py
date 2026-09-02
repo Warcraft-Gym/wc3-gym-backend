@@ -49,6 +49,8 @@ class Team(TeamBase, DBModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     icon: bytes | None = Field(default=None, sa_column=icon_column)
+    # the blob the logo is served from; while it is None the icon column still serves
+    icon_url: str | None = Field(default=None, max_length=500)
     user_seasons: list["DBUserTeamSeason"] = Relationship(
         back_populates="team", sa_relationship_kwargs={"cascade": "all, delete"}
     )
@@ -64,10 +66,10 @@ class Team(TeamBase, DBModel, table=True):
     )
 
     @classmethod
-    def update_icon(cls, session: Session, obj_id: int, file: bytes) -> Self | None:
+    def update_icon(cls, session: Session, obj_id: int, url: str) -> Self | None:
         obj = session.get(cls, obj_id)
         if obj:
-            obj.icon = file
+            obj.icon_url = url
             session.flush()
         return obj
 
@@ -134,6 +136,7 @@ class TeamPublic(TeamReduced):
             id=ident(team),
             name=team.name,
             long_name=team.long_name,
+            icon_url=team.icon_url,
             player_by_season=players,
             captains_by_season=captains,
             seasons_info=seasons_info,

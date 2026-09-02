@@ -3,6 +3,7 @@ import logging
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, File, Query, Request, Response, UploadFile
+from fastapi.responses import RedirectResponse
 
 from app.api.deps import (
     AvailabilityServiceDep,
@@ -248,7 +249,12 @@ def upload_team_image(
 
 @router.get("/teams/{team_id}/image")
 def get_team_image(team_id: int, request: Request, service: TeamServiceDep) -> Response:
-    """Fetches and returns the stored binary image for a team"""
+    """Answer the team logo: the blob it lives in, or the stored bytes until it has moved."""
+    url = service.get_icon_url(team_id)
+    if url:
+        # the blob is public, so the browser fetches the next one straight from the store
+        return RedirectResponse(url, headers={"Cache-Control": "public, max-age=3600"})
+
     team_icon = service.get_icon(team_id)
     if not team_icon:
         raise NotFoundError("Image not found")

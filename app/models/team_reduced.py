@@ -21,6 +21,8 @@ class TeamReduced(SQLModel):
     # name and long_name also receive numeric cells from the xlsx import.
     name: Annotated[str | None, NumToStr] = None
     long_name: Annotated[str | None, NumToStr] = None
+    # where the logo is served from; None until one is uploaded
+    icon_url: str | None = None
 
     @classmethod
     def from_team(cls, team: "Team") -> Self:
@@ -28,4 +30,5 @@ class TeamReduced(SQLModel):
             id=ident(team),
             name=team.name,
             long_name=team.long_name,
+            icon_url=team.icon_url,
         )

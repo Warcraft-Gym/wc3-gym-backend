@@ -26,6 +26,8 @@ build-backend = "hatchling.build"
 [dependency-groups]
 dev = [
     "httpx2>=2.10.0",
+    # team logos live in Vercel Blob; imported only on the upload path
+    "vercel>=0.10.0",
     "pytest",
     "ruff>=0.16.3",
     "rust-just>=1.58.0",
