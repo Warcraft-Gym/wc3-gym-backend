@@ -23,7 +23,9 @@ def _blob_columns() -> list[tuple[str, str, bool]]:
 
 def test_every_binary_column_is_deferred() -> None:
     loaded = [f"{cls}.{key}" for cls, key, deferred in _blob_columns() if not deferred]
-    assert not loaded, f"these load with their row and bill the bytes on every read: {loaded}"
+    assert not loaded, (
+        f"these load with their row and bill the bytes on every read: {loaded}"
+    )
 
 
 def test_the_team_logo_is_a_binary_column() -> None:
