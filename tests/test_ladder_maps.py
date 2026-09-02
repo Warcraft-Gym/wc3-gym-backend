@@ -165,7 +165,7 @@ def test_the_preview_says_which_maps_the_season_already_plays(
     assert [map["name"] for map in client.get("/maps").json()] == ["Autumn Leaves"]
 
 
-def test_the_import_creates_the_maps_and_stores_their_pictures(
+def test_the_import_creates_the_maps_and_points_at_their_pictures(
     client: Client,
     seeded: dict[str, Any],
     auth_headers: dict[str, str],
@@ -188,8 +188,10 @@ def test_the_import_creates_the_maps_and_stores_their_pictures(
     ]
     # The match donates the short name; an unmatched map falls back to initials
     assert [map["shortname"] for map in pool] == ["CH", "EI2", "N"]
-    icons = client.get(f"/maps/{pool[1]['id']}/image")
-    assert icons.status_code == 200 and icons.content == PICTURE
+    # the picture is the url it is published at, not a copy of the bytes in the database
+    icons = client.get(f"/maps/{pool[1]['id']}/image", follow_redirects=False)
+    assert icons.status_code == 307
+    assert icons.headers["location"].endswith("/echo.png")
     assert client.get(f"/maps/{pool[2]['id']}/image").status_code == 404
 
 
@@ -214,8 +216,9 @@ def test_the_import_keeps_a_known_map_and_fills_its_missing_picture(
         (seeded["map_id"], "CH"),
         (pool[1]["id"], "N"),
     ]
-    icon = client.get(f"/maps/{seeded['map_id']}/image")
-    assert icon.status_code == 200 and icon.content == PICTURE
+    icon = client.get(f"/maps/{seeded['map_id']}/image", follow_redirects=False)
+    assert icon.status_code == 307
+    assert icon.headers["location"].endswith("/echo.png")
 
 
 def test_the_import_renames_a_drifted_map_instead_of_creating_a_twin(

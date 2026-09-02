@@ -3,6 +3,7 @@ import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, Query, Request, Response, UploadFile
+from fastapi.responses import RedirectResponse
 
 from app.api.deps import MapServiceDep, require_admin
 from app.api.search import SearchQuery
@@ -92,10 +93,14 @@ def upload_map_image(
 
 @router.get("/maps/{map_id}/image")
 def get_map_image(map_id: int, request: Request, service: MapServiceDep) -> Response:
-    """Fetch the stored picture of a map."""
+    """Fetch the picture of a map: the bytes an admin uploaded, else where it is published."""
     icon = service.get_icon(map_id)
     if not icon:
-        raise NotFoundError("Image not found")
+        published = service.get_image_url(map_id)
+        if not published:
+            raise NotFoundError("Image not found")
+        # not cacheable, for the reason the team logo redirect is not: the target can change
+        return RedirectResponse(published, headers={"Cache-Control": "no-store"})
 
     # The tag is the content, so a replaced picture answers a new one.
     etag = f'"{hashlib.sha256(icon).hexdigest()}"'

@@ -194,6 +194,9 @@ class SeasonService:
         A map the app knows under an older name or spelling of the same lineage
         is renamed to the ladder name and keeps its id, results and short name;
         a missing picture is filled. Only a map with no lineage here is created.
+
+        The picture is kept as the url it is published at. It used to be downloaded into the icon
+        column, which is the shape that took the database over its egress quota for team logos.
         """
         wanted = {
             row.w3c_name: row
@@ -210,9 +213,13 @@ class SeasonService:
                 if map.name:
                     base = ladder_maps.folded_base(map.name)
                     by_base.setdefault(base, []).append(ident(map))
-            # the id alone: reading map.icon here is a deferred load of the whole picture per map
+            # a map that already has a picture, uploaded or published, is left alone
             pictured = set(
-                session.scalars(select(col(Map.id)).where(col(Map.icon).is_not(None)))
+                session.scalars(
+                    select(col(Map.id)).where(
+                        col(Map.icon).is_not(None) | col(Map.image).is_not(None)
+                    )
+                )
             )
             taken = {map.shortname.lower() for map in maps if map.shortname}
 
@@ -224,12 +231,6 @@ class SeasonService:
             lineage = by_base.get(ladder_maps.folded_base(name), [])
             return lineage[0] if len(lineage) == 1 else None
 
-        # The pictures are read outside the session, so no write waits on them
-        icons = {
-            name: ladder_maps.fetch_image(row.image_url)
-            for name, row in wanted.items()
-            if row.image_url and known(name) not in pictured
-        }
         map_ids = []
         with Session.begin() as session:
             for name in names:
@@ -245,13 +246,13 @@ class SeasonService:
                         {
                             "name": name,
                             "shortname": shortname,
-                            "icon": icons.get(name),
+                            "image": row.image_url,
                         },
                     )
                     map_id = ident(map)
                     by_name[name.lower()] = map_id
-                elif map_id not in pictured and icons.get(name):
-                    Map.update(session, map_id, name=name, icon=icons[name])
+                elif row.image_url and map_id not in pictured:
+                    Map.update(session, map_id, name=name, image=row.image_url)
                 else:
                     Map.update(session, map_id, name=name)
                 map_ids.append(map_id)
