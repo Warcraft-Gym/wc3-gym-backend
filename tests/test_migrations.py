@@ -316,7 +316,7 @@ def test_the_tier_backfill_picks_the_season_that_signed_up_every_tiered_player(
                     "battleTag": f"P{i}#1",
                     "discordTag": f"P{i}",
                     "discordId": str(i),
-                    "race": "Random",
+                    "race": "RANDOM",
                     "fantasy_tier": i,
                 }
                 for i in (1, 2)
@@ -369,14 +369,26 @@ def test_the_count_drop_rebuilds_the_cuts_from_the_tiers_and_the_mmr(
                 "VALUES ('Cut', 4, 2, 3), ('Later', 4, 2, 6)"
             )
         )
+        users = table(
+            "users",
+            *(
+                column(c)
+                for c in ("id", "name", "battleTag", "discordTag", "discordId", "race")
+            ),
+        )
         connection.execute(
-            text(
-                "INSERT INTO users (id, name, battleTag, discordTag, discordId, race) "
-                "VALUES (1, 'A', 'A#1', 'A', '1', 'Random'), "
-                "(2, 'B', 'B#1', 'B', '2', 'Random'), "
-                "(3, 'C', 'C#1', 'C', '3', 'Random'), "
-                "(4, 'D', 'D#1', 'D', '4', 'Random')"
-            )
+            users.insert(),
+            [
+                {
+                    "id": i,
+                    "name": name,
+                    "battleTag": f"{name}#1",
+                    "discordTag": name,
+                    "discordId": str(i),
+                    "race": "RANDOM",
+                }
+                for i, name in enumerate("ABCD", start=1)
+            ],
         )
         # C was moved up to tier 1 by hand with D's tier-2 MMR, so the tier-1 cut is
         # pushed one above the tier-2 cut; B's older season is ignored
