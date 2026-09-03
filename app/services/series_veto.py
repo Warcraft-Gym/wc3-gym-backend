@@ -97,6 +97,41 @@ def _side(entry: str) -> str:
     return entry.rsplit("_", 1)[-1].upper()
 
 
+STEPS = ("Ban_A", "Ban_B", "Pick_A", "Pick_B")
+DEFAULT_RULES = "veto,veto,veto"  # no rules set is the Bo3 the scoring assumes
+
+
+def veto_limits(season: Season) -> tuple[int, int]:
+    """The picks the games take and the bans the pool then allows. A veto or
+    loser game draws its map from the picks, a week game takes one map off
+    the board, and every map left after the picks may be banned."""
+    rules = (season.map_rules or DEFAULT_RULES).split(",")
+    picks = sum(rule in ("veto", "loser") for rule in rules)
+    pool = len(season.maps) - ("week" in rules)
+    return picks, max(pool - picks, 0)
+
+
+def check_order(season: Season) -> None:
+    """Refuse an order the season cannot play through."""
+    order = _order(season)
+    for step in order:
+        if step not in STEPS:
+            raise BadRequestError(
+                f"'{step}' is not a veto step. Valid steps are {', '.join(STEPS)}."
+            )
+    picks_max, bans_max = veto_limits(season)
+    picks = sum(step.startswith("Pick") for step in order)
+    bans = len(order) - picks
+    if picks > picks_max:
+        raise BadRequestError(
+            f"The games take {picks_max} picks, the order has {picks}"
+        )
+    if bans > bans_max:
+        raise BadRequestError(
+            f"The pool allows {bans_max} bans after {picks_max} picks, the order has {bans}"
+        )
+
+
 def _week_map_id(session: OrmSession, season: Season, playday: int) -> int | None:
     """The map a week rule claims for game 1; it never enters the veto."""
     if "week" not in (season.map_rules or "").split(","):
