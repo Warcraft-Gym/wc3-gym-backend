@@ -357,7 +357,7 @@ class SeasonService:
                 raise NotFoundError(
                     f"User not signed up for the season, user id: {user_id}, season id {season_id}"
                 )
-            signup.sqlmodel_update(data.model_dump())
+            signup.sqlmodel_update(data.model_dump(exclude_unset=True))
             session.flush()
             return _public(session, signup.season)
 
