@@ -1021,8 +1021,12 @@ def _vs_race(
 
 def _by_hour(session: OrmSession, scope: list[ColumnElement[bool]]) -> list[list[int]]:
     """Distinct matches by UTC weekday and hour. Row 0 is Sunday."""
-    weekday = extract("dow", col(W3CLadderMatch.start_time))
-    hour = extract("hour", col(W3CLadderMatch.start_time))
+    started = col(W3CLadderMatch.start_time)
+    if session.get_bind().dialect.name == "postgresql":
+        # Postgres reads a timestamptz in the session time zone; pin it to UTC.
+        started = func.timezone("UTC", started)
+    weekday = extract("dow", started)
+    hour = extract("hour", started)
     rows = session.execute(
         select(
             weekday.label("weekday"),
