@@ -1,5 +1,5 @@
 from datetime import date, datetime
-from typing import TYPE_CHECKING, Annotated, Any, Literal, Self
+from typing import TYPE_CHECKING, Annotated, Any, Literal, NamedTuple, Self
 
 from pydantic import PositiveInt
 from sqlalchemy import JSON, Index, and_, case, func, or_, select, text
@@ -59,8 +59,14 @@ def tier_of(mmr: int, cuts: list[int]) -> int:
 
 
 # Derived from the series, never stored: open until one is scored or past its time,
-# complete once every one is
-SeasonPhase = Literal["open", "commenced", "complete"]
+# complete once every one has a result, overdue past the end date with results missing
+SeasonPhase = Literal["open", "commenced", "overdue", "complete"]
+
+
+class SeasonProgress(NamedTuple):
+    phase: SeasonPhase
+    # The series that still carry no result
+    unscored_series: int
 
 
 class Season(SeasonBase, DBModel, table=True):
@@ -96,28 +102,34 @@ class Season(SeasonBase, DBModel, table=True):
         },
     )
 
-    @classmethod
-    def phase(cls, session: Session, season_id: int) -> SeasonPhase:
+    def progress(self, session: Session) -> SeasonProgress:
         """The season's phase from its series; a season with no series is open."""
         from app.models.match import Match
         from app.models.series import Series
 
-        done = or_(
-            and_(
-                col(Series.player1_score).is_not(None),
-                col(Series.player2_score).is_not(None),
-            ),
-            col(Series.date_time) <= utcnow(),
+        scored = and_(
+            col(Series.player1_score).is_not(None),
+            col(Series.player2_score).is_not(None),
         )
-        total, finished = session.execute(
-            select(func.count(), func.coalesce(func.sum(case((done, 1), else_=0)), 0))
+        started = or_(scored, col(Series.date_time) <= utcnow())
+        total, n_started, n_scored = session.execute(
+            select(
+                func.count(),
+                func.coalesce(func.sum(case((started, 1), else_=0)), 0),
+                func.coalesce(func.sum(case((scored, 1), else_=0)), 0),
+            )
             .select_from(Series)
             .join(Match, col(Match.id) == col(Series.match_id))
-            .where(col(Match.season_id) == season_id)
+            .where(col(Match.season_id) == self.id)
         ).one()
-        if not finished:
-            return "open"
-        return "complete" if finished == total else "commenced"
+        unscored = total - n_scored
+        if not n_started:
+            return SeasonProgress("open", unscored)
+        if not unscored:
+            return SeasonProgress("complete", 0)
+        if self.end_date and self.end_date < utcnow().date():
+            return SeasonProgress("overdue", unscored)
+        return SeasonProgress("commenced", unscored)
 
     signup_users: list["DBUserSeasonSignup"] = Relationship(
         back_populates="season", sa_relationship_kwargs={"cascade": "all, delete"}
@@ -178,6 +190,7 @@ class SeasonPublic(SeasonBase):
     fantasy_tiers_applied_at: Annotated[datetime | None, AwareUTC] = None
     # Derived from the series when the season is the subject; null when nested
     phase: SeasonPhase | None = None
+    unscored_series: int | None = None
     start_date: Annotated[IsoDate | None, LenientDate] = None
     end_date: Annotated[IsoDate | None, LenientDate] = None
     maps: Annotated[list[MapPublic], NoneToList] = []
