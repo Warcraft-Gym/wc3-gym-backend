@@ -910,7 +910,8 @@ def test_the_cron_route_is_empty_off_season(
 def test_the_cron_route_syncs_the_stalest_wave_first(
     client: Client, seeded: dict[str, Any], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """One wave is W3C_SYNC_WORKERS players, oldest ladder_synced_at first."""
+    """A wave is W3C_SYNC_WORKERS players, oldest ladder_synced_at first, and
+    the run drains wave after wave until it comes around."""
     monkeypatch.setenv("CRON_SECRET", CRON_SECRET)
     today = datetime.now(UTC).date()
     bench = add_player("bench", "bench#9999")
@@ -936,11 +937,7 @@ def test_the_cron_route_syncs_the_stalest_wave_first(
     )
 
     assert resp.status_code == 200
-    assert resp.json() == {
-        "synced": seeded["player_ids"],
-        "skipped": [],
-        "failed": [],
-    }
+    assert resp.json() == {"synced": stale_order, "skipped": [], "failed": []}
     with Session() as session:
         assert (
             session.get_one(User, seeded["player_ids"][0]).ladder_synced_at is not None
