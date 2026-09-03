@@ -93,7 +93,7 @@ def _identity(
             "discord_tag": account.get("global_name")
             or account.get("username")
             or str(claims["sub"]),
-            "season_id": None,
+            "season_id": discord_roles.current_season(),
             "access_type": access_type,
         }
     if not token:

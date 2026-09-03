@@ -243,6 +243,24 @@ def test_player_series_answers_the_linked_players_series(
     assert len(body["series"]) == int(resp.headers["X-Total-Count"])
 
 
+def test_player_series_on_a_session_reads_the_current_season(
+    client: Client, seeded: dict[str, Any], member_headers: dict[str, str]
+) -> None:
+    """A signed-in player has no token to carry the season, so the pinned one is used."""
+    from app.core.db import Session
+    from app.models.settings import Settings
+
+    with Session() as session:
+        session.add(Settings(key="current_gnl_season", value=str(seeded["season_id"])))
+        session.commit()
+
+    body = client.get("/player-series", headers=member_headers).json()
+
+    assert body["season_id"] == seeded["season_id"]
+    assert body["number_weeks"] == 4
+    assert body["availability"] == []
+
+
 def test_player_series_answers_404_for_a_member_without_a_row(
     client: Client, seeded: dict[str, Any], monkeypatch: pytest.MonkeyPatch
 ) -> None:
