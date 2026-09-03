@@ -173,7 +173,7 @@ class UserListPublic(UserReduced):
             W3CStatsPublic.model_validate(stat) for stat in (user.w3c_stats or [])
         ]
         row.signup_seasons = [
-            SeasonPublic.from_season_reduced(signup.season)
+            SeasonPublic.from_season_reduced(signup.season, signup.race)
             for signup in (user.signup_seasons or [])
         ]
         return row

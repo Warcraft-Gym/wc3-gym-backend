@@ -7,10 +7,12 @@ from sqlalchemy.orm import Session
 from sqlmodel import Field, Relationship, SQLModel, col
 
 from app.models.base import DBModel, ident
+from app.models.enums import Race
 from app.models.map import MapPublic
 from app.models.relationships import SeasonWeekMapPublic
 from app.models.types import (
     AwareUTC,
+    EnumValue,
     IsoDate,
     LenientDate,
     MapRules,
@@ -199,6 +201,8 @@ class SeasonPublic(SeasonBase):
     week_maps: Annotated[list[SeasonWeekMapPublic], NoneToList] = []
     # Always empty; the public pages read this field
     user_signup: Annotated[list[Any], NoneToList] = []
+    # The race of the signup this season is nested under; null everywhere else
+    signup_race: Annotated[str | None, EnumValue] = None
 
     @classmethod
     def from_season(cls, season: Season) -> Self:
@@ -227,10 +231,12 @@ class SeasonPublic(SeasonBase):
         )
 
     @classmethod
-    def from_season_reduced(cls, season: Season) -> Self:
+    def from_season_reduced(
+        cls, season: Season, signup_race: Race | None = None
+    ) -> Self:
         """The name and the id only. Used where a season is a label on
         another object rather than the subject of the response."""
-        return cls(id=ident(season), name=season.name)
+        return cls(id=ident(season), name=season.name, signup_race=signup_race)
 
     @classmethod
     def from_season_without_maps(cls, season: Season) -> Self:

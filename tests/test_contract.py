@@ -69,6 +69,26 @@ def test_user_by_id_carries_the_season_record(
     }
 
 
+def test_user_by_id_names_the_race_of_every_signup(
+    client: Client, seeded: dict[str, Any]
+) -> None:
+    """The player page reads one season row per signup, race included."""
+    with Session() as session:
+        session.add(
+            DBUserSeasonSignup(
+                user_id=seeded["player_ids"][0],
+                season_id=seeded["season_id"],
+                race=Race.NE,
+            )
+        )
+        session.commit()
+
+    p1 = get_json(client, f"/users/{seeded['player_ids'][0]}")
+    assert [(s["id"], s["signup_race"]) for s in p1["signup_seasons"]] == [
+        (seeded["season_id"], "NE")
+    ]
+
+
 def test_season_signups_answer_list_rows(
     client: Client, seeded: dict[str, Any]
 ) -> None:
