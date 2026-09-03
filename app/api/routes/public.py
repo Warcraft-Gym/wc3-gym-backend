@@ -40,7 +40,7 @@ from app.models.fantasy_team import (
 )
 from app.models.login import PublicAccessRequest
 from app.models.player_history import PlayerHistory
-from app.models.series import SeriesPublic, SeriesSort
+from app.models.series import SeriesSort
 from app.models.series_veto_step import SeriesVetoPublic, SeriesVetoWrite
 from app.models.types import utcnow
 from app.models.user import (
@@ -55,6 +55,7 @@ from app.models.user_season_availability import (
     UserSeasonAvailabilityPublic,
 )
 from app.services import discord, discord_roles, player_history, player_series
+from app.services.seasons import SeasonService
 from app.services.series import SeriesService
 
 logger = logging.getLogger(__name__)
@@ -144,16 +145,15 @@ def _refuse_started(series_service: SeriesService, series_id: int | None) -> Non
         )
 
 
-def _refuse_ended(series_service: SeriesService, season_id: int) -> None:
-    """A season is over once every series is scored or past its time; an unplayed, unscheduled one keeps it open."""
-    series = series_service.search_for_season(season_id, None)
-    now = utcnow()
-
-    def done(s: SeriesPublic) -> bool:
-        scored = s.player1_score is not None and s.player2_score is not None
-        return scored or (s.date_time is not None and s.date_time <= now)
-
-    if series and all(done(s) for s in series):
+def _refuse_unless_open(season_service: SeasonService, season_id: int) -> None:
+    """A fantasy team is drafted before the season commences; the admin routes stay open."""
+    phase = season_service.get(season_id).phase
+    if phase in ("commenced", "overdue"):
+        raise ApiError(
+            403,
+            {"error": "season_commenced", "message": "The season has commenced"},
+        )
+    if phase == "complete":
         raise ApiError(
             403,
             {"error": "season_ended", "message": "The season has ended"},
@@ -348,9 +348,18 @@ def public_create_user(
         user = user_service.add(user_create)
 
     # Add to season if specified, on the race the form names
+    # A commenced season takes the profile but no signup; an admin may add the player
     season_id = entry.get("season_id") or data.season_id or data.seasonId
+    closed: str | None = None
     if season_id:
-        season_service.add_user_signup(int(season_id), [user.id], data.race)
+        season = season_service.get(int(season_id))
+        if season.phase == "open":
+            season_service.add_user_signup(int(season_id), [user.id], data.race)
+        else:
+            closed = (
+                f"Signups for {season.name} are closed. Your profile is saved, but you"
+                " are not in the season. An admin may add you; there is no guarantee."
+            )
 
     # trigger W3C stats sync for the newly created/updated user (non-blocking)
     try:
@@ -362,10 +371,11 @@ def public_create_user(
     # The account is new to the guild's eyes; give it the roles it earns
     discord_roles.sync([user.id])
 
-    # return created user
-    if user:
-        return user.to_dict()
-    raise ApiError(500, {"error": "user_creation_failed"})
+    if not user:
+        raise ApiError(500, {"error": "user_creation_failed"})
+    if closed:
+        return user.to_dict() | {"signup": "closed", "message": closed}
+    return user.to_dict()
 
 
 @router.get("/player-series", response_model=None)
@@ -521,7 +531,7 @@ def _veto_viewer(
     token: str | None,
     user_service: UserServiceDep,
 ) -> int | None:
-    """The player behind the request, or null for an admin, who only reads."""
+    """The player behind the request, or null for an admin, who edits either side."""
     if credentials is not None:
         claims = require_login(request, credentials)
         if claims.get("role") == "admin" or claims.get("sub") == "admin":
@@ -552,10 +562,9 @@ def set_player_series_veto(
     credentials: Credentials,
     data: SeriesVetoWrite,
 ) -> SeriesVetoPublic:
-    """Take the next step of the veto, or take back your own last one."""
+    """Take the next step of the veto, or take back your own last one. An admin
+    enters the step for whichever side is next and takes back any last step."""
     viewer = _veto_viewer(request, credentials, data.token, user_service)
-    if viewer is None:
-        raise ApiError(403, {"error": "not_authorized_for_this_series"})
     return veto_service.take(series_id, viewer, data.action, data.map_id)
 
 
@@ -626,7 +635,7 @@ def create_fantasy_team(
     settings_service: SettingsServiceDep,
     user_service: UserServiceDep,
     fantasy_team_service: FantasyTeamServiceDep,
-    series_service: SeriesServiceDep,
+    season_service: SeasonServiceDep,
     request: Request,
     credentials: Credentials,
     data: PublicFantasyTeamWrite | None = None,
@@ -659,7 +668,7 @@ def create_fantasy_team(
 
     if not season_id or not drafted_team_id or not drafted_race:
         raise BadRequestError("missing required fields")
-    _refuse_ended(series_service, season_id)
+    _refuse_unless_open(season_service, season_id)
 
     # Find or create user
     users = user_service.find_by_discord_id(str(entry.get("discord_id")))

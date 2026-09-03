@@ -23,7 +23,7 @@ class DBSeriesVetoStep(DBModel, table=True):
     side: str = Field(max_length=1)
     action: str = Field(max_length=4)
     map_id: int = Field(foreign_key="maps.id")
-    # Who typed the step in; null when the final step took itself
+    # Who typed the step in; null when the final step took itself or an admin entered it
     entered_by: int | None = Field(
         default=None, foreign_key="users.id", ondelete="SET NULL"
     )
@@ -61,7 +61,7 @@ class SeriesVetoPublic(SQLModel):
 
     steps: list[SeriesVetoStepPublic]
     order: list[str]
-    # The side the viewer plays, null for an admin, who only reads
+    # The side the viewer plays, null for an admin, who edits either side
     viewer_side: str | None = None
     on_turn: bool = False
     complete: bool = False

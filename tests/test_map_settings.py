@@ -258,3 +258,104 @@ def test_a_map_without_a_picture_has_none_to_fetch(
 
     assert resp.status_code == 404, resp.text
     assert resp.json() == {"error": "Image not found"}
+
+
+def settings(
+    client: Client, season_id: int, headers: dict[str, str], **body: str
+) -> Any:  # noqa: ANN401  # a response
+    return client.put(f"/seasons/{season_id}", json=body, headers=headers)
+
+
+def test_the_games_take_the_picks_and_the_pool_allows_the_bans(
+    client: Client,
+    seeded: dict[str, Any],
+    auth_headers: dict[str, str],
+    three_maps: list[int],
+) -> None:
+    """Three veto games on a three map pool take three picks and allow no ban."""
+    season_id = seeded["season_id"]
+    ok = settings(
+        client,
+        season_id,
+        auth_headers,
+        map_rules="veto,veto,veto",
+        pick_ban="Pick_A|Pick_B|Pick_A",
+    )
+    assert ok.status_code == 200, ok.text
+
+    too_many_picks = settings(
+        client, season_id, auth_headers, pick_ban="Pick_A|Pick_B|Pick_A|Pick_B"
+    )
+    assert too_many_picks.status_code == 400, too_many_picks.text
+    assert too_many_picks.json()["error"] == "The games take 3 picks, the order has 4"
+
+    too_many_bans = settings(
+        client, season_id, auth_headers, pick_ban="Ban_A|Pick_A|Pick_B"
+    )
+    assert too_many_bans.status_code == 400, too_many_bans.text
+    assert (
+        too_many_bans.json()["error"]
+        == "The pool allows 0 bans after 3 picks, the order has 1"
+    )
+
+    # A week game takes one map off the board and no pick; two loser games take two picks
+    week = settings(
+        client,
+        season_id,
+        auth_headers,
+        map_rules="week,loser,loser",
+        pick_ban="Pick_A|Pick_B",
+    )
+    assert week.status_code == 200, week.text
+    over = settings(client, season_id, auth_headers, pick_ban="Ban_A|Pick_A|Pick_B")
+    assert over.status_code == 400, over.text
+    assert client.get(f"/seasons/{season_id}").json()["pick_ban"] == "Pick_A|Pick_B"
+
+
+def test_a_step_the_board_does_not_know_is_refused(
+    client: Client,
+    seeded: dict[str, Any],
+    auth_headers: dict[str, str],
+    three_maps: list[int],
+) -> None:
+    resp = settings(client, seeded["season_id"], auth_headers, pick_ban="Ban_A|Ban_C")
+
+    assert resp.status_code == 400, resp.text
+    assert (
+        resp.json()["error"]
+        == "'Ban_C' is not a veto step. Valid steps are Ban_A, Ban_B, Pick_A, Pick_B."
+    )
+
+
+def test_a_map_the_order_needs_cannot_leave_the_pool(
+    client: Client,
+    seeded: dict[str, Any],
+    auth_headers: dict[str, str],
+    three_maps: list[int],
+) -> None:
+    season_id = seeded["season_id"]
+    ok = settings(
+        client,
+        season_id,
+        auth_headers,
+        map_rules="veto,veto,veto",
+        pick_ban="Ban_A|Pick_A|Pick_B",
+    )
+    assert ok.status_code == 400, ok.text
+    ok = settings(
+        client, season_id, auth_headers, map_rules="veto", pick_ban="Ban_A|Ban_B|Pick_A"
+    )
+    assert ok.status_code == 200, ok.text
+
+    resp = client.request(
+        "DELETE",
+        f"/seasons/{season_id}/maps",
+        json={"map_ids": three_maps[:1]},
+        headers=auth_headers,
+    )
+
+    assert resp.status_code == 400, resp.text
+    assert (
+        resp.json()["error"] == "The pool allows 1 bans after 1 picks, the order has 2"
+    )
+    assert pool(client, season_id) == ["CH", "EI", "TS"]

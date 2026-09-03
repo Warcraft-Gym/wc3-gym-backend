@@ -104,6 +104,12 @@ class LadderPlayer(SQLModel):
     synced_at: datetime | None = None
 
 
+class SeasonPlayer(LadderPlayer):
+    """One signup of the season with his ladder record, and the tag of his team."""
+
+    team: str | None = None
+
+
 class LadderTeam(SQLModel):
     """One team of the season, with the ladder record of every player on it."""
 

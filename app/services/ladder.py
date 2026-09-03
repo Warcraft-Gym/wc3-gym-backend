@@ -57,6 +57,7 @@ from app.models.w3c_ladder_match import (
     LadderSyncResult,
     LadderTeam,
     SeasonLadder,
+    SeasonPlayer,
     UserLadder,
     W3CLadderMatch,
     W3CLadderMatchCreate,
@@ -141,6 +142,47 @@ class LadderService:
                 achievement_rules=_rules(paid),
                 teams=_teams(roster, totals, spans, days, races, earned, stamps),
             )
+
+    def season_players(self, season_id: int) -> list[SeasonPlayer]:
+        """Every signup of the season with his ladder record, by name.
+
+        The draft page reads this, so it skips the achievements, the hours and
+        the season days the ladder page draws. Eight statements, whatever the
+        number of players: the season, the signups with their team, the
+        w3champions seasons the window sits in, the sync stamps of the roster,
+        then one group each for the totals, the MMR spans, the player days and
+        the races.
+        """
+        with Session.begin() as session:
+            season = session.get(Season, season_id)
+            if season is None:
+                raise NotFoundError("Season not found")
+
+            roster = _roster(session, season_id)
+            user_ids = [row.user_id for row in roster]
+            window = _window(season)
+            stamps = _stamps(session, user_ids, _w3c_seasons_for(session, season))
+            scope = _scope(user_ids, window, season_id)
+            totals = _totals(session, scope)
+            spans = _mmr_span(session, _mmr_scope(user_ids, window, season_id))
+            days = _per_day(session, scope)
+            races = _vs_race(session, scope)
+
+            players = []
+            for row in roster:
+                player = _player(
+                    SeasonPlayer,
+                    row,
+                    totals.get(row.user_id),
+                    spans.get(row.user_id),
+                    days.get(row.user_id, []),
+                    races.get(row.user_id, {}),
+                    synced_at=stamps.get(row.user_id),
+                )
+                # The tag of the team he plays for, null while he is on none
+                player.team = row.team_name
+                players.append(player)
+            return sorted(players, key=lambda player: player.name or "")
 
     def user_ladder(
         self,
