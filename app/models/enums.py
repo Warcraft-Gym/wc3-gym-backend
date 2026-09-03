@@ -38,3 +38,11 @@ class RoleKind(enum.Enum):
     fantasy = "fantasy"
     gnl_participant = "gnl_participant"
     champion = "champion"
+
+
+class RoleScope(enum.Enum):
+    """Which seasons a bound Discord role reads. The name is the stored value."""
+
+    current = "current"
+    season = "season"
+    all = "all"

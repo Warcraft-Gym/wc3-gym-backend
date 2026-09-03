@@ -3,16 +3,17 @@
 The database is the source: a captain seat, a roster row, a signup, a fantasy
 team or a season's standings earns the role a discord_role_binding names. Sync
 grants what is missing and takes back only bound roles the account no longer
-earns; a role no binding names is left alone, and so is every admin binding —
-those roles are hand-managed in the guild. Every write that changes an
-expectation calls sync after its transaction commits.
+earns; a role no binding names is left alone, and so is a binding no admin
+marked synced and every admin binding — those roles are hand-managed in the
+guild. Every write that changes an expectation calls sync after its
+transaction commits.
 
 With no DISCORD_BOT_TOKEN the guild answers nothing, so every function here is
 a no-op that returns empty results.
 """
 
 import logging
-from collections import defaultdict
+from collections import Counter, defaultdict
 from collections.abc import Iterable, Sequence
 
 from sqlalchemy import func, select
@@ -24,16 +25,22 @@ from app.core.exceptions import BadRequestError, NotFoundError
 from app.models.base import ident
 from app.models.discord_role_binding import (
     DiscordRoleBinding,
+    DiscordRoleBindingBase,
     DiscordRoleBindingCreate,
     DiscordRoleBindingPublic,
     DiscordRoleBindingUpdate,
+    DiscordRoleHidden,
+    DiscordRoleHiddenWrite,
     DiscordRoleReport,
+    GuildRole,
+    RoleGroup,
 )
-from app.models.enums import RoleKind
+from app.models.enums import RoleKind, RoleScope
 from app.models.fantasy_team import FantasyTeam
 from app.models.relationships import DBTeamSeasonCaptain, DBUserSeasonSignup
 from app.models.season import Season
 from app.models.settings import Settings
+from app.models.team import Team
 from app.models.user import User
 from app.models.user_team_season import DBUserTeamSeason
 from app.services import derived, discord
@@ -57,9 +64,12 @@ def current_season() -> int | None:
 
 
 def _synced_bindings(session: OrmSession) -> Sequence[DiscordRoleBinding]:
-    """The bindings the sync acts on: every kind but the hand-managed admin."""
+    """The bindings the sync acts on: those marked synced, never the admin kind."""
     return session.scalars(
-        select(DiscordRoleBinding).where(col(DiscordRoleBinding.kind) != RoleKind.admin)
+        select(DiscordRoleBinding).where(
+            col(DiscordRoleBinding.synced).is_(True),
+            col(DiscordRoleBinding.kind) != RoleKind.admin,
+        )
     ).all()
 
 
@@ -81,50 +91,53 @@ def _season_winners(session: OrmSession, season_ids: set[int]) -> dict[int, int]
     return {season_id: team_id for season_id, (_, _, team_id) in best.items()}
 
 
+def _earned_in(seasons: set[int], season: int | None) -> bool:
+    """Whether one of those records falls in the season, or in any when the scope is all."""
+    return bool(seasons) if season is None else season in seasons
+
+
 def expected_roles_of(
-    users: Sequence[User], session: OrmSession
+    users: Sequence[User],
+    session: OrmSession,
+    bindings: Sequence[DiscordRoleBinding] | None = None,
 ) -> dict[int, set[str]]:
     """The bound roles each of those accounts earns right now, in a handful of queries.
 
-    captain is a seat of the current season and team a roster row or a
-    captain seat of that team, both only while the binding's season (if any)
-    is current. gnl_participant is a roster row or a signup and fantasy a
-    drafted team, each of the binding's season — or of the current one when
-    the binding names none — kept after that season ends. champion is a
-    roster row of the team that tops the named season's standings.
+    The binding's scope names the seasons that count: the current one, the
+    season the binding names, or every season. captain is a captain seat,
+    team a roster row or a captain seat of that team, gnl_participant a
+    roster row or a signup and fantasy a drafted team, each in those seasons.
+    champion is scoped to one season, and a roster row of the team that tops
+    its standings earns it.
     """
-    season_id = _current_season(session)
+    current = _current_season(session)
     ids = [ident(user) for user in users]
     rosters: dict[int, set[tuple[int, int]]] = defaultdict(set)
     for row in session.scalars(
         select(DBUserTeamSeason).where(col(DBUserTeamSeason.user_id).in_(ids))
     ):
         rosters[row.user_id].add((row.team_id, row.season_id))
-    captained: dict[int, set[int]] = defaultdict(set)
+    captained: dict[int, set[tuple[int, int]]] = defaultdict(set)
     for row in session.scalars(
-        select(DBTeamSeasonCaptain).where(
-            col(DBTeamSeasonCaptain.user_id).in_(ids),
-            col(DBTeamSeasonCaptain.season_id) == season_id,
+        select(DBTeamSeasonCaptain).where(col(DBTeamSeasonCaptain.user_id).in_(ids))
+    ):
+        captained[row.user_id].add((row.team_id, row.season_id))
+    signups: dict[int, set[int]] = defaultdict(set)
+    for user_id, signup_season in session.execute(
+        select(
+            col(DBUserSeasonSignup.user_id), col(DBUserSeasonSignup.season_id)
+        ).where(col(DBUserSeasonSignup.user_id).in_(ids))
+    ):
+        signups[user_id].add(signup_season)
+    drafted: dict[int, set[int]] = defaultdict(set)
+    for captain_id, drafted_season in session.execute(
+        select(col(FantasyTeam.captain_id), col(FantasyTeam.season_id)).where(
+            col(FantasyTeam.captain_id).in_(ids)
         )
     ):
-        captained[row.user_id].add(row.team_id)
-    signups = {
-        (user_id, signup_season)
-        for user_id, signup_season in session.execute(
-            select(
-                col(DBUserSeasonSignup.user_id), col(DBUserSeasonSignup.season_id)
-            ).where(col(DBUserSeasonSignup.user_id).in_(ids))
-        )
-    }
-    drafted = {
-        (captain_id, drafted_season)
-        for captain_id, drafted_season in session.execute(
-            select(col(FantasyTeam.captain_id), col(FantasyTeam.season_id)).where(
-                col(FantasyTeam.captain_id).in_(ids)
-            )
-        )
-    }
-    bindings = _synced_bindings(session)
+        drafted[captain_id].add(drafted_season)
+    if bindings is None:
+        bindings = _synced_bindings(session)
     winners = _season_winners(
         session,
         {
@@ -137,25 +150,40 @@ def expected_roles_of(
     roles: dict[int, set[str]] = {}
     for user in users:
         uid = ident(user)
-        played = {team for team, season in rosters[uid] if season == season_id}
-        seasons_played = {season for _, season in rosters[uid]}
+        seats = captained[uid]
         earned_roles: set[str] = set()
         for binding in bindings:
             if binding.kind is RoleKind.champion:
                 earned = (winners.get(binding.season_id), binding.season_id) in rosters[
                     uid
                 ]
-            elif binding.kind is RoleKind.gnl_participant:
-                season = binding.season_id or season_id
-                earned = season in seasons_played or (uid, season) in signups
-            elif binding.kind is RoleKind.fantasy:
-                earned = (uid, binding.season_id or season_id) in drafted
-            elif binding.season_id is not None and binding.season_id != season_id:
-                earned = False
-            elif binding.kind is RoleKind.captain:
-                earned = bool(captained[uid])
+                if earned:
+                    earned_roles.add(binding.discord_role)
+                continue
+            # None is every season, which is what the all scope reads
+            if binding.scope is RoleScope.all:
+                season = None
+            elif binding.scope is RoleScope.season:
+                season = binding.season_id
             else:
-                earned = binding.team_id in played | captained[uid]
+                season = current
+            if binding.kind is RoleKind.captain:
+                earned = _earned_in({one for _, one in seats}, season)
+            elif binding.kind is RoleKind.team:
+                earned = _earned_in(
+                    {
+                        one
+                        for team, one in rosters[uid] | seats
+                        if team == binding.team_id
+                    },
+                    season,
+                )
+            elif binding.kind is RoleKind.gnl_participant:
+                earned = _earned_in(
+                    {one for _, one in rosters[uid]} | signups[uid], season
+                )
+            else:
+                earned = _earned_in(drafted[uid], season)
             if earned:
                 earned_roles.add(binding.discord_role)
         roles[uid] = earned_roles
@@ -170,9 +198,17 @@ def _accounts(session: OrmSession, user_ids: Iterable[int] | None) -> Sequence[U
     return session.scalars(statement.order_by(col(User.id))).all()
 
 
-def _diffs(session: OrmSession, users: Sequence[User]) -> list[DiscordRoleReport]:
-    """The accounts whose guild roles differ from what the database says."""
+def _diffs(
+    session: OrmSession, users: Sequence[User], roles: set[str] | None = None
+) -> list[DiscordRoleReport]:
+    """The accounts whose guild roles differ from what the database says.
+
+    With roles named, only those bound roles are compared and the rest are
+    left as the guild holds them.
+    """
     bound = {binding.discord_role for binding in _synced_bindings(session)}
+    if roles is not None:
+        bound &= roles
     expected_of = expected_roles_of(users, session)
     # A full report reads the guild once; a named few read their own members
     guild = discord.guild_members() if len(users) > 5 else None
@@ -184,7 +220,7 @@ def _diffs(session: OrmSession, users: Sequence[User]) -> list[DiscordRoleReport
             actual = discord.member_roles(user.discordId)
         if actual is None:
             continue
-        expected = expected_of[ident(user)]
+        expected = expected_of[ident(user)] & bound
         missing = sorted(expected - actual)
         extra = sorted(bound & (actual - expected))
         if missing or extra:
@@ -206,10 +242,16 @@ def report(user_ids: Iterable[int] | None = None) -> list[DiscordRoleReport]:
         return _diffs(session, _accounts(session, user_ids))
 
 
-def sync(user_ids: Iterable[int] | None = None) -> list[DiscordRoleReport]:
+def sync(
+    user_ids: Iterable[int] | None = None, role_ids: Iterable[str] | None = None
+) -> list[DiscordRoleReport]:
     """Grant what those accounts earn and take back the bound roles they do not."""
     with Session.begin() as session:
-        reports = _diffs(session, _accounts(session, user_ids))
+        reports = _diffs(
+            session,
+            _accounts(session, user_ids),
+            set(role_ids) if role_ids is not None else None,
+        )
     for account in reports:
         for role in account.missing:
             discord.set_role(account.discord_id, role, grant=True)
@@ -253,21 +295,154 @@ def bindings() -> list[DiscordRoleBindingPublic]:
         return answer
 
 
-def _check(kind: RoleKind, season_id: int | None, team_id: int | None) -> None:
-    """Refuse a binding no account could ever earn."""
-    if kind is RoleKind.admin:
+def guild_roles() -> list[GuildRole]:
+    """Every guild role, with the ones an admin hid flagged as hidden."""
+    roles = discord.guild_roles()
+    with Session.begin() as session:
+        hidden = set(session.scalars(select(col(DiscordRoleHidden.discord_role))))
+    for role in roles:
+        role.hidden = role.id in hidden
+    return roles
+
+
+def hide_role(discord_role: str) -> DiscordRoleHiddenWrite:
+    """Hide a role the app must never touch. Hiding a hidden role changes nothing."""
+    with Session.begin() as session:
+        bound = session.scalar(
+            select(DiscordRoleBinding).where(
+                col(DiscordRoleBinding.discord_role) == discord_role
+            )
+        )
+        if bound is not None:
+            raise BadRequestError("Unbind the role before hiding it")
+        row = session.get(DiscordRoleHidden, discord_role)
+        if row is None:
+            row = DiscordRoleHidden.add(session, {"discord_role": discord_role})
+        return DiscordRoleHiddenWrite.model_validate(row)
+
+
+def unhide_role(discord_role: str) -> None:
+    """Show the role again, so a binding can name it."""
+    with Session.begin() as session:
+        row = session.get(DiscordRoleHidden, discord_role)
+        if row is None:
+            raise NotFoundError(f"Discord role is not hidden: {discord_role}")
+        session.delete(row)
+
+
+def _group_key(group: RoleGroup) -> str:
+    """The synthetic role id a group is counted under."""
+    return f"{group.kind.value}:{group.team_id or ''}"
+
+
+def _season_teams(session: OrmSession, season_id: int | None) -> Sequence[Team]:
+    """The teams that played or were captained in that season, or in any of them, by name."""
+    rosters = select(col(DBUserTeamSeason.team_id))
+    seats = select(col(DBTeamSeasonCaptain.team_id))
+    if season_id is not None:
+        rosters = rosters.where(col(DBUserTeamSeason.season_id) == season_id)
+        seats = seats.where(col(DBTeamSeasonCaptain.season_id) == season_id)
+    team_ids = set(session.scalars(rosters)) | set(session.scalars(seats))
+    return session.scalars(
+        select(Team).where(col(Team.id).in_(team_ids)).order_by(col(Team.name))
+    ).all()
+
+
+def role_groups(
+    season_id: int | None = None, scope: RoleScope = RoleScope.current
+) -> list[RoleGroup]:
+    """Every group of accounts a binding of that scope can name, and how many earn it now."""
+    with Session.begin() as session:
+        season = season_id or _current_season(session)
+        # A group carries the season only when its scope reads one
+        named = season if scope is RoleScope.season else None
+        groups = [
+            RoleGroup(
+                kind=RoleKind.captain, scope=scope, season_id=named, label="Captains"
+            ),
+            RoleGroup(
+                kind=RoleKind.gnl_participant,
+                scope=scope,
+                season_id=named,
+                label="Players",
+            ),
+            RoleGroup(
+                kind=RoleKind.fantasy, scope=scope, season_id=named, label="Bettors"
+            ),
+            RoleGroup(
+                kind=RoleKind.champion,
+                scope=RoleScope.season,
+                season_id=season,
+                label="Champions",
+            ),
+        ]
+        for team in _season_teams(session, None if scope is RoleScope.all else season):
+            groups.append(
+                RoleGroup(
+                    kind=RoleKind.team,
+                    scope=scope,
+                    season_id=named,
+                    team_id=ident(team),
+                    label=team.name,
+                )
+            )
+        bindings = [
+            DiscordRoleBinding(
+                kind=group.kind,
+                scope=group.scope,
+                season_id=group.season_id,
+                team_id=group.team_id,
+                discord_role=_group_key(group),
+            )
+            for group in groups
+        ]
+        earned = expected_roles_of(_accounts(session, None), session, bindings)
+        counts = Counter(role for roles in earned.values() for role in roles)
+        for group in groups:
+            group.count = counts[_group_key(group)]
+        return groups
+
+
+def _manageable(discord_role: str) -> None:
+    """Refuse a role the bot sits below; a role the guild does not name is allowed."""
+    role = next((one for one in discord.guild_roles() if one.id == discord_role), None)
+    if role is not None and not role.manageable:
+        raise BadRequestError(
+            "The bot cannot manage that role: it sits above the bot in Discord"
+        )
+
+
+def _unhidden(session: OrmSession, discord_role: str) -> None:
+    """Refuse a role an admin hid: the app must never touch it."""
+    if session.get(DiscordRoleHidden, discord_role) is not None:
+        raise BadRequestError("Unhide the role before binding it")
+
+
+def _check(binding: DiscordRoleBindingBase) -> None:
+    """Refuse a binding no account could ever earn, and drop a season its scope never reads."""
+    if binding.kind is RoleKind.admin:
         raise BadRequestError("Admin roles are hand-managed in Discord, not synced")
-    if kind is RoleKind.team and team_id is None:
+    if binding.kind is RoleKind.team and binding.team_id is None:
         raise BadRequestError("A team binding needs the team that earns it")
-    if kind is RoleKind.champion and season_id is None:
-        raise BadRequestError("A champion binding needs the season it crowns")
-    if kind is RoleKind.champion and team_id is not None:
-        raise BadRequestError("The champion team is derived from the standings")
+    if binding.kind is RoleKind.champion:
+        if binding.scope is not RoleScope.season:
+            raise BadRequestError(
+                "A champion binding crowns one season, so its scope is season"
+            )
+        if binding.team_id is not None:
+            raise BadRequestError("The champion team is derived from the standings")
+    if binding.scope is RoleScope.season:
+        if binding.season_id is None:
+            raise BadRequestError("A season binding needs the season it follows")
+    else:
+        binding.season_id = None
 
 
 def add_binding(data: DiscordRoleBindingCreate) -> DiscordRoleBindingPublic:
-    _check(data.kind, data.season_id, data.team_id)
+    _check(data)
+    _manageable(data.discord_role)
     with Session.begin() as session:
+        _unhidden(session, data.discord_role)
         binding = DiscordRoleBinding.add(session, data.model_dump())
         return DiscordRoleBindingPublic.model_validate(binding)
 
@@ -281,7 +456,9 @@ def update_binding(
         )
         if not binding:
             raise NotFoundError(f"Discord role binding not found by id: {binding_id}")
-        _check(binding.kind, binding.season_id, binding.team_id)
+        _check(binding)
+        _unhidden(session, binding.discord_role)
+        _manageable(binding.discord_role)
         return DiscordRoleBindingPublic.model_validate(binding)
 
 

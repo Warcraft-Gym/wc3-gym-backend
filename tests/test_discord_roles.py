@@ -14,20 +14,35 @@ from app.core.db import Session
 from app.models.admin_grant import AdminGrant
 from app.models.base import ident
 from app.models.discord_role_binding import DiscordRoleBinding
-from app.models.enums import RoleKind
+from app.models.enums import RoleKind, RoleScope
 from app.models.relationships import DBTeamSeasonCaptain, DBUserSeasonSignup
 from app.models.season import Season
 from app.models.user import User
+from app.models.user_team_season import DBUserTeamSeason
 from app.services import discord, discord_roles
 from tests.test_discord_auth import GUILD_ID, FakeResponse
 
 MEMBERS = f"{discord.API_URL}/guilds/{GUILD_ID}/members"
 
+# The guild list the bot reads: it holds bot-role, so only what sits under it is its to grant.
+ROLES = [
+    {"id": GUILD_ID, "name": "@everyone", "position": 0, "color": 0},
+    {"id": "team-a", "name": "Team A", "position": 2, "color": 5793266},
+    {"id": "bot-role", "name": "The Bot", "position": 5, "color": 0, "managed": True},
+    {"id": "above-the-bot", "name": "Above", "position": 9, "color": 0},
+]
 
-def _bind(kind: RoleKind, role: str, **columns: int) -> None:
+
+def _bind(
+    kind: RoleKind, role: str, synced: bool = True, **columns: int | RoleScope
+) -> int:
     with Session() as session:
-        session.add(DiscordRoleBinding(kind=kind, discord_role=role, **columns))
+        binding = DiscordRoleBinding(
+            kind=kind, discord_role=role, synced=synced, **columns
+        )
+        session.add(binding)
         session.commit()
+        return ident(binding)
 
 
 def _expected(user_id: int) -> set[str]:
@@ -45,6 +60,15 @@ def _captain(team_id: int, season_id: int, user_id: int) -> None:
         session.commit()
 
 
+def _later_season() -> int:
+    """A second season, which the roles follow as the current one."""
+    with Session() as session:
+        later = Season(name="Season 2", number_weeks=4, series_per_week=2)
+        session.add(later)
+        session.commit()
+        return ident(later)
+
+
 def _guild(
     monkeypatch: pytest.MonkeyPatch, roles: dict[str, list[str]]
 ) -> list[tuple[str, str]]:
@@ -57,8 +81,12 @@ def _guild(
             return FakeResponse(
                 200, [{"user": {"id": id}, "roles": held} for id, held in roles.items()]
             )
+        if url == f"{discord.API_URL}/users/@me":
+            return FakeResponse(200, {"id": "bot"})
+        if url == f"{MEMBERS}/bot":
+            return FakeResponse(200, {"roles": ["bot-role"]})
         if url.endswith("/roles"):
-            return FakeResponse(200, [{"id": "team-a", "name": "Team A"}])
+            return FakeResponse(200, ROLES)
         return FakeResponse(200, {"roles": roles.get(url.rsplit("/", 1)[-1], [])})
 
     monkeypatch.setenv("DISCORD_BOT_TOKEN", "a-bot-token")
@@ -168,7 +196,12 @@ def test_a_champion_binding_crowns_the_seasons_standings_winner(
     seeded: dict[str, Any],
 ) -> None:
     """Alpha won the seeded season 2-1, so its roster earns the role."""
-    _bind(RoleKind.champion, "champion", season_id=seeded["season_id"])
+    _bind(
+        RoleKind.champion,
+        "champion",
+        scope=RoleScope.season,
+        season_id=seeded["season_id"],
+    )
 
     assert _expected(seeded["player_ids"][0]) == {"champion"}
     assert _expected(seeded["player_ids"][2]) == set()
@@ -176,20 +209,55 @@ def test_a_champion_binding_crowns_the_seasons_standings_winner(
 
 def test_a_season_binding_outlives_its_season(seeded: dict[str, Any]) -> None:
     """Season 2 is current, but P1's season 1 roles are kept, not stripped."""
-    with Session() as session:
-        later = Season(name="Season 2", number_weeks=4, series_per_week=2)
-        session.add(later)
-        session.commit()
-        later_id = later.id
-    assert later_id
-    _bind(RoleKind.gnl_participant, "gnl-1", season_id=seeded["season_id"])
-    _bind(RoleKind.gnl_participant, "gnl-2", season_id=later_id)
-    _bind(RoleKind.fantasy, "fantasy-1", season_id=seeded["season_id"])
-    _bind(RoleKind.champion, "champion-1", season_id=seeded["season_id"])
+    later_id = _later_season()
+    one = RoleScope.season
+    _bind(RoleKind.gnl_participant, "gnl-1", scope=one, season_id=seeded["season_id"])
+    _bind(RoleKind.gnl_participant, "gnl-2", scope=one, season_id=later_id)
+    _bind(RoleKind.fantasy, "fantasy-1", scope=one, season_id=seeded["season_id"])
+    _bind(RoleKind.champion, "champion-1", scope=one, season_id=seeded["season_id"])
     _bind(RoleKind.team, "team-a", team_id=seeded["team_a_id"])
 
-    # P1 played, drafted and won in season 1; the team role alone follows the season
+    # P1 played, drafted and won in season 1; the team role reads the current season
     assert _expected(seeded["player_ids"][0]) == {"gnl-1", "fantasy-1", "champion-1"}
+
+
+def test_a_captain_binding_scoped_to_every_season_reads_an_old_seat(
+    seeded: dict[str, Any],
+) -> None:
+    """P3 captained Alpha in season 1; only the all scope still earns it in season 2."""
+    _captain(seeded["team_a_id"], seeded["season_id"], seeded["player_ids"][2])
+    _later_season()
+    _bind(RoleKind.captain, "captain-now")
+    _bind(RoleKind.captain, "captain-ever", scope=RoleScope.all)
+
+    assert _expected(seeded["player_ids"][2]) == {"captain-ever"}
+
+
+def test_a_team_binding_scoped_to_every_season_reads_an_old_roster(
+    seeded: dict[str, Any],
+) -> None:
+    """P1 played for Alpha in season 1 and P3 for Beta, so only P1 earns Alpha's role."""
+    _later_season()
+    _bind(RoleKind.team, "team-a-now", team_id=seeded["team_a_id"])
+    _bind(
+        RoleKind.team, "team-a-ever", scope=RoleScope.all, team_id=seeded["team_a_id"]
+    )
+
+    assert _expected(seeded["player_ids"][0]) == {"team-a-ever"}
+    assert _expected(seeded["player_ids"][2]) == set()
+
+
+def test_participant_and_fantasy_scoped_to_every_season_read_an_old_season(
+    seeded: dict[str, Any],
+) -> None:
+    """P1 played and drafted in season 1; P2 only played, so no fantasy role."""
+    _later_season()
+    _bind(RoleKind.gnl_participant, "gnl-ever", scope=RoleScope.all)
+    _bind(RoleKind.fantasy, "fantasy-ever", scope=RoleScope.all)
+    _bind(RoleKind.gnl_participant, "gnl-now")
+
+    assert _expected(seeded["player_ids"][0]) == {"gnl-ever", "fantasy-ever"}
+    assert _expected(seeded["player_ids"][1]) == {"gnl-ever"}
 
 
 def test_sync_grants_what_is_missing_and_removes_only_bound_roles(
@@ -264,15 +332,235 @@ def test_a_full_report_reads_the_guild_once(
     ]
 
 
-def test_the_guild_role_names_route(
+def test_the_guild_roles_route_lists_the_guild_top_first(
     client: Client,
     monkeypatch: pytest.MonkeyPatch,
     auth_headers: dict[str, str],
 ) -> None:
-    _guild(monkeypatch, {})
+    """A role above the bot cannot be managed, and @everyone is not a role to bind."""
+    _guild(monkeypatch, {"1": ["team-a"], "2": ["team-a", "above-the-bot"]})
+
     resp = client.get("/config/discord-guild-roles", headers=auth_headers)
+
     assert resp.status_code == 200, resp.text
-    assert resp.json() == {"team-a": "Team A"}
+    assert resp.json() == [
+        {
+            "id": "above-the-bot",
+            "name": "Above",
+            "color": None,
+            "position": 9,
+            "members": 1,
+            "manageable": False,
+            "hidden": False,
+        },
+        {
+            "id": "bot-role",
+            "name": "The Bot",
+            "color": None,
+            "position": 5,
+            "members": 0,
+            "manageable": False,
+            "hidden": False,
+        },
+        {
+            "id": "team-a",
+            "name": "Team A",
+            "color": "#5865f2",
+            "position": 2,
+            "members": 2,
+            "manageable": True,
+            "hidden": False,
+        },
+    ]
+
+
+def test_a_binding_to_a_role_above_the_bot_answers_400(
+    client: Client,
+    monkeypatch: pytest.MonkeyPatch,
+    auth_headers: dict[str, str],
+    seeded: dict[str, Any],
+) -> None:
+    """The bot could never grant it, so the binding is refused at the write."""
+    _guild(monkeypatch, {})
+
+    resp = client.post(
+        "/config/discord-role-bindings",
+        json={"kind": "captain", "discord_role": "above-the-bot"},
+        headers=auth_headers,
+    )
+
+    assert resp.status_code == 400, resp.text
+    assert resp.json() == {
+        "error": "The bot cannot manage that role: it sits above the bot in Discord"
+    }
+
+
+def test_an_unsynced_binding_is_left_to_the_guild(
+    monkeypatch: pytest.MonkeyPatch, seeded: dict[str, Any]
+) -> None:
+    """P1 earns the team role, but nobody asked the app to manage it."""
+    _bind(RoleKind.team, "team-a", synced=False, team_id=seeded["team_a_id"])
+    calls = _guild(monkeypatch, {"1": []})
+
+    assert discord_roles.report([seeded["player_ids"][0]]) == []
+    assert discord_roles.sync([seeded["player_ids"][0]]) == []
+    assert calls == [("GET", f"{MEMBERS}/1"), ("GET", f"{MEMBERS}/1")]
+
+
+def test_a_new_binding_starts_unsynced_until_an_admin_says_so(
+    client: Client,
+    monkeypatch: pytest.MonkeyPatch,
+    auth_headers: dict[str, str],
+    seeded: dict[str, Any],
+) -> None:
+    """The page creates the binding first and turns the sync on after."""
+    created = client.post(
+        "/config/discord-role-bindings",
+        json={"kind": "team", "team_id": seeded["team_a_id"], "discord_role": "team-a"},
+        headers=auth_headers,
+    )
+    assert created.status_code == 201, created.text
+    assert created.json()["synced"] is False
+
+    updated = client.put(
+        f"/config/discord-role-bindings/{created.json()['id']}",
+        json={"synced": True},
+        headers=auth_headers,
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["synced"] is True
+
+    calls = _guild(monkeypatch, {"1": []})
+    assert [one.missing for one in discord_roles.sync([seeded["player_ids"][0]])] == [
+        ["team-a"]
+    ]
+    assert calls == [("GET", f"{MEMBERS}/1"), ("PUT", f"{MEMBERS}/1/roles/team-a")]
+
+
+def test_an_admin_binding_cannot_be_marked_synced(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """The admin role stays hand-managed however the page asks."""
+    binding_id = _bind(RoleKind.admin, "admin-role", synced=False)
+
+    resp = client.put(
+        f"/config/discord-role-bindings/{binding_id}",
+        json={"synced": True},
+        headers=auth_headers,
+    )
+
+    assert resp.status_code == 400, resp.text
+    assert resp.json() == {
+        "error": "Admin roles are hand-managed in Discord, not synced"
+    }
+
+
+def test_a_sync_of_named_roles_leaves_every_other_binding_alone(
+    monkeypatch: pytest.MonkeyPatch, seeded: dict[str, Any]
+) -> None:
+    """P1 earns the team role and holds the captain role; only the team role is asked for."""
+    _bind(RoleKind.team, "team-a", team_id=seeded["team_a_id"])
+    _bind(RoleKind.captain, "captain-role")
+    calls = _guild(monkeypatch, {"1": ["captain-role"]})
+
+    reports = discord_roles.sync([seeded["player_ids"][0]], ["team-a"])
+
+    assert [(one.missing, one.extra) for one in reports] == [(["team-a"], [])]
+    assert calls == [("GET", f"{MEMBERS}/1"), ("PUT", f"{MEMBERS}/1/roles/team-a")]
+
+
+def test_the_role_groups_route_counts_who_earns_each_group(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """The seeded league: four players, one bettor, Alpha champion, no captain seat."""
+    resp = client.get("/config/discord-role-groups", headers=auth_headers)
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == [
+        {
+            "kind": "captain",
+            "scope": "current",
+            "season_id": None,
+            "team_id": None,
+            "label": "Captains",
+            "count": 0,
+        },
+        {
+            "kind": "gnl_participant",
+            "scope": "current",
+            "season_id": None,
+            "team_id": None,
+            "label": "Players",
+            "count": 4,
+        },
+        {
+            "kind": "fantasy",
+            "scope": "current",
+            "season_id": None,
+            "team_id": None,
+            "label": "Bettors",
+            "count": 1,
+        },
+        {
+            "kind": "champion",
+            "scope": "season",
+            "season_id": seeded["season_id"],
+            "team_id": None,
+            "label": "Champions",
+            "count": 2,
+        },
+        {
+            "kind": "team",
+            "scope": "current",
+            "season_id": None,
+            "team_id": seeded["team_a_id"],
+            "label": "Alpha",
+            "count": 2,
+        },
+        {
+            "kind": "team",
+            "scope": "current",
+            "season_id": None,
+            "team_id": seeded["team_b_id"],
+            "label": "Beta",
+            "count": 2,
+        },
+    ]
+
+
+def test_the_role_groups_route_counts_every_season_for_the_all_scope(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """Season 2 adds a seat and a roster row, and the all scope counts both seasons."""
+    later_id = _later_season()
+    _captain(seeded["team_a_id"], later_id, seeded["player_ids"][2])
+    with Session() as session:
+        session.add(
+            DBUserTeamSeason(
+                user_id=seeded["player_ids"][0],
+                team_id=seeded["team_b_id"],
+                season_id=later_id,
+            )
+        )
+        session.commit()
+
+    resp = client.get(
+        f"/config/discord-role-groups?scope=all&season_id={seeded['season_id']}",
+        headers=auth_headers,
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert [
+        (one["kind"], one["scope"], one["season_id"], one["label"], one["count"])
+        for one in resp.json()
+    ] == [
+        ("captain", "all", None, "Captains", 1),
+        ("gnl_participant", "all", None, "Players", 4),
+        ("fantasy", "all", None, "Bettors", 1),
+        ("champion", "season", seeded["season_id"], "Champions", 2),
+        ("team", "all", None, "Alpha", 3),
+        ("team", "all", None, "Beta", 3),
+    ]
 
 
 def test_the_report_route_admits_admins_only(
@@ -312,9 +600,11 @@ def test_a_binding_is_created_read_and_deleted(
     assert created.json() == {
         "id": created.json()["id"],
         "kind": "team",
+        "scope": "current",
         "season_id": None,
         "team_id": seeded["team_a_id"],
         "discord_role": "team-a",
+        "synced": False,
     }
 
     updated = client.put(
@@ -355,11 +645,21 @@ def test_an_unknown_binding_answers_404(
         ({"kind": "team", "discord_role": "a"}, "A team binding needs the team"),
         (
             {"kind": "champion", "discord_role": "a"},
-            "A champion binding needs the season",
+            "A champion binding crowns one season",
         ),
         (
-            {"kind": "champion", "discord_role": "a", "season_id": 1, "team_id": 1},
+            {
+                "kind": "champion",
+                "discord_role": "a",
+                "scope": "season",
+                "season_id": 1,
+                "team_id": 1,
+            },
             "The champion team is derived from the standings",
+        ),
+        (
+            {"kind": "gnl_participant", "discord_role": "a", "scope": "season"},
+            "A season binding needs the season it follows",
         ),
     ],
 )
@@ -379,9 +679,95 @@ def test_the_binding_list_names_the_derived_champion(
     client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
 ) -> None:
     """The winner is not stored, but the list carries it for the page."""
-    _bind(RoleKind.champion, "champion", season_id=seeded["season_id"])
+    _bind(
+        RoleKind.champion,
+        "champion",
+        scope=RoleScope.season,
+        season_id=seeded["season_id"],
+    )
 
     rows = client.get("/config/discord-role-bindings", headers=auth_headers).json()
     assert [(row["kind"], row["team_id"]) for row in rows] == [
         ("champion", seeded["team_a_id"])
     ]
+
+
+def test_a_hidden_role_is_flagged_and_shown_again_when_unhidden(
+    client: Client,
+    monkeypatch: pytest.MonkeyPatch,
+    auth_headers: dict[str, str],
+) -> None:
+    """The page still lists a hidden role; only its flag says the app leaves it alone."""
+    _guild(monkeypatch, {})
+
+    hidden = client.post(
+        "/config/discord-hidden-roles",
+        json={"discord_role": "above-the-bot"},
+        headers=auth_headers,
+    )
+    assert hidden.status_code == 201, hidden.text
+    assert hidden.json() == {"discord_role": "above-the-bot"}
+    # Hiding it twice is the same one row
+    assert (
+        client.post(
+            "/config/discord-hidden-roles",
+            json={"discord_role": "above-the-bot"},
+            headers=auth_headers,
+        ).status_code
+        == 201
+    )
+
+    roles = client.get("/config/discord-guild-roles", headers=auth_headers).json()
+    assert [(role["id"], role["hidden"]) for role in roles] == [
+        ("above-the-bot", True),
+        ("bot-role", False),
+        ("team-a", False),
+    ]
+
+    gone = client.delete(
+        "/config/discord-hidden-roles/above-the-bot", headers=auth_headers
+    )
+    assert gone.status_code == 204
+    repeat = client.delete(
+        "/config/discord-hidden-roles/above-the-bot", headers=auth_headers
+    )
+    assert repeat.status_code == 404
+    assert repeat.json() == {"error": "Discord role is not hidden: above-the-bot"}
+
+
+def test_hiding_a_bound_role_answers_400(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    _bind(RoleKind.team, "team-a", team_id=seeded["team_a_id"])
+
+    resp = client.post(
+        "/config/discord-hidden-roles",
+        json={"discord_role": "team-a"},
+        headers=auth_headers,
+    )
+
+    assert resp.status_code == 400, resp.text
+    assert resp.json() == {"error": "Unbind the role before hiding it"}
+
+
+def test_binding_a_hidden_role_answers_400(
+    client: Client,
+    monkeypatch: pytest.MonkeyPatch,
+    auth_headers: dict[str, str],
+    seeded: dict[str, Any],
+) -> None:
+    _guild(monkeypatch, {})
+    client.post(
+        "/config/discord-hidden-roles",
+        json={"discord_role": "team-a"},
+        headers=auth_headers,
+    )
+
+    resp = client.post(
+        "/config/discord-role-bindings",
+        json={"kind": "team", "team_id": seeded["team_a_id"], "discord_role": "team-a"},
+        headers=auth_headers,
+    )
+
+    assert resp.status_code == 400, resp.text
+    assert resp.json() == {"error": "Unhide the role before binding it"}
