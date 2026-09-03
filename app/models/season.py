@@ -174,6 +174,12 @@ class SeasonSignupWrite(SQLModel):
     race: str | None = None
 
 
+class SeasonSignupUpdate(SQLModel):
+    """The draft fields of one signup. A null MMR lets the ladder MMR stand."""
+
+    mmr_override: PositiveInt | None = None
+
+
 class SeasonPublic(SeasonBase):
     id: int
     # The short form of a season carries only the name, so these read null

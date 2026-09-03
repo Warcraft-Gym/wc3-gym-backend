@@ -164,6 +164,7 @@ class UserListPublic(UserReduced):
     fantasy_tier: int | None = None
     # Set by hand on the signup row; an unpinned tier derives from the MMR
     fantasy_tier_pinned: bool = False
+    mmr_override: int | None = None
 
     @classmethod
     def from_user(cls, user: User) -> Self:

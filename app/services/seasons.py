@@ -21,6 +21,7 @@ from app.models.season import (
     Season,
     SeasonCreate,
     SeasonPublic,
+    SeasonSignupUpdate,
     SeasonUpdate,
     tier_of,
 )
@@ -345,6 +346,21 @@ class SeasonService:
             session.flush()
             return _public(session, season)
 
+    def update_signup(
+        self, season_id: int, user_id: int, data: SeasonSignupUpdate
+    ) -> SeasonPublic:
+        with Session.begin() as session:
+            signup = session.get(
+                DBUserSeasonSignup, {"season_id": season_id, "user_id": user_id}
+            )
+            if not signup:
+                raise NotFoundError(
+                    f"User not signed up for the season, user id: {user_id}, season id {season_id}"
+                )
+            signup.sqlmodel_update(data.model_dump())
+            session.flush()
+            return _public(session, signup.season)
+
     def get_signed_up_users(
         self, season_id: int, limit: int | None = None, offset: int = 0
     ) -> list[UserListPublic]:
@@ -392,6 +408,7 @@ class SeasonService:
                         user_public.fantasy_tier_pinned = (
                             signup.fantasy_tier is not None and applied is not None
                         )
+                        user_public.mmr_override = signup.mmr_override
                         mmr = mmrs.get((signup.user_id, signup.race))
                         user_public.fantasy_tier = signup.fantasy_tier or (
                             tier_of(mmr, cuts) if mmr is not None and cuts else None
