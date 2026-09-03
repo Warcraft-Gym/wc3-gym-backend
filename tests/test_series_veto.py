@@ -282,30 +282,52 @@ def test_one_player_records_a_veto_that_happened_elsewhere(
     assert resp.json() == {"error": "The veto is complete"}
 
 
-def test_an_admin_reads_the_board_and_writes_none_of_it(
+def test_an_admin_enters_any_side_and_takes_back_any_step(
     client: Client,
     seeded: dict[str, Any],
     pool: list[int],
     dashboard_token: Callable[..., str],
     auth_headers: dict[str, str],
 ) -> None:
+    """The match page lets an admin fix a veto: no side, no turn, no token."""
     series_id = seeded["series_open_id"]
     taken(client, series_id, dashboard_token(discord_id="2"), pool[1])
 
     resp = client.get(f"/player-series/{series_id}/veto", headers=auth_headers)
-
     assert resp.status_code == 200, resp.text
-    body = resp.json()
-    assert (body["viewer_side"], body["on_turn"]) == (None, False)
-    assert [step["shortname"] for step in body["steps"]] == ["EI"]
+    assert (resp.json()["viewer_side"], resp.json()["on_turn"]) == (None, False)
 
+    # The admin enters the step the order names next, side B, with no one recorded as the enterer
+    resp = client.put(
+        f"/player-series/{series_id}/veto",
+        json={"action": "step", "map_id": pool[2]},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    steps = resp.json()["steps"]
+    assert [(s["side"], s["shortname"]) for s in steps] == [("A", "EI"), ("B", "TS")]
+    assert steps[0]["entered_by"] is not None
+    assert steps[1]["entered_by"] is None
+
+    # And takes back a step a player took
     resp = client.put(
         f"/player-series/{series_id}/veto",
         json={"action": "undo"},
         headers=auth_headers,
     )
-    assert resp.status_code == 403, resp.text
-    assert resp.json() == {"error": "not_authorized_for_this_series"}
+    resp = client.put(
+        f"/player-series/{series_id}/veto",
+        json={"action": "undo"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["steps"] == []
+    resp = client.put(
+        f"/player-series/{series_id}/veto",
+        json={"action": "undo"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 400, resp.text
 
 
 def test_a_player_of_another_series_reads_nothing(
