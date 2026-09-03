@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from typing import TYPE_CHECKING, Annotated, Any, Literal, NamedTuple, Self
 
-from pydantic import PositiveInt
+from pydantic import NonNegativeInt, PositiveInt
 from sqlalchemy import JSON, Index, and_, case, func, or_, select, text
 from sqlalchemy.orm import Session
 from sqlmodel import Field, Relationship, SQLModel, col
@@ -172,6 +172,12 @@ class SeasonSignupWrite(SQLModel):
 
     user_ids: list[int]
     race: str | None = None
+
+
+class SeasonSignupUpdate(SQLModel):
+    """The draft fields of one signup. A null position sorts the player by MMR."""
+
+    draft_position: NonNegativeInt | None = None
 
 
 class SeasonPublic(SeasonBase):
