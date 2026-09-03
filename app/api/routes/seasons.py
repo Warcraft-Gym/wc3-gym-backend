@@ -5,11 +5,10 @@ from fastapi import APIRouter, Depends, Query
 
 from app.api.deps import LadderServiceDep, SeasonServiceDep, require_admin
 from app.api.search import SearchQuery
-from app.models.map import LadderMapRow
+from app.models.map import LadderMapNames, LadderMapRow
 from app.models.relationships import SeasonWeekMapWrite
 from app.models.season import (
     SeasonCreate,
-    SeasonLadderMapNames,
     SeasonMapIds,
     SeasonPublic,
     SeasonSignupWrite,
@@ -129,7 +128,7 @@ def preview_ladder_import(
     "/seasons/{season_id}/maps/ladder-import", dependencies=[Depends(require_admin)]
 )
 def apply_ladder_import(
-    season_id: int, data: SeasonLadderMapNames, service: SeasonServiceDep
+    season_id: int, data: LadderMapNames, service: SeasonServiceDep
 ) -> SeasonPublic:
     """Add the named ladder maps to the pool, creating the ones the app misses."""
     return service.import_ladder_maps(season_id, data.names)

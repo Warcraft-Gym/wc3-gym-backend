@@ -160,10 +160,6 @@ class SeasonMapIds(SQLModel):
     map_ids: list[int]
 
 
-class SeasonLadderMapNames(SQLModel):
-    names: list[str]
-
-
 class FantasyTierAllocation(SQLModel):
     """One season's whole tier allocation: the cuts and every tiered player."""
 

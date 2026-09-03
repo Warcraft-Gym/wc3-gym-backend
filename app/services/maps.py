@@ -1,11 +1,32 @@
+from collections.abc import Callable, Sequence
+
 from sqlalchemy import select
 from sqlmodel import col
 
 from app.core.db import Session
 from app.core.exceptions import NotFoundError
 from app.core.query import QueryElement, QueryUtil
-from app.models.map import Map, MapCreate, MapPublic, MapUpdate
-from app.services import blob
+from app.models.base import ident
+from app.models.map import LadderMapRow, Map, MapCreate, MapPublic, MapUpdate
+from app.services import blob, ladder_maps
+
+
+def _known(maps: Sequence[Map]) -> Callable[[str], int | None]:
+    """The map behind a ladder name: exact, else its one lineage twin."""
+    by_name = {map.name.lower(): ident(map) for map in maps if map.name}
+    by_base: dict[str, list[int]] = {}
+    for map in maps:
+        if map.name:
+            by_base.setdefault(ladder_maps.folded_base(map.name), []).append(ident(map))
+
+    def known(name: str) -> int | None:
+        exact = by_name.get(name.lower())
+        if exact is not None:
+            return exact
+        lineage = by_base.get(ladder_maps.folded_base(name), [])
+        return lineage[0] if len(lineage) == 1 else None
+
+    return known
 
 
 class MapService:
@@ -72,3 +93,60 @@ class MapService:
         with Session.begin() as session:
             maps = Map.get_all(session, limit=limit, offset=offset)
             return [MapPublic.model_validate(map) for map in maps]
+
+    def ladder_import_preview(self) -> list[LadderMapRow]:
+        """Every 1v1 ladder map, and whether the app already holds it."""
+        with Session.begin() as session:
+            known = _known(Map.get_all(session))
+        rows = ladder_maps.ladder_maps()
+        for row in rows:
+            if known(row.w3c_name) is not None:
+                row.status = "known"
+        return rows
+
+    def import_ladder_maps(self, names: list[str]) -> list[int]:
+        """The ids of these ladder maps, in the order named; the w3champions name is the truth.
+
+        A map the app knows under an older name or spelling of the same lineage
+        is renamed to the ladder name and keeps its id, results and short name;
+        a missing picture is filled. Only a map with no lineage here is created.
+        No season pool changes.
+
+        The picture is kept as the url warcraft3.info publishes it at, never copied into our own
+        store: those bytes are already served from a CDN and cost us nothing where they are.
+        """
+        wanted = {
+            row.w3c_name: row
+            for row in ladder_maps.ladder_maps()
+            if row.w3c_name in set(names)
+        }
+        with Session.begin() as session:
+            maps = Map.get_all(session)
+            known = _known(maps)
+            # a map that already has a picture, uploaded or published, is left alone
+            pictured = set(
+                session.scalars(select(col(Map.id)).where(col(Map.image).is_not(None)))
+            )
+            taken = {map.shortname.lower() for map in maps if map.shortname}
+
+        map_ids = []
+        with Session.begin() as session:
+            for name in dict.fromkeys(names):
+                row = wanted.get(name)
+                if not row:
+                    continue
+                map_id = known(name)
+                if map_id is None:
+                    shortname = ladder_maps.free_shortname(row.shortname, name, taken)
+                    taken.add(shortname.lower())
+                    map = Map.add(
+                        session,
+                        {"name": name, "shortname": shortname, "image": row.image_url},
+                    )
+                    map_id = ident(map)
+                elif row.image_url and map_id not in pictured:
+                    Map.update(session, map_id, name=name, image=row.image_url)
+                else:
+                    Map.update(session, map_id, name=name)
+                map_ids.append(map_id)
+        return map_ids
