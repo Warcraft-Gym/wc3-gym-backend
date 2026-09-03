@@ -1,8 +1,8 @@
 """The public fantasy writes close with the schedule.
 
 A bet closes once its series has started and reopens if the series moves
-later. A fantasy team closes once every series of the season is scored or
-past its time. The admin routes stay open, so a mistake is fixed there.
+later. A fantasy team is drafted while the season is open: before any series
+is scored or past its time. The admin routes stay open, so a mistake is fixed there.
 """
 
 from datetime import UTC, datetime, timedelta
@@ -20,6 +20,7 @@ CLOSED = {
     "message": "Bets close once the series has started",
 }
 ENDED = {"error": "season_ended", "message": "The season has ended"}
+COMMENCED = {"error": "season_commenced", "message": "The season has commenced"}
 
 
 def schedule(series_id: int, when: datetime | None) -> None:
@@ -27,6 +28,13 @@ def schedule(series_id: int, when: datetime | None) -> None:
         series = session.get(Series, series_id)
         assert series is not None
         series.date_time = when
+
+
+def score(series_id: int, p1: int | None, p2: int | None) -> None:
+    with Session.begin() as session:
+        series = session.get(Series, series_id)
+        assert series is not None
+        series.player1_score, series.player2_score = p1, p2
 
 
 def test_a_bet_closes_once_its_series_has_started(
@@ -77,9 +85,10 @@ def test_a_series_moved_later_reopens_its_bets(
     assert resp.json()["bet_points"] == 5
 
 
-def test_a_team_closes_once_the_last_series_has_started(
+def test_a_team_is_drafted_only_while_the_season_is_open(
     client: Client, seeded: dict[str, Any], monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """The seeded season has one played series, so it has commenced."""
     headers = member_session(monkeypatch, "1", "p1")
     team = {
         "name": "Late",
@@ -88,20 +97,18 @@ def test_a_team_closes_once_the_last_series_has_started(
         "drafted_race": "HU",
         "player_ids": [],
     }
-    schedule(seeded["series_open_id"], datetime.now(UTC) - timedelta(hours=1))
     resp = client.post("/fantasy-team", json=team, headers=headers)
-    assert (resp.status_code, resp.json()) == (403, ENDED), resp.text
+    assert (resp.status_code, resp.json()) == (403, COMMENCED), resp.text
 
-    # An unplayed, unscheduled series keeps the season open
-    schedule(seeded["series_open_id"], None)
+    # No series scored or past its time: the season is open again
+    score(seeded["series_played_id"], None, None)
+    schedule(seeded["series_played_id"], datetime.now(UTC) + timedelta(days=1))
     resp = client.post("/fantasy-team", json=team, headers=headers)
     assert resp.status_code == 201, resp.text
     assert resp.json()["name"] == "Late"
 
     # A scored series is done whether or not it carries a time
-    with Session.begin() as session:
-        series = session.get(Series, seeded["series_open_id"])
-        assert series is not None
-        series.player1_score, series.player2_score = 2, 0
+    score(seeded["series_played_id"], 2, 1)
+    score(seeded["series_open_id"], 2, 0)
     resp = client.post("/fantasy-team", json=team, headers=headers)
     assert (resp.status_code, resp.json()) == (403, ENDED), resp.text
