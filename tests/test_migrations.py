@@ -35,6 +35,8 @@ BEFORE_PER_SEASON_TIERS = "7764c747da5d"
 BEFORE_USER_TIER_DROP = "d5e8b1c47a90"
 # The revision before the tier count is derived from the cuts
 BEFORE_COUNT_DROP = "c4d1e7f9a2b3"
+# The revision before the ledger records where a season was read from
+BEFORE_READ_FROM = "d7b3e5a91c26"
 
 
 def comparable(
@@ -467,3 +469,16 @@ def test_the_hidden_roles_table_is_created_and_dropped(tmp_path: Path) -> None:
     assert "discord_role_hidden" in inspect(engine).get_table_names()
     downgrade_to(url, BEFORE_HIDDEN_ROLES)
     assert "discord_role_hidden" not in inspect(engine).get_table_names()
+
+
+def test_the_ledger_read_from_column_is_added_and_dropped(tmp_path: Path) -> None:
+    url = fresh_database(tmp_path, "read-from")
+    upgrade_to_head(url)
+    engine = create_engine(url)
+
+    def columns() -> set[str]:
+        return {c["name"] for c in inspect(engine).get_columns("ladder_sync")}
+
+    assert "read_from" in columns()
+    downgrade_to(url, BEFORE_READ_FROM)
+    assert "read_from" not in columns()

@@ -21,6 +21,8 @@ class LadderSyncBase(SQLModel):
     synced_at: datetime = Field(sa_type=UTCDateTime)
     # The season was paged to its end, or past the window it was read for
     complete: bool = False
+    # The earliest instant the season was read from; None on rows older than it
+    read_from: datetime | None = Field(default=None, sa_type=UTCDateTime)
 
 
 class LadderSync(LadderSyncBase, DBModel, table=True):
