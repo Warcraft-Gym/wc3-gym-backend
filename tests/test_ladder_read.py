@@ -577,6 +577,45 @@ def test_the_season_answer_costs_thirteen_statements(
     assert tally[0] == 13
 
 
+def test_the_players_route_answers_one_row_per_signup(
+    client: Client, auth_headers: dict[str, str], league: dict[str, Any]
+) -> None:
+    """The same record the ladder page draws, without the achievements, and a
+    row for a signup on no team."""
+    one, two = league["player_ids"][0], league["player_ids"][1]
+    add_match(one, "a", won=True)
+    add_match(two, "b", won=False)
+    with Session() as session:
+        loose = User(
+            name="P5",
+            battleTag="P5#5555",
+            discordTag="p5",
+            discordId="5",
+            race=Race.HU,
+        )
+        session.add(loose)
+        session.commit()
+        loose_id = loose.id
+    assert loose_id is not None
+    sign_up(league["season_id"], [loose_id])
+
+    ladder_body = ladder_of(client, auth_headers, league["season_id"])
+    resp = client.get(
+        f"/seasons/{league['season_id']}/ladder/players", headers=auth_headers
+    )
+
+    assert resp.status_code == 200, resp.text
+    rows = resp.json()
+    assert [row["id"] for row in rows] == [*league["player_ids"], loose_id]
+    assert [row["team"] for row in rows] == ["Alpha", "Alpha", "Beta", "Beta", None]
+    same = ("wins", "losses", "games", "mmr", "per_day", "vs_race", "ladder_points")
+    for row in rows[:4]:
+        drawn = player_of(ladder_body, row["id"])
+        assert {key: row[key] for key in same} == {key: drawn[key] for key in same}
+        assert row["achievements"] == []
+        assert row["points"] == row["ladder_points"]
+
+
 # The achievement set: one instance per season, per rule.
 
 
@@ -770,6 +809,8 @@ def test_the_match_list_pages_like_every_other_list(
 
 def test_the_ladder_reads_need_no_token(client: Client, league: dict[str, Any]) -> None:
     assert client.get(f"/seasons/{league['season_id']}/ladder").status_code == 200
+    players = client.get(f"/seasons/{league['season_id']}/ladder/players")
+    assert players.status_code == 200
     assert client.get(f"/users/{league['player_ids'][0]}/ladder").status_code == 200
 
 

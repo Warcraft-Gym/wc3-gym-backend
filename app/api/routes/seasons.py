@@ -5,11 +5,10 @@ from fastapi import APIRouter, Depends, Query
 
 from app.api.deps import LadderServiceDep, SeasonServiceDep, require_admin
 from app.api.search import SearchQuery
-from app.models.map import LadderMapRow
+from app.models.map import LadderMapNames, LadderMapRow
 from app.models.relationships import SeasonWeekMapWrite
 from app.models.season import (
     SeasonCreate,
-    SeasonLadderMapNames,
     SeasonMapIds,
     SeasonPublic,
     SeasonSignupWrite,
@@ -17,7 +16,7 @@ from app.models.season import (
     SeasonUpdate,
 )
 from app.models.user import UserListPublic
-from app.models.w3c_ladder_match import LadderSyncResult, SeasonLadder
+from app.models.w3c_ladder_match import LadderSyncResult, SeasonLadder, SeasonPlayer
 from app.services.users import W3C_SYNC_WORKERS
 
 logger = logging.getLogger(__name__)
@@ -129,7 +128,7 @@ def preview_ladder_import(
     "/seasons/{season_id}/maps/ladder-import", dependencies=[Depends(require_admin)]
 )
 def apply_ladder_import(
-    season_id: int, data: SeasonLadderMapNames, service: SeasonServiceDep
+    season_id: int, data: LadderMapNames, service: SeasonServiceDep
 ) -> SeasonPublic:
     """Add the named ladder maps to the pool, creating the ones the app misses."""
     return service.import_ladder_maps(season_id, data.names)
@@ -213,3 +212,11 @@ def sync_ladder_season_signups(
 def get_season_ladder(season_id: int, service: LadderServiceDep) -> SeasonLadder:
     """The ladder of a season: its teams, its players and its hours."""
     return service.season_ladder(season_id)
+
+
+@router.get("/seasons/{season_id}/ladder/players")
+def get_season_ladder_players(
+    season_id: int, service: LadderServiceDep
+) -> list[SeasonPlayer]:
+    """Every signup of the season with his ladder record, without the achievements."""
+    return service.season_players(season_id)

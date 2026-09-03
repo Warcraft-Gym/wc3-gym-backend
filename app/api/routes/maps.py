@@ -7,7 +7,7 @@ from fastapi.responses import RedirectResponse
 from app.api.deps import MapServiceDep, require_admin
 from app.api.search import SearchQuery
 from app.core.exceptions import BadRequestError, NotFoundError
-from app.models.map import MapCreate, MapPublic, MapUpdate
+from app.models.map import LadderMapNames, LadderMapRow, MapCreate, MapPublic, MapUpdate
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +37,20 @@ def update_map(map_id: int, data: MapUpdate, service: MapServiceDep) -> MapPubli
 def delete_map(map_id: int, service: MapServiceDep) -> None:
     """Delete a map by their ID."""
     service.delete(map_id)
+
+
+@router.get("/maps/ladder-import", dependencies=[Depends(require_admin)])
+def preview_ladder_import(service: MapServiceDep) -> list[LadderMapRow]:
+    """List every 1v1 ladder map, matched against the maps the app holds."""
+    return service.ladder_import_preview()
+
+
+@router.post("/maps/ladder-import", dependencies=[Depends(require_admin)])
+def apply_ladder_import(
+    data: LadderMapNames, service: MapServiceDep
+) -> list[MapPublic]:
+    """Create, rename and picture the named ladder maps. No season pool changes."""
+    return [service.get(map_id) for map_id in service.import_ladder_maps(data.names)]
 
 
 @router.get("/maps/{map_id}", response_model=MapPublic)
