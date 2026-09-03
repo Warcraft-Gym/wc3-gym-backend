@@ -67,7 +67,7 @@ The gym-root workspace owns what spans two repositories: Terraform for the Azure
 
 ## Deploying to Vercel
 
-Vercel serves `api/index.py`, which imports the same application the container runs. Set `DB_URL`, `JWT_SECRET_KEY`, `ADMIN_TOKEN`, `BOT_CLIENT_TOKEN` and `FRONTEND_URL` in the project settings; the deployment reads no `.env` file.
+Vercel serves `api/index.py`, which imports the same application the container runs. Set `DB_URL`, `JWT_SECRET_KEY`, `ADMIN_TOKEN`, `BOT_CLIENT_TOKEN` and `FRONTEND_URL` in the project settings; the deployment reads no `.env` file. `CRON_SECRET` is optional; when set, Vercel Cron sends it as a bearer token to `/jobs/w3c-sync`, and the route answers 503 without it.
 
 The production build runs `alembic upgrade head` (`vercel.json`) before the new code is promoted, so a migration that fails stops the deploy. Previews run against the staging Supabase project: the shared `wc3gym_staging` database, or a branch's own copy when the branch adds a migration. How and why is in [docs/PREVIEW-DATABASES.md](docs/PREVIEW-DATABASES.md). The old code keeps serving while the build runs, so every migration must work with the code before it and after it: add columns nullable or with a default, drop a column only after the code that read it has shipped.
 

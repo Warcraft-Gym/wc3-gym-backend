@@ -6,5 +6,7 @@
       "staging": true
     }
   },
-  "buildCommand": "pip install uv && case \"$VERCEL_ENV\" in production) uv run --frozen alembic upgrade head ;; preview) uv run --frozen python api/preview_db.py ;; esac"
+  "buildCommand": "pip install uv && case \"$VERCEL_ENV\" in production) uv run --frozen alembic upgrade head ;; preview) uv run --frozen python api/preview_db.py ;; esac",
+  "crons": [{ "path": "/jobs/w3c-sync", "schedule": "0 */6 * * *" }],
+  "functions": { "api/index.py": { "maxDuration": 60 } }
 }
