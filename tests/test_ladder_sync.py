@@ -855,3 +855,93 @@ def test_the_ladder_sync_route_answers_404_for_an_unknown_season(
 
     assert resp.status_code == 404
     assert resp.json() == {"error": "Season not found"}
+
+
+# The scheduled cron sync, GET /jobs/w3c-sync.
+
+CRON_SECRET = "test-cron-secret"
+
+
+def test_the_cron_route_needs_the_bearer_header(
+    client: Client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("CRON_SECRET", CRON_SECRET)
+
+    resp = client.get("/jobs/w3c-sync")
+
+    assert resp.status_code == 401
+
+
+def test_the_cron_route_rejects_a_wrong_header(
+    client: Client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("CRON_SECRET", CRON_SECRET)
+
+    resp = client.get("/jobs/w3c-sync", headers={"Authorization": "Bearer wrong"})
+
+    assert resp.status_code == 401
+
+
+def test_the_cron_route_is_503_without_a_configured_secret(
+    client: Client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("CRON_SECRET", raising=False)
+
+    resp = client.get("/jobs/w3c-sync", headers={"Authorization": "Bearer anything"})
+
+    assert resp.status_code == 503
+
+
+def test_the_cron_route_is_empty_off_season(
+    client: Client, seeded: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The seeded season already ended, so a scheduled run finds nothing to do."""
+    monkeypatch.setenv("CRON_SECRET", CRON_SECRET)
+    sign_up(seeded["season_id"], seeded["player_ids"][0])
+
+    resp = client.get(
+        "/jobs/w3c-sync", headers={"Authorization": f"Bearer {CRON_SECRET}"}
+    )
+
+    assert resp.status_code == 200
+    assert resp.json() == {"synced": [], "skipped": [], "failed": []}
+
+
+def test_the_cron_route_syncs_the_stalest_wave_first(
+    client: Client, seeded: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """One wave is W3C_SYNC_WORKERS players, oldest ladder_synced_at first."""
+    monkeypatch.setenv("CRON_SECRET", CRON_SECRET)
+    today = datetime.now(UTC).date()
+    bench = add_player("bench", "bench#9999")
+    stale_order = [*seeded["player_ids"], bench.id]
+    with Session() as session:
+        season = session.get(Season, seeded["season_id"])
+        season.start_date = today - timedelta(days=1)
+        season.end_date = today + timedelta(days=1)
+        for index, player_id in enumerate(stale_order):
+            user = session.get(User, player_id)
+            user.ladder_synced_at = (
+                None
+                if index == 0
+                else datetime.now(UTC) - timedelta(days=len(stale_order) - index)
+            )
+        session.commit()
+    for player_id in stale_order:
+        sign_up(seeded["season_id"], player_id)
+    serve(monkeypatch, {})
+
+    resp = client.get(
+        "/jobs/w3c-sync", headers={"Authorization": f"Bearer {CRON_SECRET}"}
+    )
+
+    assert resp.status_code == 200
+    assert resp.json() == {
+        "synced": seeded["player_ids"],
+        "skipped": [],
+        "failed": [],
+    }
+    with Session() as session:
+        assert (
+            session.get_one(User, seeded["player_ids"][0]).ladder_synced_at is not None
+        )
