@@ -1,8 +1,9 @@
 """A season's phase derives from its series and gates the public signup.
 
-Open until a series is scored or past its time, commenced while some are,
-complete once every one is. A signup to a season that is not open saves the
-profile and answers closed; an admin adds the player, or does not.
+Open until a series is scored or past its time, commenced from then on,
+complete once every series has a result, overdue past the end date while a
+result is missing. A signup to a season that is not open saves the profile
+and answers closed; an admin adds the player, or does not.
 """
 
 from datetime import UTC, datetime, timedelta
@@ -13,6 +14,7 @@ from httpx2 import Client
 
 from app.core.db import Session
 from app.models.relationships import DBUserSeasonSignup
+from app.models.season import Season
 from tests.test_fantasy_locks import schedule, score
 from tests.test_public_token import SIGNUP_BODY, entry
 
@@ -32,18 +34,32 @@ def phase(client: Client, season_id: int) -> str:
     return client.get(f"/seasons/{season_id}").json()["phase"]
 
 
+def end_on(season_id: int, days_from_now: int) -> None:
+    with Session.begin() as session:
+        season = session.get(Season, season_id)
+        assert season is not None
+        season.end_date = (datetime.now(UTC) + timedelta(days=days_from_now)).date()
+
+
 def test_the_phase_follows_the_series(client: Client, seeded: dict[str, Any]) -> None:
     played, open_ = seeded["series_played_id"], seeded["series_open_id"]
+    end_on(seeded["season_id"], 7)
     assert phase(client, seeded["season_id"]) == "commenced"
 
     score(played, None, None)
     schedule(played, datetime.now(UTC) + timedelta(days=1))
     assert phase(client, seeded["season_id"]) == "open"
 
-    # A time in the past commences it; a scored series with no time completes it
+    # A time in the past commences it; a series without a result never completes it
     schedule(played, datetime.now(UTC) - timedelta(hours=1))
     assert phase(client, seeded["season_id"]) == "commenced"
     score(open_, 2, 0)
+    assert phase(client, seeded["season_id"]) == "commenced"
+
+    # Past the end date the missing result makes it overdue; the result completes it
+    end_on(seeded["season_id"], -1)
+    assert phase(client, seeded["season_id"]) == "overdue"
+    score(played, 2, 1)
     assert phase(client, seeded["season_id"]) == "complete"
 
     listed = {s["id"]: s["phase"] for s in client.get("/seasons").json()}

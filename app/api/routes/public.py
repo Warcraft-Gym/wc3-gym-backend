@@ -148,7 +148,7 @@ def _refuse_started(series_service: SeriesService, series_id: int | None) -> Non
 def _refuse_unless_open(season_service: SeasonService, season_id: int) -> None:
     """A fantasy team is drafted before the season commences; the admin routes stay open."""
     phase = season_service.get(season_id).phase
-    if phase == "commenced":
+    if phase in ("commenced", "overdue"):
         raise ApiError(
             403,
             {"error": "season_commenced", "message": "The season has commenced"},

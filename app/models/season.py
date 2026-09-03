@@ -59,8 +59,8 @@ def tier_of(mmr: int, cuts: list[int]) -> int:
 
 
 # Derived from the series, never stored: open until one is scored or past its time,
-# complete once every one is
-SeasonPhase = Literal["open", "commenced", "complete"]
+# complete once every one has a result, overdue past the end date with results missing
+SeasonPhase = Literal["open", "commenced", "overdue", "complete"]
 
 
 class Season(SeasonBase, DBModel, table=True):
@@ -96,28 +96,33 @@ class Season(SeasonBase, DBModel, table=True):
         },
     )
 
-    @classmethod
-    def phase(cls, session: Session, season_id: int) -> SeasonPhase:
+    def phase(self, session: Session) -> SeasonPhase:
         """The season's phase from its series; a season with no series is open."""
         from app.models.match import Match
         from app.models.series import Series
 
-        done = or_(
-            and_(
-                col(Series.player1_score).is_not(None),
-                col(Series.player2_score).is_not(None),
-            ),
-            col(Series.date_time) <= utcnow(),
+        scored = and_(
+            col(Series.player1_score).is_not(None),
+            col(Series.player2_score).is_not(None),
         )
-        total, finished = session.execute(
-            select(func.count(), func.coalesce(func.sum(case((done, 1), else_=0)), 0))
+        started = or_(scored, col(Series.date_time) <= utcnow())
+        total, n_started, n_scored = session.execute(
+            select(
+                func.count(),
+                func.coalesce(func.sum(case((started, 1), else_=0)), 0),
+                func.coalesce(func.sum(case((scored, 1), else_=0)), 0),
+            )
             .select_from(Series)
             .join(Match, col(Match.id) == col(Series.match_id))
-            .where(col(Match.season_id) == season_id)
+            .where(col(Match.season_id) == self.id)
         ).one()
-        if not finished:
+        if not n_started:
             return "open"
-        return "complete" if finished == total else "commenced"
+        if n_scored == total:
+            return "complete"
+        if self.end_date and self.end_date < utcnow().date():
+            return "overdue"
+        return "commenced"
 
     signup_users: list["DBUserSeasonSignup"] = Relationship(
         back_populates="season", sa_relationship_kwargs={"cascade": "all, delete"}
