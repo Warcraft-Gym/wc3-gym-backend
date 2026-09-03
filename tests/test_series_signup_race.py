@@ -12,10 +12,12 @@ from typing import Any
 import pytest
 from fastapi import FastAPI
 from httpx2 import Client
+from sqlmodel import select
 
 from app.core.db import Session
 from app.models.enums import Race
 from app.models.relationships import DBFantasyTeamPlayer, DBUserSeasonSignup
+from app.models.series import Series
 
 
 @pytest.fixture
@@ -102,6 +104,10 @@ def test_the_public_signup_stores_the_signup_race(
 
     monkeypatch.setattr(UserService, "validate_battle_tag", lambda self, tag: True)
     monkeypatch.setattr(UserService, "update_w3c_stats_by_id", lambda self, uid: None)
+    # Signups need an open season: no series scored or past its time
+    with Session.begin() as session:
+        for series in session.scalars(select(Series)):
+            series.player1_score = series.player2_score = series.date_time = None
     _token_store["t"] = {
         "discord_id": "99",
         "discord_tag": "p9",

@@ -2,6 +2,7 @@ import logging
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session as OrmSession
 from sqlalchemy.orm import joinedload, noload, selectinload
 from sqlmodel import col
 
@@ -45,6 +46,13 @@ _SEASON_OPTIONS = (
 )
 
 
+def _public(session: OrmSession, season: Season) -> SeasonPublic:
+    """The full season with its phase; the phase is one aggregate over its series."""
+    public = SeasonPublic.from_season(season)
+    public.phase = Season.phase(session, ident(season))
+    return public
+
+
 class SeasonService:
     def __init__(self, user_app_service: UserService) -> None:
         self.user_app_service = user_app_service
@@ -55,7 +63,7 @@ class SeasonService:
             # A new season scores like the last one until an admin re-prices it
             session.add_all(default_rows(new_season.id))
             session.flush()
-            return SeasonPublic.from_season(new_season)
+            return _public(session, new_season)
 
     def update(self, season_id: int, season: SeasonUpdate) -> SeasonPublic:
         with Session.begin() as session:
@@ -64,7 +72,7 @@ class SeasonService:
             )
             if not row:
                 raise NotFoundError("Season not found")
-            return SeasonPublic.from_season(row)
+            return _public(session, row)
 
     def delete(self, season_id: int) -> None:
         with Session.begin() as session:
@@ -83,7 +91,7 @@ class SeasonService:
             )
             if not season:
                 raise NotFoundError("Season not found")
-            return SeasonPublic.from_season(season)
+            return _public(session, season)
 
     def get_all(self, limit: int | None = None, offset: int = 0) -> list[SeasonPublic]:
         with Session.begin() as session:
@@ -96,7 +104,7 @@ class SeasonService:
                 .limit(limit)
             )
             seasons = session.scalars(statement).unique().all()
-            return [SeasonPublic.from_season(season) for season in seasons]
+            return [_public(session, season) for season in seasons]
 
     def add_teams(self, season_id: int, team_ids: list[int]) -> SeasonPublic:
         with Session.begin() as session:
@@ -114,7 +122,7 @@ class SeasonService:
                 except IntegrityError:
                     logger.debug(f"Team {team_id} is already in season {season_id}")
             session.flush()
-            return SeasonPublic.from_season(season)
+            return _public(session, season)
 
     def search(
         self, query: QueryElement | None, limit: int | None = None, offset: int = 0
@@ -133,7 +141,7 @@ class SeasonService:
                 .limit(limit)
             )
             seasons = session.scalars(statement).unique().all()
-            return [SeasonPublic.from_season(season) for season in seasons]
+            return [_public(session, season) for season in seasons]
 
     def remove_teams(self, season_id: int, team_ids: list[int]) -> SeasonPublic:
         with Session.begin() as session:
@@ -153,7 +161,7 @@ class SeasonService:
                     )
                 session.delete(team_season)
             session.flush()
-            return SeasonPublic.from_season(season)
+            return _public(session, season)
 
     def add_maps(self, season_id: int, map_ids: list[int]) -> SeasonPublic:
         with Session.begin() as session:
@@ -176,7 +184,7 @@ class SeasonService:
                 except IntegrityError:
                     logger.debug(f"Map {map_id} is already in season {season_id}")
             session.flush()
-            return SeasonPublic.from_season(season)
+            return _public(session, season)
 
     def ladder_import_preview(self, season_id: int) -> list[LadderMapRow]:
         """Every 1v1 ladder map, and whether the season already plays it."""
@@ -277,7 +285,7 @@ class SeasonService:
             session.flush()
             # The loaded collection keeps its old order until it is read again
             session.expire(season, ["maps"])
-            return SeasonPublic.from_season(season)
+            return _public(session, season)
 
     def set_week_map(
         self, season_id: int, playday: int, map_id: int | None
@@ -305,7 +313,7 @@ class SeasonService:
                 )
             session.flush()
             session.expire(season, ["week_maps"])
-            return SeasonPublic.from_season(season)
+            return _public(session, season)
 
     def remove_maps(self, season_id: int, map_ids: list[int]) -> SeasonPublic:
         with Session.begin() as session:
@@ -330,7 +338,7 @@ class SeasonService:
                     session.delete(week_map)
             session.flush()
             session.refresh(season)
-            return SeasonPublic.from_season(season)
+            return _public(session, season)
 
     def add_user_signup(
         self, season_id: int, user_ids: list[int], race: str | None = None
@@ -356,7 +364,7 @@ class SeasonService:
                 except IntegrityError:
                     logger.debug(f"User {user_id} is already signed up to {season_id}")
             session.flush()
-            return SeasonPublic.from_season(season)
+            return _public(session, season)
 
     @staticmethod
     def _race(race: str | None) -> Race | None:
@@ -386,7 +394,7 @@ class SeasonService:
                     )
                 session.delete(user_season)
             session.flush()
-            return SeasonPublic.from_season(season)
+            return _public(session, season)
 
     def get_signed_up_users(
         self, season_id: int, limit: int | None = None, offset: int = 0
