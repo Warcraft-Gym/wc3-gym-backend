@@ -31,7 +31,7 @@ from app.models.user_team_season import DBUserTeamSeason
 from app.models.w3c_ladder_match import W3CLadderMatch, W3CLadderMatchCreate
 from app.models.w3c_stats import W3CStats, W3CStatsCreate
 from app.services import w3c as w3c_module
-from app.services.ladder import LadderService
+from app.services.ladder import ALL_TIME, FIRST_W3C_SEASON, LadderService
 from app.services.users import W3C_SYNC_WORKERS, UserService
 from app.services.w3c import THROTTLED_MESSAGE, W3CService
 
@@ -892,19 +892,43 @@ def test_the_cron_route_is_503_without_a_configured_secret(
     assert resp.status_code == 503
 
 
-def test_the_cron_route_is_empty_off_season(
+def test_the_cron_route_syncs_members_off_season(
     client: Client, seeded: dict[str, Any], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The seeded season already ended, so a scheduled run finds nothing to do."""
+    """The seeded season ended, and a member's history is kept current anyway."""
     monkeypatch.setenv("CRON_SECRET", CRON_SECRET)
-    sign_up(seeded["season_id"], seeded["player_ids"][0])
+    player = seeded["player_ids"][0]
+    sign_up(seeded["season_id"], player)
+    fake = serve(monkeypatch, {})
 
     resp = client.get(
         "/jobs/w3c-sync", headers={"Authorization": f"Bearer {CRON_SECRET}"}
     )
 
     assert resp.status_code == 200
-    assert resp.json() == {"synced": [], "skipped": [], "failed": []}
+    assert resp.json() == {"synced": [player], "skipped": [], "failed": []}
+    assert fake.seasons() == list(range(W3C_SEASON, FIRST_W3C_SEASON - 1, -1))
+
+
+def test_the_member_sync_reads_every_season_once(
+    app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The first run asks every w3champions season from the open one down to
+    the first stored one; the next asks the open season alone, from its stamp."""
+    thanks = add_player("thanks", "thanks#11187")
+    fake = serve(monkeypatch, {W3C_SEASON: THANKS[:3]})
+
+    LadderService().sync_members([thanks], timedelta(0))
+
+    assert fake.seasons() == list(range(W3C_SEASON, FIRST_W3C_SEASON - 1, -1))
+    ledger = ledger_of(thanks.id)
+    assert set(ledger) == set(range(W3C_SEASON, FIRST_W3C_SEASON - 1, -1))
+    assert all(row.read_from == ALL_TIME for row in ledger.values())
+    stamp = ledger[W3C_SEASON].synced_at
+    fake.calls.clear()
+    LadderService().sync_members([thanks], timedelta(0))
+    assert fake.seasons() == [W3C_SEASON]
+    assert fake.since[W3C_SEASON] == stamp
 
 
 def test_the_cron_route_syncs_the_stalest_wave_first(

@@ -9,7 +9,6 @@ from app.api.deps import Credentials, LadderServiceDep
 from app.core.db import Session
 from app.core.exceptions import ApiError
 from app.models.relationships import DBUserSeasonSignup
-from app.models.season import Season
 from app.models.types import utcnow
 from app.models.user import User, UserReduced
 from app.models.w3c_stats import W3CSyncResult
@@ -23,12 +22,13 @@ DRAIN_SECONDS = 50
 
 @router.get("/jobs/w3c-sync")
 def sync_w3c_cron(credentials: Credentials, service: LadderServiceDep) -> W3CSyncResult:
-    """The stalest signups of the season running today, one wave at a time,
-    for Vercel Cron. It stops when the time is up, when a wave comes around
-    to players this run stamped, or when a wave syncs nobody.
+    """The stalest members, over their stored ladder history, one wave at a
+    time, for Vercel Cron. A member is anyone signed up for a season. It
+    stops when the time is up, when a wave comes around to players this run
+    stamped, or when a wave syncs nobody.
 
     Bearer auth against CRON_SECRET; unset answers 503, so the route is never
-    a public trigger. Off-season answers empty and makes no W3C call.
+    a public trigger.
     """
     secret = os.getenv("CRON_SECRET")
     if not secret:
@@ -39,14 +39,6 @@ def sync_w3c_cron(credentials: Credentials, service: LadderServiceDep) -> W3CSyn
     started = utcnow()
     deadline = monotonic() + DRAIN_SECONDS
     result = W3CSyncResult()
-    with Session() as session:
-        season_id = session.scalar(
-            select(col(Season.id)).where(
-                Season.start_date <= started.date(), Season.end_date >= started.date()
-            )
-        )
-    if season_id is None:
-        return result
     while True:
         with Session() as session:
             rows = session.execute(
@@ -56,8 +48,9 @@ def sync_w3c_cron(credentials: Credentials, service: LadderServiceDep) -> W3CSyn
                     col(User.battleTag),
                     col(User.ladder_synced_at),
                 )
-                .join(DBUserSeasonSignup, col(DBUserSeasonSignup.user_id) == User.id)
-                .where(col(DBUserSeasonSignup.season_id) == season_id)
+                .where(
+                    col(User.id).in_(select(col(DBUserSeasonSignup.user_id)).distinct())
+                )
                 .order_by(col(User.ladder_synced_at).asc().nulls_first(), col(User.id))
                 .limit(W3C_SYNC_WORKERS)
             ).all()
@@ -69,7 +62,7 @@ def sync_w3c_cron(credentials: Credentials, service: LadderServiceDep) -> W3CSyn
         if not rows:
             return result
         users = [UserReduced(id=r.id, name=r.name, battleTag=r.battleTag) for r in rows]
-        wave = service.sync_season_users(season_id, users, timedelta(0))
+        wave = service.sync_members(users, timedelta(0))
         result.synced += wave.synced
         result.failed += wave.failed
         if not wave.synced or monotonic() >= deadline:

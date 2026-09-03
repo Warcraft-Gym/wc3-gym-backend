@@ -66,6 +66,11 @@ from app.models.w3c_stats import W3CSyncFailure, W3CSyncResult
 from app.services.users import SYNC_MAX_AGE, W3C_SYNC_WORKERS, UserService
 from app.services.w3c import THROTTLED_MESSAGE, W3CService
 
+# The stored ladder history starts at w3champions season 23, where GNL S17 began
+FIRST_W3C_SEASON = 23
+# The window of a player's whole stored ladder history
+ALL_TIME = datetime.combine(date.min, time.min, UTC)
+
 if TYPE_CHECKING:
     from app.services.settings import SettingsService
 
@@ -287,25 +292,8 @@ class LadderService:
             # The bootstrap start: a closed window is dated by the matches
             # already stored, an open one ends in the pinned season
             walk_from = None if open_window else _walk_start(session, end)
-            fresh_since = utcnow() - max_age
-            synced_at = {
-                user_id: stamp
-                for user_id, stamp in session.execute(
-                    select(col(User.id), col(User.ladder_synced_at)).where(
-                        col(User.id).in_([user.id for user in users])
-                    )
-                )
-            }
 
-        pending: list[UserReduced] = []
-        skipped: list[int] = []
-        for user in users:
-            stamp = synced_at.get(user.id)
-            if stamp is not None and stamp > fresh_since:
-                skipped.append(user.id)
-            else:
-                pending.append(user)
-
+        pending, skipped = self._pending(users, max_age)
         if pending and seasons and open_window:
             # w3champions can have opened a season no stored match names yet
             open_season = W3CService(
@@ -316,6 +304,52 @@ class LadderService:
         result = self.sync_users(pending, since, seasons, walk_from)
         result.skipped = skipped
         return result
+
+    def sync_members(
+        self, users: Sequence[UserReduced], max_age: timedelta
+    ) -> W3CSyncResult:
+        """Sync these players over their whole stored ladder history.
+
+        Every w3champions season from the open one down to the first stored
+        one is asked for; the ledger skips a season read to its end, so a
+        known player costs one page a run and a new one a call per season,
+        once.
+        """
+        pending, skipped = self._pending(users, max_age)
+        seasons: list[int] = []
+        if pending:
+            open_season = W3CService(
+                settings_app_service=self.settings_app_service
+            ).current_season()
+            seasons = list(range(open_season, FIRST_W3C_SEASON - 1, -1))
+        result = self.sync_users(pending, ALL_TIME, seasons)
+        result.skipped = skipped
+        return result
+
+    def _pending(
+        self, users: Sequence[UserReduced], max_age: timedelta
+    ) -> tuple[list[UserReduced], list[int]]:
+        """The players to sync and the ids synced more recently than max_age;
+        a max_age of zero syncs everyone."""
+        fresh_since = utcnow() - max_age
+        with Session.begin() as session:
+            synced_at = {
+                user_id: stamp
+                for user_id, stamp in session.execute(
+                    select(col(User.id), col(User.ladder_synced_at)).where(
+                        col(User.id).in_([user.id for user in users])
+                    )
+                )
+            }
+        pending: list[UserReduced] = []
+        skipped: list[int] = []
+        for user in users:
+            stamp = synced_at.get(user.id)
+            if stamp is not None and stamp > fresh_since:
+                skipped.append(user.id)
+            else:
+                pending.append(user)
+        return pending, skipped
 
     def sync_user(self, user_id: int) -> None:
         """Sync one player now: his stats, and his matches of the season
