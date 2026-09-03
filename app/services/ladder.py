@@ -29,7 +29,7 @@ from sqlalchemy.orm import Session as OrmSession
 from sqlalchemy.orm import aliased
 from sqlmodel import col
 
-from app.core import achievements, ladder
+from app.core import achievement_rules, achievements, ladder
 from app.core.db import Session
 from app.core.exceptions import (
     BadRequestError,
@@ -106,8 +106,8 @@ class LadderService:
         signups with their team, the achievement set this season pays, the
         w3champions seasons the window sits in, the sync stamps of the roster,
         one group each for the totals, the MMR spans, the player days, the
-        races, the hours and the season days, then the matches the
-        achievements read and the season's captains.
+        races, the hours and the season days, then the achievement badges
+        and the season's captains.
         """
         with Session.begin() as session:
             season = session.get(Season, season_id)
@@ -127,7 +127,7 @@ class LadderService:
             by_hour = _by_hour(session, scope)
             games = _games_per_day(session, scope)
             paid = _paid(session, season_id)
-            earned = _earned(session, scope, roster, totals, season_id, paid)
+            earned = _earned(session, scope, roster, season_id, paid)
             return SeasonLadder(
                 season=LadderSeason(
                     id=ident(season),
@@ -226,7 +226,7 @@ class LadderService:
             spans = _mmr_span(session, _mmr_scope([user_id], window, season_id))
             roster = _roster(session, season_id) if season_id is not None else []
             paid = _paid(session, season_id)
-            earned = _earned(session, scope, roster, totals, season_id, paid)
+            earned = _earned(session, scope, roster, season_id, paid)
             answer = _player(
                 UserLadder,
                 user,
@@ -1069,38 +1069,6 @@ def _season_days(season: Season, games: dict[date, int]) -> list[LadderSeasonDay
     return [LadderSeasonDay(d=day, g=games.get(day, 0)) for day in days]
 
 
-def _match_rows(
-    session: OrmSession, scope: list[ColumnElement[bool]]
-) -> dict[int, list[Row]]:
-    """Every scoped match, per player, oldest first. One statement for all.
-
-    Only the columns the achievement rules read, so the statement returns
-    about half the bytes of the mapped row.
-    """
-    rows: dict[int, list[Row]] = defaultdict(list)
-    for match in session.execute(
-        select(
-            col(W3CLadderMatch.user_id),
-            col(W3CLadderMatch.won),
-            col(W3CLadderMatch.start_time),
-            col(W3CLadderMatch.duration_s),
-            col(W3CLadderMatch.map_name),
-            col(W3CLadderMatch.opp_race),
-            col(W3CLadderMatch.opp_battletag),
-            col(W3CLadderMatch.mmr_before),
-            col(W3CLadderMatch.mmr_after),
-        )
-        .where(*scope)
-        .order_by(
-            col(W3CLadderMatch.user_id),
-            col(W3CLadderMatch.start_time),
-            col(W3CLadderMatch.id),
-        )
-    ):
-        rows[match.user_id].append(match)
-    return rows
-
-
 def _captain_tags(session: OrmSession, season_id: int) -> frozenset[str]:
     """The battle tags of every captain of the season, in lower case."""
     tags = session.scalars(
@@ -1154,34 +1122,26 @@ def _earned(
     session: OrmSession,
     scope: list[ColumnElement[bool]],
     roster: Sequence[Row],
-    totals: dict[int, Row],
     season_id: int | None,
     paid: achievements.PaidSet,
 ) -> dict[int, list[achievements.Achievement]]:
-    """Every player's achievements, over the rows the totals already read.
+    """Every player's achievements, which the database evaluates.
 
-    Two statements whatever the number of players: the matches and the
-    captains. A player with no match earns nothing.
+    Two statements whatever the number of players or matches: the badges and
+    the captains. A player with no match earns nothing.
     """
-    rows = _match_rows(session, scope)
-    if not rows:
-        return {}
-    opponents = _opponents(roster)
     captains = (
         _captain_tags(session, season_id) if season_id is not None else frozenset()
     )
-    tags = {row.user_id: (row.battleTag or "").lower() for row in roster}
-    return {
-        user_id: achievements.earned(
-            matches,
-            int(totals[user_id].points or 0) if user_id in totals else 0,
-            paid,
-            opponents.get(user_id, frozenset()),
-            captains,
-            tags.get(user_id, "") in captains,
-        )
-        for user_id, matches in rows.items()
-    }
+    return achievement_rules.earned(
+        session,
+        scope,
+        paid,
+        _opponents(roster),
+        captains,
+        [row.user_id for row in roster if (row.battleTag or "").lower() in captains],
+        season_id is None,
+    )
 
 
 def _empty_races() -> dict[str, list[int]]:
