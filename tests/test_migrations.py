@@ -24,6 +24,8 @@ BEFORE_W3C_STATS_UNIQUE = "9f4b7c1d2ae5"
 BEFORE_CAPTAIN_TABLE = "5f4a1a4d88d3"
 # The revision before every app-owned Discord role is a binding row
 BEFORE_ROLE_BINDINGS = "b3f9d7c21a48"
+# The revision before a binding carries the seasons it reads
+BEFORE_ROLE_SCOPE = "a1c7f4b09d36"
 # The revision before the season setting is spelled w3c
 BEFORE_W3C_SEASON_KEY = "5f4a1a4d88d3"
 # The revision before the fantasy tier lives on the season signup row
@@ -420,3 +422,36 @@ def test_the_users_tier_column_is_dropped_and_comes_back_on_downgrade(
     assert "fantasy_tier" not in columns()
     downgrade_to(url, BEFORE_USER_TIER_DROP)
     assert "fantasy_tier" in columns()
+
+
+def test_a_binding_that_names_a_season_becomes_a_season_binding(tmp_path: Path) -> None:
+    """The season a binding named is now its scope; one that named none reads the current season."""
+    url = fresh_database(tmp_path, "role-scope")
+    upgrade_to(url, BEFORE_ROLE_SCOPE)
+
+    engine = create_engine(url)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO seasons (id, name, number_weeks, series_per_week) "
+                "VALUES (1, 'Season 1', 4, 2)"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO discord_role_binding (id, kind, season_id, discord_role) "
+                "VALUES (1, 'gnl_participant', 1, 'gnl'), "
+                "(2, 'captain', NULL, 'captain-role')"
+            )
+        )
+
+    upgrade_to(url, "head")
+    with engine.connect() as connection:
+        assert connection.execute(
+            text("SELECT id, scope FROM discord_role_binding ORDER BY id")
+        ).all() == [(1, "season"), (2, "current")]
+
+    downgrade_to(url, BEFORE_ROLE_SCOPE)
+    assert "scope" not in {
+        column["name"] for column in inspect(engine).get_columns("discord_role_binding")
+    }

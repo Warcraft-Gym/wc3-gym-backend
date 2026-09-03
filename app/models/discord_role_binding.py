@@ -5,11 +5,10 @@ which one and pushes the difference to the guild. A role no binding names is
 nobody's business but the guild's, and sync never touches it — nor any admin
 binding, whose role stays hand-managed in the guild.
 
-A binding is synced only when its synced flag is set. A team or captain
-binding follows the current season. A participant or fantasy binding that
-names a season follows that season's records for good; one that names none
-follows the current season. A champion binding names only a season, and the
-roster of the team that tops its standings earns it.
+A binding is synced only when its synced flag is set. Its scope says which
+seasons it reads: the current one, the season it names, or every season. A
+champion binding is scoped to one season, and the roster of the team that
+tops its standings earns it.
 """
 
 from typing import Annotated
@@ -18,12 +17,14 @@ from sqlalchemy import Index
 from sqlmodel import Field, SQLModel
 
 from app.models.base import DBModel
-from app.models.enums import RoleKind
+from app.models.enums import RoleKind, RoleScope
 from app.models.types import NumToStr
 
 
 class DiscordRoleBindingBase(SQLModel):
     kind: RoleKind
+    scope: RoleScope = Field(default=RoleScope.current)
+    # Read only by a binding scoped to a season
     season_id: int | None = Field(
         default=None, index=True, foreign_key="seasons.id", ondelete="CASCADE"
     )
@@ -51,6 +52,7 @@ class DiscordRoleBindingCreate(DiscordRoleBindingBase):
 
 class DiscordRoleBindingUpdate(SQLModel):
     kind: RoleKind | None = None
+    scope: RoleScope | None = None
     season_id: int | None = None
     team_id: int | None = None
     discord_role: Annotated[str | None, NumToStr] = None
@@ -83,6 +85,7 @@ class RoleGroup(SQLModel):
     """One group of accounts a binding can name, and how many earn it now."""
 
     kind: RoleKind
+    scope: RoleScope = RoleScope.current
     season_id: int | None = None
     team_id: int | None = None
     label: str

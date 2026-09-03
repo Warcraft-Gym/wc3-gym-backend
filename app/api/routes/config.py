@@ -15,6 +15,7 @@ from app.models.discord_role_binding import (
     GuildRole,
     RoleGroup,
 )
+from app.models.enums import RoleScope
 from app.models.settings import (
     GeneratedNightbotToken,
     Message,
@@ -201,9 +202,11 @@ def get_discord_guild_roles() -> list[GuildRole]:
 
 
 @router.get("/config/discord-role-groups", dependencies=[Depends(require_admin)])
-def get_discord_role_groups(season_id: int | None = None) -> list[RoleGroup]:
-    """Every group of accounts a binding can name, and how many earn it now."""
-    return discord_roles.role_groups(season_id)
+def get_discord_role_groups(
+    season_id: int | None = None, scope: RoleScope = RoleScope.current
+) -> list[RoleGroup]:
+    """Every group of accounts a binding of that scope can name, and how many earn it now."""
+    return discord_roles.role_groups(season_id, scope)
 
 
 @router.post("/config/discord-roles/sync", dependencies=[Depends(require_admin)])

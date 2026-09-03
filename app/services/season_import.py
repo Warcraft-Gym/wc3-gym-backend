@@ -24,7 +24,7 @@ from app.models.discord_role_binding import (
     DiscordRoleBinding,
     DiscordRoleBindingCreate,
 )
-from app.models.enums import Race, RoleKind
+from app.models.enums import Race, RoleKind, RoleScope
 from app.models.fantasy_bet import FantasyBet, FantasyBetCreate
 from app.models.fantasy_team import FantasyTeam, FantasyTeamCreate
 from app.models.map import Map, MapCreate
@@ -323,8 +323,9 @@ def _maps(session: OrmSession, sheets: Sheets, season: Season) -> dict[int, int]
 
 def _bind_team_role(session: OrmSession, team_id: int, role: Any) -> None:  # noqa: ANN401  # a cell holds text or a number
     """The Discord Role cell of a team binds that role to the team."""
+    # Teams and their rosters are all-time, so the binding reads every season
     value = DiscordRoleBindingCreate(
-        kind=RoleKind.team, team_id=team_id, discord_role=role
+        kind=RoleKind.team, scope=RoleScope.all, team_id=team_id, discord_role=role
     )
     binding = session.scalars(
         select(DiscordRoleBinding).where(
