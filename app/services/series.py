@@ -3,7 +3,7 @@ from sqlmodel import col
 
 from app.core import fantasy
 from app.core.db import Session
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import BadRequestError, NotFoundError
 from app.core.ordering import SortOrder, ordered
 from app.core.query import QueryElement, QueryUtil
 from app.models.match import Match
@@ -18,10 +18,17 @@ from app.models.series import (
 from app.services import derived
 
 
+def _both_scores(row: Series) -> None:
+    """A result is both map scores or neither: points() has no half result."""
+    if (row.player1_score is None) != (row.player2_score is None):
+        raise BadRequestError("A result needs both map scores")
+
+
 class SeriesService:
     def add(self, series: SeriesCreate) -> SeriesPublic:
         with Session.begin() as session:
             row = Series.add(session, series.model_dump())
+            _both_scores(row)
             public = SeriesPublic.from_series(row)
             derived.fill_series(session, [public])
             return public
@@ -33,6 +40,7 @@ class SeriesService:
             )
             if not row:
                 raise NotFoundError("Series not found")
+            _both_scores(row)
             public = SeriesPublic.from_series(row)
             derived.fill_series(session, [public])
             return public
