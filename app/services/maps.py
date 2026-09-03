@@ -95,13 +95,47 @@ class MapService:
             return [MapPublic.model_validate(map) for map in maps]
 
     def ladder_import_preview(self) -> list[LadderMapRow]:
-        """Every 1v1 ladder map, and whether the app already holds it."""
+        """Every 1v1 ladder map, and whether the app already holds it, then
+        every map the app holds off the ladder whose picture warcraft3.info has."""
         with Session.begin() as session:
-            known = _known(Map.get_all(session))
-        rows = ladder_maps.ladder_maps()
+            maps = Map.get_all(session)
+            known = _known(maps)
+            shortnames = {ident(map): map.shortname for map in maps}
+            taken = {map.shortname.lower() for map in maps if map.shortname}
+            unpictured = [
+                (ident(map), map.name, map.shortname)
+                for map in maps
+                if map.name and not map.image
+            ]
+        by_base = ladder_maps.map_index()
+        rows = ladder_maps.ladder_rows(by_base)
+        on_ladder = set()
         for row in rows:
-            if known(row.w3c_name) is not None:
+            map_id = known(row.w3c_name)
+            if map_id is not None:
+                # the short name shown is the one the map will have: a known map keeps its own
                 row.status = "known"
+                row.shortname = shortnames[map_id]
+                on_ladder.add(map_id)
+            elif map_id is None:
+                row.shortname = ladder_maps.free_shortname(
+                    row.shortname, row.w3c_name, taken
+                )
+                taken.add(row.shortname.lower())
+        for map_id, name, shortname in unpictured:
+            if map_id in on_ladder:
+                continue
+            found = ladder_maps.lookup(name, by_base)
+            if found.image_url:
+                rows.append(
+                    LadderMapRow(
+                        w3c_name=name,
+                        matched_name=found.matched_name,
+                        shortname=shortname,
+                        image_url=found.image_url,
+                        status="off_ladder",
+                    )
+                )
         return rows
 
     def import_ladder_maps(self, names: list[str]) -> list[int]:
@@ -110,14 +144,16 @@ class MapService:
         A map the app knows under an older name or spelling of the same lineage
         is renamed to the ladder name and keeps its id, results and short name;
         a missing picture is filled. Only a map with no lineage here is created.
-        No season pool changes.
+        A name off the ladder is a map the app holds: its picture is filled
+        from warcraft3.info and nothing else changes. No season pool changes.
 
         The picture is kept as the url warcraft3.info publishes it at, never copied into our own
         store: those bytes are already served from a CDN and cost us nothing where they are.
         """
+        by_base = ladder_maps.map_index()
         wanted = {
             row.w3c_name: row
-            for row in ladder_maps.ladder_maps()
+            for row in ladder_maps.ladder_rows(by_base)
             if row.w3c_name in set(names)
         }
         with Session.begin() as session:
@@ -133,9 +169,15 @@ class MapService:
         with Session.begin() as session:
             for name in dict.fromkeys(names):
                 row = wanted.get(name)
-                if not row:
-                    continue
                 map_id = known(name)
+                if not row:
+                    if map_id is None or map_id in pictured:
+                        continue
+                    found = ladder_maps.lookup(name, by_base)
+                    if found.image_url:
+                        Map.update(session, map_id, image=found.image_url)
+                        map_ids.append(map_id)
+                    continue
                 if map_id is None:
                     shortname = ladder_maps.free_shortname(row.shortname, name, taken)
                     taken.add(shortname.lower())

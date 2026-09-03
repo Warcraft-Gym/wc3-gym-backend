@@ -49,7 +49,8 @@ class LadderMapRow(SQLModel):
     status is `in_pool` when the season already plays it, `known` when the
     app holds it under this name or an older one of the same lineage,
     `no_match` when warcraft3.info knows no map of that name and version,
-    else `new`.
+    else `new`. A map the app holds off the ladder lists as `off_ladder`
+    when warcraft3.info has its picture; importing it fills the picture only.
     """
 
     w3c_name: str
