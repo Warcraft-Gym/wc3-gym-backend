@@ -493,10 +493,16 @@ class LadderService:
         self, session: OrmSession, user_id: int, rows: list[W3CLadderMatchCreate]
     ) -> None:
         """Insert the matches this player has no row for yet."""
+        if not rows:
+            return
+        # Only the ids in hand, not the player's whole history
         stored = set(
             session.scalars(
                 select(col(W3CLadderMatch.w3c_match_id)).where(
-                    col(W3CLadderMatch.user_id) == user_id
+                    col(W3CLadderMatch.user_id) == user_id,
+                    col(W3CLadderMatch.w3c_match_id).in_(
+                        [row.w3c_match_id for row in rows]
+                    ),
                 )
             )
         )
@@ -972,11 +978,25 @@ def _season_days(season: Season, games: dict[date, int]) -> list[LadderSeasonDay
 
 def _match_rows(
     session: OrmSession, scope: list[ColumnElement[bool]]
-) -> dict[int, list[W3CLadderMatch]]:
-    """Every scoped match, per player, oldest first. One statement for all."""
-    rows: dict[int, list[W3CLadderMatch]] = defaultdict(list)
-    for match in session.scalars(
-        select(W3CLadderMatch)
+) -> dict[int, list[Row]]:
+    """Every scoped match, per player, oldest first. One statement for all.
+
+    Only the columns the achievement rules read, so the statement returns
+    about half the bytes of the mapped row.
+    """
+    rows: dict[int, list[Row]] = defaultdict(list)
+    for match in session.execute(
+        select(
+            col(W3CLadderMatch.user_id),
+            col(W3CLadderMatch.won),
+            col(W3CLadderMatch.start_time),
+            col(W3CLadderMatch.duration_s),
+            col(W3CLadderMatch.map_name),
+            col(W3CLadderMatch.opp_race),
+            col(W3CLadderMatch.opp_battletag),
+            col(W3CLadderMatch.mmr_before),
+            col(W3CLadderMatch.mmr_after),
+        )
         .where(*scope)
         .order_by(
             col(W3CLadderMatch.user_id),
