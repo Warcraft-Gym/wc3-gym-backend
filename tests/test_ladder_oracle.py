@@ -8,7 +8,7 @@ compares.
 EXPECTED is the wc3.no GNL S18 table, read from the live page on
 2026-08-27, with the race each player is registered with. Its points column
 carries ladder points plus achievement points, so the comparison rebuilds
-the ladder points from its own wins and losses and adds core.achievements.
+the ladder points from its own wins and losses and adds the achievement rules.
 
 The race is part of the scope, not decoration: wc3.no asks w3champions for
 one race per player (`playerRace`), which matches the race the player
@@ -31,6 +31,7 @@ import requests
 from app.core import achievements, ladder
 from app.models.enums import Race
 from app.services.w3c import W3CService
+from tests import achievement_oracle
 
 # The real function, captured before conftest blocks third party calls.
 REAL_REQUEST = requests.Session.request
@@ -139,7 +140,7 @@ def test_our_numbers_match_wc3_no(
     opponents = frozenset(state["everyone"] - state["roster"][state["team_of"][tag]])
     captains = state["captains"]
     captain = tag in captains
-    earned = achievements.earned(
+    earned = achievement_oracle.earned(
         mine, totals.points, achievements.DEFAULT_PAID, opponents, captains, captain
     )
 
