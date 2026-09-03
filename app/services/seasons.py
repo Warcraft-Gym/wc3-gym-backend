@@ -30,6 +30,7 @@ from app.models.user import User, UserListPublic
 from app.services import ladder_maps
 from app.services.ladder import mmr_on
 from app.services.maps import MapService
+from app.services.series_veto import check_order
 from app.services.users import UserService
 
 logger = logging.getLogger(__name__)
@@ -75,6 +76,8 @@ class SeasonService:
             )
             if not row:
                 raise NotFoundError("Season not found")
+            if season.model_fields_set & {"pick_ban", "map_rules"}:
+                check_order(row)
             return _public(session, row)
 
     def delete(self, season_id: int) -> None:
@@ -282,6 +285,8 @@ class SeasonService:
                     session.delete(week_map)
             session.flush()
             session.refresh(season)
+            # A smaller pool may no longer carry the order
+            check_order(season)
             return _public(session, season)
 
     def add_user_signup(

@@ -31,12 +31,12 @@ def test_a_season_update_keeps_the_fields_it_was_not_given(
     before = client.get(f"/seasons/{season_id}").json()
 
     resp = client.put(
-        f"/seasons/{season_id}", headers=auth_headers, json={"pick_ban": "yes"}
+        f"/seasons/{season_id}", headers=auth_headers, json={"pick_ban": "Pick_A"}
     )
     assert resp.status_code == 200, resp.text
     after = resp.json()
 
-    assert after["pick_ban"] == "yes"
+    assert after["pick_ban"] == "Pick_A"
     for field in ("name", "number_weeks", "series_per_week", "start_date", "end_date"):
         assert after[field] == before[field], field
 
