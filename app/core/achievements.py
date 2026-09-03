@@ -168,7 +168,7 @@ HUMAN = Achievement(
     "human", 10, "A plague upon Humanity", "Win 10+ games vs. Human", "mdi-wizard-hat"
 )
 HOLIDAY = Achievement(
-    "holiday", 5, "I'm on holiday!", "Win a game on Tide Hunters", "mdi-palm-tree"
+    "holiday", 5, "I'm on holiday!", "Win a game on Tidehunters", "mdi-palm-tree"
 )
 WINTER = Achievement(
     "winter",
