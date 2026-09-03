@@ -22,6 +22,7 @@ from sqlalchemy import (
     extract,
     func,
     select,
+    tuple_,
     update,
 )
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
@@ -819,23 +820,17 @@ def _league_race(season_id: int | None) -> ColumnElement[bool]:
     keeps its numbers when he registers on another race later, and a season
     that holds no race for him scores nothing. The all-time answer spans
     seasons and has no signup to read, so it scores `users.race`.
+
+    The race is matched with a row value against the whole set of league
+    races, so the database reads it once per player instead of once per match.
     """
     if season_id is None:
-        race = (
-            select(col(User.race))
-            .where(col(User.id) == W3CLadderMatch.user_id)
-            .scalar_subquery()
-        )
+        races = select(col(User.id), col(User.race))
     else:
-        race = (
-            select(col(DBUserSeasonSignup.race))
-            .where(
-                col(DBUserSeasonSignup.user_id) == W3CLadderMatch.user_id,
-                col(DBUserSeasonSignup.season_id) == season_id,
-            )
-            .scalar_subquery()
-        )
-    return col(W3CLadderMatch.race) == race
+        races = select(
+            col(DBUserSeasonSignup.user_id), col(DBUserSeasonSignup.race)
+        ).where(col(DBUserSeasonSignup.season_id) == season_id)
+    return tuple_(col(W3CLadderMatch.user_id), col(W3CLadderMatch.race)).in_(races)
 
 
 def _mmr_scope(
