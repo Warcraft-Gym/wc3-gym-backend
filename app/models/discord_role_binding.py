@@ -9,6 +9,9 @@ A binding is synced only when its synced flag is set. Its scope says which
 seasons it reads: the current one, the season it names, or every season. A
 champion binding is scoped to one season, and the roster of the team that
 tops its standings earns it.
+
+A hidden role is one an admin marked as none of the app's business, so it
+can never be bound.
 """
 
 from typing import Annotated
@@ -63,6 +66,17 @@ class DiscordRoleBindingPublic(DiscordRoleBindingBase):
     id: int
 
 
+class DiscordRoleHiddenWrite(SQLModel):
+    """A guild role an admin hid, which the app must never bind or sync."""
+
+    # The role page sends the id as a number, and a role id is a snowflake
+    discord_role: Annotated[str, NumToStr] = Field(max_length=50, primary_key=True)
+
+
+class DiscordRoleHidden(DiscordRoleHiddenWrite, DBModel, table=True):
+    __tablename__ = "discord_role_hidden"
+
+
 class DiscordRoleSyncWrite(SQLModel):
     """Whom to sync. Without user_ids every flagged account, without role_ids every bound role."""
 
@@ -79,6 +93,8 @@ class GuildRole(SQLModel):
     position: int
     members: int
     manageable: bool
+    # Set by discord_roles.guild_roles from the roles an admin hid
+    hidden: bool = False
 
 
 class RoleGroup(SQLModel):

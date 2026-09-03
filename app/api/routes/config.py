@@ -10,6 +10,7 @@ from app.models.discord_role_binding import (
     DiscordRoleBindingCreate,
     DiscordRoleBindingPublic,
     DiscordRoleBindingUpdate,
+    DiscordRoleHiddenWrite,
     DiscordRoleReport,
     DiscordRoleSyncWrite,
     GuildRole,
@@ -28,7 +29,7 @@ from app.models.settings import (
     SettingWrite,
     W3CConfig,
 )
-from app.services import admins, discord, discord_roles
+from app.services import admins, discord_roles
 from app.services.w3c import W3CService
 
 logger = logging.getLogger(__name__)
@@ -189,6 +190,26 @@ def delete_discord_role_binding(binding_id: int) -> None:
     discord_roles.delete_binding(binding_id)
 
 
+@router.post(
+    "/config/discord-hidden-roles",
+    status_code=201,
+    dependencies=[Depends(require_admin)],
+)
+def hide_discord_role(data: DiscordRoleHiddenWrite) -> DiscordRoleHiddenWrite:
+    """Hide a guild role the app must never touch. Every admin sees it hidden."""
+    return discord_roles.hide_role(data.discord_role)
+
+
+@router.delete(
+    "/config/discord-hidden-roles/{discord_role}",
+    status_code=204,
+    dependencies=[Depends(require_admin)],
+)
+def unhide_discord_role(discord_role: str) -> None:
+    """Show the role again, so a binding can name it."""
+    discord_roles.unhide_role(discord_role)
+
+
 @router.get("/config/discord-roles", dependencies=[Depends(require_admin)])
 def get_discord_role_report() -> list[DiscordRoleReport]:
     """Every account whose guild roles differ from what the database says."""
@@ -198,7 +219,7 @@ def get_discord_role_report() -> list[DiscordRoleReport]:
 @router.get("/config/discord-guild-roles", dependencies=[Depends(require_admin)])
 def get_discord_guild_roles() -> list[GuildRole]:
     """Every guild role the page lists, highest in the Discord list first."""
-    return discord.guild_roles()
+    return discord_roles.guild_roles()
 
 
 @router.get("/config/discord-role-groups", dependencies=[Depends(require_admin)])

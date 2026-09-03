@@ -26,6 +26,8 @@ BEFORE_CAPTAIN_TABLE = "5f4a1a4d88d3"
 BEFORE_ROLE_BINDINGS = "b3f9d7c21a48"
 # The revision before a binding carries the seasons it reads
 BEFORE_ROLE_SCOPE = "a1c7f4b09d36"
+# The revision before an admin can hide a role
+BEFORE_HIDDEN_ROLES = "b6d2f04a83c1"
 # The revision before the season setting is spelled w3c
 BEFORE_W3C_SEASON_KEY = "5f4a1a4d88d3"
 # The revision before the fantasy tier lives on the season signup row
@@ -455,3 +457,13 @@ def test_a_binding_that_names_a_season_becomes_a_season_binding(tmp_path: Path) 
     assert "scope" not in {
         column["name"] for column in inspect(engine).get_columns("discord_role_binding")
     }
+
+
+def test_the_hidden_roles_table_is_created_and_dropped(tmp_path: Path) -> None:
+    url = fresh_database(tmp_path, "hidden-roles")
+    upgrade_to_head(url)
+    engine = create_engine(url)
+
+    assert "discord_role_hidden" in inspect(engine).get_table_names()
+    downgrade_to(url, BEFORE_HIDDEN_ROLES)
+    assert "discord_role_hidden" not in inspect(engine).get_table_names()

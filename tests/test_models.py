@@ -18,6 +18,7 @@ TABLES = {
     "admin_grant",
     "clerk_account",
     "discord_role_binding",
+    "discord_role_hidden",
     "draft_series",
     "fantasy_bets",
     "fantasy_team_player",

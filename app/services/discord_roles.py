@@ -29,7 +29,10 @@ from app.models.discord_role_binding import (
     DiscordRoleBindingCreate,
     DiscordRoleBindingPublic,
     DiscordRoleBindingUpdate,
+    DiscordRoleHidden,
+    DiscordRoleHiddenWrite,
     DiscordRoleReport,
+    GuildRole,
     RoleGroup,
 )
 from app.models.enums import RoleKind, RoleScope
@@ -292,6 +295,41 @@ def bindings() -> list[DiscordRoleBindingPublic]:
         return answer
 
 
+def guild_roles() -> list[GuildRole]:
+    """Every guild role, with the ones an admin hid flagged as hidden."""
+    roles = discord.guild_roles()
+    with Session.begin() as session:
+        hidden = set(session.scalars(select(col(DiscordRoleHidden.discord_role))))
+    for role in roles:
+        role.hidden = role.id in hidden
+    return roles
+
+
+def hide_role(discord_role: str) -> DiscordRoleHiddenWrite:
+    """Hide a role the app must never touch. Hiding a hidden role changes nothing."""
+    with Session.begin() as session:
+        bound = session.scalar(
+            select(DiscordRoleBinding).where(
+                col(DiscordRoleBinding.discord_role) == discord_role
+            )
+        )
+        if bound is not None:
+            raise BadRequestError("Unbind the role before hiding it")
+        row = session.get(DiscordRoleHidden, discord_role)
+        if row is None:
+            row = DiscordRoleHidden.add(session, {"discord_role": discord_role})
+        return DiscordRoleHiddenWrite.model_validate(row)
+
+
+def unhide_role(discord_role: str) -> None:
+    """Show the role again, so a binding can name it."""
+    with Session.begin() as session:
+        row = session.get(DiscordRoleHidden, discord_role)
+        if row is None:
+            raise NotFoundError(f"Discord role is not hidden: {discord_role}")
+        session.delete(row)
+
+
 def _group_key(group: RoleGroup) -> str:
     """The synthetic role id a group is counted under."""
     return f"{group.kind.value}:{group.team_id or ''}"
@@ -374,6 +412,12 @@ def _manageable(discord_role: str) -> None:
         )
 
 
+def _unhidden(session: OrmSession, discord_role: str) -> None:
+    """Refuse a role an admin hid: the app must never touch it."""
+    if session.get(DiscordRoleHidden, discord_role) is not None:
+        raise BadRequestError("Unhide the role before binding it")
+
+
 def _check(binding: DiscordRoleBindingBase) -> None:
     """Refuse a binding no account could ever earn, and drop a season its scope never reads."""
     if binding.kind is RoleKind.admin:
@@ -398,6 +442,7 @@ def add_binding(data: DiscordRoleBindingCreate) -> DiscordRoleBindingPublic:
     _check(data)
     _manageable(data.discord_role)
     with Session.begin() as session:
+        _unhidden(session, data.discord_role)
         binding = DiscordRoleBinding.add(session, data.model_dump())
         return DiscordRoleBindingPublic.model_validate(binding)
 
@@ -412,6 +457,7 @@ def update_binding(
         if not binding:
             raise NotFoundError(f"Discord role binding not found by id: {binding_id}")
         _check(binding)
+        _unhidden(session, binding.discord_role)
         _manageable(binding.discord_role)
         return DiscordRoleBindingPublic.model_validate(binding)
 

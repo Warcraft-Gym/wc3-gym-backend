@@ -351,6 +351,7 @@ def test_the_guild_roles_route_lists_the_guild_top_first(
             "position": 9,
             "members": 1,
             "manageable": False,
+            "hidden": False,
         },
         {
             "id": "bot-role",
@@ -359,6 +360,7 @@ def test_the_guild_roles_route_lists_the_guild_top_first(
             "position": 5,
             "members": 0,
             "manageable": False,
+            "hidden": False,
         },
         {
             "id": "team-a",
@@ -367,6 +369,7 @@ def test_the_guild_roles_route_lists_the_guild_top_first(
             "position": 2,
             "members": 2,
             "manageable": True,
+            "hidden": False,
         },
     ]
 
@@ -687,3 +690,84 @@ def test_the_binding_list_names_the_derived_champion(
     assert [(row["kind"], row["team_id"]) for row in rows] == [
         ("champion", seeded["team_a_id"])
     ]
+
+
+def test_a_hidden_role_is_flagged_and_shown_again_when_unhidden(
+    client: Client,
+    monkeypatch: pytest.MonkeyPatch,
+    auth_headers: dict[str, str],
+) -> None:
+    """The page still lists a hidden role; only its flag says the app leaves it alone."""
+    _guild(monkeypatch, {})
+
+    hidden = client.post(
+        "/config/discord-hidden-roles",
+        json={"discord_role": "above-the-bot"},
+        headers=auth_headers,
+    )
+    assert hidden.status_code == 201, hidden.text
+    assert hidden.json() == {"discord_role": "above-the-bot"}
+    # Hiding it twice is the same one row
+    assert (
+        client.post(
+            "/config/discord-hidden-roles",
+            json={"discord_role": "above-the-bot"},
+            headers=auth_headers,
+        ).status_code
+        == 201
+    )
+
+    roles = client.get("/config/discord-guild-roles", headers=auth_headers).json()
+    assert [(role["id"], role["hidden"]) for role in roles] == [
+        ("above-the-bot", True),
+        ("bot-role", False),
+        ("team-a", False),
+    ]
+
+    gone = client.delete(
+        "/config/discord-hidden-roles/above-the-bot", headers=auth_headers
+    )
+    assert gone.status_code == 204
+    repeat = client.delete(
+        "/config/discord-hidden-roles/above-the-bot", headers=auth_headers
+    )
+    assert repeat.status_code == 404
+    assert repeat.json() == {"error": "Discord role is not hidden: above-the-bot"}
+
+
+def test_hiding_a_bound_role_answers_400(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    _bind(RoleKind.team, "team-a", team_id=seeded["team_a_id"])
+
+    resp = client.post(
+        "/config/discord-hidden-roles",
+        json={"discord_role": "team-a"},
+        headers=auth_headers,
+    )
+
+    assert resp.status_code == 400, resp.text
+    assert resp.json() == {"error": "Unbind the role before hiding it"}
+
+
+def test_binding_a_hidden_role_answers_400(
+    client: Client,
+    monkeypatch: pytest.MonkeyPatch,
+    auth_headers: dict[str, str],
+    seeded: dict[str, Any],
+) -> None:
+    _guild(monkeypatch, {})
+    client.post(
+        "/config/discord-hidden-roles",
+        json={"discord_role": "team-a"},
+        headers=auth_headers,
+    )
+
+    resp = client.post(
+        "/config/discord-role-bindings",
+        json={"kind": "team", "team_id": seeded["team_a_id"], "discord_role": "team-a"},
+        headers=auth_headers,
+    )
+
+    assert resp.status_code == 400, resp.text
+    assert resp.json() == {"error": "Unhide the role before binding it"}
