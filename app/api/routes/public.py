@@ -531,7 +531,7 @@ def _veto_viewer(
     token: str | None,
     user_service: UserServiceDep,
 ) -> int | None:
-    """The player behind the request, or null for an admin, who only reads."""
+    """The player behind the request, or null for an admin, who edits either side."""
     if credentials is not None:
         claims = require_login(request, credentials)
         if claims.get("role") == "admin" or claims.get("sub") == "admin":
@@ -562,10 +562,9 @@ def set_player_series_veto(
     credentials: Credentials,
     data: SeriesVetoWrite,
 ) -> SeriesVetoPublic:
-    """Take the next step of the veto, or take back your own last one."""
+    """Take the next step of the veto, or take back your own last one. An admin
+    enters the step for whichever side is next and takes back any last step."""
     viewer = _veto_viewer(request, credentials, data.token, user_service)
-    if viewer is None:
-        raise ApiError(403, {"error": "not_authorized_for_this_series"})
     return veto_service.take(series_id, viewer, data.action, data.map_id)
 
 

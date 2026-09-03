@@ -39,17 +39,19 @@ class SeriesVetoService:
             return _board(session, _series(session, series_id, user_id), user_id)
 
     def take(
-        self, series_id: int, user_id: int, action: str, map_id: int | None
+        self, series_id: int, user_id: int | None, action: str, map_id: int | None
     ) -> SeriesVetoPublic:
         """Take the step the order names next, record it for whichever side the
         order names when the veto happened elsewhere, or take back the last step
-        the viewer entered."""
+        the viewer entered. A null user is an admin: any side, any last step."""
         with Session.begin() as session:
             series = _series(session, series_id, user_id)
             steps = _steps(session, series_id)
             side = "A" if user_id == series.player1_id else "B"
             if action == "undo":
-                if not steps or user_id not in (
+                if not steps:
+                    raise BadRequestError("The last step is not yours to take back")
+                if user_id is not None and user_id not in (
                     steps[-1].entered_by,
                     series.player1_id if steps[-1].side == "A" else series.player2_id,
                 ):
@@ -60,7 +62,7 @@ class SeriesVetoService:
                     session,
                     series,
                     steps,
-                    None if action == "record" else side,
+                    None if action == "record" or user_id is None else side,
                     map_id,
                     user_id,
                 )
@@ -146,7 +148,7 @@ def _take_step(
     steps: list[DBSeriesVetoStep],
     side: str | None,
     map_id: int | None,
-    user_id: int,
+    user_id: int | None,
 ) -> None:
     """A null side records the step for whichever side the order names next."""
     season = series.match.season
