@@ -31,7 +31,7 @@ from app.models.user_team_season import DBUserTeamSeason
 from app.models.w3c_ladder_match import W3CLadderMatch, W3CLadderMatchCreate
 from app.models.w3c_stats import W3CStats, W3CStatsCreate
 from app.services import w3c as w3c_module
-from app.services.ladder import ALL_TIME, LadderService
+from app.services.ladder import ALL_TIME, FIRST_W3C_SEASON, LadderService
 from app.services.users import W3C_SYNC_WORKERS, UserService
 from app.services.w3c import THROTTLED_MESSAGE, W3CService
 
@@ -907,22 +907,22 @@ def test_the_cron_route_syncs_members_off_season(
 
     assert resp.status_code == 200
     assert resp.json() == {"synced": [player], "skipped": [], "failed": []}
-    assert fake.seasons() == list(range(W3C_SEASON, -1, -1))
+    assert fake.seasons() == list(range(W3C_SEASON, FIRST_W3C_SEASON - 1, -1))
 
 
 def test_the_member_sync_reads_every_season_once(
     app: FastAPI, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The first run asks every w3champions season from the open one down;
-    the next asks the open season alone, from its stamp."""
+    """The first run asks every w3champions season from the open one down to
+    the first stored one; the next asks the open season alone, from its stamp."""
     thanks = add_player("thanks", "thanks#11187")
     fake = serve(monkeypatch, {W3C_SEASON: THANKS[:3]})
 
     LadderService().sync_members([thanks], timedelta(0))
 
-    assert fake.seasons() == list(range(W3C_SEASON, -1, -1))
+    assert fake.seasons() == list(range(W3C_SEASON, FIRST_W3C_SEASON - 1, -1))
     ledger = ledger_of(thanks.id)
-    assert set(ledger) == set(range(W3C_SEASON, -1, -1))
+    assert set(ledger) == set(range(W3C_SEASON, FIRST_W3C_SEASON - 1, -1))
     assert all(row.read_from == ALL_TIME for row in ledger.values())
     stamp = ledger[W3C_SEASON].synced_at
     fake.calls.clear()

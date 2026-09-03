@@ -22,7 +22,7 @@ DRAIN_SECONDS = 50
 
 @router.get("/jobs/w3c-sync")
 def sync_w3c_cron(credentials: Credentials, service: LadderServiceDep) -> W3CSyncResult:
-    """The stalest members, over their whole ladder history, one wave at a
+    """The stalest members, over their stored ladder history, one wave at a
     time, for Vercel Cron. A member is anyone signed up for a season. It
     stops when the time is up, when a wave comes around to players this run
     stamped, or when a wave syncs nobody.

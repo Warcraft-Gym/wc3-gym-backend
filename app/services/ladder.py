@@ -65,7 +65,9 @@ from app.models.w3c_stats import W3CSyncFailure, W3CSyncResult
 from app.services.users import SYNC_MAX_AGE, W3C_SYNC_WORKERS, UserService
 from app.services.w3c import THROTTLED_MESSAGE, W3CService
 
-# The window of a player's whole ladder history
+# The stored ladder history starts at w3champions season 23, where GNL S17 began
+FIRST_W3C_SEASON = 23
+# The window of a player's whole stored ladder history
 ALL_TIME = datetime.combine(date.min, time.min, UTC)
 
 if TYPE_CHECKING:
@@ -264,11 +266,12 @@ class LadderService:
     def sync_members(
         self, users: Sequence[UserReduced], max_age: timedelta
     ) -> W3CSyncResult:
-        """Sync these players over their whole ladder history.
+        """Sync these players over their whole stored ladder history.
 
-        Every w3champions season from the open one down is asked for; the
-        ledger skips a season read to its end, so a known player costs one
-        page a run and a new one about a call per season, once.
+        Every w3champions season from the open one down to the first stored
+        one is asked for; the ledger skips a season read to its end, so a
+        known player costs one page a run and a new one a call per season,
+        once.
         """
         pending, skipped = self._pending(users, max_age)
         seasons: list[int] = []
@@ -276,7 +279,7 @@ class LadderService:
             open_season = W3CService(
                 settings_app_service=self.settings_app_service
             ).current_season()
-            seasons = list(range(open_season, -1, -1))
+            seasons = list(range(open_season, FIRST_W3C_SEASON - 1, -1))
         result = self.sync_users(pending, ALL_TIME, seasons)
         result.skipped = skipped
         return result
