@@ -533,6 +533,46 @@ def test_the_open_season_is_read_again_from_its_own_stamp(
     assert fake.since[W3C_SEASON] == stamp
 
 
+def test_a_window_that_starts_earlier_reads_the_season_again_from_its_start(
+    app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A season first read for a late window is read again for an earlier one,
+    from the earlier start, and the ledger keeps the earliest start."""
+    thanks = add_player("thanks", "thanks#11187")
+    fake = serve(monkeypatch, {W3C_SEASON: THANKS[:3]})
+    late = SINCE + timedelta(days=200)
+
+    LadderService().sync_users([thanks], late, [W3C_SEASON])
+    assert ledger_of(thanks.id)[W3C_SEASON].read_from == late
+    LadderService().sync_users([thanks], SINCE, [W3C_SEASON])
+
+    assert fake.since[W3C_SEASON] == SINCE
+    assert ledger_of(thanks.id)[W3C_SEASON].read_from == SINCE
+    # The late window sits inside the earliest read, so it reads from the stamp
+    stamp = ledger_of(thanks.id)[W3C_SEASON].synced_at
+    LadderService().sync_users([thanks], late, [W3C_SEASON])
+    assert fake.since[W3C_SEASON] == stamp
+    assert ledger_of(thanks.id)[W3C_SEASON].read_from == SINCE
+
+
+def test_a_row_that_does_not_say_where_it_was_read_from_is_read_again(
+    app: FastAPI, seeded: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A ledger row older than the read_from column is trusted once less."""
+    player = seeded["player_ids"][0]
+    sign_up(seeded["season_id"], player)
+    store_match(player, W3C_SEASON - 1, datetime(2026, 1, 10, tzinfo=UTC))
+    mark(player, W3C_SEASON - 1, complete=True)
+    fake = serve(monkeypatch, {})
+
+    LadderService().sync_season(seeded["season_id"])
+
+    assert fake.seasons() == [W3C_SEASON - 1]
+    assert ledger_of(player)[W3C_SEASON - 1].read_from == datetime(
+        2026, 1, 5, tzinfo=UTC
+    )
+
+
 def test_the_first_sync_of_a_window_walks_and_writes_what_it_found(
     app: FastAPI, seeded: dict[str, Any], monkeypatch: pytest.MonkeyPatch
 ) -> None:

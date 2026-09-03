@@ -452,6 +452,7 @@ class LadderService:
                         col(LadderSync.wc3_season),
                         col(LadderSync.synced_at),
                         col(LadderSync.complete),
+                        col(LadderSync.read_from),
                     ).where(col(LadderSync.user_id) == user.id)
                 )
             }
@@ -469,7 +470,7 @@ class LadderService:
                 for season in plan.seasons:
                     row = ledger.get(season)
                     is_open = season == plan.open_season
-                    if not _read_to_the_end(row, is_open):
+                    if not _read_to_the_end(row, is_open, plan.since):
                         wanted.append((season, _since_of(row, is_open, plan.since)))
                 matches, complete = w3c_service.get_player_matches(
                     user.battleTag, wanted
@@ -493,7 +494,7 @@ class LadderService:
             # The ledger names the seasons this run read; a skipped one keeps
             # the stamp of the run that read it
             for season, done in complete.items():
-                self._stamp(session, user.id, season, stamp, done)
+                self._stamp(session, user.id, season, stamp, done, plan.since)
             # The stamp says when the app last asked, not that matches were found
             session.execute(
                 update(User)
@@ -510,8 +511,10 @@ class LadderService:
         season: int,
         stamp: datetime,
         complete: bool,
+        read_from: datetime,
     ) -> None:
-        """Record that this player's w3champions season was read just now."""
+        """Record that this player's w3champions season was read just now,
+        and the earliest instant any run read it from."""
         row = session.scalar(
             select(LadderSync).where(
                 col(LadderSync.user_id) == user_id, col(LadderSync.wc3_season) == season
@@ -525,11 +528,14 @@ class LadderService:
                     "wc3_season": season,
                     "synced_at": stamp,
                     "complete": complete,
+                    "read_from": read_from,
                 },
             )
             return
         row.synced_at = stamp
         row.complete = complete
+        if row.read_from is None or read_from < row.read_from:
+            row.read_from = read_from
 
     def _write_matches(
         self, session: OrmSession, user_id: int, rows: list[W3CLadderMatchCreate]
@@ -647,18 +653,29 @@ def mmr_on(
     return result
 
 
-def _read_to_the_end(row: Row | None, open_season: bool) -> bool:
-    """A closed w3champions season read to its end is never read again.
+def _read_to_the_end(row: Row | None, open_season: bool, start: datetime) -> bool:
+    """A closed w3champions season read to its end, from the start of this
+    window or earlier, is never read again.
 
-    The open season always is: it takes new matches after every run.
+    The open season always is: it takes new matches after every run. A row
+    that does not say where it was read from is read again.
     """
-    return row is not None and row.complete and not open_season
+    return (
+        row is not None
+        and row.complete
+        and not open_season
+        and row.read_from is not None
+        and row.read_from <= start
+    )
 
 
 def _since_of(row: Row | None, open_season: bool, start: datetime) -> datetime:
     """The open season is read again from its own stamp; every other season is
-    read from the start of the window."""
-    return row.synced_at if row is not None and open_season else start
+    read from the start of the window. A window that starts before the
+    earliest read of the season reads it from the window start."""
+    if row is None or row.read_from is None or start < row.read_from:
+        return start
+    return row.synced_at if open_season else start
 
 
 def _w3c_seasons_for(session: OrmSession, season: Season) -> list[int]:
