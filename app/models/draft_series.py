@@ -23,8 +23,8 @@ class DraftSeriesBase(SQLModel):
     caster: Annotated[str | None, NumToStr] = Field(default=None, max_length=50)
     player1_id: int = Field(index=True, foreign_key="users.id")
     player2_id: int = Field(index=True, foreign_key="users.id")
-    player1_score: int | None = 0
-    player2_score: int | None = 0
+    player1_score: int | None = None
+    player2_score: int | None = None
     host_player_id: int
     is_fantasy_match: bool | None = False
 

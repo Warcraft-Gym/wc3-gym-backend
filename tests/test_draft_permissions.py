@@ -95,3 +95,23 @@ def test_promote_stays_an_admin_act(
 
     resp = client.post(f"/draft-series/{draft_id}/promote", headers=captain)
     assert resp.status_code == 403, resp.text
+
+
+def test_a_promoted_draft_is_unplayed(
+    client: Client,
+    seeded: dict[str, Any],
+    captain: dict[str, str],
+    auth_headers: dict[str, str],
+) -> None:
+    """A draft carries no score, so the published series counts as unscored."""
+    body = {**draft_body(seeded), "player2_id": seeded["player_ids"][3]}
+    resp = client.post("/draft-series", json=body, headers=captain)
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["player1_score"] is None
+
+    resp = client.post(
+        f"/draft-series/{resp.json()['id']}/promote", headers=auth_headers
+    )
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["player1_score"] is None
+    assert resp.json()["player2_score"] is None
