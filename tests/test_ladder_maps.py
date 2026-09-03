@@ -309,3 +309,59 @@ def test_a_source_that_is_down_answers_502(
 
     assert resp.status_code == 502
     assert "error" in resp.json()
+
+
+def test_the_global_preview_says_which_maps_the_app_knows(
+    client: Client,
+    seeded: dict[str, Any],
+    auth_headers: dict[str, str],
+    sources: list[str],
+) -> None:
+    """The maps page has no pool: a map the app holds under an older name is known."""
+    with Session.begin() as session:
+        Map.update(session, seeded["map_id"], name="Autumn Leaves")
+    new_map("Echo Isles", "EI")
+
+    resp = client.get("/maps/ladder-import", headers=auth_headers)
+
+    assert resp.status_code == 200, resp.text
+    listed = {row["w3c_name"]: row for row in resp.json()}
+    assert listed["Autumn Leaves v2"]["status"] == "known"
+    assert listed["Echo Isles v2"]["status"] == "known"
+    assert listed["Turtle Rock v2"]["status"] == "new"
+    assert listed["Nonesuch"]["status"] == "no_match"
+    # The season preview still tells its pool apart from the rest the app knows
+    season = rows(client, seeded["season_id"], auth_headers)
+    assert season["Autumn Leaves v2"]["status"] == "in_pool"
+    assert season["Echo Isles v2"]["status"] == "known"
+
+
+def test_the_global_import_renames_and_pictures_without_touching_a_pool(
+    client: Client,
+    seeded: dict[str, Any],
+    auth_headers: dict[str, str],
+    sources: list[str],
+) -> None:
+    new_map("Echo Isles", "EI")
+
+    resp = client.post(
+        "/maps/ladder-import",
+        json={"names": ["Echo Isles v2", "Nonesuch"]},
+        headers=auth_headers,
+    )
+
+    assert resp.status_code == 200, resp.text
+    imported = resp.json()
+    assert [(map["name"], map["shortname"]) for map in imported] == [
+        ("Echo Isles v2", "EI"),
+        ("Nonesuch", "N"),
+    ]
+    assert imported[0]["image"].endswith("/echo.png")
+    # Renamed in place, and the season pool is what it was
+    assert sorted(map["name"] for map in client.get("/maps").json()) == [
+        "Concealed Hill",
+        "Echo Isles v2",
+        "Nonesuch",
+    ]
+    pool = client.get(f"/seasons/{seeded['season_id']}").json()["maps"]
+    assert [map["name"] for map in pool] == ["Concealed Hill"]
