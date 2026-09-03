@@ -295,7 +295,11 @@ def test_the_default_order_holds_without_a_sort(
             method, url, headers=auth_headers if "/draft-series" in path else {}
         )
     assert resp.status_code == 200, url
-    assert order_fragments(statements) == DEFAULT_ORDER[f"{method} {path}"]
+    fragments = order_fragments(statements)
+    expected = DEFAULT_ORDER[f"{method} {path}"]
+    assert fragments[0] == expected[0]
+    # Sibling eager loads run in hash order (mapper._prop_set is a frozenset)
+    assert sorted(fragments[1:]) == sorted(expected[1:])
 
 
 def test_the_sort_names_are_declared_once() -> None:
