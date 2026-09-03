@@ -27,8 +27,8 @@ class DBUserSeasonSignup(DBModel, table=True):
     race: Race | None = None
     # The fantasy tier this season cut the player into, null when not allocated
     fantasy_tier: int | None = None
-    # Set by an admin during the draft; null means the ladder MMR stands
-    mmr_override: int | None = None
+    # The slot an admin moved the player to in the draft order; null sorts by MMR
+    draft_position: int | None = None
     user: "User" = Relationship(back_populates="signup_seasons")
     season: "Season" = Relationship(back_populates="signup_users")
 

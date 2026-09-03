@@ -408,7 +408,7 @@ class SeasonService:
                         user_public.fantasy_tier_pinned = (
                             signup.fantasy_tier is not None and applied is not None
                         )
-                        user_public.mmr_override = signup.mmr_override
+                        user_public.draft_position = signup.draft_position
                         mmr = mmrs.get((signup.user_id, signup.race))
                         user_public.fantasy_tier = signup.fantasy_tier or (
                             tier_of(mmr, cuts) if mmr is not None and cuts else None

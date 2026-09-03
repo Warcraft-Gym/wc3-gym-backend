@@ -37,7 +37,7 @@ BEFORE_USER_TIER_DROP = "d5e8b1c47a90"
 BEFORE_COUNT_DROP = "c4d1e7f9a2b3"
 # The revision before the ledger records where a season was read from
 BEFORE_READ_FROM = "d7b3e5a91c26"
-# The revision before a signup carries a draft MMR
+# The revision before a signup carries a draft position
 BEFORE_MMR_OVERRIDE = "c8e2a6d4f913"
 
 
@@ -486,14 +486,14 @@ def test_the_ledger_read_from_column_is_added_and_dropped(tmp_path: Path) -> Non
     assert "read_from" not in columns()
 
 
-def test_the_signup_mmr_override_column_is_added_and_dropped(tmp_path: Path) -> None:
-    url = fresh_database(tmp_path, "mmr-override")
+def test_the_signup_draft_position_column_is_added_and_dropped(tmp_path: Path) -> None:
+    url = fresh_database(tmp_path, "draft-position")
     upgrade_to_head(url)
     engine = create_engine(url)
 
     def columns() -> set[str]:
         return {c["name"] for c in inspect(engine).get_columns("user_season_signup")}
 
-    assert "mmr_override" in columns()
+    assert "draft_position" in columns()
     downgrade_to(url, BEFORE_MMR_OVERRIDE)
-    assert "mmr_override" not in columns()
+    assert "draft_position" not in columns()

@@ -1,7 +1,7 @@
-"""Store a draft MMR per signup
+"""Store a draft position per signup
 
-An admin sets it during the season draft when the ladder MMR misreads a
-player. Null means the ladder MMR stands.
+An admin moves a player in the draft order when the ladder MMR misreads
+him. Null means the player sorts by MMR.
 
 Revision ID: e4b7a1c9d2f6
 Revises: c8e2a6d4f913
@@ -24,9 +24,9 @@ depends_on: str | Sequence[str] | None = None
 def upgrade() -> None:
     op.add_column(
         "user_season_signup",
-        sa.Column("mmr_override", sa.Integer(), nullable=True),
+        sa.Column("draft_position", sa.Integer(), nullable=True),
     )
 
 
 def downgrade() -> None:
-    op.drop_column("user_season_signup", "mmr_override")
+    op.drop_column("user_season_signup", "draft_position")

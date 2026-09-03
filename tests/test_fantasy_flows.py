@@ -493,40 +493,40 @@ def test_each_season_keeps_its_own_tiers(
     assert _tier_of(client, second, p1) == 5
 
 
-def test_a_signup_carries_the_draft_mmr_an_admin_sets(
+def test_a_signup_carries_the_draft_position_an_admin_sets(
     client: Client, seeded: dict[str, Any], auth_headers: dict[str, str]
 ) -> None:
-    """PUT sets the override on the signup row, null clears it, no signup is 404."""
+    """PUT sets the position on the signup row, null clears it, no signup is 404."""
     season = seeded["season_id"]
     p1, p2 = seeded["player_ids"][:2]
     client.post(
         f"/seasons/{season}/signups", json={"user_ids": [p1]}, headers=auth_headers
     )
 
-    def override() -> int | None:
+    def position() -> int | None:
         rows = get_json(client, f"/seasons/{season}/signups")
-        return next(row["mmr_override"] for row in rows if row["id"] == p1)
+        return next(row["draft_position"] for row in rows if row["id"] == p1)
 
-    assert override() is None
+    assert position() is None
     resp = client.put(
         f"/seasons/{season}/signups/{p1}",
-        json={"mmr_override": 1800},
+        json={"draft_position": 12},
         headers=auth_headers,
     )
     assert resp.status_code == 200
-    assert override() == 1800
+    assert position() == 12
     resp = client.put(
         f"/seasons/{season}/signups/{p1}",
-        json={"mmr_override": None},
+        json={"draft_position": None},
         headers=auth_headers,
     )
     assert resp.status_code == 200
-    assert override() is None
+    assert position() is None
     resp = client.put(
         f"/seasons/{season}/signups/{p2}",
-        json={"mmr_override": 1800},
+        json={"draft_position": 12},
         headers=auth_headers,
     )
     assert resp.status_code == 404
-    resp = client.put(f"/seasons/{season}/signups/{p1}", json={"mmr_override": 1800})
+    resp = client.put(f"/seasons/{season}/signups/{p1}", json={"draft_position": 12})
     assert resp.status_code == 401
