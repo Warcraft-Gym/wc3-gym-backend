@@ -96,8 +96,8 @@ class DraftSeriesService:
                 caster=draft_series.caster,
                 player1_id=draft_series.player1_id,
                 player2_id=draft_series.player2_id,
-                player1_score=draft_series.player1_score or 0,
-                player2_score=draft_series.player2_score or 0,
+                player1_score=draft_series.player1_score,
+                player2_score=draft_series.player2_score,
                 host_player_id=draft_series.host_player_id,
                 is_fantasy_match=draft_series.is_fantasy_match,
             )
