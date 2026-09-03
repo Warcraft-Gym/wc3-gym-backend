@@ -1,7 +1,8 @@
 """One test per achievement rule, at the boundary the rule turns on.
 
-The rules are pure functions over a player's ordered matches, so most tests
-craft rows and call core.achievements.earned directly. The two rules that
+The rules are one statement over the scoped matches, so most tests craft rows
+and call the oracle of tests/achievement_oracle.py, which
+tests/test_achievement_parity.py holds the statement to. The two rules that
 read a roster and the wiring into the routes are tested through the service.
 """
 
@@ -16,11 +17,14 @@ from httpx2 import Client
 from sqlalchemy import select
 
 from app.core import achievements
+from app.core.achievement_rules import LIFETIME_FROM_W3C_SEASON
 from app.core.achievements import Achievement
 from app.core.db import Session
 from app.models.enums import Race
+from app.models.ladder_achievement import default_rows
 from app.models.relationships import DBTeamSeasonCaptain
 from app.models.w3c_ladder_match import W3CLadderMatch
+from tests import achievement_oracle
 from tests.test_ladder_read import INSIDE, add_match, ladder_of, player_of, sign_up
 from tests.test_query_budget import count_statements
 
@@ -59,26 +63,26 @@ class Row:
 
 
 def run(
-    rows: Sequence[achievements.AchievementRow],
+    rows: Sequence[achievement_oracle.AchievementRow],
     points: int = 0,
     opponents: frozenset[str] = frozenset(),
     captains: frozenset[str] = frozenset(),
     is_captain: bool = False,
 ) -> set[str]:
     """The ids of the rules these rows earn."""
-    found = achievements.earned(
+    found = achievement_oracle.earned(
         rows, points, achievements.DEFAULT_PAID, opponents, captains, is_captain
     )
     return {item.id for item in found}
 
 
 def paid(
-    rows: Sequence[achievements.AchievementRow],
+    rows: Sequence[achievement_oracle.AchievementRow],
     rule_id: str,
     opponents: frozenset[str] = frozenset(),
 ) -> Achievement:
     """The earned rule itself, for the ones that pay a variable amount."""
-    found = achievements.earned(rows, 0, achievements.DEFAULT_PAID, opponents)
+    found = achievement_oracle.earned(rows, 0, achievements.DEFAULT_PAID, opponents)
     return next(item for item in found if item.id == rule_id)
 
 
@@ -91,7 +95,7 @@ def series(results: list[bool]) -> list[Row]:
 
 
 def test_no_match_earns_nothing() -> None:
-    assert achievements.earned([], 0, achievements.DEFAULT_PAID) == []
+    assert achievement_oracle.earned([], 0, achievements.DEFAULT_PAID) == []
 
 
 def test_win_first_and_lose_first_read_the_oldest_match() -> None:
@@ -415,8 +419,33 @@ def test_the_badges_read_only_the_scoped_rows(
     assert [badge["id"] for badge in row["achievements"]] == ["lose_first"]
 
 
+def test_the_lifetime_badges_start_at_a_w3champions_season(
+    client: Client, auth_headers: dict[str, str], league: dict[str, Any]
+) -> None:
+    """The scope that spans seasons reads the seasons from the cutoff on."""
+    player = league["player_ids"][0]
+    with Session() as session:
+        session.add_all(default_rows(None))
+        session.commit()
+    add_match(player, "before", won=True, wc3_season=LIFETIME_FROM_W3C_SEASON - 1)
+
+    body = client.get(f"/users/{player}/ladder", headers=auth_headers).json()
+    assert body["achievements"] == []
+
+    add_match(
+        player,
+        "after",
+        won=True,
+        wc3_season=LIFETIME_FROM_W3C_SEASON,
+        start_time=INSIDE + timedelta(minutes=1),
+    )
+
+    body = client.get(f"/users/{player}/ladder", headers=auth_headers).json()
+    assert [badge["id"] for badge in body["achievements"]] == ["win_first"]
+
+
 def test_the_rules_read_the_stored_rows(league: dict[str, Any]) -> None:
-    """The Protocol the core declares is what the table actually holds."""
+    """The Protocol the oracle declares is what the table actually holds."""
     player = league["player_ids"][0]
     add_match(player, "one", won=True)
     with Session() as session:
@@ -443,7 +472,7 @@ def test_a_badge_names_the_match_that_turned_its_rule_on() -> None:
     rows = series([True] * 4 + [False] + [True] * 5)
     at = {
         item.id: item.achieved_at
-        for item in achievements.earned(rows, 500, achievements.DEFAULT_PAID)
+        for item in achievement_oracle.earned(rows, 500, achievements.DEFAULT_PAID)
     }
     assert at["win_first"] == rows[0].start_time
     # The streak completes on the tenth match, not the last one
@@ -452,7 +481,7 @@ def test_a_badge_names_the_match_that_turned_its_rule_on() -> None:
     long = series([True] * 200)
     goal = next(
         item
-        for item in achievements.earned(long, 600, achievements.DEFAULT_PAID)
+        for item in achievement_oracle.earned(long, 600, achievements.DEFAULT_PAID)
         if item.id == "ladder_goal"
     )
     assert goal.achieved_at == long[166].start_time
