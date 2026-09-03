@@ -1,5 +1,5 @@
 from datetime import date, datetime
-from typing import TYPE_CHECKING, Annotated, Any, Literal, Self
+from typing import TYPE_CHECKING, Annotated, Any, Literal, NamedTuple, Self
 
 from pydantic import PositiveInt
 from sqlalchemy import JSON, Index, and_, case, func, or_, select, text
@@ -63,6 +63,12 @@ def tier_of(mmr: int, cuts: list[int]) -> int:
 SeasonPhase = Literal["open", "commenced", "overdue", "complete"]
 
 
+class SeasonProgress(NamedTuple):
+    phase: SeasonPhase
+    # The series that still carry no result
+    unscored_series: int
+
+
 class Season(SeasonBase, DBModel, table=True):
     __tablename__ = "seasons"
     # The import matches a season by name, so two seasons cannot share one
@@ -96,7 +102,7 @@ class Season(SeasonBase, DBModel, table=True):
         },
     )
 
-    def phase(self, session: Session) -> SeasonPhase:
+    def progress(self, session: Session) -> SeasonProgress:
         """The season's phase from its series; a season with no series is open."""
         from app.models.match import Match
         from app.models.series import Series
@@ -116,13 +122,14 @@ class Season(SeasonBase, DBModel, table=True):
             .join(Match, col(Match.id) == col(Series.match_id))
             .where(col(Match.season_id) == self.id)
         ).one()
+        unscored = total - n_scored
         if not n_started:
-            return "open"
-        if n_scored == total:
-            return "complete"
+            return SeasonProgress("open", unscored)
+        if not unscored:
+            return SeasonProgress("complete", 0)
         if self.end_date and self.end_date < utcnow().date():
-            return "overdue"
-        return "commenced"
+            return SeasonProgress("overdue", unscored)
+        return SeasonProgress("commenced", unscored)
 
     signup_users: list["DBUserSeasonSignup"] = Relationship(
         back_populates="season", sa_relationship_kwargs={"cascade": "all, delete"}
@@ -183,6 +190,7 @@ class SeasonPublic(SeasonBase):
     fantasy_tiers_applied_at: Annotated[datetime | None, AwareUTC] = None
     # Derived from the series when the season is the subject; null when nested
     phase: SeasonPhase | None = None
+    unscored_series: int | None = None
     start_date: Annotated[IsoDate | None, LenientDate] = None
     end_date: Annotated[IsoDate | None, LenientDate] = None
     maps: Annotated[list[MapPublic], NoneToList] = []

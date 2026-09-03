@@ -49,7 +49,7 @@ _SEASON_OPTIONS = (
 def _public(session: OrmSession, season: Season) -> SeasonPublic:
     """The full season with its phase; the phase is one aggregate over its series."""
     public = SeasonPublic.from_season(season)
-    public.phase = season.phase(session)
+    public.phase, public.unscored_series = season.progress(session)
     return public
 
 

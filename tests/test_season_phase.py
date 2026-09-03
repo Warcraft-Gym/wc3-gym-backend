@@ -34,6 +34,10 @@ def phase(client: Client, season_id: int) -> str:
     return client.get(f"/seasons/{season_id}").json()["phase"]
 
 
+def unscored(client: Client, season_id: int) -> int:
+    return client.get(f"/seasons/{season_id}").json()["unscored_series"]
+
+
 def end_on(season_id: int, days_from_now: int) -> None:
     with Session.begin() as session:
         season = session.get(Season, season_id)
@@ -59,8 +63,10 @@ def test_the_phase_follows_the_series(client: Client, seeded: dict[str, Any]) ->
     # Past the end date the missing result makes it overdue; the result completes it
     end_on(seeded["season_id"], -1)
     assert phase(client, seeded["season_id"]) == "overdue"
+    assert unscored(client, seeded["season_id"]) == 1
     score(played, 2, 1)
     assert phase(client, seeded["season_id"]) == "complete"
+    assert unscored(client, seeded["season_id"]) == 0
 
     listed = {s["id"]: s["phase"] for s in client.get("/seasons").json()}
     assert listed[seeded["season_id"]] == "complete"
