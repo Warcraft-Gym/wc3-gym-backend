@@ -15,7 +15,7 @@ mod local './just/local.just'
 # The Terraform staging box, over SSH: deploy, logs, status, alembic, seed.
 mod azure './just/azure.just'
 
-# The Vercel project, prod or staging: deploy, logs, status, migrate, seed, list, drop.
+# The Vercel project, prod or staging: deploy, logs, status, migrate, seed, import-maps, list, drop.
 mod vercel './just/vercel.just'
 
 alias up := local::up
