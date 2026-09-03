@@ -57,6 +57,8 @@ MAP_DB = [
     entry("Last Refuge 1.2", "LRX", "2016-01-01T00:00:00Z"),
     entry("Last Refuge 1.5", "LR", "2020-01-01T00:00:00Z", "refuge.png"),
     entry("Twisted Meadows 1.1", "TM", "2021-01-01T00:00:00Z", "meadows.png"),
+    # Off the ladder this season, but warcraft3.info still has the picture
+    entry("War Hail", "WH", "2020-06-01T00:00:00Z", "warhail.png"),
 ]
 
 
@@ -365,3 +367,66 @@ def test_the_global_import_renames_and_pictures_without_touching_a_pool(
     ]
     pool = client.get(f"/seasons/{seeded['season_id']}").json()["maps"]
     assert [map["name"] for map in pool] == ["Concealed Hill"]
+
+
+def test_the_preview_shows_the_short_name_a_map_will_have(
+    client: Client,
+    seeded: dict[str, Any],
+    auth_headers: dict[str, str],
+    sources: list[str],
+) -> None:
+    """A known map keeps its own short name; a new one gets the one the import assigns."""
+    new_map("Echo Isles", "EI")
+    new_map("Turtle Rock", "TR2")
+
+    resp = client.get("/maps/ladder-import", headers=auth_headers)
+
+    assert resp.status_code == 200, resp.text
+    listed = {row["w3c_name"]: row for row in resp.json()}
+    assert (
+        listed["Echo Isles v2"]["status"],
+        listed["Echo Isles v2"]["shortname"],
+    ) == ("known", "EI")
+    assert (
+        listed["Turtle Rock v2"]["status"],
+        listed["Turtle Rock v2"]["shortname"],
+    ) == ("known", "TR2")
+    # Nonesuch has no match and no donated short name: the initials it will get
+    assert listed["Nonesuch"]["shortname"] == "N"
+
+
+def test_a_map_off_the_ladder_lists_with_the_picture_warcraft3_info_has(
+    client: Client,
+    seeded: dict[str, Any],
+    auth_headers: dict[str, str],
+    sources: list[str],
+) -> None:
+    new_map("War Hail", "WH")
+    new_map("Nowhere", "NW")
+
+    resp = client.get("/maps/ladder-import", headers=auth_headers)
+
+    assert resp.status_code == 200, resp.text
+    listed = {row["w3c_name"]: row for row in resp.json()}
+    assert listed["War Hail"]["status"] == "off_ladder"
+    assert listed["War Hail"]["shortname"] == "WH"
+    assert listed["War Hail"]["image_url"].endswith("/warhail.png")
+    # No picture anywhere for Nowhere, and Concealed Hill is not in the fake map db
+    assert "Nowhere" not in listed
+    assert "Concealed Hill" not in listed
+
+    resp = client.post(
+        "/maps/ladder-import", json={"names": ["War Hail"]}, headers=auth_headers
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert [(map["name"], map["shortname"]) for map in resp.json()] == [
+        ("War Hail", "WH")
+    ]
+    assert resp.json()[0]["image"].endswith("/warhail.png")
+    # Once pictured it is no longer offered
+    listed = {
+        row["w3c_name"]
+        for row in client.get("/maps/ladder-import", headers=auth_headers).json()
+    }
+    assert "War Hail" not in listed

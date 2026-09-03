@@ -121,18 +121,32 @@ def _row(ladder_map: dict, by_base: MapIndex) -> LadderMapRow:
     )
 
 
-def ladder_maps() -> list[LadderMapRow]:
+def map_index() -> MapIndex:
+    """Every map warcraft3.info knows, keyed by base name."""
+    by_base: MapIndex = {}
+    for entry in W3CService().send_request(url=MAP_DB_URL) or []:
+        base, version = _split_version(entry.get("name") or "")
+        by_base.setdefault(base, []).append((version, entry))
+    return by_base
+
+
+def ladder_rows(by_base: MapIndex) -> list[LadderMapRow]:
     """Every 1v1 ladder map, with the short name and picture matched to it."""
     w3c = W3CService()
     modes = w3c.send_request(url=f"{w3c.base_url()}/ladder/active-modes") or []
     maps = next(
         (mode.get("maps") or [] for mode in modes if mode.get("id") == SOLO_MODE), []
     )
-    by_base: MapIndex = {}
-    for entry in w3c.send_request(url=MAP_DB_URL) or []:
-        base, version = _split_version(entry.get("name") or "")
-        by_base.setdefault(base, []).append((version, entry))
     return [_row(ladder_map, by_base) for ladder_map in maps]
+
+
+def ladder_maps() -> list[LadderMapRow]:
+    return ladder_rows(map_index())
+
+
+def lookup(name: str, by_base: MapIndex) -> LadderMapRow:
+    """One map by its name alone: what warcraft3.info holds for a map off the ladder."""
+    return _row({"name": name}, by_base)
 
 
 def fetch_image(url: str) -> bytes | None:
