@@ -17,7 +17,7 @@ from app.models.season import (
     SeasonUpdate,
 )
 from app.models.user import UserListPublic
-from app.models.w3c_ladder_match import LadderSyncResult, SeasonLadder
+from app.models.w3c_ladder_match import LadderSyncResult, SeasonLadder, SeasonPlayer
 from app.services.users import W3C_SYNC_WORKERS
 
 logger = logging.getLogger(__name__)
@@ -213,3 +213,11 @@ def sync_ladder_season_signups(
 def get_season_ladder(season_id: int, service: LadderServiceDep) -> SeasonLadder:
     """The ladder of a season: its teams, its players and its hours."""
     return service.season_ladder(season_id)
+
+
+@router.get("/seasons/{season_id}/ladder/players")
+def get_season_ladder_players(
+    season_id: int, service: LadderServiceDep
+) -> list[SeasonPlayer]:
+    """Every signup of the season with his ladder record, without the achievements."""
+    return service.season_players(season_id)
