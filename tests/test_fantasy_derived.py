@@ -14,6 +14,7 @@ from typing import Any
 import pytest
 from httpx2 import Client
 
+from app.core import fantasy
 from app.core.db import Session
 from app.models.base import ident
 from app.models.enums import Race
@@ -483,3 +484,38 @@ def test_a_season_scoped_search_pays_the_same_numbers(
         found = post(client, f"/fantasy/teams/search?query=season_id == {season}")
         assert len(found) == 1
         assert scores(found[0]) == expected
+
+
+# The player draft scale by best-of, as (wins, own, opp): a win pays 10 less 2 per
+# map the loser took, a loss pays 4 per map won spread over the maps short of a win
+DRAFT_SCALE = {
+    (1, 1, 0): 10,
+    (1, 0, 1): 0,
+    (2, 2, 0): 10,
+    (2, 2, 1): 8,
+    (2, 1, 2): 4,
+    (2, 0, 2): 0,
+    (3, 3, 0): 10,
+    (3, 3, 1): 8,
+    (3, 3, 2): 6,
+    (3, 2, 3): 4,
+    (3, 1, 3): 2,
+    (3, 0, 3): 0,
+}
+
+
+@pytest.mark.parametrize("wins,own,opp", list(DRAFT_SCALE))
+def test_a_drafted_player_is_paid_by_maps_in_any_best_of(
+    wins: int, own: int, opp: int
+) -> None:
+    assert fantasy.series_points(own, opp, wins) == DRAFT_SCALE[(wins, own, opp)]
+
+
+def test_the_winner_of_a_series_took_the_maps_its_season_needs() -> None:
+    one, two = fantasy.Player(1, "One", None), fantasy.Player(2, "Two", None)
+    bo5 = fantasy.Series(1, one, two, 3, 1, wins=3)
+    assert bo5.winner() == one
+    assert fantasy.Series(1, one, two, 2, 1, wins=3).winner() is None
+    assert fantasy.Series(1, one, two, 0, 1, wins=1).winner() == two
+    assert fantasy.bet_result(10, 1, bo5) == 10
+    assert fantasy.bet_result(10, 2, bo5) == -10

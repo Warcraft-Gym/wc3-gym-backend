@@ -7,6 +7,7 @@ from typing import Any
 import requests
 from fastapi.responses import JSONResponse
 
+from app.core.scoring import wins_needed
 from app.core.security import secure_filename
 from app.models.series import SeriesPublic, SeriesUpdate
 from app.services import blob, replays
@@ -136,10 +137,13 @@ def update_player_series(
     original_p1_score = series.player1_score
     original_p2_score = series.player2_score
 
-    # Handle file uploads - prepare for Discord transmission
+    # One replay slot per game of the season's best-of, game1..gameN
+    season = series.match.season if series.match else None
+    wins = wins_needed(season.map_rules if season else None)
+    games = 2 * wins - 1
     uploaded_files = {}
     replay_bytes: dict[str, bytes] = {}
-    for file_key in ["game1", "game2", "game3"]:
+    for file_key in [f"game{n}" for n in range(1, games + 1)]:
         if file_key in files and files[file_key]["filename"]:
             file = files[file_key]
             if file["filename"].lower().endswith(".w3g"):
@@ -174,42 +178,30 @@ def update_player_series(
             status_code=400,
         )
 
-    # If the action explicitly indicates a result report, enforce file requirements.
-    if action == "score_updated":
-        if "game1" not in uploaded_files or "game2" not in uploaded_files:
-            return JSONResponse(
-                {
-                    "error": "Game 1 and Game 2 replay files are required when reporting results."
-                },
-                status_code=400,
-            )
-
-        # Determine if game3 is required based on provided scores
+    # A result needs one replay per game played
+    if reporting:
         try:
             p1 = int(data["player1_score"])
             p2 = int(data["player2_score"])
         except Exception:
-            # If scores are missing or invalid, reject
             return JSONResponse(
                 {"error": "Invalid or missing player scores for score update."},
                 status_code=400,
             )
-
-        needs_game3 = (p1 == 2 and p2 == 1) or (p1 == 1 and p2 == 2)
-        if needs_game3 and "game3" not in uploaded_files:
+        if max(p1, p2) != wins or min(p1, p2) >= wins:
             return JSONResponse(
-                {"error": "Game 3 replay file is required for 2:1 or 1:2 results."},
+                {"error": f"A series of this season ends at {wins} map wins."},
                 status_code=400,
             )
-    else:
-        # Backwards compatibility: if no explicit action provided, fall back to previous behavior
-        scores_being_updated = "player1_score" in data or "player2_score" in data
-        if scores_being_updated and (
-            "game1" not in uploaded_files or "game2" not in uploaded_files
-        ):
+        missing = [
+            f"Game {n}"
+            for n in range(1, p1 + p2 + 1)
+            if f"game{n}" not in uploaded_files
+        ]
+        if missing:
             return JSONResponse(
                 {
-                    "error": "Game 1 and Game 2 replay files are required when updating scores."
+                    "error": f"{' and '.join(missing)} replay files are required when reporting results."
                 },
                 status_code=400,
             )

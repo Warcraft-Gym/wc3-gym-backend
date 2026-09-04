@@ -18,7 +18,7 @@ from sqlmodel import col
 
 from app.core.db import Session
 from app.core.exceptions import BadRequestError
-from app.core.scoring import DEFAULT_SYSTEM, MAX_POINTS
+from app.core.scoring import DEFAULT_SYSTEM, SYSTEMS
 from app.models.base import ident
 from app.models.discord_role_binding import (
     DiscordRoleBinding,
@@ -156,7 +156,7 @@ def _write(
 
 def _known_system(system: str) -> str:
     """A score system the scoring rule knows."""
-    if system not in MAX_POINTS:
+    if system not in SYSTEMS:
         raise BadRequestError(f"Unknown score system: {system}")
     return system
 

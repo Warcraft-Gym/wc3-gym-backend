@@ -6,6 +6,7 @@ from app.core.db import Session
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.core.ordering import SortOrder, ordered
 from app.core.query import QueryElement, QueryUtil
+from app.core.scoring import fits, wins_needed
 from app.models.match import Match
 from app.models.series import (
     SERIES_SORTS,
@@ -19,9 +20,15 @@ from app.services import derived
 
 
 def _both_scores(row: Series) -> None:
-    """A result is both map scores or neither: points() has no half result."""
+    """A result is both map scores or neither, and neither above the maps a
+    win takes in this season: points() has no value for a half or over result."""
     if (row.player1_score is None) != (row.player2_score is None):
         raise BadRequestError("A result needs both map scores")
+    if row.player1_score is None or row.player2_score is None:
+        return
+    wins = wins_needed(row.match.season.map_rules if row.match else None)
+    if not fits(row.player1_score, row.player2_score, wins):
+        raise BadRequestError(f"A series of this season ends at {wins} map wins")
 
 
 class SeriesService:
