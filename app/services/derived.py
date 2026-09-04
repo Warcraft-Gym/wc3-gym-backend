@@ -73,7 +73,7 @@ def _scale(system: str | None, map_rules: str | None) -> Scale:
     return system or DEFAULT_SYSTEM, wins_needed(map_rules)
 
 
-def _systems_by_match(session: Session, match_ids: set[int]) -> dict[int, Scale]:
+def _scales_by_match(session: Session, match_ids: set[int]) -> dict[int, Scale]:
     """The scale of the season of every match, in one statement."""
     if not match_ids:
         return {}
@@ -85,10 +85,10 @@ def _systems_by_match(session: Session, match_ids: set[int]) -> dict[int, Scale]
     return {match_id: _scale(system, rules) for match_id, system, rules in rows}
 
 
-def _scores_by_match(session: Session, systems: dict[int, Scale]) -> MatchScores:
+def _scores_by_match(session: Session, scales: dict[int, Scale]) -> MatchScores:
     """The two team scores of every match, summed from its series."""
     by_scale: dict[Scale, list[int]] = {}
-    for match_id, scale in systems.items():
+    for match_id, scale in scales.items():
         by_scale.setdefault(scale, []).append(match_id)
 
     scores: MatchScores = {}
@@ -176,11 +176,11 @@ def fill_series(session: Session, series_list: Iterable[SeriesPublic | None]) ->
         return
 
     match_ids = {series.match_id for series in rows if series.match_id is not None}
-    systems = _systems_by_match(session, match_ids)
-    scores = _scores_by_match(session, systems)
+    scales = _scales_by_match(session, match_ids)
+    scores = _scores_by_match(session, scales)
 
     for series in rows:
-        scale = systems.get(series.match_id, DEFAULT_SCALE)
+        scale = scales.get(series.match_id, DEFAULT_SCALE)
         series.player1_points = points(
             series.player1_score, series.player2_score, *scale
         )
@@ -204,8 +204,8 @@ def fill_matches(session: Session, matches: Iterable[MatchPublic | None]) -> Non
     if not rows:
         return
 
-    systems = _systems_by_match(session, {match.id for match in rows if match.id})
-    scores = _scores_by_match(session, systems)
+    scales = _scales_by_match(session, {match.id for match in rows if match.id})
+    scores = _scores_by_match(session, scales)
     for match in rows:
         _fill_match(match, scores)
 
