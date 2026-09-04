@@ -1070,6 +1070,30 @@ def test_a_result_with_one_score_missing_is_refused(
     assert get(client, f"/series/{league['series_id']}")["player1_score"] is None
 
 
+def test_a_result_is_capped_at_the_maps_a_win_takes(
+    client: Client, auth_headers: dict[str, str], league: dict[str, Any]
+) -> None:
+    """A 3-1 is over for a Bo3 season, and pays 4 standard once the season is a Bo5."""
+    path = f"/series/{league['series_id']}"
+    resp = client.put(
+        path, json={"player1_score": 3, "player2_score": 1}, headers=auth_headers
+    )
+    assert resp.status_code == 400, resp.text
+    assert resp.json() == {"error": "A series of this season ends at 2 map wins"}
+
+    season = client.put(
+        f"/seasons/{league['season_id']}",
+        json={"map_rules": "veto,veto,veto,veto,veto"},
+        headers=auth_headers,
+    )
+    assert season.status_code == 200, season.text
+    resp = client.put(
+        path, json={"player1_score": 3, "player2_score": 1}, headers=auth_headers
+    )
+    assert resp.status_code == 200, resp.text
+    assert (resp.json()["player1_points"], resp.json()["player2_points"]) == (4, 1)
+
+
 def test_a_team_season_takes_any_number_of_captains(
     client: Client, auth_headers: dict[str, str], league: dict[str, Any]
 ) -> None:

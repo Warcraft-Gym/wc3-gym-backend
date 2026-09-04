@@ -140,9 +140,9 @@ SERIES_SORTS: dict[SeriesSort, ColumnElement[Any]] = {
 
 
 class SeriesCreate(SeriesBase):
-    # A series is best of three, so app.core.scoring only scores 0 to 2
-    player1_score: int | None = Field(default=None, ge=0, le=2)
-    player2_score: int | None = Field(default=None, ge=0, le=2)
+    # SeriesService caps a score at the maps a win takes in the season
+    player1_score: int | None = Field(default=None, ge=0)
+    player2_score: int | None = Field(default=None, ge=0)
 
 
 class SeriesUpdate(SQLModel):
@@ -151,8 +151,8 @@ class SeriesUpdate(SQLModel):
     caster: Annotated[str | None, NumToStr] = None
     player1_id: int | None = None
     player2_id: int | None = None
-    player1_score: int | None = Field(default=None, ge=0, le=2)
-    player2_score: int | None = Field(default=None, ge=0, le=2)
+    player1_score: int | None = Field(default=None, ge=0)
+    player2_score: int | None = Field(default=None, ge=0)
     host_player_id: int | None = None
     is_fantasy_match: bool | None = None
 
