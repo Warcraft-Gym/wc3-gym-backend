@@ -230,15 +230,15 @@ def create_public_access_helper(
         "expires_at": expires_at,
     }
 
-    frontend = os.getenv("FRONTEND_URL") or str(request.base_url).rstrip("/")
+    frontend = (os.getenv("FRONTEND_URL") or str(request.base_url)).rstrip("/")
 
     # Route based on access type
     if access_type == "signup":
-        access_url = f"{frontend}#/signup?token={token}"
+        access_url = f"{frontend}/signup?token={token}"
     elif access_type == "dashboard":
-        access_url = f"{frontend}#/player-dashboard?token={token}"
+        access_url = f"{frontend}/player-dashboard?token={token}"
     elif access_type == "fantasy":
-        access_url = f"{frontend}#/fantasy-registration?token={token}"
+        access_url = f"{frontend}/fantasy-registration?token={token}"
 
     return {"access_url": access_url, "token": token}
 
