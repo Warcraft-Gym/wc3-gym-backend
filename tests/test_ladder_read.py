@@ -529,18 +529,19 @@ def test_every_earned_achievement_is_in_the_catalogue(
 def test_the_season_per_day_counts_a_shared_match_once(
     client: Client, auth_headers: dict[str, str], league: dict[str, Any]
 ) -> None:
-    """The series adds up to total_games, which the header shows."""
+    """The series adds up to total_games, and a late match keeps its UTC day."""
     one, two = league["player_ids"][0], league["player_ids"][2]
     add_match(one, "shared", won=True)
     add_match(two, "shared", won=False)
+    add_match(one, "late", start_time=datetime(2026, 1, 8, 23, 30, tzinfo=UTC))
     add_match(one, "own", start_time=INSIDE + timedelta(days=2))
 
     body = ladder_of(client, auth_headers, league["season_id"])
 
-    assert body["total_games"] == 2
+    assert body["total_games"] == 3
     assert sum(day["g"] for day in body["per_day"]) == body["total_games"]
     played = {day["d"]: day["g"] for day in body["per_day"] if day["g"]}
-    assert played == {"2026-01-07": 1, "2026-01-09": 1}
+    assert played == {"2026-01-07": 1, "2026-01-08": 1, "2026-01-09": 1}
 
 
 def test_the_season_per_day_covers_every_day_of_the_window(

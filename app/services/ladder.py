@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import (
     ColumnElement,
     Row,
+    SQLColumnExpression,
     Subquery,
     and_,
     case,
@@ -941,11 +942,20 @@ def _mmr_span(session: OrmSession, scope: list[ColumnElement[bool]]) -> dict[int
     return {row.user_id: row for row in rows}
 
 
+def _utc(
+    session: OrmSession, column: SQLColumnExpression[datetime]
+) -> SQLColumnExpression[datetime]:
+    """Postgres reads a timestamptz in the session time zone; pin it to UTC."""
+    if session.get_bind().dialect.name == "postgresql":
+        return func.timezone("UTC", column)
+    return column
+
+
 def _per_day(
     session: OrmSession, scope: list[ColumnElement[bool]]
 ) -> dict[int, list[Row]]:
     """Every player's days in order, with the MMR he opened and closed each on."""
-    day = func.date(W3CLadderMatch.start_time)
+    day = func.date(_utc(session, col(W3CLadderMatch.start_time)))
     ordered = (
         select(
             col(W3CLadderMatch.user_id).label("user_id"),
@@ -1021,8 +1031,9 @@ def _vs_race(
 
 def _by_hour(session: OrmSession, scope: list[ColumnElement[bool]]) -> list[list[int]]:
     """Distinct matches by UTC weekday and hour. Row 0 is Sunday."""
-    weekday = extract("dow", col(W3CLadderMatch.start_time))
-    hour = extract("hour", col(W3CLadderMatch.start_time))
+    started = _utc(session, col(W3CLadderMatch.start_time))
+    weekday = extract("dow", started)
+    hour = extract("hour", started)
     rows = session.execute(
         select(
             weekday.label("weekday"),
@@ -1043,7 +1054,7 @@ def _games_per_day(
 ) -> dict[date, int]:
     """Distinct matches per UTC day, so a match between two GNL players
     counts once, the way the season total counts it."""
-    day = func.date(W3CLadderMatch.start_time)
+    day = func.date(_utc(session, col(W3CLadderMatch.start_time)))
     rows = session.execute(
         select(
             day.label("day"),
