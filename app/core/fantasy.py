@@ -55,12 +55,13 @@ class Series(NamedTuple):
     player2: Player
     player1_score: int | None
     player2_score: int | None
+    wins: int = 2  # the maps a series of the season takes to win
 
     def winner(self) -> Player | None:
-        """The side that took two maps, if the series is decided."""
-        if self.player1_score == 2:
+        """The side that took the maps a win takes, if the series is decided."""
+        if self.player1_score == self.wins:
             return self.player1
-        if self.player2_score == 2:
+        if self.player2_score == self.wins:
             return self.player2
         return None
 
@@ -87,22 +88,20 @@ class Standing(NamedTuple):
 type SeriesByWeek = Mapping[int | None, Sequence[Series]]
 
 
-def series_points(own: int, opp: int) -> int:
-    """The points one played series pays the player who holds the own score."""
-    if own == 2:
-        if opp == 0:
-            return 10
-        elif opp == 1:
-            return 8
-        else:
-            raise BadRequestError(f"Invalid result score1: {own} - score2: {opp}")
-    elif own == 1:
-        if opp == 2:
-            return 4
-        else:
-            raise BadRequestError(f"Invalid result score1: {own} - score2: {opp}")
-    else:
-        return 0
+def series_points(own: int, opp: int, wins: int = 2) -> int:
+    """The points one played series pays the player who holds the own score.
+
+    A win pays 10 less 2 per map the loser took; a loss pays 4 per map won,
+    spread over the maps short of a win (a Bo3: 10, 8, 4, 0).
+    """
+    # ponytail: fixed weights, a setting if a Bo1 and a Bo5 should pay the same
+    if own > wins or opp > wins or own == opp == wins:
+        raise BadRequestError(f"Invalid result score1: {own} - score2: {opp}")
+    if own == wins:
+        return 10 - 2 * opp
+    if opp == wins:
+        return 4 * own // (wins - 1) if wins > 1 else 0
+    return 0  # no side has won yet
 
 
 @overload
@@ -145,20 +144,12 @@ def race_points(
         week_race_looses = {}
 
         for series in season_week_series:
-            if series.player1_score == 2:
-                week_race_wins[series.player1.race] = (
-                    week_race_wins.get(series.player1.race, 0) + 1
-                )
-                week_race_looses[series.player2.race] = (
-                    week_race_looses.get(series.player2.race, 0) + 1
-                )
-            elif series.player2_score == 2:
-                week_race_wins[series.player2.race] = (
-                    week_race_wins.get(series.player2.race, 0) + 1
-                )
-                week_race_looses[series.player1.race] = (
-                    week_race_looses.get(series.player1.race, 0) + 1
-                )
+            winner = series.winner()
+            if winner is None:
+                continue
+            loser = series.player2 if winner is series.player1 else series.player1
+            week_race_wins[winner.race] = week_race_wins.get(winner.race, 0) + 1
+            week_race_looses[loser.race] = week_race_looses.get(loser.race, 0) + 1
 
         week_result = {}
         all_races = set(list(week_race_wins.keys()) + list(week_race_looses.keys()))
@@ -357,7 +348,9 @@ def team_scores(
                             series.player2_score if is_player1 else series.player1_score
                         )
 
-                        points = series_points(player_score, opponent_score)
+                        points = series_points(
+                            player_score, opponent_score, series.wins
+                        )
                         week_points += points
 
                         if include_breakdown:

@@ -46,6 +46,7 @@ from app.core.scoring import (
     points,
     points_case,
     wins_needed,
+    wins_needed_sql,
 )
 from app.models.draft_series import DraftSeriesPublic
 from app.models.fantasy_bet import FantasyBet, FantasyBetPublic
@@ -316,25 +317,32 @@ def _gnl_tallies(
 
     A series counts for both of its players, so the two sides union before the
     grouping. It counts as a game once the player stands in it, and pays a win
-    or a loss once both map scores are in and they are not both zero. Two games
-    take the series, so every other scored series is a loss.
+    or a loss once both map scores are in and they are not both zero. The maps
+    a win takes come off the season, so every other scored series is a loss.
     """
+    wins = wins_needed_sql(col(Season.map_rules)).label("wins")
     sides = union_all(
         select(
             col(Series.player1_id).label("user_id"),
             col(Match.season_id).label("season_id"),
             col(Series.player1_score).label("own"),
             col(Series.player2_score).label("opp"),
-        ).join(Match, col(Match.id) == Series.match_id),
+            wins,
+        )
+        .join(Match, col(Match.id) == Series.match_id)
+        .join(Season, col(Season.id) == Match.season_id),
         select(
             col(Series.player2_id),
             col(Match.season_id),
             col(Series.player2_score),
             col(Series.player1_score),
-        ).join(Match, col(Match.id) == Series.match_id),
+            wins,
+        )
+        .join(Match, col(Match.id) == Series.match_id)
+        .join(Season, col(Season.id) == Match.season_id),
     ).subquery()
 
-    own, opp = sides.c.own, sides.c.opp
+    own, opp, wins = sides.c.own, sides.c.opp, sides.c.wins
     scored = own.is_not(None) & opp.is_not(None) & ~((own == 0) & (opp == 0))
     rows = session.execute(
         select(
@@ -342,8 +350,8 @@ def _gnl_tallies(
             sides.c.season_id,
             func.count(),
             # count() skips the null a case with no else leaves behind
-            func.count(case((scored & (own == 2), 1))),
-            func.count(case((scored & (own != 2), 1))),
+            func.count(case((scored & (own == wins), 1))),
+            func.count(case((scored & (own != wins), 1))),
         )
         .where(sides.c.user_id.in_(user_ids), sides.c.season_id.in_(season_ids))
         .group_by(sides.c.user_id, sides.c.season_id)
@@ -741,8 +749,10 @@ def fantasy_series(
             col(player2.race),
             col(Series.player1_score),
             col(Series.player2_score),
+            col(Season.map_rules),
         )
         .join(Match, col(Match.id) == Series.match_id)
+        .join(Season, col(Season.id) == Match.season_id)
         .join(player1, col(player1.id) == Series.player1_id, isouter=True)
         .join(player2, col(player2.id) == Series.player2_id, isouter=True)
         .where(col(Match.season_id).in_(season_ids))
@@ -760,6 +770,7 @@ def fantasy_series(
         two_race,
         one_score,
         two_score,
+        map_rules,
     ) in rows:
         weeks = by_season.setdefault(season_id, {})
         weeks.setdefault(week, []).append(
@@ -769,6 +780,7 @@ def fantasy_series(
                 player2=fantasy.Player(two_id, two_name, fantasy.race_value(two_race)),
                 player1_score=one_score,
                 player2_score=two_score,
+                wins=wins_needed(map_rules),
             )
         )
     return by_season
@@ -801,9 +813,11 @@ def _fantasy_bets(
             col(player2.name),
             col(Series.player1_score),
             col(Series.player2_score),
+            col(Season.map_rules),
         )
         .join(Series, col(Series.id) == FantasyBet.series_id)
         .join(Match, col(Match.id) == Series.match_id, isouter=True)
+        .join(Season, col(Season.id) == Match.season_id, isouter=True)
         .join(winner, col(winner.id) == FantasyBet.winner_id, isouter=True)
         .join(player1, col(player1.id) == Series.player1_id, isouter=True)
         .join(player2, col(player2.id) == Series.player2_id, isouter=True)
@@ -828,6 +842,7 @@ def _fantasy_bets(
         two_name,
         one_score,
         two_score,
+        map_rules,
     ) in rows:
         by_captain.setdefault((user_id, season_id), []).append(
             fantasy.Bet(
@@ -840,6 +855,7 @@ def _fantasy_bets(
                     player2=fantasy.Player(two_id, two_name, None),
                     player1_score=one_score,
                     player2_score=two_score,
+                    wins=wins_needed(map_rules),
                 ),
             )
         )
@@ -864,6 +880,11 @@ def public_series(series: SeriesPublic | None) -> fantasy.Series | None:
         ),
         player1_score=series.player1_score,
         player2_score=series.player2_score,
+        wins=wins_needed(
+            series.match.season.map_rules
+            if series.match and series.match.season
+            else None
+        ),
     )
 
 

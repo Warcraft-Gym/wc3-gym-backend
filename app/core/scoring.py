@@ -7,7 +7,7 @@ faces read the same rule, so a value the database computes equals the value
 Python computes for the same scores.
 """
 
-from sqlalchemy import Case, SQLColumnExpression, and_, case
+from sqlalchemy import Case, SQLColumnExpression, and_, case, func
 
 # What each system adds to 2*wins for the top of its scale
 SYSTEMS = {"standard": -1, "helpstone": 0}
@@ -20,6 +20,15 @@ def wins_needed(map_rules: str | None) -> int:
     if not map_rules:
         return DEFAULT_WINS
     return len(map_rules.split(",")) // 2 + 1
+
+
+def wins_needed_sql(
+    map_rules: SQLColumnExpression[str | None],
+) -> SQLColumnExpression[int]:
+    """The rule of wins_needed() as SQL: the games are the commas plus one."""
+    rules = func.nullif(map_rules, "")
+    games = func.length(rules) - func.length(func.replace(rules, ",", "")) + 1
+    return func.coalesce(games // 2 + 1, DEFAULT_WINS)
 
 
 def max_points(system: str, wins: int = DEFAULT_WINS) -> int:

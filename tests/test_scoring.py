@@ -12,7 +12,14 @@ from fastapi import FastAPI
 from httpx2 import Client
 from sqlalchemy import Integer, literal, select
 
-from app.core.scoring import SYSTEMS, max_points, points, points_case, wins_needed
+from app.core.scoring import (
+    SYSTEMS,
+    max_points,
+    points,
+    points_case,
+    wins_needed,
+    wins_needed_sql,
+)
 
 SCORES = [None, 0, 1, 2]
 COMBOS = [(own, opp, system) for own in SCORES for opp in SCORES for system in SYSTEMS]
@@ -121,9 +128,13 @@ def test_a_score_above_the_maps_a_win_takes_is_not_valid() -> None:
     ],
 )
 def test_wins_needed_reads_the_best_of_off_the_map_rules(
-    map_rules: str | None, wins: int
+    app: FastAPI, map_rules: str | None, wins: int
 ) -> None:
+    from app.core.db import Session
+
     assert wins_needed(map_rules) == wins
+    with Session() as session:
+        assert session.scalar(select(wins_needed_sql(literal(map_rules)))) == wins
 
 
 @pytest.mark.parametrize("system,top", [("standard", 3), ("helpstone", 4)])

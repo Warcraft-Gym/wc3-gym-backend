@@ -234,9 +234,14 @@ class SeasonPublic(SeasonBase):
     def from_season_reduced(
         cls, season: Season, signup_race: Race | None = None
     ) -> Self:
-        """The name and the id only. Used where a season is a label on
-        another object rather than the subject of the response."""
-        return cls(id=ident(season), name=season.name, signup_race=signup_race)
+        """The name, the id and the map rules only. Used where a season is a
+        label on another object rather than the subject of the response."""
+        return cls(
+            id=ident(season),
+            name=season.name,
+            map_rules=season.map_rules,
+            signup_race=signup_race,
+        )
 
     @classmethod
     def from_season_without_maps(cls, season: Season) -> Self:
