@@ -71,6 +71,16 @@ seed env="prod":
         if [ -f "$seed/users.csv" ]; then just _load-seed "$seed" "$url"; fi
     fi
 
+# Import the W3C map pool: create, rename and picture every ladder map, no season pool change. For staging: the shared database.
+import-maps env="prod":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    url=$(just vercel url {{ env }})
+    if [ "{{ env }}" = staging ]; then
+        url=$(DB_URL="$url" uv run python -c 'import os; from api.preview_db import SHARED, with_database; print(with_database(os.environ["DB_URL"], SHARED))')
+    fi
+    DB_URL="$url" uv run python -c 'from app.api.deps import map_service; from app.core.db import init_engine; init_engine(); print(len(map_service.import_ladder_maps([row.w3c_name for row in map_service.ladder_import_preview()])), "maps imported")'
+
 # Build the review season on the shared staging database: you (the first ADMIN_DISCORD_IDS entry) against
 # the reviewer's Discord id: `just vercel review-season staging <reviewer discord id>`.
 review-season env reviewer me="":
