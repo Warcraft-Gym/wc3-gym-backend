@@ -8,9 +8,6 @@ Entering a result writes the map scores and the per-player season stats. The ser
 points, the match score and the three standings numbers are sums the response takes
 from the map scores at read time, so they follow a result with no write of their own.
 The assertions walk that chain one step at a time.
-
-One test is xfail(strict=True) on the defect it pins. A fix turns it XPASS and fails
-the run, so the marker goes with the fix.
 """
 
 import threading
@@ -1059,24 +1056,18 @@ def test_a_player_race_update_is_held_to_the_same_values(
     assert get(client, f"/users/{player_id}")["race"] == "NE"
 
 
-# Defects this branch records but does not fix.
-
-
-@pytest.mark.xfail(
-    strict=True,
-    reason="a series with one score missing reaches points() as a half result, "
-    "and the ValueError it raises becomes a 500",
-)
 def test_a_result_with_one_score_missing_is_refused(
     client: Client, auth_headers: dict[str, str], league: dict[str, Any]
 ) -> None:
-    """A half-entered result answers 500, not a 4xx."""
+    """A half-entered result is refused, and the series keeps no score."""
     resp = client.put(
         f"/series/{league['series_id']}",
         json={"player1_score": 1},
         headers=auth_headers,
     )
-    assert resp.status_code < 500
+    assert resp.status_code == 400, resp.text
+    assert resp.json() == {"error": "A result needs both map scores"}
+    assert get(client, f"/series/{league['series_id']}")["player1_score"] is None
 
 
 def test_a_team_season_takes_any_number_of_captains(
