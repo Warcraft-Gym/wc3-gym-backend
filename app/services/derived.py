@@ -6,10 +6,10 @@ of the season that holds them, through app.core.scoring and app.core.career.
 Nothing stores player1_points, player2_points, team1_score, team2_score,
 final_score, points_against or points_available.
 
-Two statements answer a whole response: one resolves the score system of every
-match or season in it, and one sums the series on that system. points_case
-reads the system and not the season, so seasons that share a system share a
-statement, and there are two systems. A series answer pays one more statement
+Two statements answer a whole response: one resolves the scale of every
+match or season in it, and one sums the series on that scale. points_case
+reads the scale (score system and maps to win) and not the season, so seasons
+that share a scale share a statement. A series answer pays one more statement
 for the race every player in it registered on for the season of its match.
 
 A career answer costs two more statements: one groups the series of every
@@ -39,7 +39,14 @@ from sqlmodel import col
 
 from app.core import career, fantasy
 from app.core.ordering import SortOrder
-from app.core.scoring import DEFAULT_SYSTEM, max_points, points, points_case
+from app.core.scoring import (
+    DEFAULT_SYSTEM,
+    DEFAULT_WINS,
+    max_points,
+    points,
+    points_case,
+    wins_needed,
+)
 from app.models.draft_series import DraftSeriesPublic
 from app.models.fantasy_bet import FantasyBet, FantasyBetPublic
 from app.models.fantasy_team import FantasyTeamPublic
@@ -52,43 +59,50 @@ from app.models.team import TeamPublic
 from app.models.user import User, UserListPublic, UserPublic, UserReduced
 
 type MatchScores = dict[int, tuple[int, int]]
-# score system, series per week and number of weeks, per season
-type SeasonRules = dict[int, tuple[str, int | None, int | None]]
+# score system and maps to win, the two arguments of the scoring rule
+type Scale = tuple[str, int]
+DEFAULT_SCALE: Scale = (DEFAULT_SYSTEM, DEFAULT_WINS)
+# scale, series per week and number of weeks, per season
+type SeasonRules = dict[int, tuple[Scale, int | None, int | None]]
 # points for and points against, per (team, season)
 type TeamSums = dict[tuple[int, int], list[int]]
 
 
-def _systems_by_match(session: Session, match_ids: set[int]) -> dict[int, str]:
-    """The score system of the season of every match, in one statement."""
+def _scale(system: str | None, map_rules: str | None) -> Scale:
+    return system or DEFAULT_SYSTEM, wins_needed(map_rules)
+
+
+def _systems_by_match(session: Session, match_ids: set[int]) -> dict[int, Scale]:
+    """The scale of the season of every match, in one statement."""
     if not match_ids:
         return {}
     rows = session.execute(
-        select(col(Match.id), col(Season.score_system))
+        select(col(Match.id), col(Season.score_system), col(Season.map_rules))
         .join(Season, col(Season.id) == Match.season_id)
         .where(col(Match.id).in_(match_ids))
     ).all()
-    return {match_id: system or DEFAULT_SYSTEM for match_id, system in rows}
+    return {match_id: _scale(system, rules) for match_id, system, rules in rows}
 
 
-def _scores_by_match(session: Session, systems: dict[int, str]) -> MatchScores:
+def _scores_by_match(session: Session, systems: dict[int, Scale]) -> MatchScores:
     """The two team scores of every match, summed from its series."""
-    by_system: dict[str, list[int]] = {}
-    for match_id, system in systems.items():
-        by_system.setdefault(system, []).append(match_id)
+    by_scale: dict[Scale, list[int]] = {}
+    for match_id, scale in systems.items():
+        by_scale.setdefault(scale, []).append(match_id)
 
     scores: MatchScores = {}
-    for system, match_ids in by_system.items():
+    for scale, match_ids in by_scale.items():
         rows = session.execute(
             select(
                 col(Series.match_id),
                 func.sum(
                     points_case(
-                        col(Series.player1_score), col(Series.player2_score), system
+                        col(Series.player1_score), col(Series.player2_score), *scale
                     )
                 ),
                 func.sum(
                     points_case(
-                        col(Series.player2_score), col(Series.player1_score), system
+                        col(Series.player2_score), col(Series.player1_score), *scale
                     )
                 ),
             )
@@ -165,12 +179,12 @@ def fill_series(session: Session, series_list: Iterable[SeriesPublic | None]) ->
     scores = _scores_by_match(session, systems)
 
     for series in rows:
-        system = systems.get(series.match_id, DEFAULT_SYSTEM)
+        scale = systems.get(series.match_id, DEFAULT_SCALE)
         series.player1_points = points(
-            series.player1_score, series.player2_score, system
+            series.player1_score, series.player2_score, *scale
         )
         series.player2_points = points(
-            series.player2_score, series.player1_score, system
+            series.player2_score, series.player1_score, *scale
         )
         if series.match:
             _fill_match(series.match, scores)
@@ -196,35 +210,36 @@ def fill_matches(session: Session, matches: Iterable[MatchPublic | None]) -> Non
 
 
 def _rules_by_season(session: Session, season_ids: set[int]) -> SeasonRules:
-    """The score system and the season length of every season, in one statement."""
+    """The scale and the season length of every season, in one statement."""
     if not season_ids:
         return {}
     rows = session.execute(
         select(
             col(Season.id),
             col(Season.score_system),
+            col(Season.map_rules),
             col(Season.series_per_week),
             col(Season.number_weeks),
         ).where(col(Season.id).in_(season_ids))
     ).all()
     return {
-        season_id: (system or DEFAULT_SYSTEM, per_week, weeks)
-        for season_id, system, per_week, weeks in rows
+        season_id: (_scale(system, rules), per_week, weeks)
+        for season_id, system, rules, per_week, weeks in rows
     }
 
 
 def _sums_by_team(session: Session, rules: SeasonRules) -> TeamSums:
     """The points for and against of every team of every season.
 
-    One statement per score system, grouped by the two teams of a match, so a
+    One statement per scale, grouped by the two teams of a match, so a
     team collects both the matches it holds as team1 and as team2.
     """
-    by_system: dict[str, list[int]] = {}
-    for season_id, (system, _, _) in rules.items():
-        by_system.setdefault(system, []).append(season_id)
+    by_scale: dict[Scale, list[int]] = {}
+    for season_id, (scale, _, _) in rules.items():
+        by_scale.setdefault(scale, []).append(season_id)
 
     sums: TeamSums = {}
-    for system, season_ids in by_system.items():
+    for scale, season_ids in by_scale.items():
         rows = session.execute(
             select(
                 col(Match.season_id),
@@ -232,12 +247,12 @@ def _sums_by_team(session: Session, rules: SeasonRules) -> TeamSums:
                 col(Match.team2_id),
                 func.sum(
                     points_case(
-                        col(Series.player1_score), col(Series.player2_score), system
+                        col(Series.player1_score), col(Series.player2_score), *scale
                     )
                 ),
                 func.sum(
                     points_case(
-                        col(Series.player2_score), col(Series.player1_score), system
+                        col(Series.player2_score), col(Series.player1_score), *scale
                     )
                 ),
             )
@@ -273,14 +288,12 @@ def fill_standings(session: Session, teams: Iterable[TeamPublic | None]) -> None
     sums = _sums_by_team(session, rules)
 
     for team_id, info in infos:
-        system, per_week, weeks = rules.get(
-            info.season_id, (DEFAULT_SYSTEM, None, None)
-        )
+        scale, per_week, weeks = rules.get(info.season_id, (DEFAULT_SCALE, None, None))
         final, against = sums.get((team_id, info.season_id), [0, 0])
         info.final_score = final
         info.points_against = against
         info.points_available = (
-            per_week * weeks * max_points(system) - final - against
+            per_week * weeks * max_points(*scale) - final - against
             if per_week is not None and weeks is not None
             else None
         )
@@ -869,7 +882,7 @@ def public_bet(bet: FantasyBetPublic) -> fantasy.Bet | None:
 
 def _season_weeks(rules: SeasonRules, season_id: int | None) -> int | None:
     """How many weeks the season is played over."""
-    return rules.get(season_id, (DEFAULT_SYSTEM, None, None))[2]
+    return rules.get(season_id, (DEFAULT_SCALE, None, None))[2]
 
 
 def _drafted_standing(
@@ -881,10 +894,10 @@ def _drafted_standing(
     """
     if team_id is None or season_id is None:
         return None
-    system, per_week, weeks = rules.get(season_id, (DEFAULT_SYSTEM, None, None))
+    scale, per_week, weeks = rules.get(season_id, (DEFAULT_SCALE, None, None))
     final, against = sums.get((team_id, season_id), [0, 0])
     available = (
-        per_week * weeks * max_points(system) - final - against
+        per_week * weeks * max_points(*scale) - final - against
         if per_week is not None and weeks is not None
         else 0
     )
