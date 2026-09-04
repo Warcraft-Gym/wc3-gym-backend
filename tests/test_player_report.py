@@ -6,6 +6,8 @@ from typing import Any
 import pytest
 from httpx2 import Client
 
+from app.services import blob
+
 
 def test_a_report_with_its_replays_lands(
     client: Client,
@@ -18,7 +20,7 @@ def test_a_report_with_its_replays_lands(
     monkeypatch.setattr(
         player_series, "_notify_discord_series_update", lambda *a: False
     )
-    replay = ("game.w3g", b"replay", "application/octet-stream")
+    replay = ("game.w3g", blob.REPLAY_MAGIC + b"\0" * 8, "application/octet-stream")
 
     resp = client.put(
         f"/player-series/{seeded['series_open_id']}",

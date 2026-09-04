@@ -6,6 +6,8 @@ from fastapi import APIRouter, Depends, Query
 from app.api.deps import MatchServiceDep, require_admin
 from app.api.search import SearchQuery
 from app.models.match import MatchCreate, MatchPublic, MatchUpdate
+from app.models.series_replay import SeriesReplayPublic
+from app.services import replays
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +49,12 @@ def delete_match(match_id: int, service: MatchServiceDep) -> None:
 def get_match(match_id: int, service: MatchServiceDep) -> MatchPublic:
     """Retrieve a match by its ID."""
     return service.get(match_id)
+
+
+@router.get("/matches/{match_id}/replays")
+def get_match_replays(match_id: int) -> list[SeriesReplayPublic]:
+    """The replay of every game played in this match, one row per series and game."""
+    return replays.for_match(match_id)
 
 
 @router.post("/matches/search")
