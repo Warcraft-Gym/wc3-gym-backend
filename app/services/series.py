@@ -6,7 +6,7 @@ from app.core.db import Session
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.core.ordering import SortOrder, ordered
 from app.core.query import QueryElement, QueryUtil
-from app.core.scoring import wins_needed
+from app.core.scoring import fits, wins_needed
 from app.models.match import Match
 from app.models.series import (
     SERIES_SORTS,
@@ -27,9 +27,7 @@ def _both_scores(row: Series) -> None:
     if row.player1_score is None or row.player2_score is None:
         return
     wins = wins_needed(row.match.season.map_rules if row.match else None)
-    if max(row.player1_score, row.player2_score) > wins or (
-        row.player1_score == row.player2_score == wins
-    ):
+    if not fits(row.player1_score, row.player2_score, wins):
         raise BadRequestError(f"A series of this season ends at {wins} map wins")
 
 

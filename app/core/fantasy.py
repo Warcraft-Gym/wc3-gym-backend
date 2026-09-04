@@ -19,6 +19,7 @@ from collections.abc import Mapping, Sequence
 from typing import Any, Literal, NamedTuple, overload
 
 from app.core.exceptions import BadRequestError
+from app.core.scoring import DEFAULT_WINS, fits
 
 # Points the first three ranks of a week pay to a race
 RACE_RANK_POINTS = {1: 18, 2: 12, 3: 6}
@@ -55,7 +56,7 @@ class Series(NamedTuple):
     player2: Player
     player1_score: int | None
     player2_score: int | None
-    wins: int = 2  # the maps a series of the season takes to win
+    wins: int = DEFAULT_WINS  # the maps a series of the season takes to win
 
     def winner(self) -> Player | None:
         """The side that took the maps a win takes, if the series is decided."""
@@ -88,14 +89,14 @@ class Standing(NamedTuple):
 type SeriesByWeek = Mapping[int | None, Sequence[Series]]
 
 
-def series_points(own: int, opp: int, wins: int = 2) -> int:
+def series_points(own: int, opp: int, wins: int = DEFAULT_WINS) -> int:
     """The points one played series pays the player who holds the own score.
 
     A win pays 10 less 2 per map the loser took; a loss pays 4 per map won,
     spread over the maps short of a win (a Bo3: 10, 8, 4, 0).
     """
     # ponytail: fixed weights, a setting if a Bo1 and a Bo5 should pay the same
-    if own > wins or opp > wins or own == opp == wins:
+    if not fits(own, opp, wins):
         raise BadRequestError(f"Invalid result score1: {own} - score2: {opp}")
     if own == wins:
         return 10 - 2 * opp

@@ -31,6 +31,12 @@ def wins_needed_sql(
     return func.coalesce(games // 2 + 1, DEFAULT_WINS)
 
 
+def fits(own: int, opp: int, wins: int) -> bool:
+    """Whether two map scores fit a series that takes `wins` maps to win:
+    neither above it, and not both at it."""
+    return max(own, opp) <= wins and not own == opp == wins
+
+
 def max_points(system: str, wins: int = DEFAULT_WINS) -> int:
     """The points a series pays for a clean win under this score system."""
     return 2 * wins + SYSTEMS.get(system, SYSTEMS[DEFAULT_SYSTEM])
