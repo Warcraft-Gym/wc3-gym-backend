@@ -122,8 +122,15 @@ def blob_store(monkeypatch: pytest.MonkeyPatch) -> dict[str, bytes]:
         stored[url] = data
         return url
 
+    def put_replay(name: str, data: bytes) -> str:
+        blob.replay_check(data)
+        url = f"https://test.public.blob.vercel-storage.com/{name}-{next(serial)}.w3g"
+        stored[url] = data
+        return url
+
     monkeypatch.setattr(blob, "put_icon", put_icon)
-    monkeypatch.setattr(blob, "delete_icon", lambda url: stored.pop(url, None))
+    monkeypatch.setattr(blob, "put_replay", put_replay)
+    monkeypatch.setattr(blob, "delete_blob", lambda url: stored.pop(url, None))
     return stored
 
 

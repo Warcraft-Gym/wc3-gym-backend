@@ -82,7 +82,7 @@ class MapService:
             previous = map.image
             map.image = url
         if previous and blob.ours(previous):
-            blob.delete_icon(previous)
+            blob.delete_blob(previous)
 
     def get_image_url(self, map_id: int) -> str | None:
         """Where the picture is published, or None for a map without one."""

@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 from app.core.scoring import wins_needed
 from app.core.security import secure_filename
 from app.models.series import SeriesPublic, SeriesUpdate
+from app.services import blob, replays
 from app.services.series import SeriesService
 from app.services.series_veto import SeriesVetoService
 from app.services.users import UserService
@@ -141,10 +142,13 @@ def update_player_series(
     wins = wins_needed(season.map_rules if season else None)
     games = 2 * wins - 1
     uploaded_files = {}
+    replay_bytes: dict[str, bytes] = {}
     for file_key in [f"game{n}" for n in range(1, games + 1)]:
         if file_key in files and files[file_key]["filename"]:
             file = files[file_key]
             if file["filename"].lower().endswith(".w3g"):
+                blob.replay_check(file["data"])
+                replay_bytes[file_key] = file["data"]
                 uploaded_files[file_key] = {
                     "filename": secure_filename(file["filename"]),
                     "data": file["data"],
@@ -227,6 +231,9 @@ def update_player_series(
     if "player2_score" in data and data["player2_score"] is not None:
         changes["player2_score"] = int(data["player2_score"])
 
+    # The replays first: a put that fails leaves the score unreported rather than half-reported
+    stored = replays.store(series_id, user.id, replay_bytes)
+
     # Only the fields this editor changes, so a concurrent edit stands
     updated_series = series_service.update(series_id, SeriesUpdate(**changes))
 
@@ -256,6 +263,7 @@ def update_player_series(
     result = updated_series.to_dict()
     if uploaded_files:
         result["uploaded_files"] = {k: v["filename"] for k, v in uploaded_files.items()}
+        result["replays"] = [replay.model_dump(mode="json") for replay in stored]
 
     # Always include Discord notification status in response
     result["discord_notification_sent"] = discord_notified

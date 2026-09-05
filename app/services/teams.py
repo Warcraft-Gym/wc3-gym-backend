@@ -113,7 +113,7 @@ class TeamService:
             previous = team.icon_url
             team.icon_url = url
         if previous:
-            blob.delete_icon(previous)
+            blob.delete_blob(previous)
 
     def add_players(
         self, team_id: int, season_id: int, player_ids: list[int]
