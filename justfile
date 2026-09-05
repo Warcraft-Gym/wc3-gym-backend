@@ -44,10 +44,6 @@ fmt:
     uv run ruff format .
     uv run ruff check --fix .
 
-# Turn a prod /dump zip into a seed directory: no Nightbot token, no test seasons, no derived columns.
-clean-dump zip out_dir *seasons:
-    uv run python scripts/clean_dump.py "{{ zip }}" "{{ out_dir }}" {{ seasons }}
-
 # Clone the private seed repo into a directory. No access is not an error: the directory stays empty.
 _fetch-seed dir:
     #!/usr/bin/env bash

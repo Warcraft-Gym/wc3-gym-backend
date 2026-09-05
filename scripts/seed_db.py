@@ -1,4 +1,4 @@
-"""Seed a migrated Postgres from a directory of CSVs (one per table, NULL as \\N), as clean-dump writes.
+"""Seed a migrated Postgres from a directory of CSVs (one per table, NULL as \\N), as the seed repo holds them.
 
 usage: uv run python scripts/seed_db.py <dir> <postgresql://url>
 

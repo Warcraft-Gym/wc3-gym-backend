@@ -1,7 +1,7 @@
 """The staging Supabase project behind Vercel previews. DB_URL names the project.
 
 migrate               bring wc3gym_template (unlocked for the duration) and wc3gym_staging to head
-seed <seed_dir>       reseed the template from a clean-dump directory, then recreate wc3gym_staging from it
+seed <seed_dir>       reseed the template from a seed directory, then recreate wc3gym_staging from it
 list                  the databases on the project
 drop <database>       drop one branch copy by name; the template and the shared database are refused
 drop-branch <branch>  drop the copy a branch owns, if any (the workflow calls this on branch delete)
