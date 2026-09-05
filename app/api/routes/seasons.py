@@ -1,7 +1,7 @@
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 
 from app.api.deps import LadderServiceDep, SeasonServiceDep, require_admin
 from app.api.search import SearchQuery
@@ -220,8 +220,12 @@ def sync_ladder_season_signups(
 
 
 @router.get("/seasons/{season_id}/ladder")
-def get_season_ladder(season_id: int, service: LadderServiceDep) -> SeasonLadder:
+def get_season_ladder(
+    season_id: int, service: LadderServiceDep, response: Response
+) -> SeasonLadder:
     """The ladder of a season: its teams, its players and its hours."""
+    # matches change once a day at the cron; the edge serves every viewer one read
+    response.headers["Cache-Control"] = "public, s-maxage=3600"
     return service.season_ladder(season_id)
 
 
