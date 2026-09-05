@@ -1,13 +1,14 @@
-"""Game replays, in the Cloudflare R2 bucket `gnl-replays`, through its S3 API.
+"""Game replays, in a Cloudflare R2 bucket, through its S3 API.
 
 Every call is a presigned URL, signed here with the standard library (AWS Signature Version 4).
 The browser uploads straight to the bucket with one, so no file passes through a Vercel function
 and its 4.5 MB request cap. A download link is signed per read and lives `DOWNLOAD_SECONDS`, the
 longest R2 allows. A tab left open longer gets a 403 from R2 and the reader refreshes the page.
 
-Env: `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_ACCESS_KEY_ID`, `CLOUDFLARE_SECRET_ACCESS_KEY` from the
-R2 API token scoped to the bucket. A key starts with `VERCEL_ENV`, so a preview or the staging
-build never overwrites a production replay.
+Env: `CLOUDFLARE_R2_BUCKET`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_ACCESS_KEY_ID` and
+`CLOUDFLARE_SECRET_ACCESS_KEY`, from the R2 API token scoped to that bucket. Production uses
+`gnl-replays`; the preview and development targets use `gnl-replays-staging` with its own token.
+A key also starts with `VERCEL_ENV`, so two builds on one bucket never share a file.
 """
 
 import hashlib
@@ -18,7 +19,6 @@ from urllib.parse import quote, urlencode
 
 import requests
 
-BUCKET = "gnl-replays"
 DOWNLOAD_SECONDS = 7 * 24 * 3600
 UPLOAD_SECONDS = 600
 ALGORITHM = "AWS4-HMAC-SHA256"
@@ -73,7 +73,7 @@ def _signed(method: str, key: str, seconds: int) -> str:
     return presign(
         method,
         f"{account}.r2.cloudflarestorage.com",
-        f"/{BUCKET}/{quote(key)}",
+        f"/{os.environ['CLOUDFLARE_R2_BUCKET']}/{quote(key)}",
         seconds,
         access_key=os.environ["CLOUDFLARE_ACCESS_KEY_ID"],
         secret_key=os.environ["CLOUDFLARE_SECRET_ACCESS_KEY"],
