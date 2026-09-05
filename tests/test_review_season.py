@@ -19,7 +19,7 @@ from app.services.review_season import NAME, WEEKS, build
 
 
 def test_build_copies_the_latest_season_and_seats_the_captains(
-    seeded: dict[str, Any],
+    seeded: dict[str, Any], blob_store: dict[str, bytes]
 ) -> None:
     with Session.begin() as session:
         for user_id in seeded["player_ids"]:
@@ -37,11 +37,13 @@ def test_build_copies_the_latest_season_and_seats_the_captains(
         ).first()
         assert first
         replays.store(ident(first), None, {"game1": blob.REPLAY_MAGIC + b"\0" * 64})
+    assert len(blob_store) == 1
 
-    # a second build replaces the season: its series and their replay rows go with it
+    # a second build replaces the season: its series, their replay rows and the blob go with it
     summary = build("1", "9999")
 
     assert "captains team" in summary
+    assert blob_store == {}
     with Session() as session:
         seasons = session.scalars(select(Season).where(col(Season.name) == NAME)).all()
         assert len(seasons) == 1
