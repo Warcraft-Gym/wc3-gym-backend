@@ -815,6 +815,13 @@ def test_the_ladder_reads_need_no_token(client: Client, league: dict[str, Any]) 
     assert client.get(f"/users/{league['player_ids'][0]}/ladder").status_code == 200
 
 
+def test_the_season_ladder_is_cacheable_at_the_edge(
+    client: Client, league: dict[str, Any]
+) -> None:
+    ladder = client.get(f"/seasons/{league['season_id']}/ladder")
+    assert ladder.headers["cache-control"] == "public, s-maxage=3600"
+
+
 def test_both_routes_answer_404_for_an_unknown_id(
     client: Client, auth_headers: dict[str, str], league: dict[str, Any]
 ) -> None:
