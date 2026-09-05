@@ -14,7 +14,7 @@ worker can start at the same time.
 import os
 from typing import Any
 
-from sqlalchemy import Engine, create_engine
+from sqlalchemy import Engine, create_engine, event
 from sqlalchemy.orm import InstrumentedAttribute, sessionmaker
 
 # Unbound until init_engine runs; the services import this name at import time
@@ -38,5 +38,10 @@ def init_engine(db_url: str | None = None) -> Engine:
         raise RuntimeError("DB_URL is not set. See the variable table in README.md.")
 
     engine = create_engine(db_url, pool_pre_ping=True, pool_recycle=3600)
+    if engine.dialect.name == "sqlite":
+        # the tests run on SQLite, which enforces foreign keys and their cascades only when asked
+        event.listen(
+            engine, "connect", lambda conn, _: conn.execute("PRAGMA foreign_keys=ON")
+        )
     Session.configure(bind=engine)
     return engine
