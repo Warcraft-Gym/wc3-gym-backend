@@ -40,7 +40,7 @@ migrate env="prod":
     set -euo pipefail
     url=$(just vercel url {{ env }})
     if [ "{{ env }}" = staging ]; then
-        DB_URL="$url" uv run python scripts/vercel_staging_db.py migrate
+        DB_URL="$url" uv run python -m api.preview_db migrate
     else
         DB_URL="$url" uv run alembic upgrade head
     fi
@@ -62,9 +62,9 @@ seed env="prod":
     just _fetch-seed "$seed"
     if [ "{{ env }}" = staging ]; then
         if [ -f "$seed/users.csv" ]; then
-            DB_URL="$url" uv run python scripts/vercel_staging_db.py seed "$seed"
+            DB_URL="$url" uv run python -m api.preview_db seed "$seed"
         else
-            DB_URL="$url" uv run python scripts/vercel_staging_db.py migrate
+            DB_URL="$url" uv run python -m api.preview_db migrate
         fi
     else
         DB_URL="$url" uv run alembic upgrade head
@@ -91,12 +91,12 @@ review-season env reviewer me="":
         url=$(DB_URL="$url" uv run python -c 'import os; from api.preview_db import SHARED, with_database; print(with_database(os.environ["DB_URL"], SHARED))')
     fi
     me="{{ me }}"
-    DB_URL="$url" uv run python scripts/review_season.py "${me:-${ADMIN_DISCORD_IDS%%,*}}" "{{ reviewer }}"
+    DB_URL="$url" uv run python -c 'import sys; from app.services.review_season import build; from app.core.db import init_engine; init_engine(); print(build(*sys.argv[1:]))' "${me:-${ADMIN_DISCORD_IDS%%,*}}" "{{ reviewer }}"
 
 # List the staging databases: the template, the shared database and the branch copies.
 list:
-    DB_URL="$(just vercel url staging)" uv run python scripts/vercel_staging_db.py list
+    DB_URL="$(just vercel url staging)" uv run python -m api.preview_db list
 
 # Drop one branch copy on staging. The template and the shared database are refused.
 drop database:
-    DB_URL="$(just vercel url staging)" uv run python scripts/vercel_staging_db.py drop "{{ database }}"
+    DB_URL="$(just vercel url staging)" uv run python -m api.preview_db drop "{{ database }}"

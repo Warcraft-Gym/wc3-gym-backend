@@ -44,10 +44,6 @@ fmt:
     uv run ruff format .
     uv run ruff check --fix .
 
-# Turn a prod /dump zip into a seed directory: no Nightbot token, no test seasons, no derived columns.
-clean-dump zip out_dir *seasons:
-    uv run python scripts/clean_dump.py "{{ zip }}" "{{ out_dir }}" {{ seasons }}
-
 # Clone the private seed repo into a directory. No access is not an error: the directory stays empty.
 _fetch-seed dir:
     #!/usr/bin/env bash
@@ -66,7 +62,7 @@ _load-seed dir url:
     export DB_URL="{{ url }}"
     # the URLs the load is about to drop; deleted last, so a failed upload leaves an orphan, not a broken image
     previous=$(uv run python -c 'from sqlalchemy import text; from app.core.db import Session, init_engine; init_engine(); print(*[u for (u,) in Session().execute(text("SELECT icon_url FROM teams WHERE icon_url IS NOT NULL"))])')
-    uv run python scripts/seed_db.py "{{ dir }}" "$DB_URL"
+    uv run python -m app.core.seed "{{ dir }}" "$DB_URL"
     if [ -z "${BLOB_READ_WRITE_TOKEN:-}" ]; then echo "logos: BLOB_READ_WRITE_TOKEN is not set, teams keep the default logo" >&2; exit 0; fi
     uv run python - "{{ dir }}/logos" $previous <<'PY'
     import sys

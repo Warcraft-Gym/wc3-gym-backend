@@ -1,6 +1,6 @@
-"""Seed a migrated Postgres from a directory of CSVs (one per table, NULL as \\N), as clean-dump writes.
+"""Seed a migrated Postgres from a directory of CSVs (one per table, NULL as \\N), as the seed repo holds them.
 
-usage: uv run python scripts/seed_db.py <dir> <postgresql://url>
+usage: uv run python -m app.core.seed <dir> <postgresql://url>
 
 Copies every column the target table still has, keeps the ids, then sets every
 sequence. FK checks are off during the copy, so table order does not matter.
@@ -14,15 +14,20 @@ import sys
 from pathlib import Path
 
 import psycopg
+from psycopg import sql
 
 from app.core.achievements import DEFAULT_PAID
 
 csv.field_size_limit(sys.maxsize)
 
 
-def bytea(cell: str) -> str:
-    """csv.writer stringified BLOBs as repr(bytes); Postgres wants hex bytea"""
-    return r"\x" + ast.literal_eval(cell).hex()
+def convert(cell: str, data_type: str) -> str:
+    """The two cells COPY cannot take as written: repr(bytes) BLOBs and MySQL 0/1 booleans"""
+    if data_type == "bytea" and cell.startswith("b'"):
+        return r"\x" + ast.literal_eval(cell).hex()
+    if data_type == "boolean" and cell in ("0", "1"):
+        return "true" if cell == "1" else "false"
+    return cell
 
 
 def main(seed_dir: str, url: str) -> None:
@@ -33,7 +38,11 @@ def main(seed_dir: str, url: str) -> None:
         tables = [f.stem for f in files]
         # CASCADE: tables outside the seed set reference these (ladder_achievements,
         # ladder_sync, w3c_ladder_matches, team_season_captain, discord_role_binding)
-        cur.execute("TRUNCATE " + ", ".join(f'"{t}"' for t in tables) + " CASCADE")
+        cur.execute(
+            sql.SQL("TRUNCATE {} CASCADE").format(
+                sql.SQL(", ").join(map(sql.Identifier, tables))
+            )
+        )
         for table, path in zip(tables, files):
             rows = list(csv.reader(path.open(encoding="utf-8")))
             header, body = rows[0], rows[1:]
@@ -46,18 +55,15 @@ def main(seed_dir: str, url: str) -> None:
             keep = [i for i, c in enumerate(header) if c in types]
             cols = [header[i] for i in keep]
             with cur.copy(
-                f"COPY \"{table}\" ({', '.join(f'"{c}"' for c in cols)}) FROM STDIN (FORMAT csv, NULL '\\N')"
+                sql.SQL("COPY {} ({}) FROM STDIN (FORMAT csv, NULL '\\N')").format(
+                    sql.Identifier(table),
+                    sql.SQL(", ").join(map(sql.Identifier, cols)),
+                )
             ) as copy:
                 out = io.StringIO()
                 w = csv.writer(out)
                 for row in body:
-                    vals = [row[i] for i in keep]
-                    for j, c in enumerate(cols):
-                        if types[c] == "bytea" and vals[j].startswith("b'"):
-                            vals[j] = bytea(vals[j])
-                        elif types[c] == "boolean" and vals[j] in ("0", "1"):
-                            vals[j] = "false" if vals[j] == "0" else "true"
-                    w.writerow(vals)
+                    w.writerow([convert(row[i], types[c]) for i, c in zip(keep, cols)])
                 copy.write(out.getvalue())
             dropped = sorted(set(header) - set(cols))
             print(
@@ -79,8 +85,15 @@ def main(seed_dir: str, url: str) -> None:
         )
         for table, col in cur.fetchall():
             cur.execute(
-                f"SELECT setval(pg_get_serial_sequence('{table}', '{col}'),"
-                f' COALESCE(MAX("{col}"), 0) + 1, false) FROM "{table}"'
+                sql.SQL(
+                    "SELECT setval(pg_get_serial_sequence({}, {}),"
+                    " COALESCE(MAX({}), 0) + 1, false) FROM {}"
+                ).format(
+                    sql.Literal(table),
+                    sql.Literal(col),
+                    sql.Identifier(col),
+                    sql.Identifier(table),
+                )
             )
         conn.commit()
 

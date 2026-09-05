@@ -13,11 +13,14 @@ A key also starts with `VERCEL_ENV`, so two builds on one bucket never share a f
 
 import hashlib
 import hmac
+import logging
 import os
 from datetime import UTC, datetime
 from urllib.parse import quote, urlencode
 
 import requests
+
+logger = logging.getLogger(__name__)
 
 DOWNLOAD_SECONDS = 7 * 24 * 3600
 UPLOAD_SECONDS = 600
@@ -105,6 +108,17 @@ def fetch(key: str) -> bytes:
     resp = requests.get(_signed("GET", key, 60), timeout=30)
     resp.raise_for_status()
     return resp.content
+
+
+def delete(key: str) -> None:
+    """Drop the file under this key. A key with no file is not an error, and a store that refuses
+    is logged: the row is already gone, and a delete must not fail on the file."""
+    try:
+        requests.delete(
+            _signed("DELETE", key, UPLOAD_SECONDS), timeout=30
+        ).raise_for_status()
+    except requests.RequestException:
+        logger.warning("could not delete the replay %s", key, exc_info=True)
 
 
 def download_url(key: str) -> str:

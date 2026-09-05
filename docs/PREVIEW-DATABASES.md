@@ -59,10 +59,10 @@ A Supabase project is one Postgres instance. Extra databases work through the po
 
 | Piece | Where | Runs on |
 |---|---|---|
-| Choose or create the branch database, migrate it | `api/preview_db.py`, called from `vercel.json` | Preview build |
+| Choose or create the branch database, migrate it | `api/preview_db.py` build, called from `vercel.json` | Preview build |
 | Point the app at its database | `api/index.py` | Cold start |
-| Migrate template and shared database | `.github/workflows/vercel-staging-db.yml` → `scripts/vercel_staging_db.py migrate` | Push to `main` |
-| Drop a branch's copy | `.github/workflows/vercel-staging-db-drop.yml` → `scripts/vercel_staging_db.py drop-branch <branch>` | Branch deleted |
+| Migrate template and shared database | `.github/workflows/vercel-staging-db.yml` → `api/preview_db.py migrate` | Push to `main` |
+| Drop a branch's copy | `.github/workflows/vercel-staging-db-drop.yml` → `api/preview_db.py drop-branch <branch>` | Branch deleted |
 | Single migration head | `tests/test_migrations.py` | Every pull request |
 | Reseed, list, manual drop | `just db seed vercel staging`, `just db list vercel staging`, `just db drop vercel staging <database>` | By hand |
 

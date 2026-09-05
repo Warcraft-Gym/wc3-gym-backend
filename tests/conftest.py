@@ -136,6 +136,7 @@ def blob_store(monkeypatch: pytest.MonkeyPatch) -> dict[str, bytes]:
     monkeypatch.setattr(r2, "upload_url", lambda key: f"https://r2.test/upload/{key}")
     monkeypatch.setattr(r2, "peek", peek)
     monkeypatch.setattr(r2, "fetch", lambda key: stored[download_url(key)])
+    monkeypatch.setattr(r2, "delete", lambda key: stored.pop(download_url(key), None))
     return stored
 
 
