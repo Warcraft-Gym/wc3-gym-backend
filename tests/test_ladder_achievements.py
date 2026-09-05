@@ -490,9 +490,9 @@ def test_a_badge_names_the_match_that_turned_its_rule_on() -> None:
 
 
 def test_deleting_a_season_drops_its_prices(seeded: dict[str, Any]) -> None:
-    from app.api.deps import season_service
     from sqlmodel import col
 
+    from app.api.deps import season_service
     from app.models.ladder_achievement import LadderAchievement
 
     season_service.delete(seeded["season_id"])
