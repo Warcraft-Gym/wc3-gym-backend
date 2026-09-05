@@ -12,11 +12,14 @@ build never overwrites a production replay.
 
 import hashlib
 import hmac
+import logging
 import os
 from datetime import UTC, datetime
 from urllib.parse import quote, urlencode
 
 import requests
+
+logger = logging.getLogger(__name__)
 
 BUCKET = "gnl-replays"
 DOWNLOAD_SECONDS = 7 * 24 * 3600
@@ -90,6 +93,17 @@ def put(key: str, data: bytes) -> None:
     requests.put(
         _signed("PUT", key, UPLOAD_SECONDS), data=data, headers=headers, timeout=30
     ).raise_for_status()
+
+
+def delete(key: str) -> None:
+    """Drop the file under this key. A key with no file is not an error, and a store that refuses
+    is logged: the row is already gone, and a delete must not fail on the file."""
+    try:
+        requests.delete(
+            _signed("DELETE", key, UPLOAD_SECONDS), timeout=30
+        ).raise_for_status()
+    except requests.RequestException:
+        logger.warning("could not delete the replay %s", key, exc_info=True)
 
 
 def download_url(key: str) -> str:

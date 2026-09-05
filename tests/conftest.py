@@ -131,6 +131,7 @@ def blob_store(monkeypatch: pytest.MonkeyPatch) -> dict[str, bytes]:
         r2, "put", lambda key, data: stored.__setitem__(download_url(key), data)
     )
     monkeypatch.setattr(r2, "download_url", download_url)
+    monkeypatch.setattr(r2, "delete", lambda key: stored.pop(download_url(key), None))
     return stored
 
 
