@@ -23,7 +23,6 @@ def test_a_player_edit_stores_the_new_date(
     result = player_series.update_player_series(
         seeded["series_played_id"],
         {"date_time": "2026-01-09 20:00:00"},
-        {},
         discord_id="1",
         discord_tag="p1",
         user_service=UserService(),
@@ -51,7 +50,6 @@ def test_a_caster_set_after_the_read_survives_the_player_edit(
     result = player_series.update_player_series(
         series_id,
         {"date_time": "2026-01-09 20:00:00"},
-        {},
         discord_id="1",
         discord_tag="p1",
         user_service=UserService(),

@@ -1,4 +1,4 @@
-"""A player reports a result from the dashboard with the replays attached."""
+"""A player reports a result from the dashboard once the replays are in the bucket."""
 
 from collections.abc import Callable
 from typing import Any
@@ -6,22 +6,23 @@ from typing import Any
 import pytest
 from httpx2 import Client
 
-from app.services import replays
+
+@pytest.fixture(autouse=True)
+def no_discord(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.services import player_series
+
+    monkeypatch.setattr(
+        player_series, "_notify_discord_series_update", lambda *a: False
+    )
 
 
 def test_a_report_with_its_replays_lands(
     client: Client,
     seeded: dict[str, Any],
     dashboard_token: Callable[..., str],
-    monkeypatch: pytest.MonkeyPatch,
+    replay_uploaded: Callable[..., None],
 ) -> None:
-    from app.services import player_series
-
-    monkeypatch.setattr(
-        player_series, "_notify_discord_series_update", lambda *a: False
-    )
-    replay = ("game.w3g", replays.REPLAY_MAGIC + b"\0" * 8, "application/octet-stream")
-
+    replay_uploaded(seeded["series_open_id"], 1, 2)
     resp = client.put(
         f"/player-series/{seeded['series_open_id']}",
         data={
@@ -30,29 +31,22 @@ def test_a_report_with_its_replays_lands(
             "player1_score": "2",
             "player2_score": "0",
         },
-        files={"game1": replay, "game2": replay},
     )
 
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert (body["player1_score"], body["player2_score"]) == (2, 0)
-    assert body["uploaded_files"] == {"game1": "game.w3g", "game2": "game.w3g"}
+    assert [r["game_no"] for r in body["replays"]] == [1, 2]
 
 
 def test_a_report_needs_one_replay_per_game_played(
     client: Client,
     seeded: dict[str, Any],
     dashboard_token: Callable[..., str],
-    monkeypatch: pytest.MonkeyPatch,
+    replay_uploaded: Callable[..., None],
 ) -> None:
-    """A 2-1 went three games, so a report with two replays is refused."""
-    from app.services import player_series
-
-    monkeypatch.setattr(
-        player_series, "_notify_discord_series_update", lambda *a: False
-    )
-    replay = ("game.w3g", replays.REPLAY_MAGIC + b"\0" * 8, "application/octet-stream")
-
+    """A 2-1 went three games, so a report with two replays in the bucket is refused."""
+    replay_uploaded(seeded["series_open_id"], 1, 2)
     resp = client.put(
         f"/player-series/{seeded['series_open_id']}",
         data={
@@ -61,10 +55,7 @@ def test_a_report_needs_one_replay_per_game_played(
             "player1_score": "2",
             "player2_score": "1",
         },
-        files={"game1": replay, "game2": replay},
     )
 
     assert resp.status_code == 400, resp.text
-    assert resp.json() == {
-        "error": "Game 3 replay files are required when reporting results."
-    }
+    assert resp.json() == {"error": "Game 3 replay is missing"}

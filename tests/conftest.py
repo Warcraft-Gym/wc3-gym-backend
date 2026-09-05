@@ -36,7 +36,7 @@ os.environ.pop("DB_URL", None)
 os.environ.pop("SCORE_SYSTEM", None)
 
 from app.main import create_app
-from app.services import blob, r2
+from app.services import blob, r2, replays
 
 type SheetSpec = tuple[list[str], list[list[Any]]]
 
@@ -127,11 +127,30 @@ def blob_store(monkeypatch: pytest.MonkeyPatch) -> dict[str, bytes]:
 
     monkeypatch.setattr(blob, "put_icon", put_icon)
     monkeypatch.setattr(blob, "delete_blob", lambda url: stored.pop(url, None))
-    monkeypatch.setattr(
-        r2, "put", lambda key, data: stored.__setitem__(download_url(key), data)
-    )
+
+    def peek(key: str) -> tuple[bytes, int] | None:
+        data = stored.get(download_url(key))
+        return (data[:28], len(data)) if data is not None else None
+
     monkeypatch.setattr(r2, "download_url", download_url)
+    monkeypatch.setattr(r2, "upload_url", lambda key: f"https://r2.test/upload/{key}")
+    monkeypatch.setattr(r2, "peek", peek)
+    monkeypatch.setattr(r2, "fetch", lambda key: stored[download_url(key)])
     return stored
+
+
+REPLAY_BYTES = replays.REPLAY_MAGIC + b"\0" * 64
+
+
+@pytest.fixture
+def replay_uploaded(blob_store: dict[str, bytes]) -> Callable[..., None]:
+    """Pretend the browser put a replay in the bucket for these games of a series."""
+
+    def upload(series_id: int, *games: int, data: bytes = REPLAY_BYTES) -> None:
+        for game_no in games:
+            blob_store[f"https://r2.test/{r2.key(series_id, game_no)}"] = data
+
+    return upload
 
 
 @pytest.fixture(autouse=True)
