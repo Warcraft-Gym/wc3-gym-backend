@@ -187,3 +187,63 @@ def member_roles(discord_id: str) -> set[str] | None:
         )
         return None
     return set(response.json().get("roles", []))
+
+
+# Interaction replies. The interaction token is the authorization; no bot token is needed.
+def _interaction_call(
+    method: str,
+    application_id: str,
+    token: str,
+    path: str,
+    message: dict[str, Any] | None,
+) -> None:
+    url = f"{API_URL}/webhooks/{application_id}/{token}{path}"
+    try:
+        response = requests.request(method, url, json=message, timeout=REQUEST_TIMEOUT)
+    except requests.RequestException as error:
+        logger.warning("Discord interaction call failed for %s: %s", path, error)
+        return
+    if not response.ok:
+        logger.warning(
+            "Discord refused the interaction call %s: %s", path, response.status_code
+        )
+
+
+def edit_reply(application_id: str, token: str, message: dict[str, Any]) -> None:
+    """Replace the deferred reply the adapter sent, private as it was."""
+    _interaction_call("PATCH", application_id, token, "/messages/@original", message)
+
+
+def post_reply(application_id: str, token: str, message: dict[str, Any]) -> None:
+    """Post a public follow-up in the channel, and drop the private "thinking" reply."""
+    _interaction_call("POST", application_id, token, "", message)
+    _interaction_call("DELETE", application_id, token, "/messages/@original", None)
+
+
+def register_guild_commands(commands: list[dict[str, Any]]) -> list[str]:
+    """Replace the guild's slash commands with these; guild commands update at once."""
+    headers = _bot_headers()
+    application_id = os.getenv("DISCORD_APPLICATION_ID", "")
+    guild_id = os.getenv("DISCORD_GUILD_ID", "")
+    if not headers or not application_id or not guild_id:
+        raise ApiError(
+            503,
+            {
+                "error": "DISCORD_BOT_TOKEN, DISCORD_APPLICATION_ID and DISCORD_GUILD_ID are needed"
+            },
+        )
+    response = requests.request(
+        "PUT",
+        f"{API_URL}/applications/{application_id}/guilds/{guild_id}/commands",
+        headers=headers,
+        json=commands,
+        timeout=REQUEST_TIMEOUT,
+    )
+    if not response.ok:
+        raise ApiError(
+            502,
+            {
+                "error": f"Discord refused the commands: {response.status_code} {response.text}"
+            },
+        )
+    return [command["name"] for command in response.json()]

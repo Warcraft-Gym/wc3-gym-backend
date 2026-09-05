@@ -2,6 +2,7 @@ from fastapi import APIRouter
 
 from app.api.routes import (
     config,
+    discord,
     draft_series,
     fantasy,
     health,
@@ -36,3 +37,4 @@ api_router.include_router(koth.router)
 api_router.include_router(stats.router)
 api_router.include_router(health.router)
 api_router.include_router(jobs.router)
+api_router.include_router(discord.router)
