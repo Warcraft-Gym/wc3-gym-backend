@@ -6,12 +6,15 @@ from sqlmodel import col, select
 
 from app.core.db import Session
 from app.models.admin_grant import AdminGrant
+from app.models.base import ident
 from app.models.enums import Race
 from app.models.match import Match
 from app.models.season import Season
 from app.models.series import Series
+from app.models.series_replay import DBSeriesReplay
 from app.models.settings import Settings
 from app.models.w3c_stats import W3CStats
+from app.services import blob, replays
 from app.services.review_season import NAME, WEEKS, build
 
 
@@ -25,6 +28,17 @@ def test_build_copies_the_latest_season_and_seats_the_captains(
             )
 
     # an account that never signed up, and three rostered players: one pair, one left over
+    build("1", "9999")
+    with Session() as session:
+        first = session.scalars(
+            select(Series)
+            .join(Match)
+            .where(col(Match.season_id) != seeded["season_id"])
+        ).first()
+        assert first
+        replays.store(ident(first), None, {"game1": blob.REPLAY_MAGIC + b"\0" * 64})
+
+    # a second build replaces the season: its series and their replay rows go with it
     summary = build("1", "9999")
 
     assert "captains team" in summary
@@ -32,6 +46,7 @@ def test_build_copies_the_latest_season_and_seats_the_captains(
         seasons = session.scalars(select(Season).where(col(Season.name) == NAME)).all()
         assert len(seasons) == 1
         sid = seasons[0].id
+        assert session.scalars(select(DBSeriesReplay)).all() == []
         current = Settings.get_by_key(session, "current_gnl_season")
         assert current and current.value == str(sid)
         matches = session.scalars(
