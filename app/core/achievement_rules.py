@@ -15,8 +15,9 @@ tests/test_achievement_parity.py runs the two over the same random matches.
 """
 
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import replace
+from dataclasses import dataclass, field, replace
 from datetime import datetime
+from math import ceil
 from operator import itemgetter
 from typing import Any
 
@@ -24,11 +25,13 @@ from sqlalchemy import (
     CTE,
     Case,
     ColumnElement,
+    Integer,
     Row,
     Select,
     SQLColumnExpression,
     and_,
     case,
+    cast,
     extract,
     false,
     func,
@@ -40,33 +43,114 @@ from sqlalchemy import (
 from sqlalchemy.orm import Session as OrmSession
 from sqlmodel import col
 
+from app.core import achievement_shapes as shape
 from app.core import ladder
 from app.core.achievements import (
     ACHIEVEMENTS,
     ADDICTED,
+    ALWAYS_HERE,
+    ANTI_RANDOM,
+    AWAY_DAYS,
+    BUSY_DAY_GAMES,
+    BUSY_DAYS,
+    CAPTAIN_GAMES,
+    CAPTAINS_DUTY,
+    CIVIL_WAR,
+    CLIMB,
+    CLIMBER,
     DATS_FAKT_AP,
+    DISTINCT_DAYS,
     DOUBLE_UP,
     DUCK_HUNTING,
+    EARLY_BIRD,
+    EARLY_DAYS,
     ELITE,
     ELITE_MMR,
     FALLING_STAR,
+    FIRST_TO,
+    FIRST_TO_FIFTY,
+    FIVE_A_DAY,
+    FOUR_HORSEMEN,
+    GAMES_25,
+    GAMES_50,
+    GAMES_100,
+    GAMES_TIERS,
+    GONE_DAYS,
+    GONE_GAMES,
+    GRAND_TOUR,
+    HOLD_GAMES,
+    HOLD_THE_LINE,
+    HOLD_WITHIN,
     HOLIDAY,
     HOLIDAY_MAPS,
+    HOME_TURF,
+    HOME_WINS,
+    HOUR_WINS,
+    HUNTING_SEASON,
     I_AM_THE_CAPTAIN_NOW,
     JOIN_THEM,
     LADDER_GOAL,
     LADDER_GOAL_REACHED,
     LADDER_MAPS,
+    LADDER_SECONDS,
+    LAST_CALL,
+    LAST_DAYS,
     LONG_GAME_S,
     LOSE_FIRST,
+    MARATHON,
+    MARATHON_S,
+    MIRROR_MASTER,
+    MIRROR_WINS,
+    MONTH_OF_SUNDAYS,
+    NEMESIS,
+    NEMESIS_WINS,
+    NET_WINS,
+    NEVER_GONE,
     NEW_MAPS,
     NEWBIE,
+    OFF_DUTY,
+    ONE_SITTING,
+    OPEN_SEASON,
+    OPEN_SEASON_N,
+    PLUS_TWENTY,
+    POWER_HOUR,
     RACE_ACHIEVEMENTS,
     RACE_IDS,
+    RACE_TOUR,
+    RANDOM_WINS,
+    REPEAT_OFFENDER,
+    REPEAT_STREAK,
+    REPEAT_TIMES,
     RISING_STAR,
+    RIVAL,
+    RIVAL_GAMES,
     SAD_TROMBONE,
+    SITTING_GAMES,
+    SITTING_S,
+    SLAYER_GAMES,
+    SLAYER_RATE,
+    SLAYERS,
+    SPEEDRUN_S,
+    SPEEDRUNNER,
+    STREAK_DAYS,
+    STREAK_WEEK,
+    TOURIST,
+    TWENTY_DAYS,
+    TWENTY_HOURS,
+    WEEK_ONE,
+    WEEK_ONE_GAMES,
+    WEEKEND_GAMES,
+    WEEKEND_WARRIOR,
+    WEEKEND_WEEKS,
+    WEEKLY_GAMES,
+    WEEKLY_REGULAR,
+    WEEKLY_WEEKS,
+    WELCOME_BACK,
+    WIDE_NET,
+    WIDE_NET_N,
     WIN_EVERY_MAP,
     WIN_FIRST,
+    WIN_POOL,
     WIN_STREAK,
     WIN_STREAK_2,
     WINNER_WINNER,
@@ -102,25 +186,86 @@ ADDICTED_GAMES = 30
 DAY_MMR = 100
 
 
+@dataclass(frozen=True)
+class Context:
+    """What the rules read beside the matches: the season around them.
+
+    `teams` maps a team id to the players on it and `tags` to their battle
+    tags in lower case; a player on no team is in neither. `league_race` is
+    the race each player signed up on, the one the scope keeps. `window` is
+    the season's, None over a lifetime; `pool` its map names. `lifetime` is
+    the scope that spans seasons, which starts its rules at
+    LIFETIME_FROM_W3C_SEASON.
+    """
+
+    window: tuple[datetime, datetime] | None = None
+    pool: Sequence[str] = ()
+    teams: Mapping[int, Sequence[int]] = field(default_factory=dict)
+    tags: Mapping[int, Sequence[str]] = field(default_factory=dict)
+    captains: frozenset[str] = frozenset()
+    captain_ids: Sequence[int] = ()
+    league_race: Mapping[int, str | None] = field(default_factory=dict)
+    lifetime: bool = False
+
+    @property
+    def opponents(self) -> dict[int, frozenset[str]]:
+        """Per player, the tags of everyone on another team."""
+        everyone = frozenset(tag for tags in self.tags.values() for tag in tags)
+        return {
+            user_id: everyone - frozenset(self.tags.get(team, ()))
+            for team, users in self.teams.items()
+            for user_id in users
+        }
+
+    @property
+    def teammates(self) -> dict[int, frozenset[str]]:
+        """Per player, the tags of everyone on his own team."""
+        return {
+            user_id: frozenset(self.tags.get(team, ()))
+            for team, users in self.teams.items()
+            for user_id in users
+        }
+
+    @property
+    def members(self) -> frozenset[str]:
+        return frozenset(tag for tags in self.tags.values() for tag in tags)
+
+    @property
+    def since_day(self) -> int:
+        """The epoch of the window's first UTC day."""
+        assert self.window is not None
+        epoch = int(self.window[0].timestamp())
+        return epoch - epoch % shape.DAY_S
+
+    @property
+    def until(self) -> int:
+        assert self.window is not None
+        return int(self.window[1].timestamp())
+
+    @property
+    def weeks(self) -> int:
+        """The weeks the window spans, the last one however short."""
+        assert self.window is not None
+        return ceil(((self.window[1] - self.window[0]).days + 1) / 7)
+
+
 def earned(
     session: OrmSession,
     scope: Sequence[ColumnElement[bool]],
     paid: PaidSet,
-    opponents: Mapping[int, frozenset[str]],
-    captains: frozenset[str],
-    captain_ids: Sequence[int],
-    lifetime: bool,
+    ctx: Context,
+    any_race: Sequence[ColumnElement[bool]] | None = None,
 ) -> dict[int, list[Achievement]]:
     """Every player's achievements over the scope, oldest first.
 
     `paid` is what this scope pays for each rule and a rule it does not name
-    is not evaluated; `opponents` are the tags of the players on other teams,
-    per player; `captains` the tags of the season's captains and `captain_ids`
-    the players who are captains themselves, who the captain rule skips.
-    `lifetime` is the scope that spans seasons, which starts its rules at
-    LIFETIME_FROM_W3C_SEASON.
+    is not evaluated. `any_race` is the scope without the league race clause,
+    which the two off-race rules read; None skips them.
     """
-    queries = _queries(_scoped(scope, lifetime), opponents, captains, captain_ids)
+    rows = scoped(scope, ctx.lifetime)
+    queries = _queries(rows, ctx)
+    if any_race is not None:
+        queries += _off_race_queries(scoped(any_race, ctx.lifetime, "any_race"), ctx)
     wanted = [(ids, query) for ids, query in queries if paid.keys() & set(ids)]
     if not wanted:
         return {}
@@ -158,18 +303,17 @@ def _badges(
     }
 
 
-def _queries(
-    rows: CTE,
-    opponents: Mapping[int, frozenset[str]],
-    captains: frozenset[str],
-    captain_ids: Sequence[int],
-) -> list[tuple[tuple[str, ...], Select[Any]]]:
+Query = tuple[tuple[str, ...], Select[Any]]
+
+
+def _queries(rows: CTE, ctx: Context) -> list[Query]:
     """Every rule as one statement, in the order the rules are evaluated in.
 
     A rule whose inputs are empty is dropped: no roster means no duck and no
-    captain to beat.
+    captain to beat, no window means no first week.
     """
-    queries: list[tuple[tuple[str, ...], Select[Any]]] = [
+    opponents, captains, captain_ids = ctx.opponents, ctx.captains, ctx.captain_ids
+    queries: list[Query] = [
         ((WIN_FIRST.id,), _first_match(rows, True, WIN_FIRST.id)),
         ((LOSE_FIRST.id,), _first_match(rows, False, LOSE_FIRST.id)),
         ((WINNER_WINNER.id,), _nth_result(rows, True, 100, WINNER_WINNER.id)),
@@ -216,10 +360,239 @@ def _queries(
         ((LADDER_GOAL_REACHED.id,), _goal(rows, LADDER_GOAL, LADDER_GOAL_REACHED.id)),
         ((DOUBLE_UP.id,), _goal(rows, LADDER_GOAL * 2, DOUBLE_UP.id)),
     ]
+    return queries + _s19_queries(rows, ctx)
+
+
+def _one(rule: Achievement, query: Select[Any]) -> Query:
+    return ((rule.id,), query)
+
+
+def _s19_queries(rows: CTE, ctx: Context) -> list[Query]:
+    """The S19 rules, built from core.achievement_shapes."""
+    won, tag = rows.c.won, rows.c.tag
+    mirror = shape.all_of(
+        rows.c.played_race.is_not(None), rows.c.played_race == rows.c.opp_played_race
+    )
+    queries = [
+        _one(GAMES_25, shape.nth(rows, GAMES_25.id, GAMES_TIERS[0])),
+        _one(GAMES_50, shape.nth(rows, GAMES_50.id, GAMES_TIERS[1])),
+        _one(GAMES_100, shape.nth(rows, GAMES_100.id, GAMES_TIERS[2])),
+        _one(
+            PLUS_TWENTY,
+            shape.running(rows, PLUS_TWENTY.id, case((won, 1), else_=-1), NET_WINS),
+        ),
+        _one(
+            TWENTY_HOURS,
+            shape.running(rows, TWENTY_HOURS.id, rows.c.duration_s, LADDER_SECONDS),
+        ),
+        _one(
+            STREAK_WEEK,
+            shape.consecutive_periods(
+                rows, STREAK_WEEK.id, shape.day_number(rows), 1, STREAK_DAYS
+            ),
+        ),
+        _one(
+            TWENTY_DAYS,
+            shape.periods(rows, TWENTY_DAYS.id, rows.c.day, 1, DISTINCT_DAYS),
+        ),
+        _one(
+            FIVE_A_DAY,
+            shape.periods(rows, FIVE_A_DAY.id, rows.c.day, BUSY_DAY_GAMES, BUSY_DAYS),
+        ),
+        _one(
+            WELCOME_BACK,
+            shape.after_break(rows, WELCOME_BACK.id, AWAY_DAYS * shape.DAY_S),
+        ),
+        _one(ONE_SITTING, shape.within(rows, ONE_SITTING.id, SITTING_GAMES, SITTING_S)),
+        _one(POWER_HOUR, shape.within(rows, POWER_HOUR.id, HOUR_WINS, 3600, won)),
+        _one(
+            WEEKEND_WARRIOR,
+            shape.nth(rows, WEEKEND_WARRIOR.id, WEEKEND_GAMES, shape.weekend(rows)),
+        ),
+        _one(
+            REPEAT_OFFENDER,
+            shape.streak_count(
+                rows, REPEAT_OFFENDER.id, True, REPEAT_STREAK, REPEAT_TIMES
+            ),
+        ),
+        _one(CLIMBER, shape.span(rows, CLIMBER.id, CLIMB)),
+        _one(
+            HOLD_THE_LINE,
+            shape.held_peak(rows, HOLD_THE_LINE.id, HOLD_WITHIN, HOLD_GAMES),
+        ),
+        _one(
+            HOME_TURF,
+            shape.group_nth(rows, HOME_TURF.id, HOME_WINS, (rows.c.map_name,), won),
+        ),
+        _one(
+            RACE_TOUR,
+            shape.covers(rows, RACE_TOUR.id, rows.c.opp_race, list(RACE_RULES), won),
+        ),
+        _one(
+            MIRROR_MASTER, shape.nth(rows, MIRROR_MASTER.id, MIRROR_WINS, won, mirror)
+        ),
+        _one(
+            ANTI_RANDOM,
+            shape.nth(
+                rows, ANTI_RANDOM.id, RANDOM_WINS, won, rows.c.opp_race == Race.RANDOM
+            ),
+        ),
+        (
+            tuple(rule.id for rule in SLAYERS.values()),
+            shape.rate_by(
+                rows,
+                {Race[code]: rule.id for code, rule in SLAYERS.items()},
+                rows.c.opp_race,
+                SLAYER_RATE,
+                SLAYER_GAMES,
+            ),
+        ),
+        _one(
+            NEMESIS,
+            shape.group_nth(
+                rows, NEMESIS.id, NEMESIS_WINS, (tag,), won, tag.is_not(None)
+            ),
+        ),
+        _one(
+            RIVAL,
+            shape.group_nth(rows, RIVAL.id, RIVAL_GAMES, (tag,), tag.is_not(None)),
+        ),
+        _one(WIDE_NET, shape.covers_count(rows, WIDE_NET.id, tag, WIDE_NET_N, won)),
+        _one(
+            SPEEDRUNNER,
+            shape.first(rows, SPEEDRUNNER.id, won, rows.c.duration_s <= SPEEDRUN_S),
+        ),
+        _one(MARATHON, shape.first(rows, MARATHON.id, rows.c.duration_s >= MARATHON_S)),
+        _one(
+            FIRST_TO_FIFTY,
+            shape.first_across(shape.nth(rows, FIRST_TO_FIFTY.id, FIRST_TO)),
+        ),
+    ]
+    if ctx.window is not None:
+        day, week = (
+            shape.day_index(rows, ctx.since_day),
+            shape.week_index(rows, ctx.since_day),
+        )
+        last_days = ctx.until - LAST_DAYS * shape.DAY_S
+        queries += [
+            _one(EARLY_BIRD, shape.first(rows, EARLY_BIRD.id, day < EARLY_DAYS)),
+            _one(WEEK_ONE, shape.nth(rows, WEEK_ONE.id, WEEK_ONE_GAMES, day < 7)),
+            _one(LAST_CALL, shape.first(rows, LAST_CALL.id, rows.c.epoch > last_days)),
+            _one(ALWAYS_HERE, shape.periods(rows, ALWAYS_HERE.id, week, 1, ctx.weeks)),
+            _one(
+                WEEKLY_REGULAR,
+                shape.periods(
+                    rows, WEEKLY_REGULAR.id, week, WEEKLY_GAMES, WEEKLY_WEEKS
+                ),
+            ),
+            _one(
+                MONTH_OF_SUNDAYS,
+                shape.consecutive_periods(
+                    rows,
+                    MONTH_OF_SUNDAYS.id,
+                    week,
+                    1,
+                    WEEKEND_WEEKS,
+                    shape.weekend(rows),
+                ),
+            ),
+            _one(
+                NEVER_GONE,
+                shape.no_break(
+                    rows,
+                    NEVER_GONE.id,
+                    GONE_DAYS * shape.DAY_S,
+                    GONE_GAMES,
+                    ctx.since_day,
+                    ctx.until,
+                ),
+            ),
+        ]
+    if ctx.pool:
+        queries += [
+            _one(
+                WIN_POOL,
+                shape.covers(rows, WIN_POOL.id, rows.c.map_name, ctx.pool, won),
+            ),
+            _one(TOURIST, shape.covers(rows, TOURIST.id, rows.c.map_name, ctx.pool)),
+        ]
+    if ctx.members:
+        member = tag.in_(sorted(ctx.members))
+        queries += [
+            _one(
+                HUNTING_SEASON,
+                shape.first(rows, HUNTING_SEASON.id, won, _ducks(rows, ctx.opponents)),
+            ),
+            _one(
+                OPEN_SEASON,
+                shape.covers_count(
+                    rows, OPEN_SEASON.id, tag, OPEN_SEASON_N, won, member
+                ),
+            ),
+            _one(
+                CIVIL_WAR,
+                shape.first(rows, CIVIL_WAR.id, won, _ducks(rows, ctx.teammates)),
+            ),
+        ]
+    if len(ctx.tags) > 1:
+        own = shape.team_of(rows, ctx.teams)
+        other = shape.opponent_team(rows, ctx.tags)
+        queries.append(
+            _one(
+                GRAND_TOUR,
+                shape.covers(
+                    rows,
+                    GRAND_TOUR.id,
+                    other,
+                    list(ctx.tags),
+                    won,
+                    other != own,
+                    need=len(ctx.tags) - 1,
+                ),
+            )
+        )
+    if ctx.captain_ids:
+        queries.append(
+            _one(
+                CAPTAINS_DUTY,
+                shape.nth(
+                    rows,
+                    CAPTAINS_DUTY.id,
+                    CAPTAIN_GAMES,
+                    rows.c.user_id.in_(list(ctx.captain_ids)),
+                ),
+            )
+        )
     return queries
 
 
-def _scoped(scope: Sequence[ColumnElement[bool]], lifetime: bool) -> CTE:
+def _off_race_queries(rows: CTE, ctx: Context) -> list[Query]:
+    """The two rules that read every race the player played, not only the
+    league one."""
+    league = shape.lookup(
+        [
+            (rows.c.user_id == user_id, race)
+            for user_id, race in ctx.league_race.items()
+            if race
+        ],
+        rows.c.race.type,
+    )
+    return [
+        _one(
+            FOUR_HORSEMEN,
+            shape.covers(
+                rows, FOUR_HORSEMEN.id, rows.c.played_race, list(RACE_RULES), rows.c.won
+            ),
+        ),
+        _one(
+            OFF_DUTY, shape.first(rows, OFF_DUTY.id, rows.c.won, rows.c.race != league)
+        ),
+    ]
+
+
+def scoped(
+    scope: Sequence[ColumnElement[bool]], lifetime: bool, name: str = "scoped"
+) -> CTE:
     """The matches the rules read, with the values every rule reads off one.
 
     One CTE, so the scope and its race subquery are applied once for the whole
@@ -243,9 +616,15 @@ def _scoped(scope: Sequence[ColumnElement[bool]], lifetime: bool) -> CTE:
             col(W3CLadderMatch.start_time).label("start_time"),
             col(W3CLadderMatch.duration_s).label("duration_s"),
             col(W3CLadderMatch.map_name).label("map_name"),
+            col(W3CLadderMatch.race).label("race"),
+            col(W3CLadderMatch.played_race).label("played_race"),
             col(W3CLadderMatch.opp_race).label("opp_race"),
+            col(W3CLadderMatch.opp_played_race).label("opp_played_race"),
             func.lower(col(W3CLadderMatch.opp_battletag)).label("tag"),
+            col(W3CLadderMatch.w3c_match_id).label("match_id"),
+            before.label("mmr_before"),
             after.label("mmr_after"),
+            _epoch(col(W3CLadderMatch.start_time)).label("epoch"),
             _utc_day(col(W3CLadderMatch.start_time)).label("day"),
             case(
                 (and_(before.is_not(None), after.is_not(None)), after - before),
@@ -254,8 +633,13 @@ def _scoped(scope: Sequence[ColumnElement[bool]], lifetime: bool) -> CTE:
             ladder.points_case(won, col(W3CLadderMatch.duration_s)).label("points"),
         )
         .where(*scope)
-        .cte("scoped")
+        .cte(name)
     )
+
+
+def _epoch(column: SQLColumnExpression[datetime]) -> ColumnElement[Any]:
+    """The instant as whole seconds, the unit the time windows count in."""
+    return cast(func.floor(extract("epoch", column)), Integer)
 
 
 def _utc_day(column: SQLColumnExpression[datetime]) -> ColumnElement[Any]:
@@ -264,7 +648,7 @@ def _utc_day(column: SQLColumnExpression[datetime]) -> ColumnElement[Any]:
     An epoch is absolute, so the session time zone cannot move the day, which
     date() would let it do on Postgres.
     """
-    epoch = extract("epoch", column)
+    epoch = _epoch(column)
     return epoch - epoch % 86400
 
 
@@ -276,8 +660,8 @@ def _member(query: Select[Any]) -> Select[Any]:
 
 
 def _ducks(rows: CTE, opponents: Mapping[int, frozenset[str]]) -> ColumnElement[bool]:
-    """An opponent signed up on another team. Everyone on one team has the
-    same opponents, so the clause carries one tag list per team."""
+    """An opponent in the player's tag set. Everyone on one team has the same
+    set, so the clause carries one tag list per team."""
     teams: dict[frozenset[str], list[int]] = {}
     for user_id, tags in opponents.items():
         if tags:

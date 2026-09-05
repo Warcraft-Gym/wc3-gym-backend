@@ -21,8 +21,8 @@ from httpx2 import Client
 from sqlalchemy import case, func, select
 from sqlmodel import col
 
-from app.core import ladder
-from app.core.achievements import ACHIEVEMENTS
+from app.core import achievements, ladder
+from app.core.achievements import ACHIEVEMENTS, TEAM_IDS
 from app.core.db import Session
 from app.models.enums import Race
 from app.models.ladder_achievement import LadderAchievement, default_rows
@@ -93,6 +93,7 @@ def add_match(
     race: Race | None = None,
     played_race: Race | None = None,
     opp_played_race: Race | None = None,
+    map_name: str = "Last Refuge",
 ) -> None:
     """One stored match. Without a race it is selected on the league race,
     and without a played race each side played the race it selected."""
@@ -104,7 +105,7 @@ def add_match(
                 wc3_season=wc3_season,
                 start_time=start_time,
                 duration_s=duration_s,
-                map_name="Last Refuge",
+                map_name=map_name,
                 race=race or session.get_one(User, user_id).race,
                 played_race=played_race or race or session.get_one(User, user_id).race,
                 opp_battletag=opp_battletag,
@@ -305,8 +306,11 @@ def test_the_teams_carry_the_points_of_their_players(
     team = next(t for t in body["teams"] if t["name"] == "Alpha")
     assert (team["ladder_points"], team["games"]) == (4, 2)
     # The loser leads the card: lose_first pays 25 where win_first pays 15
-    assert (team["points"], team["games"]) == (4 + 15 + 25, 2)
-    assert [player["id"] for player in team["players"]] == [two, one]
+    # One's win and Two's loss are both a first game on the third day, so each
+    # earns the first-game badge and the early bird
+    assert (team["points"], team["games"]) == (4 + (3 + 2) + (5 + 2), 2)
+    # Both on 8 points, so the names decide
+    assert [player["id"] for player in team["players"]] == [one, two]
 
 
 # The shapes the page draws.
@@ -459,7 +463,12 @@ def test_the_season_carries_every_achievement_rule_once(
 
     body = ladder_of(client, auth_headers, league["season_id"])
 
-    assert body["achievement_rules"] == [asdict(rule) for rule in ACHIEVEMENTS]
+    assert body["achievement_rules"] == [
+        asdict(rule) for rule in ACHIEVEMENTS if rule.id not in TEAM_IDS
+    ]
+    assert body["team_achievement_rules"] == [
+        asdict(rule) for rule in ACHIEVEMENTS if rule.id in TEAM_IDS
+    ]
 
 
 def test_the_season_stamp_is_the_oldest_of_the_roster(
@@ -522,7 +531,8 @@ def test_every_earned_achievement_is_in_the_catalogue(
     body = ladder_of(client, auth_headers, league["season_id"])
 
     earned = {rule["id"] for rule in player_of(body, player)["achievements"]}
-    assert earned == {"win_first"}
+    # One win on the third day of the season: the first win and the early bird
+    assert earned == {"win_first", "early_bird"}
     assert earned <= {rule["id"] for rule in body["achievement_rules"]}
 
 
@@ -559,10 +569,14 @@ def test_the_season_per_day_covers_every_day_of_the_window(
     assert body["per_day"][2] == {"d": "2026-01-07", "g": 1}
 
 
-def test_the_season_answer_costs_thirteen_statements(
+def test_the_season_answer_costs_a_constant_number_of_statements(
     app: FastAPI, league: dict[str, Any]
 ) -> None:
-    """The count is a constant: it does not grow with the number of players."""
+    """The count is a constant: it does not grow with the number of players.
+
+    Fifteen: the thirteen of the season answer, the map pool the badge rules
+    read, and the team badges.
+    """
     from app.services.ladder import LadderService
 
     for index, player in enumerate(league["player_ids"]):
@@ -573,9 +587,9 @@ def test_the_season_answer_costs_thirteen_statements(
 
     assert body.total_games == 4
     # The rules are a constant and the day counts are the total_games group
-    assert body.achievement_rules == ACHIEVEMENTS
+    assert body.achievement_rules == [r for r in ACHIEVEMENTS if r.id not in TEAM_IDS]
     assert sum(day.g for day in body.per_day) == 4
-    assert tally[0] == 13
+    assert tally[0] == 15
 
 
 def test_the_players_route_answers_one_row_per_signup(
@@ -681,11 +695,12 @@ def test_a_season_pays_its_own_price_for_a_rule(
     assert resp.status_code == 200, resp.text
     theirs = resp.json()
 
-    assert [(b["id"], b["points"]) for b in mine["achievements"]] == [("win_first", 99)]
-    assert [(b["id"], b["points"]) for b in theirs["achievements"]] == [
-        ("win_first", 15)
-    ]
-    assert mine["points"] == mine["ladder_points"] + 99
+    price = {b["id"]: b["points"] for b in mine["achievements"]}
+    assert price["win_first"] == 99
+    assert {b["id"]: b["points"] for b in theirs["achievements"]}["win_first"] == (
+        achievements.WIN_FIRST.points
+    )
+    assert mine["points"] == mine["ladder_points"] + sum(price.values())
 
 
 def test_a_season_drops_a_rule_by_not_paying_it(
@@ -702,8 +717,7 @@ def test_a_season_drops_a_rule_by_not_paying_it(
 
     body = ladder_of(client, auth_headers, season)
     row = player_of(body, player)
-    assert row["achievements"] == []
-    assert row["points"] == row["ladder_points"]
+    assert "win_first" not in {badge["id"] for badge in row["achievements"]}
     assert "win_first" not in {rule["id"] for rule in body["achievement_rules"]}
 
 

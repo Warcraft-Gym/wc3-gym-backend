@@ -98,7 +98,7 @@ class LadderPlayer(SQLModel):
     per_day: list[LadderDay] = []
     # Wins and losses against each race, keyed by the race the opponent selected
     vs_race: dict[str, list[int]] = {}
-    # The rules of core.achievements this player earned, worth most first
+    # The rules of core.achievements this player earned, oldest first
     achievements: list[Achievement] = []
     # The oldest ladder sync stamp of the w3champions seasons this scope needs
     synced_at: datetime | None = None
@@ -121,6 +121,8 @@ class LadderTeam(SQLModel):
     ladder_points: int = 0
     games: int = 0
     players: list[LadderPlayer] = []
+    # The team rules of core.achievements this team earned; they add to nothing
+    achievements: list[Achievement] = []
 
 
 class LadderSeasonDay(SQLModel):
@@ -152,6 +154,8 @@ class SeasonLadder(SQLModel):
     per_day: list[LadderSeasonDay] = []
     # Every rule of the season; a player's locked ones are these less his earned
     achievement_rules: list[Achievement] = []
+    # The team rules the season pays, drawn beside the player ones
+    team_achievement_rules: list[Achievement] = []
     teams: list[LadderTeam] = []
 
 
