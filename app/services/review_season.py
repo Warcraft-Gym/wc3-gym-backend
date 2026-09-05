@@ -2,21 +2,19 @@
 teams and meet in an unplayed series every week, on a roster of real players, so the dashboard,
 availability, veto and fantasy tier pages have something to click.
 
-usage: DB_URL=... uv run python scripts/review_season.py <discord_id_a> <discord_id_b>
-
-The season becomes the current one and both accounts get an admin grant. Running it again
-replaces the season. Rosters, maps and rules copy from the latest real season.
+`just vercel review-season <env> <reviewer discord id>` calls build. The season becomes the
+current one and both accounts get an admin grant. Running it again replaces the season.
+Rosters, maps and rules copy from the latest real season.
 """
 
-import os
-import sys
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import delete, func
 from sqlalchemy.orm import Session as OrmSession
 from sqlmodel import col, select
 
-from app.core.db import Session, init_engine
+from app.core.db import Session
+from app.core.exceptions import NotFoundError
 from app.models.admin_grant import AdminGrant
 from app.models.base import ident
 from app.models.enums import Race
@@ -57,8 +55,8 @@ def player(session: OrmSession, discord_id: str) -> User:
     return user
 
 
-def main(discord_a: str, discord_b: str) -> None:
-    init_engine()
+def build(discord_a: str, discord_b: str) -> str:
+    """Replace the review season and answer a summary of who plays whom."""
     with Session.begin() as session:
         old = session.scalar(select(Season).where(col(Season.name) == NAME))
         if old:
@@ -69,7 +67,7 @@ def main(discord_a: str, discord_b: str) -> None:
             session.flush()
         source = session.scalar(select(Season).order_by(col(Season.id).desc()))
         if source is None:
-            sys.exit("no season to copy the maps, rules and roster from")
+            raise NotFoundError("no season to copy the maps, rules and roster from")
 
         today = datetime.now(UTC).date()
         season = Season(
@@ -115,8 +113,9 @@ def main(discord_a: str, discord_b: str) -> None:
             .group_by(col(User.id))
             .order_by(func.max(col(W3CStats.mmr)).desc())
         ).all()
-        side_a = [a] + rostered[0 : 2 * PER_TEAM - 2 : 2]
-        side_b = [b] + rostered[1 : 2 * PER_TEAM - 2 : 2]
+        pairs = min(PER_TEAM - 1, len(rostered) // 2)
+        side_a = [a] + rostered[0 : 2 * pairs : 2]
+        side_b = [b] + rostered[1 : 2 * pairs : 2]
 
         team_a, team_b = session.scalars(
             select(col(DBTeamSeason.team_id))
@@ -193,20 +192,10 @@ def main(discord_a: str, discord_b: str) -> None:
                     )
                 )
 
-        print(
-            f"season {sid} '{NAME}': {WEEKS} weeks, teams {team_a} vs {team_b}, {2 * len(side_a)} players"
+        return "\n".join(
+            (
+                f"season {sid} '{NAME}': {WEEKS} weeks, teams {team_a} vs {team_b}, {2 * len(side_a)} players",
+                f"A: {a.name} ({a.discordId}) captains team {team_a}; B: {b.name} ({b.discordId}) captains team {team_b}",
+                "week 1 series between them is unscheduled; weeks 2+ are scheduled 20:00 UTC",
+            )
         )
-        print(
-            f"A: {a.name} ({a.discordId}) captains team {team_a}; B: {b.name} ({b.discordId}) captains team {team_b}"
-        )
-        print(
-            "week 1 series between them is unscheduled; weeks 2+ are scheduled 20:00 UTC"
-        )
-
-
-if __name__ == "__main__":
-    if len(sys.argv) != 3:
-        sys.exit(__doc__)
-    if not os.getenv("DB_URL"):
-        sys.exit("DB_URL is not set")
-    main(sys.argv[1], sys.argv[2])

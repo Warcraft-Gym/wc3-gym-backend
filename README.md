@@ -428,7 +428,6 @@ backend/
 ├── just/                  # One module per place: local.just, azure.just, vercel.just
 ├── .env                   # Database URLs and the staging host; gitignored, copy .env.example
 ├── api/                   # The Vercel entry point and its preview-database choice
-├── scripts/               # Database helpers the just recipes call
 ├── tests/                 # pytest suite
 ├── app/
 │   ├── main.py            # The application factory, create_app
