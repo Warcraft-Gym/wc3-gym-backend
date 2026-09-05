@@ -1,13 +1,14 @@
-"""Game replays, in the Cloudflare R2 bucket `gnl-replays`, through its S3 API.
+"""Game replays, in a Cloudflare R2 bucket, through its S3 API.
 
-Every call is a presigned URL: signed here with the standard library (AWS Signature Version 4)
-and performed by `requests` or by the browser. A download link is signed per read and lives
-`DOWNLOAD_SECONDS`, the longest R2 allows. A tab left open longer gets a 403 from R2 and the
-reader refreshes the page.
+Every call is a presigned URL, signed here with the standard library (AWS Signature Version 4).
+The browser uploads straight to the bucket with one, so no file passes through a Vercel function
+and its 4.5 MB request cap. A download link is signed per read and lives `DOWNLOAD_SECONDS`, the
+longest R2 allows. A tab left open longer gets a 403 from R2 and the reader refreshes the page.
 
-Env: `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_ACCESS_KEY_ID`, `CLOUDFLARE_SECRET_ACCESS_KEY` from the
-R2 API token scoped to the bucket. A key starts with `VERCEL_ENV`, so a preview or the staging
-build never overwrites a production replay.
+Env: `CLOUDFLARE_R2_BUCKET`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_ACCESS_KEY_ID` and
+`CLOUDFLARE_SECRET_ACCESS_KEY`, from the R2 API token scoped to that bucket. Production uses
+`gnl-replays`; the preview and development targets use `gnl-replays-staging` with its own token.
+A key also starts with `VERCEL_ENV`, so two builds on one bucket never share a file.
 """
 
 import hashlib
@@ -21,7 +22,6 @@ import requests
 
 logger = logging.getLogger(__name__)
 
-BUCKET = "gnl-replays"
 DOWNLOAD_SECONDS = 7 * 24 * 3600
 UPLOAD_SECONDS = 600
 ALGORITHM = "AWS4-HMAC-SHA256"
@@ -76,23 +76,38 @@ def _signed(method: str, key: str, seconds: int) -> str:
     return presign(
         method,
         f"{account}.r2.cloudflarestorage.com",
-        f"/{BUCKET}/{quote(key)}",
+        f"/{os.environ['CLOUDFLARE_R2_BUCKET']}/{quote(key)}",
         seconds,
         access_key=os.environ["CLOUDFLARE_ACCESS_KEY_ID"],
         secret_key=os.environ["CLOUDFLARE_SECRET_ACCESS_KEY"],
     )
 
 
-def put(key: str, data: bytes) -> None:
-    """Store the file under this key, over whatever was there. A download saves under the key's
-    file name."""
-    headers = {
-        "Content-Type": "application/octet-stream",
-        "Content-Disposition": f'attachment; filename="{key.rsplit("/", 1)[-1]}"',
-    }
-    requests.put(
-        _signed("PUT", key, UPLOAD_SECONDS), data=data, headers=headers, timeout=30
-    ).raise_for_status()
+def upload_url(key: str) -> str:
+    """A link the browser PUTs one file to, for the next ten minutes, over whatever was there."""
+    return _signed("PUT", key, UPLOAD_SECONDS)
+
+
+def peek(key: str) -> tuple[bytes, int] | None:
+    """The first bytes of the stored file and its size, or None when nothing is stored."""
+    resp = requests.get(
+        _signed("GET", key, 60), headers={"Range": "bytes=0-27"}, timeout=30
+    )
+    if resp.status_code == 404:
+        return None
+    resp.raise_for_status()
+    size = (
+        resp.headers.get("Content-Range", "").rpartition("/")[2]
+        or resp.headers["Content-Length"]
+    )
+    return resp.content[:28], int(size)
+
+
+def fetch(key: str) -> bytes:
+    """The whole stored file, for the Discord post."""
+    resp = requests.get(_signed("GET", key, 60), timeout=30)
+    resp.raise_for_status()
+    return resp.content
 
 
 def delete(key: str) -> None:

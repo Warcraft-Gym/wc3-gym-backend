@@ -40,7 +40,8 @@ from app.models.fantasy_team import (
 )
 from app.models.login import PublicAccessRequest
 from app.models.player_history import PlayerHistory
-from app.models.series import SeriesSort
+from app.models.series import SeriesPublic, SeriesSort
+from app.models.series_replay import SeriesReplayPublic
 from app.models.series_veto_step import SeriesVetoPublic, SeriesVetoWrite
 from app.models.types import utcnow
 from app.models.user import (
@@ -54,7 +55,7 @@ from app.models.user_season_availability import (
     PlayerAvailabilityWrite,
     UserSeasonAvailabilityPublic,
 )
-from app.services import discord, discord_roles, player_history, player_series
+from app.services import discord, discord_roles, player_history, player_series, replays
 from app.services.seasons import SeasonService
 from app.services.series import SeriesService
 
@@ -489,20 +490,11 @@ async def update_player_series(
 ) -> JSONResponse | dict[str, Any]:
     """Update a series that belongs to the authenticated player."""
     # Handle both form data and JSON
-    content_type = request.headers.get("content-type")
+    content_type = request.headers.get("content-type") or ""
     data = {}
-    files = {}
-    if content_type and "multipart/form-data" in content_type:
+    if "multipart/form-data" in content_type or "x-www-form-urlencoded" in content_type:
         for key, value in (await request.form()).multi_items():
-            if isinstance(value, UploadFile):
-                if key not in files:
-                    await value.seek(0)
-                    files[key] = {
-                        "filename": value.filename,
-                        "data": await value.read(),
-                        "content_type": value.content_type,
-                    }
-            else:
+            if not isinstance(value, UploadFile):
                 data.setdefault(key, value)
     else:
         data = await request.json() or {}
@@ -517,12 +509,54 @@ async def update_player_series(
         player_series.update_player_series,
         series_id,
         data,
-        files,
         discord_id=str(entry.get("discord_id")),
         discord_tag=entry.get("discord_tag", "Unknown Player"),
         user_service=user_service,
         series_service=series_service,
     )
+
+
+def _own_series(
+    series_service: SeriesService, series_id: int, user_id: int | None
+) -> SeriesPublic:
+    """The series, for one of its two players."""
+    series = series_service.get(series_id)
+    if not series:
+        raise NotFoundError("series_not_found")
+    if user_id not in (series.player1_id, series.player2_id):
+        raise ApiError(403, {"error": "not_authorized_for_this_series"})
+    return series
+
+
+@router.post("/player-series/{series_id}/replays/{game_no}/upload-url")
+def replay_upload_url(
+    series_id: int,
+    game_no: int,
+    player: DashboardPlayer,
+    series_service: SeriesServiceDep,
+) -> dict[str, str]:
+    """Where the browser puts one game's replay, for either player of the series."""
+    _own_series(series_service, series_id, player[1].id)
+    return {"url": replays.upload_url(series_id, game_no)}
+
+
+@router.put("/player-series/{series_id}/replays/{game_no}")
+def replace_replay(
+    series_id: int,
+    game_no: int,
+    player: DashboardPlayer,
+    series_service: SeriesServiceDep,
+) -> SeriesReplayPublic:
+    """Point one slot at the file just uploaded. The first report confirms every game itself;
+    this replaces one of them afterwards."""
+    series = _own_series(series_service, series_id, player[1].id)
+    if series.player1_score is None or series.player2_score is None:
+        raise BadRequestError("Report the result first")
+    played = series.player1_score + series.player2_score
+    if not 1 <= game_no <= played:
+        raise BadRequestError(f"This series had {played} games")
+    rows = replays.confirm(series_id, [game_no], player[1].id)
+    return next(row for row in rows if row.game_no == game_no)
 
 
 def _veto_viewer(

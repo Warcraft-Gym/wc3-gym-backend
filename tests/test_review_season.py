@@ -1,5 +1,6 @@
 """The review season copies the latest season and seats the two named accounts as captains."""
 
+from collections.abc import Callable
 from typing import Any
 
 from sqlmodel import col, select
@@ -19,7 +20,9 @@ from app.services.review_season import NAME, WEEKS, build
 
 
 def test_build_copies_the_latest_season_and_seats_the_captains(
-    seeded: dict[str, Any], blob_store: dict[str, bytes]
+    seeded: dict[str, Any],
+    blob_store: dict[str, bytes],
+    replay_uploaded: Callable[..., None],
 ) -> None:
     with Session.begin() as session:
         for user_id in seeded["player_ids"]:
@@ -36,7 +39,8 @@ def test_build_copies_the_latest_season_and_seats_the_captains(
             .where(col(Match.season_id) != seeded["season_id"])
         ).first()
         assert first
-        replays.store(ident(first), None, {"game1": replays.REPLAY_MAGIC + b"\0" * 64})
+        replay_uploaded(ident(first), 1)
+        replays.confirm(ident(first), [1], None)
     assert len(blob_store) == 1
 
     # a second build replaces the season: its series, their replay rows and the blob go with it

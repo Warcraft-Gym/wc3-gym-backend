@@ -8,9 +8,8 @@ import requests
 from fastapi.responses import JSONResponse
 
 from app.core.scoring import wins_needed
-from app.core.security import secure_filename
 from app.models.series import SeriesPublic, SeriesUpdate
-from app.services import replays
+from app.services import r2, replays
 from app.services.series import SeriesService
 from app.services.series_veto import SeriesVetoService
 from app.services.users import UserService
@@ -109,7 +108,6 @@ def _notify_discord_series_update(
 def update_player_series(
     series_id: int,
     data: dict[str, Any],
-    files: dict[str, dict[str, Any]],
     discord_id: str,
     discord_tag: str,
     user_service: UserService,
@@ -140,30 +138,6 @@ def update_player_series(
     # One replay slot per game of the season's best-of, game1..gameN
     season = series.match.season if series.match else None
     wins = wins_needed(season.map_rules if season else None)
-    games = 2 * wins - 1
-    uploaded_files = {}
-    replay_bytes: dict[str, bytes] = {}
-    for file_key in [f"game{n}" for n in range(1, games + 1)]:
-        if file_key in files and files[file_key]["filename"]:
-            file = files[file_key]
-            if file["filename"].lower().endswith(".w3g"):
-                replays.replay_check(file["data"])
-                replay_bytes[file_key] = file["data"]
-                uploaded_files[file_key] = {
-                    "filename": secure_filename(file["filename"]),
-                    "data": file["data"],
-                    "content_type": file["content_type"] or "application/octet-stream",
-                }
-            else:
-                logger.warning(f"File {file_key} failed validation: {file['filename']}")
-                return JSONResponse(
-                    {
-                        "error": f"Invalid file type for {file_key}. Only .w3g files are allowed."
-                    },
-                    status_code=400,
-                )
-
-    # Determine action: 'score_updated' or 'scheduled'. Frontend may send 'action'.
     action = data.get("action")
 
     # A result carries its veto: the record is what the map stats are made of
@@ -193,18 +167,6 @@ def update_player_series(
                 {"error": f"A series of this season ends at {wins} map wins."},
                 status_code=400,
             )
-        missing = [
-            f"Game {n}"
-            for n in range(1, p1 + p2 + 1)
-            if f"game{n}" not in uploaded_files
-        ]
-        if missing:
-            return JSONResponse(
-                {
-                    "error": f"{' and '.join(missing)} replay files are required when reporting results."
-                },
-                status_code=400,
-            )
 
     # Update allowed fields (players can only update date_time and scores)
     changes: dict[str, Any] = {}
@@ -231,8 +193,10 @@ def update_player_series(
     if "player2_score" in data and data["player2_score"] is not None:
         changes["player2_score"] = int(data["player2_score"])
 
-    # The replays first: a put that fails leaves the score unreported rather than half-reported
-    stored = replays.store(series_id, user.id, replay_bytes)
+    # The replays first: a game with no file in the bucket leaves the score unreported
+    stored = (
+        replays.confirm(series_id, range(1, p1 + p2 + 1), user.id) if reporting else []
+    )
 
     # Only the fields this editor changes, so a concurrent edit stands
     updated_series = series_service.update(series_id, SeriesUpdate(**changes))
@@ -251,18 +215,30 @@ def update_player_series(
     # Attempt Discord notifications (non-blocking - app continues regardless of success/failure)
     discord_notified = False
     if scores_updated:
+        # the bot still posts the files, fetched back from the bucket
+        attachments = (
+            {
+                f"game{r.game_no}": {
+                    "filename": f"game{r.game_no}.w3g",
+                    "data": r2.fetch(r2.key(series_id, r.game_no)),
+                    "content_type": "application/octet-stream",
+                }
+                for r in stored
+            }
+            if os.getenv("BOT_WEBHOOK_URL")
+            else None
+        )
         discord_notified = _notify_discord_series_update(
-            updated_series, player_name, "score_updated", uploaded_files
+            updated_series, player_name, "score_updated", attachments
         )
     elif datetime_updated:
         discord_notified = _notify_discord_series_update(
-            updated_series, player_name, "scheduled", uploaded_files
+            updated_series, player_name, "scheduled"
         )
 
     # Convert to dict only for JSON response
     result = updated_series.to_dict()
-    if uploaded_files:
-        result["uploaded_files"] = {k: v["filename"] for k, v in uploaded_files.items()}
+    if reporting:
         result["replays"] = [replay.model_dump(mode="json") for replay in stored]
 
     # Always include Discord notification status in response

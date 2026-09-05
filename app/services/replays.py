@@ -1,4 +1,11 @@
-"""The replays of a series: one file per game in the R2 bucket, one row per slot."""
+"""The replays of a series: one file per game in the R2 bucket, one row per slot.
+
+The browser uploads each file to the bucket itself, at a link this module signs. A slot is
+written only once the file is there and starts like a replay, so a row never points at
+nothing. A re-upload lands on the same key, so nothing is deleted.
+"""
+
+from collections.abc import Iterable
 
 from sqlmodel import col, select
 
@@ -11,15 +18,11 @@ from app.models.types import utcnow
 from app.services import r2
 
 REPLAY_MAGIC = b"Warcraft III recorded game\x1a\x00"
-MAX_REPLAY_BYTES = 4 * 1024 * 1024
 
 
-def replay_check(data: bytes) -> None:
-    """Refuse anything that is not a Warcraft III replay, before it is stored."""
-    if not data.startswith(REPLAY_MAGIC):
-        raise BadRequestError("Not a Warcraft III replay")
-    if len(data) > MAX_REPLAY_BYTES:
-        raise BadRequestError(f"Replay is larger than {MAX_REPLAY_BYTES // 1024} KB")
+def upload_url(series_id: int, game_no: int) -> str:
+    """Where the browser puts one game's replay."""
+    return r2.upload_url(r2.key(series_id, game_no))
 
 
 def public(row: DBSeriesReplay) -> SeriesReplayPublic:
@@ -33,17 +36,18 @@ def public(row: DBSeriesReplay) -> SeriesReplayPublic:
     )
 
 
-def store(
-    series_id: int, user_id: int | None, files: dict[str, bytes]
+def confirm(
+    series_id: int, games: Iterable[int], user_id: int | None
 ) -> list[SeriesReplayPublic]:
-    """Put each game's replay in the store over the one it replaces, then point its slot at it.
-    `files` is keyed game1, game2, game3."""
-    # the store is not part of the transaction, so the put happens first: a put that is never
-    # committed is overwritten by the next report, while a committed row must point at a written
-    # file
-    keys = {int(name[-1]): r2.key(series_id, int(name[-1])) for name in files}
-    for name, data in files.items():
-        r2.put(keys[int(name[-1])], data)
+    """Point each game's slot at the file the browser uploaded. Every file is checked before
+    any slot is written, so a report with one file missing changes nothing."""
+    keys = {game_no: r2.key(series_id, game_no) for game_no in games}
+    for game_no, key in keys.items():
+        found = r2.peek(key)
+        if not found:
+            raise BadRequestError(f"Game {game_no} replay is missing")
+        if not found[0].startswith(REPLAY_MAGIC):
+            raise BadRequestError(f"Game {game_no} is not a Warcraft III replay")
     with Session.begin() as session:
         for game_no, key in keys.items():
             row = session.get(DBSeriesReplay, (series_id, game_no))

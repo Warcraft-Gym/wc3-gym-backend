@@ -11,8 +11,6 @@ from typing import Any
 import pytest
 from httpx2 import Client
 
-from app.services import replays
-
 ORDER = ["Ban_A", "Ban_B", "Pick_A", "Pick_B"]
 
 
@@ -353,6 +351,7 @@ def test_a_result_is_reported_only_once_the_veto_is_complete(
     seeded: dict[str, Any],
     pool: list[int],
     dashboard_token: Callable[..., str],
+    replay_uploaded: Callable[..., None],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The record is what the map stats are made of, so a score waits for it.
@@ -364,16 +363,15 @@ def test_a_result_is_reported_only_once_the_veto_is_complete(
     )
     series_id = seeded["series_open_id"]
     side_a, side_b = dashboard_token(discord_id="2"), dashboard_token(discord_id="4")
-    replay = ("game.w3g", replays.REPLAY_MAGIC + b"\0" * 8, "application/octet-stream")
+    replay_uploaded(series_id, 1, 2)
     scores = {
         "token": side_a,
         "action": "score_updated",
         "player1_score": "2",
         "player2_score": "0",
     }
-    files = {"game1": replay, "game2": replay}
 
-    resp = client.put(f"/player-series/{series_id}", data=scores, files=files)
+    resp = client.put(f"/player-series/{series_id}", data=scores)
     assert resp.status_code == 400, resp.text
     assert resp.json() == {
         "error": "The map veto is not complete. Enter it on the veto board first."
@@ -388,6 +386,6 @@ def test_a_result_is_reported_only_once_the_veto_is_complete(
     taken(client, series_id, side_a, pool[1])
     taken(client, series_id, side_b, pool[2])
     taken(client, series_id, side_a, pool[3])
-    resp = client.put(f"/player-series/{series_id}", data=scores, files=files)
+    resp = client.put(f"/player-series/{series_id}", data=scores)
     assert resp.status_code == 200, resp.text
     assert (resp.json()["player1_score"], resp.json()["player2_score"]) == (2, 0)
