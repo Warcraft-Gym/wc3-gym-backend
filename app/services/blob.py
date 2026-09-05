@@ -1,4 +1,4 @@
-"""The files the app owns, in Vercel Blob: team logos, map thumbnails and game replays.
+"""The pictures the app owns, in Vercel Blob: team logos and map thumbnails.
 
 The SDK is imported inside each call, not at module scope: it carries its own httpx and a dozen
 other packages, and only the upload route ever needs them. Reads never come here at all, because a
@@ -20,9 +20,6 @@ EXTENSION = {"image/png": "png", "image/jpeg": "jpg"}
 MAX_ICON_BYTES = 2 * 1024 * 1024
 # a blob never changes under its own URL, because every upload gets a new random suffix
 ICON_CACHE_SECONDS = 31_536_000
-REPLAY_MAGIC = b"Warcraft III recorded game\x1a\x00"
-# a game runs about 250 bytes a second, so this is a four-hour game; Vercel caps a request at 4.5 MB
-MAX_REPLAY_BYTES = 4 * 1024 * 1024
 
 
 def icon_type(data: bytes) -> str:
@@ -49,31 +46,6 @@ def put_icon(name: str, data: bytes) -> str:
         access="public",
         content_type=media_type,
         # a new URL every time, so no browser holds a replaced logo for the cache year
-        add_random_suffix=True,
-        cache_control_max_age=ICON_CACHE_SECONDS,
-    )
-    return result.url
-
-
-def replay_check(data: bytes) -> None:
-    """Refuse anything that is not a Warcraft III replay. It becomes a public URL, so this runs
-    before it is stored, not after."""
-    if not data.startswith(REPLAY_MAGIC):
-        raise BadRequestError("Not a Warcraft III replay")
-    if len(data) > MAX_REPLAY_BYTES:
-        raise BadRequestError(f"Replay is larger than {MAX_REPLAY_BYTES // 1024} KB")
-
-
-def put_replay(name: str, data: bytes) -> str:
-    """Store the replay under this name, such as `replays/12/game1`, and answer its public URL."""
-    from vercel import blob
-
-    replay_check(data)
-    result = blob.put(
-        f"{name}.w3g",
-        data,
-        access="public",
-        content_type="application/octet-stream",
         add_random_suffix=True,
         cache_control_max_age=ICON_CACHE_SECONDS,
     )
@@ -109,13 +81,6 @@ def demo() -> None:
     assert EXTENSION[icon_type(jpeg)] == "jpg"
     assert ours("https://abc.public.blob.vercel-storage.com/maps/8-x.png")
     assert not ours("https://d3upx5peno0o6w.cloudfront.net/echo.png")
-    replay_check(REPLAY_MAGIC + b"\0" * 8)
-    for bad in (b"", b"replay", REPLAY_MAGIC + b"\0" * (MAX_REPLAY_BYTES + 1)):
-        try:
-            replay_check(bad)
-        except BadRequestError:
-            continue
-        raise AssertionError(f"{bad[:8]!r} was accepted")
     print("ok")
 
 

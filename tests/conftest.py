@@ -36,7 +36,7 @@ os.environ.pop("DB_URL", None)
 os.environ.pop("SCORE_SYSTEM", None)
 
 from app.main import create_app
-from app.services import blob
+from app.services import blob, r2
 
 type SheetSpec = tuple[list[str], list[list[Any]]]
 
@@ -110,8 +110,8 @@ def clean_db(app: FastAPI) -> Generator[None]:
 
 @pytest.fixture(autouse=True)
 def blob_store(monkeypatch: pytest.MonkeyPatch) -> dict[str, bytes]:
-    """No test uploads to Vercel Blob. The uploads land in this dict instead, keyed by the URL
-    the fake store answers, so a test can read back what the route stored."""
+    """No test uploads to Vercel Blob or R2. The uploads land in this dict instead, keyed by the
+    URL the fake store answers, so a test can read back what the route stored."""
     stored: dict[str, bytes] = {}
     # a counter, not len(stored): a delete would otherwise let the next URL repeat one already used
     serial = itertools.count()
@@ -122,15 +122,15 @@ def blob_store(monkeypatch: pytest.MonkeyPatch) -> dict[str, bytes]:
         stored[url] = data
         return url
 
-    def put_replay(name: str, data: bytes) -> str:
-        blob.replay_check(data)
-        url = f"https://test.public.blob.vercel-storage.com/{name}-{next(serial)}.w3g"
-        stored[url] = data
-        return url
+    def download_url(key: str) -> str:
+        return f"https://r2.test/{key}"
 
     monkeypatch.setattr(blob, "put_icon", put_icon)
-    monkeypatch.setattr(blob, "put_replay", put_replay)
     monkeypatch.setattr(blob, "delete_blob", lambda url: stored.pop(url, None))
+    monkeypatch.setattr(
+        r2, "put", lambda key, data: stored.__setitem__(download_url(key), data)
+    )
+    monkeypatch.setattr(r2, "download_url", download_url)
     return stored
 
 

@@ -1,8 +1,8 @@
 """The replay of one game: the series_replay table.
 
 A series has one replay slot per game. A player uploads it with the result,
-and a later upload replaces the earlier one. The file itself lives in Vercel
-Blob; a row holds its public URL and who uploaded it when.
+and a later upload replaces the earlier one. The file itself lives in the R2
+bucket; a row holds its object key and who uploaded it when.
 """
 
 from datetime import datetime
@@ -20,7 +20,7 @@ class DBSeriesReplay(DBModel, table=True):
     )
     # The games count from 1, in the order they were played
     game_no: int = Field(primary_key=True)
-    url: str = Field(max_length=500)
+    key: str = Field(max_length=500)
     uploaded_by: int | None = Field(
         default=None, foreign_key="users.id", ondelete="SET NULL"
     )

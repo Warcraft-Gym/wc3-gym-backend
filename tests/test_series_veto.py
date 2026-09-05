@@ -11,7 +11,7 @@ from typing import Any
 import pytest
 from httpx2 import Client
 
-from app.services import blob
+from app.services import replays
 
 ORDER = ["Ban_A", "Ban_B", "Pick_A", "Pick_B"]
 
@@ -364,7 +364,7 @@ def test_a_result_is_reported_only_once_the_veto_is_complete(
     )
     series_id = seeded["series_open_id"]
     side_a, side_b = dashboard_token(discord_id="2"), dashboard_token(discord_id="4")
-    replay = ("game.w3g", blob.REPLAY_MAGIC + b"\0" * 8, "application/octet-stream")
+    replay = ("game.w3g", replays.REPLAY_MAGIC + b"\0" * 8, "application/octet-stream")
     scores = {
         "token": side_a,
         "action": "score_updated",

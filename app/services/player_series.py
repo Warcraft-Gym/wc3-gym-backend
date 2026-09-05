@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse
 from app.core.scoring import wins_needed
 from app.core.security import secure_filename
 from app.models.series import SeriesPublic, SeriesUpdate
-from app.services import blob, replays
+from app.services import replays
 from app.services.series import SeriesService
 from app.services.series_veto import SeriesVetoService
 from app.services.users import UserService
@@ -147,7 +147,7 @@ def update_player_series(
         if file_key in files and files[file_key]["filename"]:
             file = files[file_key]
             if file["filename"].lower().endswith(".w3g"):
-                blob.replay_check(file["data"])
+                replays.replay_check(file["data"])
                 replay_bytes[file_key] = file["data"]
                 uploaded_files[file_key] = {
                     "filename": secure_filename(file["filename"]),
