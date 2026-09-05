@@ -63,7 +63,7 @@ status: _host
 alembic *args: _host
     ssh {{ box }} 'cd /opt/gnl && sudo docker compose exec -T backend alembic {{ args }}'
 
-# Migrate, then load the private seed repo. The image carries scripts/seed_db.py, so only the CSVs travel.
+# Migrate, then load the private seed repo. The image carries the loader, so only the CSVs travel.
 seed: _host (alembic "upgrade head")
     #!/usr/bin/env bash
     set -euo pipefail
@@ -71,5 +71,5 @@ seed: _host (alembic "upgrade head")
     trap 'rm -rf "$seed"' EXIT
     just _fetch-seed "$seed"
     if [ -f "$seed/users.csv" ]; then
-        tar -C "$seed" -cz . | ssh {{ box }} 'rm -rf /tmp/seed && mkdir /tmp/seed && tar -C /tmp/seed -xz && chmod -R a+rX /tmp/seed && cd /opt/gnl && sudo docker compose run --rm --no-deps -T -v /tmp/seed:/seed backend sh -c "python scripts/seed_db.py /seed \"\$DB_URL\""'
+        tar -C "$seed" -cz . | ssh {{ box }} 'rm -rf /tmp/seed && mkdir /tmp/seed && tar -C /tmp/seed -xz && chmod -R a+rX /tmp/seed && cd /opt/gnl && sudo docker compose run --rm --no-deps -T -v /tmp/seed:/seed backend sh -c "python -m app.core.seed /seed \"\$DB_URL\""'
     fi
