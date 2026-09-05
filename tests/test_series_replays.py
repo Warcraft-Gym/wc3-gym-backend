@@ -1,4 +1,4 @@
-"""A reported result keeps its replays: one blob per game, one row per slot."""
+"""A reported result keeps its replays: one file per game, one row per slot."""
 
 from collections.abc import Callable
 from typing import Any
@@ -6,9 +6,9 @@ from typing import Any
 import pytest
 from httpx2 import Client, Response
 
-from app.services import blob
+from app.services import replays
 
-REPLAY = blob.REPLAY_MAGIC + b"\0" * 64
+REPLAY = replays.REPLAY_MAGIC + b"\0" * 64
 FILE = ("game.w3g", REPLAY, "application/octet-stream")
 
 
@@ -68,14 +68,13 @@ def test_a_second_upload_replaces_the_first(
 ) -> None:
     series_id = seeded["series_open_id"]
     token = dashboard_token(discord_id="2")
-    first = report(client, series_id, token, {"game1": FILE, "game2": FILE}).json()[
-        "replays"
-    ]
-    second = report(client, series_id, token, {"game1": FILE, "game2": FILE}).json()[
-        "replays"
-    ]
-    assert [r["url"] for r in second] != [r["url"] for r in first]
+    report(client, series_id, token, {"game1": FILE, "game2": FILE})
+    longer = ("game.w3g", REPLAY + b"\1", "application/octet-stream")
+    second = report(
+        client, series_id, token, {"game1": longer, "game2": longer}
+    ).json()["replays"]
     assert set(blob_store) == {r["url"] for r in second}
+    assert all(blob_store[r["url"]] == REPLAY + b"\1" for r in second)
 
 
 def test_a_file_that_is_not_a_replay_is_refused(

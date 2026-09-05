@@ -6,7 +6,7 @@ from typing import Any
 import pytest
 from httpx2 import Client
 
-from app.services import blob
+from app.services import replays
 
 
 def test_a_report_with_its_replays_lands(
@@ -20,7 +20,7 @@ def test_a_report_with_its_replays_lands(
     monkeypatch.setattr(
         player_series, "_notify_discord_series_update", lambda *a: False
     )
-    replay = ("game.w3g", blob.REPLAY_MAGIC + b"\0" * 8, "application/octet-stream")
+    replay = ("game.w3g", replays.REPLAY_MAGIC + b"\0" * 8, "application/octet-stream")
 
     resp = client.put(
         f"/player-series/{seeded['series_open_id']}",
@@ -51,7 +51,7 @@ def test_a_report_needs_one_replay_per_game_played(
     monkeypatch.setattr(
         player_series, "_notify_discord_series_update", lambda *a: False
     )
-    replay = ("game.w3g", blob.REPLAY_MAGIC + b"\0" * 8, "application/octet-stream")
+    replay = ("game.w3g", replays.REPLAY_MAGIC + b"\0" * 8, "application/octet-stream")
 
     resp = client.put(
         f"/player-series/{seeded['series_open_id']}",
