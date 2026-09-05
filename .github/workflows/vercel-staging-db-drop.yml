@@ -13,6 +13,6 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
       - run: uv sync --frozen
-      - run: uv run python scripts/vercel_staging_db.py drop-branch "${{ github.event.ref }}"
+      - run: uv run python -m api.preview_db drop-branch "${{ github.event.ref }}"
         env:
           DB_URL: ${{ secrets.VERCEL_STAGING_DB_URL }}
