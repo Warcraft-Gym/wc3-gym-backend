@@ -99,3 +99,54 @@ def test_a_file_that_is_not_a_replay_is_refused(
 
 def test_the_replays_of_a_missing_match(client: Client) -> None:
     assert client.get("/matches/999999/replays").status_code == 404
+
+
+def test_a_deleted_series_or_season_drops_its_replays_from_the_store(
+    client: Client,
+    seeded: dict[str, Any],
+    dashboard_token: Callable[..., str],
+    blob_store: dict[str, bytes],
+) -> None:
+    from app.api.deps import season_service, series_service
+
+    # each series reported by one of its own players
+    for series_id, discord_id in (
+        (seeded["series_open_id"], "2"),
+        (seeded["series_played_id"], "1"),
+    ):
+        token = dashboard_token(discord_id=discord_id)
+        resp = report(client, series_id, token, {"game1": FILE, "game2": FILE})
+        assert resp.status_code == 200, resp.text
+    assert len(blob_store) == 4
+
+    series_service.delete(seeded["series_open_id"])
+    assert len(blob_store) == 2
+    season_service.delete(seeded["season_id"])
+    assert blob_store == {}
+
+
+def test_a_deleted_team_drops_its_logo_and_its_replays(
+    client: Client,
+    seeded: dict[str, Any],
+    dashboard_token: Callable[..., str],
+    blob_store: dict[str, bytes],
+) -> None:
+    from app.api.deps import team_service
+    from app.core.db import Session
+    from app.models.team import Team
+
+    resp = report(
+        client,
+        seeded["series_open_id"],
+        dashboard_token(discord_id="2"),
+        {"game1": FILE, "game2": FILE},
+    )
+    assert resp.status_code == 200, resp.text
+    with Session.begin() as session:
+        team = session.get(Team, seeded["team_a_id"])
+        assert team
+        team.icon_url = blob.put_icon("teams/a", b"\x89PNG\r\n\x1a\n" + b"0" * 8)
+    assert len(blob_store) == 3
+
+    team_service.delete(seeded["team_a_id"])
+    assert blob_store == {}

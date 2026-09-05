@@ -5,11 +5,27 @@ other packages, and only the upload route ever needs them. Reads never come here
 public blob is fetched by the browser straight from the store.
 
 `BLOB_READ_WRITE_TOKEN` comes from the store connected to the Vercel project.
+
+The store follows the rows: a delete that drops a series, by itself or through the cascade from
+its match, season, team or player, drops its replays after the commit, and a deleted team or map
+drops its picture. app.core.db registers the listeners with the session.
 """
 
 import logging
 
+from sqlalchemy import event, or_, select
+from sqlalchemy.orm import Session as OrmSession
+from sqlmodel import col
+
+from app.core.db import Session
 from app.core.exceptions import BadRequestError
+from app.models.map import Map
+from app.models.match import Match
+from app.models.season import Season
+from app.models.series import Series
+from app.models.series_replay import DBSeriesReplay
+from app.models.team import Team
+from app.models.user import User
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +85,60 @@ def delete_blob(url: str) -> None:
         # a blob that is already gone is fine, but a bad token or a suspended store also lands
         # here and would otherwise leak a blob per replacement with nothing said
         logger.warning("could not delete the replaced blob %s", url, exc_info=True)
+
+
+def doomed(session: OrmSession) -> list[str]:
+    """The URLs of ours that the rows marked for deletion carry, themselves or through a cascade."""
+    urls: list[str] = []
+    replays = select(col(DBSeriesReplay.url)).join(
+        Series, col(Series.id) == col(DBSeriesReplay.series_id)
+    )
+    matches = replays.join(Match, col(Match.id) == col(Series.match_id))
+    for row in session.deleted:
+        match row:
+            case Series():
+                urls += session.scalars(replays.where(col(Series.id) == row.id))
+            case Match():
+                urls += session.scalars(replays.where(col(Series.match_id) == row.id))
+            case Season():
+                urls += session.scalars(matches.where(col(Match.season_id) == row.id))
+            case User():
+                urls += session.scalars(
+                    replays.where(
+                        or_(
+                            col(Series.player1_id) == row.id,
+                            col(Series.player2_id) == row.id,
+                        )
+                    )
+                )
+            case Team():
+                urls += session.scalars(
+                    matches.where(
+                        or_(
+                            col(Match.team1_id) == row.id, col(Match.team2_id) == row.id
+                        )
+                    )
+                )
+                urls += filter(None, [row.icon_url])
+            case Map():
+                urls += filter(None, [row.image])
+    return [url for url in urls if ours(url)]
+
+
+@event.listens_for(Session, "before_flush")
+def _collect(session: OrmSession, *_: object) -> None:
+    session.info.setdefault("doomed_blobs", []).extend(doomed(session))
+
+
+@event.listens_for(Session, "after_commit")
+def _drop(session: OrmSession) -> None:
+    for url in session.info.pop("doomed_blobs", []):
+        delete_blob(url)
+
+
+@event.listens_for(Session, "after_rollback")
+def _forget(session: OrmSession) -> None:
+    session.info.pop("doomed_blobs", None)
 
 
 def demo() -> None:
