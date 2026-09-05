@@ -5,7 +5,7 @@ the season with no cascade, so deleting any real season failed on the
 foreign key. The rows now go with the season.
 
 Revision ID: b8e1d4a7c2f9
-Revises: a3f7c2d9e5b1
+Revises: b8d2e4f6a1c3
 Create Date: 2026-09-05 12:00:00.000000
 
 """
@@ -17,7 +17,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "b8e1d4a7c2f9"
-down_revision: str | Sequence[str] | None = "a3f7c2d9e5b1"
+down_revision: str | Sequence[str] | None = "b8d2e4f6a1c3"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

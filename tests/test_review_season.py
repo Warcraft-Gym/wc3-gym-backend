@@ -14,7 +14,7 @@ from app.models.series import Series
 from app.models.series_replay import DBSeriesReplay
 from app.models.settings import Settings
 from app.models.w3c_stats import W3CStats
-from app.services import blob, replays
+from app.services import replays
 from app.services.review_season import NAME, WEEKS, build
 
 
@@ -36,7 +36,7 @@ def test_build_copies_the_latest_season_and_seats_the_captains(
             .where(col(Match.season_id) != seeded["season_id"])
         ).first()
         assert first
-        replays.store(ident(first), None, {"game1": blob.REPLAY_MAGIC + b"\0" * 64})
+        replays.store(ident(first), None, {"game1": replays.REPLAY_MAGIC + b"\0" * 64})
     assert len(blob_store) == 1
 
     # a second build replaces the season: its series, their replay rows and the blob go with it

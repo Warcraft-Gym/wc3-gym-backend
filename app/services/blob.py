@@ -26,6 +26,7 @@ from app.models.series import Series
 from app.models.series_replay import DBSeriesReplay
 from app.models.team import Team
 from app.models.user import User
+from app.services import r2
 
 logger = logging.getLogger(__name__)
 
@@ -87,23 +88,25 @@ def delete_blob(url: str) -> None:
         logger.warning("could not delete the replaced blob %s", url, exc_info=True)
 
 
-def doomed(session: OrmSession) -> list[str]:
-    """The URLs of ours that the rows marked for deletion carry, themselves or through a cascade."""
+def doomed(session: OrmSession) -> tuple[list[str], list[str]]:
+    """The replay keys and the picture URLs of ours that the rows marked for deletion carry,
+    themselves or through a cascade."""
+    keys: list[str] = []
     urls: list[str] = []
-    replays = select(col(DBSeriesReplay.url)).join(
+    replays = select(col(DBSeriesReplay.key)).join(
         Series, col(Series.id) == col(DBSeriesReplay.series_id)
     )
     matches = replays.join(Match, col(Match.id) == col(Series.match_id))
     for row in session.deleted:
         match row:
             case Series():
-                urls += session.scalars(replays.where(col(Series.id) == row.id))
+                keys += session.scalars(replays.where(col(Series.id) == row.id))
             case Match():
-                urls += session.scalars(replays.where(col(Series.match_id) == row.id))
+                keys += session.scalars(replays.where(col(Series.match_id) == row.id))
             case Season():
-                urls += session.scalars(matches.where(col(Match.season_id) == row.id))
+                keys += session.scalars(matches.where(col(Match.season_id) == row.id))
             case User():
-                urls += session.scalars(
+                keys += session.scalars(
                     replays.where(
                         or_(
                             col(Series.player1_id) == row.id,
@@ -112,7 +115,7 @@ def doomed(session: OrmSession) -> list[str]:
                     )
                 )
             case Team():
-                urls += session.scalars(
+                keys += session.scalars(
                     matches.where(
                         or_(
                             col(Match.team1_id) == row.id, col(Match.team2_id) == row.id
@@ -122,22 +125,27 @@ def doomed(session: OrmSession) -> list[str]:
                 urls += filter(None, [row.icon_url])
             case Map():
                 urls += filter(None, [row.image])
-    return [url for url in urls if ours(url)]
+    return keys, [url for url in urls if ours(url)]
 
 
 @event.listens_for(Session, "before_flush")
 def _collect(session: OrmSession, *_: object) -> None:
-    session.info.setdefault("doomed_blobs", []).extend(doomed(session))
+    keys, urls = doomed(session)
+    session.info.setdefault("doomed_keys", []).extend(keys)
+    session.info.setdefault("doomed_blobs", []).extend(urls)
 
 
 @event.listens_for(Session, "after_commit")
 def _drop(session: OrmSession) -> None:
+    for key in session.info.pop("doomed_keys", []):
+        r2.delete(key)
     for url in session.info.pop("doomed_blobs", []):
         delete_blob(url)
 
 
 @event.listens_for(Session, "after_rollback")
 def _forget(session: OrmSession) -> None:
+    session.info.pop("doomed_keys", None)
     session.info.pop("doomed_blobs", None)
 
 

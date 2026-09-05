@@ -6,7 +6,7 @@ from typing import Any
 import pytest
 from httpx2 import Client, Response
 
-from app.services import replays
+from app.services import blob, replays
 
 REPLAY = replays.REPLAY_MAGIC + b"\0" * 64
 FILE = ("game.w3g", REPLAY, "application/octet-stream")
