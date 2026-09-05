@@ -487,3 +487,19 @@ def test_a_badge_names_the_match_that_turned_its_rule_on() -> None:
     assert goal.achieved_at == long[166].start_time
     # A catalogue entry has no date
     assert achievements.WIN_FIRST.achieved_at is None
+
+
+def test_deleting_a_season_drops_its_prices(seeded: dict[str, Any]) -> None:
+    from app.api.deps import season_service
+    from sqlmodel import col
+
+    from app.models.ladder_achievement import LadderAchievement
+
+    season_service.delete(seeded["season_id"])
+    with Session() as session:
+        rows = session.scalars(
+            select(LadderAchievement).where(
+                col(LadderAchievement.season_id) == seeded["season_id"]
+            )
+        ).all()
+        assert rows == []

@@ -18,7 +18,9 @@ from app.models.base import DBModel
 
 class LadderAchievementBase(SQLModel):
     # No season means the rule is lifetime, read over every match of the player
-    season_id: int | None = Field(default=None, foreign_key="seasons.id")
+    season_id: int | None = Field(
+        default=None, foreign_key="seasons.id", ondelete="CASCADE"
+    )
     # The id of a rule in core.achievements; a row naming no rule pays nothing
     rule_id: str = Field(max_length=40)
     points: int
