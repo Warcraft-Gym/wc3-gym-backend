@@ -39,11 +39,17 @@ class SeriesVetoService:
             return _board(session, _series(session, series_id, user_id), user_id)
 
     def take(
-        self, series_id: int, user_id: int | None, action: str, map_id: int | None
+        self,
+        series_id: int,
+        user_id: int | None,
+        action: str,
+        map_id: int | None,
+        entered_by: int | None = None,
     ) -> SeriesVetoPublic:
         """Take the step the order names next, record it for whichever side the
         order names when the veto happened elsewhere, or take back the last step
-        the viewer entered. A null user is an admin: any side, any last step."""
+        the viewer entered. A null user is an admin: any side, any last step.
+        The step records entered_by, the user when not given."""
         with Session.begin() as session:
             series = _series(session, series_id, user_id)
             steps = _steps(session, series_id)
@@ -64,7 +70,7 @@ class SeriesVetoService:
                     steps,
                     None if action == "record" or user_id is None else side,
                     map_id,
-                    user_id,
+                    user_id if entered_by is None else entered_by,
                 )
             session.flush()
             return _board(session, series, user_id)
@@ -148,7 +154,7 @@ def _take_step(
     steps: list[DBSeriesVetoStep],
     side: str | None,
     map_id: int | None,
-    user_id: int | None,
+    entered_by: int | None,
 ) -> None:
     """A null side records the step for whichever side the order names next."""
     season = series.match.season
@@ -171,7 +177,7 @@ def _take_step(
             # The order names the action; the client only names the map
             action=order[len(steps)].split("_")[0].lower(),
             map_id=map_id,
-            entered_by=user_id,
+            entered_by=entered_by,
         )
     )
     # The final step takes itself when one entry and one map remain: no choice is left
@@ -190,6 +196,7 @@ def _take_step(
                 side=_side(order[-1]),
                 action=order[-1].split("_")[0].lower(),
                 map_id=left[0],
+                entered_by=entered_by,
             )
         )
 
