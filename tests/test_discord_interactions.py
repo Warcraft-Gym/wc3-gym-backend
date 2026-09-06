@@ -272,6 +272,7 @@ def test_register_commands_puts_the_guild_list(monkeypatch: pytest.MonkeyPatch) 
         "upcoming",
         "leaderboard",
         "schedule",
+        "score",
         "postlinks",
         "veto",
         "announce",
