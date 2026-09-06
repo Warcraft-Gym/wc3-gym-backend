@@ -29,6 +29,7 @@ from sqlalchemy import (
     Row,
     Select,
     SQLColumnExpression,
+    String,
     and_,
     case,
     cast,
@@ -569,13 +570,15 @@ def _s19_queries(rows: CTE, ctx: Context) -> list[Query]:
 def _off_race_queries(rows: CTE, ctx: Context) -> list[Query]:
     """The two rules that read every race the player played, not only the
     league one."""
+    # Both sides as text: Postgres will not compare its race enum with a CASE
+    # of bound strings, and the enum stores the race code
     league = shape.lookup(
         [
-            (rows.c.user_id == user_id, race)
+            (rows.c.user_id == user_id, _code(race))
             for user_id, race in ctx.league_race.items()
             if race
         ],
-        rows.c.race.type,
+        String,
     )
     return [
         _one(
@@ -585,9 +588,17 @@ def _off_race_queries(rows: CTE, ctx: Context) -> list[Query]:
             ),
         ),
         _one(
-            OFF_DUTY, shape.first(rows, OFF_DUTY.id, rows.c.won, rows.c.race != league)
+            OFF_DUTY,
+            shape.first(
+                rows, OFF_DUTY.id, rows.c.won, cast(rows.c.race, String) != league
+            ),
         ),
     ]
+
+
+def _code(race: Race | str) -> str:
+    """The race as the enum stores it: its code, HU for Race.HU."""
+    return race.value if isinstance(race, Race) else str(race)
 
 
 def scoped(
