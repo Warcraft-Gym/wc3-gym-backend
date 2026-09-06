@@ -22,7 +22,7 @@ from sqlalchemy import case, func, select
 from sqlmodel import col
 
 from app.core import achievements, ladder
-from app.core.achievements import ACHIEVEMENTS, TEAM_IDS
+from app.core.achievements import ACHIEVEMENTS, MAP_WIN, TEAM_IDS, Achievement, per_map
 from app.core.db import Session
 from app.models.enums import Race
 from app.models.ladder_achievement import LadderAchievement, default_rows
@@ -455,6 +455,19 @@ def test_by_hour_buckets_the_matches_by_utc_weekday_and_hour(
     assert sum(sum(row) for row in body["by_hour"]) == 2
 
 
+def player_rules() -> list[Achievement]:
+    """The player catalogue as a season answers it: the map rule once per
+    map of the seeded pool, which is Concealed Hill alone."""
+    return [
+        expanded
+        for rule in ACHIEVEMENTS
+        if rule.id not in TEAM_IDS
+        for expanded in (
+            [per_map("Concealed Hill")] if rule.id == MAP_WIN.id else [rule]
+        )
+    ]
+
+
 def test_the_season_carries_every_achievement_rule_once(
     client: Client, auth_headers: dict[str, str], league: dict[str, Any]
 ) -> None:
@@ -463,9 +476,7 @@ def test_the_season_carries_every_achievement_rule_once(
 
     body = ladder_of(client, auth_headers, league["season_id"])
 
-    assert body["achievement_rules"] == [
-        asdict(rule) for rule in ACHIEVEMENTS if rule.id not in TEAM_IDS
-    ]
+    assert body["achievement_rules"] == [asdict(rule) for rule in player_rules()]
     assert body["team_achievement_rules"] == [
         asdict(rule) for rule in ACHIEVEMENTS if rule.id in TEAM_IDS
     ]
@@ -587,7 +598,7 @@ def test_the_season_answer_costs_a_constant_number_of_statements(
 
     assert body.total_games == 4
     # The rules are a constant and the day counts are the total_games group
-    assert body.achievement_rules == [r for r in ACHIEVEMENTS if r.id not in TEAM_IDS]
+    assert body.achievement_rules == player_rules()
     assert sum(day.g for day in body.per_day) == 4
     assert tally[0] == 15
 

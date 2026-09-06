@@ -1147,11 +1147,14 @@ def _rules(
         if rule.id in paid and (rule.id in achievements.TEAM_IDS) is team
     ]
     return [
-        replace(achievements.per_map(name), points=rule.points)
+        expanded
         for rule in rules
-        if rule.id == achievements.MAP_WIN.id
-        for name in pool
-    ] + [rule for rule in rules if rule.id != achievements.MAP_WIN.id]
+        for expanded in (
+            [replace(achievements.per_map(name), points=rule.points) for name in pool]
+            if rule.id == achievements.MAP_WIN.id
+            else [rule]
+        )
+    ]
 
 
 def _any_race(
