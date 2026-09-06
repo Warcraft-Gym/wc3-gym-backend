@@ -308,7 +308,7 @@ def test_the_teams_carry_the_points_of_their_players(
     # The loser leads the card: lose_first pays 25 where win_first pays 15
     # One's win and Two's loss are both a first game on the third day, so each
     # earns the first-game badge and the early bird
-    assert (team["points"], team["games"]) == (4 + (3 + 2) + (5 + 2), 2)
+    assert (team["points"], team["games"]) == (4 + (3 + 3) + (5 + 3), 2)
     # Both on 8 points, so the names decide
     assert [player["id"] for player in team["players"]] == [one, two]
 

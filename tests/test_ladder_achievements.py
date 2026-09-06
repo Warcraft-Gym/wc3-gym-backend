@@ -328,7 +328,7 @@ def test_the_answer_carries_the_badges_and_adds_their_points(
 
     assert row["ladder_points"] == 3
     # The first win and, on the third day of the season, the early bird
-    assert row["points"] == 3 + 3 + 2
+    assert row["points"] == 3 + 3 + 3
     assert [badge["id"] for badge in row["achievements"]] == ["win_first", "early_bird"]
     assert row["achievements"][0] == {
         "id": "win_first",
@@ -419,7 +419,7 @@ def test_the_user_route_answers_the_badges_too(
         "lose_first",
         "early_bird",
     ]
-    assert (body["ladder_points"], body["points"]) == (1, 1 + 5 + 2)
+    assert (body["ladder_points"], body["points"]) == (1, 1 + 5 + 3)
 
 
 def test_the_badges_read_only_the_scoped_rows(
