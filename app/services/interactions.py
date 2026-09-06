@@ -346,3 +346,10 @@ def handle(payload: dict[str, Any], services: Services) -> dict[str, Any]:
 
 def register_commands() -> list[str]:
     return discord.register_guild_commands(COMMANDS)
+
+
+# Imported last: a command module imports PUBLIC, Services and the helpers above
+from app.services.commands import announce, veto
+
+COMMANDS += [veto.COMMAND, announce.COMMAND]
+HANDLERS |= {"veto": veto.run, "announce": announce.run}
