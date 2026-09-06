@@ -124,7 +124,12 @@ def handle(payload: dict[str, Any], series_service: SeriesService) -> dict[str, 
         return {"type": AUTOCOMPLETE_RESULT, "data": {"choices": []}}
     application_id, token = payload["application_id"], payload["token"]
     if kind == COMMAND and payload["data"]["name"] == "upcoming":
-        discord.post_reply(application_id, token, upcoming(payload, series_service))
+        discord.post_reply(
+            application_id,
+            token,
+            payload["channel_id"],
+            upcoming(payload, series_service),
+        )
     else:
         discord.edit_reply(application_id, token, {"content": "Unknown command."})
     return {"ok": True}

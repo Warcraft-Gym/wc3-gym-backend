@@ -214,10 +214,36 @@ def edit_reply(application_id: str, token: str, message: dict[str, Any]) -> None
     _interaction_call("PATCH", application_id, token, "/messages/@original", message)
 
 
-def post_reply(application_id: str, token: str, message: dict[str, Any]) -> None:
-    """Post a public follow-up in the channel, and drop the private "thinking" reply."""
-    _interaction_call("POST", application_id, token, "", message)
-    _interaction_call("DELETE", application_id, token, "/messages/@original", None)
+def post_reply(
+    application_id: str, token: str, channel_id: str, message: dict[str, Any]
+) -> None:
+    """Post the answer in the channel as the bot, and drop the private "thinking" reply.
+
+    A follow-up through the interaction token cannot leave the deferred reply's
+    private state (the first one edits it), so the public post uses the bot
+    token. Without a bot token, or when Discord refuses the post, the answer
+    stays in the private reply instead of going nowhere.
+    """
+    headers = _bot_headers()
+    if headers:
+        try:
+            response = requests.request(
+                "POST",
+                f"{API_URL}/channels/{channel_id}/messages",
+                headers=headers,
+                json=message,
+                timeout=REQUEST_TIMEOUT,
+            )
+        except requests.RequestException as error:
+            logger.warning("Discord channel post failed: %s", error)
+        else:
+            if response.ok:
+                _interaction_call(
+                    "DELETE", application_id, token, "/messages/@original", None
+                )
+                return
+            logger.warning("Discord refused the channel post: %s", response.status_code)
+    edit_reply(application_id, token, message)
 
 
 def register_guild_commands(commands: list[dict[str, Any]]) -> list[str]:
