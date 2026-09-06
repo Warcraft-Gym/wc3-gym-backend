@@ -180,6 +180,8 @@ class SeasonSignupUpdate(SQLModel):
     """The draft fields of one signup. A null position sorts the player by MMR."""
 
     draft_position: NonNegativeInt | None = None
+    # The race the player registered on; null clears it
+    race: str | None = None
 
 
 class SeasonPublic(SeasonBase):
