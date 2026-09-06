@@ -9,7 +9,7 @@ of the deferred reply, or a public follow-up in the channel.
 
 import json
 import os
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from datetime import UTC, datetime, timedelta
 from typing import Any, NamedTuple
 
@@ -26,6 +26,7 @@ from app.models.user import UserPublic
 from app.models.w3c_ladder_match import LadderPlayer
 from app.services import discord, discord_roles, player_series
 from app.services.commands import score
+from app.services.fantasy_teams import FantasyTeamService
 from app.services.ladder import LadderService
 from app.services.seasons import SeasonService
 from app.services.series import SeriesService
@@ -53,7 +54,7 @@ COMMANDS: list[dict[str, Any]] = [
     },
     {
         "name": "leaderboard",
-        "description": "Who is ahead in achievement or ladder points this season",
+        "description": "Who is ahead in achievement, ladder or fantasy points this season",
         "options": [
             {
                 "type": 3,
@@ -62,6 +63,7 @@ COMMANDS: list[dict[str, Any]] = [
                 "choices": [
                     {"name": "achievements", "value": "achievements"},
                     {"name": "ladder", "value": "ladder"},
+                    {"name": "fantasy", "value": "fantasy"},
                 ],
             },
             {
@@ -110,6 +112,7 @@ class Services(NamedTuple):
     users: UserService
     ladder: LadderService
     seasons: SeasonService
+    fantasy: FantasyTeamService
 
 
 def verified(headers: Mapping[str, str], body: bytes) -> bool:
@@ -223,9 +226,9 @@ def schedule(
     return {"content": f"Scheduled by <@{discord_id}>: {line}"}, PUBLIC
 
 
-def choices(payload: dict[str, Any], services: Services) -> list[dict[str, Any]]:
-    """The autocomplete choices for a `series` option: the caller's own series."""
-    typed = next(
+def typed_option(payload: dict[str, Any]) -> str:
+    """What the member has typed so far in the option he is filling, lowercased."""
+    return next(
         (
             str(option.get("value", "")).lower()
             for option in payload.get("data", {}).get("options", [])
@@ -233,6 +236,11 @@ def choices(payload: dict[str, Any], services: Services) -> list[dict[str, Any]]
         ),
         "",
     )
+
+
+def choices(payload: dict[str, Any], services: Services) -> list[dict[str, Any]]:
+    """The autocomplete choices for a `series` option: the caller's own series."""
+    typed = typed_option(payload)
     names = (
         (_series_line(row).split(" · ", 1)[1][:100], row.id)
         for row in own_series(payload, services)
@@ -257,6 +265,32 @@ def _season_id(name: str | None, season_service: SeasonService) -> int | None:
     return max(found, key=lambda season: season.id).id if found else None
 
 
+def fantasy_standings(
+    season_id: int, season_name: str | None, top: int, services: Services
+) -> dict[str, Any]:
+    """The season's fantasy teams by total points, as the website ranks them."""
+    teams, _ = services.fantasy.search(
+        QueryUtil.parse_query(f"season_id == {season_id}")
+    )
+    if not teams:
+        return {"content": f"No fantasy teams in {season_name}."}
+    teams.sort(key=lambda team: -(team.total_points or 0))
+    lines = [
+        f"**{n}.** {team.name} · {team.captain.name if team.captain else '?'}"
+        f" · {team.total_points or 0} pts"
+        for n, team in enumerate(teams[:top], 1)
+    ]
+    return {
+        "embeds": [
+            {
+                "title": f"{season_name} · fantasy leaderboard",
+                "description": "\n".join(lines),
+                "color": 0x4A4DB8,
+            }
+        ]
+    }
+
+
 def leaderboard(
     payload: dict[str, Any], services: Services
 ) -> tuple[dict[str, Any], bool]:
@@ -272,6 +306,8 @@ def leaderboard(
             "content": f"No season named {name}." if name else "No current season."
         }, PUBLIC
     season_name = services.seasons.get(season_id).name
+    if kind == "fantasy":
+        return fantasy_standings(season_id, season_name, top, services), PUBLIC
     answer = services.ladder.season_ladder(season_id)
     players = [
         (player, team.name)
@@ -322,6 +358,14 @@ HANDLERS = {
     "schedule": schedule,
     "score": score.run,
 }
+# The autocomplete finders that are not the series list, keyed by command name
+CHOICES: dict[str, Callable[[dict[str, Any], Services], list[dict[str, Any]]]] = {}
+
+# Imported here, not at the top: a command module imports this one.
+from app.services.commands import postlinks
+
+COMMANDS.append(postlinks.COMMAND)
+HANDLERS["postlinks"] = postlinks.run
 
 
 def handle(payload: dict[str, Any], services: Services) -> dict[str, Any]:
@@ -334,9 +378,9 @@ def handle(payload: dict[str, Any], services: Services) -> dict[str, Any]:
     if kind == PING:
         return {"type": PONG}
     if kind == AUTOCOMPLETE:
-        found = (
-            choices(payload, services) if payload["data"]["name"] in HANDLERS else []
-        )
+        name = payload["data"]["name"]
+        finder = CHOICES.get(name, choices if name in HANDLERS else None)
+        found = finder(payload, services) if finder else []
         return {"type": AUTOCOMPLETE_RESULT, "data": {"choices": found}}
     application_id, token = payload["application_id"], payload["token"]
     handler = HANDLERS.get(payload["data"]["name"]) if kind == COMMAND else None
@@ -353,3 +397,16 @@ def handle(payload: dict[str, Any], services: Services) -> dict[str, Any]:
 
 def register_commands() -> list[str]:
     return discord.register_guild_commands(COMMANDS)
+
+
+# Imported last: a command module imports PUBLIC, Services and the helpers above
+from app.services.commands import announce, veto
+
+COMMANDS += [veto.COMMAND, announce.COMMAND]
+HANDLERS |= {"veto": veto.run, "announce": announce.run}
+
+from app.services.commands import w3c
+
+COMMANDS += [w3c.MMR, w3c.STATS]
+HANDLERS["mmr"], HANDLERS["stats"] = w3c.mmr, w3c.stats
+CHOICES["mmr"] = CHOICES["stats"] = w3c.player_choices

@@ -214,6 +214,29 @@ def edit_reply(application_id: str, token: str, message: dict[str, Any]) -> None
     _interaction_call("PATCH", application_id, token, "/messages/@original", message)
 
 
+def post_to_channel(channel_id: str, message: dict[str, Any]) -> bool:
+    """Post a message in a channel as the bot. False with no bot token, or when
+    Discord is unreachable or refuses it."""
+    headers = _bot_headers()
+    if not headers:
+        return False
+    try:
+        response = requests.request(
+            "POST",
+            f"{API_URL}/channels/{channel_id}/messages",
+            headers=headers,
+            json=message,
+            timeout=REQUEST_TIMEOUT,
+        )
+    except requests.RequestException as error:
+        logger.warning("Discord channel post failed: %s", error)
+        return False
+    if not response.ok:
+        logger.warning("Discord refused the channel post: %s", response.status_code)
+        return False
+    return True
+
+
 def post_reply(
     application_id: str, token: str, channel_id: str, message: dict[str, Any]
 ) -> None:
@@ -224,25 +247,9 @@ def post_reply(
     token. Without a bot token, or when Discord refuses the post, the answer
     stays in the private reply instead of going nowhere.
     """
-    headers = _bot_headers()
-    if headers:
-        try:
-            response = requests.request(
-                "POST",
-                f"{API_URL}/channels/{channel_id}/messages",
-                headers=headers,
-                json=message,
-                timeout=REQUEST_TIMEOUT,
-            )
-        except requests.RequestException as error:
-            logger.warning("Discord channel post failed: %s", error)
-        else:
-            if response.ok:
-                _interaction_call(
-                    "DELETE", application_id, token, "/messages/@original", None
-                )
-                return
-            logger.warning("Discord refused the channel post: %s", response.status_code)
+    if post_to_channel(channel_id, message):
+        _interaction_call("DELETE", application_id, token, "/messages/@original", None)
+        return
     edit_reply(application_id, token, message)
 
 

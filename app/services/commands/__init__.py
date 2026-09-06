@@ -1,1 +1,1 @@
-"""One module per slash command, each with its `COMMAND` and its `run`."""
+"""One module per slash command; app.services.interactions collects them."""
