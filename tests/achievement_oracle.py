@@ -28,6 +28,8 @@ from app.core.achievements import (
     CIVIL_WAR,
     CLIMB,
     CLIMBER,
+    COMEBACK,
+    COMEBACK_GAIN,
     DATS_FAKT_AP,
     DISTINCT_DAYS,
     DOUBLE_UP,
@@ -47,6 +49,7 @@ from app.core.achievements import (
     GONE_DAYS,
     GONE_GAMES,
     GRAND_TOUR,
+    HAT_TRICK,
     HOLD_GAMES,
     HOLD_THE_LINE,
     HOLD_WITHIN,
@@ -90,6 +93,7 @@ from app.core.achievements import (
     REPEAT_OFFENDER,
     REPEAT_STREAK,
     REPEAT_TIMES,
+    REVENGE,
     RISING_STAR,
     RIVAL,
     RIVAL_GAMES,
@@ -127,6 +131,8 @@ from app.core.achievements import (
     WINTER_MAPS,
     Achievement,
     PaidSet,
+    per_map,
+    priced_id,
 )
 
 
@@ -259,7 +265,7 @@ def earned(
         rule: Achievement, at: AchievementRow | None, extra: int = 0, suffix: str = ""
     ) -> None:
         """Award a rule at what this scope pays for it, if it pays it at all."""
-        price = paid.get(rule.id)
+        price = paid.get(priced_id(rule.id))
         if price is None or at is None:
             return
         badge = replace(
@@ -307,6 +313,7 @@ def _wc3no(
     pay(DATS_FAKT_AP, run_end(rows, False, 10))
     pay(WIN_STREAK, run_end(rows, True, 5))
     pay(WIN_STREAK_2, run_end(rows, True, 10))
+    pay(HAT_TRICK, run_end(rows, True, 3))
     if kills:
         kill = first(row for row in wins if _tag(row) in opponents)
         pay(DUCK_HUNTING, kill, 5 * kills, f" - {kills} kill(s)")
@@ -566,6 +573,8 @@ def s19(
         pay(CLIMBER, scored[-1])
     if len(scored) >= HOLD_GAMES and max(afters) - afters[-1] <= HOLD_WITHIN:
         pay(HOLD_THE_LINE, scored[-1])
+    if len(scored) >= HOLD_GAMES and afters[-1] - min(afters) >= COMEBACK_GAIN:
+        pay(COMEBACK, scored[-1])
     pay(HOME_TURF, group_nth(wins, HOME_WINS, lambda r: r.map_name))
     pay(RACE_TOUR, covers(wins, lambda r: _value(r.opp_race), RACE_ACHIEVEMENTS))
     mirror = lambda r: (
@@ -584,6 +593,17 @@ def s19(
         ):
             pay(rule, max(versus, key=key))
     pay(NEMESIS, group_nth([r for r in wins if tag(r)], NEMESIS_WINS, tag))
+    lost_to: set[str] = set()
+    avenged = None
+    for row in rows:
+        opponent = tag(row)
+        if opponent is None:
+            continue
+        if row.won and opponent in lost_to and avenged is None:
+            avenged = row
+        if not row.won:
+            lost_to.add(opponent)
+    pay(REVENGE, avenged)
     pay(RIVAL, group_nth([r for r in rows if tag(r)], RIVAL_GAMES, tag))
     pay(WIDE_NET, covers_count(wins, tag, WIDE_NET_N))
     pay(SPEEDRUNNER, first_where(wins, lambda r: r.duration_s <= SPEEDRUN_S))
@@ -627,6 +647,8 @@ def s19(
     if season.pool:
         pay(WIN_POOL, covers(wins, lambda r: r.map_name, season.pool))
         pay(TOURIST, covers(rows, lambda r: r.map_name, season.pool))
+        for name in season.pool:
+            pay(per_map(name), first_where(wins, lambda r, m=name: r.map_name == m))
     if season.members:
         pay(HUNTING_SEASON, first_where(wins, lambda r: _tag(r) in season.opponents))
         pay(

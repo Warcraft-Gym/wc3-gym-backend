@@ -59,6 +59,8 @@ from app.core.achievements import (
     CIVIL_WAR,
     CLIMB,
     CLIMBER,
+    COMEBACK,
+    COMEBACK_GAIN,
     DATS_FAKT_AP,
     DISTINCT_DAYS,
     DOUBLE_UP,
@@ -79,6 +81,7 @@ from app.core.achievements import (
     GONE_DAYS,
     GONE_GAMES,
     GRAND_TOUR,
+    HAT_TRICK,
     HOLD_GAMES,
     HOLD_THE_LINE,
     HOLD_WITHIN,
@@ -98,6 +101,7 @@ from app.core.achievements import (
     LAST_DAYS,
     LONG_GAME_S,
     LOSE_FIRST,
+    MAP_WIN,
     MARATHON,
     MARATHON_S,
     MIRROR_MASTER,
@@ -122,6 +126,7 @@ from app.core.achievements import (
     REPEAT_OFFENDER,
     REPEAT_STREAK,
     REPEAT_TIMES,
+    REVENGE,
     RISING_STAR,
     RIVAL,
     RIVAL_GAMES,
@@ -159,6 +164,8 @@ from app.core.achievements import (
     WINTER_MAPS,
     Achievement,
     PaidSet,
+    per_map,
+    priced_id,
 )
 from app.models.enums import Race
 from app.models.w3c_ladder_match import W3CLadderMatch
@@ -284,11 +291,14 @@ def _badges(
     """
     found: dict[int, list[tuple[datetime, int, Achievement]]] = {}
     for row in rows:
-        price = paid.get(row.rule_id)
+        priced = priced_id(row.rule_id)
+        price = paid.get(priced)
         if price is None:
             continue
-        rate, suffix = VARIABLE.get(row.rule_id, (0, ""))
-        rule = BY_ID[row.rule_id]
+        rate, suffix = VARIABLE.get(priced, (0, ""))
+        rule = BY_ID[priced]
+        if priced != row.rule_id:
+            rule = per_map(row.rule_id.removeprefix(f"{MAP_WIN.id}:"))
         badge = replace(
             rule,
             points=price + rate * row.extra,
@@ -296,7 +306,7 @@ def _badges(
             achieved_at=row.achieved_at,
         )
         found.setdefault(row.user_id, []).append(
-            (row.achieved_at, order[row.rule_id], badge)
+            (row.achieved_at, order[priced], badge)
         )
     return {
         user_id: [badge for _, _, badge in sorted(items, key=itemgetter(0, 1))]
@@ -323,6 +333,7 @@ def _queries(rows: CTE, ctx: Context) -> list[Query]:
         ((DATS_FAKT_AP.id,), _streak(rows, False, 10, DATS_FAKT_AP.id)),
         ((WIN_STREAK.id,), _streak(rows, True, 5, WIN_STREAK.id)),
         ((WIN_STREAK_2.id,), _streak(rows, True, 10, WIN_STREAK_2.id)),
+        ((HAT_TRICK.id,), _streak(rows, True, 3, HAT_TRICK.id)),
     ]
     if any(opponents.values()):
         queries.append(
@@ -422,6 +433,10 @@ def _s19_queries(rows: CTE, ctx: Context) -> list[Query]:
             shape.held_peak(rows, HOLD_THE_LINE.id, HOLD_WITHIN, HOLD_GAMES),
         ),
         _one(
+            COMEBACK,
+            shape.from_low(rows, COMEBACK.id, COMEBACK_GAIN, HOLD_GAMES),
+        ),
+        _one(
             HOME_TURF,
             shape.group_nth(rows, HOME_TURF.id, HOME_WINS, (rows.c.map_name,), won),
         ),
@@ -454,6 +469,7 @@ def _s19_queries(rows: CTE, ctx: Context) -> list[Query]:
                 rows, NEMESIS.id, NEMESIS_WINS, (tag,), won, tag.is_not(None)
             ),
         ),
+        _one(REVENGE, shape.revenge(rows, REVENGE.id, tag)),
         _one(
             RIVAL,
             shape.group_nth(rows, RIVAL.id, RIVAL_GAMES, (tag,), tag.is_not(None)),
@@ -516,6 +532,13 @@ def _s19_queries(rows: CTE, ctx: Context) -> list[Query]:
                 shape.covers(rows, WIN_POOL.id, rows.c.map_name, ctx.pool, won),
             ),
             _one(TOURIST, shape.covers(rows, TOURIST.id, rows.c.map_name, ctx.pool)),
+        ]
+        queries += [
+            (
+                (MAP_WIN.id,),
+                shape.first(rows, per_map(name).id, won, rows.c.map_name == name),
+            )
+            for name in ctx.pool
         ]
     if ctx.members:
         member = tag.in_(sorted(ctx.members))

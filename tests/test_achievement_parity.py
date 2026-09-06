@@ -32,6 +32,7 @@ from app.core.achievements import (
     TEAM_IDS,
     WINTER_MAPS,
     Achievement,
+    priced_id,
 )
 from app.core.db import Session
 from app.models.enums import Race
@@ -102,7 +103,7 @@ def test_the_statement_answers_what_the_oracle_answers(league: dict[str, Any]) -
 
         expected = _oracle(season_id)
         assert found == expected, f"round {seed}: {_diff(found, expected)}"
-        seen |= {badge.id for badges in found.values() for badge in badges}
+        seen |= {priced_id(badge.id) for badges in found.values() for badge in badges}
 
     # A rule no round earns is a rule this test does not compare; the team
     # rules pay a team, which this test does not read

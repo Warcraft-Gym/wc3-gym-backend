@@ -151,7 +151,7 @@ class LadderService:
                 total_games=sum(games.values()),
                 by_hour=by_hour,
                 per_day=_season_days(season, games),
-                achievement_rules=_rules(paid, False),
+                achievement_rules=_rules(paid, False, ctx.pool),
                 team_achievement_rules=_rules(paid, True),
                 teams=_teams(
                     roster, totals, spans, days, races, earned, stamps, team_badges
@@ -1136,14 +1136,22 @@ def _paid(session: OrmSession, season_id: int | None) -> achievements.PaidSet:
     return {row.rule_id: row.points for row in rows}
 
 
-def _rules(paid: achievements.PaidSet, team: bool) -> list[achievements.Achievement]:
+def _rules(
+    paid: achievements.PaidSet, team: bool, pool: Sequence[str] = ()
+) -> list[achievements.Achievement]:
     """The player or the team catalogue this scope draws, at the prices this
-    scope pays, in catalogue order."""
-    return [
+    scope pays, in catalogue order; the map rule once per map of the pool."""
+    rules = [
         replace(rule, points=paid[rule.id])
         for rule in achievements.ACHIEVEMENTS
         if rule.id in paid and (rule.id in achievements.TEAM_IDS) is team
     ]
+    return [
+        replace(achievements.per_map(name), points=rule.points)
+        for rule in rules
+        if rule.id == achievements.MAP_WIN.id
+        for name in pool
+    ] + [rule for rule in rules if rule.id != achievements.MAP_WIN.id]
 
 
 def _any_race(

@@ -311,7 +311,7 @@ def test_a_captain_earns_nothing_for_beating_a_captain() -> None:
 def test_every_rule_has_its_own_id_and_a_test() -> None:
     """The list is the whole rule set, so nothing ships untested."""
     ids = [rule.id for rule in achievements.ACHIEVEMENTS]
-    assert len(ids) == len(set(ids)) == 87
+    assert len(ids) == len(set(ids)) == 91
     tested = Path(__file__).read_text()
     for rule_id in ids:
         assert f'"{rule_id}"' in tested, rule_id
@@ -352,12 +352,13 @@ def test_the_badges_come_oldest_first(
     row = player_of(ladder_of(client, auth_headers, league["season_id"]), player)
 
     # Five mirror wins a minute apart over one opponent: the first and the
-    # early bird, three wins in an hour and the nemesis on the third, then the
-    # streak, the sitting, the mirrors, the rival and the first week's five
-    # games all on the fifth, in the order the rules are evaluated
+    # early bird, the hat-trick, three wins in an hour and the nemesis on the
+    # third, then the streak, the sitting, the mirrors, the rival and the first
+    # week's five games all on the fifth, in the order the rules are evaluated
     assert [badge["id"] for badge in row["achievements"]] == [
         "win_first",
         "early_bird",
+        "hat_trick",
         "power_hour",
         "nemesis",
         "win_streak",
@@ -605,9 +606,15 @@ S19_CASES: dict[str, tuple[list[Row], dict[str, Any]]] = {
     "one_sitting": (series([True] * 5), {}),
     "power_hour": (series([True] * 3), {}),
     "weekend_warrior": ([Row(minutes=3 * DAY + m) for m in range(10)], {}),
+    "hat_trick": (series([True] * 3), {}),
     "repeat_offender": (series([True, True, True, False] * 3), {}),
     "climber": ([Row(mmr_before=1500, mmr_after=1600)], {}),
     "hold_the_line": (series([True] * 30), {}),  # every match 1500 to 1512
+    "comeback": (
+        [Row(mmr_before=1500, mmr_after=1400)]
+        + [Row(minutes=i, mmr_before=1400, mmr_after=1500) for i in range(1, 30)],
+        {},
+    ),
     "win_pool": ([Row(map_name=m, minutes=i) for i, m in enumerate(POOL)], {}),
     "tourist": (
         [Row(won=False, map_name=m, minutes=i) for i, m in enumerate(POOL)],
@@ -628,13 +635,17 @@ S19_CASES: dict[str, tuple[list[Row], dict[str, Any]]] = {
     "slayer_ne": ([Row(won=i < 7, minutes=i, opp_race=Race.NE) for i in range(10)], {}),
     "slayer_ud": ([Row(won=i < 7, minutes=i, opp_race=Race.UD) for i in range(10)], {}),
     "nemesis": (versus(["foe#9"] * 3), {}),
+    "revenge": (
+        versus(["foe#9"], won=False) + [Row(minutes=1, opp_battletag="foe#9")],
+        {},
+    ),
     "rival": (versus(["foe#9"] * 5, won=False), {}),
     "wide_net": (versus([f"o{i}#1" for i in range(20)]), {}),
     "hunting_season": (versus(["foe#1"]), {}),
     "open_season": (versus(sorted(MEMBERS)), {}),
     "civil_war": (versus(["mate#1"]), {}),
     "grand_tour": (versus(["foe#1", "x#1"]), {}),
-    "speedrunner": ([Row(duration_s=480)], {}),
+    "speedrunner": ([Row(duration_s=420)], {}),
     "marathon": ([Row(won=False, duration_s=2700)], {}),
     "captains_duty": (series([True] * 20), {"is_captain": True}),
     "first_to_fifty": (
@@ -680,12 +691,25 @@ def test_the_s19_rule_turns_on_at_its_boundary(rule_id: str) -> None:
         ("repeat_offender", series([True, True, True, False] * 2 + [True, True])),
         ("climber", [Row(mmr_before=1500, mmr_after=1599)]),
         ("hold_the_line", series([True] * 29)),
+        (
+            "comeback",
+            [Row(mmr_before=1500, mmr_after=1400)]
+            + [Row(minutes=i, mmr_before=1400, mmr_after=1499) for i in range(1, 30)],
+        ),
+        ("hat_trick", series([True, True, False, True, True])),
+        (
+            "revenge",
+            [
+                Row(opp_battletag="foe#9"),
+                Row(won=False, minutes=1, opp_battletag="foe#9"),
+            ],
+        ),
         ("mirror_master", [Row(minutes=i, opp_played_race=Race.OC) for i in range(5)]),
         ("slayer_hu", series([True] * 6 + [False] * 4)),
         ("nemesis", versus(["foe#9"] * 2 + ["foe#8"])),
         ("wide_net", versus([f"o{i}#1" for i in range(19)] + ["o0#1"])),
         ("grand_tour", versus(["foe#1", "foe#2"])),  # the same other team twice
-        ("speedrunner", [Row(duration_s=481)]),
+        ("speedrunner", [Row(duration_s=421)]),
         ("marathon", [Row(duration_s=2699)]),
         ("captains_duty", series([True] * 20)),  # not a captain
     ],
@@ -694,6 +718,13 @@ def test_the_s19_rule_stays_off_short_of_its_boundary(
     rule_id: str, rows: list[Row]
 ) -> None:
     assert rule_id not in run(rows, season=SEASON)
+
+
+def test_map_win_pays_one_badge_per_map_of_the_pool() -> None:
+    earned = run([Row(map_name="Tidehunters")], season=SEASON)
+    assert "map_win:Tidehunters" in earned
+    assert "map_win:Last Refuge" not in earned
+    assert "map_win" not in earned
 
 
 def test_the_off_race_rules_read_no_league_race_match() -> None:

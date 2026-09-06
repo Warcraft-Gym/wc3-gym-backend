@@ -483,6 +483,46 @@ def held_peak(rows: CTE, rule: str, within_mmr: int, min_games: int) -> Select[A
     )
 
 
+def from_low(rows: CTE, rule: str, min_gain: int, min_games: int) -> Select[Any]:
+    """min_games rated matches and a finish at least min_gain above the
+    season low. Dated by the last rated match."""
+    rated = _rated(rows)
+    last = func.max(case((rated.c.n_desc == 1, rated.c.mmr_after)))
+    return (
+        _badge(rated.c.user_id, rule, func.max(rated.c.start_time))
+        .group_by(rated.c.user_id)
+        .having(
+            func.count() >= min_games,
+            last - func.min(rated.c.mmr_after) >= min_gain,
+        )
+    )
+
+
+def revenge(rows: CTE, rule: str, tag: ColumnElement[Any]) -> Select[Any]:
+    """The first win over an opponent this player had lost to before."""
+    losses = (
+        select(
+            rows.c.user_id,
+            rows.c.start_time,
+            rows.c.won,
+            func.sum(case((rows.c.won, 0), else_=1))
+            .over(
+                partition_by=(rows.c.user_id, tag),
+                order_by=_order(rows),
+                rows=(None, -1),
+            )
+            .label("before"),
+        )
+        .where(tag.is_not(None))
+        .subquery()
+    )
+    return (
+        _badge(losses.c.user_id, rule, func.min(losses.c.start_time))
+        .where(losses.c.won, losses.c.before > 0)
+        .group_by(losses.c.user_id)
+    )
+
+
 def rate_by(
     rows: CTE,
     rules: dict[Any, str],

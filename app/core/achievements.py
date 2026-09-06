@@ -22,7 +22,7 @@ this module by the day it started on, because the table keeps a start time.
 """
 
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 
 # The season's points target, hardcoded as `W1=500` in the wc3.no bundle
@@ -247,6 +247,8 @@ CLIMB = 100
 # Games played and MMR under the peak to hold the line
 HOLD_GAMES = 30
 HOLD_WITHIN = 20
+# MMR gained from the season low to the finish, over HOLD_GAMES games
+COMEBACK_GAIN = 100
 # Wins on one map
 HOME_WINS = 10
 # Mirror wins, and wins over Random players
@@ -262,7 +264,7 @@ WIDE_NET_N = 20
 # Distinct GNL players beaten
 OPEN_SEASON_N = 5
 # A short win and a long game, in seconds
-SPEEDRUN_S = 8 * 60
+SPEEDRUN_S = 7 * 60
 MARATHON_S = 45 * 60
 # Games a captain plays
 CAPTAIN_GAMES = 20
@@ -518,7 +520,7 @@ SPEEDRUNNER = Achievement(
     "speedrunner",
     1,
     "Speedrunner",
-    "Win a game in under 8 minutes",
+    "Win a game in under 7 minutes",
     "game-icons:running-shoe",
 )
 MARATHON = Achievement(
@@ -684,6 +686,44 @@ TEAM_CLIMB_CAP, TEAM_CLIMB_TARGET = 100, 500
 BRAGGING_WINS = 20
 SPARRING_GAMES = 10
 
+HAT_TRICK = Achievement(
+    "hat_trick", 2, "Hat-trick", "Win 3 games in a row", "game-icons:top-hat"
+)
+REVENGE = Achievement(
+    "revenge",
+    2,
+    "Revenge",
+    "Beat an opponent who beat you earlier this season",
+    "game-icons:backstab",
+)
+COMEBACK = Achievement(
+    "comeback",
+    4,
+    "Comeback",
+    "Play 30 games and finish 100 MMR above your season low",
+    "game-icons:sunrise",
+)
+# One badge per map of the season's pool, id `map_win:<map>`; see per_map
+MAP_WIN = Achievement(
+    "map_win", 1, "Map win", "Win a game on a map", "game-icons:position-marker"
+)
+
+
+def per_map(map_name: str) -> Achievement:
+    """The MAP_WIN badge of one map; the price row is MAP_WIN's."""
+    return replace(
+        MAP_WIN,
+        id=f"{MAP_WIN.id}:{map_name}",
+        name=f"Win on {map_name}",
+        description=f"Win a game on {map_name}",
+    )
+
+
+def priced_id(rule_id: str) -> str:
+    """The catalogue id a badge id is priced by: `map_win:<map>` is map_win."""
+    return rule_id.partition(":")[0]
+
+
 S19_PLAYER = [
     WIN_FIRST,
     LOSE_FIRST,
@@ -710,11 +750,14 @@ S19_PLAYER = [
     WEEKEND_WARRIOR,
     WIN_STREAK,
     WIN_STREAK_2,
+    HAT_TRICK,
     REPEAT_OFFENDER,
     CLIMBER,
     HOLD_THE_LINE,
+    COMEBACK,
     WIN_POOL,
     TOURIST,
+    MAP_WIN,
     HOME_TURF,
     RACE_TOUR,
     MIRROR_MASTER,
@@ -726,6 +769,7 @@ S19_PLAYER = [
     FOUR_HORSEMEN,
     OFF_DUTY,
     NEMESIS,
+    REVENGE,
     RIVAL,
     WIDE_NET,
     HUNTING_SEASON,
