@@ -1,7 +1,7 @@
 """The interactions route: Discord's signature is the auth, and a command
 answers through the interaction token, never through the route's own body."""
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 import pytest
@@ -10,6 +10,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from httpx2 import Client
 
 from app.core.db import Session
+from app.models.season import SeasonPublic
 from app.models.series import Series
 from app.models.types import utcnow
 from app.services import discord, interactions
@@ -129,6 +130,26 @@ def test_leaderboard_ranks_badge_points_then_ladder_points(
     client.post("/discord/interactions", content=body, headers=headers)
     lines = discord_calls[2][2]["embeds"][0]["description"].splitlines()
     assert lines[2:] == ["**1.** P1 (Alpha) · 6 pts · 2-0"]
+
+
+def test_season_span_counts_the_weeks_of_the_range(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A 59-day window is 9 weeks however many it plays; day 27 is week 4."""
+    monkeypatch.setattr(
+        interactions, "utcnow", lambda: datetime(2026, 9, 6, 12, tzinfo=UTC)
+    )
+    season = SeasonPublic(
+        id=5,
+        name="Review",
+        number_weeks=4,
+        series_per_week=1,
+        start_date=date(2026, 8, 10),
+        end_date=date(2026, 10, 7),
+    )
+    assert interactions._season_span(season) == "2026-08-10 to 2026-10-07 · week 4 of 9"
+    season.start_date = date(2026, 9, 7)
+    assert interactions._season_span(season) == "2026-09-07 to 2026-10-07"
 
 
 def test_leaderboard_fantasy_ranks_the_seasons_fantasy_teams(
