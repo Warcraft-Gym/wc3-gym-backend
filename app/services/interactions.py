@@ -25,6 +25,7 @@ from app.models.types import utcnow
 from app.models.user import UserPublic
 from app.models.w3c_ladder_match import LadderPlayer
 from app.services import discord, discord_roles, player_series
+from app.services.commands import score
 from app.services.ladder import LadderService
 from app.services.seasons import SeasonService
 from app.services.series import SeriesService
@@ -96,6 +97,7 @@ COMMANDS: list[dict[str, Any]] = [
             },
         ],
     },
+    score.COMMAND,
 ]
 # A reply is public in the channel, or a private edit of the deferred "thinking" reply
 PUBLIC, PRIVATE = True, False
@@ -314,7 +316,12 @@ def leaderboard(
     }, PUBLIC
 
 
-HANDLERS = {"upcoming": upcoming, "leaderboard": leaderboard, "schedule": schedule}
+HANDLERS = {
+    "upcoming": upcoming,
+    "leaderboard": leaderboard,
+    "schedule": schedule,
+    "score": score.run,
+}
 
 
 def handle(payload: dict[str, Any], services: Services) -> dict[str, Any]:
