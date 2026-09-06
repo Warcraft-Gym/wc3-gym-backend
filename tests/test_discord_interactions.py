@@ -1,14 +1,11 @@
 """The interactions route: Discord's signature is the auth, and a command
 answers through the interaction token, never through the route's own body."""
 
-import json
-import time
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
 import requests
-from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from httpx2 import Client
 
@@ -16,76 +13,16 @@ from app.core.db import Session
 from app.models.series import Series
 from app.models.types import utcnow
 from app.services import discord, interactions
-from tests.test_ladder_read import INSIDE, add_match, sign_up
-
-KEY = Ed25519PrivateKey.generate()
-PUBLIC_KEY = (
-    KEY.public_key()
-    .public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
-    .hex()
+from tests.discord import (
+    APP_ID,
+    CHANNEL,
+    WEBHOOK,
+    autocomplete,
+    command,
+    record,
+    signed,
 )
-APP_ID, TOKEN = "app-1", "interaction-token"
-WEBHOOK = f"{discord.API_URL}/webhooks/{APP_ID}/{TOKEN}"
-CHANNEL = f"{discord.API_URL}/channels/chan-1/messages"
-
-
-def signed(
-    payload: dict[str, Any], key: Ed25519PrivateKey = KEY
-) -> tuple[bytes, dict[str, str]]:
-    body = json.dumps(payload).encode()
-    stamp = str(int(time.time()))
-    return body, {
-        "Content-Type": "application/json",
-        "X-Signature-Ed25519": key.sign(stamp.encode() + body).hex(),
-        "X-Signature-Timestamp": stamp,
-    }
-
-
-def command(name: str, user: str = "1", **options: int | bool | str) -> dict[str, Any]:
-    return {
-        "type": interactions.COMMAND,
-        "application_id": APP_ID,
-        "token": TOKEN,
-        "channel_id": "chan-1",
-        "member": {"user": {"id": user, "username": f"p{user}"}},
-        "data": {
-            "name": name,
-            "options": [{"name": k, "value": v} for k, v in options.items()],
-        },
-    }
-
-
-@pytest.fixture
-def public_key(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("DISCORD_PUBLIC_KEY", PUBLIC_KEY)
-
-
-@pytest.fixture
-def bot_token(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("DISCORD_BOT_TOKEN", "a-bot-token")
-
-
-@pytest.fixture
-def discord_calls(
-    monkeypatch: pytest.MonkeyPatch, bot_token: None
-) -> list[tuple[str, str, Any]]:
-    """Record every call to Discord and answer 200."""
-    return _record(monkeypatch, 200)
-
-
-def _record(monkeypatch: pytest.MonkeyPatch, status: int) -> list[tuple[str, str, Any]]:
-    calls: list[tuple[str, str, Any]] = []
-
-    class Answer:
-        ok = status < 400
-        status_code = status
-
-    def request(method: str, url: str, **kwargs: object) -> Answer:
-        calls.append((method, url, kwargs.get("json")))
-        return Answer()
-
-    monkeypatch.setattr(discord.requests, "request", request)
-    return calls
+from tests.test_ladder_read import INSIDE, add_match, sign_up
 
 
 def test_no_public_key_answers_503(
@@ -204,12 +141,12 @@ def test_upcoming_stays_private_without_a_bot_token_or_when_refused(
     client: Client, public_key: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.delenv("DISCORD_BOT_TOKEN", raising=False)
-    calls = _record(monkeypatch, 200)
+    calls = record(monkeypatch, 200)
     body, headers = signed(command("upcoming"))
     client.post("/discord/interactions", content=body, headers=headers)
     assert [(c[0], c[1]) for c in calls] == [("PATCH", f"{WEBHOOK}/messages/@original")]
     monkeypatch.setenv("DISCORD_BOT_TOKEN", "a-bot-token")
-    calls = _record(monkeypatch, 403)
+    calls = record(monkeypatch, 403)
     client.post("/discord/interactions", content=body, headers=headers)
     assert [(c[0], c[1]) for c in calls] == [
         ("POST", CHANNEL),
@@ -228,19 +165,6 @@ def test_unknown_command_edits_the_private_reply(
     assert discord_calls == [
         ("PATCH", f"{WEBHOOK}/messages/@original", {"content": "Unknown command."})
     ]
-
-
-def autocomplete(name: str, user: str, typed: str) -> dict[str, Any]:
-    return {
-        "type": interactions.AUTOCOMPLETE,
-        "application_id": APP_ID,
-        "token": TOKEN,
-        "member": {"user": {"id": user}},
-        "data": {
-            "name": name,
-            "options": [{"name": "series", "value": typed, "focused": True}],
-        },
-    }
 
 
 def test_autocomplete_lists_the_callers_own_series(

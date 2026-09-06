@@ -37,6 +37,7 @@ os.environ.pop("SCORE_SYSTEM", None)
 
 from app.main import create_app
 from app.services import blob, r2, replays
+from tests.discord import PUBLIC_KEY, record
 
 type SheetSpec = tuple[list[str], list[list[Any]]]
 
@@ -207,3 +208,22 @@ def auth_headers(client: Client) -> dict[str, str]:
     assert resp.status_code == 200
     token = resp.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}
+
+
+# Discord interactions
+@pytest.fixture
+def public_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DISCORD_PUBLIC_KEY", PUBLIC_KEY)
+
+
+@pytest.fixture
+def bot_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DISCORD_BOT_TOKEN", "a-bot-token")
+
+
+@pytest.fixture
+def discord_calls(
+    monkeypatch: pytest.MonkeyPatch, bot_token: None
+) -> list[tuple[str, str, Any]]:
+    """Record every call to Discord and answer 200."""
+    return record(monkeypatch, 200)
