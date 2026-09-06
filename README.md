@@ -40,7 +40,7 @@ Use the **pooler** connection string from the Supabase dashboard (Connect → Se
 DB_URL="postgresql+psycopg://postgres.<ref>:<password>@aws-<n>-<region>.pooler.supabase.com:5432/postgres?sslmode=require"
 ```
 
-Port 5432 is the session pooler, which behaves like a direct connection and is the one to use for `alembic upgrade head` and for a long-lived server. Port 6543 is the transaction pooler for serverless functions; it needs `connect_args={"prepare_threshold": None}` in `init_engine`, which is not set today.
+Port 5432 is the session pooler, which behaves like a direct connection and is the one to use for `alembic upgrade head` and for a long-lived server. Port 6543 is the transaction pooler for serverless functions. `init_engine` turns off prepared statements, which the transaction pooler rejects.
 
 ## Where the backend runs
 
@@ -71,7 +71,7 @@ Vercel serves `api/index.py`, which imports the same application the container r
 
 The production build runs `alembic upgrade head` (`vercel.json`) before the new code is promoted, so a migration that fails stops the deploy. Previews run against the staging Supabase project: the shared `wc3gym_staging` database, or a branch's own copy when the branch adds a migration. How and why is in [docs/PREVIEW-DATABASES.md](docs/PREVIEW-DATABASES.md). The old code keeps serving while the build runs, so every migration must work with the code before it and after it: add columns nullable or with a default, drop a column only after the code that read it has shipped.
 
-Use the session pooler on port 5432 for `DB_URL`. Port 6543 is the transaction pooler; it needs `connect_args={"prepare_threshold": None}` in `init_engine`, which is not set, so a `DB_URL` on 6543 fails on the second request.
+Use the transaction pooler on port 6543 for `DB_URL`. The session pooler on port 5432 allows 15 clients in total, and every warm function instance holds pooled connections, so a few instances fill it and every other request answers `Database error`.
 
 A full-season `POST /import` takes longer than the Vercel function timeout. Import a season from a machine that runs the server itself, or against the pooler URL directly.
 

@@ -37,7 +37,13 @@ def init_engine(db_url: str | None = None) -> Engine:
     if not db_url:
         raise RuntimeError("DB_URL is not set. See the variable table in README.md.")
 
-    engine = create_engine(db_url, pool_pre_ping=True, pool_recycle=3600)
+    # no server-side prepared statements: the Supabase transaction pooler rejects them
+    connect_args = (
+        {"prepare_threshold": None} if db_url.startswith("postgresql") else {}
+    )
+    engine = create_engine(
+        db_url, pool_pre_ping=True, pool_recycle=3600, connect_args=connect_args
+    )
     if engine.dialect.name == "sqlite":
         # the tests run on SQLite, which enforces foreign keys and their cascades only when asked
         event.listen(
