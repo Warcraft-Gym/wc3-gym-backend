@@ -265,7 +265,7 @@ def test_one_player_records_a_veto_that_happened_elsewhere(
     assert resp.status_code == 200, resp.text
     body = resp.json()
 
-    # The rules of a live veto hold, and the forced final step names nobody
+    # The rules of a live veto hold, and the forced final step names the same enterer
     assert [
         (step["side"], step["action"], step["shortname"], step["entered_by"])
         for step in body["steps"]
@@ -273,7 +273,7 @@ def test_one_player_records_a_veto_that_happened_elsewhere(
         ("A", "ban", "EI", seeded["player_ids"][3]),
         ("B", "ban", "TS", seeded["player_ids"][3]),
         ("A", "pick", "LR", seeded["player_ids"][3]),
-        ("B", "pick", "AL", None),
+        ("B", "pick", "AL", seeded["player_ids"][3]),
     ]
     assert body["complete"] is True
 
@@ -297,7 +297,7 @@ def test_an_admin_enters_any_side_and_takes_back_any_step(
     assert resp.status_code == 200, resp.text
     assert (resp.json()["viewer_side"], resp.json()["on_turn"]) == (None, False)
 
-    # The admin enters the step the order names next, side B, with no one recorded as the enterer
+    # The admin enters the step the order names next, side B; the admin token has no player row
     resp = client.put(
         f"/player-series/{series_id}/veto",
         json={"action": "step", "map_id": pool[2]},
@@ -389,3 +389,36 @@ def test_a_result_is_reported_only_once_the_veto_is_complete(
     resp = client.put(f"/player-series/{series_id}", data=scores)
     assert resp.status_code == 200, resp.text
     assert (resp.json()["player1_score"], resp.json()["player2_score"]) == (2, 0)
+
+
+def test_an_admin_who_plays_is_named_on_the_steps_they_enter(
+    client: Client,
+    seeded: dict[str, Any],
+    pool: list[int],
+    auth_headers: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An admin with a player row enters both sides; every step names them, the self-taken last one too."""
+    from tests.test_discord_auth import _grant
+    from tests.test_public_token import member_session
+
+    _grant(client, auth_headers, "2")
+    headers = member_session(monkeypatch, discord_id="2")
+    series_id = seeded["series_open_id"]
+
+    for map_id in (pool[1], pool[2], pool[3]):
+        resp = client.put(
+            f"/player-series/{series_id}/veto",
+            json={"action": "step", "map_id": map_id},
+            headers=headers,
+        )
+        assert resp.status_code == 200, resp.text
+
+    steps = resp.json()["steps"]
+    assert [(s["side"], s["action"]) for s in steps] == [
+        ("A", "ban"),
+        ("B", "ban"),
+        ("A", "pick"),
+        ("B", "pick"),
+    ]
+    assert [s["entered_by"] for s in steps] == [seeded["player_ids"][1]] * 4
