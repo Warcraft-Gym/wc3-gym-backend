@@ -836,6 +836,35 @@ WC3NO = [
     NEWBIE,
 ]
 
+# What S17 and S18 pay, row for row as production holds them. A season that ran
+# under wc3.no keeps these exact prices; the reprice of 2026-09-06 is S19 onwards.
+WC3NO_PAID: PaidSet = {
+    "ladder_goal": 500,
+    "double_up": 1000,
+    "i_am_the_captain_now": 100,
+    "addicted": 100,
+    "elite": 100,
+    "dats_fakt_ap": 50,
+    "winner_winner": 50,
+    "sad_trombone": 50,
+    "win_streak_2": 50,
+    "win_first": 15,
+    "lose_first": 25,
+    "win_streak": 25,
+    "win_every_map": 25,
+    "rising_star": 25,
+    "falling_star": 25,
+    "duck_hunting": 10,
+    "night_elf": 10,
+    "undead": 10,
+    "orc": 10,
+    "human": 10,
+    "join_them": 10,
+    "winter": 10,
+    "holiday": 5,
+    "newbie": 5,
+}
+
 # Every rule that ever paid: the wc3.no set, the S19 set and the team set. A rule
 # dropped from a season keeps its code; the season simply has no price row for it.
 ACHIEVEMENTS = (
