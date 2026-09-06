@@ -3,7 +3,7 @@ answers through the interaction token, never through the route's own body."""
 
 import json
 import time
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
@@ -41,13 +41,13 @@ def signed(
     }
 
 
-def command(name: str, **options: int | bool | str) -> dict[str, Any]:
+def command(name: str, user: str = "1", **options: int | bool | str) -> dict[str, Any]:
     return {
         "type": interactions.COMMAND,
         "application_id": APP_ID,
         "token": TOKEN,
         "channel_id": "chan-1",
-        "member": {"user": {"id": "1"}},
+        "member": {"user": {"id": user, "username": f"p{user}"}},
         "data": {
             "name": name,
             "options": [{"name": k, "value": v} for k, v in options.items()],
@@ -230,17 +230,86 @@ def test_unknown_command_edits_the_private_reply(
     ]
 
 
-def test_autocomplete_answers_no_choices_yet(client: Client, public_key: None) -> None:
-    body, headers = signed(
-        {
-            "type": 4,
-            "application_id": APP_ID,
-            "token": TOKEN,
-            "data": {"name": "upcoming"},
-        }
-    )
+def autocomplete(name: str, user: str, typed: str) -> dict[str, Any]:
+    return {
+        "type": interactions.AUTOCOMPLETE,
+        "application_id": APP_ID,
+        "token": TOKEN,
+        "member": {"user": {"id": user}},
+        "data": {
+            "name": name,
+            "options": [{"name": "series", "value": typed, "focused": True}],
+        },
+    }
+
+
+def test_autocomplete_lists_the_callers_own_series(
+    client: Client, public_key: None, seeded: dict[str, Any]
+) -> None:
+    body, headers = signed(autocomplete("schedule", "2", ""))
+    resp = client.post("/discord/interactions", content=body, headers=headers)
+    assert resp.json() == {
+        "type": 8,
+        "data": {
+            "choices": [
+                {
+                    "name": f"Wk 1 · P2 (Alpha) vs P4 (Beta) · #{seeded['series_open_id']}",
+                    "value": seeded["series_open_id"],
+                }
+            ]
+        },
+    }
+    body, headers = signed(autocomplete("schedule", "2", "zzz"))
     resp = client.post("/discord/interactions", content=body, headers=headers)
     assert resp.json() == {"type": 8, "data": {"choices": []}}
+    body, headers = signed(autocomplete("nothing", "2", ""))
+    resp = client.post("/discord/interactions", content=body, headers=headers)
+    assert resp.json() == {"type": 8, "data": {"choices": []}}
+
+
+def test_schedule_sets_the_time_and_posts_publicly(
+    client: Client, public_key: None, discord_calls: list, seeded: dict[str, Any]
+) -> None:
+    series_id = seeded["series_open_id"]
+    body, headers = signed(
+        command("schedule", user="2", series=series_id, when_utc="2026-09-09 20:00")
+    )
+    resp = client.post("/discord/interactions", content=body, headers=headers)
+    assert resp.json() == {"ok": True}
+    with Session.begin() as session:
+        series = session.get(Series, series_id)
+        assert series
+        assert series.date_time == datetime(2026, 9, 9, 20, tzinfo=UTC)
+    (post, delete) = discord_calls
+    assert post[:2] == ("POST", CHANNEL)
+    stamp = int(datetime(2026, 9, 9, 20, tzinfo=UTC).timestamp())
+    assert post[2] == {
+        "content": f"Scheduled by <@2>: <t:{stamp}:f> · Wk 1 · P2 (Alpha) vs P4 (Beta)"
+        f" · #{series_id}"
+    }
+    assert delete[:2] == ("DELETE", f"{WEBHOOK}/messages/@original")
+
+
+def test_schedule_refuses_a_stranger_and_a_bad_time_privately(
+    client: Client, public_key: None, discord_calls: list, seeded: dict[str, Any]
+) -> None:
+    series_id = seeded["series_open_id"]
+    body, headers = signed(
+        command("schedule", user="1", series=series_id, when_utc="2026-09-09 20:00")
+    )
+    client.post("/discord/interactions", content=body, headers=headers)
+    body, headers = signed(
+        command("schedule", user="2", series=series_id, when_utc="tomorrow")
+    )
+    client.post("/discord/interactions", content=body, headers=headers)
+    edit = f"{WEBHOOK}/messages/@original"
+    assert discord_calls == [
+        ("PATCH", edit, {"content": "not_authorized_for_this_series"}),
+        ("PATCH", edit, {"content": "Give the time in UTC as YYYY-MM-DD HH:MM."}),
+    ]
+    with Session.begin() as session:
+        series = session.get(Series, series_id)
+        assert series and series.date_time is None
 
 
 def test_register_commands_puts_the_guild_list(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -261,7 +330,7 @@ def test_register_commands_puts_the_guild_list(monkeypatch: pytest.MonkeyPatch) 
         return Ok()
 
     monkeypatch.setattr(requests, "request", request)
-    assert interactions.register_commands() == ["upcoming", "leaderboard"]
+    assert interactions.register_commands() == ["upcoming", "leaderboard", "schedule"]
     assert seen == [
         (
             "PUT",

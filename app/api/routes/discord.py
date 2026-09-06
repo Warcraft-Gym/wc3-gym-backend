@@ -5,7 +5,12 @@ import json
 from fastapi import APIRouter, Request
 from fastapi.concurrency import run_in_threadpool
 
-from app.api.deps import LadderServiceDep, SeasonServiceDep, SeriesServiceDep
+from app.api.deps import (
+    LadderServiceDep,
+    SeasonServiceDep,
+    SeriesServiceDep,
+    UserServiceDep,
+)
 from app.core.exceptions import ApiError
 from app.services import interactions
 
@@ -16,6 +21,7 @@ router = APIRouter(tags=["discord"])
 async def discord_interaction(
     request: Request,
     series_service: SeriesServiceDep,
+    user_service: UserServiceDep,
     ladder_service: LadderServiceDep,
     season_service: SeasonServiceDep,
 ) -> dict:
@@ -27,10 +33,7 @@ async def discord_interaction(
     body = await request.body()
     if not interactions.verified(request.headers, body):
         raise ApiError(401, {"error": "bad signature"})
-    return await run_in_threadpool(
-        interactions.handle,
-        json.loads(body),
-        series_service,
-        ladder_service,
-        season_service,
+    services = interactions.Services(
+        series_service, user_service, ladder_service, season_service
     )
+    return await run_in_threadpool(interactions.handle, json.loads(body), services)
