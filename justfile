@@ -39,6 +39,11 @@ lint:
 typecheck:
     uv run ty check app tests
 
+# Replace the guild's slash commands with the backend's list. Reads DISCORD_APPLICATION_ID,
+# DISCORD_GUILD_ID and DISCORD_BOT_TOKEN from .env; guild commands update at once.
+discord-commands:
+    uv run --env-file .env python -c 'from app.services.interactions import register_commands; print(register_commands())'
+
 # Format the code and apply the lint fixes ruff can make.
 fmt:
     uv run ruff format .
