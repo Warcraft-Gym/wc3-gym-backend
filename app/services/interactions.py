@@ -9,7 +9,7 @@ of the deferred reply, or a public follow-up in the channel.
 
 import json
 import os
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from datetime import UTC, datetime, timedelta
 from typing import Any, NamedTuple
 
@@ -224,9 +224,9 @@ def schedule(
     return {"content": f"Scheduled by <@{discord_id}>: {line}"}, PUBLIC
 
 
-def choices(payload: dict[str, Any], services: Services) -> list[dict[str, Any]]:
-    """The autocomplete choices for a `series` option: the caller's own series."""
-    typed = next(
+def typed_option(payload: dict[str, Any]) -> str:
+    """What the member has typed so far in the option he is filling, lowercased."""
+    return next(
         (
             str(option.get("value", "")).lower()
             for option in payload.get("data", {}).get("options", [])
@@ -234,6 +234,11 @@ def choices(payload: dict[str, Any], services: Services) -> list[dict[str, Any]]
         ),
         "",
     )
+
+
+def choices(payload: dict[str, Any], services: Services) -> list[dict[str, Any]]:
+    """The autocomplete choices for a `series` option: the caller's own series."""
+    typed = typed_option(payload)
     names = (
         (_series_line(row).split(" · ", 1)[1][:100], row.id)
         for row in own_series(payload, services)
@@ -346,6 +351,8 @@ def leaderboard(
 
 
 HANDLERS = {"upcoming": upcoming, "leaderboard": leaderboard, "schedule": schedule}
+# The autocomplete finders that are not the series list, keyed by command name
+CHOICES: dict[str, Callable[[dict[str, Any], Services], list[dict[str, Any]]]] = {}
 
 # Imported here, not at the top: a command module imports this one.
 from app.services.commands import postlinks
@@ -364,9 +371,9 @@ def handle(payload: dict[str, Any], services: Services) -> dict[str, Any]:
     if kind == PING:
         return {"type": PONG}
     if kind == AUTOCOMPLETE:
-        found = (
-            choices(payload, services) if payload["data"]["name"] in HANDLERS else []
-        )
+        name = payload["data"]["name"]
+        finder = CHOICES.get(name, choices if name in HANDLERS else None)
+        found = finder(payload, services) if finder else []
         return {"type": AUTOCOMPLETE_RESULT, "data": {"choices": found}}
     application_id, token = payload["application_id"], payload["token"]
     handler = HANDLERS.get(payload["data"]["name"]) if kind == COMMAND else None
@@ -390,3 +397,9 @@ from app.services.commands import announce, veto
 
 COMMANDS += [veto.COMMAND, announce.COMMAND]
 HANDLERS |= {"veto": veto.run, "announce": announce.run}
+
+from app.services.commands import w3c
+
+COMMANDS += [w3c.MMR, w3c.STATS]
+HANDLERS["mmr"], HANDLERS["stats"] = w3c.mmr, w3c.stats
+CHOICES["mmr"] = CHOICES["stats"] = w3c.player_choices
