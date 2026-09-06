@@ -126,6 +126,20 @@ def test_leaderboard_ranks_badge_points_then_ladder_points(
     assert lines == ["**1.** P1 (Alpha) · 6 pts · 2-0"]
 
 
+def test_leaderboard_fantasy_ranks_the_seasons_fantasy_teams(
+    client: Client, public_key: None, discord_calls: list, seeded: dict[str, Any]
+) -> None:
+    body, headers = signed(command("leaderboard", kind="fantasy"))
+    client.post("/discord/interactions", content=body, headers=headers)
+    post = discord_calls[0]
+    assert post[:2] == ("POST", CHANNEL)
+    embed = post[2]["embeds"][0]
+    assert embed["title"].endswith("fantasy leaderboard")
+    assert embed["description"].startswith("**1.** The Optimists · P1 · ")
+    assert embed["description"].endswith(" pts")
+    assert "fields" not in embed
+
+
 def test_leaderboard_names_a_season_or_says_which_is_missing(
     client: Client, public_key: None, discord_calls: list, seeded: dict[str, Any]
 ) -> None:
@@ -258,6 +272,9 @@ def test_register_commands_puts_the_guild_list(monkeypatch: pytest.MonkeyPatch) 
         "upcoming",
         "leaderboard",
         "schedule",
+        "postlinks",
+        "veto",
+        "announce",
         "mmr",
         "stats",
     ]

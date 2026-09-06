@@ -1,1 +1,1 @@
-"""One module per group of Discord slash commands, wired into interactions.py."""
+"""One module per slash command; app.services.interactions collects them."""
