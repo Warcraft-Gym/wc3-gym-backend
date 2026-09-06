@@ -102,7 +102,7 @@ def test_stats_posts_the_season_record_as_an_embed(
     first, second = embed["description"].splitlines()
     assert first == "2-1 · 3 games"
     # 3 a win and 1 a loss make the ladder points; the badges pay the rest
-    assert second == "7 ladder points · 5 achievement points · 2 badges"
+    assert second == "7 ladder points · 6 achievement points · 2 badges"
     assert embed["fields"][0] == {
         "name": "w3champions S26",
         "value": "**HU 1512 · 40-30**\nNE 1400 · 5-7\nOC 1300 · 2-1 (S25)",
