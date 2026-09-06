@@ -26,6 +26,7 @@ PUBLIC_KEY = (
 )
 APP_ID, TOKEN = "app-1", "interaction-token"
 WEBHOOK = f"{discord.API_URL}/webhooks/{APP_ID}/{TOKEN}"
+CHANNEL = f"{discord.API_URL}/channels/chan-1/messages"
 
 
 def signed(
@@ -45,6 +46,7 @@ def command(name: str, **options: int | bool | str) -> dict[str, Any]:
         "type": interactions.COMMAND,
         "application_id": APP_ID,
         "token": TOKEN,
+        "channel_id": "chan-1",
         "member": {"user": {"id": "1"}},
         "data": {
             "name": name,
@@ -59,23 +61,37 @@ def public_key(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture
-def discord_calls(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, str, Any]]:
+def bot_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DISCORD_BOT_TOKEN", "a-bot-token")
+
+
+@pytest.fixture
+def discord_calls(
+    monkeypatch: pytest.MonkeyPatch, bot_token: None
+) -> list[tuple[str, str, Any]]:
     """Record every call to Discord and answer 200."""
+    return _record(monkeypatch, 200)
+
+
+def _record(monkeypatch: pytest.MonkeyPatch, status: int) -> list[tuple[str, str, Any]]:
     calls: list[tuple[str, str, Any]] = []
 
-    class Ok:
-        ok = True
-        status_code = 200
+    class Answer:
+        ok = status < 400
+        status_code = status
 
-    def request(method: str, url: str, **kwargs: object) -> Ok:
+    def request(method: str, url: str, **kwargs: object) -> Answer:
         calls.append((method, url, kwargs.get("json")))
-        return Ok()
+        return Answer()
 
     monkeypatch.setattr(discord.requests, "request", request)
     return calls
 
 
-def test_no_public_key_answers_503(client: Client) -> None:
+def test_no_public_key_answers_503(
+    client: Client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("DISCORD_PUBLIC_KEY", raising=False)
     body, headers = signed({"type": 1})
     resp = client.post("/discord/interactions", content=body, headers=headers)
     assert resp.status_code == 503
@@ -110,7 +126,7 @@ def test_upcoming_posts_the_window_publicly(
     assert resp.status_code == 200
     assert resp.json() == {"ok": True}
     (post, delete) = discord_calls
-    assert post[:2] == ("POST", WEBHOOK)
+    assert post[:2] == ("POST", CHANNEL)
     line = post[2]["embeds"][0]["description"]
     assert line == (
         f"<t:{int(soon.timestamp())}:f> · Wk 1 · P2 (Alpha) vs P4 (Beta)"
@@ -152,7 +168,7 @@ def test_leaderboard_ranks_badge_points_then_ladder_points(
         "/discord/interactions", content=body, headers=headers
     ).json() == {"ok": True}
     (post, delete) = discord_calls
-    assert post[:2] == ("POST", WEBHOOK)
+    assert post[:2] == ("POST", CHANNEL)
     embed = post[2]["embeds"][0]
     assert embed["title"].endswith("achievements leaderboard")
     lines = embed["description"].splitlines()
@@ -182,6 +198,23 @@ def test_leaderboard_names_a_season_or_says_which_is_missing(
     body, headers = signed(command("leaderboard", season="season"))
     client.post("/discord/interactions", content=body, headers=headers)
     assert "No ladder games in" in discord_calls[2][2]["content"]
+
+
+def test_upcoming_stays_private_without_a_bot_token_or_when_refused(
+    client: Client, public_key: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("DISCORD_BOT_TOKEN", raising=False)
+    calls = _record(monkeypatch, 200)
+    body, headers = signed(command("upcoming"))
+    client.post("/discord/interactions", content=body, headers=headers)
+    assert [(c[0], c[1]) for c in calls] == [("PATCH", f"{WEBHOOK}/messages/@original")]
+    monkeypatch.setenv("DISCORD_BOT_TOKEN", "a-bot-token")
+    calls = _record(monkeypatch, 403)
+    client.post("/discord/interactions", content=body, headers=headers)
+    assert [(c[0], c[1]) for c in calls] == [
+        ("POST", CHANNEL),
+        ("PATCH", f"{WEBHOOK}/messages/@original"),
+    ]
 
 
 def test_unknown_command_edits_the_private_reply(

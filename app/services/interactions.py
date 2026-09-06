@@ -232,10 +232,18 @@ def handle(
     application_id, token = payload["application_id"], payload["token"]
     name = payload["data"]["name"] if kind == COMMAND else None
     if name == "upcoming":
-        discord.post_reply(application_id, token, upcoming(payload, series_service))
+        discord.post_reply(
+            application_id,
+            token,
+            payload["channel_id"],
+            upcoming(payload, series_service),
+        )
     elif name == "leaderboard":
         discord.post_reply(
-            application_id, token, leaderboard(payload, ladder_service, season_service)
+            application_id,
+            token,
+            payload["channel_id"],
+            leaderboard(payload, ladder_service, season_service),
         )
     else:
         discord.edit_reply(application_id, token, {"content": "Unknown command."})
