@@ -273,7 +273,7 @@ FIRST_TO = 50
 
 EARLY_BIRD = Achievement(
     "early_bird",
-    2,
+    3,
     "Early bird",
     "Play a game in the first 3 days of the season",
     "game-icons:hummingbird",
@@ -287,17 +287,17 @@ WEEK_ONE = Achievement(
 )
 LAST_CALL = Achievement(
     "last_call",
-    2,
+    3,
     "Last call",
     "Play a game in the last 3 days of the season",
     "game-icons:hourglass",
 )
 GAMES_25 = Achievement(
-    "games_25", 2, "Regular", "Play 25 games", "game-icons:card-play"
+    "games_25", 3, "Regular", "Play 25 games", "game-icons:card-play"
 )
 GAMES_50 = Achievement("games_50", 3, "Grinder", "Play 50 games", "game-icons:gears")
 GAMES_100 = Achievement(
-    "games_100", 8, "No-lifer", "Play 100 games", "game-icons:night-sleep"
+    "games_100", 10, "No-lifer", "Play 100 games", "game-icons:night-sleep"
 )
 PLUS_TWENTY = Achievement(
     "plus_twenty",
@@ -325,7 +325,7 @@ TWENTY_DAYS = Achievement(
 )
 FIVE_A_DAY = Achievement(
     "five_a_day",
-    8,
+    10,
     "Five a day",
     "Play 5 or more games on 10 different days",
     "game-icons:shiny-apple",
@@ -339,14 +339,14 @@ ALWAYS_HERE = Achievement(
 )
 WEEKLY_REGULAR = Achievement(
     "weekly_regular",
-    4,
+    5,
     "Weekly regular",
     "Play 5 or more games in 4 different weeks",
     "game-icons:stopwatch",
 )
 MONTH_OF_SUNDAYS = Achievement(
     "month_of_sundays",
-    8,
+    10,
     "Month of Sundays",
     "Play on 4 weekends in a row",
     "game-icons:sun",
@@ -360,21 +360,21 @@ NEVER_GONE = Achievement(
 )
 WELCOME_BACK = Achievement(
     "welcome_back",
-    2,
+    3,
     "Welcome back",
     "Play again after 14 days away",
     "game-icons:return-arrow",
 )
 ONE_SITTING = Achievement(
     "one_sitting",
-    2,
+    3,
     "One sitting",
     "Play 5 games inside 3 hours",
     "game-icons:armchair",
 )
 POWER_HOUR = Achievement(
     "power_hour",
-    2,
+    3,
     "Power hour",
     "Win 3 games inside one hour",
     "game-icons:lightning-trio",
@@ -416,7 +416,7 @@ WIN_POOL = Achievement(
 )
 TOURIST = Achievement(
     "tourist",
-    8,
+    10,
     "Tourist",
     "Play a game on every map in this season's pool",
     "game-icons:suitcase",
@@ -425,7 +425,7 @@ HOME_TURF = Achievement(
     "home_turf", 5, "Home turf", "Win 10 games on one map", "game-icons:castle"
 )
 RACE_TOUR = Achievement(
-    "race_tour", 2, "Race tour", "Beat every race", "game-icons:world"
+    "race_tour", 3, "Race tour", "Beat every race", "game-icons:world"
 )
 MIRROR_MASTER = Achievement(
     "mirror_master",
@@ -501,7 +501,7 @@ HUNTING_SEASON = Achievement(
 )
 OPEN_SEASON = Achievement(
     "open_season",
-    20,
+    25,
     "Open season",
     "Beat 5 different GNL players",
     "game-icons:crosshair",
@@ -518,7 +518,7 @@ GRAND_TOUR = Achievement(
 )
 SPEEDRUNNER = Achievement(
     "speedrunner",
-    2,
+    3,
     "Speedrunner",
     "Win a game in under 7 minutes",
     "game-icons:running-shoe",
@@ -687,7 +687,7 @@ BRAGGING_WINS = 20
 SPARRING_GAMES = 10
 
 HAT_TRICK = Achievement(
-    "hat_trick", 2, "Hat-trick", "Win 3 games in a row", "game-icons:top-hat"
+    "hat_trick", 3, "Hat-trick", "Win 3 games in a row", "game-icons:top-hat"
 )
 REVENGE = Achievement(
     "revenge",
@@ -698,14 +698,14 @@ REVENGE = Achievement(
 )
 COMEBACK = Achievement(
     "comeback",
-    8,
+    10,
     "Comeback",
     "Play 30 games and finish 100 MMR above your season low",
     "game-icons:sunrise",
 )
 # One badge per map of the season's pool, id `map_win:<map>`; see per_map
 MAP_WIN = Achievement(
-    "map_win", 2, "Map win", "Win a game on a map", "game-icons:position-marker"
+    "map_win", 3, "Map win", "Win a game on a map", "game-icons:position-marker"
 )
 
 
