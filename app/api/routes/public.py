@@ -564,13 +564,16 @@ def _veto_viewer(
     credentials: Credentials,
     token: str | None,
     user_service: UserServiceDep,
-) -> int | None:
-    """The player behind the request, or null for an admin, who edits either side."""
+) -> tuple[int | None, int | None]:
+    """The player behind the request, or null for an admin, who edits either
+    side; and the player row to record as the enterer, if the account has one."""
     if credentials is not None:
         claims = require_login(request, credentials)
         if claims.get("role") == "admin" or claims.get("sub") == "admin":
-            return None
-    return dashboard_player(request, credentials, user_service, token)[1].id
+            users = user_service.find_by_discord_id(str(claims["sub"]))
+            return None, users[0].id if users else None
+    player = dashboard_player(request, credentials, user_service, token)[1].id
+    return player, player
 
 
 @router.get("/player-series/{series_id}/veto")
@@ -583,7 +586,7 @@ def get_player_series_veto(
     token: str | None = None,
 ) -> SeriesVetoPublic:
     """The map veto board of a series, read by either player or by an admin."""
-    viewer = _veto_viewer(request, credentials, token, user_service)
+    viewer, _ = _veto_viewer(request, credentials, token, user_service)
     return veto_service.board(series_id, viewer)
 
 
@@ -598,8 +601,8 @@ def set_player_series_veto(
 ) -> SeriesVetoPublic:
     """Take the next step of the veto, or take back your own last one. An admin
     enters the step for whichever side is next and takes back any last step."""
-    viewer = _veto_viewer(request, credentials, data.token, user_service)
-    return veto_service.take(series_id, viewer, data.action, data.map_id)
+    viewer, entered_by = _veto_viewer(request, credentials, data.token, user_service)
+    return veto_service.take(series_id, viewer, data.action, data.map_id, entered_by)
 
 
 @router.get("/user-info", response_model=None)
