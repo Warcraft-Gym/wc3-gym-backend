@@ -21,7 +21,10 @@ from app.models.series import SeriesPublic
 from app.models.team import TeamReduced
 from app.models.types import utcnow
 from app.models.user import UserPublic
+from app.models.w3c_ladder_match import LadderPlayer
 from app.services import discord, discord_roles
+from app.services.ladder import LadderService
+from app.services.seasons import SeasonService
 from app.services.series import SeriesService
 
 # Interaction types Discord sends
@@ -42,6 +45,33 @@ COMMANDS: list[dict[str, Any]] = [
                 "max_value": 60,
             },
             {"type": 5, "name": "fantasy", "description": "Only the fantasy matches"},
+        ],
+    },
+    {
+        "name": "leaderboard",
+        "description": "Who is ahead in achievement or ladder points this season",
+        "options": [
+            {
+                "type": 3,
+                "name": "kind",
+                "description": "Achievement points unless given",
+                "choices": [
+                    {"name": "achievements", "value": "achievements"},
+                    {"name": "ladder", "value": "ladder"},
+                ],
+            },
+            {
+                "type": 3,
+                "name": "season",
+                "description": "Part of a season name, the current season unless given",
+            },
+            {
+                "type": 4,
+                "name": "top",
+                "description": "How many players, 10 unless given",
+                "min_value": 1,
+                "max_value": 25,
+            },
         ],
     },
 ]
@@ -111,7 +141,84 @@ def upcoming(payload: dict[str, Any], series_service: SeriesService) -> dict[str
     }
 
 
-def handle(payload: dict[str, Any], series_service: SeriesService) -> dict[str, Any]:
+def _season_id(name: str | None, season_service: SeasonService) -> int | None:
+    """The season a name points at, the newest of the matches; the current
+    season when no name is given."""
+    if not name:
+        return discord_roles.current_season()
+    found = [
+        season
+        for season in season_service.get_all()
+        if name.lower() in (season.name or "").lower()
+    ]
+    return max(found, key=lambda season: season.id).id if found else None
+
+
+def leaderboard(
+    payload: dict[str, Any],
+    ladder_service: LadderService,
+    season_service: SeasonService,
+) -> dict[str, Any]:
+    """/leaderboard kind season top: the season's players by achievement or
+    ladder points, and its teams by total points."""
+    options = options_of(payload)
+    kind = options.get("kind", "achievements")
+    top = int(options.get("top", 10))
+    season_id = _season_id(options.get("season"), season_service)
+    if season_id is None:
+        name = options.get("season")
+        return {"content": f"No season named {name}." if name else "No current season."}
+    season_name = season_service.get(season_id).name
+    answer = ladder_service.season_ladder(season_id)
+    players = [
+        (player, team.name)
+        for team in answer.teams
+        for player in team.players
+        if player.games
+    ]
+    if not players:
+        return {"content": f"No ladder games in {season_name} yet."}
+
+    def badge_points(player: LadderPlayer) -> int:
+        return player.points - player.ladder_points
+
+    if kind == "ladder":
+        players.sort(key=lambda row: (-row[0].ladder_points, -row[0].wins))
+        lines = [
+            f"**{n}.** {p.name} ({tag}) · {p.ladder_points} pts · {p.wins}-{p.losses}"
+            for n, (p, tag) in enumerate(players[:top], 1)
+        ]
+    else:
+        players.sort(key=lambda row: (-badge_points(row[0]), -len(row[0].achievements)))
+        lines = [
+            f"**{n}.** {p.name} ({tag}) · {badge_points(p)} pts"
+            f" · {len(p.achievements)} badges"
+            for n, (p, tag) in enumerate(players[:top], 1)
+        ]
+    teams = sorted(answer.teams, key=lambda team: -team.points)
+    standing = "\n".join(
+        f"{team.name} · {team.points} pts · {team.games} games"
+        f" · {len(team.achievements)} team badges"
+        for team in teams
+    )
+    return {
+        "embeds": [
+            {
+                "title": f"{season_name} · {kind} leaderboard",
+                "description": "\n".join(lines),
+                "fields": [{"name": "Teams", "value": standing}],
+                "color": 0x4A4DB8,
+            }
+        ]
+    }
+
+
+def handle(
+    payload: dict[str, Any],
+    series_service: SeriesService,
+    ladder_service: LadderService,
+    season_service: SeasonService,
+) -> dict[str, Any]:
     """Run one interaction and answer what the adapter relays to Discord.
 
     A command's answer goes to Discord through the interaction token here, so
@@ -123,12 +230,20 @@ def handle(payload: dict[str, Any], series_service: SeriesService) -> dict[str, 
     if kind == AUTOCOMPLETE:
         return {"type": AUTOCOMPLETE_RESULT, "data": {"choices": []}}
     application_id, token = payload["application_id"], payload["token"]
-    if kind == COMMAND and payload["data"]["name"] == "upcoming":
+    name = payload["data"]["name"] if kind == COMMAND else None
+    if name == "upcoming":
         discord.post_reply(
             application_id,
             token,
             payload["channel_id"],
             upcoming(payload, series_service),
+        )
+    elif name == "leaderboard":
+        discord.post_reply(
+            application_id,
+            token,
+            payload["channel_id"],
+            leaderboard(payload, ladder_service, season_service),
         )
     else:
         discord.edit_reply(application_id, token, {"content": "Unknown command."})

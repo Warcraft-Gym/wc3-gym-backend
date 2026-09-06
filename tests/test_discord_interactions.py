@@ -16,6 +16,7 @@ from app.core.db import Session
 from app.models.series import Series
 from app.models.types import utcnow
 from app.services import discord, interactions
+from tests.test_ladder_read import INSIDE, add_match, sign_up
 
 KEY = Ed25519PrivateKey.generate()
 PUBLIC_KEY = (
@@ -40,7 +41,7 @@ def signed(
     }
 
 
-def command(name: str, **options: int | bool) -> dict[str, Any]:
+def command(name: str, **options: int | bool | str) -> dict[str, Any]:
     return {
         "type": interactions.COMMAND,
         "application_id": APP_ID,
@@ -152,6 +153,53 @@ def test_upcoming_window_and_fantasy_filter(
     assert "Wk 1" in discord_calls[4][2]["embeds"][0]["description"]
 
 
+def test_leaderboard_ranks_badge_points_then_ladder_points(
+    client: Client, public_key: None, discord_calls: list, seeded: dict[str, Any]
+) -> None:
+    """Two rostered players: the first wins twice, the second loses once."""
+    first, second = seeded["player_ids"][:2]
+    sign_up(seeded["season_id"], [first, second])
+    add_match(first, "w1", won=True)
+    add_match(first, "w2", won=True, start_time=INSIDE + timedelta(minutes=1))
+    add_match(second, "l1", won=False)
+
+    body, headers = signed(command("leaderboard"))
+    assert client.post(
+        "/discord/interactions", content=body, headers=headers
+    ).json() == {"ok": True}
+    (post, delete) = discord_calls
+    assert post[:2] == ("POST", CHANNEL)
+    embed = post[2]["embeds"][0]
+    assert embed["title"].endswith("achievements leaderboard")
+    lines = embed["description"].splitlines()
+    # The first win, the early bird and the hat-trick's opener pay the winner;
+    # the loser gets the first loss's five points
+    assert (
+        lines[0].startswith("**1.**")
+        and "(Alpha)" in lines[0]
+        and " pts · " in lines[0]
+    )
+    assert len(lines) == 2
+    assert embed["fields"][0]["name"] == "Teams"
+    assert delete[:2] == ("DELETE", f"{WEBHOOK}/messages/@original")
+
+    body, headers = signed(command("leaderboard", kind="ladder", top=1))
+    client.post("/discord/interactions", content=body, headers=headers)
+    lines = discord_calls[2][2]["embeds"][0]["description"].splitlines()
+    assert lines == ["**1.** P1 (Alpha) · 6 pts · 2-0"]
+
+
+def test_leaderboard_names_a_season_or_says_which_is_missing(
+    client: Client, public_key: None, discord_calls: list, seeded: dict[str, Any]
+) -> None:
+    body, headers = signed(command("leaderboard", season="nothing like it"))
+    client.post("/discord/interactions", content=body, headers=headers)
+    assert discord_calls[0][2] == {"content": "No season named nothing like it."}
+    body, headers = signed(command("leaderboard", season="season"))
+    client.post("/discord/interactions", content=body, headers=headers)
+    assert "No ladder games in" in discord_calls[2][2]["content"]
+
+
 def test_upcoming_stays_private_without_a_bot_token_or_when_refused(
     client: Client, public_key: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -213,7 +261,7 @@ def test_register_commands_puts_the_guild_list(monkeypatch: pytest.MonkeyPatch) 
         return Ok()
 
     monkeypatch.setattr(requests, "request", request)
-    assert interactions.register_commands() == ["upcoming"]
+    assert interactions.register_commands() == ["upcoming", "leaderboard"]
     assert seen == [
         (
             "PUT",
