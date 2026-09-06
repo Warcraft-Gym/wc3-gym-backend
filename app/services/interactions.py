@@ -25,6 +25,7 @@ from app.models.types import utcnow
 from app.models.user import UserPublic
 from app.models.w3c_ladder_match import LadderPlayer
 from app.services import discord, discord_roles, player_series
+from app.services.fantasy_teams import FantasyTeamService
 from app.services.ladder import LadderService
 from app.services.seasons import SeasonService
 from app.services.series import SeriesService
@@ -52,7 +53,7 @@ COMMANDS: list[dict[str, Any]] = [
     },
     {
         "name": "leaderboard",
-        "description": "Who is ahead in achievement or ladder points this season",
+        "description": "Who is ahead in achievement, ladder or fantasy points this season",
         "options": [
             {
                 "type": 3,
@@ -61,6 +62,7 @@ COMMANDS: list[dict[str, Any]] = [
                 "choices": [
                     {"name": "achievements", "value": "achievements"},
                     {"name": "ladder", "value": "ladder"},
+                    {"name": "fantasy", "value": "fantasy"},
                 ],
             },
             {
@@ -108,6 +110,7 @@ class Services(NamedTuple):
     users: UserService
     ladder: LadderService
     seasons: SeasonService
+    fantasy: FantasyTeamService
 
 
 def verified(headers: Mapping[str, str], body: bytes) -> bool:
@@ -255,6 +258,32 @@ def _season_id(name: str | None, season_service: SeasonService) -> int | None:
     return max(found, key=lambda season: season.id).id if found else None
 
 
+def fantasy_standings(
+    season_id: int, season_name: str | None, top: int, services: Services
+) -> dict[str, Any]:
+    """The season's fantasy teams by total points, as the website ranks them."""
+    teams, _ = services.fantasy.search(
+        QueryUtil.parse_query(f"season_id == {season_id}")
+    )
+    if not teams:
+        return {"content": f"No fantasy teams in {season_name}."}
+    teams.sort(key=lambda team: -(team.total_points or 0))
+    lines = [
+        f"**{n}.** {team.name} · {team.captain.name if team.captain else '?'}"
+        f" · {team.total_points or 0} pts"
+        for n, team in enumerate(teams[:top], 1)
+    ]
+    return {
+        "embeds": [
+            {
+                "title": f"{season_name} · fantasy leaderboard",
+                "description": "\n".join(lines),
+                "color": 0x4A4DB8,
+            }
+        ]
+    }
+
+
 def leaderboard(
     payload: dict[str, Any], services: Services
 ) -> tuple[dict[str, Any], bool]:
@@ -270,6 +299,8 @@ def leaderboard(
             "content": f"No season named {name}." if name else "No current season."
         }, PUBLIC
     season_name = services.seasons.get(season_id).name
+    if kind == "fantasy":
+        return fantasy_standings(season_id, season_name, top, services), PUBLIC
     answer = services.ladder.season_ladder(season_id)
     players = [
         (player, team.name)
@@ -315,6 +346,12 @@ def leaderboard(
 
 
 HANDLERS = {"upcoming": upcoming, "leaderboard": leaderboard, "schedule": schedule}
+
+# Imported here, not at the top: a command module imports this one.
+from app.services.commands import postlinks
+
+COMMANDS.append(postlinks.COMMAND)
+HANDLERS["postlinks"] = postlinks.run
 
 
 def handle(payload: dict[str, Any], services: Services) -> dict[str, Any]:
