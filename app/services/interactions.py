@@ -19,6 +19,7 @@ from fastapi.responses import JSONResponse
 
 from app.core.exceptions import ApiError
 from app.core.query import QueryUtil
+from app.models.season import SeasonPublic
 from app.models.series import SeriesPublic
 from app.models.team import TeamReduced
 from app.models.types import utcnow
@@ -265,15 +266,34 @@ def _season_id(name: str | None, season_service: SeasonService) -> int | None:
     return max(found, key=lambda season: season.id).id if found else None
 
 
+def _season_span(season: SeasonPublic) -> str:
+    """The season's date range and where today sits in it, for a report header."""
+    start, end = season.start_date, season.end_date
+    span = f"{start or '?'} to {end or '?'}"
+    today = utcnow().date()
+    if start is None or today < start:
+        return span
+    if end is not None and today > end:
+        return f"{span} · ended"
+    weeks = season.number_weeks
+    week = (today - start).days // 7 + 1
+    return f"{span} · week {min(week, weeks or week)} of {weeks or '?'}"
+
+
+def _snapshot(text: str, at: datetime | None) -> dict[str, Any]:
+    """The embed footer: what the data time means, shown in the reader's zone."""
+    return {"footer": {"text": text}, "timestamp": (at or utcnow()).isoformat()}
+
+
 def fantasy_standings(
-    season_id: int, season_name: str | None, top: int, services: Services
+    season_id: int, season: SeasonPublic, top: int, services: Services
 ) -> dict[str, Any]:
     """The season's fantasy teams by total points, as the website ranks them."""
     teams, _ = services.fantasy.search(
         QueryUtil.parse_query(f"season_id == {season_id}")
     )
     if not teams:
-        return {"content": f"No fantasy teams in {season_name}."}
+        return {"content": f"No fantasy teams in {season.name}."}
     teams.sort(key=lambda team: -(team.total_points or 0))
     lines = [
         f"**{n}.** {team.name} · {team.captain.name if team.captain else '?'}"
@@ -283,9 +303,10 @@ def fantasy_standings(
     return {
         "embeds": [
             {
-                "title": f"{season_name} · fantasy leaderboard",
-                "description": "\n".join(lines),
+                "title": f"{season.name} · fantasy leaderboard",
+                "description": "\n".join([_season_span(season), "", *lines]),
                 "color": 0x4A4DB8,
+                **_snapshot("Standings as of", None),
             }
         ]
     }
@@ -305,9 +326,9 @@ def leaderboard(
         return {
             "content": f"No season named {name}." if name else "No current season."
         }, PUBLIC
-    season_name = services.seasons.get(season_id).name
+    season = services.seasons.get(season_id)
     if kind == "fantasy":
-        return fantasy_standings(season_id, season_name, top, services), PUBLIC
+        return fantasy_standings(season_id, season, top, services), PUBLIC
     answer = services.ladder.season_ladder(season_id)
     players = [
         (player, team.name)
@@ -316,7 +337,7 @@ def leaderboard(
         if player.games
     ]
     if not players:
-        return {"content": f"No ladder games in {season_name} yet."}, PUBLIC
+        return {"content": f"No ladder games in {season.name} yet."}, PUBLIC
 
     def badge_points(player: LadderPlayer) -> int:
         return player.points - player.ladder_points
@@ -335,6 +356,7 @@ def leaderboard(
             for n, (p, tag) in enumerate(players[:top], 1)
         ]
     teams = sorted(answer.teams, key=lambda team: -team.points)
+    synced = answer.season.synced_at
     standing = "\n".join(
         f"{team.name} · {team.points} pts · {team.games} games"
         f" · {len(team.achievements)} team badges"
@@ -343,10 +365,14 @@ def leaderboard(
     return {
         "embeds": [
             {
-                "title": f"{season_name} · {kind} leaderboard",
-                "description": "\n".join(lines),
+                "title": f"{season.name} · {kind} leaderboard",
+                "description": "\n".join([_season_span(season), "", *lines]),
                 "fields": [{"name": "Teams", "value": standing}],
                 "color": 0x4A4DB8,
+                **_snapshot(
+                    "Ladder synced" if synced else "Ladder sync incomplete as of",
+                    synced,
+                ),
             }
         ]
     }, PUBLIC

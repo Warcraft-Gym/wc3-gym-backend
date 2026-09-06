@@ -108,7 +108,9 @@ def test_leaderboard_ranks_badge_points_then_ladder_points(
     assert post[:2] == ("POST", CHANNEL)
     embed = post[2]["embeds"][0]
     assert embed["title"].endswith("achievements leaderboard")
-    lines = embed["description"].splitlines()
+    span, blank, *lines = embed["description"].splitlines()
+    # The seeded season is over, so the header names its range and says so
+    assert (span, blank) == ("2026-01-05 to 2026-02-27 · ended", "")
     # The first win, the early bird and the hat-trick's opener pay the winner;
     # the loser gets the first loss's five points
     assert (
@@ -118,12 +120,15 @@ def test_leaderboard_ranks_badge_points_then_ladder_points(
     )
     assert len(lines) == 2
     assert embed["fields"][0]["name"] == "Teams"
+    # The data time is the roster's oldest sync stamp; none is stored here
+    assert embed["footer"] == {"text": "Ladder sync incomplete as of"}
+    assert embed["timestamp"].endswith("+00:00")
     assert delete[:2] == ("DELETE", f"{WEBHOOK}/messages/@original")
 
     body, headers = signed(command("leaderboard", kind="ladder", top=1))
     client.post("/discord/interactions", content=body, headers=headers)
     lines = discord_calls[2][2]["embeds"][0]["description"].splitlines()
-    assert lines == ["**1.** P1 (Alpha) · 6 pts · 2-0"]
+    assert lines[2:] == ["**1.** P1 (Alpha) · 6 pts · 2-0"]
 
 
 def test_leaderboard_fantasy_ranks_the_seasons_fantasy_teams(
@@ -135,9 +140,12 @@ def test_leaderboard_fantasy_ranks_the_seasons_fantasy_teams(
     assert post[:2] == ("POST", CHANNEL)
     embed = post[2]["embeds"][0]
     assert embed["title"].endswith("fantasy leaderboard")
-    assert embed["description"].startswith("**1.** The Optimists · P1 · ")
-    assert embed["description"].endswith(" pts")
+    span, blank, first = embed["description"].splitlines()
+    assert (span, blank) == ("2026-01-05 to 2026-02-27 · ended", "")
+    assert first.startswith("**1.** The Optimists · P1 · ")
+    assert first.endswith(" pts")
     assert "fields" not in embed
+    assert embed["footer"] == {"text": "Standings as of"}
 
 
 def test_leaderboard_names_a_season_or_says_which_is_missing(
