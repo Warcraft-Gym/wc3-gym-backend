@@ -347,6 +347,12 @@ def leaderboard(
 
 HANDLERS = {"upcoming": upcoming, "leaderboard": leaderboard, "schedule": schedule}
 
+# Imported here, not at the top: a command module imports this one.
+from app.services.commands import postlinks
+
+COMMANDS.append(postlinks.COMMAND)
+HANDLERS["postlinks"] = postlinks.run
+
 
 def handle(payload: dict[str, Any], services: Services) -> dict[str, Any]:
     """Run one interaction and answer what the adapter relays to Discord.

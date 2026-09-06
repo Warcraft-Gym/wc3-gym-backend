@@ -268,7 +268,12 @@ def test_register_commands_puts_the_guild_list(monkeypatch: pytest.MonkeyPatch) 
         return Ok()
 
     monkeypatch.setattr(requests, "request", request)
-    assert interactions.register_commands() == ["upcoming", "leaderboard", "schedule"]
+    assert interactions.register_commands() == [
+        "upcoming",
+        "leaderboard",
+        "schedule",
+        "postlinks",
+    ]
     assert seen == [
         (
             "PUT",
