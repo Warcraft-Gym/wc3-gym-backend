@@ -11,6 +11,7 @@ import json
 import os
 from collections.abc import Callable, Mapping
 from datetime import UTC, datetime, timedelta
+from math import ceil
 from typing import Any, NamedTuple
 
 from cryptography.exceptions import InvalidSignature
@@ -267,7 +268,11 @@ def _season_id(name: str | None, season_service: SeasonService) -> int | None:
 
 
 def _season_span(season: SeasonPublic) -> str:
-    """The season's date range and where today sits in it, for a report header."""
+    """The season's date range and the calendar week of it today sits in.
+
+    The weeks are the range's, as the achievement window counts them, not the
+    play weeks: a review season can span more weeks than it plays.
+    """
     start, end = season.start_date, season.end_date
     span = f"{start or '?'} to {end or '?'}"
     today = utcnow().date()
@@ -275,9 +280,10 @@ def _season_span(season: SeasonPublic) -> str:
         return span
     if end is not None and today > end:
         return f"{span} · ended"
-    weeks = season.number_weeks
     week = (today - start).days // 7 + 1
-    return f"{span} · week {min(week, weeks or week)} of {weeks or '?'}"
+    if end is None:
+        return f"{span} · week {week}"
+    return f"{span} · week {week} of {ceil(((end - start).days + 1) / 7)}"
 
 
 def _snapshot(text: str, at: datetime | None) -> dict[str, Any]:
