@@ -27,3 +27,13 @@ from app.core.seed import convert
 )
 def test_convert(cell: str, data_type: str, expected: str) -> None:
     assert convert(cell, data_type) == expected
+
+
+def test_seed_prices_are_the_wc3no_rows() -> None:
+    """A seeded season pays what production S17 and S18 pay, not the S19 catalogue."""
+    from app.core import seed
+    from app.core.achievements import WC3NO, WC3NO_PAID
+
+    assert "WC3NO_PAID" in seed.__dict__ and "DEFAULT_PAID" not in seed.__dict__
+    assert set(WC3NO_PAID) == {rule.id for rule in WC3NO}
+    assert (WC3NO_PAID["ladder_goal"], WC3NO_PAID["win_first"]) == (500, 15)

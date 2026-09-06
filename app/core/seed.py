@@ -16,7 +16,7 @@ from pathlib import Path
 import psycopg
 from psycopg import sql
 
-from app.core.achievements import DEFAULT_PAID
+from app.core.achievements import WC3NO_PAID
 
 csv.field_size_limit(sys.maxsize)
 
@@ -74,10 +74,13 @@ def main(seed_dir: str, url: str) -> None:
         cur.execute(
             "UPDATE seasons SET score_system = 'helpstone'"
         )  # MySQL kept it in settings, one value for every season
-        cur.executemany(  # the prices the migration seeded went with the CASCADE
+        # The prices went with the CASCADE. Every season in the dump ran under
+        # wc3.no, so each gets those exact rows; a season made in the app takes
+        # DEFAULT_PAID at creation instead.
+        cur.executemany(
             "INSERT INTO ladder_achievements (season_id, rule_id, points)"
             " SELECT id, %s, %s FROM seasons",
-            list(DEFAULT_PAID.items()),
+            list(WC3NO_PAID.items()),
         )
         cur.execute(
             "SELECT table_name, column_name FROM information_schema.columns"

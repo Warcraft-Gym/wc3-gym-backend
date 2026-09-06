@@ -84,7 +84,7 @@ LOSE_FIRST = Achievement(
 )
 WINNER_WINNER = Achievement(
     "winner_winner",
-    5,
+    40,
     "Winner winner chicken dinner!",
     "Win 100 games",
     "mdi-food-drumstick",
@@ -102,7 +102,7 @@ WIN_STREAK = Achievement(
     "win_streak", 3, "Connect Five!", "Win 5 games in a row", "mdi-tally-mark-5"
 )
 WIN_STREAK_2 = Achievement(
-    "win_streak_2", 5, "Who can stop me?!", "Win 10 games in a row", "mdi-karate"
+    "win_streak_2", 40, "Who can stop me?!", "Win 10 games in a row", "mdi-karate"
 )
 DUCK_HUNTING = Achievement(
     "duck_hunting",
@@ -167,7 +167,7 @@ JOIN_THEM = Achievement(
 )
 ADDICTED = Achievement(
     "addicted",
-    3,
+    50,
     "Better Living Through Chemistry",
     "Play 30 games in 24-hour span",
     "mdi-flask",
@@ -188,14 +188,14 @@ FALLING_STAR = Achievement(
 )
 LADDER_GOAL_REACHED = Achievement(
     "ladder_goal",
-    5,
+    100,
     "The end of a journey holds the seed of new dreams!",
     "Reach this seasons ladder goal!",
     "mdi-seed-plus",
 )
 DOUBLE_UP = Achievement(
     "double_up",
-    5,
+    250,
     "Double Up On The Bubble Up",
     "Reach this seasons ladder goal! TWICE!",
     "mdi-chart-bubble",
@@ -297,35 +297,35 @@ GAMES_25 = Achievement(
 )
 GAMES_50 = Achievement("games_50", 3, "Grinder", "Play 50 games", "game-icons:gears")
 GAMES_100 = Achievement(
-    "games_100", 5, "No-lifer", "Play 100 games", "game-icons:night-sleep"
+    "games_100", 8, "No-lifer", "Play 100 games", "game-icons:night-sleep"
 )
 PLUS_TWENTY = Achievement(
     "plus_twenty",
-    5,
+    25,
     "Plus twenty",
     "Get 20 more wins than losses",
     "game-icons:health-increase",
 )
 TWENTY_HOURS = Achievement(
     "twenty_hours",
-    3,
+    5,
     "Twenty hours",
     "Spend 20 hours in ladder games",
     "game-icons:pocket-watch",
 )
 STREAK_WEEK = Achievement(
-    "streak_week", 4, "Streak week", "Play on 7 days in a row", "game-icons:calendar"
+    "streak_week", 5, "Streak week", "Play on 7 days in a row", "game-icons:calendar"
 )
 TWENTY_DAYS = Achievement(
     "twenty_days",
-    4,
+    5,
     "Twenty days",
     "Play on 20 different days",
     "game-icons:sands-of-time",
 )
 FIVE_A_DAY = Achievement(
     "five_a_day",
-    4,
+    8,
     "Five a day",
     "Play 5 or more games on 10 different days",
     "game-icons:shiny-apple",
@@ -346,21 +346,21 @@ WEEKLY_REGULAR = Achievement(
 )
 MONTH_OF_SUNDAYS = Achievement(
     "month_of_sundays",
-    3,
+    8,
     "Month of Sundays",
     "Play on 4 weekends in a row",
     "game-icons:sun",
 )
 NEVER_GONE = Achievement(
     "never_gone",
-    5,
+    10,
     "Never gone",
     "Never go 5 days without a game, from the first week to the last",
     "game-icons:campfire",
 )
 WELCOME_BACK = Achievement(
     "welcome_back",
-    1,
+    2,
     "Welcome back",
     "Play again after 14 days away",
     "game-icons:return-arrow",
@@ -381,7 +381,7 @@ POWER_HOUR = Achievement(
 )
 WEEKEND_WARRIOR = Achievement(
     "weekend_warrior",
-    2,
+    3,
     "Weekend warrior",
     "Play 10 games on Saturdays and Sundays",
     "game-icons:barbecue",
@@ -395,151 +395,151 @@ REPEAT_OFFENDER = Achievement(
 )
 CLIMBER = Achievement(
     "climber",
-    5,
+    15,
     "Climber",
     "Finish the season 100 MMR above where you started",
     "game-icons:mountain-climbing",
 )
 HOLD_THE_LINE = Achievement(
     "hold_the_line",
-    4,
+    15,
     "Hold the line",
     "Play 30 games and finish within 20 MMR of your season high",
     "game-icons:shield",
 )
 WIN_POOL = Achievement(
     "win_pool",
-    5,
+    15,
     "Win every map",
     "Win a game on every map in this season's pool",
     "game-icons:treasure-map",
 )
 TOURIST = Achievement(
     "tourist",
-    2,
+    8,
     "Tourist",
     "Play a game on every map in this season's pool",
     "game-icons:suitcase",
 )
 HOME_TURF = Achievement(
-    "home_turf", 2, "Home turf", "Win 10 games on one map", "game-icons:castle"
+    "home_turf", 5, "Home turf", "Win 10 games on one map", "game-icons:castle"
 )
 RACE_TOUR = Achievement(
-    "race_tour", 3, "Race tour", "Beat every race", "game-icons:world"
+    "race_tour", 2, "Race tour", "Beat every race", "game-icons:world"
 )
 MIRROR_MASTER = Achievement(
     "mirror_master",
-    2,
+    3,
     "Mirror master",
     "Win 5 mirror matches",
     "game-icons:mirror-mirror",
 )
 ANTI_RANDOM = Achievement(
     "anti_random",
-    2,
+    5,
     "Anti-random",
     "Beat 5 players who picked Random",
     "game-icons:perspective-dice-six-faces-random",
 )
 SLAYER_HU = Achievement(
     "slayer_hu",
-    3,
+    25,
     "Human slayer",
     "Win 70% of 10 or more games against Human",
     "game-icons:crowned-skull",
 )
 SLAYER_OC = Achievement(
     "slayer_oc",
-    3,
+    25,
     "Orc slayer",
     "Win 70% of 10 or more games against Orc",
     "game-icons:orc-head",
 )
 SLAYER_NE = Achievement(
     "slayer_ne",
-    3,
+    25,
     "Night Elf slayer",
     "Win 70% of 10 or more games against Night Elf",
     "game-icons:elf-helmet",
 )
 SLAYER_UD = Achievement(
     "slayer_ud",
-    3,
+    25,
     "Undead slayer",
     "Win 70% of 10 or more games against Undead",
     "game-icons:shambling-zombie",
 )
 FOUR_HORSEMEN = Achievement(
     "four_horsemen",
-    3,
+    15,
     "Four horsemen",
     "Win a game as each of the four races",
     "game-icons:mounted-knight",
 )
 OFF_DUTY = Achievement(
     "off_duty",
-    1,
+    5,
     "Off duty",
     "Win a game on a race that is not your league race",
     "game-icons:beach-bag",
 )
 NEMESIS = Achievement(
-    "nemesis", 2, "Nemesis", "Beat the same opponent 3 times", "game-icons:daggers"
+    "nemesis", 5, "Nemesis", "Beat the same opponent 3 times", "game-icons:daggers"
 )
 RIVAL = Achievement(
-    "rival", 2, "Rival", "Play the same opponent 5 times", "game-icons:crossed-swords"
+    "rival", 5, "Rival", "Play the same opponent 5 times", "game-icons:crossed-swords"
 )
 WIDE_NET = Achievement(
     "wide_net", 3, "Wide net", "Beat 20 different opponents", "game-icons:fishing-net"
 )
 HUNTING_SEASON = Achievement(
     "hunting_season",
-    2,
+    3,
     "Hunting season",
     "Beat a player from another team",
     "game-icons:duck",
 )
 OPEN_SEASON = Achievement(
     "open_season",
-    3,
+    20,
     "Open season",
     "Beat 5 different GNL players",
     "game-icons:crosshair",
 )
 CIVIL_WAR = Achievement(
-    "civil_war", 2, "Civil war", "Beat a teammate", "game-icons:two-shadows"
+    "civil_war", 5, "Civil war", "Beat a teammate", "game-icons:two-shadows"
 )
 GRAND_TOUR = Achievement(
     "grand_tour",
-    5,
+    75,
     "Grand tour",
     "Beat a player from every other team",
     "game-icons:trophy-cup",
 )
 SPEEDRUNNER = Achievement(
     "speedrunner",
-    1,
+    2,
     "Speedrunner",
     "Win a game in under 7 minutes",
     "game-icons:running-shoe",
 )
 MARATHON = Achievement(
     "marathon",
-    1,
+    3,
     "Marathon",
     "Play a game longer than 45 minutes",
     "game-icons:tortoise",
 )
 CAPTAINS_DUTY = Achievement(
     "captains_duty",
-    3,
+    25,
     "Captain's duty",
     "Play 20 games as a captain",
     "game-icons:captain-hat-profile",
 )
 FIRST_TO_FIFTY = Achievement(
     "first_to_fifty",
-    3,
+    50,
     "First to fifty",
     "Be the first player of the season to reach 50 games",
     "game-icons:finish-line",
@@ -548,126 +548,126 @@ FIRST_TO_FIFTY = Achievement(
 # Team badges: paid to the team, never a player. `subject` tells them apart.
 FULL_ROSTER = Achievement(
     "full_roster",
-    5,
+    25,
     "Full roster",
     "Every player on the team played 10 or more games",
     "game-icons:team-idea",
 )
 EVERYONE_SCORES = Achievement(
     "everyone_scores",
-    3,
+    15,
     "Everyone scores",
     "Every player on the team won at least one game",
     "game-icons:podium-winner",
 )
 HALF_REGULAR = Achievement(
     "half_regular",
-    5,
+    25,
     "Half regular",
     "Half the team earned Weekly regular",
     "game-icons:half-heart",
 )
 EVERY_WEEK = Achievement(
     "every_week",
-    5,
+    25,
     "Every week",
     "In every week of the season, 3 or more players played 3 or more games",
     "game-icons:calendar-half-year",
 )
 NEVER_BLANK = Achievement(
     "never_blank",
-    3,
+    15,
     "Never blank",
     "In every week of the season, somebody on the team won",
     "game-icons:checkered-flag",
 )
 FAST_START = Achievement(
     "fast_start",
-    3,
+    15,
     "Fast start",
     "Every player on the team played in the first week",
     "game-icons:sprint",
 )
 NOBODY_LEFT = Achievement(
     "nobody_left",
-    3,
+    15,
     "Nobody left",
     "Every player on the team played in the last week",
     "game-icons:exit-door",
 )
 TEAM_NIGHT = Achievement(
     "team_night",
-    3,
+    15,
     "Team night",
     "The team played 30 games in one day, from 5 or more players",
     "game-icons:moon",
 )
 TEAM_MAP_COVERAGE = Achievement(
     "team_map_coverage",
-    5,
+    25,
     "Team map coverage",
     "The team won on every map in the season's pool",
     "game-icons:compass",
 )
 TEAM_RACE_COVERAGE = Achievement(
     "team_race_coverage",
-    3,
+    15,
     "Team race coverage",
     "The team beat every race",
     "game-icons:swords-emblem",
 )
 TEAM_GRAND_TOUR = Achievement(
     "team_grand_tour",
-    5,
+    25,
     "Team grand tour",
     "The team beat a player from every other team",
     "game-icons:laurels-trophy",
 )
 FIFTY_FACES = Achievement(
     "fifty_faces",
-    3,
+    15,
     "Fifty faces",
     "The team beat 50 different opponents",
     "game-icons:three-friends",
 )
 TEAM_GOAL = Achievement(
     "team_goal",
-    5,
+    25,
     "Team goal",
     "The team's ladder points add up to 1000, counting at most 150 per player",
     "game-icons:goal-keeper",
 )
 TWO_HUNDRED = Achievement(
     "two_hundred",
-    3,
+    15,
     "Two hundred",
     "The team played 200 games, counting at most 30 per player",
     "game-icons:abacus",
 )
 TEAM_CLIMB = Achievement(
     "team_climb",
-    5,
+    25,
     "Team climb",
     "The team gained 500 MMR, counting at most 100 per player",
     "game-icons:stairs-goal",
 )
 BRAGGING_RIGHTS = Achievement(
     "bragging_rights",
-    3,
+    15,
     "Bragging rights",
     "The team beat one other team 20 times",
     "game-icons:trumpet-flag",
 )
 SPARRING_PARTNERS = Achievement(
     "sparring_partners",
-    2,
+    10,
     "Sparring partners",
     "Teammates played each other 10 times",
     "game-icons:boxing-glove",
 )
 EVERYONE_HUNTS = Achievement(
     "everyone_hunts",
-    5,
+    25,
     "Everyone hunts",
     "Every player on the team beat a player from another team",
     "game-icons:hunting-horn",
@@ -691,21 +691,21 @@ HAT_TRICK = Achievement(
 )
 REVENGE = Achievement(
     "revenge",
-    2,
+    3,
     "Revenge",
     "Beat an opponent who beat you earlier this season",
     "game-icons:backstab",
 )
 COMEBACK = Achievement(
     "comeback",
-    4,
+    8,
     "Comeback",
     "Play 30 games and finish 100 MMR above your season low",
     "game-icons:sunrise",
 )
 # One badge per map of the season's pool, id `map_win:<map>`; see per_map
 MAP_WIN = Achievement(
-    "map_win", 1, "Map win", "Win a game on a map", "game-icons:position-marker"
+    "map_win", 2, "Map win", "Win a game on a map", "game-icons:position-marker"
 )
 
 
@@ -835,6 +835,35 @@ WC3NO = [
     HOLIDAY,
     NEWBIE,
 ]
+
+# What S17 and S18 pay, row for row as production holds them. A season that ran
+# under wc3.no keeps these exact prices; the reprice of 2026-09-06 is S19 onwards.
+WC3NO_PAID: PaidSet = {
+    "ladder_goal": 500,
+    "double_up": 1000,
+    "i_am_the_captain_now": 100,
+    "addicted": 100,
+    "elite": 100,
+    "dats_fakt_ap": 50,
+    "winner_winner": 50,
+    "sad_trombone": 50,
+    "win_streak_2": 50,
+    "win_first": 15,
+    "lose_first": 25,
+    "win_streak": 25,
+    "win_every_map": 25,
+    "rising_star": 25,
+    "falling_star": 25,
+    "duck_hunting": 10,
+    "night_elf": 10,
+    "undead": 10,
+    "orc": 10,
+    "human": 10,
+    "join_them": 10,
+    "winter": 10,
+    "holiday": 5,
+    "newbie": 5,
+}
 
 # Every rule that ever paid: the wc3.no set, the S19 set and the team set. A rule
 # dropped from a season keeps its code; the season simply has no price row for it.
