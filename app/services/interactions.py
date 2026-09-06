@@ -235,7 +235,7 @@ def handle(
         return {"ok": True}
     message, public = handler(payload, series_service, user_service)
     if public:
-        discord.post_reply(application_id, token, message)
+        discord.post_reply(application_id, token, payload["channel_id"], message)
     else:
         discord.edit_reply(application_id, token, message)
     return {"ok": True}
