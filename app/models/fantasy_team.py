@@ -23,6 +23,10 @@ class FantasyTeamBase(SQLModel):
     drafted_team_id: int | None = Field(
         index=True, default=None, foreign_key="teams.id", ondelete="CASCADE"
     )
+    # The second team a bettor picks, paid by its rank on achievement points
+    grind_team_id: int | None = Field(
+        index=True, default=None, foreign_key="teams.id", ondelete="SET NULL"
+    )
 
 
 class FantasyTeam(FantasyTeamBase, DBModel, table=True):
@@ -75,6 +79,7 @@ class PublicFantasyTeamWrite(SQLModel):
     name: Annotated[str | None, NumToStr] = None
     season_id: int | None = None
     drafted_team_id: int | None = None
+    grind_team_id: int | None = None
     drafted_race: str | None = None
     player_ids: list[int] = []
     user_name: Annotated[str | None, NumToStr] = None
@@ -90,16 +95,18 @@ class FantasyTeamUpdate(SQLModel):
     season_id: int | None = None
     captain_id: int | None = None
     drafted_team_id: int | None = None
+    grind_team_id: int | None = None
     drafted_race: Annotated[Race | None, SuggestRace] = None
 
 
 class FantasyTeamPublic(FantasyTeamBase, PublicModel):
-    # app.services.derived.fill_fantasy_teams answers these six; no column holds them
+    # app.services.derived.fill_fantasy_teams answers these seven; no column holds them
     player_points: int | None = None
     bench_points: int | None = None
     team_points: int | None = None
     race_points: int | None = None
     bet_points: int | None = None
+    grind_points: int | None = None
     total_points: int | None = None
     id: int
     name: Annotated[str | None, NumToStr] = None
@@ -128,6 +135,7 @@ class FantasyTeamPublic(FantasyTeamBase, PublicModel):
             captain_id=fteam.captain_id,
             captain=UserPublic.from_user(fteam.captain) if fteam.captain else None,
             drafted_team_id=fteam.drafted_team_id,
+            grind_team_id=fteam.grind_team_id,
             drafted_team=TeamPublic.from_team(fteam.drafted_team)
             if fteam.drafted_team
             else None,

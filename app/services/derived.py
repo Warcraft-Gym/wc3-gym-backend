@@ -925,10 +925,53 @@ def _drafted_standing(
     return fantasy.Standing(team_id, None, final, against, available)
 
 
+def _grind_by_season(
+    session: Session, rows: list[FantasyTeamPublic]
+) -> dict[int, dict[int, int]]:
+    """The achievement points of every team, per season that offers the grind
+    pick and holds one in this batch. No pick costs no statement."""
+    # app.services.ladder reads this module through app.services.users
+    from app.services.ladder import team_achievement_points
+
+    picked = {
+        team.season_id
+        for team in rows
+        if team.grind_team_id is not None and team.season_id is not None
+    }
+    if not picked:
+        return {}
+    offered = picked & set(
+        session.scalars(
+            select(col(Season.id)).where(
+                col(Season.id).in_(picked), col(Season.fantasy_grind)
+            )
+        )
+    )
+    return {
+        season_id: team_achievement_points(session, season_id) for season_id in offered
+    }
+
+
+def _grind(
+    achievement_points: dict[int, dict[int, int]],
+    team_id: int | None,
+    season_id: int | None,
+) -> fantasy.Grind | None:
+    """The grind pick of one fantasy team. The list answer carries no team
+    name, and only the breakdown reads one."""
+    by_team = achievement_points.get(season_id) if season_id is not None else None
+    if team_id is None or not by_team:
+        return None
+    rank, points = fantasy.grind_points(by_team, team_id)
+    return fantasy.Grind(
+        team_id, None, by_team.get(team_id, 0), rank, len(by_team), points
+    )
+
+
 def fill_fantasy_teams(
     session: Session, teams: Iterable[FantasyTeamPublic | None]
 ) -> None:
-    """Fill the six score fields of every fantasy team and the signup race of
+    """Fill the seven score fields of every fantasy team and the signup race of
     every drafted player, each against the season the team names."""
     rows = [team for team in teams if team is not None]
     if not rows:
@@ -950,6 +993,7 @@ def fill_fantasy_teams(
         )
         for season_id in season_ids
     }
+    grinds = _grind_by_season(session, rows)
 
     for team in rows:
         season_id = team.season_id
@@ -964,12 +1008,14 @@ def fill_fantasy_teams(
             race_points=races.get(season_id, {}),
             series_by_week=series.get(season_id, {}),
             number_weeks=_season_weeks(rules, season_id),
+            grind=_grind(grinds, team.grind_team_id, season_id),
         )
         team.player_points = scores["player_points"]
         team.bench_points = scores["bench_points"]
         team.team_points = scores["team_points"]
         team.race_points = scores["race_points"]
         team.bet_points = scores["bet_points"]
+        team.grind_points = scores["grind_points"]
         team.total_points = scores["total_points"]
 
 
