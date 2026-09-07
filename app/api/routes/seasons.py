@@ -11,7 +11,7 @@ from app.models.ladder_achievement import (
     catalogue,
 )
 from app.models.map import LadderMapNames, LadderMapRow
-from app.models.relationships import SeasonWeekMapWrite
+from app.models.relationships import SeasonRoundWrite
 from app.models.season import (
     SeasonCreate,
     SeasonMapIds,
@@ -148,12 +148,12 @@ def set_map_order(
     return service.set_map_order(season_id, data.map_ids)
 
 
-@router.put("/seasons/{season_id}/week-maps", dependencies=[Depends(require_admin)])
-def set_week_map(
-    season_id: int, data: SeasonWeekMapWrite, service: SeasonServiceDep
+@router.put("/seasons/{season_id}/rounds", dependencies=[Depends(require_admin)])
+def set_round(
+    season_id: int, data: SeasonRoundWrite, service: SeasonServiceDep
 ) -> SeasonPublic:
-    """Name the game 1 map of one playday. A null map clears the playday."""
-    return service.set_week_map(season_id, data.playday, data.map_id)
+    """Set the dates and the game 1 map of one round. A field left out keeps its value."""
+    return service.set_round(season_id, data)
 
 
 @router.post("/seasons/{season_id}/signups", dependencies=[Depends(require_admin)])
