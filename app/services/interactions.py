@@ -439,6 +439,6 @@ HANDLERS |= {"veto": veto.run, "announce": announce.run}
 
 from app.services.commands import w3c
 
-COMMANDS += [w3c.MMR, w3c.STATS]
-HANDLERS["mmr"], HANDLERS["stats"] = w3c.mmr, w3c.stats
-CHOICES["mmr"] = CHOICES["stats"] = w3c.player_choices
+COMMANDS.append(w3c.STATS)
+HANDLERS["stats"] = w3c.stats
+CHOICES["stats"] = w3c.player_choices
