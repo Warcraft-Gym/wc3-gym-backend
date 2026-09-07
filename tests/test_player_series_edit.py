@@ -1,7 +1,7 @@
 """The player series editor writes the fields it changes, and no more.
 
 The editor reads the series in one transaction and writes it in another.
-An admin who changes the caster between the two must keep that change, so
+An admin who flags the series as fantasy between the two must keep that change, so
 the write carries the date and the scores only.
 """
 
@@ -33,19 +33,19 @@ def test_a_player_edit_stores_the_new_date(
     assert result["date_time"].startswith("2026-01-09T20:00:00")
 
 
-def test_a_caster_set_after_the_read_survives_the_player_edit(
+def test_a_flag_set_after_the_read_survives_the_player_edit(
     app: FastAPI, seeded: dict[str, Any], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     series_id = seeded["series_played_id"]
     series_service = SeriesService()
     read_series = series_service.get
 
-    def read_then_admin_sets_the_caster(sid: int) -> SeriesPublic:
+    def read_then_admin_sets_the_flag(sid: int) -> SeriesPublic:
         series = read_series(sid)
-        series_service.update(sid, SeriesUpdate(caster="Grubby"))
+        series_service.update(sid, SeriesUpdate(is_fantasy_match=True))
         return series
 
-    monkeypatch.setattr(series_service, "get", read_then_admin_sets_the_caster)
+    monkeypatch.setattr(series_service, "get", read_then_admin_sets_the_flag)
 
     result = player_series.update_player_series(
         series_id,
@@ -58,5 +58,5 @@ def test_a_caster_set_after_the_read_survives_the_player_edit(
 
     assert isinstance(result, dict), result
     written = read_series(series_id)
-    assert written.caster == "Grubby"
+    assert written.is_fantasy_match is True
     assert written.date_time == datetime(2026, 1, 9, 20, 0, tzinfo=UTC)

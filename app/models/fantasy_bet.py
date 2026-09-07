@@ -11,6 +11,7 @@ from app.models.match import Match
 from app.models.relationships import DBMapSeason, DBUserSeasonSignup
 from app.models.season import Season, SeasonPublic
 from app.models.series import Series, SeriesPublic
+from app.models.series_cast import SeriesCast
 from app.models.types import EmptyStrToNone
 from app.models.user import User, UserPublic
 
@@ -54,6 +55,9 @@ class FantasyBet(FantasyBetBase, DBModel, table=True):
             joinedload(rel(cls.winner)),
             joinedload(rel(cls.series)).joinedload(rel(Series.player1)),
             joinedload(rel(cls.series)).joinedload(rel(Series.player2)),
+            joinedload(rel(cls.series))
+            .selectinload(rel(Series.casts))
+            .joinedload(rel(SeriesCast.user)),
         )
         return (
             # Collections use selectinload; a joined collection multiplies the rows
@@ -106,6 +110,9 @@ class FantasyBet(FantasyBetBase, DBModel, table=True):
             joinedload(rel(cls.series))
             .joinedload(rel(Series.match))
             .joinedload(rel(Match.fixed_map)),
+            joinedload(rel(cls.series))
+            .selectinload(rel(Series.casts))
+            .joinedload(rel(SeriesCast.user)),
         )
 
 

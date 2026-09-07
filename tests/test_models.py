@@ -37,6 +37,7 @@ TABLES = {
     "season_week_map",
     "seasons",
     "series",
+    "series_cast",
     "series_replay",
     "series_veto_step",
     "settings",

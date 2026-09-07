@@ -12,6 +12,7 @@ from httpx2 import Client
 from app.core.db import Session
 from app.models.season import SeasonPublic
 from app.models.series import Series
+from app.models.series_cast import SeriesCast
 from app.models.types import utcnow
 from app.services import discord, interactions
 from tests.discord import (
@@ -58,7 +59,7 @@ def test_upcoming_posts_the_window_publicly(
         series = session.get(Series, seeded["series_open_id"])
         assert series
         series.date_time = soon
-        series.caster = "gnlcaster"
+        series.casts.append(SeriesCast(channel_url="https://www.twitch.tv/gnlcaster"))
     body, headers = signed(command("upcoming"))
     resp = client.post("/discord/interactions", content=body, headers=headers)
     assert resp.status_code == 200

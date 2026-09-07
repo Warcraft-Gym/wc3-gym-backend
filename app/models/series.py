@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import Annotated, Any, Literal, Self
 
 from sqlalchemy import ColumnElement, ColumnExpressionArgument, Index, and_, select
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, selectinload
 from sqlalchemy.orm.interfaces import ORMOption
 from sqlmodel import Field, Relationship, SQLModel, col
 
@@ -11,7 +11,8 @@ from app.core.db import rel
 from app.core.ordering import SortOrder, ordered
 from app.models.base import DBModel, PublicModel, ident
 from app.models.match import Match, MatchPublic
-from app.models.types import AwareUTC, NumToStr, UTCDateTime
+from app.models.series_cast import CastPublic, SeriesCast
+from app.models.types import AwareUTC, UTCDateTime
 from app.models.user import User, UserPublic
 
 SeriesSort = Literal["date_time", "week", "id"]
@@ -22,7 +23,6 @@ class SeriesBase(SQLModel):
     date_time: Annotated[datetime | None, AwareUTC] = Field(
         default=None, sa_type=UTCDateTime
     )
-    caster: Annotated[str | None, NumToStr] = Field(default=None, max_length=50)
     player1_id: int = Field(index=True, foreign_key="users.id", ondelete="CASCADE")
     player2_id: int = Field(index=True, foreign_key="users.id", ondelete="CASCADE")
     player1_score: int | None = None
@@ -53,6 +53,9 @@ class Series(SeriesBase, DBModel, table=True):
     )
     player2: "User" = Relationship(
         sa_relationship_kwargs={"foreign_keys": "[Series.player2_id]"}
+    )
+    casts: list[SeriesCast] = Relationship(
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"}
     )
 
     @classmethod
@@ -113,6 +116,7 @@ class Series(SeriesBase, DBModel, table=True):
             joinedload(rel(cls.match)).joinedload(rel(Match.fixed_map)),
             joinedload(rel(cls.player1)),
             joinedload(rel(cls.player2)),
+            selectinload(rel(cls.casts)).joinedload(rel(SeriesCast.user)),
         )
 
     @classmethod
@@ -128,6 +132,7 @@ class Series(SeriesBase, DBModel, table=True):
             joinedload(rel(cls.player2)).selectinload(rel(User.w3c_stats)),
             joinedload(rel(cls.player2)).selectinload(rel(User.team_seasons)),
             joinedload(rel(cls.player2)).selectinload(rel(User.signup_seasons)),
+            selectinload(rel(cls.casts)).joinedload(rel(SeriesCast.user)),
         )
 
 
@@ -148,7 +153,6 @@ class SeriesCreate(SeriesBase):
 class SeriesUpdate(SQLModel):
     match_id: int | None = None
     date_time: Annotated[datetime | None, AwareUTC] = None
-    caster: Annotated[str | None, NumToStr] = None
     player1_id: int | None = None
     player2_id: int | None = None
     player1_score: int | None = Field(default=None, ge=0)
@@ -170,6 +174,7 @@ class SeriesPublic(SeriesBase, PublicModel):
     # app.services.derived fills the points from the map scores
     player1_points: int | None = None
     player2_points: int | None = None
+    casts: list[CastPublic] = []
 
     @classmethod
     def from_series(cls, series: Series) -> Self:
@@ -178,7 +183,7 @@ class SeriesPublic(SeriesBase, PublicModel):
             match_id=series.match_id,
             match=MatchPublic.from_match(series.match) if series.match else None,
             date_time=series.date_time,
-            caster=series.caster,
+            casts=[CastPublic.from_cast(cast) for cast in series.casts],
             player1_id=series.player1_id,
             player1=UserPublic.from_user(series.player1) if series.player1 else None,
             player2_id=series.player2_id,
@@ -197,7 +202,7 @@ class SeriesPublic(SeriesBase, PublicModel):
             match_id=series.match_id,
             match=MatchPublic.from_match(series.match) if series.match else None,
             date_time=series.date_time,
-            caster=series.caster,
+            casts=[CastPublic.from_cast(cast) for cast in series.casts],
             player1_id=series.player1_id,
             player1=UserPublic.from_user_reduced(series.player1)
             if series.player1
