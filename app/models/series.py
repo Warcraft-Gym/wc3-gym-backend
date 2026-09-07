@@ -54,10 +54,6 @@ class Series(SeriesBase, DBModel, table=True):
     player2: "User" = Relationship(
         sa_relationship_kwargs={"foreign_keys": "[Series.player2_id]"}
     )
-    # The bot's last /veto or /announce post of the series, edited after every veto step
-    discord_post_command: str | None = Field(default=None, max_length=8)
-    discord_post_channel_id: str | None = Field(default=None, max_length=20)
-    discord_post_message_id: str | None = Field(default=None, max_length=20)
 
     @classmethod
     def search_for_season_and_playday(

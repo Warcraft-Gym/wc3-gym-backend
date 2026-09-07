@@ -69,7 +69,8 @@ def record(monkeypatch: pytest.MonkeyPatch, status: int) -> list[tuple[str, str,
         status_code = status
 
         def json(self) -> dict[str, str]:
-            return {"id": "msg-1"}
+            # Every channel post gets its own message id: msg-1, msg-2, ...
+            return {"id": f"msg-{sum(call[0] == 'POST' for call in calls)}"}
 
     def request(method: str, url: str, **kwargs: object) -> Answer:
         calls.append((method, url, kwargs.get("json")))

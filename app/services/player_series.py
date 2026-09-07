@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 
 from app.core.scoring import wins_needed
 from app.models.series import SeriesPublic, SeriesUpdate
-from app.services import r2, replays
+from app.services import discord_posts, r2, replays
 from app.services.series import SeriesService
 from app.services.series_veto import SeriesVetoService
 from app.services.users import UserService
@@ -211,6 +211,8 @@ def update_player_series(
 
     # Check if date/time was updated
     datetime_updated = original_datetime != updated_series.date_time
+    if datetime_updated:
+        discord_posts.refresh_series(series_id)  # the announce card shows the time
 
     # Attempt Discord notifications (non-blocking - app continues regardless of success/failure)
     discord_notified = False
