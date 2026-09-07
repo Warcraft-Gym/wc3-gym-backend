@@ -32,8 +32,6 @@ class DraftSeries(DraftSeriesBase, DBModel, table=True):
     __tablename__ = "draft_series"
 
     id: int | None = Field(default=None, primary_key=True)
-    # The old caster name, read by nothing; the next migration drops it
-    caster: str | None = Field(default=None, max_length=50)
     created_at: datetime | None = Field(default=None, sa_type=UTCDateTime)
 
     match: "Match" = Relationship(
