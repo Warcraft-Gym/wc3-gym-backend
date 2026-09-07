@@ -10,6 +10,7 @@ from httpx2 import Client
 from app.core.db import Session
 from app.models.season import Season
 from app.models.series import Series
+from app.models.series_cast import SeriesCast
 from tests.discord import CHANNEL, WEBHOOK, autocomplete, command, signed
 from tests.test_series_veto import pool, taken, write  # noqa: F401  # pool is a fixture
 
@@ -92,7 +93,7 @@ def test_announce_posts_the_match_card(
         series = session.get(Series, series_id)
         assert series
         series.date_time = when
-        series.caster = "gnlcaster"
+        series.casts.append(SeriesCast(channel_url="https://www.twitch.tv/gnlcaster"))
     assert send(client, command("announce", user="4", series=series_id)) == {"ok": True}
     (post, delete) = discord_calls
     assert post[:2] == ("POST", CHANNEL)
@@ -103,7 +104,7 @@ def test_announce_posts_the_match_card(
             {
                 "title": "Wk 1 · P2 (Alpha) vs P4 (Beta)",
                 "description": f"<t:{stamp}:F> (<t:{stamp}:R>)\n"
-                "Cast on https://twitch.tv/gnlcaster\n"
+                "Cast on https://www.twitch.tv/gnlcaster\n"
                 "veto 0/4, P2 to ban\nFixed map · CH\n"
                 f"{SITE}/player-series/{series_id}/veto",
                 "color": 0x4A4DB8,

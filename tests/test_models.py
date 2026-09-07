@@ -37,6 +37,7 @@ TABLES = {
     "season_rounds",
     "seasons",
     "series",
+    "series_cast",
     "series_replay",
     "series_veto_step",
     "settings",

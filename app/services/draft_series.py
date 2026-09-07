@@ -93,7 +93,6 @@ class DraftSeriesService:
             return SeriesCreate(
                 match_id=draft_series.match_id,
                 date_time=draft_series.date_time,
-                caster=draft_series.caster,
                 player1_id=draft_series.player1_id,
                 player2_id=draft_series.player2_id,
                 player1_score=draft_series.player1_score,
