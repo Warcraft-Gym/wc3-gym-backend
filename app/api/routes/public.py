@@ -4,7 +4,7 @@ import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Query, Request, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
@@ -56,6 +56,7 @@ from app.models.user_season_availability import (
     UserSeasonAvailabilityPublic,
 )
 from app.services import discord, discord_roles, player_history, player_series, replays
+from app.services.commands import veto
 from app.services.seasons import SeasonService
 from app.services.series import SeriesService
 
@@ -598,11 +599,15 @@ def set_player_series_veto(
     request: Request,
     credentials: Credentials,
     data: SeriesVetoWrite,
+    background: BackgroundTasks,
 ) -> SeriesVetoPublic:
     """Take the next step of the veto, or take back your own last one. An admin
-    enters the step for whichever side is next and takes back any last step."""
+    enters the step for whichever side is next and takes back any last step.
+    The bot's post of the series, if any, is edited after the answer."""
     viewer, entered_by = _veto_viewer(request, credentials, data.token, user_service)
-    return veto_service.take(series_id, viewer, data.action, data.map_id, entered_by)
+    board = veto_service.take(series_id, viewer, data.action, data.map_id, entered_by)
+    background.add_task(veto.refresh_post, series_id)
+    return board
 
 
 @router.get("/user-info", response_model=None)
