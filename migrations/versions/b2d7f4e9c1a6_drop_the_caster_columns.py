@@ -1,8 +1,9 @@
 """Drop the caster columns
 
 series_cast holds every cast since a9c4e7d1f2b3, and the code that read
-series.caster has shipped, so the two columns go. A downgrade puts the
-first cast's Twitch login back on the series row.
+series.caster has shipped, so the two columns go, and so do the two rows
+whose name has no Twitch channel. A downgrade puts the first cast's
+Twitch login back on the series row.
 
 Revision ID: b2d7f4e9c1a6
 Revises: a9c4e7d1f2b3
@@ -24,6 +25,11 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
+    # Two old names with no Twitch channel (checked 2026-09-08); a downgrade does not bring them back
+    op.execute(
+        "DELETE FROM series_cast WHERE user_id IS NULL AND channel_url IN "
+        "('https://www.twitch.tv/lilyamalolzcsgo', 'https://www.twitch.tv/zinithin')"
+    )
     op.drop_column("series", "caster")
     op.drop_column("draft_series", "caster")
 

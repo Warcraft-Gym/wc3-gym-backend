@@ -180,6 +180,7 @@ def test_the_caster_names_become_cast_rows_and_back(tmp_path: Path) -> None:
             (2, "3, 4", "https://www.twitch.tv/ares1776/"),
             (3, "1, 3", "@grubby"),
             (4, "2, 4", "   "),
+            (5, "3, 1", "zinithin"),
         ):
             connection.execute(
                 text(
@@ -199,6 +200,7 @@ def test_the_caster_names_become_cast_rows_and_back(tmp_path: Path) -> None:
             (1, None, "https://www.twitch.tv/barrentv"),
             (2, None, "https://www.twitch.tv/ares1776"),
             (3, None, "https://www.twitch.tv/grubby"),
+            (5, None, "https://www.twitch.tv/zinithin"),
         ]
         # The column stays until the code that read it has shipped
         assert (
@@ -212,6 +214,10 @@ def test_the_caster_names_become_cast_rows_and_back(tmp_path: Path) -> None:
             row[1] for row in connection.execute(text("PRAGMA table_info(series)"))
         }
         assert "caster" not in columns
+        # The name with no Twitch channel is gone with the column
+        assert connection.execute(
+            text("SELECT series_id FROM series_cast ORDER BY series_id")
+        ).scalars().all() == [1, 2, 3]
 
     from tests.migrate import downgrade_to
 
@@ -219,4 +225,10 @@ def test_the_caster_names_become_cast_rows_and_back(tmp_path: Path) -> None:
     with engine.connect() as connection:
         assert connection.execute(
             text("SELECT id, caster FROM series ORDER BY id")
-        ).all() == [(1, "barrentv"), (2, "ares1776"), (3, "grubby"), (4, None)]
+        ).all() == [
+            (1, "barrentv"),
+            (2, "ares1776"),
+            (3, "grubby"),
+            (4, None),
+            (5, None),
+        ]
