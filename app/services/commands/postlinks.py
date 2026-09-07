@@ -8,7 +8,7 @@ import os
 from typing import Any
 
 from app.services import admins, discord
-from app.services.interactions import PRIVATE, PUBLIC, Services, caller, options_of
+from app.services.commands.base import PRIVATE, PUBLIC, Services, caller, options_of
 
 COMMAND: dict[str, Any] = {
     "name": "postlinks",

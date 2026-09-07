@@ -6,6 +6,8 @@ from sqlmodel import col
 from app.core.db import Session
 from app.models.discord_post import DiscordPost
 from app.services import discord
+from app.services.commands import announce, veto
+from app.services.series import SeriesService
 
 # The cards about a series, by the command that posts them
 SERIES_KINDS = ("veto", "announce")
@@ -27,9 +29,6 @@ def remember(kind: str, subject_id: int, channel_id: str, message_id: str) -> No
 def refresh_series(series_id: int) -> None:
     """Rebuild every post about the series, so each card says where the series
     stands now: its time and its veto."""
-    from app.services.commands import announce, veto  # they import interactions
-    from app.services.series import SeriesService
-
     with Session() as session:
         posts = list(
             session.scalars(
