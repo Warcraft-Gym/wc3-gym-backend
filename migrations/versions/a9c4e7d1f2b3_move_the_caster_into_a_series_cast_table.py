@@ -7,7 +7,7 @@ stay until the code that read them has shipped; the next migration drops
 them, so the old code keeps serving while this one migrates.
 
 Revision ID: a9c4e7d1f2b3
-Revises: d5e8f1a2b3c4
+Revises: e6f1a9c3d5b7
 Create Date: 2026-09-07 00:00:00.000000
 
 """
@@ -22,7 +22,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "a9c4e7d1f2b3"
-down_revision: str | Sequence[str] | None = "d5e8f1a2b3c4"
+down_revision: str | Sequence[str] | None = "e6f1a9c3d5b7"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

@@ -145,7 +145,7 @@ def test_a_guest_cannot_claim(
     assert resp.status_code == 403
 
 
-BEFORE_CAST_TABLE = "d5e8f1a2b3c4"
+BEFORE_CAST_TABLE = "e6f1a9c3d5b7"
 
 
 def test_the_caster_names_become_cast_rows_and_back(tmp_path: Path) -> None:
