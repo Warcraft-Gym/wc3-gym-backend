@@ -10,7 +10,7 @@ career stats row per player on team A, one map in the season pool, one
 active KOTH event.
 """
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -25,7 +25,7 @@ from app.models.ladder_achievement import LadderAchievement, default_rows
 from app.models.map import Map
 from app.models.match import Match
 from app.models.player_career_stats import PlayerCareerStats
-from app.models.relationships import DBFantasyTeamPlayer, DBMapSeason
+from app.models.relationships import DBFantasyTeamPlayer, DBMapSeason, DBSeasonRound
 from app.models.season import Season
 from app.models.series import Series
 from app.models.settings import Settings
@@ -176,8 +176,17 @@ def seed_league(session: Session) -> dict[str, Any]:
         ]
     )
     session.flush()
-    # A real season is created with its achievement set; the fixture matches that
+    # A real season is created with its achievement set and a round a week apart
     session.add_all(default_rows(season.id))
+    session.add_all(
+        DBSeasonRound(
+            season_id=ident(season),
+            playday=playday,
+            start_date=season.start_date + timedelta(weeks=playday - 1),
+            end_date=season.start_date + timedelta(weeks=playday - 1, days=6),
+        )
+        for playday in range(1, season.number_weeks + 1)
+    )
     # The wc3.no rules too, so the legacy tests find their prices
     session.add_all(
         LadderAchievement(season_id=season.id, rule_id=rule_id, points=points)

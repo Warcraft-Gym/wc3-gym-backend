@@ -27,13 +27,15 @@ import requests
 from fastapi import FastAPI
 from httpx2 import Client
 
-# create_app reads these. Set before the app import so the values are the
-# same with and without a .env file (load_dotenv does not override).
+# create_app reads the process environment and no .env file, so the suite
+# runs the same on every machine. The shell's own values are cleared here.
 os.environ["JWT_SECRET_KEY"] = "test-secret-key-of-at-least-32-bytes"
 os.environ["ADMIN_TOKEN"] = "test-admin-token"
 os.environ["TOKEN_TIME"] = "15"
 os.environ.pop("DB_URL", None)
 os.environ.pop("SCORE_SYSTEM", None)
+# A bot token would send the role sync to Discord, and the guard below fails that
+os.environ.pop("DISCORD_BOT_TOKEN", None)
 
 from app.main import create_app
 from app.services import blob, r2, replays

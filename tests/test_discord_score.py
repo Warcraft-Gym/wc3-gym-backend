@@ -143,6 +143,19 @@ def test_a_player_reports_the_result_and_its_replays(
     assert delete[:2] == ("DELETE", EDIT)
 
 
+def refused(text: str) -> dict[str, Any]:
+    """The private red card /score answers with."""
+    return {
+        "embeds": [
+            {
+                "title": "Error · result not saved",
+                "description": text,
+                "color": 0xED4245,
+            }
+        ]
+    }
+
+
 def test_an_incomplete_veto_answers_the_board_link(
     client: Client,
     public_key: None,
@@ -164,10 +177,12 @@ def test_an_incomplete_veto_answers_the_board_link(
         (
             "PATCH",
             EDIT,
-            {
-                "content": "The map veto is not complete. Enter it on the veto board"
-                f" first. https://gnl.test/player-series/{series_id}/veto"
-            },
+            refused(
+                "The map veto is not complete, so the result cannot be saved. Enter the"
+                f" veto on the [veto board](https://gnl.test/player-series/{series_id}/veto)"
+                " first. Then report the score here, or in Report Result on"
+                " [your dashboard](https://gnl.test/player-dashboard)."
+            ),
         )
     ]
     with Session() as session:
@@ -187,7 +202,14 @@ def test_the_attachments_must_match_the_games_played(
 ) -> None:
     send(client, scoring(attached, seeded["series_open_id"], 2, 1, games=2))
     assert discord_calls == [
-        ("PATCH", EDIT, {"content": "Attach one replay per game played (3)."})
+        (
+            "PATCH",
+            EDIT,
+            refused(
+                "Attach one replay per game played: a 2-1 result needs 3 files, game1 to"
+                " game3. The score is saved only when the replays match it."
+            ),
+        )
     ]
     assert blob_store == {}
 
@@ -203,7 +225,7 @@ def test_a_stranger_is_refused(
 ) -> None:
     send(client, scoring(attached, seeded["series_open_id"], 2, 0, user="1", games=2))
     assert discord_calls == [
-        ("PATCH", EDIT, {"content": "not_authorized_for_this_series"})
+        ("PATCH", EDIT, refused("Only a player of the series can report its result."))
     ]
     assert blob_store == {}
 
@@ -222,7 +244,7 @@ def test_a_file_that_is_not_a_replay_is_refused(
     series_id = seeded["series_open_id"]
     send(client, scoring(attached, series_id, 2, 0, games=2, data={2: b"a text file"}))
     assert discord_calls == [
-        ("PATCH", EDIT, {"content": "Game 2 is not a Warcraft III replay"})
+        ("PATCH", EDIT, refused("Game 2 is not a Warcraft III replay"))
     ]
     with Session() as session:
         series = session.get(Series, series_id)
@@ -242,5 +264,5 @@ def test_a_file_over_ten_megabytes_is_refused(
         client,
         scoring(attached, seeded["series_open_id"], 2, 0, games=2, size=11 * 1024**2),
     )
-    assert discord_calls == [("PATCH", EDIT, {"content": "Replay 1 is too large."})]
+    assert discord_calls == [("PATCH", EDIT, refused("Replay 1 is over 10 MB."))]
     assert blob_store == {}

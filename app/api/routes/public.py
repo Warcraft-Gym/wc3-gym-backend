@@ -450,6 +450,7 @@ def get_player_series(
         "number_weeks": availability_service.season_weeks(season_id)
         if season_id
         else None,
+        "rounds": availability_service.season_rounds(season_id) if season_id else [],
     }
 
 

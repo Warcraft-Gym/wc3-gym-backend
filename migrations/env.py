@@ -14,13 +14,10 @@ import logging
 import os
 
 from alembic import context
-from dotenv import load_dotenv
 from sqlalchemy import engine_from_config, pool
 from sqlmodel import SQLModel
 
 import app.models  # noqa: F401  # the import is the registration
-
-load_dotenv()
 
 config = context.config
 
