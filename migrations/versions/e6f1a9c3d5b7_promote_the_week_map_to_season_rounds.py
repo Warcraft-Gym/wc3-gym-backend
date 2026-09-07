@@ -52,6 +52,12 @@ def upgrade() -> None:
     )
     op.drop_index(op.f("ix_season_week_map_map_id"), table_name=WEEK_MAP)
     op.drop_table(WEEK_MAP)
+    # The code that serves while this runs still reads the old name; a later
+    # migration drops the view
+    op.execute(
+        f"CREATE VIEW {WEEK_MAP} AS SELECT season_id, playday, map_id "
+        f"FROM {ROUNDS} WHERE map_id IS NOT NULL"
+    )
 
     # One round per playday of every season, a week apart from its start date
     bind = op.get_bind()
@@ -92,6 +98,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    op.execute(f"DROP VIEW {WEEK_MAP}")
     op.create_table(
         WEEK_MAP,
         sa.Column("season_id", sa.Integer(), nullable=False),
