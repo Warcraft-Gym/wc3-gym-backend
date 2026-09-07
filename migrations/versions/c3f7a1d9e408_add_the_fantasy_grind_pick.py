@@ -4,7 +4,7 @@ A season may offer the pick, and a fantasy team names the team it picked. Both
 columns open empty: no season offers the pick and no fantasy team holds one.
 
 Revision ID: c3f7a1d9e408
-Revises: d5e8f1a2b3c4
+Revises: a9c4e7d1f2b3
 Create Date: 2026-09-07 10:00:00.000000
 
 """
@@ -16,7 +16,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "c3f7a1d9e408"
-down_revision: str | Sequence[str] | None = "d5e8f1a2b3c4"
+down_revision: str | Sequence[str] | None = "a9c4e7d1f2b3"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
