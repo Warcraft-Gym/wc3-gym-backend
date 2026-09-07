@@ -5,6 +5,11 @@ from fastapi import APIRouter, Depends, Query, Response
 
 from app.api.deps import LadderServiceDep, SeasonServiceDep, require_admin
 from app.api.search import SearchQuery
+from app.models.ladder_achievement import (
+    SeasonAchievementPublic,
+    SeasonAchievementWrite,
+    catalogue,
+)
 from app.models.map import LadderMapNames, LadderMapRow
 from app.models.relationships import SeasonWeekMapWrite
 from app.models.season import (
@@ -217,6 +222,28 @@ def sync_ladder_season_signups(
     synced in the last SYNC_MAX_AGE is skipped.
     """
     return service.sync_season(season_id, offset=offset, limit=limit)
+
+
+@router.get("/achievements")
+def get_achievement_catalogue() -> list[SeasonAchievementPublic]:
+    """Every achievement rule at its default price and numbers."""
+    return catalogue()
+
+
+@router.get("/seasons/{season_id}/achievements")
+def get_season_achievements(
+    season_id: int, service: SeasonServiceDep
+) -> list[SeasonAchievementPublic]:
+    """The rules this season pays, with its prices and numbers."""
+    return service.achievements(season_id)
+
+
+@router.put("/seasons/{season_id}/achievements", dependencies=[Depends(require_admin)])
+def set_season_achievements(
+    season_id: int, data: list[SeasonAchievementWrite], service: SeasonServiceDep
+) -> list[SeasonAchievementPublic]:
+    """Replace the season's set with these rows."""
+    return service.set_achievements(season_id, data)
 
 
 @router.get("/seasons/{season_id}/ladder")

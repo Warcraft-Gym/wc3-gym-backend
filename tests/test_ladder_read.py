@@ -10,7 +10,7 @@ asked for.
 """
 
 import importlib.util
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -457,9 +457,10 @@ def test_by_hour_buckets_the_matches_by_utc_weekday_and_hour(
 
 def player_rules() -> list[Achievement]:
     """The player catalogue as a season answers it: the map rule once per
-    map of the seeded pool, which is Concealed Hill alone."""
+    map of the seeded pool, which is Concealed Hill alone, and each rule's
+    numbers filled into its text."""
     return [
-        expanded
+        replace(expanded, description=expanded.text())
         for rule in ACHIEVEMENTS
         if rule.id not in TEAM_IDS
         for expanded in (
@@ -478,7 +479,9 @@ def test_the_season_carries_every_achievement_rule_once(
 
     assert body["achievement_rules"] == [asdict(rule) for rule in player_rules()]
     assert body["team_achievement_rules"] == [
-        asdict(rule) for rule in ACHIEVEMENTS if rule.id in TEAM_IDS
+        asdict(replace(rule, description=rule.text()))
+        for rule in ACHIEVEMENTS
+        if rule.id in TEAM_IDS
     ]
 
 

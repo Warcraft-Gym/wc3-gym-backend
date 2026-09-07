@@ -271,7 +271,7 @@ def earned(
         badge = replace(
             rule,
             points=price + extra,
-            description=rule.description + suffix,
+            description=rule.text() + suffix,
             achieved_at=at.start_time,
         )
         found.append((at.start_time, badge))

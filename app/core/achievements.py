@@ -22,7 +22,7 @@ this module by the day it started on, because the table keeps a start time.
 """
 
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 
 # The season's points target, hardcoded as `W1=500` in the wc3.no bundle
@@ -65,6 +65,13 @@ class Achievement:
     # When the rule turned on: the start of the match that earned it, the
     # last match of the day for the day rules, None on a catalogue entry
     achieved_at: datetime | None = None
+    # The numbers the rule reads, at their defaults; `description` names each
+    # as `{key}`. A season overrides them per price row, never the rule
+    params: Mapping[str, int] = field(default_factory=dict)
+
+    def text(self, params: Mapping[str, int] | None = None) -> str:
+        """The description with this scope's numbers in it."""
+        return self.description.format(**{**self.params, **(params or {})})
 
 
 # What a scope pays for each rule it pays at all, keyed by rule id. A rule
@@ -99,10 +106,20 @@ DATS_FAKT_AP = Achievement(
     "dats_fakt_ap", 50, "DATS FAKT AP", "Lose 10 games in a row", "mdi-egg"
 )
 WIN_STREAK = Achievement(
-    "win_streak", 3, "Connect Five!", "Win 5 games in a row", "mdi-tally-mark-5"
+    "win_streak",
+    3,
+    "Connect Five!",
+    "Win {wins} games in a row",
+    "mdi-tally-mark-5",
+    params={"wins": 5},
 )
 WIN_STREAK_2 = Achievement(
-    "win_streak_2", 40, "Who can stop me?!", "Win 10 games in a row", "mdi-karate"
+    "win_streak_2",
+    40,
+    "Who can stop me?!",
+    "Win {wins} games in a row",
+    "mdi-karate",
+    params={"wins": 10},
 )
 DUCK_HUNTING = Achievement(
     "duck_hunting",
@@ -268,67 +285,94 @@ SPEEDRUN_S = 7 * 60
 MARATHON_S = 45 * 60
 # Games a captain plays
 CAPTAIN_GAMES = 20
-# The race to this many games
-FIRST_TO = 50
 
 EARLY_BIRD = Achievement(
     "early_bird",
     3,
     "Early bird",
-    "Play a game in the first 3 days of the season",
+    "Play a game in the first {days} days of the season",
     "game-icons:hummingbird",
+    params={"days": EARLY_DAYS},
 )
 WEEK_ONE = Achievement(
     "week_one",
     3,
     "Week one warrior",
-    "Play 5 games in the first week",
+    "Play {games} games in the first week",
     "game-icons:spartan-helmet",
+    params={"games": WEEK_ONE_GAMES},
 )
 LAST_CALL = Achievement(
     "last_call",
     3,
     "Last call",
-    "Play a game in the last 3 days of the season",
+    "Play a game in the last {days} days of the season",
     "game-icons:hourglass",
+    params={"days": LAST_DAYS},
 )
 GAMES_25 = Achievement(
-    "games_25", 3, "Regular", "Play 25 games", "game-icons:card-play"
+    "games_25",
+    3,
+    "Regular",
+    "Play {games} games",
+    "game-icons:card-play",
+    params={"games": GAMES_TIERS[0]},
 )
-GAMES_50 = Achievement("games_50", 3, "Grinder", "Play 50 games", "game-icons:gears")
+GAMES_50 = Achievement(
+    "games_50",
+    3,
+    "Grinder",
+    "Play {games} games",
+    "game-icons:gears",
+    params={"games": GAMES_TIERS[1]},
+)
 GAMES_100 = Achievement(
-    "games_100", 10, "No-lifer", "Play 100 games", "game-icons:night-sleep"
+    "games_100",
+    10,
+    "No-lifer",
+    "Play {games} games",
+    "game-icons:night-sleep",
+    params={"games": GAMES_TIERS[2]},
 )
 PLUS_TWENTY = Achievement(
     "plus_twenty",
     25,
     "Plus twenty",
-    "Get 20 more wins than losses",
+    "Get {wins} more wins than losses",
     "game-icons:health-increase",
+    params={"wins": NET_WINS},
 )
 TWENTY_HOURS = Achievement(
     "twenty_hours",
     5,
     "Twenty hours",
-    "Spend 20 hours in ladder games",
+    "Spend {hours} hours in ladder games",
     "game-icons:pocket-watch",
+    params={"hours": LADDER_SECONDS // 3600},
 )
 STREAK_WEEK = Achievement(
-    "streak_week", 5, "Streak week", "Play on 7 days in a row", "game-icons:calendar"
+    "streak_week",
+    5,
+    "Streak week",
+    "Play on {days} days in a row",
+    "game-icons:calendar",
+    params={"days": STREAK_DAYS},
 )
 TWENTY_DAYS = Achievement(
     "twenty_days",
     5,
     "Twenty days",
-    "Play on 20 different days",
+    "Play on {days} different days",
     "game-icons:sands-of-time",
+    params={"days": DISTINCT_DAYS},
 )
 FIVE_A_DAY = Achievement(
     "five_a_day",
     10,
     "Five a day",
-    "Play 5 or more games on 10 different days",
+    "Play {games} or more games on {days} different days",
     "game-icons:shiny-apple",
+    params={"games": BUSY_DAY_GAMES, "days": BUSY_DAYS},
 )
 ALWAYS_HERE = Achievement(
     "always_here",
@@ -341,71 +385,82 @@ WEEKLY_REGULAR = Achievement(
     "weekly_regular",
     5,
     "Weekly regular",
-    "Play 5 or more games in 4 different weeks",
+    "Play {games} or more games in {weeks} different weeks",
     "game-icons:stopwatch",
+    params={"games": WEEKLY_GAMES, "weeks": WEEKLY_WEEKS},
 )
 MONTH_OF_SUNDAYS = Achievement(
     "month_of_sundays",
     10,
     "Month of Sundays",
-    "Play on 4 weekends in a row",
+    "Play on {weekends} weekends in a row",
     "game-icons:sun",
+    params={"weekends": WEEKEND_WEEKS},
 )
 NEVER_GONE = Achievement(
     "never_gone",
     10,
     "Never gone",
-    "Never go 5 days without a game, from the first week to the last",
+    "Play {games} games and never go {days} days without one, from the first"
+    " week to the last",
     "game-icons:campfire",
+    params={"days": GONE_DAYS, "games": GONE_GAMES},
 )
 WELCOME_BACK = Achievement(
     "welcome_back",
     3,
     "Welcome back",
-    "Play again after 14 days away",
+    "Play again after {days} days away",
     "game-icons:return-arrow",
+    params={"days": AWAY_DAYS},
 )
 ONE_SITTING = Achievement(
     "one_sitting",
     3,
     "One sitting",
-    "Play 5 games inside 3 hours",
+    "Play {games} games inside {hours} hours",
     "game-icons:armchair",
+    params={"games": SITTING_GAMES, "hours": SITTING_S // 3600},
 )
 POWER_HOUR = Achievement(
     "power_hour",
     3,
     "Power hour",
-    "Win 3 games inside one hour",
+    "Win {wins} games inside one hour",
     "game-icons:lightning-trio",
+    params={"wins": HOUR_WINS},
 )
 WEEKEND_WARRIOR = Achievement(
     "weekend_warrior",
     3,
     "Weekend warrior",
-    "Play 10 games on Saturdays and Sundays",
+    "Play {games} games on Saturdays and Sundays",
     "game-icons:barbecue",
+    params={"games": WEEKEND_GAMES},
 )
 REPEAT_OFFENDER = Achievement(
     "repeat_offender",
     3,
     "Repeat offender",
-    "Win 3 in a row, three separate times",
+    "Win {streak} in a row, {times} separate times",
     "game-icons:handcuffs",
+    params={"streak": REPEAT_STREAK, "times": REPEAT_TIMES},
 )
 CLIMBER = Achievement(
     "climber",
     15,
     "Climber",
-    "Finish the season 100 MMR above where you started",
+    "Finish the season {mmr} MMR above where you started",
     "game-icons:mountain-climbing",
+    params={"mmr": CLIMB},
 )
 HOLD_THE_LINE = Achievement(
     "hold_the_line",
     15,
     "Hold the line",
-    "Play 30 games and finish within 20 MMR of your season high",
+    "Play {games} games and finish within {mmr} MMR of your season high",
     "game-icons:shield",
+    params={"games": HOLD_GAMES, "mmr": HOLD_WITHIN},
 )
 WIN_POOL = Achievement(
     "win_pool",
@@ -422,7 +477,12 @@ TOURIST = Achievement(
     "game-icons:suitcase",
 )
 HOME_TURF = Achievement(
-    "home_turf", 5, "Home turf", "Win 10 games on one map", "game-icons:castle"
+    "home_turf",
+    5,
+    "Home turf",
+    "Win {wins} games on one map",
+    "game-icons:castle",
+    params={"wins": HOME_WINS},
 )
 RACE_TOUR = Achievement(
     "race_tour", 3, "Race tour", "Beat every race", "game-icons:world"
@@ -431,15 +491,17 @@ MIRROR_MASTER = Achievement(
     "mirror_master",
     3,
     "Mirror master",
-    "Win 5 mirror matches",
+    "Win {wins} mirror matches",
     "game-icons:mirror-mirror",
+    params={"wins": MIRROR_WINS},
 )
 ANTI_RANDOM = Achievement(
     "anti_random",
     5,
     "Anti-random",
-    "Beat 5 players who picked Random",
+    "Beat {wins} players who picked Random",
     "game-icons:perspective-dice-six-faces-random",
+    params={"wins": RANDOM_WINS},
 )
 SLAYER_HU = Achievement(
     "slayer_hu",
@@ -484,13 +546,28 @@ OFF_DUTY = Achievement(
     "game-icons:beach-bag",
 )
 NEMESIS = Achievement(
-    "nemesis", 5, "Nemesis", "Beat the same opponent 3 times", "game-icons:daggers"
+    "nemesis",
+    5,
+    "Nemesis",
+    "Beat the same opponent {wins} times",
+    "game-icons:daggers",
+    params={"wins": NEMESIS_WINS},
 )
 RIVAL = Achievement(
-    "rival", 5, "Rival", "Play the same opponent 5 times", "game-icons:crossed-swords"
+    "rival",
+    5,
+    "Rival",
+    "Play the same opponent {games} times",
+    "game-icons:crossed-swords",
+    params={"games": RIVAL_GAMES},
 )
 WIDE_NET = Achievement(
-    "wide_net", 3, "Wide net", "Beat 20 different opponents", "game-icons:fishing-net"
+    "wide_net",
+    3,
+    "Wide net",
+    "Beat {opponents} different opponents",
+    "game-icons:fishing-net",
+    params={"opponents": WIDE_NET_N},
 )
 HUNTING_SEASON = Achievement(
     "hunting_season",
@@ -503,8 +580,9 @@ OPEN_SEASON = Achievement(
     "open_season",
     25,
     "Open season",
-    "Beat 5 different GNL players",
+    "Beat {players} different GNL players",
     "game-icons:crosshair",
+    params={"players": OPEN_SEASON_N},
 )
 CIVIL_WAR = Achievement(
     "civil_war", 5, "Civil war", "Beat a teammate", "game-icons:two-shadows"
@@ -520,29 +598,33 @@ SPEEDRUNNER = Achievement(
     "speedrunner",
     3,
     "Speedrunner",
-    "Win a game in under 7 minutes",
+    "Win a game in under {minutes} minutes",
     "game-icons:running-shoe",
+    params={"minutes": SPEEDRUN_S // 60},
 )
 MARATHON = Achievement(
     "marathon",
     3,
     "Marathon",
-    "Play a game longer than 45 minutes",
+    "Play a game longer than {minutes} minutes",
     "game-icons:tortoise",
+    params={"minutes": MARATHON_S // 60},
 )
 CAPTAINS_DUTY = Achievement(
     "captains_duty",
     25,
     "Captain's duty",
-    "Play 20 games as a captain",
+    "Play {games} games as a captain",
     "game-icons:captain-hat-profile",
+    params={"games": CAPTAIN_GAMES},
 )
 FIRST_TO_FIFTY = Achievement(
     "first_to_fifty",
     50,
     "First to fifty",
-    "Be the first player of the season to reach 50 games",
+    "Be the first player of the season to reach {games} games",
     "game-icons:finish-line",
+    params={"games": 50},
 )
 
 # Team badges: paid to the team, never a player. `subject` tells them apart.
@@ -550,8 +632,9 @@ FULL_ROSTER = Achievement(
     "full_roster",
     25,
     "Full roster",
-    "Every player on the team played 10 or more games",
+    "Every player on the team played {games} or more games",
     "game-icons:team-idea",
+    params={"games": 10},
 )
 EVERYONE_SCORES = Achievement(
     "everyone_scores",
@@ -571,8 +654,10 @@ EVERY_WEEK = Achievement(
     "every_week",
     25,
     "Every week",
-    "In every week of the season, 3 or more players played 3 or more games",
+    "In every week of the season, {players} or more players played {games}"
+    " or more games",
     "game-icons:calendar-half-year",
+    params={"players": 3, "games": 3},
 )
 NEVER_BLANK = Achievement(
     "never_blank",
@@ -599,8 +684,9 @@ TEAM_NIGHT = Achievement(
     "team_night",
     15,
     "Team night",
-    "The team played 30 games in one day, from 5 or more players",
+    "The team played {games} games in one day, from {players} or more players",
     "game-icons:moon",
+    params={"games": 30, "players": 5},
 )
 TEAM_MAP_COVERAGE = Achievement(
     "team_map_coverage",
@@ -627,43 +713,49 @@ FIFTY_FACES = Achievement(
     "fifty_faces",
     15,
     "Fifty faces",
-    "The team beat 50 different opponents",
+    "The team beat {opponents} different opponents",
     "game-icons:three-friends",
+    params={"opponents": 50},
 )
 TEAM_GOAL = Achievement(
     "team_goal",
     25,
     "Team goal",
-    "The team's ladder points add up to 1000, counting at most 150 per player",
+    "The team's ladder points add up to {points}, counting at most {cap} per player",
     "game-icons:goal-keeper",
+    params={"points": 1000, "cap": 150},
 )
 TWO_HUNDRED = Achievement(
     "two_hundred",
     15,
     "Two hundred",
-    "The team played 200 games, counting at most 30 per player",
+    "The team played {games} games, counting at most {cap} per player",
     "game-icons:abacus",
+    params={"games": 200, "cap": 30},
 )
 TEAM_CLIMB = Achievement(
     "team_climb",
     25,
     "Team climb",
-    "The team gained 500 MMR, counting at most 100 per player",
+    "The team gained {mmr} MMR, counting at most {cap} per player",
     "game-icons:stairs-goal",
+    params={"mmr": 500, "cap": 100},
 )
 BRAGGING_RIGHTS = Achievement(
     "bragging_rights",
     15,
     "Bragging rights",
-    "The team beat one other team 20 times",
+    "The team beat one other team {wins} times",
     "game-icons:trumpet-flag",
+    params={"wins": 20},
 )
 SPARRING_PARTNERS = Achievement(
     "sparring_partners",
     10,
     "Sparring partners",
-    "Teammates played each other 10 times",
+    "Teammates played each other {games} times",
     "game-icons:boxing-glove",
+    params={"games": 10},
 )
 EVERYONE_HUNTS = Achievement(
     "everyone_hunts",
@@ -673,21 +765,13 @@ EVERYONE_HUNTS = Achievement(
     "game-icons:hunting-horn",
 )
 
-# The team folds that read a per-player number: games, wins, points, or MMR gained
-ROSTER_GAMES = 10
-TEAM_WEEK_PLAYERS = 3
-TEAM_WEEK_GAMES = 3
-TEAM_NIGHT_GAMES = 30
-TEAM_NIGHT_PLAYERS = 5
-FIFTY_FACES_N = 50
-TEAM_GOAL_CAP, TEAM_GOAL_TARGET = 150, 1000
-TWO_HUNDRED_CAP, TWO_HUNDRED_TARGET = 30, 200
-TEAM_CLIMB_CAP, TEAM_CLIMB_TARGET = 100, 500
-BRAGGING_WINS = 20
-SPARRING_GAMES = 10
-
 HAT_TRICK = Achievement(
-    "hat_trick", 3, "Hat-trick", "Win 3 games in a row", "game-icons:top-hat"
+    "hat_trick",
+    3,
+    "Hat-trick",
+    "Win {wins} games in a row",
+    "game-icons:top-hat",
+    params={"wins": 3},
 )
 REVENGE = Achievement(
     "revenge",
@@ -700,8 +784,9 @@ COMEBACK = Achievement(
     "comeback",
     10,
     "Comeback",
-    "Play 30 games and finish 100 MMR above your season low",
+    "Play {games} games and finish {mmr} MMR above your season low",
     "game-icons:sunrise",
+    params={"games": HOLD_GAMES, "mmr": COMEBACK_GAIN},
 )
 # One badge per map of the season's pool, id `map_win:<map>`; see per_map
 MAP_WIN = Achievement(
@@ -872,6 +957,8 @@ ACHIEVEMENTS = (
 )
 # The team badges, by id
 TEAM_IDS = frozenset(rule.id for rule in TEAM_ACHIEVEMENTS)
+# The catalogue by rule id
+BY_ID = {rule.id: rule for rule in ACHIEVEMENTS}
 
 # The rule pays for one race only, so the race the player beat most is looked
 # up here. Random is in no bucket and pays nothing.

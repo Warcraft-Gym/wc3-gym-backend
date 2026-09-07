@@ -337,6 +337,7 @@ def test_the_answer_carries_the_badges_and_adds_their_points(
         "description": "Win your first game",
         "icon": "mdi-redhat",
         "achieved_at": INSIDE.isoformat().replace("+00:00", "Z"),
+        "params": {},
     }
 
 
