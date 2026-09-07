@@ -7,6 +7,7 @@ import pytest
 from httpx2 import Client
 
 from app.core.db import Session
+from app.models.base import ident
 from app.models.enums import Race
 from app.models.user import User
 from app.services import discord
@@ -134,7 +135,7 @@ def test_stats_says_when_nothing_is_synced(
         )
         session.add(user)
         session.commit()
-        player = user.id
+        player = ident(user)
     sign_up(seeded["season_id"], [player])
     _post(client, command("stats", player=player))
     assert discord_calls[0][2] == {"content": "No ladder games synced for P9."}
