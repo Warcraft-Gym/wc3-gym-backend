@@ -45,6 +45,8 @@ class Series(SeriesBase, DBModel, table=True):
     )
 
     id: int | None = Field(default=None, primary_key=True)
+    # The old caster name, read by nothing; series_cast holds it, the next migration drops it
+    caster: str | None = Field(default=None, max_length=50)
     match: "Match" = Relationship(
         sa_relationship_kwargs={"foreign_keys": "[Series.match_id]"}
     )

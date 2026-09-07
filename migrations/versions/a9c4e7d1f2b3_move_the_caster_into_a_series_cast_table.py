@@ -2,8 +2,9 @@
 
 A series_cast row names the series, the account that claimed it and the
 channel it streams on. Every stored caster name becomes a row with no
-account and a Twitch channel link, then the series and draft_series
-columns go.
+account and a Twitch channel link. The series and draft_series columns
+stay until the code that read them has shipped; the next migration drops
+them, so the old code keeps serving while this one migrates.
 
 Revision ID: a9c4e7d1f2b3
 Revises: d5e8f1a2b3c4
@@ -88,23 +89,8 @@ def upgrade() -> None:
             ),
             rows,
         )
-    op.drop_column("series", "caster")
-    op.drop_column("draft_series", "caster")
 
 
 def downgrade() -> None:
-    op.add_column("draft_series", sa.Column("caster", sa.String(50)))
-    op.add_column("series", sa.Column("caster", sa.String(50)))
-    # The first cast's Twitch login goes back on the row; the others are lost
-    bind = op.get_bind()
-    casts = bind.execute(
-        sa.text("SELECT series_id, channel_url FROM series_cast ORDER BY id DESC")
-    ).all()
-    for series_id, url in casts:
-        login = re.sub(r"^https?://(www\.)?twitch\.tv/", "", url)[:50]
-        bind.execute(
-            sa.text("UPDATE series SET caster = :login WHERE id = :id"),
-            {"login": login, "id": series_id},
-        )
     op.drop_index(op.f("ix_series_cast_series_id"), "series_cast")
     op.drop_table("series_cast")

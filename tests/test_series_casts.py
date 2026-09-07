@@ -149,7 +149,7 @@ BEFORE_CAST_TABLE = "d5e8f1a2b3c4"
 
 
 def test_the_caster_names_become_cast_rows_and_back(tmp_path: Path) -> None:
-    """Every spelling of a name becomes one Twitch link; a downgrade keeps the login."""
+    """Every spelling of a name becomes one Twitch link; the column stays as it was."""
     url = fresh_database(tmp_path, "casts")
     upgrade_to(url, BEFORE_CAST_TABLE)
     engine = create_engine(url)
@@ -199,16 +199,14 @@ def test_the_caster_names_become_cast_rows_and_back(tmp_path: Path) -> None:
             (2, None, "https://www.twitch.tv/ares1776"),
             (3, None, "https://www.twitch.tv/grubby"),
         ]
+        # The old column is dropped by the next migration, once this code serves
+        assert (
+            connection.execute(text("SELECT caster FROM series WHERE id = 2")).scalar()
+            == "https://www.twitch.tv/ares1776/"
+        )
 
     from tests.migrate import downgrade_to
 
     downgrade_to(url, BEFORE_CAST_TABLE)
     with engine.connect() as connection:
-        assert connection.execute(
-            text("SELECT id, caster FROM series ORDER BY id")
-        ).all() == [
-            (1, "barrentv"),
-            (2, "ares1776"),
-            (3, "grubby"),
-            (4, None),
-        ]
+        assert connection.execute(text("SELECT count(*) FROM series")).scalar() == 4
