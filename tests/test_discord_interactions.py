@@ -52,6 +52,25 @@ def test_ping_answers_pong(client: Client, public_key: None) -> None:
     assert resp.json() == {"type": 1}
 
 
+def test_upcoming_marks_a_cast_series_that_is_on_now(
+    client: Client, public_key: None, discord_calls: list, seeded: dict[str, Any]
+) -> None:
+    """A claimed series inside its window gets the red dot; the same series a day out does not."""
+    soon = utcnow() + timedelta(minutes=10)
+    with Session.begin() as session:
+        series = session.get(Series, seeded["series_open_id"])
+        assert series
+        series.date_time = soon
+        series.casts.append(SeriesCast(channel_url="https://www.twitch.tv/gnlcaster"))
+    body, headers = signed(command("upcoming"))
+    assert (
+        client.post("/discord/interactions", content=body, headers=headers).status_code
+        == 200
+    )
+    line = discord_calls[0][2]["embeds"][0]["description"]
+    assert line.startswith(f"🔴 <t:{int(soon.timestamp())}:f> · Wk 1 · ")
+
+
 def test_upcoming_posts_the_window_publicly(
     client: Client, public_key: None, discord_calls: list, seeded: dict[str, Any]
 ) -> None:
