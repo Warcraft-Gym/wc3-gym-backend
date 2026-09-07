@@ -362,7 +362,9 @@ def public_create_user(
     if season_id:
         season = season_service.get(int(season_id))
         if season.phase == "open":
-            season_service.add_user_signup(int(season_id), [user.id], data.race)
+            season_service.add_user_signup(
+                int(season_id), [user.id], user_create.race.value
+            )
         else:
             closed = (
                 f"Signups for {season.name} are closed. Your profile is saved, but you"

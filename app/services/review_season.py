@@ -145,7 +145,7 @@ def build(discord_a: str, discord_b: str) -> str:
                     DBUserSeasonSignup(
                         user_id=ident(user),
                         season_id=sid,
-                        race=signup_race.get(user.id) or user.race,
+                        race=signup_race.get(user.id) or user.race or Race.RANDOM,
                     )
                 )
                 session.add(

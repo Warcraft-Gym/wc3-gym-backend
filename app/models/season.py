@@ -174,18 +174,23 @@ class FantasyTierAllocation(SQLModel):
     tiers: dict[int, PositiveInt]
 
 
-class SeasonSignupWrite(SQLModel):
-    """The users to sign up or remove. A removal ignores the race."""
+class SeasonSignupRemove(SQLModel):
+    """The users to remove from a season."""
 
     user_ids: list[int]
-    race: str | None = None
+
+
+class SeasonSignupWrite(SeasonSignupRemove):
+    """The users to sign up, all on the race they registered on."""
+
+    race: str
 
 
 class SeasonSignupUpdate(SQLModel):
     """The draft fields of one signup. A null position sorts the player by MMR."""
 
     draft_position: NonNegativeInt | None = None
-    # The race the player registered on; null clears it
+    # The race the player registered on; a field left out keeps it, null is refused
     race: str | None = None
 
 

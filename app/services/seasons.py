@@ -382,9 +382,9 @@ class SeasonService:
             return _public(session, season)
 
     def add_user_signup(
-        self, season_id: int, user_ids: list[int], race: str | None = None
+        self, season_id: int, user_ids: list[int], race: str
     ) -> SeasonPublic:
-        """Sign these users up, all on the race the caller names, if any."""
+        """Sign these users up, all on the race the caller names."""
         with Session.begin() as session:
             season = session.get(Season, season_id)
             if not season:
@@ -408,10 +408,10 @@ class SeasonService:
             return _public(session, season)
 
     @staticmethod
-    def _race(race: str | None) -> Race | None:
+    def _race(race: str | None) -> Race:
         """The race a signup names, read the way a person writes it."""
         if not race:
-            return None
+            raise BadRequestError("A signup needs a race")
         try:
             return Race.from_text(race)
         except ValueError as error:

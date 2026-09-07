@@ -682,7 +682,7 @@ def test_the_ladder_sync_route_pages_through_the_signups(
     signed_up = seeded["player_ids"][:3]
     resp = client.post(
         f"/seasons/{seeded['season_id']}/signups",
-        json={"user_ids": signed_up},
+        json={"user_ids": signed_up, "race": "HU"},
         headers=auth_headers,
     )
     assert resp.status_code == 200
@@ -717,7 +717,7 @@ def test_the_ladder_sync_route_stores_the_matches_of_the_signups(
         session.commit()
     client.post(
         f"/seasons/{seeded['season_id']}/signups",
-        json={"user_ids": [player]},
+        json={"user_ids": [player], "race": "HU"},
         headers=auth_headers,
     )
     serve(monkeypatch, {W3C_SEASON: THANKS[:4]})
