@@ -527,7 +527,6 @@ def _matches(
             season_id=ident(season),
             playday=playday,
             fixed_map_id=maps.get(whole_number(row.get("Fixed Map ID"))),
-            date_frame=row.get("Date Frame"),
         )
         key = (team1_id, team2_id, values.playday)
         match = stored.get(key)
