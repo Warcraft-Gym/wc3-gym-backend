@@ -2,11 +2,12 @@ import logging
 
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session as OrmSession
 from sqlalchemy.orm import joinedload, noload
 from sqlmodel import col
 
 from app.core.db import Session, rel
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import BadRequestError, NotFoundError
 from app.core.query import QueryElement, QueryUtil
 from app.models.fantasy_team import (
     FantasyTeam,
@@ -15,15 +16,31 @@ from app.models.fantasy_team import (
     FantasyTeamUpdate,
 )
 from app.models.relationships import DBFantasyTeamPlayer
+from app.models.season import Season
+from app.models.team_season import DBTeamSeason
 from app.models.user import User
 from app.services import derived, discord_roles
 
 logger = logging.getLogger(__name__)
 
 
+def _check_grind(
+    session: OrmSession, team_id: int | None, season_id: int | None
+) -> None:
+    """A grind pick names a team of a season that offers the pick."""
+    if team_id is None or season_id is None:
+        return
+    season = session.get(Season, season_id)
+    if season is None or not season.fantasy_grind:
+        raise BadRequestError("This season offers no grind pick")
+    if session.get(DBTeamSeason, {"team_id": team_id, "season_id": season_id}) is None:
+        raise BadRequestError("The grind team is not a team of this season")
+
+
 class FantasyTeamService:
     def add(self, fantasy_team: FantasyTeamCreate) -> FantasyTeamPublic:
         with Session.begin() as session:
+            _check_grind(session, fantasy_team.grind_team_id, fantasy_team.season_id)
             row = FantasyTeam.add(session, fantasy_team.model_dump())
             public = FantasyTeamPublic.from_fantasy_team(row)
             derived.fill_fantasy_teams(session, [public])
@@ -43,6 +60,7 @@ class FantasyTeamService:
             )
             if not row:
                 raise NotFoundError("Fantasy Team not found")
+            _check_grind(session, row.grind_team_id, row.season_id)
             public = FantasyTeamPublic.from_fantasy_team(row)
             derived.fill_fantasy_teams(session, [public])
             return public

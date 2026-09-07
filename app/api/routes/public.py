@@ -753,6 +753,9 @@ def create_fantasy_team(
         "drafted_team_id": drafted_team_id,
         "drafted_race": drafted_race,
     }
+    # An absent grind pick leaves the one on record; a null clears it
+    if "grind_team_id" in data.model_fields_set:
+        team_data["grind_team_id"] = data.grind_team_id
 
     if existing_teams and len(existing_teams) > 0:
         # Update existing team

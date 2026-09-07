@@ -2,7 +2,7 @@ from datetime import date, datetime
 from typing import TYPE_CHECKING, Annotated, Any, Literal, NamedTuple, Self
 
 from pydantic import NonNegativeInt, PositiveInt
-from sqlalchemy import JSON, Index, and_, case, func, or_, select, text
+from sqlalchemy import JSON, Index, and_, case, false, func, or_, select, text
 from sqlalchemy.orm import Session
 from sqlmodel import Field, Relationship, SQLModel, col
 
@@ -47,6 +47,10 @@ class SeasonBase(SQLModel):
         default="standard",
         max_length=20,
         sa_column_kwargs={"server_default": "standard"},
+    )
+    # Whether the season offers the fantasy grind pick: a second team, paid by rank
+    fantasy_grind: bool = Field(
+        default=False, sa_column_kwargs={"server_default": false()}
     )
 
 
@@ -152,6 +156,7 @@ class SeasonUpdate(SQLModel):
     discordRole: Annotated[str | None, NumToStr] = None
     map_rules: Annotated[str | None, MapRules] = None
     score_system: str | None = None
+    fantasy_grind: bool | None = None
 
 
 class SeasonTeamIds(SQLModel):
@@ -190,6 +195,7 @@ class SeasonPublic(SeasonBase):
     number_weeks: int | None = None
     series_per_week: int | None = None
     score_system: str | None = None
+    fantasy_grind: bool | None = None
     # Derived: one more than the cuts, 0 until the season is allocated
     fantasy_tiers: int | None = None
     fantasy_tier_cuts: Annotated[list[int], NoneToList] = []
@@ -227,6 +233,7 @@ class SeasonPublic(SeasonBase):
             discordRole=season.discordRole,
             map_rules=season.map_rules,
             score_system=season.score_system,
+            fantasy_grind=season.fantasy_grind,
             fantasy_tiers=tier_count(season.fantasy_tier_cuts),
             fantasy_tier_cuts=season.fantasy_tier_cuts or [],
             fantasy_tiers_applied_at=season.fantasy_tiers_applied_at,
@@ -236,12 +243,13 @@ class SeasonPublic(SeasonBase):
     def from_season_reduced(
         cls, season: Season, signup_race: Race | None = None
     ) -> Self:
-        """The name, the id and the map rules only. Used where a season is a
-        label on another object rather than the subject of the response."""
+        """The name, the id, the map rules and the grind flag only. Used where
+        a season is a label on another object rather than the subject."""
         return cls(
             id=ident(season),
             name=season.name,
             map_rules=season.map_rules,
+            fantasy_grind=season.fantasy_grind,
             signup_race=signup_race,
         )
 
@@ -259,6 +267,7 @@ class SeasonPublic(SeasonBase):
             discordRole=season.discordRole,
             map_rules=season.map_rules,
             score_system=season.score_system,
+            fantasy_grind=season.fantasy_grind,
             fantasy_tiers=tier_count(season.fantasy_tier_cuts),
             fantasy_tier_cuts=season.fantasy_tier_cuts or [],
             fantasy_tiers_applied_at=season.fantasy_tiers_applied_at,

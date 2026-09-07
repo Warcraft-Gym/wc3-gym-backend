@@ -1,6 +1,6 @@
 """The fantasy scoring rules, as Python.
 
-A fantasy team takes five parts, all of them from the season it names.
+A fantasy team takes six parts, all of them from the season it names.
 
 Its drafted players pay the points of every series they played that season, and
 5 bench points for every week they stood in no series at all. Its drafted team
@@ -8,8 +8,10 @@ pays the standing it holds in that season. Its drafted race pays the weekly race
 table: a race scores wins over losses, the three best ratios of the week take
 18, 12 and 6, races that share a ratio share a rank, and the next rank advances
 by the size of the group that tied. Its captain's bets pay their stake, plus
-when the series went the way he called it and minus when it did not. The total
-is the sum of the five.
+when the series went the way he called it and minus when it did not. Its grind
+pick pays the rank the picked team holds on achievement points: with N teams
+the rank r pays N - r + 1, and a season that offers no pick pays nothing. The
+total is the sum of the six.
 
 Nothing here reads the database, so the read path and the score recalculation
 answer the same numbers from the same rule.
@@ -86,7 +88,34 @@ class Standing(NamedTuple):
     points_available: int
 
 
+class Grind(NamedTuple):
+    """The grind pick of a fantasy team: the team it picked and what that pays."""
+
+    team_id: int
+    team_name: str | None
+    achievement_points: int
+    rank: int
+    teams: int
+    points: int
+
+
 type SeriesByWeek = Mapping[int | None, Sequence[Series]]
+
+
+def grind_points(
+    achievement_points: Mapping[int, int], team_id: int
+) -> tuple[int, int]:
+    """The rank a picked team holds and what that rank pays.
+
+    Teams rank on achievement points, most first, and a tie shares the rank,
+    so three teams may rank 1, 1 and 3. With N teams the rank r pays N - r + 1.
+    A team outside the season pays nothing.
+    """
+    if team_id not in achievement_points:
+        return 0, 0
+    points = achievement_points[team_id]
+    rank = 1 + sum(other > points for other in achievement_points.values())
+    return rank, len(achievement_points) - rank + 1
 
 
 def series_points(own: int, opp: int, wins: int = DEFAULT_WINS) -> int:
@@ -260,6 +289,7 @@ def team_scores(
     race_points: RacePoints,
     series_by_week: SeriesByWeek,
     number_weeks: int | None,
+    grind: Grind | None = None,
     include_breakdown: bool = False,
 ) -> dict[str, Any]:
     """
@@ -273,6 +303,7 @@ def team_scores(
         race_points: Pre-calculated race points dictionary
         series_by_week: The season's series keyed by week
         number_weeks: The number of weeks the season is played over
+        grind: The grind pick of the team, if the season offers one and it picked
         include_breakdown: If True, returns detailed breakdown; if False, returns just totals
 
     Returns:
@@ -284,10 +315,12 @@ def team_scores(
         "team_points": 0,
         "race_points": 0,
         "bet_points": 0,
+        "grind_points": grind.points if grind else 0,
         "total_points": 0,
     }
 
     if include_breakdown:
+        result["grind_breakdown"] = grind._asdict() if grind else {}
         result["player_breakdown"] = []
         result["bench_breakdown"] = []
 
@@ -434,6 +467,7 @@ def team_scores(
         + result["team_points"]
         + result["race_points"]
         + result["bet_points"]
+        + result["grind_points"]
     )
 
     return result
