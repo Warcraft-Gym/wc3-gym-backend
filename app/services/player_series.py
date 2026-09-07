@@ -1,108 +1,17 @@
-import json
 import logging
-import os
 from datetime import datetime
 from typing import Any
 
-import requests
 from fastapi.responses import JSONResponse
 
 from app.core.scoring import wins_needed
-from app.models.series import SeriesPublic, SeriesUpdate
-from app.services import discord_posts, r2, replays
+from app.models.series import SeriesUpdate
+from app.services import discord_posts, replays
 from app.services.series import SeriesService
 from app.services.series_veto import SeriesVetoService
 from app.services.users import UserService
 
 logger = logging.getLogger(__name__)
-
-
-def _notify_discord_series_update(
-    series: SeriesPublic,
-    player_name: str | None,
-    action: str,
-    uploaded_files: dict[str, dict[str, Any]] | None = None,
-) -> bool:
-    """Send series update notification to Discord bot webhook with optional file attachments
-
-    This function is designed to be non-blocking - if Discord notifications fail,
-    the series update operation will still succeed.
-    """
-    try:
-        bot_webhook_url = os.getenv("BOT_WEBHOOK_URL")
-        bot_client_token = os.getenv("BOT_CLIENT_TOKEN")
-
-        if not bot_webhook_url or not bot_client_token:
-            logger.debug("Discord webhook not configured, skipping notification")
-            return False
-
-        # Prepare multipart form data for files
-        if uploaded_files:
-            # Create multipart form data manually using requests
-            files_dict = {}
-
-            series_json = json.dumps(series.to_dict(), sort_keys=True)
-
-            data_dict = {
-                "series": series_json,
-                "player_name": player_name,
-                "action": action,
-                "auth_token": bot_client_token,
-            }
-
-            # Add files to requests files dict
-            for file_key, file_info in uploaded_files.items():
-                files_dict[file_key] = (
-                    file_info["filename"],
-                    file_info["data"],
-                    file_info["content_type"],
-                )
-
-            # Send webhook request with files
-            response = requests.post(
-                bot_webhook_url,
-                data=data_dict,
-                files=files_dict,
-                timeout=30,  # Increased timeout for file uploads
-            )
-        else:
-            # Send regular JSON payload
-            payload = {
-                "series": series.to_dict(),
-                "player_name": player_name,
-                "action": action,
-                "auth_token": bot_client_token,
-            }
-
-            response = requests.post(
-                bot_webhook_url,
-                data=json.dumps(payload, sort_keys=True),
-                timeout=5,
-                headers={"Content-Type": "application/json"},
-            )
-
-        if response.status_code == 200:
-            logger.info(f"Successfully notified Discord of series update: {action}")
-            return True
-        else:
-            logger.warning(
-                f"Discord webhook returned status {response.status_code}: {response.text}"
-            )
-            return False
-
-    except requests.exceptions.Timeout:
-        logger.warning(
-            "Discord webhook request timed out - continuing without notification"
-        )
-        return False
-    except requests.exceptions.ConnectionError:
-        logger.warning("Discord webhook connection failed - bot may be offline")
-        return False
-    except Exception as e:
-        logger.warning(
-            f"Discord notification failed: {e} - series update will continue"
-        )
-        return False
 
 
 def update_player_series(
@@ -201,49 +110,17 @@ def update_player_series(
     # Only the fields this editor changes, so a concurrent edit stands
     updated_series = series_service.update(series_id, SeriesUpdate(**changes))
 
-    # Determine notification action based on what was updated
-    player_name = user.name
+    # The bot's cards follow the write: the time on the announce card, the
+    # score on the result card
+    if original_datetime != updated_series.date_time:
+        discord_posts.refresh_series(series_id)
+    if (original_p1_score, original_p2_score) != (
+        updated_series.player1_score,
+        updated_series.player2_score,
+    ):
+        discord_posts.post_result(series_id)
 
-    # Check if scores were updated
-    scores_updated = (original_p1_score != updated_series.player1_score) or (
-        original_p2_score != updated_series.player2_score
-    )
-
-    # Check if date/time was updated
-    datetime_updated = original_datetime != updated_series.date_time
-    if datetime_updated:
-        discord_posts.refresh_series(series_id)  # the announce card shows the time
-
-    # Attempt Discord notifications (non-blocking - app continues regardless of success/failure)
-    discord_notified = False
-    if scores_updated:
-        # the bot still posts the files, fetched back from the bucket
-        attachments = (
-            {
-                f"game{r.game_no}": {
-                    "filename": f"game{r.game_no}.w3g",
-                    "data": r2.fetch(r2.key(series_id, r.game_no)),
-                    "content_type": "application/octet-stream",
-                }
-                for r in stored
-            }
-            if os.getenv("BOT_WEBHOOK_URL")
-            else None
-        )
-        discord_notified = _notify_discord_series_update(
-            updated_series, player_name, "score_updated", attachments
-        )
-    elif datetime_updated:
-        discord_notified = _notify_discord_series_update(
-            updated_series, player_name, "scheduled"
-        )
-
-    # Convert to dict only for JSON response
     result = updated_series.to_dict()
     if reporting:
         result["replays"] = [replay.model_dump(mode="json") for replay in stored]
-
-    # Always include Discord notification status in response
-    result["discord_notification_sent"] = discord_notified
-
     return result

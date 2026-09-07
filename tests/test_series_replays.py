@@ -4,20 +4,10 @@ the report confirms them, one row per slot."""
 from collections.abc import Callable
 from typing import Any
 
-import pytest
 from httpx2 import Client, Response
 
 from app.services import blob
 from tests.conftest import REPLAY_BYTES
-
-
-@pytest.fixture(autouse=True)
-def no_discord(monkeypatch: pytest.MonkeyPatch) -> None:
-    from app.services import player_series
-
-    monkeypatch.setattr(
-        player_series, "_notify_discord_series_update", lambda *a: False
-    )
 
 
 def report(
