@@ -1,24 +1,25 @@
-"""/stats: the one command that reads the stored w3champions ladder.
+"""/stats: one player's GNL season, from the stored ladder and his series.
 
-It reads what the daily sync wrote, never w3champions itself. The league
-scores a player on the race he registered on, so the season numbers cover that
-one race; the MMR and record of every race he plays come from his stored
-w3champions rows, the signup race first and in bold.
+The ladder numbers are the season's window only, never the whole w3champions
+season: the league scores a player on the race he registered on, so that
+race's record and MMR lead, and the other races he laddered in the window
+follow as off-races.
 """
 
+import os
 from typing import Any
 from urllib.parse import quote
 
 from app.core.exceptions import NotFoundError
+from app.core.query import QueryUtil
+from app.models.series import SeriesPublic
 from app.models.user import UserPublic
 from app.models.w3c_ladder_match import UserLadder
-from app.models.w3c_stats import W3CStatsPublic
 from app.services import discord, discord_roles
 from app.services.interactions import (
     PUBLIC,
     Services,
     _season_span,
-    _snapshot,
     options_of,
     typed_option,
 )
@@ -34,29 +35,9 @@ PLAYER_OPTION = {
 
 STATS: dict[str, Any] = {
     "name": "stats",
-    "description": "A player's season record, and his MMR and record on every race",
+    "description": "A player's GNL season: series, ladder record, points and badges",
     "options": [PLAYER_OPTION],
 }
-
-
-def _record(
-    payload: dict[str, Any], services: Services
-) -> tuple[int, UserLadder, UserPublic, list[W3CStatsPublic]] | dict[str, Any]:
-    """The current season, the player's record of it, the player and his
-    newest w3champions rows, or the answer to send instead."""
-    season_id = discord_roles.current_season()
-    if season_id is None:
-        return {"content": "No current season."}
-    user_id = int(options_of(payload)["player"])
-    try:
-        answer = services.ladder.user_ladder(user_id, season_id, limit=1)
-    except NotFoundError:
-        return {"content": "No player with that id."}
-    user = services.users.get(user_id)
-    rows = _newest_per_race(user.w3c_stats, answer.race)
-    if not answer.games and not rows:
-        return {"content": f"No ladder games synced for {answer.name}."}
-    return season_id, answer, user, rows
 
 
 def _flag(country: str | None) -> str:
@@ -66,99 +47,134 @@ def _flag(country: str | None) -> str:
     return "".join(chr(0x1F1E6 + ord(letter) - ord("A")) for letter in country.upper())
 
 
-def _newest_per_race(
-    rows: list[W3CStatsPublic], signup_race: str | None
-) -> list[W3CStatsPublic]:
-    """The newest w3champions row of every race he has games on: the signup
-    race first, then the rest by MMR."""
-    newest: dict[str | None, W3CStatsPublic] = {}
-    for row in rows:
-        if row.games and (
-            row.race not in newest or row.wc3_season > newest[row.race].wc3_season
-        ):
-            newest[row.race] = row
-    return sorted(
-        newest.values(), key=lambda row: (row.race != signup_race, -(row.mmr or 0))
-    )
-
-
 def _icon(name: str | None, emojis: dict[str, str]) -> str:
-    """The app emoji of a race or the crown before a text, or nothing until
-    `just discord-emojis` has uploaded it."""
+    """The app emoji of a race, the GNL mark or the crown before a text, or
+    nothing until `just discord-emojis` has uploaded it."""
     return f"<:{name}:{emojis[name]}> " if name in emojis else ""
 
 
-def _race_lines(
-    rows: list[W3CStatsPublic], signup_race: str | None, emojis: dict[str, str]
-) -> list[str]:
-    """One line per race, the signup race in bold; a row from an older
-    w3champions season than his newest names it. No row on the signup race
-    says so, so a player yet to play it still shows his other races."""
-    newest = max((row.wc3_season for row in rows), default=0)
+def _record(race: str, wins: int, losses: int, emojis: dict[str, str]) -> str:
+    return f"{_icon(race, emojis)}{race} {wins}-{losses}"
+
+
+def _header(user: UserPublic, answer: UserLadder, emojis: dict[str, str]) -> str:
+    """Race, flag and name, then the links to his GNL page and his
+    w3champions profile."""
+    line = (
+        f"{_icon(answer.race, emojis)}{_flag(user.country)} **{answer.name}**".strip()
+    )
+    site = (os.getenv("FRONTEND_URL") or "").rstrip("/")
+    if site:
+        line += f" · {_icon('gnl', emojis)}[GNL profile]({site}/player/{user.id})"
+    if user.battleTag:
+        profile = f"https://www.w3champions.com/player/{quote(user.battleTag, safe='')}"
+        line += f" · {_icon('w3champions', emojis)}[w3champions ↗]({profile})"
+    return line
+
+
+def _series_lines(series: list[SeriesPublic], user_id: int) -> tuple[str, list[str]]:
+    """The player's series record and one line per series, from his side:
+    the score of a played one, the time of a scheduled one, else TBD."""
+    wins = losses = 0
     lines = []
-    for row in rows:
-        mmr = f"{row.mmr} MMR" if row.mmr is not None else "no MMR yet"
-        text = f"{row.race} {mmr} · {row.wins or 0}-{row.losses or 0}"
-        if row.wc3_season < newest:
-            text += f" (S{row.wc3_season})"
-        text = f"**{text}**" if row.race == signup_race else text
-        lines.append(_icon(row.race, emojis) + text)
-    if signup_race and all(row.race != signup_race for row in rows):
-        lines.insert(0, f"{_icon(signup_race, emojis)}**{signup_race} no games yet**")
-    return lines
+    for one in series:
+        mine = one.player1_id == user_id
+        other = one.player2 if mine else one.player1
+        match = one.match
+        team = (match.team2 if mine else match.team1) if match else None
+        name = (other.name if other else None) or "?"
+        line = f"Wk {match.playday if match else '?'} · vs "
+        line += f"{name} ({team.name})" if team else name
+        own, theirs = (
+            (one.player1_score, one.player2_score)
+            if mine
+            else (one.player2_score, one.player1_score)
+        )
+        if own is not None and theirs is not None:
+            won = own > theirs
+            wins += won
+            losses += not won
+            line += f" · {own}-{theirs} {'W' if won else 'L'}"
+        elif one.date_time:
+            line += f" · <t:{int(one.date_time.timestamp())}:f>"
+        else:
+            line += " · TBD"
+        lines.append(line)
+    return f"{wins}-{losses}", lines
 
 
 def stats(payload: dict[str, Any], services: Services) -> tuple[dict[str, Any], bool]:
-    """/stats player: the season's range, the player's record and points in it
-    and by opponent race, and his MMR and record on every race for the whole
-    w3champions season."""
-    found = _record(payload, services)
-    if isinstance(found, dict):
-        return found, PUBLIC
-    season_id, answer, user, rows = found
+    """/stats player: the season's range, his series, and his ladder grind in
+    it: points, badges, the record and MMR on his race, the off-races, the
+    record by opponent race, and when the ladder was last synced."""
+    season_id = discord_roles.current_season()
+    if season_id is None:
+        return {"content": "No current season."}, PUBLIC
+    user_id = int(options_of(payload)["player"])
+    try:
+        answer = services.ladder.user_ladder(user_id, season_id, limit=1)
+    except NotFoundError:
+        return {"content": "No player with that id."}, PUBLIC
+    user = services.users.get(user_id)
     season = services.seasons.get(season_id)
+    off_races = services.ladder.off_race_records(user_id, season_id)
+    query = f"player1_id == {user_id} or player2_id == {user_id}"
+    series = services.series.search_for_season(
+        season_id, QueryUtil.parse_query(query), sort="date_time"
+    )
+    if not answer.games and not off_races and not series:
+        return {"content": f"No ladder games synced for {answer.name}."}, PUBLIC
     emojis = discord.app_emojis(payload["application_id"])
-    versus = " · ".join(
-        f"{_icon(race, emojis)}{race} {wins}-{losses}"
-        for race, (wins, losses) in answer.vs_race.items()
-        if wins + losses
-    )
-    newest = max((row.wc3_season for row in rows), default=None)
-    fields = []
-    if versus:
-        fields.append({"name": "GNL record by opponent race", "value": versus})
-    fields.append(
-        {
-            "name": f"w3champions S{newest} · all games, not just GNL"
-            if newest
-            else "w3champions",
-            "value": "\n".join(_race_lines(rows, answer.race, emojis)),
-        }
-    )
-    embed = {
-        "title": f"{_flag(user.country)} {answer.name} · {season.name}".strip(),
-        "description": (
-            f"{_season_span(season)}\n"
-            f"{answer.wins}-{answer.losses} · {answer.games} games\n"
-            f"{answer.ladder_points} ladder points · "
+
+    record, series_lines = _series_lines(series, user_id)
+    grind = [
+        f"{answer.ladder_points} ladder points",
+        (
             f"{answer.points - answer.ladder_points} achievement points · "
             f"{len(answer.achievements)} badges"
         ),
-        "fields": fields,
-        "color": 0x4A4DB8,
-        **_snapshot(
-            "Ladder synced" if answer.synced_at else "Ladder sync incomplete as of",
-            answer.synced_at,
-        ),
-    }
-    if user.battleTag:
-        embed["author"] = {
-            "name": "w3champions profile",
-            "url": f"https://www.w3champions.com/player/{quote(user.battleTag, safe='')}",
-        }
-        if "w3champions" in emojis:
-            embed["author"]["icon_url"] = discord.emoji_url(emojis["w3champions"])
-    return {"embeds": [embed]}, PUBLIC
+    ]
+    if answer.race:
+        line = _record(answer.race, answer.wins, answer.losses, emojis)
+        if answer.mmr.current is not None:
+            line += f" · {answer.mmr.current} MMR"
+        grind.append(line)
+    if off_races:
+        grind.append(
+            "Off-race "
+            + " · ".join(
+                _record(race, wins, losses, emojis)
+                for race, (wins, losses) in off_races.items()
+            )
+        )
+    versus = " · ".join(
+        _record(race, wins, losses, emojis)
+        for race, (wins, losses) in answer.vs_race.items()
+        if wins + losses
+    )
+    if versus:
+        grind.append(f"vs {versus}")
+    if answer.synced_at:
+        grind.append(f"Synced <t:{int(answer.synced_at.timestamp())}:R>")
+    else:
+        grind.append("Sync incomplete")
+    fields = []
+    if series_lines:
+        fields.append(
+            {"name": f"GNL Series · {record}", "value": "\n".join(series_lines)}
+        )
+    fields.append({"name": "Ladder Grind", "value": "\n".join(grind)})
+    return {
+        "embeds": [
+            {
+                "description": (
+                    f"{_header(user, answer, emojis)}\n{season.name} · {_season_span(season)}"
+                ),
+                "fields": fields,
+                "color": 0x4A4DB8,
+            }
+        ]
+    }, PUBLIC
 
 
 def player_choices(payload: dict[str, Any], services: Services) -> list[dict[str, Any]]:

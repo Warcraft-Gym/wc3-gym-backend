@@ -1,6 +1,6 @@
-"""/stats reads the stored w3champions ladder, never w3champions."""
+"""/stats reads the stored ladder and the player's series, never w3champions."""
 
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
@@ -8,14 +8,17 @@ from httpx2 import Client
 
 from app.core.db import Session
 from app.models.enums import Race
-from app.models.w3c_stats import W3CStats
+from app.models.user import User
 from app.services import discord
 from tests.discord import CHANNEL, autocomplete, command, signed
-from tests.test_ladder_read import INSIDE, add_match, sign_up
+from tests.test_ladder_read import INSIDE, add_match, sign_up, stamp_ladder
+
+SYNCED = datetime(2026, 1, 20, 8, 0, tzinfo=UTC)
 
 
 def _ladder(seeded: dict[str, Any]) -> int:
-    """P1 signs up on Human and plays three rated games: two wins, one loss."""
+    """P1 signs up on Human and plays three rated games on it, two wins and a
+    loss, plus one Orc game the league does not score."""
     player = seeded["player_ids"][0]
     sign_up(seeded["season_id"], [player])
     add_match(player, "w1", won=True, mmr_before=1500, mmr_after=1512)
@@ -36,28 +39,27 @@ def _ladder(seeded: dict[str, Any]) -> int:
         mmr_before=1524,
         mmr_after=1512,
     )
+    add_match(
+        player,
+        "oc1",
+        won=False,
+        race=Race.OC,
+        start_time=INSIDE + timedelta(minutes=60),
+        mmr_before=1300,
+        mmr_after=1290,
+    )
     return player
-
-
-def _w3c_rows(player: int, *races: Race) -> None:
-    """His w3champions rows: HU and NE this season, OC last season, UD unplayed."""
-    rows = {
-        Race.HU: {"wc3_season": 26, "mmr": 1512, "wins": 40, "losses": 30, "games": 70},
-        Race.NE: {"wc3_season": 26, "mmr": 1400, "wins": 5, "losses": 7, "games": 12},
-        Race.OC: {"wc3_season": 25, "mmr": 1300, "wins": 2, "losses": 1, "games": 3},
-        Race.UD: {"wc3_season": 26, "mmr": 1000, "wins": 0, "losses": 0, "games": 0},
-    }
-    with Session() as session:
-        for race in races:
-            session.add(W3CStats(user_id=player, race=race, **rows[race]))
-        session.commit()
 
 
 @pytest.fixture(autouse=True)
 def emojis(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The app has the HU and OC icons and the crown uploaded, NE not yet."""
+    """The app has the HU icon, the GNL mark and the crown uploaded, OC and NE
+    not yet."""
+    monkeypatch.setenv("FRONTEND_URL", "https://gnl.example/")
     monkeypatch.setattr(
-        discord, "app_emojis", lambda _: {"HU": "11", "OC": "22", "w3champions": "33"}
+        discord,
+        "app_emojis",
+        lambda _: {"HU": "11", "gnl": "22", "w3champions": "33"},
     )
 
 
@@ -66,64 +68,78 @@ def _post(client: Client, payload: dict[str, Any]) -> None:
     assert client.post("/discord/interactions", content=body, headers=headers).json()
 
 
-def test_stats_posts_the_season_record_as_an_embed(
+def test_stats_posts_the_gnl_season_as_an_embed(
     client: Client, public_key: None, discord_calls: list, seeded: dict[str, Any]
 ) -> None:
     player = _ladder(seeded)
-    _w3c_rows(player, Race.NE, Race.UD, Race.OC, Race.HU)
+    stamp_ladder(player, 25, SYNCED)
     _post(client, command("stats", player=player))
     (post, delete) = discord_calls
     assert post[:2] == ("POST", CHANNEL)
     embed = post[2]["embeds"][0]
-    assert embed["title"] == "🇩🇪 P1 · Season 1"
-    assert embed["author"] == {
-        "name": "w3champions profile",
-        "url": "https://www.w3champions.com/player/P1%231111",
-        "icon_url": "https://cdn.discordapp.com/emojis/33.png",
-    }
-    span, record, points = embed["description"].splitlines()
-    assert span == "2026-01-05 to 2026-02-27 · ended"
-    assert record == "2-1 · 3 games"
-    # 3 a win and 1 a loss make the ladder points; the badges pay the rest
-    assert points == "7 ladder points · 6 achievement points · 2 badges"
+    header, season = embed["description"].splitlines()
+    assert header == (
+        "<:HU:11> 🇩🇪 **P1**"
+        f" · <:gnl:22> [GNL profile](https://gnl.example/player/{player})"
+        " · <:w3champions:33> [w3champions ↗](https://www.w3champions.com/player/P1%231111)"
+    )
+    assert season == "Season 1 · 2026-01-05 to 2026-02-27 · ended"
+    # The seed plays P1 against P3 of Beta on playday 1, 2-1 to P1
     assert embed["fields"][0] == {
-        "name": "GNL record by opponent race",
-        "value": "<:HU:11> HU 2-0 · NE 0-1",
+        "name": "GNL Series · 1-0",
+        "value": "Wk 1 · vs P3 (Beta) · 2-1 W",
     }
+    # 3 a win and 1 a loss make the ladder points; the badges pay the rest.
+    # The Orc game counts as an off-race, not in the record or the points.
     assert embed["fields"][1] == {
-        "name": "w3champions S26 · all games, not just GNL",
-        # UD has no games and stays hidden; OC's row is from the older season
-        "value": "<:HU:11> **HU 1512 MMR · 40-30**\nNE 1400 MMR · 5-7\n"
-        "<:OC:22> OC 1300 MMR · 2-1 (S25)",
+        "name": "Ladder Grind",
+        "value": "\n".join(
+            [
+                "7 ladder points",
+                "6 achievement points · 2 badges",
+                "<:HU:11> HU 2-1 · 1512 MMR",
+                "Off-race OC 0-1",
+                "vs <:HU:11> HU 2-0 · NE 0-1",
+                f"Synced <t:{int(SYNCED.timestamp())}:R>",
+            ]
+        ),
     }
-    # No sync stamp is stored here
-    assert embed["footer"] == {"text": "Ladder sync incomplete as of"}
+    assert "title" not in embed and "footer" not in embed
     assert delete[0] == "DELETE"
 
 
-def test_stats_shows_the_other_races_before_he_plays_his_signup_race(
+def test_stats_before_any_game_shows_the_series_and_an_empty_grind(
     client: Client, public_key: None, discord_calls: list, seeded: dict[str, Any]
 ) -> None:
     player = seeded["player_ids"][0]
     sign_up(seeded["season_id"], [player])
-    _w3c_rows(player, Race.OC)
     _post(client, command("stats", player=player))
     embed = discord_calls[0][2]["embeds"][0]
-    assert embed["description"].splitlines()[1] == "0-0 · 0 games"
-    assert embed["fields"] == [
-        {
-            "name": "w3champions S25 · all games, not just GNL",
-            "value": "<:HU:11> **HU no games yet**\n<:OC:22> OC 1300 MMR · 2-1",
-        }
+    assert embed["fields"][0]["name"] == "GNL Series · 1-0"
+    assert embed["fields"][1]["value"].splitlines() == [
+        "0 ladder points",
+        "0 achievement points · 0 badges",
+        "<:HU:11> HU 0-0",
+        "Sync incomplete",
     ]
 
 
 def test_stats_says_when_nothing_is_synced(
     client: Client, public_key: None, discord_calls: list, seeded: dict[str, Any]
 ) -> None:
-    sign_up(seeded["season_id"], [seeded["player_ids"][0]])
-    _post(client, command("stats", player=seeded["player_ids"][0]))
-    assert discord_calls[0][2] == {"content": "No ladder games synced for P1."}
+    # A player with no series and no games
+    with Session() as session:
+        user = User(
+            name="P9", battleTag="P9#9999", discordTag="p9", discordId="9", race=Race.UD
+        )
+        session.add(user)
+        session.commit()
+        player = user.id
+    sign_up(seeded["season_id"], [player])
+    _post(client, command("stats", player=player))
+    assert discord_calls[0][2] == {"content": "No ladder games synced for P9."}
+    _post(client, command("stats", player=9999))
+    assert discord_calls[2][2] == {"content": "No player with that id."}
 
 
 def test_player_autocomplete_lists_the_seasons_players(

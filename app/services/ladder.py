@@ -199,6 +199,37 @@ class LadderService:
                 players.append(player)
             return sorted(players, key=lambda player: player.name or "")
 
+    def off_race_records(self, user_id: int, season_id: int) -> dict[str, list[int]]:
+        """One player's wins and losses in the season's window on every race
+        but the one the league scores him on, keyed by the race he selected."""
+        with Session.begin() as session:
+            season = session.get(Season, season_id)
+            if season is None:
+                raise NotFoundError("Season not found")
+            window = _window(season)
+            rows = session.execute(
+                select(
+                    col(W3CLadderMatch.race).label("race"),
+                    func.sum(case((col(W3CLadderMatch.won), 1), else_=0)).label("wins"),
+                    func.sum(case((col(W3CLadderMatch.won), 0), else_=1)).label(
+                        "losses"
+                    ),
+                )
+                .where(
+                    col(W3CLadderMatch.user_id) == user_id,
+                    col(W3CLadderMatch.race).is_not(None),
+                    ~_league_race(season_id),
+                    col(W3CLadderMatch.start_time) >= window[0],
+                    col(W3CLadderMatch.start_time) <= window[1],
+                    ladder.counted_clause(col(W3CLadderMatch.duration_s)),
+                )
+                .group_by(col(W3CLadderMatch.race))
+            ).all()
+            return {
+                row.race.value: [int(row.wins or 0), int(row.losses or 0)]
+                for row in rows
+            }
+
     def user_ladder(
         self,
         user_id: int,
