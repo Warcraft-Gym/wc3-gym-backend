@@ -362,11 +362,6 @@ def test_a_result_is_reported_only_once_the_veto_is_complete(
 ) -> None:
     """The record is what the map stats are made of, so a score waits for it.
     Scheduling does not."""
-    from app.services import player_series
-
-    monkeypatch.setattr(
-        player_series, "_notify_discord_series_update", lambda *a: False
-    )
     series_id = seeded["series_open_id"]
     side_a, side_b = dashboard_token(discord_id="2"), dashboard_token(discord_id="4")
     replay_uploaded(series_id, 1, 2)

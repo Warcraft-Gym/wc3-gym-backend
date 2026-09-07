@@ -6,7 +6,7 @@ account and a Twitch channel link, then the series and draft_series
 columns go.
 
 Revision ID: a9c4e7d1f2b3
-Revises: d5e0f3a8b2c4
+Revises: d5e8f1a2b3c4
 Create Date: 2026-09-07 00:00:00.000000
 
 """
@@ -21,7 +21,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "a9c4e7d1f2b3"
-down_revision: str | Sequence[str] | None = "d5e0f3a8b2c4"
+down_revision: str | Sequence[str] | None = "d5e8f1a2b3c4"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

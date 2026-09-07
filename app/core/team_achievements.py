@@ -32,38 +32,24 @@ from app.core import achievement_shapes as shape
 from app.core.achievement_rules import BY_ID, Context, scoped
 from app.core.achievements import (
     BRAGGING_RIGHTS,
-    BRAGGING_WINS,
     EVERY_WEEK,
     EVERYONE_HUNTS,
     EVERYONE_SCORES,
     FAST_START,
     FIFTY_FACES,
-    FIFTY_FACES_N,
     FULL_ROSTER,
     HALF_REGULAR,
     HUNTING_SEASON,
     NEVER_BLANK,
     NOBODY_LEFT,
-    ROSTER_GAMES,
-    SPARRING_GAMES,
     SPARRING_PARTNERS,
     TEAM_CLIMB,
-    TEAM_CLIMB_CAP,
-    TEAM_CLIMB_TARGET,
     TEAM_GOAL,
-    TEAM_GOAL_CAP,
-    TEAM_GOAL_TARGET,
     TEAM_GRAND_TOUR,
     TEAM_MAP_COVERAGE,
     TEAM_NIGHT,
-    TEAM_NIGHT_GAMES,
-    TEAM_NIGHT_PLAYERS,
     TEAM_RACE_COVERAGE,
-    TEAM_WEEK_GAMES,
-    TEAM_WEEK_PLAYERS,
     TWO_HUNDRED,
-    TWO_HUNDRED_CAP,
-    TWO_HUNDRED_TARGET,
     WEEKLY_REGULAR,
     Achievement,
     PaidSet,
@@ -91,7 +77,12 @@ def earned(
         price = paid.get(rule.id)
         if price is not None:
             found.setdefault(team, []).append(
-                replace(rule, points=price, achieved_at=at)
+                replace(
+                    rule,
+                    points=price,
+                    achieved_at=at,
+                    description=rule.text(ctx.params.get(rule.id)),
+                )
             )
 
     if ctx.teams and paid.keys() & SQL_RULES:
@@ -184,7 +175,7 @@ def _statement(rows: CTE, ctx: Context) -> CompoundSelect[Any]:
                 literal(BRAGGING_RIGHTS.id).label("rule_id"),
                 func.min(beaten.c.start_time).label("achieved_at"),
             )
-            .where(beaten.c.n == BRAGGING_WINS)
+            .where(beaten.c.n == ctx.n(BRAGGING_RIGHTS, "wins"))
             .group_by(beaten.c.team_id)
         )
     faces = (
@@ -205,7 +196,7 @@ def _statement(rows: CTE, ctx: Context) -> CompoundSelect[Any]:
             ranked.c.team_id,
             literal(FIFTY_FACES.id).label("rule_id"),
             ranked.c.first.label("achieved_at"),
-        ).where(ranked.c.n == FIFTY_FACES_N)
+        ).where(ranked.c.n == ctx.n(FIFTY_FACES, "opponents"))
     )
     sparring = (
         select(
@@ -229,7 +220,7 @@ def _statement(rows: CTE, ctx: Context) -> CompoundSelect[Any]:
             ranked_sparring.c.team_id,
             literal(SPARRING_PARTNERS.id).label("rule_id"),
             ranked_sparring.c.first.label("achieved_at"),
-        ).where(ranked_sparring.c.n == SPARRING_GAMES)
+        ).where(ranked_sparring.c.n == ctx.n(SPARRING_PARTNERS, "games"))
     )
     # SQLite refuses a compound member that orders or limits, so each is a subquery
     return union_all(*(select(m.subquery()) for m in members))
@@ -276,7 +267,7 @@ def _fold(
         dates = sorted(b.achieved_at for b in badges if b.achieved_at is not None)
         return dates[need - 1] if len(dates) >= need else None
 
-    if all(games(u) >= ROSTER_GAMES for u in users):
+    if all(games(u) >= ctx.n(FULL_ROSTER, "games") for u in users):
         pay(team, FULL_ROSTER, None)
     if all(wins(u) >= 1 for u in users):
         pay(team, EVERYONE_SCORES, None)
@@ -286,11 +277,16 @@ def _fold(
     hunters = [b for u in users if (b := badge(u, HUNTING_SEASON)) is not None]
     if len(hunters) == len(users):
         pay(team, EVERYONE_HUNTS, dated(hunters, len(users)))
-    if sum(min(points(u), TEAM_GOAL_CAP) for u in users) >= TEAM_GOAL_TARGET:
+    goal_cap = ctx.n(TEAM_GOAL, "cap")
+    if sum(min(points(u), goal_cap) for u in users) >= ctx.n(TEAM_GOAL, "points"):
         pay(team, TEAM_GOAL, None)
-    if sum(min(games(u), TWO_HUNDRED_CAP) for u in users) >= TWO_HUNDRED_TARGET:
+    two_hundred_cap = ctx.n(TWO_HUNDRED, "cap")
+    if sum(min(games(u), two_hundred_cap) for u in users) >= ctx.n(
+        TWO_HUNDRED, "games"
+    ):
         pay(team, TWO_HUNDRED, None)
-    if sum(min(gain(u), TEAM_CLIMB_CAP) for u in users) >= TEAM_CLIMB_TARGET:
+    climb_cap = ctx.n(TEAM_CLIMB, "cap")
+    if sum(min(gain(u), climb_cap) for u in users) >= ctx.n(TEAM_CLIMB, "mmr"):
         pay(team, TEAM_CLIMB, None)
     beaten: set[str] = set()
     for u in users:
@@ -318,9 +314,10 @@ def _fold(
             record[0] += played
             record[1] += int(row.wins or 0)
             per_day.setdefault(_date(row.day), {})[u] = played
+    week_games = ctx.n(EVERY_WEEK, "games")
     if all(
-        sum(1 for r in per_week.get(w, {}).values() if r[0] >= TEAM_WEEK_GAMES)
-        >= TEAM_WEEK_PLAYERS
+        sum(1 for r in per_week.get(w, {}).values() if r[0] >= week_games)
+        >= ctx.n(EVERY_WEEK, "players")
         for w in range(weeks)
     ):
         pay(team, EVERY_WEEK, None)
@@ -333,8 +330,10 @@ def _fold(
     }
     if all(u in last_week for u in users):
         pay(team, NOBODY_LEFT, None)
+    night_players = ctx.n(TEAM_NIGHT, "players")
     if any(
-        sum(by_user.values()) >= TEAM_NIGHT_GAMES and len(by_user) >= TEAM_NIGHT_PLAYERS
+        sum(by_user.values()) >= ctx.n(TEAM_NIGHT, "games")
+        and len(by_user) >= night_players
         for by_user in per_day.values()
     ):
         pay(team, TEAM_NIGHT, None)

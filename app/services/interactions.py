@@ -11,8 +11,7 @@ import json
 import os
 from collections.abc import Callable, Mapping
 from datetime import UTC, datetime, timedelta
-from math import ceil
-from typing import Any, NamedTuple
+from typing import Any
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
@@ -21,19 +20,22 @@ from fastapi.responses import JSONResponse
 from app.core.exceptions import ApiError
 from app.core.query import QueryUtil
 from app.models.season import SeasonPublic
-from app.models.series import SeriesPublic
-from app.models.series_cast import channel_name
-from app.models.team import TeamReduced
 from app.models.types import utcnow
-from app.models.user import UserPublic
 from app.models.w3c_ladder_match import LadderPlayer
 from app.services import discord, discord_posts, discord_roles, player_series
-from app.services.commands import score
-from app.services.fantasy_teams import FantasyTeamService
-from app.services.ladder import LadderService
+from app.services.commands import announce, postlinks, score, veto, w3c
+from app.services.commands.base import (
+    PRIVATE,
+    PUBLIC,
+    Services,
+    caller,
+    options_of,
+    own_series,
+    season_span,
+    series_line,
+    typed_option,
+)
 from app.services.seasons import SeasonService
-from app.services.series import SeriesService
-from app.services.users import UserService
 
 # Interaction types Discord sends
 PING, COMMAND, AUTOCOMPLETE = 1, 2, 4
@@ -103,19 +105,11 @@ COMMANDS: list[dict[str, Any]] = [
         ],
     },
     score.COMMAND,
+    postlinks.COMMAND,
+    veto.COMMAND,
+    announce.COMMAND,
+    w3c.STATS,
 ]
-# A reply is public in the channel, or a private edit of the deferred "thinking" reply
-PUBLIC, PRIVATE = True, False
-
-
-class Services(NamedTuple):
-    """What the commands read and write through."""
-
-    series: SeriesService
-    users: UserService
-    ladder: LadderService
-    seasons: SeasonService
-    fantasy: FantasyTeamService
 
 
 def verified(headers: Mapping[str, str], body: bytes) -> bool:
@@ -131,34 +125,6 @@ def verified(headers: Mapping[str, str], body: bytes) -> bool:
     except (InvalidSignature, ValueError):
         return False
     return True
-
-
-def options_of(payload: dict[str, Any]) -> dict[str, Any]:
-    return {
-        option["name"]: option["value"]
-        for option in payload.get("data", {}).get("options", [])
-    }
-
-
-def caller(payload: dict[str, Any]) -> tuple[str, str]:
-    """The Discord id and display name of the member who sent the interaction."""
-    user = payload.get("member", {}).get("user") or payload.get("user", {})
-    return str(user.get("id")), user.get("global_name") or user.get("username") or "?"
-
-
-def _series_line(series: SeriesPublic) -> str:
-    def side(player: UserPublic | None, team: TeamReduced | None) -> str:
-        name = (player.name if player else None) or "?"
-        return f"{name} ({team.name})" if team else name
-
-    match = series.match
-    stamp = f"<t:{int(series.date_time.timestamp())}:f>" if series.date_time else "TBD"
-    line = f"{stamp} · Wk {match.playday if match else '?'} · "
-    line += side(series.player1, match.team1 if match else None)
-    line += " vs " + side(series.player2, match.team2 if match else None)
-    for cast in series.casts:
-        line += f" · {channel_name(cast.channel_url)}"
-    return line + f" · #{series.id}"
 
 
 def upcoming(
@@ -183,24 +149,11 @@ def upcoming(
         "embeds": [
             {
                 "title": f"Series in the next {days} days",
-                "description": "\n".join(_series_line(row) for row in rows),
+                "description": "\n".join(series_line(row) for row in rows),
                 "color": 0x4A4DB8,
             }
         ]
     }, PUBLIC
-
-
-def own_series(payload: dict[str, Any], services: Services) -> list[SeriesPublic]:
-    """The caller's series of the current season, soonest first."""
-    discord_id, _ = caller(payload)
-    users = services.users.find_by_discord_id(discord_id)
-    season_id = discord_roles.current_season()
-    if not users or season_id is None:
-        return []
-    query = f"player1_id == {users[0].id} or player2_id == {users[0].id}"
-    return services.series.search_for_season(
-        season_id, QueryUtil.parse_query(query), sort="date_time"
-    )
 
 
 def schedule(
@@ -225,27 +178,15 @@ def schedule(
     )
     if isinstance(result, JSONResponse):
         return {"content": json.loads(bytes(result.body))["error"]}, PRIVATE
-    line = _series_line(services.series.get(int(options["series"])))
+    line = series_line(services.series.get(int(options["series"])))
     return {"content": f"Scheduled by <@{discord_id}>: {line}"}, PUBLIC
-
-
-def typed_option(payload: dict[str, Any]) -> str:
-    """What the member has typed so far in the option he is filling, lowercased."""
-    return next(
-        (
-            str(option.get("value", "")).lower()
-            for option in payload.get("data", {}).get("options", [])
-            if option.get("focused")
-        ),
-        "",
-    )
 
 
 def choices(payload: dict[str, Any], services: Services) -> list[dict[str, Any]]:
     """The autocomplete choices for a `series` option: the caller's own series."""
     typed = typed_option(payload)
     names = (
-        (_series_line(row).split(" · ", 1)[1][:100], row.id)
+        (series_line(row).split(" · ", 1)[1][:100], row.id)
         for row in own_series(payload, services)
     )
     return [
@@ -266,25 +207,6 @@ def _season_id(name: str | None, season_service: SeasonService) -> int | None:
         if name.lower() in (season.name or "").lower()
     ]
     return max(found, key=lambda season: season.id).id if found else None
-
-
-def _season_span(season: SeasonPublic) -> str:
-    """The season's date range and the calendar week of it today sits in.
-
-    The weeks are the range's, as the achievement window counts them, not the
-    play weeks: a review season can span more weeks than it plays.
-    """
-    start, end = season.start_date, season.end_date
-    span = f"{start or '?'} to {end or '?'}"
-    today = utcnow().date()
-    if start is None or today < start:
-        return span
-    if end is not None and today > end:
-        return f"{span} · ended"
-    week = (today - start).days // 7 + 1
-    if end is None:
-        return f"{span} · week {week}"
-    return f"{span} · week {week} of {ceil(((end - start).days + 1) / 7)}"
 
 
 def _snapshot(text: str, at: datetime | None) -> dict[str, Any]:
@@ -311,7 +233,7 @@ def fantasy_standings(
         "embeds": [
             {
                 "title": f"{season.name} · fantasy leaderboard",
-                "description": "\n".join([_season_span(season), "", *lines]),
+                "description": "\n".join([season_span(season), "", *lines]),
                 "color": 0x4A4DB8,
                 **_snapshot("Standings as of", None),
             }
@@ -373,7 +295,7 @@ def leaderboard(
         "embeds": [
             {
                 "title": f"{season.name} · {kind} leaderboard",
-                "description": "\n".join([_season_span(season), "", *lines]),
+                "description": "\n".join([season_span(season), "", *lines]),
                 "fields": [{"name": "Teams", "value": standing}],
                 "color": 0x4A4DB8,
                 **_snapshot(
@@ -390,15 +312,15 @@ HANDLERS = {
     "leaderboard": leaderboard,
     "schedule": schedule,
     "score": score.run,
+    "postlinks": postlinks.run,
+    "veto": veto.run,
+    "announce": announce.run,
+    "stats": w3c.stats,
 }
 # The autocomplete finders that are not the series list, keyed by command name
-CHOICES: dict[str, Callable[[dict[str, Any], Services], list[dict[str, Any]]]] = {}
-
-# Imported here, not at the top: a command module imports this one.
-from app.services.commands import postlinks
-
-COMMANDS.append(postlinks.COMMAND)
-HANDLERS["postlinks"] = postlinks.run
+CHOICES: dict[str, Callable[[dict[str, Any], Services], list[dict[str, Any]]]] = {
+    "stats": w3c.player_choices
+}
 
 
 def handle(payload: dict[str, Any], services: Services) -> dict[str, Any]:
@@ -437,16 +359,3 @@ def handle(payload: dict[str, Any], services: Services) -> dict[str, Any]:
 
 def register_commands() -> list[str]:
     return discord.register_guild_commands(COMMANDS)
-
-
-# Imported last: a command module imports PUBLIC, Services and the helpers above
-from app.services.commands import announce, veto
-
-COMMANDS += [veto.COMMAND, announce.COMMAND]
-HANDLERS |= {"veto": veto.run, "announce": announce.run}
-
-from app.services.commands import w3c
-
-COMMANDS.append(w3c.STATS)
-HANDLERS["stats"] = w3c.stats
-CHOICES["stats"] = w3c.player_choices

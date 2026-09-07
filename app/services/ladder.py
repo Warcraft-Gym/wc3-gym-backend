@@ -74,6 +74,8 @@ from app.models.w3c_stats import W3CSyncFailure, W3CSyncResult
 from app.services.users import SYNC_MAX_AGE, W3C_SYNC_WORKERS, UserService
 from app.services.w3c import THROTTLED_MESSAGE, W3CService
 
+# Per rule id, the numbers a scope's price rows override
+ParamSet = Mapping[str, Mapping[str, int]]
 # The stored ladder history starts at w3champions season 23, where GNL S17 began
 FIRST_W3C_SEASON = 23
 # The window of a player's whole stored ladder history
@@ -134,8 +136,8 @@ class LadderService:
             races = _vs_race(session, scope)
             by_hour = _by_hour(session, scope)
             games = _games_per_day(session, scope)
-            paid = _paid(session, season_id)
-            ctx = _context(session, roster, season)
+            paid, params = _paid(session, season_id)
+            ctx = _context(session, roster, season, params)
             earned = _earned(session, scope, ctx, paid, _any_race(user_ids, window))
             team_badges = team_achievements.earned(
                 session, scope, ctx, paid, totals, spans, days, races, earned
@@ -151,8 +153,8 @@ class LadderService:
                 total_games=sum(games.values()),
                 by_hour=by_hour,
                 per_day=_season_days(season, games),
-                achievement_rules=_rules(paid, False, ctx.pool),
-                team_achievement_rules=_rules(paid, True),
+                achievement_rules=_rules(paid, params, False, ctx.pool),
+                team_achievement_rules=_rules(paid, params, True),
                 teams=_teams(
                     roster, totals, spans, days, races, earned, stamps, team_badges
                 ),
@@ -272,8 +274,8 @@ class LadderService:
             totals = _totals(session, scope)
             spans = _mmr_span(session, _mmr_scope([user_id], window, season_id))
             roster = _roster(session, season_id) if season_id is not None else []
-            paid = _paid(session, season_id)
-            ctx = _context(session, roster, season)
+            paid, params = _paid(session, season_id)
+            ctx = _context(session, roster, season, params)
             earned = _earned(
                 session,
                 scope,
@@ -1147,8 +1149,10 @@ def _opponents(roster: Sequence[Row]) -> dict[int, frozenset[str]]:
     return {row.user_id: frozenset(everyone - by_team[row.team_id]) for row in roster}
 
 
-def _paid(session: OrmSession, season_id: int | None) -> achievements.PaidSet:
-    """What this scope pays for each rule.
+def _paid(
+    session: OrmSession, season_id: int | None
+) -> tuple[achievements.PaidSet, ParamSet]:
+    """What this scope pays for each rule, and the numbers it overrides.
 
     A season reads its own rows; the all-time scope reads the rows that name
     no season. A scope with no rows pays nothing, which is how a season drops
@@ -1160,20 +1164,30 @@ def _paid(session: OrmSession, season_id: int | None) -> achievements.PaidSet:
         else col(LadderAchievement.season_id).is_(None)
     )
     rows = session.execute(
-        select(col(LadderAchievement.rule_id), col(LadderAchievement.points)).where(
-            where
-        )
+        select(
+            col(LadderAchievement.rule_id),
+            col(LadderAchievement.points),
+            col(LadderAchievement.params),
+        ).where(where)
     ).all()
-    return {row.rule_id: row.points for row in rows}
+    return (
+        {row.rule_id: row.points for row in rows},
+        {row.rule_id: row.params for row in rows if row.params},
+    )
 
 
 def _rules(
-    paid: achievements.PaidSet, team: bool, pool: Sequence[str] = ()
+    paid: achievements.PaidSet, params: ParamSet, team: bool, pool: Sequence[str] = ()
 ) -> list[achievements.Achievement]:
-    """The player or the team catalogue this scope draws, at the prices this
-    scope pays, in catalogue order; the map rule once per map of the pool."""
+    """The player or the team catalogue this scope draws, at the prices and
+    numbers this scope pays, in catalogue order; the map rule once per map."""
     rules = [
-        replace(rule, points=paid[rule.id])
+        replace(
+            rule,
+            points=paid[rule.id],
+            params={**rule.params, **params.get(rule.id, {})},
+            description=rule.text(params.get(rule.id)),
+        )
         for rule in achievements.ACHIEVEMENTS
         if rule.id in paid and (rule.id in achievements.TEAM_IDS) is team
     ]
@@ -1203,12 +1217,15 @@ def _any_race(
 
 
 def _context(
-    session: OrmSession, roster: Sequence[Row], season: Season | None
+    session: OrmSession,
+    roster: Sequence[Row],
+    season: Season | None,
+    params: ParamSet,
 ) -> Context:
     """What the rules read beside the matches. Two statements with a season:
     the captains and the map pool; none over a lifetime."""
     if season is None:
-        return Context(lifetime=True)
+        return Context(lifetime=True, params=params)
     season_id = ident(season)
     captains = _captain_tags(session, season_id)
     teams: dict[int, list[int]] = defaultdict(list)
@@ -1234,6 +1251,7 @@ def _context(
             row.user_id for row in roster if (row.battleTag or "").lower() in captains
         ],
         league_race={row.user_id: row.race for row in roster},
+        params=params,
     )
 
 

@@ -195,7 +195,7 @@ def _oracle(season_id: int) -> dict[int, list[Achievement]]:
         window = _window(season)
         matches = _by_player(session, user_ids, _scope(user_ids, window, season_id))
         every_race = _by_player(session, user_ids, _any_race(user_ids, window))
-        ctx = _context(session, roster, season)
+        ctx = _context(session, roster, season, {})
         team_of_tag = {tag: team for team, tags in ctx.tags.items() for tag in tags}
         own_team = {user: team for team, users in ctx.teams.items() for user in users}
         # The season-wide race: the earliest 50th game, ties to the lowest id
@@ -205,7 +205,7 @@ def _oracle(season_id: int) -> dict[int, list[Achievement]]:
             if len(rows) >= 50
         ]
         first_fifty = min(fifty)[1] if fifty else None
-        paid = _paid(session, season_id)
+        paid, _ = _paid(session, season_id)
         return {
             row.user_id: achievement_oracle.earned(
                 matches[row.user_id],

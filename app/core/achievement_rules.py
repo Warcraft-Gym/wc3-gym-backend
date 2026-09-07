@@ -47,113 +47,76 @@ from sqlmodel import col
 from app.core import achievement_shapes as shape
 from app.core import ladder
 from app.core.achievements import (
-    ACHIEVEMENTS,
     ADDICTED,
     ALWAYS_HERE,
     ANTI_RANDOM,
-    AWAY_DAYS,
-    BUSY_DAY_GAMES,
-    BUSY_DAYS,
-    CAPTAIN_GAMES,
+    BY_ID,
     CAPTAINS_DUTY,
     CIVIL_WAR,
-    CLIMB,
     CLIMBER,
     COMEBACK,
-    COMEBACK_GAIN,
     DATS_FAKT_AP,
-    DISTINCT_DAYS,
     DOUBLE_UP,
     DUCK_HUNTING,
     EARLY_BIRD,
-    EARLY_DAYS,
     ELITE,
     ELITE_MMR,
     FALLING_STAR,
-    FIRST_TO,
     FIRST_TO_FIFTY,
     FIVE_A_DAY,
     FOUR_HORSEMEN,
     GAMES_25,
     GAMES_50,
     GAMES_100,
-    GAMES_TIERS,
-    GONE_DAYS,
-    GONE_GAMES,
     GRAND_TOUR,
     HAT_TRICK,
-    HOLD_GAMES,
     HOLD_THE_LINE,
-    HOLD_WITHIN,
     HOLIDAY,
     HOLIDAY_MAPS,
     HOME_TURF,
-    HOME_WINS,
-    HOUR_WINS,
     HUNTING_SEASON,
     I_AM_THE_CAPTAIN_NOW,
     JOIN_THEM,
     LADDER_GOAL,
     LADDER_GOAL_REACHED,
     LADDER_MAPS,
-    LADDER_SECONDS,
     LAST_CALL,
-    LAST_DAYS,
     LONG_GAME_S,
     LOSE_FIRST,
     MAP_WIN,
     MARATHON,
-    MARATHON_S,
     MIRROR_MASTER,
-    MIRROR_WINS,
     MONTH_OF_SUNDAYS,
     NEMESIS,
-    NEMESIS_WINS,
-    NET_WINS,
     NEVER_GONE,
     NEW_MAPS,
     NEWBIE,
     OFF_DUTY,
     ONE_SITTING,
     OPEN_SEASON,
-    OPEN_SEASON_N,
     PLUS_TWENTY,
     POWER_HOUR,
     RACE_ACHIEVEMENTS,
     RACE_IDS,
     RACE_TOUR,
-    RANDOM_WINS,
     REPEAT_OFFENDER,
-    REPEAT_STREAK,
-    REPEAT_TIMES,
     REVENGE,
     RISING_STAR,
     RIVAL,
-    RIVAL_GAMES,
     SAD_TROMBONE,
-    SITTING_GAMES,
-    SITTING_S,
     SLAYER_GAMES,
     SLAYER_RATE,
     SLAYERS,
-    SPEEDRUN_S,
     SPEEDRUNNER,
-    STREAK_DAYS,
     STREAK_WEEK,
     TOURIST,
     TWENTY_DAYS,
     TWENTY_HOURS,
     WEEK_ONE,
-    WEEK_ONE_GAMES,
-    WEEKEND_GAMES,
     WEEKEND_WARRIOR,
-    WEEKEND_WEEKS,
-    WEEKLY_GAMES,
     WEEKLY_REGULAR,
-    WEEKLY_WEEKS,
     WELCOME_BACK,
     WIDE_NET,
-    WIDE_NET_N,
     WIN_EVERY_MAP,
     WIN_FIRST,
     WIN_POOL,
@@ -175,9 +138,6 @@ VARIABLE = {
     DUCK_HUNTING.id: (5, " - {} kill(s)"),
     **{rule.id: (1, " - {} wins!") for rule in RACE_ACHIEVEMENTS.values()},
 }
-
-# The catalogue by the id the statement answers
-BY_ID = {rule.id: rule for rule in ACHIEVEMENTS}
 
 # The race the badge names, and the tie the bundle breaks by the lowest race id
 RACE_RULES = {Race[code]: rule.id for code, rule in RACE_ACHIEVEMENTS.items()}
@@ -214,6 +174,12 @@ class Context:
     captain_ids: Sequence[int] = ()
     league_race: Mapping[int, str | None] = field(default_factory=dict)
     lifetime: bool = False
+    # Per rule id, the numbers this scope's price rows override
+    params: Mapping[str, Mapping[str, int]] = field(default_factory=dict)
+
+    def n(self, rule: Achievement, key: str) -> int:
+        """The number a rule reads: the scope's override, else the rule's default."""
+        return self.params.get(rule.id, {}).get(key, rule.params[key])
 
     @property
     def opponents(self) -> dict[int, frozenset[str]]:
@@ -279,11 +245,14 @@ def earned(
         return {}
     order = {rule_id: n for n, (ids, _) in enumerate(wanted) for rule_id in ids}
     rows = session.execute(union_all(*(_member(query) for _, query in wanted))).all()
-    return _badges(rows, paid, order)
+    return _badges(rows, paid, order, ctx.params)
 
 
 def _badges(
-    rows: Iterable[Row[Any]], paid: PaidSet, order: Mapping[str, int]
+    rows: Iterable[Row[Any]],
+    paid: PaidSet,
+    order: Mapping[str, int],
+    params: Mapping[str, Mapping[str, int]] = {},
 ) -> dict[int, list[Achievement]]:
     """The badges these rows read as, per player, oldest first.
 
@@ -302,7 +271,7 @@ def _badges(
         badge = replace(
             rule,
             points=price + rate * row.extra,
-            description=rule.description + suffix.format(row.extra),
+            description=rule.text(params.get(priced)) + suffix.format(row.extra),
             achieved_at=row.achieved_at,
         )
         found.setdefault(row.user_id, []).append(
@@ -331,9 +300,18 @@ def _queries(rows: CTE, ctx: Context) -> list[Query]:
         ((SAD_TROMBONE.id,), _nth_result(rows, False, 100, SAD_TROMBONE.id)),
         ((ELITE.id,), _mmr_reaches(rows, ELITE_MMR, ELITE.id)),
         ((DATS_FAKT_AP.id,), _streak(rows, False, 10, DATS_FAKT_AP.id)),
-        ((WIN_STREAK.id,), _streak(rows, True, 5, WIN_STREAK.id)),
-        ((WIN_STREAK_2.id,), _streak(rows, True, 10, WIN_STREAK_2.id)),
-        ((HAT_TRICK.id,), _streak(rows, True, 3, HAT_TRICK.id)),
+        (
+            (WIN_STREAK.id,),
+            _streak(rows, True, ctx.n(WIN_STREAK, "wins"), WIN_STREAK.id),
+        ),
+        (
+            (WIN_STREAK_2.id,),
+            _streak(rows, True, ctx.n(WIN_STREAK_2, "wins"), WIN_STREAK_2.id),
+        ),
+        (
+            (HAT_TRICK.id,),
+            _streak(rows, True, ctx.n(HAT_TRICK, "wins"), HAT_TRICK.id),
+        ),
     ]
     if any(opponents.values()):
         queries.append(
@@ -386,71 +364,131 @@ def _s19_queries(rows: CTE, ctx: Context) -> list[Query]:
         rows.c.played_race.is_not(None), rows.c.played_race == rows.c.opp_played_race
     )
     queries = [
-        _one(GAMES_25, shape.nth(rows, GAMES_25.id, GAMES_TIERS[0])),
-        _one(GAMES_50, shape.nth(rows, GAMES_50.id, GAMES_TIERS[1])),
-        _one(GAMES_100, shape.nth(rows, GAMES_100.id, GAMES_TIERS[2])),
+        _one(GAMES_25, shape.nth(rows, GAMES_25.id, ctx.n(GAMES_25, "games"))),
+        _one(GAMES_50, shape.nth(rows, GAMES_50.id, ctx.n(GAMES_50, "games"))),
+        _one(GAMES_100, shape.nth(rows, GAMES_100.id, ctx.n(GAMES_100, "games"))),
         _one(
             PLUS_TWENTY,
-            shape.running(rows, PLUS_TWENTY.id, case((won, 1), else_=-1), NET_WINS),
+            shape.running(
+                rows,
+                PLUS_TWENTY.id,
+                case((won, 1), else_=-1),
+                ctx.n(PLUS_TWENTY, "wins"),
+            ),
         ),
         _one(
             TWENTY_HOURS,
-            shape.running(rows, TWENTY_HOURS.id, rows.c.duration_s, LADDER_SECONDS),
+            shape.running(
+                rows,
+                TWENTY_HOURS.id,
+                rows.c.duration_s,
+                ctx.n(TWENTY_HOURS, "hours") * 3600,
+            ),
         ),
         _one(
             STREAK_WEEK,
             shape.consecutive_periods(
-                rows, STREAK_WEEK.id, shape.day_number(rows), 1, STREAK_DAYS
+                rows,
+                STREAK_WEEK.id,
+                shape.day_number(rows),
+                1,
+                ctx.n(STREAK_WEEK, "days"),
             ),
         ),
         _one(
             TWENTY_DAYS,
-            shape.periods(rows, TWENTY_DAYS.id, rows.c.day, 1, DISTINCT_DAYS),
+            shape.periods(
+                rows, TWENTY_DAYS.id, rows.c.day, 1, ctx.n(TWENTY_DAYS, "days")
+            ),
         ),
         _one(
             FIVE_A_DAY,
-            shape.periods(rows, FIVE_A_DAY.id, rows.c.day, BUSY_DAY_GAMES, BUSY_DAYS),
+            shape.periods(
+                rows,
+                FIVE_A_DAY.id,
+                rows.c.day,
+                ctx.n(FIVE_A_DAY, "games"),
+                ctx.n(FIVE_A_DAY, "days"),
+            ),
         ),
         _one(
             WELCOME_BACK,
-            shape.after_break(rows, WELCOME_BACK.id, AWAY_DAYS * shape.DAY_S),
+            shape.after_break(
+                rows, WELCOME_BACK.id, ctx.n(WELCOME_BACK, "days") * shape.DAY_S
+            ),
         ),
-        _one(ONE_SITTING, shape.within(rows, ONE_SITTING.id, SITTING_GAMES, SITTING_S)),
-        _one(POWER_HOUR, shape.within(rows, POWER_HOUR.id, HOUR_WINS, 3600, won)),
+        _one(
+            ONE_SITTING,
+            shape.within(
+                rows,
+                ONE_SITTING.id,
+                ctx.n(ONE_SITTING, "games"),
+                ctx.n(ONE_SITTING, "hours") * 3600,
+            ),
+        ),
+        _one(
+            POWER_HOUR,
+            shape.within(rows, POWER_HOUR.id, ctx.n(POWER_HOUR, "wins"), 3600, won),
+        ),
         _one(
             WEEKEND_WARRIOR,
-            shape.nth(rows, WEEKEND_WARRIOR.id, WEEKEND_GAMES, shape.weekend(rows)),
+            shape.nth(
+                rows,
+                WEEKEND_WARRIOR.id,
+                ctx.n(WEEKEND_WARRIOR, "games"),
+                shape.weekend(rows),
+            ),
         ),
         _one(
             REPEAT_OFFENDER,
             shape.streak_count(
-                rows, REPEAT_OFFENDER.id, True, REPEAT_STREAK, REPEAT_TIMES
+                rows,
+                REPEAT_OFFENDER.id,
+                True,
+                ctx.n(REPEAT_OFFENDER, "streak"),
+                ctx.n(REPEAT_OFFENDER, "times"),
             ),
         ),
-        _one(CLIMBER, shape.span(rows, CLIMBER.id, CLIMB)),
+        _one(CLIMBER, shape.span(rows, CLIMBER.id, ctx.n(CLIMBER, "mmr"))),
         _one(
             HOLD_THE_LINE,
-            shape.held_peak(rows, HOLD_THE_LINE.id, HOLD_WITHIN, HOLD_GAMES),
+            shape.held_peak(
+                rows,
+                HOLD_THE_LINE.id,
+                ctx.n(HOLD_THE_LINE, "mmr"),
+                ctx.n(HOLD_THE_LINE, "games"),
+            ),
         ),
         _one(
             COMEBACK,
-            shape.from_low(rows, COMEBACK.id, COMEBACK_GAIN, HOLD_GAMES),
+            shape.from_low(
+                rows, COMEBACK.id, ctx.n(COMEBACK, "mmr"), ctx.n(COMEBACK, "games")
+            ),
         ),
         _one(
             HOME_TURF,
-            shape.group_nth(rows, HOME_TURF.id, HOME_WINS, (rows.c.map_name,), won),
+            shape.group_nth(
+                rows, HOME_TURF.id, ctx.n(HOME_TURF, "wins"), (rows.c.map_name,), won
+            ),
         ),
         _one(
             RACE_TOUR,
             shape.covers(rows, RACE_TOUR.id, rows.c.opp_race, list(RACE_RULES), won),
         ),
         _one(
-            MIRROR_MASTER, shape.nth(rows, MIRROR_MASTER.id, MIRROR_WINS, won, mirror)
+            MIRROR_MASTER,
+            shape.nth(
+                rows, MIRROR_MASTER.id, ctx.n(MIRROR_MASTER, "wins"), won, mirror
+            ),
         ),
         _one(
             ANTI_RANDOM,
             shape.nth(
-                rows, ANTI_RANDOM.id, RANDOM_WINS, won, rows.c.opp_race == Race.RANDOM
+                rows,
+                ANTI_RANDOM.id,
+                ctx.n(ANTI_RANDOM, "wins"),
+                won,
+                rows.c.opp_race == Race.RANDOM,
             ),
         ),
         (
@@ -466,23 +504,42 @@ def _s19_queries(rows: CTE, ctx: Context) -> list[Query]:
         _one(
             NEMESIS,
             shape.group_nth(
-                rows, NEMESIS.id, NEMESIS_WINS, (tag,), won, tag.is_not(None)
+                rows, NEMESIS.id, ctx.n(NEMESIS, "wins"), (tag,), won, tag.is_not(None)
             ),
         ),
         _one(REVENGE, shape.revenge(rows, REVENGE.id, tag)),
         _one(
             RIVAL,
-            shape.group_nth(rows, RIVAL.id, RIVAL_GAMES, (tag,), tag.is_not(None)),
+            shape.group_nth(
+                rows, RIVAL.id, ctx.n(RIVAL, "games"), (tag,), tag.is_not(None)
+            ),
         ),
-        _one(WIDE_NET, shape.covers_count(rows, WIDE_NET.id, tag, WIDE_NET_N, won)),
+        _one(
+            WIDE_NET,
+            shape.covers_count(
+                rows, WIDE_NET.id, tag, ctx.n(WIDE_NET, "opponents"), won
+            ),
+        ),
         _one(
             SPEEDRUNNER,
-            shape.first(rows, SPEEDRUNNER.id, won, rows.c.duration_s <= SPEEDRUN_S),
+            shape.first(
+                rows,
+                SPEEDRUNNER.id,
+                won,
+                rows.c.duration_s <= ctx.n(SPEEDRUNNER, "minutes") * 60,
+            ),
         ),
-        _one(MARATHON, shape.first(rows, MARATHON.id, rows.c.duration_s >= MARATHON_S)),
+        _one(
+            MARATHON,
+            shape.first(
+                rows, MARATHON.id, rows.c.duration_s >= ctx.n(MARATHON, "minutes") * 60
+            ),
+        ),
         _one(
             FIRST_TO_FIFTY,
-            shape.first_across(shape.nth(rows, FIRST_TO_FIFTY.id, FIRST_TO)),
+            shape.first_across(
+                shape.nth(rows, FIRST_TO_FIFTY.id, ctx.n(FIRST_TO_FIFTY, "games"))
+            ),
         ),
     ]
     if ctx.window is not None:
@@ -490,16 +547,26 @@ def _s19_queries(rows: CTE, ctx: Context) -> list[Query]:
             shape.day_index(rows, ctx.since_day),
             shape.week_index(rows, ctx.since_day),
         )
-        last_days = ctx.until - LAST_DAYS * shape.DAY_S
+        last_days = ctx.until - ctx.n(LAST_CALL, "days") * shape.DAY_S
         queries += [
-            _one(EARLY_BIRD, shape.first(rows, EARLY_BIRD.id, day < EARLY_DAYS)),
-            _one(WEEK_ONE, shape.nth(rows, WEEK_ONE.id, WEEK_ONE_GAMES, day < 7)),
+            _one(
+                EARLY_BIRD,
+                shape.first(rows, EARLY_BIRD.id, day < ctx.n(EARLY_BIRD, "days")),
+            ),
+            _one(
+                WEEK_ONE,
+                shape.nth(rows, WEEK_ONE.id, ctx.n(WEEK_ONE, "games"), day < 7),
+            ),
             _one(LAST_CALL, shape.first(rows, LAST_CALL.id, rows.c.epoch > last_days)),
             _one(ALWAYS_HERE, shape.periods(rows, ALWAYS_HERE.id, week, 1, ctx.weeks)),
             _one(
                 WEEKLY_REGULAR,
                 shape.periods(
-                    rows, WEEKLY_REGULAR.id, week, WEEKLY_GAMES, WEEKLY_WEEKS
+                    rows,
+                    WEEKLY_REGULAR.id,
+                    week,
+                    ctx.n(WEEKLY_REGULAR, "games"),
+                    ctx.n(WEEKLY_REGULAR, "weeks"),
                 ),
             ),
             _one(
@@ -509,7 +576,7 @@ def _s19_queries(rows: CTE, ctx: Context) -> list[Query]:
                     MONTH_OF_SUNDAYS.id,
                     week,
                     1,
-                    WEEKEND_WEEKS,
+                    ctx.n(MONTH_OF_SUNDAYS, "weekends"),
                     shape.weekend(rows),
                 ),
             ),
@@ -518,8 +585,8 @@ def _s19_queries(rows: CTE, ctx: Context) -> list[Query]:
                 shape.no_break(
                     rows,
                     NEVER_GONE.id,
-                    GONE_DAYS * shape.DAY_S,
-                    GONE_GAMES,
+                    ctx.n(NEVER_GONE, "days") * shape.DAY_S,
+                    ctx.n(NEVER_GONE, "games"),
                     ctx.since_day,
                     ctx.until,
                 ),
@@ -550,7 +617,12 @@ def _s19_queries(rows: CTE, ctx: Context) -> list[Query]:
             _one(
                 OPEN_SEASON,
                 shape.covers_count(
-                    rows, OPEN_SEASON.id, tag, OPEN_SEASON_N, won, member
+                    rows,
+                    OPEN_SEASON.id,
+                    tag,
+                    ctx.n(OPEN_SEASON, "players"),
+                    won,
+                    member,
                 ),
             ),
             _one(
@@ -582,7 +654,7 @@ def _s19_queries(rows: CTE, ctx: Context) -> list[Query]:
                 shape.nth(
                     rows,
                     CAPTAINS_DUTY.id,
-                    CAPTAIN_GAMES,
+                    ctx.n(CAPTAINS_DUTY, "games"),
                     rows.c.user_id.in_(list(ctx.captain_ids)),
                 ),
             )

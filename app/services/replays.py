@@ -71,6 +71,17 @@ def confirm(
         return [public(row) for row in rows]
 
 
+def for_series(series_id: int) -> list[SeriesReplayPublic]:
+    """The replay of every game played in this series, in game order."""
+    with Session() as session:
+        rows = session.scalars(
+            select(DBSeriesReplay)
+            .where(col(DBSeriesReplay.series_id) == series_id)
+            .order_by(col(DBSeriesReplay.game_no))
+        )
+        return [public(row) for row in rows]
+
+
 def for_match(match_id: int) -> list[SeriesReplayPublic]:
     """The replay of every game played in this match, in series and game order."""
     with Session() as session:

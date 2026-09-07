@@ -3,17 +3,7 @@
 from collections.abc import Callable
 from typing import Any
 
-import pytest
 from httpx2 import Client
-
-
-@pytest.fixture(autouse=True)
-def no_discord(monkeypatch: pytest.MonkeyPatch) -> None:
-    from app.services import player_series
-
-    monkeypatch.setattr(
-        player_series, "_notify_discord_series_update", lambda *a: False
-    )
 
 
 def test_a_report_with_its_replays_lands(

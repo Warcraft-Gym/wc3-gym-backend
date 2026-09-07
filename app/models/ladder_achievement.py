@@ -10,7 +10,10 @@ A row with no season is scored over the player's whole history rather than
 one season.
 """
 
-from sqlalchemy import Index, text
+from typing import Annotated
+
+from pydantic import model_validator
+from sqlalchemy import JSON, Index, text
 from sqlmodel import Field, SQLModel
 
 from app.models.base import DBModel
@@ -24,6 +27,8 @@ class LadderAchievementBase(SQLModel):
     # The id of a rule in core.achievements; a row naming no rule pays nothing
     rule_id: str = Field(max_length=40)
     points: int
+    # The rule's numbers this row overrides, `{}` for the rule's defaults
+    params: dict[str, int] = Field(default_factory=dict, sa_type=JSON)
 
 
 class LadderAchievement(LadderAchievementBase, DBModel, table=True):
@@ -47,6 +52,64 @@ class LadderAchievement(LadderAchievementBase, DBModel, table=True):
     )
 
     id: int | None = Field(default=None, primary_key=True)
+
+
+class SeasonAchievementWrite(SQLModel):
+    """One row of a season's set, as the admin page sends it."""
+
+    rule_id: str = Field(max_length=40)
+    points: int = Field(ge=0)
+    # The rule's numbers; a key the rule does not read is rejected
+    params: dict[str, Annotated[int, Field(ge=1)]] = {}
+
+    @model_validator(mode="after")
+    def _rule_reads_every_key(self) -> "SeasonAchievementWrite":
+        from app.core.achievements import BY_ID
+
+        rule = BY_ID.get(self.rule_id)
+        if rule is None:
+            raise ValueError(f"No rule {self.rule_id}")
+        unknown = sorted(self.params.keys() - rule.params.keys())
+        if unknown:
+            raise ValueError(f"{self.rule_id} reads no {', '.join(unknown)}")
+        return self
+
+
+class SeasonAchievementPublic(SQLModel):
+    """A rule as one scope pays it: the catalogue text, the scope's price and
+    numbers. `description` keeps its `{key}` placeholders for the editor."""
+
+    rule_id: str
+    name: str
+    description: str
+    icon: str
+    team: bool
+    points: int
+    params: dict[str, int]
+
+    @classmethod
+    def of(
+        cls, rule_id: str, points: int, params: dict[str, int] | None = None
+    ) -> "SeasonAchievementPublic":
+        from app.core.achievements import BY_ID, TEAM_IDS
+
+        rule = BY_ID[rule_id]
+        return cls(
+            rule_id=rule.id,
+            name=rule.name,
+            description=rule.description,
+            icon=rule.icon,
+            team=rule.id in TEAM_IDS,
+            points=points,
+            params={**rule.params, **(params or {})},
+        )
+
+
+def catalogue() -> list[SeasonAchievementPublic]:
+    """Every rule at its catalogue price and numbers."""
+    from app.core.achievements import ACHIEVEMENTS
+
+    return [SeasonAchievementPublic.of(rule.id, rule.points) for rule in ACHIEVEMENTS]
 
 
 def default_rows(season_id: int | None) -> list["LadderAchievement"]:
