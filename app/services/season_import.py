@@ -36,6 +36,7 @@ from app.models.relationships import (
 )
 from app.models.season import Season, SeasonCreate
 from app.models.series import Series, SeriesCreate
+from app.models.series_cast import SeriesCast, channel_url
 from app.models.team import Team, TeamCreate
 from app.models.team_season import DBTeamSeason
 from app.models.user import User, UserCreate
@@ -558,7 +559,6 @@ def _series_values(
         "player1_score": whole_number(row.get("Player1 Score")),
         "player2_score": whole_number(row.get("Player2 Score")),
         "host_player_id": host.id,
-        "caster": row.get("Caster"),
         "is_fantasy_match": bool(row.get("Is Fantasy Match")),
     }
     if row.get("Date Time") is not None:
@@ -583,6 +583,7 @@ def _series(
 
     written: list[Series] = []
     old_ids: dict[int, Series] = {}
+    casters: list[tuple[Series, str]] = []
     for row in rows:
         match_id = matches.get(whole_number(row["Match ID"]))
         player1 = users.by_old_id.get(whole_number(row["Player1 ID"]))
@@ -604,11 +605,26 @@ def _series(
         old_id = whole_number(row["ID"])
         if old_id:
             old_ids[old_id] = series
+        if row.get("Caster"):
+            casters.append((series, str(row["Caster"])))
     session.add_all(written)
+    session.flush()
+    # A Caster cell is a channel link or a Twitch login; the cast has no account
+    for series, caster in casters:
+        url = _cast_url(caster)
+        if all(cast.channel_url != url for cast in series.casts):
+            series.casts.append(SeriesCast(channel_url=url))
     session.flush()
     return {
         old_id: series.id for old_id, series in old_ids.items() if series.id is not None
     }
+
+
+def _cast_url(caster: str) -> str:
+    try:
+        return channel_url(caster)
+    except ValueError:
+        return f"https://www.twitch.tv/{caster.strip().lstrip('@').lower()}"
 
 
 def _fantasy_users(session: OrmSession, sheets: Sheets, users: Users) -> None:

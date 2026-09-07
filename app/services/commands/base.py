@@ -8,6 +8,7 @@ from typing import Any, NamedTuple
 from app.core.query import QueryUtil
 from app.models.season import SeasonPublic
 from app.models.series import SeriesPublic
+from app.models.series_cast import channel_name
 from app.models.team import TeamReduced
 from app.models.types import utcnow
 from app.models.user import UserPublic
@@ -67,8 +68,8 @@ def series_line(series: SeriesPublic) -> str:
     line = f"{stamp} · Wk {match.playday if match else '?'} · "
     line += side(series.player1, match.team1 if match else None)
     line += " vs " + side(series.player2, match.team2 if match else None)
-    if series.caster:
-        line += f" · twitch.tv/{series.caster}"
+    for cast in series.casts:
+        line += f" · {channel_name(cast.channel_url)}"
     return line + f" · #{series.id}"
 
 

@@ -21,12 +21,11 @@ COMMAND: dict[str, Any] = {
 
 def card(series: SeriesPublic) -> dict[str, Any]:
     """An embed with the time, the caster and the veto."""
-    # The series line without its stamp, caster and id: "Wk 1 · A (Alpha) vs B (Beta)"
+    # The series line without its stamp, casts and id: "Wk 1 · A (Alpha) vs B (Beta)"
     title = " · ".join(series_line(series).split(" · ")[1:3])
     stamp = int(series.date_time.timestamp()) if series.date_time else None
     lines = [f"<t:{stamp}:F> (<t:{stamp}:R>)" if stamp else "Not scheduled yet"]
-    if series.caster:
-        lines.append(f"Cast on https://twitch.tv/{series.caster}")
+    lines += [f"Cast on {cast.channel_url}" for cast in series.casts]
     lines += [state(series), board_link(series.id)]
     return {
         "content": f"{ping(series.player1)} vs {ping(series.player2)}",
