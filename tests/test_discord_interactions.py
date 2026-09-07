@@ -306,6 +306,7 @@ def test_register_commands_puts_the_guild_list(monkeypatch: pytest.MonkeyPatch) 
         "veto",
         "announce",
         "stats",
+        "availability",
     ]
     assert seen == [
         (
