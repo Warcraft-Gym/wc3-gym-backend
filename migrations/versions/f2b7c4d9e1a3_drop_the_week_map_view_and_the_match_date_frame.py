@@ -5,7 +5,7 @@ rounds migration ran; nothing reads it now. A round's dates replace the
 free-text date frame of a match, so the column goes too.
 
 Revision ID: f2b7c4d9e1a3
-Revises: a9c4e7d1f2b3
+Revises: b2d7f4e9c1a6
 Create Date: 2026-09-07 20:00:00.000000
 
 """
@@ -17,7 +17,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "f2b7c4d9e1a3"
-down_revision: str | Sequence[str] | None = "a9c4e7d1f2b3"
+down_revision: str | Sequence[str] | None = "b2d7f4e9c1a6"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
