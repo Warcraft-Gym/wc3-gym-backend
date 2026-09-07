@@ -13,7 +13,6 @@ import.
 import logging
 import os
 
-from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -37,10 +36,10 @@ logger = logging.getLogger(__name__)
 def create_app(db_url: str | None = None) -> FastAPI:
     """Build the application: engine, routers.
 
-    Reads the environment when the caller passes no db_url. The tables come
+    Reads the process environment when the caller passes no db_url; no .env
+    file is read here, the entrypoint or the just recipe loads one. The tables come
     from `alembic upgrade head`, which runs before the server starts.
     """
-    load_dotenv()
     # A wrong LOG_LEVEL must not stop the application.
     logging.basicConfig(
         level=getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper(), logging.INFO)
