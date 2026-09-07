@@ -10,6 +10,7 @@ from sqlmodel import col
 
 from app.core.db import Session
 from app.core.exceptions import BadRequestError, NotFoundError
+from app.models.relationships import SeasonRoundPublic
 from app.models.season import Season
 from app.models.user import User
 from app.models.user_season_availability import (
@@ -23,6 +24,14 @@ class AvailabilityService:
     def season_weeks(self, season_id: int) -> int:
         with Session.begin() as session:
             return _weeks(session, season_id)
+
+    def season_rounds(self, season_id: int) -> list[SeasonRoundPublic]:
+        """The rounds the dashboard asks about, with their date windows."""
+        with Session.begin() as session:
+            season = session.get(Season, season_id)
+            if not season:
+                raise NotFoundError(f"Season not found by Id: {season_id}")
+            return [SeasonRoundPublic.from_row(row) for row in season.rounds]
 
     def for_user(
         self, user_id: int, season_id: int
