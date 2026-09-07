@@ -6,8 +6,12 @@ enough to import cleanly (the engine connects lazily on first query).
 
 import os
 
+from dotenv import load_dotenv
+
 from api.preview_db import runtime_database, with_database
 from app.main import create_app
+
+load_dotenv()  # a bare `uvicorn api.index:app` on a laptop; Vercel has no .env
 
 if name := runtime_database():
     os.environ["DB_URL"] = with_database(os.environ["DB_URL"], name)
