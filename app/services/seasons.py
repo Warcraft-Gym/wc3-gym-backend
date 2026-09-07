@@ -1,6 +1,6 @@
 import logging
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as OrmSession
 from sqlalchemy.orm import joinedload, noload, selectinload
@@ -10,7 +10,12 @@ from app.core.db import Session, rel
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.core.query import QueryElement, QueryUtil
 from app.models.enums import Race
-from app.models.ladder_achievement import default_rows
+from app.models.ladder_achievement import (
+    LadderAchievement,
+    SeasonAchievementPublic,
+    SeasonAchievementWrite,
+    default_rows,
+)
 from app.models.map import LadderMapRow, Map
 from app.models.relationships import (
     DBMapSeason,
@@ -46,6 +51,22 @@ _SEASON_OPTIONS = (
     selectinload(rel(Season.week_maps)),
     noload(rel(Season.signup_users)),
 )
+
+
+def _achievement_set(
+    session: OrmSession, season_id: int
+) -> list[SeasonAchievementPublic]:
+    from app.core.achievements import BY_ID
+
+    order = {rule_id: n for n, rule_id in enumerate(BY_ID)}
+    rows = session.scalars(
+        select(LadderAchievement).where(col(LadderAchievement.season_id) == season_id)
+    ).all()
+    return [
+        SeasonAchievementPublic.of(row.rule_id, row.points, row.params)
+        for row in sorted(rows, key=lambda row: order.get(row.rule_id, len(order)))
+        if row.rule_id in BY_ID
+    ]
 
 
 def _public(session: OrmSession, season: Season) -> SeasonPublic:
@@ -84,6 +105,46 @@ class SeasonService:
     def delete(self, season_id: int) -> None:
         with Session.begin() as session:
             Season.delete(session, season_id)
+
+    def achievements(self, season_id: int) -> list[SeasonAchievementPublic]:
+        """The rules this season pays, in catalogue order."""
+        with Session.begin() as session:
+            if session.get(Season, season_id) is None:
+                raise NotFoundError("Season not found")
+            return _achievement_set(session, season_id)
+
+    def set_achievements(
+        self, season_id: int, rows: list[SeasonAchievementWrite]
+    ) -> list[SeasonAchievementPublic]:
+        """Replace the season's set. A row stores only the numbers that differ
+        from the rule's defaults, so an untouched row follows the code."""
+        from app.core.achievements import BY_ID
+
+        if len({row.rule_id for row in rows}) < len(rows):
+            raise BadRequestError("A rule is listed twice")
+        with Session.begin() as session:
+            if session.get(Season, season_id) is None:
+                raise NotFoundError("Season not found")
+            session.execute(
+                delete(LadderAchievement).where(
+                    col(LadderAchievement.season_id) == season_id
+                )
+            )
+            session.add_all(
+                LadderAchievement(
+                    season_id=season_id,
+                    rule_id=row.rule_id,
+                    points=row.points,
+                    params={
+                        key: value
+                        for key, value in row.params.items()
+                        if value != BY_ID[row.rule_id].params[key]
+                    },
+                )
+                for row in rows
+            )
+            session.flush()
+            return _achievement_set(session, season_id)
 
     def get(self, season_id: int) -> SeasonPublic:
         with Session.begin() as session:
