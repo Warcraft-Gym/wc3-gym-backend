@@ -10,6 +10,7 @@ import pytest
 from httpx2 import Client
 
 from app.core.db import Session
+from app.models.enums import Race
 from app.models.relationships import DBUserSeasonSignup
 from tests.test_discord_auth import ACCOUNT, SESSION, stub_clerk
 
@@ -98,7 +99,9 @@ def test_me_says_whether_the_player_signed_up(
     with Session() as session:
         session.add(
             DBUserSeasonSignup(
-                user_id=seeded["player_ids"][0], season_id=seeded["season_id"]
+                user_id=seeded["player_ids"][0],
+                season_id=seeded["season_id"],
+                race=Race.HU,
             )
         )
         session.commit()

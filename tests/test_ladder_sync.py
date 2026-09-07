@@ -141,7 +141,9 @@ def add_player(name: str, battle_tag: str) -> UserReduced:
 def sign_up(season_id: int, user_id: int, team_id: int | None = None) -> None:
     """Sign a player up, and put him on a team when one is named."""
     with Session() as session:
-        session.add(DBUserSeasonSignup(user_id=user_id, season_id=season_id))
+        session.add(
+            DBUserSeasonSignup(user_id=user_id, season_id=season_id, race=Race.HU)
+        )
         if team_id is not None:
             session.add(
                 DBUserTeamSeason(user_id=user_id, team_id=team_id, season_id=season_id)

@@ -441,7 +441,11 @@ def test_a_tier_stored_before_any_apply_date_is_not_a_pin(
     season = seeded["season_id"]
     p1 = seeded["player_ids"][0]
     with Session() as session:
-        session.add(DBUserSeasonSignup(user_id=p1, season_id=season, fantasy_tier=3))
+        session.add(
+            DBUserSeasonSignup(
+                user_id=p1, season_id=season, race=Race.HU, fantasy_tier=3
+            )
+        )
         session.commit()
     row = next(
         r for r in get_json(client, f"/seasons/{season}/signups") if r["id"] == p1

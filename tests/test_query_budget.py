@@ -114,7 +114,9 @@ def league(app: FastAPI, seeded: dict[str, Any]) -> dict[str, Any]:
                     )
                 )
             session.add(
-                DBUserSeasonSignup(user_id=user_id, season_id=seeded["season_id"])
+                DBUserSeasonSignup(
+                    user_id=user_id, season_id=seeded["season_id"], race=Race.HU
+                )
             )
         session.add(
             DraftSeries(
