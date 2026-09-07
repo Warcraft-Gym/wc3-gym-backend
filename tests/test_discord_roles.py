@@ -15,7 +15,7 @@ from app.core.db import Session
 from app.models.admin_grant import AdminGrant
 from app.models.base import ident
 from app.models.discord_role_binding import DiscordRoleBinding
-from app.models.enums import RoleKind, RoleScope
+from app.models.enums import Race, RoleKind, RoleScope
 from app.models.relationships import DBTeamSeasonCaptain, DBUserSeasonSignup
 from app.models.season import Season
 from app.models.user import User
@@ -139,7 +139,9 @@ def test_a_signup_earns_the_participant_role(seeded: dict[str, Any]) -> None:
         session.commit()
         waiting_id = ident(waiting)
         session.add(
-            DBUserSeasonSignup(user_id=waiting_id, season_id=seeded["season_id"])
+            DBUserSeasonSignup(
+                user_id=waiting_id, season_id=seeded["season_id"], race=Race.HU
+            )
         )
         session.commit()
 

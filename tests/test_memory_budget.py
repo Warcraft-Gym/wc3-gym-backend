@@ -40,7 +40,9 @@ def crowded(app: FastAPI, seeded: dict[str, Any]) -> dict[str, Any]:
         for user_id in seeded["player_ids"]:
             for season in seasons:
                 session.add(
-                    DBUserSeasonSignup(user_id=user_id, season_id=ident(season))
+                    DBUserSeasonSignup(
+                        user_id=user_id, season_id=ident(season), race=Race.HU
+                    )
                 )
             session.add(
                 W3CStats(user_id=user_id, wc3_season=20, race=Race.HU, mmr=1500)

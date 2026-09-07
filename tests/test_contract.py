@@ -96,7 +96,9 @@ def test_season_signups_answer_list_rows(
     with Session() as session:
         session.add(
             DBUserSeasonSignup(
-                user_id=seeded["player_ids"][0], season_id=seeded["season_id"]
+                user_id=seeded["player_ids"][0],
+                season_id=seeded["season_id"],
+                race=Race.HU,
             )
         )
         session.commit()
@@ -191,7 +193,9 @@ def test_fantasy_bets_list_keeps_every_key_with_empty_collections(
                 W3CStats(user_id=user_id, wc3_season=20, race=Race.HU, mmr=1500)
             )
             session.add(
-                DBUserSeasonSignup(user_id=user_id, season_id=seeded["season_id"])
+                DBUserSeasonSignup(
+                    user_id=user_id, season_id=seeded["season_id"], race=Race.HU
+                )
             )
         session.commit()
 

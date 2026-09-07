@@ -25,8 +25,8 @@ class DBUserSeasonSignup(DBModel, table=True):
     __tablename__ = "user_season_signup"
     user_id: int = Field(foreign_key="users.id", primary_key=True)
     season_id: int = Field(index=True, foreign_key="seasons.id", primary_key=True)
-    # The race the player registered on for this season, null when not recorded
-    race: Race | None = None
+    # The race the player registered on for this season
+    race: Race
     # The fantasy tier this season cut the player into, null when not allocated
     fantasy_tier: int | None = None
     # The slot an admin moved the player to in the draft order; null sorts by MMR

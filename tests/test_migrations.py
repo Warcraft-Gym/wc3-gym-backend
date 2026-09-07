@@ -332,8 +332,8 @@ def test_the_tier_backfill_picks_the_season_that_signed_up_every_tiered_player(
         # Season 1 signed up both tiered players; season 2 is newer but signed up one
         connection.execute(
             text(
-                "INSERT INTO user_season_signup (user_id, season_id) "
-                "VALUES (1, 1), (2, 1), (1, 2)"
+                "INSERT INTO user_season_signup (user_id, season_id, race) "
+                "VALUES (1, 1, 'HU'), (2, 1, 'HU'), (1, 2, 'HU')"
             )
         )
 
@@ -401,8 +401,9 @@ def test_the_count_drop_rebuilds_the_cuts_from_the_tiers_and_the_mmr(
         )
         connection.execute(
             text(
-                "INSERT INTO user_season_signup (user_id, season_id, fantasy_tier) "
-                "VALUES (1, 1, 3), (2, 1, 2), (3, 1, 1), (4, 1, 2), (1, 2, NULL)"
+                "INSERT INTO user_season_signup (user_id, season_id, fantasy_tier, race) "
+                "VALUES (1, 1, 3, 'HU'), (2, 1, 2, 'HU'), (3, 1, 1, 'HU'), (4, 1, 2, 'HU'), "
+                "(1, 2, NULL, 'HU')"
             )
         )
 

@@ -945,26 +945,6 @@ def test_the_signup_race_scores_the_season_it_belongs_to(
     assert ladder_of(client, auth_headers, other)["total_games"] == 1
 
 
-def test_a_signup_that_names_no_race_scores_nothing(
-    client: Client, auth_headers: dict[str, str], league: dict[str, Any]
-) -> None:
-    """The season race is the signup race and nothing else, so a signup with no
-    race on it scores no match and the answer names no race."""
-    player = league["player_ids"][0]
-    other = second_season(league["season_id"])
-    with Session() as session:
-        session.add(DBUserSeasonSignup(user_id=player, season_id=other, race=None))
-        session.commit()
-    add_match(player, "human")  # played on the profile race, HU
-
-    resp = client.get(f"/users/{player}/ladder?season_id={other}", headers=auth_headers)
-    assert resp.status_code == 200, resp.text
-
-    assert resp.json()["race"] is None
-    assert resp.json()["matches"] == []
-    assert ladder_of(client, auth_headers, other)["total_games"] == 0
-
-
 def test_the_all_time_answer_reads_the_race_of_the_player(
     client: Client, auth_headers: dict[str, str], league: dict[str, Any]
 ) -> None:
