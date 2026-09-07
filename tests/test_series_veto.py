@@ -409,6 +409,11 @@ def test_an_admin_who_plays_is_named_on_the_steps_they_enter(
     headers = member_session(monkeypatch, discord_id="2")
     series_id = seeded["series_open_id"]
 
+    # The board knows the side they play, so their own turn is a player's turn
+    resp = client.get(f"/player-series/{series_id}/veto", headers=headers)
+    assert resp.status_code == 200, resp.text
+    assert (resp.json()["viewer_side"], resp.json()["on_turn"]) == ("A", True)
+
     for map_id in (pool[1], pool[2], pool[3]):
         resp = client.put(
             f"/player-series/{series_id}/veto",
@@ -425,3 +430,4 @@ def test_an_admin_who_plays_is_named_on_the_steps_they_enter(
         ("B", "pick"),
     ]
     assert [s["entered_by"] for s in steps] == [seeded["player_ids"][1]] * 3 + [None]
+    assert (resp.json()["viewer_side"], resp.json()["on_turn"]) == ("A", False)

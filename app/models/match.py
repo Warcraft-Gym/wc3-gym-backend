@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Annotated, Self
+from typing import TYPE_CHECKING, Self
 
 from sqlalchemy import Index
 from sqlmodel import Field, Relationship, SQLModel
@@ -7,7 +7,6 @@ from app.models.base import DBModel, ident
 from app.models.map import Map, MapPublic
 from app.models.season import SeasonPublic
 from app.models.team_reduced import TeamReduced
-from app.models.types import NumToStr
 
 if TYPE_CHECKING:
     from app.models.season import Season
@@ -20,8 +19,6 @@ class MatchBase(SQLModel):
     season_id: int = Field(index=True, foreign_key="seasons.id", ondelete="CASCADE")
     playday: int
     fixed_map_id: int | None = Field(index=True, default=None, foreign_key="maps.id")
-    # date_frame receives numeric cells from the xlsx import.
-    date_frame: Annotated[str | None, NumToStr] = Field(default=None, max_length=50)
 
 
 class Match(MatchBase, DBModel, table=True):
@@ -63,7 +60,6 @@ class MatchUpdate(SQLModel):
     season_id: int | None = None
     playday: int | None = None
     fixed_map_id: int | None = None
-    date_frame: Annotated[str | None, NumToStr] = None
 
 
 class MatchPublic(MatchBase):
@@ -93,7 +89,6 @@ class MatchPublic(MatchBase):
             if match.season
             else None,
             playday=match.playday,
-            date_frame=match.date_frame,
             fixed_map_id=match.fixed_map_id,
             fixed_map=MapPublic.model_validate(match.fixed_map)
             if match.fixed_map

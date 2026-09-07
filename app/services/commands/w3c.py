@@ -65,7 +65,8 @@ def _header(user: UserPublic, answer: UserLadder, emojis: dict[str, str]) -> str
     )
     site = (os.getenv("FRONTEND_URL") or "").rstrip("/")
     if site:
-        line += f" · {_icon('gnl', emojis)}[GNL profile]({site}/player/{user.id})"
+        key = quote(user.battleTag, safe="") if user.battleTag else user.id
+        line += f" · {_icon('gnl', emojis)}[GNL profile]({site}/player/{key})"
     if user.battleTag:
         profile = f"https://www.w3champions.com/player/{quote(user.battleTag, safe='')}"
         line += f" · {_icon('w3champions', emojis)}[w3champions ↗]({profile})"

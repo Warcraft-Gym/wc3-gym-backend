@@ -4,6 +4,7 @@ Signups being closed does not gate the edit; the battle tag is validated.
 """
 
 from typing import Any
+from urllib.parse import quote
 
 import pytest
 from fastapi import FastAPI
@@ -81,3 +82,19 @@ def test_the_admin_token_is_not_a_member(
 ) -> None:
     resp = client.put("/user-info", json={"country": "DE"}, headers=auth_headers)
     assert resp.status_code == 401, resp.text
+
+
+def test_a_user_reads_by_battle_tag_as_well_as_by_id(
+    client: Client, seeded: dict[str, Any]
+) -> None:
+    """The battle tag is the URL key; the id keeps working for old links."""
+    by_id = client.get("/users/1").json()
+    tag = by_id["battleTag"]
+    assert "#" in tag
+    by_tag = client.get(f"/users/{quote(tag, safe='')}").json()
+    assert by_tag["id"] == by_id["id"]
+    # the lookup ignores case, like the unique index
+    assert client.get(f"/users/{quote(tag.upper(), safe='')}").json()["id"] == 1
+    # a key that is neither a known id nor a tag
+    assert client.get("/users/nobody%230000").status_code == 404
+    assert client.get("/users/1%230000").status_code == 404

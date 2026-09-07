@@ -33,10 +33,14 @@ class SeriesVetoService:
                 raise NotFoundError(f"Series not found by id: {series_id}")
             return len(_steps(session, series_id)) >= len(_order(series.match.season))
 
-    def board(self, series_id: int, user_id: int | None) -> SeriesVetoPublic:
-        """The board of one series. A null user is an admin, who reads any of them."""
+    def board(
+        self, series_id: int, user_id: int | None, player_id: int | None = None
+    ) -> SeriesVetoPublic:
+        """The board of one series. A null user is an admin, who reads any of them;
+        player_id is the admin's own player row, so the board names the side they play."""
         with Session.begin() as session:
-            return _board(session, _series(session, series_id, user_id), user_id)
+            series = _series(session, series_id, user_id)
+            return _board(session, series, user_id if player_id is None else player_id)
 
     def take(
         self,
@@ -78,7 +82,9 @@ class SeriesVetoService:
                     user_id if entered_by is None else entered_by,
                 )
             session.flush()
-            return _board(session, series, user_id)
+            return _board(
+                session, series, user_id if entered_by is None else entered_by
+            )
 
 
 def _series(session: OrmSession, series_id: int, user_id: int | None) -> Series:
@@ -219,15 +225,16 @@ def _forced_last(
 
 
 def _board(
-    session: OrmSession, series: Series, user_id: int | None
+    session: OrmSession, series: Series, player_id: int | None
 ) -> SeriesVetoPublic:
+    """The board as one player row sees it: an admin who plays gets their side and turn."""
     season = series.match.season
     order = _order(season)
     steps = _steps(session, ident(series))
     side = None
-    if user_id == series.player1_id:
+    if player_id == series.player1_id:
         side = "A"
-    elif user_id == series.player2_id:
+    elif player_id == series.player2_id:
         side = "B"
     complete = len(steps) >= len(order)
     return SeriesVetoPublic(

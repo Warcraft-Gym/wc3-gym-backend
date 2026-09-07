@@ -81,7 +81,7 @@ def test_stats_posts_the_gnl_season_as_an_embed(
     header, season = embed["description"].splitlines()
     assert header == (
         "<:HU:11> 🇩🇪 **P1**"
-        f" · <:gnl:22> [GNL profile](https://gnl.example/player/{player})"
+        " · <:gnl:22> [GNL profile](https://gnl.example/player/P1%231111)"
         " · <:w3champions:33> [w3champions ↗](https://www.w3champions.com/player/P1%231111)"
     )
     assert season == "Season 1 · 2026-01-05 to 2026-02-27 · ended"

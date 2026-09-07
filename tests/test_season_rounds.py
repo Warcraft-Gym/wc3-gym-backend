@@ -6,7 +6,7 @@ from typing import Any
 from httpx2 import Client
 from sqlalchemy import create_engine, text
 
-from tests.migrate import fresh_database, upgrade_to, upgrade_to_head
+from tests.migrate import downgrade_to, fresh_database, upgrade_to, upgrade_to_head
 
 # The revision before the week map became the rounds table
 BEFORE_ROUNDS = "d5e8f1a2b3c4"
@@ -162,3 +162,21 @@ def test_the_migration_dates_every_round_and_keeps_the_week_maps(
         ("2", "1", "None", "None", "None"),
         ("2", "2", "None", "None", "None"),
     ]
+
+
+def test_the_contract_migration_drops_the_view_and_the_date_frame(
+    tmp_path: Path,
+) -> None:
+    from sqlalchemy import inspect
+
+    url = fresh_database(tmp_path, "contract")
+    upgrade_to_head(url)
+    engine = create_engine(url)
+
+    assert "season_week_map" not in inspect(engine).get_view_names()
+    assert "date_frame" not in {
+        c["name"] for c in inspect(engine).get_columns("matches")
+    }
+    downgrade_to(url, "e6f1a9c3d5b7")
+    assert "season_week_map" in inspect(engine).get_view_names()
+    assert "date_frame" in {c["name"] for c in inspect(engine).get_columns("matches")}

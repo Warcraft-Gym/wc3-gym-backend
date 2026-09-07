@@ -189,7 +189,6 @@ def export_season(
             "Team1 Score",
             "Team2 Score",
             "Fixed Map ID",
-            "Date Frame",
         ]
     )
     all_matches = match_service.search(season_query)
@@ -204,7 +203,6 @@ def export_season(
                 match.team1_score or "",
                 match.team2_score or "",
                 match.fixed_map.id if match.fixed_map else "",
-                match.date_frame or "",
             ]
         )
 

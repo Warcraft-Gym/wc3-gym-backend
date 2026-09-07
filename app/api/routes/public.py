@@ -594,8 +594,8 @@ def get_player_series_veto(
     token: str | None = None,
 ) -> SeriesVetoPublic:
     """The map veto board of a series, read by either player or by an admin."""
-    viewer, _ = _veto_viewer(request, credentials, token, user_service)
-    return veto_service.board(series_id, viewer)
+    viewer, player = _veto_viewer(request, credentials, token, user_service)
+    return veto_service.board(series_id, viewer, player)
 
 
 @router.put("/player-series/{series_id}/veto")
