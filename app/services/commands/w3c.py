@@ -1,6 +1,6 @@
-"""The two commands that read the stored w3champions ladder: /mmr and /stats.
+"""/stats: the one command that reads the stored w3champions ladder.
 
-Both read what the daily sync wrote, never w3champions itself. The league
+It reads what the daily sync wrote, never w3champions itself. The league
 scores a player on the race he registered on, so the season numbers cover that
 one race; the MMR and record of every race he plays come from his stored
 w3champions rows, the signup race first and in bold.
@@ -14,7 +14,7 @@ from app.models.w3c_stats import W3CStatsPublic
 from app.services import discord_roles
 from app.services.interactions import PUBLIC, Services, options_of, typed_option
 
-# The player option both commands take; its value is the GNL user id
+# The player option; its value is the GNL user id
 PLAYER_OPTION = {
     "type": 4,
     "name": "player",
@@ -23,15 +23,9 @@ PLAYER_OPTION = {
     "autocomplete": True,
 }
 
-MMR: dict[str, Any] = {
-    "name": "mmr",
-    "description": "A player's MMR on every race, the one he plays this season first",
-    "options": [PLAYER_OPTION],
-}
-
 STATS: dict[str, Any] = {
     "name": "stats",
-    "description": "A player's ladder record this season",
+    "description": "A player's season record, and his MMR and record on every race",
     "options": [PLAYER_OPTION],
 }
 
@@ -71,18 +65,15 @@ def _newest_per_race(
     )
 
 
-def _race_lines(
-    rows: list[W3CStatsPublic], signup_race: str | None, record: bool
-) -> list[str]:
+def _race_lines(rows: list[W3CStatsPublic], signup_race: str | None) -> list[str]:
     """One line per race, the signup race in bold; a row from an older
     w3champions season than his newest names it. No row on the signup race
     says so, so a player yet to play it still shows his other races."""
     newest = max((row.wc3_season for row in rows), default=0)
     lines = []
     for row in rows:
-        text = f"{row.race} {row.mmr if row.mmr is not None else 'no MMR yet'}"
-        if record:
-            text += f" · {row.wins or 0}-{row.losses or 0}"
+        mmr = f"{row.mmr} MMR" if row.mmr is not None else "no MMR yet"
+        text = f"{row.race} {mmr} · {row.wins or 0}-{row.losses or 0}"
         if row.wc3_season < newest:
             text += f" (S{row.wc3_season})"
         lines.append(f"**{text}**" if row.race == signup_race else text)
@@ -91,19 +82,9 @@ def _race_lines(
     return lines
 
 
-def mmr(payload: dict[str, Any], services: Services) -> tuple[dict[str, Any], bool]:
-    """/mmr player: the player's MMR on every race, the season's race first."""
-    found = _record(payload, services)
-    if isinstance(found, dict):
-        return found, PUBLIC
-    _, answer, rows = found
-    lines = _race_lines(rows, answer.race, record=False)
-    return {"content": " · ".join([str(answer.name), *lines])}, PUBLIC
-
-
 def stats(payload: dict[str, Any], services: Services) -> tuple[dict[str, Any], bool]:
     """/stats player: the season record and points, every race's MMR and
-    record, and the opponent races."""
+    record, and the season record by opponent race."""
     found = _record(payload, services)
     if isinstance(found, dict):
         return found, PUBLIC
@@ -118,11 +99,11 @@ def stats(payload: dict[str, Any], services: Services) -> tuple[dict[str, Any], 
     fields = [
         {
             "name": f"w3champions S{newest}" if newest else "w3champions",
-            "value": "\n".join(_race_lines(rows, answer.race, record=True)),
+            "value": "\n".join(_race_lines(rows, answer.race)),
         }
     ]
     if versus:
-        fields.append({"name": "Opponent races", "value": versus})
+        fields.append({"name": "Season record by opponent race", "value": versus})
     return {
         "embeds": [
             {

@@ -1,4 +1,4 @@
-"""/mmr and /stats: both read the stored w3champions ladder, never w3champions."""
+"""/stats reads the stored w3champions ladder, never w3champions."""
 
 from datetime import timedelta
 from typing import Any
@@ -56,44 +56,11 @@ def _post(client: Client, payload: dict[str, Any]) -> None:
     assert client.post("/discord/interactions", content=body, headers=headers).json()
 
 
-def test_mmr_posts_every_race_with_the_signup_race_first(
-    client: Client, public_key: None, discord_calls: list, seeded: dict[str, Any]
-) -> None:
-    player = _ladder(seeded)
-    _w3c_rows(player, Race.NE, Race.UD, Race.OC, Race.HU)
-    _post(client, command("mmr", player=player))
-    (post, delete) = discord_calls
-    assert post[:2] == ("POST", CHANNEL)
-    # UD has no games and stays hidden; OC's row is from the older season
-    assert post[2] == {"content": "P1 · **HU 1512** · NE 1400 · OC 1300 (S25)"}
-    assert delete[0] == "DELETE"
-
-
-def test_mmr_shows_the_other_races_before_he_plays_his_signup_race(
-    client: Client, public_key: None, discord_calls: list, seeded: dict[str, Any]
-) -> None:
-    player = seeded["player_ids"][0]
-    sign_up(seeded["season_id"], [player])
-    _w3c_rows(player, Race.NE)
-    _post(client, command("mmr", player=player))
-    assert discord_calls[0][2] == {"content": "P1 · **HU no games yet** · NE 1400"}
-
-
-def test_mmr_says_when_nothing_is_synced(
-    client: Client, public_key: None, discord_calls: list, seeded: dict[str, Any]
-) -> None:
-    sign_up(seeded["season_id"], [seeded["player_ids"][0]])
-    _post(client, command("mmr", player=seeded["player_ids"][0]))
-    assert discord_calls[0][2] == {"content": "No ladder games synced for P1."}
-    _post(client, command("mmr", player=9999))
-    assert discord_calls[2][2] == {"content": "No player with that id."}
-
-
 def test_stats_posts_the_season_record_as_an_embed(
     client: Client, public_key: None, discord_calls: list, seeded: dict[str, Any]
 ) -> None:
     player = _ladder(seeded)
-    _w3c_rows(player, Race.HU, Race.NE, Race.OC)
+    _w3c_rows(player, Race.NE, Race.UD, Race.OC, Race.HU)
     _post(client, command("stats", player=player))
     (post, delete) = discord_calls
     assert post[:2] == ("POST", CHANNEL)
@@ -105,10 +72,11 @@ def test_stats_posts_the_season_record_as_an_embed(
     assert second == "7 ladder points · 6 achievement points · 2 badges"
     assert embed["fields"][0] == {
         "name": "w3champions S26",
-        "value": "**HU 1512 · 40-30**\nNE 1400 · 5-7\nOC 1300 · 2-1 (S25)",
+        # UD has no games and stays hidden; OC's row is from the older season
+        "value": "**HU 1512 MMR · 40-30**\nNE 1400 MMR · 5-7\nOC 1300 MMR · 2-1 (S25)",
     }
     assert embed["fields"][1] == {
-        "name": "Opponent races",
+        "name": "Season record by opponent race",
         "value": "HU 2-0 · NE 0-1",
     }
     assert delete[0] == "DELETE"
@@ -124,7 +92,7 @@ def test_stats_shows_the_other_races_before_he_plays_his_signup_race(
     embed = discord_calls[0][2]["embeds"][0]
     assert embed["description"].splitlines()[0] == "0-0 · 0 games"
     assert embed["fields"] == [
-        {"name": "w3champions S25", "value": "**HU no games yet**\nOC 1300 · 2-1"}
+        {"name": "w3champions S25", "value": "**HU no games yet**\nOC 1300 MMR · 2-1"}
     ]
 
 
@@ -141,7 +109,7 @@ def test_player_autocomplete_lists_the_seasons_players(
 ) -> None:
     first, second = seeded["player_ids"][:2]
     sign_up(seeded["season_id"], [first, second])
-    body, headers = signed(autocomplete("mmr", "1", ""))
+    body, headers = signed(autocomplete("stats", "1", ""))
     assert client.post(
         "/discord/interactions", content=body, headers=headers
     ).json() == {
