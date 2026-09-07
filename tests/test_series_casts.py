@@ -146,10 +146,11 @@ def test_a_guest_cannot_claim(
 
 
 BEFORE_CAST_TABLE = "e6f1a9c3d5b7"
+CAST_TABLE = "a9c4e7d1f2b3"
 
 
 def test_the_caster_names_become_cast_rows_and_back(tmp_path: Path) -> None:
-    """Every spelling of a name becomes one Twitch link; the column stays as it was."""
+    """Every spelling of a name becomes one Twitch link; the column goes one migration later."""
     url = fresh_database(tmp_path, "casts")
     upgrade_to(url, BEFORE_CAST_TABLE)
     engine = create_engine(url)
@@ -188,7 +189,7 @@ def test_the_caster_names_become_cast_rows_and_back(tmp_path: Path) -> None:
                 {"caster": caster},
             )
 
-    upgrade_to(url, "head")
+    upgrade_to(url, CAST_TABLE)
     with engine.connect() as connection:
         assert connection.execute(
             text(
@@ -199,14 +200,23 @@ def test_the_caster_names_become_cast_rows_and_back(tmp_path: Path) -> None:
             (2, None, "https://www.twitch.tv/ares1776"),
             (3, None, "https://www.twitch.tv/grubby"),
         ]
-        # The old column is dropped by the next migration, once this code serves
+        # The column stays until the code that read it has shipped
         assert (
             connection.execute(text("SELECT caster FROM series WHERE id = 2")).scalar()
             == "https://www.twitch.tv/ares1776/"
         )
 
+    upgrade_to(url, "head")
+    with engine.connect() as connection:
+        columns = {
+            row[1] for row in connection.execute(text("PRAGMA table_info(series)"))
+        }
+        assert "caster" not in columns
+
     from tests.migrate import downgrade_to
 
     downgrade_to(url, BEFORE_CAST_TABLE)
     with engine.connect() as connection:
-        assert connection.execute(text("SELECT count(*) FROM series")).scalar() == 4
+        assert connection.execute(
+            text("SELECT id, caster FROM series ORDER BY id")
+        ).all() == [(1, "barrentv"), (2, "ares1776"), (3, "grubby"), (4, None)]
