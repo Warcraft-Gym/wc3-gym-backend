@@ -27,15 +27,15 @@ def press(user: str, custom_id: str) -> dict[str, Any]:
     }
 
 
-def test_the_card_names_the_week_and_carries_three_buttons(
+def test_the_card_names_the_season_and_round_and_carries_three_buttons(
     client: Client, seeded: dict[str, Any], public_key: None, discord_calls: list
 ) -> None:
     """The seeded season is the current one and runs four weeks from 5 Jan 2026."""
-    post(client, command("availability", user="1", week=3))
+    post(client, command("availability", user="1", round=3))
 
     posted = discord_calls[0]
     assert posted[:2] == ("POST", CHANNEL)
-    assert posted[2]["content"].startswith("**Week 3** · <t:")
+    assert posted[2]["content"].startswith("**Season 1 · Round 3** · <t:")
     assert posted[2]["content"].endswith(" — can you play?")
     buttons = posted[2]["components"][0]["components"]
     assert [(b["label"], b["style"], b["custom_id"]) for b in buttons] == [
@@ -45,13 +45,13 @@ def test_the_card_names_the_week_and_carries_three_buttons(
     ]
 
 
-def test_without_a_week_the_card_is_for_the_current_round(
+def test_without_a_round_the_card_is_for_the_current_one(
     client: Client, seeded: dict[str, Any], public_key: None, discord_calls: list
 ) -> None:
     """Every seeded round has ended, so the last one stands in."""
     post(client, command("availability", user="1"))
 
-    assert discord_calls[0][2]["content"].startswith("**Week 4**")
+    assert discord_calls[0][2]["content"].startswith("**Season 1 · Round 4**")
 
 
 def test_a_press_writes_the_pressers_own_answer(
@@ -59,7 +59,9 @@ def test_a_press_writes_the_pressers_own_answer(
 ) -> None:
     post(client, press("1", "availability:1:3:no"))
     assert discord_calls[-1][:2] == ("PATCH", f"{WEBHOOK}/messages/@original")
-    assert discord_calls[-1][2] == {"content": "Saved: you cannot play week 3."}
+    assert discord_calls[-1][2] == {
+        "content": "Saved: you cannot play round 3 of Season 1."
+    }
 
     rows = AvailabilityService().for_user(seeded["player_ids"][0], seeded["season_id"])
     assert [(row.playday, row.available, row.set_by_user_id) for row in rows] == [
@@ -68,7 +70,7 @@ def test_a_press_writes_the_pressers_own_answer(
 
     post(client, press("1", "availability:1:3:clear"))
     assert discord_calls[-1][2] == {
-        "content": "Saved: your answer for week 3 is cleared."
+        "content": "Saved: your answer for round 3 of Season 1 is cleared."
     }
     assert (
         AvailabilityService().for_user(seeded["player_ids"][0], seeded["season_id"])
@@ -86,11 +88,11 @@ def test_a_stranger_is_told_to_link_their_account(
     )
 
 
-def test_a_week_the_season_lacks_is_refused(
+def test_a_round_the_season_lacks_is_refused(
     client: Client, seeded: dict[str, Any], public_key: None, discord_calls: list
 ) -> None:
-    post(client, command("availability", user="1", week=9))
-    assert discord_calls[-1][2] == {"content": "The season has no week 9."}
+    post(client, command("availability", user="1", round=9))
+    assert discord_calls[-1][2] == {"content": "Season 1 has no round 9."}
 
     post(client, press("1", "availability:1:9:yes"))
     assert discord_calls[-1][2] == {"content": "playday must be between 1 and 4"}

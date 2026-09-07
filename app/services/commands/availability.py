@@ -23,8 +23,8 @@ COMMAND: dict[str, Any] = {
     "options": [
         {
             "type": 4,
-            "name": "week",
-            "description": "The week of the season; the current round when left out",
+            "name": "round",
+            "description": "The round of the season; the current one when left out",
             "required": False,
             "min_value": 1,
         }
@@ -35,9 +35,9 @@ COMMAND: dict[str, Any] = {
 ANSWERS = (("yes", "Can play", 3), ("no", "Cannot play", 4), ("clear", "Clear", 2))
 VALUES = {"yes": True, "no": False, "clear": None}
 SAVED = {
-    "yes": "Saved: you can play week {n}.",
-    "no": "Saved: you cannot play week {n}.",
-    "clear": "Saved: your answer for week {n} is cleared.",
+    "yes": "Saved: you can play round {n} of {season}.",
+    "no": "Saved: you cannot play round {n} of {season}.",
+    "clear": "Saved: your answer for round {n} of {season} is cleared.",
 }
 
 
@@ -67,17 +67,18 @@ def run(payload: dict[str, Any], services: "Services") -> tuple[dict[str, Any], 
     season_id = discord_roles.current_season()
     if season_id is None:
         return {"content": "No current season."}, PRIVATE
-    rounds = services.seasons.get(season_id).rounds
-    week = options_of(payload).get("week")
+    season = services.seasons.get(season_id)
+    wanted = options_of(payload).get("round")
     round_ = (
-        next((r for r in rounds if r.playday == week), None)
-        if week
-        else _current(rounds)
+        next((r for r in season.rounds if r.playday == wanted), None)
+        if wanted
+        else _current(season.rounds)
     )
     if round_ is None:
-        return {"content": f"The season has no week {week}."}, PRIVATE
+        return {"content": f"{season.name} has no round {wanted}."}, PRIVATE
     return {
-        "content": f"**Week {round_.playday}**{_window(round_)} — can you play?",
+        "content": f"**{season.name} · Round {round_.playday}**{_window(round_)}"
+        " — can you play?",
         "components": [
             {
                 "type": 1,
@@ -112,4 +113,5 @@ def press(payload: dict[str, Any], services: "Services") -> tuple[dict[str, Any]
         )
     except BadRequestError as error:
         return {"content": str(error)}, PRIVATE
-    return {"content": SAVED[answer].format(n=playday)}, PRIVATE
+    season = services.seasons.get(int(season_id)).name
+    return {"content": SAVED[answer].format(n=playday, season=season)}, PRIVATE
