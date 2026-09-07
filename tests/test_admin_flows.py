@@ -834,7 +834,12 @@ def test_a_second_w3c_sync_during_the_first_answers_200(
 def sign_up(
     client: Client, headers: dict[str, str], season_id: int, user_ids: list[int]
 ) -> None:
-    post(client, headers, f"/seasons/{season_id}/signups", {"user_ids": user_ids})
+    post(
+        client,
+        headers,
+        f"/seasons/{season_id}/signups",
+        {"user_ids": user_ids, "race": "HU"},
+    )
 
 
 def test_a_signup_records_the_race_it_names(
@@ -855,8 +860,32 @@ def test_a_signup_records_the_race_it_names(
 
     assert {row["id"]: row["signup_race"] for row in body} == {
         first: "UD",
-        second: None,
+        second: "HU",
     }
+
+
+def test_a_signup_needs_a_race(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """A signup without a race is refused, and a stored race cannot be cleared."""
+    player = seeded["player_ids"][0]
+    season_id = seeded["season_id"]
+    resp = client.post(
+        f"/seasons/{season_id}/signups",
+        json={"user_ids": [player]},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 422
+
+    sign_up(client, auth_headers, season_id, [player])
+    resp = client.put(
+        f"/seasons/{season_id}/signups/{player}",
+        json={"race": None},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 400
+    body = get(client, f"/seasons/{season_id}/signups")
+    assert next(row["signup_race"] for row in body if row["id"] == player) == "HU"
 
 
 def test_a_signup_refuses_a_race_that_is_not_one(

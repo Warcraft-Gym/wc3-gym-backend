@@ -16,6 +16,7 @@ from app.models.season import (
     SeasonCreate,
     SeasonMapIds,
     SeasonPublic,
+    SeasonSignupRemove,
     SeasonSignupUpdate,
     SeasonSignupWrite,
     SeasonTeamIds,
@@ -162,14 +163,14 @@ def add_user_signup(
 ) -> SeasonPublic:
     """Add signup users to season by providing a list of user ids.
 
-    An optional "race" names the race they registered on for this season.
+    The "race" names the race they registered on for this season.
     """
     return service.add_user_signup(season_id, data.user_ids, data.race)
 
 
 @router.delete("/seasons/{season_id}/signups", dependencies=[Depends(require_admin)])
 def remove_user_signup(
-    season_id: int, data: SeasonSignupWrite, service: SeasonServiceDep
+    season_id: int, data: SeasonSignupRemove, service: SeasonServiceDep
 ) -> SeasonPublic:
     """Remove signup users from season by providing a list of user ids."""
     return service.remove_user_signup(season_id, data.user_ids)

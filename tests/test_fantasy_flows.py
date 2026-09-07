@@ -229,7 +229,9 @@ def test_tier_allocation_replaces_the_whole_map_at_once(
     season = seeded["season_id"]
     p1, p2 = seeded["player_ids"][:2]
     client.post(
-        f"/seasons/{season}/signups", json={"user_ids": [p1, p2]}, headers=auth_headers
+        f"/seasons/{season}/signups",
+        json={"user_ids": [p1, p2], "race": "HU"},
+        headers=auth_headers,
     )
 
     resp = client.put(
@@ -278,7 +280,9 @@ def test_a_tier_allocation_names_its_season(
     assert resp.status_code == 422
 
     client.post(
-        f"/seasons/{season}/signups", json={"user_ids": [p1]}, headers=auth_headers
+        f"/seasons/{season}/signups",
+        json={"user_ids": [p1], "race": "HU"},
+        headers=auth_headers,
     )
     resp = client.put(
         f"/fantasy/tiers?season_id={season}",
@@ -298,7 +302,9 @@ def test_the_cuts_make_the_tiers(
     season = seeded["season_id"]
     p1 = seeded["player_ids"][0]
     client.post(
-        f"/seasons/{season}/signups", json={"user_ids": [p1]}, headers=auth_headers
+        f"/seasons/{season}/signups",
+        json={"user_ids": [p1], "race": "HU"},
+        headers=auth_headers,
     )
     before = get_json(client, f"/seasons/{season}")
     assert (before["fantasy_tiers"], before["fantasy_tier_cuts"]) == (0, [])
@@ -475,7 +481,9 @@ def test_each_season_keeps_its_own_tiers(
     ).json()["id"]
     for season in (first, second):
         client.post(
-            f"/seasons/{season}/signups", json={"user_ids": [p1]}, headers=auth_headers
+            f"/seasons/{season}/signups",
+            json={"user_ids": [p1], "race": "HU"},
+            headers=auth_headers,
         )
 
     client.put(
@@ -500,7 +508,9 @@ def test_a_signup_carries_the_draft_position_an_admin_sets(
     season = seeded["season_id"]
     p1, p2 = seeded["player_ids"][:2]
     client.post(
-        f"/seasons/{season}/signups", json={"user_ids": [p1]}, headers=auth_headers
+        f"/seasons/{season}/signups",
+        json={"user_ids": [p1], "race": "HU"},
+        headers=auth_headers,
     )
 
     def position() -> int | None:
@@ -527,18 +537,13 @@ def test_a_signup_carries_the_draft_position_an_admin_sets(
         rows = get_json(client, f"/seasons/{season}/signups")
         return next(row["signup_race"] for row in rows if row["id"] == p1)
 
-    assert race() is None
+    assert race() == "HU"
     resp = client.put(
         f"/seasons/{season}/signups/{p1}", json={"race": "UD"}, headers=auth_headers
     )
     assert resp.status_code == 200
     assert race() == "UD"
     assert position() is None
-    resp = client.put(
-        f"/seasons/{season}/signups/{p1}", json={"race": None}, headers=auth_headers
-    )
-    assert resp.status_code == 200
-    assert race() is None
     resp = client.put(
         f"/seasons/{season}/signups/{p2}",
         json={"draft_position": 12},
