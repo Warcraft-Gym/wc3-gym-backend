@@ -7,7 +7,7 @@ from sqlmodel import Field, Relationship, SQLModel
 from app.core.db import rel
 from app.models.base import DBModel, ident
 from app.models.match import MatchPublic
-from app.models.types import AwareUTC, NumToStr, UTCDateTime
+from app.models.types import AwareUTC, UTCDateTime
 from app.models.user import UserPublic
 
 if TYPE_CHECKING:
@@ -20,7 +20,6 @@ class DraftSeriesBase(SQLModel):
     date_time: Annotated[datetime | None, AwareUTC] = Field(
         default=None, sa_type=UTCDateTime
     )
-    caster: Annotated[str | None, NumToStr] = Field(default=None, max_length=50)
     player1_id: int = Field(index=True, foreign_key="users.id")
     player2_id: int = Field(index=True, foreign_key="users.id")
     player1_score: int | None = None
@@ -33,6 +32,8 @@ class DraftSeries(DraftSeriesBase, DBModel, table=True):
     __tablename__ = "draft_series"
 
     id: int | None = Field(default=None, primary_key=True)
+    # The old caster name, read by nothing; the next migration drops it
+    caster: str | None = Field(default=None, max_length=50)
     created_at: datetime | None = Field(default=None, sa_type=UTCDateTime)
 
     match: "Match" = Relationship(
@@ -73,7 +74,6 @@ class DraftSeriesCreate(DraftSeriesBase):
 class DraftSeriesUpdate(SQLModel):
     match_id: int | None = None
     date_time: Annotated[datetime | None, AwareUTC] = None
-    caster: Annotated[str | None, NumToStr] = None
     player1_id: int | None = None
     player2_id: int | None = None
     player1_score: int | None = None
@@ -103,7 +103,6 @@ class DraftSeriesPublic(DraftSeriesBase):
             if draft_series.match
             else None,
             date_time=draft_series.date_time,
-            caster=draft_series.caster,
             player1_id=draft_series.player1_id,
             player1=UserPublic.from_user(draft_series.player1)
             if draft_series.player1

@@ -7,7 +7,7 @@ so the veto rule and the best-of rule are the same in both places.
 
 import json
 import os
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import requests
 from fastapi.responses import JSONResponse
@@ -15,9 +15,14 @@ from fastapi.responses import JSONResponse
 from app.core.exceptions import BadRequestError
 from app.models.user import UserPublic
 from app.services import discord, player_series, replays
-
-if TYPE_CHECKING:
-    from app.services.interactions import Services
+from app.services.commands.base import (
+    PRIVATE,
+    PUBLIC,
+    Services,
+    caller,
+    options_of,
+    own_series,
+)
 
 # What Discord accepts as an attachment option
 ATTACHMENT = 11
@@ -103,30 +108,57 @@ def _name(player: UserPublic | None) -> str:
     return (player.name if player else None) or "?"
 
 
-def run(payload: dict[str, Any], services: "Services") -> tuple[dict[str, Any], bool]:
-    """/score series player1_score player2_score game1 game2 game3."""
-    # imported here because interactions imports this module
-    from app.services import interactions
+def _refused(text: str) -> tuple[dict[str, Any], bool]:
+    """A private red card: the reason, and that nothing was saved."""
+    return {
+        "embeds": [
+            {
+                "title": "Error · result not saved",
+                "description": text,
+                "color": 0xED4245,
+            }
+        ]
+    }, PRIVATE
 
-    options = interactions.options_of(payload)
+
+def _veto_help(series_id: int) -> str:
+    """Where to enter the veto, then where to report the score."""
+    site = (os.getenv("FRONTEND_URL") or "").rstrip("/")
+    board = (
+        f"[veto board]({site}/player-series/{series_id}/veto)"
+        if site
+        else "veto board on the website"
+    )
+    dashboard = (
+        f"[your dashboard]({site}/player-dashboard)" if site else "your dashboard"
+    )
+    return (
+        f"The map veto is not complete, so the result cannot be saved. Enter the veto on the {board} first."
+        f" Then report the score here, or in Report Result on {dashboard}."
+    )
+
+
+def run(payload: dict[str, Any], services: Services) -> tuple[dict[str, Any], bool]:
+    """/score series player1_score player2_score game1 game2 game3."""
+    options = options_of(payload)
     series_id = int(options["series"])
-    if series_id not in {row.id for row in interactions.own_series(payload, services)}:
-        return {"content": "not_authorized_for_this_series"}, interactions.PRIVATE
+    if series_id not in {row.id for row in own_series(payload, services)}:
+        return _refused("Only a player of the series can report its result.")
     p1, p2 = int(options["player1_score"]), int(options["player2_score"])
     attached = _attachments(payload, options)
     if len(attached) != p1 + p2:
-        return {
-            "content": f"Attach one replay per game played ({p1 + p2})."
-        }, interactions.PRIVATE
+        games = p1 + p2
+        return _refused(
+            f"Attach one replay per game played: a {p1}-{p2} result needs {games} files,"
+            f" game1 to game{games}. The score is saved only when the replays match it."
+        )
     for game_no, attachment in enumerate(attached, 1):
         if attachment.get("size", 0) > MAX_BYTES:
-            return {"content": f"Replay {game_no} is too large."}, interactions.PRIVATE
+            return _refused(f"Replay {game_no} is over 10 MB.")
         if not _store(attachment, series_id, game_no):
-            return {
-                "content": f"Could not store replay {game_no}."
-            }, interactions.PRIVATE
+            return _refused(f"Replay {game_no} could not be stored. Try again.")
 
-    discord_id, discord_tag = interactions.caller(payload)
+    discord_id, discord_tag = caller(payload)
     try:
         result = player_series.update_player_series(
             series_id,
@@ -138,13 +170,10 @@ def run(payload: dict[str, Any], services: "Services") -> tuple[dict[str, Any], 
         )
     except BadRequestError as error:
         # what the replay check refuses, such as a file that is not a replay
-        return {"content": str(error)}, interactions.PRIVATE
+        return _refused(str(error))
     if isinstance(result, JSONResponse):
         error = json.loads(bytes(result.body))["error"]
-        frontend = os.getenv("FRONTEND_URL")
-        if "map veto" in error and frontend:
-            error += f" {frontend.rstrip('/')}/player-series/{series_id}/veto"
-        return {"content": error}, interactions.PRIVATE
+        return _refused(_veto_help(series_id) if "map veto" in error else error)
 
     series = services.series.get(series_id)
     match = series.match
@@ -155,4 +184,4 @@ def run(payload: dict[str, Any], services: "Services") -> tuple[dict[str, Any], 
     )
     lines = [result_line]
     lines += [f"Game {row['game_no']}: {row['url']}" for row in result["replays"]]
-    return {"content": "\n".join(lines)}, interactions.PUBLIC
+    return {"content": "\n".join(lines)}, PUBLIC

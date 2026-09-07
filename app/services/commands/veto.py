@@ -11,13 +11,13 @@ from app.core.db import Session
 from app.models.map import Map
 from app.models.series import SeriesPublic
 from app.models.user import UserPublic
-from app.services.interactions import (
+from app.services.commands.base import (
     PRIVATE,
     PUBLIC,
     Services,
-    _series_line,
     options_of,
     own_series,
+    series_line,
 )
 from app.services.series_veto import SeriesVetoService
 
@@ -89,7 +89,7 @@ def state(series: SeriesPublic) -> str:
 def card(series: SeriesPublic) -> dict[str, Any]:
     """The series, both players and where the veto stands."""
     return {
-        "content": f"{_series_line(series)}\n"
+        "content": f"{series_line(series)}\n"
         f"{ping(series.player1)} vs {ping(series.player2)} · {state(series)}\n"
         f"{board_link(series.id)}"
     }

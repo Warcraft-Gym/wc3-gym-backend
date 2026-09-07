@@ -3,10 +3,18 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
 
-from app.api.deps import SeriesServiceDep, require_admin
+from app.api.deps import (
+    RequireMember,
+    SeriesServiceDep,
+    UserServiceDep,
+    require_admin,
+)
 from app.api.search import SearchQuery
+from app.core.exceptions import NotFoundError
 from app.core.query import QueryUtil
 from app.models.series import SeriesCreate, SeriesPublic, SeriesUpdate
+from app.models.series_cast import CastPublic, CastWrite
+from app.services import casts
 
 logger = logging.getLogger(__name__)
 
@@ -101,3 +109,47 @@ def search_series_by_season(
     return service.search_for_season(
         season_id, parsed_query, limit=limit, offset=offset
     )
+
+
+def caster(claims: RequireMember, user_service: UserServiceDep) -> tuple[int, bool]:
+    """The users row behind a member's session, and whether it is an admin."""
+    users = user_service.find_by_discord_id(str(claims["sub"]))
+    if not users:
+        raise NotFoundError("player_not_found")
+    admin = claims.get("role") == "admin" or claims["sub"] == "admin"
+    return users[0].id, admin
+
+
+Caster = Annotated[tuple[int, bool], Depends(caster)]
+
+
+@router.get("/series/{series_id}/casts")
+def get_casts(series_id: int) -> list[CastPublic]:
+    """Who casts this series, on which channel."""
+    return casts.for_series(series_id)
+
+
+@router.post("/series/{series_id}/casts", status_code=201)
+def claim_series(series_id: int, data: CastWrite, who: Caster) -> list[CastPublic]:
+    """Claim the series to cast it. An account claims a series once."""
+    return casts.claim(series_id, who[0], data.channel_url)
+
+
+@router.put("/series/{series_id}/casts/{cast_id}")
+def update_cast(
+    series_id: int, cast_id: int, data: CastWrite, who: Caster
+) -> list[CastPublic]:
+    """Change the channel of your own cast; an admin changes any."""
+    return casts.update(series_id, cast_id, *who, data.channel_url)
+
+
+@router.delete("/series/{series_id}/casts/{cast_id}", status_code=204)
+def unclaim_series(series_id: int, cast_id: int, who: Caster) -> None:
+    """Remove your own cast; an admin removes any."""
+    casts.unclaim(series_id, cast_id, *who)
+
+
+@router.get("/casts/last")
+def last_cast_channel(who: Caster) -> dict[str, str | None]:
+    """The channel of your newest claim, to pre-fill the next one."""
+    return {"channel_url": casts.last_channel(who[0])}

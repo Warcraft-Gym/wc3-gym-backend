@@ -88,7 +88,7 @@ def test_a_token_without_a_season_falls_back_to_the_setting(
     assert [row["playday"] for row in rows] == [3]
 
 
-def test_player_series_carries_the_answers_and_the_week_count(
+def test_player_series_carries_the_answers_and_the_rounds(
     client: Client, seeded: dict[str, Any], dashboard_token: Callable[..., str]
 ) -> None:
     token = dashboard_token()
@@ -100,6 +100,12 @@ def test_player_series_carries_the_answers_and_the_week_count(
     assert [(row["playday"], row["available"]) for row in body["availability"]] == [
         (3, False)
     ]
+    assert [(row["playday"], row["start_date"]) for row in body["rounds"]] == [
+        (1, "2026-01-05"),
+        (2, "2026-01-12"),
+        (3, "2026-01-19"),
+        (4, "2026-01-26"),
+    ]
 
 
 def test_player_series_without_a_season_answers_no_availability(
@@ -109,6 +115,7 @@ def test_player_series_without_a_season_answers_no_availability(
 
     assert body["availability"] == []
     assert body["number_weeks"] is None
+    assert body["rounds"] == []
 
 
 @pytest.fixture

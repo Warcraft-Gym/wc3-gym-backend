@@ -16,11 +16,11 @@ from app.models.series import SeriesPublic
 from app.models.user import UserPublic
 from app.models.w3c_ladder_match import UserLadder
 from app.services import discord, discord_roles
-from app.services.interactions import (
+from app.services.commands.base import (
     PUBLIC,
     Services,
-    _season_span,
     options_of,
+    season_span,
     typed_option,
 )
 
@@ -168,7 +168,7 @@ def stats(payload: dict[str, Any], services: Services) -> tuple[dict[str, Any], 
         "embeds": [
             {
                 "description": (
-                    f"{_header(user, answer, emojis)}\n{season.name} · {_season_span(season)}"
+                    f"{_header(user, answer, emojis)}\n{season.name} · {season_span(season)}"
                 ),
                 "fields": fields,
                 "color": 0x4A4DB8,

@@ -17,6 +17,11 @@ def pool(client: Client, season_id: int) -> list[str]:
     return [map["shortname"] for map in resp.json()["maps"]]
 
 
+def week_maps(body: dict[str, Any]) -> dict[int, int]:
+    """The game 1 map of each round that has one."""
+    return {r["playday"]: r["map_id"] for r in body["rounds"] if r["map_id"]}
+
+
 @pytest.fixture
 def three_maps(
     client: Client, seeded: dict[str, Any], auth_headers: dict[str, str]
@@ -157,39 +162,36 @@ def test_the_admin_names_and_clears_the_map_of_a_week(
     season_id = seeded["season_id"]
 
     resp = client.put(
-        f"/seasons/{season_id}/week-maps",
+        f"/seasons/{season_id}/rounds",
         json={"playday": 2, "map_id": three_maps[1]},
         headers=auth_headers,
     )
     assert resp.status_code == 200, resp.text
-    assert resp.json()["week_maps"] == [{"playday": 2, "map_id": three_maps[1]}]
+    assert week_maps(resp.json()) == {2: three_maps[1]}
 
     # A second write to the same week replaces the map
     client.put(
-        f"/seasons/{season_id}/week-maps",
+        f"/seasons/{season_id}/rounds",
         json={"playday": 1, "map_id": three_maps[0]},
         headers=auth_headers,
     )
     resp = client.put(
-        f"/seasons/{season_id}/week-maps",
+        f"/seasons/{season_id}/rounds",
         json={"playday": 2, "map_id": three_maps[2]},
         headers=auth_headers,
     )
-    assert resp.json()["week_maps"] == [
-        {"playday": 1, "map_id": three_maps[0]},
-        {"playday": 2, "map_id": three_maps[2]},
-    ]
-    assert client.get(f"/seasons/{season_id}").json()["week_maps"] == [
-        {"playday": 1, "map_id": three_maps[0]},
-        {"playday": 2, "map_id": three_maps[2]},
-    ]
+    assert week_maps(resp.json()) == {1: three_maps[0], 2: three_maps[2]}
+    assert week_maps(client.get(f"/seasons/{season_id}").json()) == {
+        1: three_maps[0],
+        2: three_maps[2],
+    }
 
     resp = client.put(
-        f"/seasons/{season_id}/week-maps",
+        f"/seasons/{season_id}/rounds",
         json={"playday": 2, "map_id": None},
         headers=auth_headers,
     )
-    assert resp.json()["week_maps"] == [{"playday": 1, "map_id": three_maps[0]}]
+    assert week_maps(resp.json()) == {1: three_maps[0]}
 
 
 @pytest.mark.parametrize("playday", [0, 5, -1])
@@ -202,7 +204,7 @@ def test_a_week_outside_the_season_takes_no_map(
 ) -> None:
     """The seeded season runs four weeks."""
     resp = client.put(
-        f"/seasons/{seeded['season_id']}/week-maps",
+        f"/seasons/{seeded['season_id']}/rounds",
         json={"playday": playday, "map_id": three_maps[0]},
         headers=auth_headers,
     )
@@ -218,7 +220,7 @@ def test_a_map_leaving_the_pool_takes_its_week_with_it(
     auth_headers: dict[str, str],
 ) -> None:
     client.put(
-        f"/seasons/{seeded['season_id']}/week-maps",
+        f"/seasons/{seeded['season_id']}/rounds",
         json={"playday": 1, "map_id": three_maps[1]},
         headers=auth_headers,
     )
@@ -231,7 +233,7 @@ def test_a_map_leaving_the_pool_takes_its_week_with_it(
     )
 
     assert resp.status_code == 200, resp.text
-    assert resp.json()["week_maps"] == []
+    assert week_maps(resp.json()) == {}
 
 
 def test_a_map_outside_the_pool_is_not_a_week_map(
@@ -242,7 +244,7 @@ def test_a_map_outside_the_pool_is_not_a_week_map(
     ).json()["id"]
 
     resp = client.put(
-        f"/seasons/{seeded['season_id']}/week-maps",
+        f"/seasons/{seeded['season_id']}/rounds",
         json={"playday": 1, "map_id": outside},
         headers=auth_headers,
     )

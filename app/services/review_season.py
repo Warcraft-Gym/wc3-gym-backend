@@ -21,7 +21,7 @@ from app.models.enums import Race
 from app.models.match import Match
 from app.models.relationships import (
     DBMapSeason,
-    DBSeasonWeekMap,
+    DBSeasonRound,
     DBTeamSeasonCaptain,
     DBUserSeasonSignup,
 )
@@ -95,9 +95,11 @@ def build(discord_a: str, discord_b: str) -> str:
             session.add(DBMapSeason(map_id=map_id, season_id=sid))
         for week in range(1, WEEKS + 1):
             session.add(
-                DBSeasonWeekMap(
+                DBSeasonRound(
                     season_id=sid,
                     playday=week,
+                    start_date=today + timedelta(weeks=week - 1),
+                    end_date=today + timedelta(weeks=week - 1, days=6),
                     map_id=pool[(week - 1) % len(pool)],
                 )
             )

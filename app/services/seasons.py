@@ -1,4 +1,5 @@
 import logging
+from datetime import timedelta
 
 from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
@@ -9,6 +10,7 @@ from sqlmodel import col
 from app.core.db import Session, rel
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.core.query import QueryElement, QueryUtil
+from app.models.base import ident
 from app.models.enums import Race
 from app.models.ladder_achievement import (
     LadderAchievement,
@@ -19,8 +21,9 @@ from app.models.ladder_achievement import (
 from app.models.map import LadderMapRow, Map
 from app.models.relationships import (
     DBMapSeason,
-    DBSeasonWeekMap,
+    DBSeasonRound,
     DBUserSeasonSignup,
+    SeasonRoundWrite,
 )
 from app.models.season import (
     Season,
@@ -48,7 +51,7 @@ _SEASON_OPTIONS = (
     noload(rel(Season.user_teams)),
     noload(rel(Season.teams)),
     selectinload(rel(Season.maps)).joinedload(rel(DBMapSeason.map)),
-    selectinload(rel(Season.week_maps)),
+    selectinload(rel(Season.rounds)),
     noload(rel(Season.signup_users)),
 )
 
@@ -67,6 +70,26 @@ def _achievement_set(
         for row in sorted(rows, key=lambda row: order.get(row.rule_id, len(order)))
         if row.rule_id in BY_ID
     ]
+
+
+def _fill_rounds(session: OrmSession, season: Season) -> None:
+    """One round per playday. A missing round is added a week after the one
+    before it; a round past the last playday is dropped; a set date stays."""
+    rounds = {row.playday: row for row in season.rounds}
+    for playday in range(1, season.number_weeks + 1):
+        row = rounds.get(playday) or DBSeasonRound(
+            season_id=ident(season), playday=playday
+        )
+        # ponytail: weekly rounds, the GNL cadence; a stage cadence when cups need it
+        if row.start_date is None and season.start_date:
+            row.start_date = season.start_date + timedelta(weeks=playday - 1)
+            row.end_date = row.start_date + timedelta(days=6)
+        session.add(row)
+    for playday, row in rounds.items():
+        if playday > season.number_weeks:
+            session.delete(row)
+    session.flush()
+    session.expire(season, ["rounds"])
 
 
 def _public(session: OrmSession, season: Season) -> SeasonPublic:
@@ -89,6 +112,7 @@ class SeasonService:
             # A new season scores like the last one until an admin re-prices it
             session.add_all(default_rows(new_season.id))
             session.flush()
+            _fill_rounds(session, new_season)
             return _public(session, new_season)
 
     def update(self, season_id: int, season: SeasonUpdate) -> SeasonPublic:
@@ -100,6 +124,8 @@ class SeasonService:
                 raise NotFoundError("Season not found")
             if season.model_fields_set & {"pick_ban", "map_rules"}:
                 check_order(row)
+            if season.model_fields_set & {"number_weeks", "start_date"}:
+                _fill_rounds(session, row)
             return _public(session, row)
 
     def delete(self, season_id: int) -> None:
@@ -296,32 +322,36 @@ class SeasonService:
             session.expire(season, ["maps"])
             return _public(session, season)
 
-    def set_week_map(
-        self, season_id: int, playday: int, map_id: int | None
-    ) -> SeasonPublic:
-        """Name the game 1 map of one playday, or clear it with a null map."""
+    def set_round(self, season_id: int, data: SeasonRoundWrite) -> SeasonPublic:
+        """Set the dates and the game 1 map of one round.
+
+        A field left out of the write keeps its value; a null clears it.
+        """
         with Session.begin() as session:
             season = session.get(Season, season_id)
             if not season:
                 raise NotFoundError(f"Season not found by id: {season_id}")
-            if not 1 <= playday <= season.number_weeks:
+            if not 1 <= data.playday <= season.number_weeks:
                 raise BadRequestError(
                     f"playday must be between 1 and {season.number_weeks}"
                 )
-            if map_id is None:
-                row = session.get(DBSeasonWeekMap, (season_id, playday))
-                if row:
-                    session.delete(row)
-            elif map_id not in {link.map_id for link in season.maps}:
+            fields = data.model_dump(exclude_unset=True, exclude={"playday"})
+            map_id = fields.get("map_id")
+            if map_id is not None and map_id not in {
+                link.map_id for link in season.maps
+            }:
                 raise BadRequestError(
                     f"Map not part of the season, map id: {map_id}, season id {season_id}"
                 )
-            else:
-                session.merge(
-                    DBSeasonWeekMap(season_id=season_id, playday=playday, map_id=map_id)
-                )
+            row = session.get(
+                DBSeasonRound, (season_id, data.playday)
+            ) or DBSeasonRound(season_id=season_id, playday=data.playday)
+            row.sqlmodel_update(fields)
+            if row.end_date and row.start_date and row.end_date < row.start_date:
+                raise BadRequestError("end_date must not be before start_date")
+            session.add(row)
             session.flush()
-            session.expire(season, ["week_maps"])
+            session.expire(season, ["rounds"])
             return _public(session, season)
 
     def remove_maps(self, season_id: int, map_ids: list[int]) -> SeasonPublic:
@@ -341,10 +371,10 @@ class SeasonService:
                         f"Map not part of the season, map id: {map_id}, season id {season_id}"
                     )
                 session.delete(map_season)
-            # A week map has to come from the pool, so it leaves with its map.
-            for week_map in list(season.week_maps):
-                if week_map.map_id in map_ids:
-                    session.delete(week_map)
+            # A round's map has to come from the pool, so it leaves with its map.
+            for round_ in season.rounds:
+                if round_.map_id in map_ids:
+                    round_.map_id = None
             session.flush()
             session.refresh(season)
             # A smaller pool may no longer carry the order

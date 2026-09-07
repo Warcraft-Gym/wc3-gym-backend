@@ -4,12 +4,14 @@ The link tables with a model's worth of columns are in their own files:
 team_season.py and user_team_season.py.
 """
 
-from typing import TYPE_CHECKING, Self
+from datetime import date
+from typing import TYPE_CHECKING, Annotated, Self
 
 from sqlmodel import Field, Relationship, SQLModel
 
 from app.models.base import DBModel
 from app.models.enums import Race
+from app.models.types import IsoDate, LenientDate
 
 if TYPE_CHECKING:
     from app.models.fantasy_team import FantasyTeam
@@ -52,29 +54,41 @@ class DBMapSeason(DBModel, table=True):
     map: "Map" = Relationship(back_populates="seasons")
 
 
-class DBSeasonWeekMap(DBModel, table=True):
-    """The map game 1 of every series of one playday is played on."""
+class DBSeasonRound(DBModel, table=True):
+    """One scheduled round of a season: its date window and the map of game 1."""
 
-    __tablename__ = "season_week_map"
+    __tablename__ = "season_rounds"
     season_id: int = Field(foreign_key="seasons.id", primary_key=True)
     playday: int = Field(primary_key=True)
-    map_id: int = Field(index=True, foreign_key="maps.id")
-    season: "Season" = Relationship(back_populates="week_maps")
+    # The window the round is played in; no end date means a one-day round
+    start_date: date | None = None
+    end_date: date | None = None
+    map_id: int | None = Field(default=None, index=True, foreign_key="maps.id")
+    season: "Season" = Relationship(back_populates="rounds")
 
 
-class SeasonWeekMapPublic(SQLModel):
+class SeasonRoundPublic(SQLModel):
     playday: int
-    map_id: int
+    start_date: Annotated[IsoDate | None, LenientDate] = None
+    end_date: Annotated[IsoDate | None, LenientDate] = None
+    map_id: int | None = None
 
     @classmethod
-    def from_row(cls, row: DBSeasonWeekMap) -> Self:
-        return cls(playday=row.playday, map_id=row.map_id)
+    def from_row(cls, row: DBSeasonRound) -> Self:
+        return cls(
+            playday=row.playday,
+            start_date=row.start_date,
+            end_date=row.end_date,
+            map_id=row.map_id,
+        )
 
 
-class SeasonWeekMapWrite(SQLModel):
-    """One playday's map. A null map clears the playday."""
+class SeasonRoundWrite(SQLModel):
+    """One round's settings. A field left out keeps its value; a null clears it."""
 
     playday: int
+    start_date: Annotated[date | None, LenientDate] = None
+    end_date: Annotated[date | None, LenientDate] = None
     map_id: int | None = None
 
 

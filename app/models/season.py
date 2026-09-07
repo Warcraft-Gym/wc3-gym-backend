@@ -9,7 +9,7 @@ from sqlmodel import Field, Relationship, SQLModel, col
 from app.models.base import DBModel, ident
 from app.models.enums import Race
 from app.models.map import MapPublic
-from app.models.relationships import SeasonWeekMapPublic
+from app.models.relationships import SeasonRoundPublic
 from app.models.types import (
     AwareUTC,
     EnumValue,
@@ -25,7 +25,7 @@ from app.models.types import (
 if TYPE_CHECKING:
     from app.models.relationships import (
         DBMapSeason,
-        DBSeasonWeekMap,
+        DBSeasonRound,
         DBUserSeasonSignup,
     )
     from app.models.team_season import DBTeamSeason
@@ -100,11 +100,11 @@ class Season(SeasonBase, DBModel, table=True):
             "order_by": "DBMapSeason.position",
         },
     )
-    week_maps: list["DBSeasonWeekMap"] = Relationship(
+    rounds: list["DBSeasonRound"] = Relationship(
         back_populates="season",
         sa_relationship_kwargs={
             "cascade": "all, delete",
-            "order_by": "DBSeasonWeekMap.playday",
+            "order_by": "DBSeasonRound.playday",
         },
     )
 
@@ -206,7 +206,7 @@ class SeasonPublic(SeasonBase):
     start_date: Annotated[IsoDate | None, LenientDate] = None
     end_date: Annotated[IsoDate | None, LenientDate] = None
     maps: Annotated[list[MapPublic], NoneToList] = []
-    week_maps: Annotated[list[SeasonWeekMapPublic], NoneToList] = []
+    rounds: Annotated[list[SeasonRoundPublic], NoneToList] = []
     # Always empty; the public pages read this field
     user_signup: Annotated[list[Any], NoneToList] = []
     # The race of the signup this season is nested under; null everywhere else
@@ -227,9 +227,7 @@ class SeasonPublic(SeasonBase):
                 for map_season in (season.maps or [])
                 if map_season and map_season.map
             ],
-            week_maps=[
-                SeasonWeekMapPublic.from_row(row) for row in (season.week_maps or [])
-            ],
+            rounds=[SeasonRoundPublic.from_row(row) for row in (season.rounds or [])],
             discordRole=season.discordRole,
             map_rules=season.map_rules,
             score_system=season.score_system,

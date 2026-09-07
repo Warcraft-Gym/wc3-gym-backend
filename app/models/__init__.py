@@ -42,6 +42,7 @@ from app.models import (
     season,
     season_info,
     series,
+    series_cast,
     series_replay,
     series_veto_step,
     settings,

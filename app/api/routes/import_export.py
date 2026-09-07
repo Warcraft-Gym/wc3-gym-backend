@@ -247,7 +247,7 @@ def export_season(
                     series.player2_points or "",
                     series.host_player_id,
                     date_time_str,
-                    series.caster or "",
+                    series.casts[0].channel_url if series.casts else "",
                     series.is_fantasy_match or False,
                 ]
             )
