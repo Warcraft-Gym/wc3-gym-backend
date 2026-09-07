@@ -22,7 +22,13 @@ from app.core.query import QueryUtil
 from app.models.season import SeasonPublic
 from app.models.types import utcnow
 from app.models.w3c_ladder_match import LadderPlayer
-from app.services import discord, discord_posts, discord_roles, player_series
+from app.services import (
+    casts,
+    discord,
+    discord_posts,
+    discord_roles,
+    player_series,
+)
 from app.services.commands import announce, postlinks, score, veto, w3c
 from app.services.commands.base import (
     PRIVATE,
@@ -149,7 +155,10 @@ def upcoming(
         "embeds": [
             {
                 "title": f"Series in the next {days} days",
-                "description": "\n".join(series_line(row) for row in rows),
+                "description": "\n".join(
+                    ("🔴 " if casts.on_now(row, start) else "") + series_line(row)
+                    for row in rows
+                ),
                 "color": 0x4A4DB8,
             }
         ]

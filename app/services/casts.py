@@ -5,13 +5,28 @@ its channel or removes it. A cast the importer wrote has no owner, so only
 an admin touches it.
 """
 
+from datetime import datetime, timedelta
+
 from sqlalchemy.orm import Session as OrmSession
 from sqlmodel import col, select
 
 from app.core.db import Session
 from app.core.exceptions import ApiError, BadRequestError, NotFoundError
-from app.models.series import Series
+from app.models.series import Series, SeriesPublic
 from app.models.series_cast import CastPublic, SeriesCast
+
+# A cast series counts as on now from half an hour before its time to four hours after
+WINDOW_BEFORE = timedelta(minutes=30)
+WINDOW_AFTER = timedelta(hours=4)
+
+
+def on_now(series: SeriesPublic, now: datetime) -> bool:
+    """A claimed series with no result, inside its window. No platform is asked."""
+    if not series.casts or series.date_time is None:
+        return False
+    if series.player1_score is not None or series.player2_score is not None:
+        return False
+    return series.date_time - WINDOW_BEFORE <= now <= series.date_time + WINDOW_AFTER
 
 
 def _rows(session: OrmSession, series_id: int) -> list[CastPublic]:
