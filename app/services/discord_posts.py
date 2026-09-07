@@ -18,9 +18,9 @@ from app.services.series import SeriesService
 
 # The cards about a series that show its time and veto, by the command that posts them
 SERIES_KINDS = ("veto", "announce")
-# The result card the app posts itself, in the channel this setting names
+# The result card the app posts itself, in the channel the old bot's setting names
 RESULT = "result"
-RESULTS_CHANNEL = "discord_results_channel_id"
+RESULTS_CHANNEL = "results_channel_id"
 
 
 def result_card(series: SeriesPublic) -> dict[str, Any]:

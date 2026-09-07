@@ -30,7 +30,7 @@ def report(client: Client, series_id: int, token: str, p1: int, p2: int) -> None
 @pytest.fixture
 def results_channel() -> None:
     with Session.begin() as session:
-        session.add(Settings(key="discord_results_channel_id", value="results"))
+        session.add(Settings(key="results_channel_id", value="results"))
 
 
 def test_a_result_posts_once_and_a_correction_edits_it(
