@@ -8,9 +8,9 @@ import os
 from typing import Any
 
 from app.core.db import Session
-from app.models.series import Series, SeriesPublic
+from app.models.map import Map
+from app.models.series import SeriesPublic
 from app.models.user import UserPublic
-from app.services import discord
 from app.services.interactions import (
     PRIVATE,
     PUBLIC,
@@ -19,7 +19,6 @@ from app.services.interactions import (
     options_of,
     own_series,
 )
-from app.services.series import SeriesService
 from app.services.series_veto import SeriesVetoService
 
 # Both commands take the same option: a series of the caller, by autocomplete
@@ -62,15 +61,29 @@ def board_link(series_id: int) -> str:
 
 
 def state(series: SeriesPublic) -> str:
-    """The veto in one phrase: complete, or the steps taken and whose turn it is."""
-    service = SeriesVetoService()
-    if service.is_complete(series.id):
-        return "veto complete"
-    board = service.board(series.id, None)
-    step = board.order[len(board.steps)]
-    on_turn = series.player1 if step.upper().endswith("_A") else series.player2
-    name = (on_turn.name if on_turn else None) or "?"
-    return f"veto {len(board.steps)}/{len(board.order)}, {name} to move"
+    """The veto, a line per step: the fixed map, each ban and pick with who
+    took it, and whose move it is until the veto is complete."""
+    board = SeriesVetoService().board(series.id, None)
+    names = {"A": series.player1, "B": series.player2}
+
+    def name(side: str) -> str:
+        player = names[side]
+        return (player.name if player else None) or "?"
+
+    lines = []
+    if board.week_map_id:
+        with Session() as session:
+            fixed = session.get(Map, board.week_map_id)
+        lines.append(f"Fixed map · {(fixed.shortname or fixed.name) if fixed else '?'}")
+    lines += [
+        f"{step.action.title()} · {step.shortname or step.name} · {name(step.side)}"
+        for step in board.steps
+    ]
+    if board.complete:
+        return "\n".join(["veto complete", *lines])
+    action, _, side = board.order[len(board.steps)].partition("_")
+    turn = f"{name(side.upper())} to {action.lower()}"
+    return "\n".join([f"veto {len(board.steps)}/{len(board.order)}, {turn}", *lines])
 
 
 def card(series: SeriesPublic) -> dict[str, Any]:
@@ -88,36 +101,3 @@ def run(payload: dict[str, Any], services: Services) -> tuple[dict[str, Any], bo
     if series is None:
         return {"content": "not_authorized_for_this_series"}, PRIVATE
     return card(series), PUBLIC
-
-
-def remember_post(
-    series_id: int, command: str, channel_id: str, message_id: str
-) -> None:
-    """Keep the bot's post of the series, so a veto step can edit it. The
-    newest post replaces the last one."""
-    with Session.begin() as session:
-        series = session.get(Series, series_id)
-        if series:
-            series.discord_post_command = command
-            series.discord_post_channel_id = channel_id
-            series.discord_post_message_id = message_id
-
-
-def refresh_post(series_id: int) -> None:
-    """Rebuild the bot's last post of the series, if there is one, so its
-    veto line says where the veto stands now."""
-    from app.services.commands import announce  # imports this module
-
-    with Session() as session:
-        series = session.get(Series, series_id)
-        if not series:
-            return
-        command = series.discord_post_command
-        channel_id = series.discord_post_channel_id
-        message_id = series.discord_post_message_id
-    if not command or not channel_id or not message_id:
-        return
-    build = {"veto": card, "announce": announce.card}[command]
-    discord.edit_channel_message(
-        channel_id, message_id, build(SeriesService().get(series_id))
-    )

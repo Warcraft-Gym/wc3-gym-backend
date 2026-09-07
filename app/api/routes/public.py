@@ -55,8 +55,14 @@ from app.models.user_season_availability import (
     PlayerAvailabilityWrite,
     UserSeasonAvailabilityPublic,
 )
-from app.services import discord, discord_roles, player_history, player_series, replays
-from app.services.commands import veto
+from app.services import (
+    discord,
+    discord_posts,
+    discord_roles,
+    player_history,
+    player_series,
+    replays,
+)
 from app.services.seasons import SeasonService
 from app.services.series import SeriesService
 
@@ -606,7 +612,7 @@ def set_player_series_veto(
     The bot's post of the series, if any, is edited after the answer."""
     viewer, entered_by = _veto_viewer(request, credentials, data.token, user_service)
     board = veto_service.take(series_id, viewer, data.action, data.map_id, entered_by)
-    background.add_task(veto.refresh_post, series_id)
+    background.add_task(discord_posts.refresh_series, series_id)
     return board
 
 

@@ -23,6 +23,7 @@ from app.models import (
     admin_grant,
     base,
     clerk_account,
+    discord_post,
     discord_role_binding,
     draft_series,
     enums,

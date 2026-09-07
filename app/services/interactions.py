@@ -26,7 +26,7 @@ from app.models.team import TeamReduced
 from app.models.types import utcnow
 from app.models.user import UserPublic
 from app.models.w3c_ladder_match import LadderPlayer
-from app.services import discord, discord_roles, player_series
+from app.services import discord, discord_posts, discord_roles, player_series
 from app.services.commands import score
 from app.services.fantasy_teams import FantasyTeamService
 from app.services.ladder import LadderService
@@ -426,10 +426,10 @@ def handle(payload: dict[str, Any], services: Services) -> dict[str, Any]:
     channel_id = payload["channel_id"]
     message_id = discord.post_reply(application_id, token, channel_id, message)
     name = payload["data"]["name"]
-    if message_id and name in ("veto", "announce"):
-        # The series keeps the post; a veto step edits its veto line
-        veto.remember_post(
-            int(options_of(payload)["series"]), name, channel_id, message_id
+    if message_id and name in discord_posts.SERIES_KINDS:
+        # A write to the series edits the card
+        discord_posts.remember(
+            name, int(options_of(payload)["series"]), channel_id, message_id
         )
     return {"ok": True}
 
