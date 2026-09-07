@@ -14,6 +14,7 @@ from app.models.season import SeasonPublic
 from app.models.series import Series
 from app.models.types import utcnow
 from app.services import discord, interactions
+from app.services.commands import base
 from tests.discord import (
     APP_ID,
     CHANNEL,
@@ -136,9 +137,7 @@ def test_season_span_counts_the_weeks_of_the_range(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A 59-day window is 9 weeks however many it plays; day 27 is week 4."""
-    monkeypatch.setattr(
-        interactions, "utcnow", lambda: datetime(2026, 9, 6, 12, tzinfo=UTC)
-    )
+    monkeypatch.setattr(base, "utcnow", lambda: datetime(2026, 9, 6, 12, tzinfo=UTC))
     season = SeasonPublic(
         id=5,
         name="Review",
@@ -147,9 +146,9 @@ def test_season_span_counts_the_weeks_of_the_range(
         start_date=date(2026, 8, 10),
         end_date=date(2026, 10, 7),
     )
-    assert interactions._season_span(season) == "2026-08-10 to 2026-10-07 · week 4 of 9"
+    assert base.season_span(season) == "2026-08-10 to 2026-10-07 · week 4 of 9"
     season.start_date = date(2026, 9, 7)
-    assert interactions._season_span(season) == "2026-09-07 to 2026-10-07"
+    assert base.season_span(season) == "2026-09-07 to 2026-10-07"
 
 
 def test_leaderboard_fantasy_ranks_the_seasons_fantasy_teams(

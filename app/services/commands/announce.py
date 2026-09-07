@@ -3,18 +3,13 @@
 from typing import Any
 
 from app.models.series import SeriesPublic
+from app.services.commands.base import PRIVATE, PUBLIC, Services, series_line
 from app.services.commands.veto import (
     SERIES_OPTION,
     board_link,
     picked,
     ping,
     state,
-)
-from app.services.interactions import (
-    PRIVATE,
-    PUBLIC,
-    Services,
-    _series_line,
 )
 
 COMMAND: dict[str, Any] = {
@@ -27,7 +22,7 @@ COMMAND: dict[str, Any] = {
 def card(series: SeriesPublic) -> dict[str, Any]:
     """An embed with the time, the caster and the veto."""
     # The series line without its stamp, caster and id: "Wk 1 · A (Alpha) vs B (Beta)"
-    title = " · ".join(_series_line(series).split(" · ")[1:3])
+    title = " · ".join(series_line(series).split(" · ")[1:3])
     stamp = int(series.date_time.timestamp()) if series.date_time else None
     lines = [f"<t:{stamp}:F> (<t:{stamp}:R>)" if stamp else "Not scheduled yet"]
     if series.caster:
