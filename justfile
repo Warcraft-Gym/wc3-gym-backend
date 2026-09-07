@@ -44,6 +44,11 @@ typecheck:
 discord-commands:
     uv run --env-file .env python -c 'from app.services.interactions import register_commands; print(register_commands())'
 
+# Upload docs/discord-emojis/*.png as the app's emojis (race icons and the w3champions
+# crown); /stats shows them once they exist. Reads DISCORD_APPLICATION_ID and DISCORD_BOT_TOKEN.
+discord-emojis:
+    uv run --env-file .env python -c 'from pathlib import Path; from app.services.discord import upload_app_emojis; print(upload_app_emojis(Path("docs/discord-emojis")))'
+
 # Format the code and apply the lint fixes ruff can make.
 fmt:
     uv run ruff format .

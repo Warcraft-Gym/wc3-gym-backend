@@ -5,9 +5,12 @@ account (`identify` scope); the bot reads the guild. Membership is all the
 guild decides: app.services.admins says who administers the site.
 """
 
+import base64
 import logging
 import os
 from collections import Counter
+from functools import cache
+from pathlib import Path
 from typing import Any
 
 import requests
@@ -251,6 +254,49 @@ def post_reply(
         _interaction_call("DELETE", application_id, token, "/messages/@original", None)
         return
     edit_reply(application_id, token, message)
+
+
+@cache
+def app_emojis(application_id: str) -> dict[str, str]:
+    """The application's emojis by name, read once per process; empty until
+    `just discord-emojis` uploads them, or when Discord cannot be reached."""
+    response = _bot_get(f"/applications/{application_id}/emojis")
+    if response is None or not response.ok:
+        return {}
+    return {item["name"]: item["id"] for item in response.json()["items"]}
+
+
+def emoji_url(emoji_id: str) -> str:
+    """Where Discord serves an emoji as an image."""
+    return f"https://cdn.discordapp.com/emojis/{emoji_id}.png"
+
+
+def upload_app_emojis(folder: Path) -> list[str]:
+    """Upload every PNG in the folder as an application emoji named by its
+    file stem; an emoji that exists already is left as it is."""
+    headers = _bot_headers()
+    application_id = os.getenv("DISCORD_APPLICATION_ID", "")
+    if not headers or not application_id:
+        raise ApiError(
+            503, {"error": "DISCORD_BOT_TOKEN and DISCORD_APPLICATION_ID are needed"}
+        )
+    have = app_emojis(application_id)
+    uploaded = []
+    for png in sorted(folder.glob("*.png")):
+        if png.stem in have:
+            continue
+        image = base64.b64encode(png.read_bytes()).decode()
+        response = requests.request(
+            "POST",
+            f"{API_URL}/applications/{application_id}/emojis",
+            headers=headers,
+            json={"name": png.stem, "image": f"data:image/png;base64,{image}"},
+            timeout=REQUEST_TIMEOUT,
+        )
+        if not response.ok:
+            raise ApiError(response.status_code, {"error": response.text})
+        uploaded.append(png.stem)
+    return uploaded
 
 
 def register_guild_commands(commands: list[dict[str, Any]]) -> list[str]:
