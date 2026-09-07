@@ -265,7 +265,7 @@ def test_one_player_records_a_veto_that_happened_elsewhere(
     assert resp.status_code == 200, resp.text
     body = resp.json()
 
-    # The rules of a live veto hold, and the forced final step names the same enterer
+    # The rules of a live veto hold, and the forced final step names nobody
     assert [
         (step["side"], step["action"], step["shortname"], step["entered_by"])
         for step in body["steps"]
@@ -273,13 +273,19 @@ def test_one_player_records_a_veto_that_happened_elsewhere(
         ("A", "ban", "EI", seeded["player_ids"][3]),
         ("B", "ban", "TS", seeded["player_ids"][3]),
         ("A", "pick", "LR", seeded["player_ids"][3]),
-        ("B", "pick", "AL", seeded["player_ids"][3]),
+        ("B", "pick", "AL", None),
     ]
     assert body["complete"] is True
 
     resp = write(client, series_id, side_b, action="record", map_id=pool[0])
     assert resp.status_code == 400, resp.text
     assert resp.json() == {"error": "The veto is complete"}
+
+    # The forced step goes with the step that forced it, on the enterer's undo
+    resp = write(client, series_id, side_b, action="undo")
+    assert resp.status_code == 200, resp.text
+    assert [step["shortname"] for step in resp.json()["steps"]] == ["EI", "TS"]
+    assert resp.json()["complete"] is False
 
 
 def test_an_admin_enters_any_side_and_takes_back_any_step(
@@ -398,7 +404,7 @@ def test_an_admin_who_plays_is_named_on_the_steps_they_enter(
     auth_headers: dict[str, str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """An admin with a player row enters both sides; every step names them, the self-taken last one too."""
+    """An admin with a player row enters both sides; every step they take names them."""
     from tests.test_discord_auth import _grant
     from tests.test_public_token import member_session
 
@@ -421,4 +427,4 @@ def test_an_admin_who_plays_is_named_on_the_steps_they_enter(
         ("A", "pick"),
         ("B", "pick"),
     ]
-    assert [s["entered_by"] for s in steps] == [seeded["player_ids"][1]] * 4
+    assert [s["entered_by"] for s in steps] == [seeded["player_ids"][1]] * 3 + [None]

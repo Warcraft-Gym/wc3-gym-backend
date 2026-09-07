@@ -55,14 +55,19 @@ class SeriesVetoService:
             steps = _steps(session, series_id)
             side = "A" if user_id == series.player1_id else "B"
             if action == "undo":
-                if not steps:
+                # A forced last step goes with the step that forced it: nobody took it
+                undone = (
+                    steps[-2:] if _forced_last(session, series, steps) else steps[-1:]
+                )
+                if not undone:
                     raise BadRequestError("The last step is not yours to take back")
                 if user_id is not None and user_id not in (
-                    steps[-1].entered_by,
-                    series.player1_id if steps[-1].side == "A" else series.player2_id,
+                    undone[0].entered_by,
+                    series.player1_id if undone[0].side == "A" else series.player2_id,
                 ):
                     raise BadRequestError("The last step is not yours to take back")
-                session.delete(steps[-1])
+                for step in undone:
+                    session.delete(step)
             else:
                 _take_step(
                     session,
@@ -106,7 +111,7 @@ def _side(entry: str) -> str:
 
 
 STEPS = ("Ban_A", "Ban_B", "Pick_A", "Pick_B")
-DEFAULT_RULES = "veto,veto,veto"  # no rules set is the Bo3 the scoring assumes
+DEFAULT_RULES = "week,loser,loser"  # no rules set is GNL's Bo3, as the frontend assumes
 
 
 def veto_limits(season: Season) -> tuple[int, int]:
@@ -142,7 +147,7 @@ def check_order(season: Season) -> None:
 
 def _week_map_id(session: OrmSession, season: Season, playday: int) -> int | None:
     """The map a week rule claims for game 1; it never enters the veto."""
-    if "week" not in (season.map_rules or "").split(","):
+    if "week" not in (season.map_rules or DEFAULT_RULES).split(","):
         return None
     row = session.get(DBSeasonWeekMap, (ident(season), playday))
     return row.map_id if row else None
@@ -196,9 +201,21 @@ def _take_step(
                 side=_side(order[-1]),
                 action=order[-1].split("_")[0].lower(),
                 map_id=left[0],
-                entered_by=entered_by,
             )
         )
+
+
+def _forced_last(
+    session: OrmSession, series: Series, steps: list[DBSeriesVetoStep]
+) -> bool:
+    """Whether the last step took itself: the order is complete and it used up
+    the whole board, so one map was left for it."""
+    season = series.match.season
+    order = _order(season)
+    week = _week_map_id(session, season, series.match.playday)
+    return len(order) >= 2 and len(steps) == len(order) == len(season.maps) - (
+        week is not None
+    )
 
 
 def _board(
