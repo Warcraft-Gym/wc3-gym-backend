@@ -8,6 +8,7 @@ import pytest
 from httpx2 import Client
 
 from app.core.db import Session
+from app.models.season import Season
 from app.models.series import Series
 from tests.discord import CHANNEL, WEBHOOK, autocomplete, command, signed
 from tests.test_series_veto import pool, taken, write  # noqa: F401  # pool is a fixture
@@ -211,3 +212,25 @@ def test_a_veto_step_without_a_post_calls_discord_not_at_all(
 ) -> None:
     taken(client, seeded["series_open_id"], dashboard_token(discord_id="2"), pool[1])
     assert discord_calls == []
+
+
+def test_the_card_follows_the_seasons_map_rules(
+    client: Client,
+    public_key: None,
+    discord_calls: list,
+    seeded: dict[str, Any],
+    pool: list[int],  # noqa: F811  # the fixture of the veto tests
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A season without the week rule has no fixed map, so the card has no
+    fixed map line; the card carries no rule wording of its own."""
+    monkeypatch.setenv("FRONTEND_URL", SITE)
+    series_id = seeded["series_open_id"]
+    with Session.begin() as session:
+        season = session.get(Season, seeded["season_id"])
+        assert season
+        season.map_rules = "veto,loser"
+    send(client, command("veto", user="2", series=series_id))
+    content = discord_calls[0][2]["content"]
+    assert f"· veto 0/4, P2 to ban\n{SITE}" in content
+    assert "Fixed map" not in content
