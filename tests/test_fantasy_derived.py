@@ -34,6 +34,7 @@ SCORE_FIELDS = (
     "team_points",
     "race_points",
     "bet_points",
+    "grind_points",
     "total_points",
 )
 
@@ -53,11 +54,13 @@ TEAM_KEYS = [
     "season_id",
     "captain_id",
     "drafted_team_id",
+    "grind_team_id",
     "player_points",
     "bench_points",
     "team_points",
     "race_points",
     "bet_points",
+    "grind_points",
     "total_points",
     "id",
     "drafted_race",
@@ -217,11 +220,11 @@ def league(client: Client) -> dict[str, Any]:
 # D2 stands in a week 1 series and in none in week 2, so he benches once for 5.
 # Team One took 3 off the sweep and 1 off the close loss. HU tops week 1 and NE
 # tops week 2, so each takes 18. The right call pays 10, the wrong one costs 4,
-# and the call on the open series pays nothing.
-FIRST = (14, 5, 4, 18, 6, 47)
+# and the call on the open series pays nothing. No season offers a grind pick.
+FIRST = (14, 5, 4, 18, 6, 0, 47)
 # Second drafts D3, who lost week 1 and won week 2, and never benches. Team Two
 # took 2, OC tops no week, and its captain's only bet sits on the open series.
-SECOND = (8, 0, 2, 0, 0, 10)
+SECOND = (8, 0, 2, 0, 0, 0, 10)
 # The right call pays its stake, the wrong one costs it, the open series pays
 # nothing at all
 BET_RESULTS = [10, -4, None]
@@ -453,10 +456,10 @@ def two_seasons(client: Client) -> dict[str, Any]:
 
 # Fantasy A over season A: a 2-0 pays 10, week 2 sits on the bench for 5,
 # team A1 stands at 3, HU tops the only week for 18, the bet pays its 10.
-FANTASY_A = (10, 5, 3, 18, 10, 46)
+FANTASY_A = (10, 5, 3, 18, 10, 0, 46)
 # Fantasy B over season B: a 2-1 pays 8, the season is one week so nobody
 # sits, team B1 stands at 2, NE tops the only week for 18, the bet loses 7.
-FANTASY_B = (8, 0, 2, 18, -7, 21)
+FANTASY_B = (8, 0, 2, 18, -7, 0, 21)
 
 
 def test_one_answer_pays_each_team_by_its_own_season(

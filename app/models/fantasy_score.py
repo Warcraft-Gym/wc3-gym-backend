@@ -74,6 +74,7 @@ class FantasyScoreTotals(SQLModel):
     team_points: int
     race_points: int
     bet_points: int
+    grind_points: int
     total_points: int
 
 
@@ -88,4 +89,6 @@ class FantasyTeamScoreBreakdown(SQLModel):
     team_breakdown: dict[str, Any]
     race_breakdown: FantasyRaceBreakdown
     bet_breakdown: list[FantasyBetOutcome]
+    # An empty dict without a grind pick, or in a season that offers none
+    grind_breakdown: dict[str, Any] = {}
     totals: FantasyScoreTotals

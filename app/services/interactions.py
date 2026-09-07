@@ -29,7 +29,14 @@ from app.services import (
     discord_roles,
     player_series,
 )
-from app.services.commands import announce, postlinks, score, veto, w3c
+from app.services.commands import (
+    announce,
+    availability,
+    postlinks,
+    score,
+    veto,
+    w3c,
+)
 from app.services.commands.base import (
     PRIVATE,
     PUBLIC,
@@ -44,7 +51,7 @@ from app.services.commands.base import (
 from app.services.seasons import SeasonService
 
 # Interaction types Discord sends
-PING, COMMAND, AUTOCOMPLETE = 1, 2, 4
+PING, COMMAND, COMPONENT, AUTOCOMPLETE = 1, 2, 3, 4
 PONG, AUTOCOMPLETE_RESULT = 1, 8
 
 # The guild's slash commands, as PUT to Discord by `just discord-commands`
@@ -115,6 +122,7 @@ COMMANDS: list[dict[str, Any]] = [
     veto.COMMAND,
     announce.COMMAND,
     w3c.STATS,
+    availability.COMMAND,
 ]
 
 
@@ -325,7 +333,10 @@ HANDLERS = {
     "veto": veto.run,
     "announce": announce.run,
     "stats": w3c.stats,
+    "availability": availability.run,
 }
+# A button press, keyed by the first part of its custom_id
+COMPONENTS = {"availability": availability.press}
 # The autocomplete finders that are not the series list, keyed by command name
 CHOICES: dict[str, Callable[[dict[str, Any], Services], list[dict[str, Any]]]] = {
     "stats": w3c.player_choices
@@ -347,7 +358,11 @@ def handle(payload: dict[str, Any], services: Services) -> dict[str, Any]:
         found = finder(payload, services) if finder else []
         return {"type": AUTOCOMPLETE_RESULT, "data": {"choices": found}}
     application_id, token = payload["application_id"], payload["token"]
-    handler = HANDLERS.get(payload["data"]["name"]) if kind == COMMAND else None
+    handler = None
+    if kind == COMMAND:
+        handler = HANDLERS.get(payload["data"]["name"])
+    elif kind == COMPONENT:
+        handler = COMPONENTS.get(payload["data"].get("custom_id", "").split(":")[0])
     if handler is None:
         discord.edit_reply(application_id, token, {"content": "Unknown command."})
         return {"ok": True}

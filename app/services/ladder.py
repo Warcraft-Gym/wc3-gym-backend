@@ -52,6 +52,7 @@ from app.models.relationships import (
 )
 from app.models.season import Season
 from app.models.team import Team
+from app.models.team_season import DBTeamSeason
 from app.models.types import utcnow
 from app.models.user import User, UserReduced
 from app.models.user_team_season import DBUserTeamSeason
@@ -1266,6 +1267,46 @@ def _earned(
     statement whatever the number of players or matches. A player with no
     match earns nothing."""
     return achievement_rules.earned(session, scope, paid, ctx, any_race)
+
+
+def team_achievement_points(session: OrmSession, season_id: int) -> dict[int, int]:
+    """The achievement points every team of the season holds: the badge points
+    its players earned, which is what a LadderTeam counts over its ladder
+    points. Team badges pay nothing here. A team with no badge reads 0.
+
+    Seven statements, whatever the number of players: the season, its teams,
+    the roster, the prices, the captains, the map pool, then the badges the
+    database evaluates in one.
+    """
+    season = session.get(Season, season_id)
+    if season is None:
+        raise NotFoundError("Season not found")
+    points = dict.fromkeys(
+        session.scalars(
+            select(col(DBTeamSeason.team_id)).where(
+                col(DBTeamSeason.season_id) == season_id
+            )
+        ),
+        0,
+    )
+    roster = _roster(session, season_id)
+    user_ids = [row.user_id for row in roster]
+    window = _window(season)
+    paid, params = _paid(session, season_id)
+    ctx = _context(session, roster, season, params)
+    earned = _earned(
+        session,
+        _scope(user_ids, window, season_id),
+        ctx,
+        paid,
+        _any_race(user_ids, window),
+    )
+    for row in roster:
+        if row.team_id in points:
+            points[row.team_id] += achievements.total_points(
+                earned.get(row.user_id, [])
+            )
+    return points
 
 
 def _empty_races() -> dict[str, list[int]]:

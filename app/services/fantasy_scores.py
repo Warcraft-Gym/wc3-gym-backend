@@ -6,12 +6,16 @@ same scores for one team, with the per-part breakdown the page reads.
 
 from typing import TYPE_CHECKING, Any
 
+from sqlalchemy.orm import Session as OrmSession
+
 from app.core import fantasy
 from app.core.db import Session
 from app.core.query import QueryUtil
+from app.models.team import Team
 from app.services import derived
 from app.services.fantasy_bets import FantasyBetService
 from app.services.fantasy_teams import FantasyTeamService
+from app.services.ladder import team_achievement_points
 
 if TYPE_CHECKING:
     from app.models.fantasy_team import FantasyTeamPublic
@@ -38,6 +42,29 @@ def _drafted_standing(
     return None
 
 
+def _grind(
+    session: OrmSession, fantasy_team: "FantasyTeamPublic", season: "SeasonPublic"
+) -> fantasy.Grind | None:
+    """The grind pick of the fantasy team, with the name of the team it picked.
+
+    A season that offers no pick, or a team without one, grinds nothing.
+    """
+    team_id = fantasy_team.grind_team_id
+    if team_id is None or not season.fantasy_grind:
+        return None
+    by_team = team_achievement_points(session, season.id)
+    rank, points = fantasy.grind_points(by_team, team_id)
+    name = session.get(Team, team_id)
+    return fantasy.Grind(
+        team_id,
+        name.name if name else None,
+        by_team.get(team_id, 0),
+        rank,
+        len(by_team),
+        points,
+    )
+
+
 def team_score_breakdown(
     fantasy_team_service: FantasyTeamService,
     fantasy_bet_service: FantasyBetService,
@@ -50,6 +77,7 @@ def team_score_breakdown(
 
     with Session.begin() as session:
         series_by_week = derived.fantasy_series(session, {season.id}).get(season.id, {})
+        grind = _grind(session, fantasy_team, season)
     race_points, race_stats, race_weekly_details = fantasy.race_points(
         season.number_weeks, series_by_week, True
     )
@@ -73,6 +101,7 @@ def team_score_breakdown(
         race_points=race_points,
         series_by_week=series_by_week,
         number_weeks=season.number_weeks,
+        grind=grind,
         include_breakdown=True,
     )
 
@@ -103,12 +132,14 @@ def team_score_breakdown(
             },
         },
         "bet_breakdown": scores["bet_breakdown"],
+        "grind_breakdown": scores["grind_breakdown"],
         "totals": {
             "player_points": scores["player_points"],
             "bench_points": scores["bench_points"],
             "team_points": scores["team_points"],
             "race_points": race_total_points,
             "bet_points": scores["bet_points"],
+            "grind_points": scores["grind_points"],
             "total_points": scores["total_points"],
         },
     }
