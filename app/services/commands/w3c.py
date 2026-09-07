@@ -7,12 +7,21 @@ w3champions rows, the signup race first and in bold.
 """
 
 from typing import Any
+from urllib.parse import quote
 
 from app.core.exceptions import NotFoundError
+from app.models.user import UserPublic
 from app.models.w3c_ladder_match import UserLadder
 from app.models.w3c_stats import W3CStatsPublic
 from app.services import discord_roles
-from app.services.interactions import PUBLIC, Services, options_of, typed_option
+from app.services.interactions import (
+    PUBLIC,
+    Services,
+    _season_span,
+    _snapshot,
+    options_of,
+    typed_option,
+)
 
 # The player option; its value is the GNL user id
 PLAYER_OPTION = {
@@ -32,9 +41,9 @@ STATS: dict[str, Any] = {
 
 def _record(
     payload: dict[str, Any], services: Services
-) -> tuple[int, UserLadder, list[W3CStatsPublic]] | dict[str, Any]:
-    """The current season, the player's record of it and his w3champions rows,
-    or the answer to send instead."""
+) -> tuple[int, UserLadder, UserPublic, list[W3CStatsPublic]] | dict[str, Any]:
+    """The current season, the player's record of it, the player and his
+    newest w3champions rows, or the answer to send instead."""
     season_id = discord_roles.current_season()
     if season_id is None:
         return {"content": "No current season."}
@@ -43,10 +52,18 @@ def _record(
         answer = services.ladder.user_ladder(user_id, season_id, limit=1)
     except NotFoundError:
         return {"content": "No player with that id."}
-    rows = _newest_per_race(services.users.get(user_id).w3c_stats, answer.race)
+    user = services.users.get(user_id)
+    rows = _newest_per_race(user.w3c_stats, answer.race)
     if not answer.games and not rows:
         return {"content": f"No ladder games synced for {answer.name}."}
-    return season_id, answer, rows
+    return season_id, answer, user, rows
+
+
+def _flag(country: str | None) -> str:
+    """The flag emoji of a two-letter country code, or nothing."""
+    if not country or len(country) != 2 or not country.isalpha():
+        return ""
+    return "".join(chr(0x1F1E6 + ord(letter) - ord("A")) for letter in country.upper())
 
 
 def _newest_per_race(
@@ -83,12 +100,13 @@ def _race_lines(rows: list[W3CStatsPublic], signup_race: str | None) -> list[str
 
 
 def stats(payload: dict[str, Any], services: Services) -> tuple[dict[str, Any], bool]:
-    """/stats player: the season record and points, every race's MMR and
-    record, and the season record by opponent race."""
+    """/stats player: the season's range, the player's record and points in it
+    and by opponent race, and his MMR and record on every race for the whole
+    w3champions season."""
     found = _record(payload, services)
     if isinstance(found, dict):
         return found, PUBLIC
-    season_id, answer, rows = found
+    season_id, answer, user, rows = found
     season = services.seasons.get(season_id)
     versus = " · ".join(
         f"{race} {wins}-{losses}"
@@ -96,29 +114,39 @@ def stats(payload: dict[str, Any], services: Services) -> tuple[dict[str, Any], 
         if wins + losses
     )
     newest = max((row.wc3_season for row in rows), default=None)
-    fields = [
+    fields = []
+    if versus:
+        fields.append({"name": "GNL record by opponent race", "value": versus})
+    fields.append(
         {
-            "name": f"w3champions S{newest}" if newest else "w3champions",
+            "name": f"w3champions S{newest} · all games, not just GNL"
+            if newest
+            else "w3champions",
             "value": "\n".join(_race_lines(rows, answer.race)),
         }
-    ]
-    if versus:
-        fields.append({"name": "Season record by opponent race", "value": versus})
-    return {
-        "embeds": [
-            {
-                "title": f"{answer.name} · {season.name}",
-                "description": (
-                    f"{answer.wins}-{answer.losses} · {answer.games} games\n"
-                    f"{answer.ladder_points} ladder points · "
-                    f"{answer.points - answer.ladder_points} achievement points · "
-                    f"{len(answer.achievements)} badges"
-                ),
-                "fields": fields,
-                "color": 0x4A4DB8,
-            }
-        ]
-    }, PUBLIC
+    )
+    embed = {
+        "title": f"{_flag(user.country)} {answer.name} · {season.name}".strip(),
+        "description": (
+            f"{_season_span(season)}\n"
+            f"{answer.wins}-{answer.losses} · {answer.games} games\n"
+            f"{answer.ladder_points} ladder points · "
+            f"{answer.points - answer.ladder_points} achievement points · "
+            f"{len(answer.achievements)} badges"
+        ),
+        "fields": fields,
+        "color": 0x4A4DB8,
+        **_snapshot(
+            "Ladder synced" if answer.synced_at else "Ladder sync incomplete as of",
+            answer.synced_at,
+        ),
+    }
+    if user.battleTag:
+        embed["author"] = {
+            "name": "w3champions profile",
+            "url": f"https://www.w3champions.com/player/{quote(user.battleTag, safe='')}",
+        }
+    return {"embeds": [embed]}, PUBLIC
 
 
 def player_choices(payload: dict[str, Any], services: Services) -> list[dict[str, Any]]:
