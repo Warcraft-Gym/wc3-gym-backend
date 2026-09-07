@@ -5,6 +5,7 @@ and records the role writes. Without DISCORD_BOT_TOKEN nothing is called at
 all, and the suite fails any call a test did not stand in for.
 """
 
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -771,3 +772,35 @@ def test_binding_a_hidden_role_answers_400(
 
     assert resp.status_code == 400, resp.text
     assert resp.json() == {"error": "Unhide the role before binding it"}
+
+
+def test_app_emojis_read_once_and_upload_skips_what_exists(
+    monkeypatch: pytest.MonkeyPatch, bot_token: None, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("DISCORD_APPLICATION_ID", "app")
+    calls: list[tuple[str, str, Any]] = []
+
+    class Answer:
+        ok = True
+        status_code = 200
+
+        def json(self) -> dict[str, Any]:
+            return {"items": [{"name": "HU", "id": "11"}]}
+
+    def request(method: str, url: str, **kwargs: object) -> Answer:
+        calls.append((method, url, kwargs.get("json")))
+        return Answer()
+
+    monkeypatch.setattr(discord.requests, "request", request)
+    discord.app_emojis.cache_clear()
+    (tmp_path / "HU.png").write_bytes(b"hu")
+    (tmp_path / "OC.png").write_bytes(b"oc")
+    assert discord.upload_app_emojis(tmp_path) == ["OC"]
+    assert discord.app_emojis("app") == {"HU": "11"}
+    # One read for the listing, one upload for OC; HU is there already
+    assert [call[:2] for call in calls] == [
+        ("GET", "https://discord.com/api/v10/applications/app/emojis"),
+        ("POST", "https://discord.com/api/v10/applications/app/emojis"),
+    ]
+    assert calls[1][2] == {"name": "OC", "image": "data:image/png;base64,b2M="}
+    discord.app_emojis.cache_clear()

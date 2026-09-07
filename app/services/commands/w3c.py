@@ -13,7 +13,7 @@ from app.core.exceptions import NotFoundError
 from app.models.user import UserPublic
 from app.models.w3c_ladder_match import UserLadder
 from app.models.w3c_stats import W3CStatsPublic
-from app.services import discord_roles
+from app.services import discord, discord_roles
 from app.services.interactions import (
     PUBLIC,
     Services,
@@ -82,7 +82,15 @@ def _newest_per_race(
     )
 
 
-def _race_lines(rows: list[W3CStatsPublic], signup_race: str | None) -> list[str]:
+def _icon(name: str | None, emojis: dict[str, str]) -> str:
+    """The app emoji of a race or the crown before a text, or nothing until
+    `just discord-emojis` has uploaded it."""
+    return f"<:{name}:{emojis[name]}> " if name in emojis else ""
+
+
+def _race_lines(
+    rows: list[W3CStatsPublic], signup_race: str | None, emojis: dict[str, str]
+) -> list[str]:
     """One line per race, the signup race in bold; a row from an older
     w3champions season than his newest names it. No row on the signup race
     says so, so a player yet to play it still shows his other races."""
@@ -93,9 +101,10 @@ def _race_lines(rows: list[W3CStatsPublic], signup_race: str | None) -> list[str
         text = f"{row.race} {mmr} · {row.wins or 0}-{row.losses or 0}"
         if row.wc3_season < newest:
             text += f" (S{row.wc3_season})"
-        lines.append(f"**{text}**" if row.race == signup_race else text)
+        text = f"**{text}**" if row.race == signup_race else text
+        lines.append(_icon(row.race, emojis) + text)
     if signup_race and all(row.race != signup_race for row in rows):
-        lines.insert(0, f"**{signup_race} no games yet**")
+        lines.insert(0, f"{_icon(signup_race, emojis)}**{signup_race} no games yet**")
     return lines
 
 
@@ -108,8 +117,9 @@ def stats(payload: dict[str, Any], services: Services) -> tuple[dict[str, Any], 
         return found, PUBLIC
     season_id, answer, user, rows = found
     season = services.seasons.get(season_id)
+    emojis = discord.app_emojis(payload["application_id"])
     versus = " · ".join(
-        f"{race} {wins}-{losses}"
+        f"{_icon(race, emojis)}{race} {wins}-{losses}"
         for race, (wins, losses) in answer.vs_race.items()
         if wins + losses
     )
@@ -122,7 +132,7 @@ def stats(payload: dict[str, Any], services: Services) -> tuple[dict[str, Any], 
             "name": f"w3champions S{newest} · all games, not just GNL"
             if newest
             else "w3champions",
-            "value": "\n".join(_race_lines(rows, answer.race)),
+            "value": "\n".join(_race_lines(rows, answer.race, emojis)),
         }
     )
     embed = {
@@ -146,6 +156,8 @@ def stats(payload: dict[str, Any], services: Services) -> tuple[dict[str, Any], 
             "name": "w3champions profile",
             "url": f"https://www.w3champions.com/player/{quote(user.battleTag, safe='')}",
         }
+        if "w3champions" in emojis:
+            embed["author"]["icon_url"] = discord.emoji_url(emojis["w3champions"])
     return {"embeds": [embed]}, PUBLIC
 
 
