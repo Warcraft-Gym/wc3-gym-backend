@@ -120,7 +120,16 @@ class UserService:
         with Session.begin() as session:
             User.delete(session, user_id)
 
-    def get(self, user_id: int) -> UserPublic:
+    def get(self, key: int | str) -> UserPublic:
+        """One user by id, or by battle tag when the key is not all digits.
+
+        A battle tag always carries a `#`, so the two never collide.
+        """
+        key = str(key).strip()
+        if key.isdecimal():
+            where = col(User.id) == int(key)
+        else:
+            where = func.lower(func.trim(col(User.battleTag))) == key.lower()
         with Session.begin() as session:
             # Eager load related entities, disable nested loading
             user = (
@@ -130,13 +139,13 @@ class UserService:
                         joinedload(rel(User.team_seasons)).noload("*"),
                         joinedload(rel(User.w3c_stats)),
                     )
-                    .where(col(User.id) == user_id)
+                    .where(where)
                 )
                 .unique()
                 .first()
             )
             if not user:
-                raise NotFoundError(f"User not found by Id: {user_id}")
+                raise NotFoundError(f"User not found: {key}")
             return _public(session, user)
 
     def search(

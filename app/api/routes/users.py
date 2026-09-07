@@ -42,10 +42,10 @@ def delete_user(user_id: int, service: UserServiceDep) -> None:
     service.delete(user_id)
 
 
-@router.get("/users/{user_id}")
-def get_user(user_id: int, service: UserServiceDep) -> UserPublic:
-    """Retrieve a user by their ID."""
-    return service.get(user_id)
+@router.get("/users/{key}")
+def get_user(key: str, service: UserServiceDep) -> UserPublic:
+    """Retrieve a user by id, or by battle tag: `/users/thanks%2311187`."""
+    return service.get(key)
 
 
 @router.get("/users")
