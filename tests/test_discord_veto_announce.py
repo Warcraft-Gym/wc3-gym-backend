@@ -10,7 +10,7 @@ from httpx2 import Client
 from app.core.db import Session
 from app.models.series import Series
 from tests.discord import CHANNEL, WEBHOOK, autocomplete, command, signed
-from tests.test_series_veto import pool, taken  # noqa: F401  # pool is a fixture
+from tests.test_series_veto import pool, taken, write  # noqa: F401  # pool is a fixture
 
 SITE = "https://gnl.test"
 
@@ -145,3 +145,41 @@ def test_both_commands_autocomplete_the_callers_own_series(
             "type": 8,
             "data": {"choices": [choice]},
         }
+
+
+def test_a_veto_step_edits_the_last_post_of_the_series(
+    client: Client,
+    public_key: None,
+    discord_calls: list,
+    seeded: dict[str, Any],
+    pool: list[int],  # noqa: F811  # the fixture of the veto tests
+    dashboard_token: Any,  # noqa: ANN401  # a factory fixture
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("FRONTEND_URL", SITE)
+    series_id = seeded["series_open_id"]
+    send(client, command("veto", user="2", series=series_id))
+    send(client, command("announce", user="4", series=series_id))
+    discord_calls.clear()
+    side_a = dashboard_token(discord_id="2")
+    taken(client, series_id, side_a, pool[1])
+    write(client, series_id, side_a, action="undo")
+    edit = f"{CHANNEL}/msg-1"
+    assert [call[:2] for call in discord_calls] == [("PATCH", edit), ("PATCH", edit)]
+    # The newest post is the one edited: the /announce card, not the /veto line
+    after_step, after_undo = (
+        call[2]["embeds"][0]["description"] for call in discord_calls
+    )
+    assert "\nveto 1/4, P4 to move\n" in after_step
+    assert "\nveto 0/4, P2 to move\n" in after_undo
+
+
+def test_a_veto_step_without_a_post_calls_discord_not_at_all(
+    client: Client,
+    discord_calls: list,
+    seeded: dict[str, Any],
+    pool: list[int],  # noqa: F811  # the fixture of the veto tests
+    dashboard_token: Any,  # noqa: ANN401  # a factory fixture
+) -> None:
+    taken(client, seeded["series_open_id"], dashboard_token(discord_id="2"), pool[1])
+    assert discord_calls == []

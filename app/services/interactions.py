@@ -420,10 +420,17 @@ def handle(payload: dict[str, Any], services: Services) -> dict[str, Any]:
         discord.edit_reply(application_id, token, {"content": "Unknown command."})
         return {"ok": True}
     message, public = handler(payload, services)
-    if public:
-        discord.post_reply(application_id, token, payload["channel_id"], message)
-    else:
+    if not public:
         discord.edit_reply(application_id, token, message)
+        return {"ok": True}
+    channel_id = payload["channel_id"]
+    message_id = discord.post_reply(application_id, token, channel_id, message)
+    name = payload["data"]["name"]
+    if message_id and name in ("veto", "announce"):
+        # The series keeps the post; a veto step edits its veto line
+        veto.remember_post(
+            int(options_of(payload)["series"]), name, channel_id, message_id
+        )
     return {"ok": True}
 
 

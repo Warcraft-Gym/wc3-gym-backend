@@ -2,6 +2,7 @@
 
 from typing import Any
 
+from app.models.series import SeriesPublic
 from app.services.commands.veto import (
     SERIES_OPTION,
     board_link,
@@ -23,11 +24,8 @@ COMMAND: dict[str, Any] = {
 }
 
 
-def run(payload: dict[str, Any], services: Services) -> tuple[dict[str, Any], bool]:
-    """/announce series: an embed with the time, the caster and the veto."""
-    series = picked(payload, services)
-    if series is None:
-        return {"content": "not_authorized_for_this_series"}, PRIVATE
+def card(series: SeriesPublic) -> dict[str, Any]:
+    """An embed with the time, the caster and the veto."""
     # The series line without its stamp, caster and id: "Wk 1 · A (Alpha) vs B (Beta)"
     title = " · ".join(_series_line(series).split(" · ")[1:3])
     stamp = int(series.date_time.timestamp()) if series.date_time else None
@@ -40,4 +38,12 @@ def run(payload: dict[str, Any], services: Services) -> tuple[dict[str, Any], bo
         "embeds": [
             {"title": title, "description": "\n".join(lines), "color": 0x4A4DB8}
         ],
-    }, PUBLIC
+    }
+
+
+def run(payload: dict[str, Any], services: Services) -> tuple[dict[str, Any], bool]:
+    """/announce series: the match card, posted in the channel."""
+    series = picked(payload, services)
+    if series is None:
+        return {"content": "not_authorized_for_this_series"}, PRIVATE
+    return card(series), PUBLIC

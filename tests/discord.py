@@ -68,6 +68,9 @@ def record(monkeypatch: pytest.MonkeyPatch, status: int) -> list[tuple[str, str,
         ok = status < 400
         status_code = status
 
+        def json(self) -> dict[str, str]:
+            return {"id": "msg-1"}
+
     def request(method: str, url: str, **kwargs: object) -> Answer:
         calls.append((method, url, kwargs.get("json")))
         return Answer()

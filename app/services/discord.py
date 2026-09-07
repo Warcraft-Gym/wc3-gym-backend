@@ -217,43 +217,64 @@ def edit_reply(application_id: str, token: str, message: dict[str, Any]) -> None
     _interaction_call("PATCH", application_id, token, "/messages/@original", message)
 
 
-def post_to_channel(channel_id: str, message: dict[str, Any]) -> bool:
-    """Post a message in a channel as the bot. False with no bot token, or when
-    Discord is unreachable or refuses it."""
+def _channel_call(
+    method: str, path: str, message: dict[str, Any]
+) -> requests.Response | None:
+    """A call on a channel as the bot. None with no bot token, or when Discord
+    is unreachable or refuses it."""
     headers = _bot_headers()
     if not headers:
-        return False
+        return None
     try:
         response = requests.request(
-            "POST",
-            f"{API_URL}/channels/{channel_id}/messages",
+            method,
+            f"{API_URL}/channels/{path}",
             headers=headers,
             json=message,
             timeout=REQUEST_TIMEOUT,
         )
     except requests.RequestException as error:
-        logger.warning("Discord channel post failed: %s", error)
-        return False
+        logger.warning("Discord channel call failed for %s: %s", path, error)
+        return None
     if not response.ok:
-        logger.warning("Discord refused the channel post: %s", response.status_code)
-        return False
-    return True
+        logger.warning(
+            "Discord refused the channel call %s: %s", path, response.status_code
+        )
+        return None
+    return response
+
+
+def post_to_channel(channel_id: str, message: dict[str, Any]) -> str | None:
+    """Post a message in a channel as the bot. The id of the message, or None
+    when it did not go out."""
+    response = _channel_call("POST", f"{channel_id}/messages", message)
+    return str(response.json()["id"]) if response else None
+
+
+def edit_channel_message(
+    channel_id: str, message_id: str, message: dict[str, Any]
+) -> None:
+    """Replace a message the bot posted in a channel."""
+    _channel_call("PATCH", f"{channel_id}/messages/{message_id}", message)
 
 
 def post_reply(
     application_id: str, token: str, channel_id: str, message: dict[str, Any]
-) -> None:
+) -> str | None:
     """Post the answer in the channel as the bot, and drop the private "thinking" reply.
 
     A follow-up through the interaction token cannot leave the deferred reply's
     private state (the first one edits it), so the public post uses the bot
     token. Without a bot token, or when Discord refuses the post, the answer
-    stays in the private reply instead of going nowhere.
+    stays in the private reply instead of going nowhere. The id of the channel
+    post, or None when the answer stayed private.
     """
-    if post_to_channel(channel_id, message):
+    message_id = post_to_channel(channel_id, message)
+    if message_id:
         _interaction_call("DELETE", application_id, token, "/messages/@original", None)
-        return
+        return message_id
     edit_reply(application_id, token, message)
+    return None
 
 
 @cache
