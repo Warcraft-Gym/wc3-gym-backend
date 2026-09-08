@@ -100,6 +100,10 @@ class VodWrite(SQLModel):
         return vod_url(value) if value else None
 
 
+class ClaimWrite(CastWrite, VodWrite):
+    """A claim. A series that is over is claimed with its VOD, which is also the channel."""
+
+
 class CastPublic(PublicModel):
     id: int
     series_id: int

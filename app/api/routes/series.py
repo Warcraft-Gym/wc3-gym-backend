@@ -13,7 +13,7 @@ from app.api.search import SearchQuery
 from app.core.exceptions import NotFoundError
 from app.core.query import QueryUtil
 from app.models.series import SeriesCreate, SeriesPublic, SeriesUpdate
-from app.models.series_cast import CastPublic, CastWrite, VodWrite
+from app.models.series_cast import CastPublic, CastWrite, ClaimWrite, VodWrite
 from app.services import casts
 
 logger = logging.getLogger(__name__)
@@ -130,9 +130,9 @@ def get_casts(series_id: int) -> list[CastPublic]:
 
 
 @router.post("/series/{series_id}/casts", status_code=201)
-def claim_series(series_id: int, data: CastWrite, who: Caster) -> list[CastPublic]:
-    """Claim the series to cast it. An account claims a series once."""
-    return casts.claim(series_id, who[0], data.channel_url)
+def claim_series(series_id: int, data: ClaimWrite, who: Caster) -> list[CastPublic]:
+    """Claim the series to cast it. A series that is over is claimed with its VOD."""
+    return casts.claim(series_id, who[0], data.channel_url, data.vod_url)
 
 
 @router.put("/series/{series_id}/casts/{cast_id}")

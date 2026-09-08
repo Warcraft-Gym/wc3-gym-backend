@@ -57,11 +57,21 @@ def for_series(series_id: int) -> list[CastPublic]:
         return _rows(session, series_id)
 
 
-def claim(series_id: int, user_id: int, channel_url: str) -> list[CastPublic]:
-    """Add the account's claim; the account claims a series once."""
+def claim(
+    series_id: int, user_id: int, channel_url: str, vod_url: str | None = None
+) -> list[CastPublic]:
+    """Add the account's claim; the account claims a series once.
+
+    A series with a result has nothing left to stream, so it is claimed with a VOD.
+    """
     with Session.begin() as session:
-        if not session.get(Series, series_id):
+        series = session.get(Series, series_id)
+        if not series:
             raise NotFoundError("Series not found")
+        if not vod_url and (
+            series.player1_score is not None or series.player2_score is not None
+        ):
+            raise BadRequestError("This series is over; a VOD link is needed")
         taken = session.scalar(
             select(SeriesCast.id).where(
                 col(SeriesCast.series_id) == series_id,
@@ -71,7 +81,13 @@ def claim(series_id: int, user_id: int, channel_url: str) -> list[CastPublic]:
         if taken:
             raise BadRequestError("You already cast this series")
         session.add(
-            SeriesCast(series_id=series_id, user_id=user_id, channel_url=channel_url)
+            SeriesCast(
+                series_id=series_id,
+                user_id=user_id,
+                channel_url=channel_url,
+                vod_url=vod_url,
+                vod_added_at=utcnow() if vod_url else None,
+            )
         )
         session.flush()
         return _rows(session, series_id)
@@ -109,7 +125,11 @@ def last_channel(user_id: int) -> str | None:
     with Session() as session:
         return session.scalar(
             select(SeriesCast.channel_url)
-            .where(col(SeriesCast.user_id) == user_id)
+            .where(
+                col(SeriesCast.user_id) == user_id,
+                # A VOD claim stored the video page as its channel; it pre-fills nothing
+                col(SeriesCast.channel_url).is_distinct_from(col(SeriesCast.vod_url)),
+            )
             .order_by(col(SeriesCast.id).desc())
             .limit(1)
         )
