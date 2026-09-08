@@ -27,7 +27,7 @@ def pool(seeded: dict[str, Any]) -> list[int]:
         season = session.get(Season, seeded["season_id"])
         assert season
         season.pick_ban = "|".join(ORDER)
-        season.map_rules = "week,loser,loser"
+        season.map_rules = "fixed,loser,loser"
         maps = [Map(name=short, shortname=short) for short in ("EI", "TS", "LR", "AL")]
         session.add_all(maps)
         session.flush()
@@ -91,7 +91,7 @@ def test_the_two_players_ban_and_pick_until_the_veto_is_complete(
         "complete": False,
         "pool": pool,
         "week_map_id": pool[0],
-        "map_rules": "week,loser,loser",
+        "map_rules": "fixed,loser,loser",
         "player1": {"id": seeded["player_ids"][1], "name": "P2"},
         "player2": {"id": seeded["player_ids"][3], "name": "P4"},
     }

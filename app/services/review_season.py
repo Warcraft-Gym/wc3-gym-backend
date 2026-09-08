@@ -4,7 +4,8 @@ availability, veto and fantasy tier pages have something to click.
 
 `just vercel review-season <env> <reviewer discord id>` calls build. The season becomes the
 current one and both accounts get an admin grant. Running it again replaces the season.
-Rosters, maps and rules copy from the latest real season.
+Rosters, maps and the pick and ban order copy from the latest real season. The map rules
+are always fixed,loser,loser, the format GNL plays.
 """
 
 from datetime import UTC, datetime, timedelta
@@ -75,7 +76,7 @@ def build(discord_a: str, discord_b: str) -> str:
             number_weeks=WEEKS,
             series_per_week=PER_TEAM,
             pick_ban=source.pick_ban,
-            map_rules="week,veto,veto",
+            map_rules="fixed,loser,loser",
             start_date=today,
             end_date=today + timedelta(weeks=WEEKS + 1),
             score_system=source.score_system,

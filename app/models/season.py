@@ -40,7 +40,7 @@ class SeasonBase(SQLModel):
     start_date: Annotated[date | None, LenientDate] = None
     end_date: Annotated[date | None, LenientDate] = None
     discordRole: Annotated[str | None, NumToStr] = Field(default=None, max_length=50)
-    # One rule per game of a series: veto, loser, host or week
+    # One rule per game of a series: veto, loser, host or fixed
     map_rules: Annotated[str | None, MapRules] = Field(default=None, max_length=100)
     # The scale the series points use: "standard" or "helpstone"
     score_system: str = Field(
