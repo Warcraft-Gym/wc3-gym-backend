@@ -11,6 +11,7 @@ from typing import Any
 import pytest
 from fastapi import FastAPI
 
+from app.core.exceptions import BadRequestError
 from app.models.series import SeriesPublic, SeriesUpdate
 from app.services import player_series
 from app.services.series import SeriesService
@@ -31,6 +32,21 @@ def test_a_player_edit_stores_the_new_date(
 
     assert isinstance(result, dict), result
     assert result["date_time"].startswith("2026-01-09T20:00:00")
+
+
+def test_a_date_before_the_season_start_is_refused(
+    app: FastAPI, seeded: dict[str, Any]
+) -> None:
+    # The season starts 2026-01-05; a mistyped year lands decades before it
+    with pytest.raises(BadRequestError, match="2026-01-05"):
+        player_series.update_player_series(
+            seeded["series_played_id"],
+            {"date_time": "1994-10-12 22:41:00"},
+            discord_id="1",
+            discord_tag="p1",
+            user_service=UserService(),
+            series_service=SeriesService(),
+        )
 
 
 def test_a_flag_set_after_the_read_survives_the_player_edit(
