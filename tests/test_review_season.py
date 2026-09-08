@@ -6,11 +6,13 @@ from typing import Any
 import pytest
 from sqlmodel import col, select
 
+from app.core.achievements import DEFAULT_PAID
 from app.core.db import Session
 from app.models.admin_grant import AdminGrant
 from app.models.base import ident
 from app.models.enums import Race
 from app.models.fantasy_team import FantasyTeam
+from app.models.ladder_achievement import LadderAchievement
 from app.models.match import Match
 from app.models.relationships import DBFantasyTeamPlayer, DBSeasonRound
 from app.models.season import Season
@@ -80,6 +82,14 @@ def test_build_copies_the_latest_season_and_seats_the_captains(
         assert session.scalars(select(DBSeriesReplay)).all() == []
         current = Settings.get_by_key(session, "current_gnl_season")
         assert current and current.value == str(sid)
+
+        # the season pays the same badges a season created in the app pays
+        paid = session.scalars(
+            select(col(LadderAchievement.rule_id)).where(
+                col(LadderAchievement.season_id) == sid
+            )
+        ).all()
+        assert set(paid) == set(DEFAULT_PAID)
 
         rounds = session.scalars(
             select(DBSeasonRound)
