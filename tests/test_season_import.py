@@ -162,7 +162,7 @@ def test_a_synchronous_import_writes_the_season(
             select(Season).where(col(Season.name) == "Season 9")
         ).one()
         assert season.id == body["season_id"]
-        assert season.number_weeks == 4
+        assert season.number_rounds == 4
         assert len(session.scalars(select(Team)).all()) == 2
         assert len(session.scalars(select(User)).all()) == 2
 

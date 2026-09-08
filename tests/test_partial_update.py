@@ -37,7 +37,13 @@ def test_a_season_update_keeps_the_fields_it_was_not_given(
     after = resp.json()
 
     assert after["pick_ban"] == "Pick_A"
-    for field in ("name", "number_weeks", "series_per_week", "start_date", "end_date"):
+    for field in (
+        "name",
+        "number_rounds",
+        "series_per_round",
+        "start_date",
+        "end_date",
+    ):
         assert after[field] == before[field], field
 
 

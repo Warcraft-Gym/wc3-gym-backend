@@ -246,8 +246,8 @@ def test_player_series_count_holds_to_the_current_season(
         session.add(Settings(key="current_gnl_season", value=str(seeded["season_id"])))
         other = Season(
             name="Season 2",
-            number_weeks=4,
-            series_per_week=2,
+            number_rounds=4,
+            series_per_round=2,
             start_date=date(2026, 3, 5),
             end_date=date(2026, 4, 27),
         )

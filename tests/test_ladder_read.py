@@ -66,8 +66,8 @@ def second_season(season_id: int) -> int:
         first = session.get_one(Season, season_id)
         other = Season(
             name="Second season",
-            number_weeks=first.number_weeks,
-            series_per_week=first.series_per_week,
+            number_rounds=first.number_rounds,
+            series_per_round=first.series_per_round,
             start_date=first.start_date,
             end_date=first.end_date,
         )

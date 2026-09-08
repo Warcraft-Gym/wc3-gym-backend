@@ -4,7 +4,8 @@ dashboard, availability, veto and fantasy tier pages have something to click.
 
 `just vercel review-season <env> <reviewer discord id>` calls build. The season becomes the
 current one and both accounts get an admin grant. Running it again replaces the season.
-Rosters, maps and the pick and ban order copy from the latest real season. The map rules
+Rosters, maps and the pick and ban order copy from the latest real season; the badges come
+from the catalogue, so the season pays what a season made in the app pays. The map rules
 are always fixed,loser,loser, the format GNL plays.
 
 A series between two accounts that are not in the test guild gets a time. A series with a
@@ -23,6 +24,7 @@ from app.models.admin_grant import AdminGrant
 from app.models.base import ident
 from app.models.enums import Race
 from app.models.fantasy_team import FantasyTeam
+from app.models.ladder_achievement import default_rows
 from app.models.match import Match
 from app.models.relationships import (
     DBMapSeason,
@@ -115,8 +117,8 @@ def build(discord_a: str, discord_b: str) -> str:
 
         season = Season(
             name=NAME,
-            number_weeks=ROUNDS,
-            series_per_week=size,
+            number_rounds=ROUNDS,
+            series_per_round=size,
             pick_ban=source.pick_ban,
             map_rules="fixed,loser,loser",
             start_date=START,
@@ -126,6 +128,7 @@ def build(discord_a: str, discord_b: str) -> str:
         session.add(season)
         session.flush()
         sid = ident(season)
+        session.add_all(default_rows(sid))
 
         pool_maps = list(
             session.scalars(
