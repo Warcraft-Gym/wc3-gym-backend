@@ -37,6 +37,9 @@ BEFORE_USER_TIER_DROP = "d5e8b1c47a90"
 BEFORE_COUNT_DROP = "c4d1e7f9a2b3"
 # The revision before the ledger records where a season was read from
 BEFORE_READ_FROM = "d7b3e5a91c26"
+
+# The revision that added the round columns, before the week columns were dropped
+BEFORE_WEEK_DROP = "a3f9d17c6b40"
 # The revision before a signup carries a draft position
 BEFORE_DRAFT_POSITION = "c8e2a6d4f913"
 
@@ -510,3 +513,33 @@ def test_the_signup_draft_position_column_is_added_and_dropped(tmp_path: Path) -
     assert "draft_position" in columns()
     downgrade_to(url, BEFORE_DRAFT_POSITION)
     assert "draft_position" not in columns()
+
+
+def test_the_week_columns_are_dropped_and_come_back_filled(tmp_path: Path) -> None:
+    """The drop loses no count: the downgrade refills each week column from the
+    round column that replaced it."""
+    url = fresh_database(tmp_path, "week-drop")
+    upgrade_to_head(url)
+    engine = create_engine(url)
+
+    def columns() -> set[str]:
+        return {c["name"] for c in inspect(engine).get_columns("seasons")}
+
+    assert columns() >= {"number_rounds", "series_per_round"}
+    assert not columns() & {"number_weeks", "series_per_week"}
+
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO seasons (id, name, number_rounds, series_per_round) "
+                "VALUES (1, 'S', 3, 2)"
+            )
+        )
+
+    downgrade_to(url, BEFORE_WEEK_DROP)
+    assert columns() >= {"number_weeks", "series_per_week"}
+    with engine.begin() as connection:
+        row = connection.execute(
+            text("SELECT number_weeks, series_per_week FROM seasons WHERE id = 1")
+        ).one()
+    assert tuple(row) == (3, 2)
