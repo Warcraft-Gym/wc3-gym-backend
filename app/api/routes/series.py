@@ -13,7 +13,7 @@ from app.api.search import SearchQuery
 from app.core.exceptions import NotFoundError
 from app.core.query import QueryUtil
 from app.models.series import SeriesCreate, SeriesPublic, SeriesUpdate
-from app.models.series_cast import CastPublic, CastWrite
+from app.models.series_cast import CastPublic, CastWrite, VodWrite
 from app.services import casts
 
 logger = logging.getLogger(__name__)
@@ -141,6 +141,14 @@ def update_cast(
 ) -> list[CastPublic]:
     """Change the channel of your own cast; an admin changes any."""
     return casts.update(series_id, cast_id, *who, data.channel_url)
+
+
+@router.put("/series/{series_id}/casts/{cast_id}/vod")
+def set_cast_vod(
+    series_id: int, cast_id: int, data: VodWrite, who: Caster
+) -> list[CastPublic]:
+    """Paste or clear the VOD of your own cast; an admin does it for any."""
+    return casts.set_vod(series_id, cast_id, *who, data.vod_url)
 
 
 @router.delete("/series/{series_id}/casts/{cast_id}", status_code=204)

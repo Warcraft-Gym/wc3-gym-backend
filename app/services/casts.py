@@ -14,6 +14,7 @@ from app.core.db import Session
 from app.core.exceptions import ApiError, BadRequestError, NotFoundError
 from app.models.series import Series, SeriesPublic
 from app.models.series_cast import CastPublic, SeriesCast
+from app.models.types import utcnow
 
 # A cast series counts as on now from half an hour before its time to four hours after
 WINDOW_BEFORE = timedelta(minutes=30)
@@ -82,6 +83,18 @@ def update(
     with Session.begin() as session:
         row = _owned(session, series_id, cast_id, user_id, admin)
         row.channel_url = channel_url
+        session.flush()
+        return _rows(session, series_id)
+
+
+def set_vod(
+    series_id: int, cast_id: int, user_id: int, admin: bool, vod_url: str | None
+) -> list[CastPublic]:
+    """Paste, replace or clear the VOD. When it was added is kept: a Twitch VOD expires."""
+    with Session.begin() as session:
+        row = _owned(session, series_id, cast_id, user_id, admin)
+        row.vod_url = vod_url
+        row.vod_added_at = utcnow() if vod_url else None
         session.flush()
         return _rows(session, series_id)
 

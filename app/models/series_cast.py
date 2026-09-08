@@ -21,15 +21,39 @@ from app.models.user import User
 STREAM_HOSTS = {"twitch.tv", "youtube.com", "youtu.be"}
 
 
-def channel_url(value: str) -> str:
-    """The URL with its scheme, or a ValueError when it is not a Twitch or YouTube link."""
+def _host_path(value: str) -> tuple[str, str, str]:
+    """The URL with its scheme, its host without www or m, and its path."""
     value = value.strip()
     if not re.match(r"https?://", value, re.IGNORECASE):
         value = f"https://{value}"
     parts = urlsplit(value)
     host = re.sub(r"^(www|m)\.", "", parts.hostname or "")
-    if host not in STREAM_HOSTS or parts.path in ("", "/"):
+    return value, host, parts.path.rstrip("/")
+
+
+def channel_url(value: str) -> str:
+    """The URL with its scheme, or a ValueError when it is not a Twitch or YouTube link."""
+    value, host, path = _host_path(value)
+    if host not in STREAM_HOSTS or not path:
         raise ValueError("A twitch.tv, youtube.com or youtu.be link is needed")
+    return value
+
+
+# A Twitch video, a YouTube watch or live page, or a youtu.be short link
+VOD_PATHS = {
+    "twitch.tv": r"/videos/\d+",
+    "youtube.com": r"/watch|/live/[\w-]+",
+    "youtu.be": r"/[\w-]+",
+}
+
+
+def vod_url(value: str) -> str:
+    """The video URL with its scheme, or a ValueError. A `?t=` start stays."""
+    value, host, path = _host_path(value)
+    if host not in VOD_PATHS or not re.fullmatch(VOD_PATHS[host], path):
+        raise ValueError(
+            "A twitch.tv/videos, youtube.com/watch, youtube.com/live or youtu.be link is needed"
+        )
     return value
 
 
@@ -64,6 +88,16 @@ class CastWrite(SQLModel):
     @classmethod
     def _stream_link(cls, value: str) -> str:
         return channel_url(value)
+
+
+class VodWrite(SQLModel):
+    # None clears the VOD
+    vod_url: str | None = Field(default=None, max_length=300)
+
+    @field_validator("vod_url")
+    @classmethod
+    def _video_link(cls, value: str | None) -> str | None:
+        return vod_url(value) if value else None
 
 
 class CastPublic(PublicModel):
