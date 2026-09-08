@@ -167,3 +167,13 @@ def test_player_autocomplete_lists_the_seasons_players(
         "type": 8,
         "data": {"choices": [{"name": "P2 (Alpha)", "value": second}]},
     }
+
+
+def test_a_flag_is_drawn_for_a_country_or_a_uk_nation() -> None:
+    from app.services.commands.w3c import _flag
+
+    assert _flag("DE") == "🇩🇪"
+    assert _flag("de") == "🇩🇪"
+    assert _flag("GB-SCT") == "🏴󠁧󠁢󠁳󠁣󠁴󠁿"
+    assert _flag("GB-NIR") == ""
+    assert _flag(None) == ""

@@ -247,6 +247,15 @@ def test_a_player_update_changes_only_its_fields(
     assert player["race"] == "HU"
 
 
+def test_a_player_country_may_be_a_uk_nation(
+    client: Client, auth_headers: dict[str, str], league: dict[str, Any]
+) -> None:
+    player_id = league["player_a_id"]
+    put(client, auth_headers, f"/users/{player_id}", {"country": "GB-SCT"})
+
+    assert get(client, f"/users/{player_id}")["country"] == "GB-SCT"
+
+
 def test_a_deleted_player_leaves_the_list(
     client: Client, auth_headers: dict[str, str], league: dict[str, Any]
 ) -> None:
