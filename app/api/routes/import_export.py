@@ -216,6 +216,8 @@ def export_season(
             "Player2 ID",
             "Player1 Score",
             "Player2 Score",
+            "Player1 Off Race",
+            "Player2 Off Race",
             "Player1 Points",
             "Player2 Points",
             "Host Player ID",
@@ -241,6 +243,9 @@ def export_season(
                     series.player2_id,
                     series.player1_score if series.player1_score is not None else "",
                     series.player2_score if series.player2_score is not None else "",
+                    # Empty means the side played the race he signed up on
+                    series.player1_off_race or "",
+                    series.player2_off_race or "",
                     series.player1_points or "",
                     series.player2_points or "",
                     series.host_player_id,

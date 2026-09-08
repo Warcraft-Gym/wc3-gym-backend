@@ -2,13 +2,16 @@
 
 The seeded league has one fantasy team with no drafted players. Its
 captain P1 won the only played series 2-1 with a 10-point bet on
-himself, and his race (HU) won its only series, so the race takes the
-18 first-place points of week 1.
+himself. The seed signs nobody up, and a season scores a race only for
+the players registered on it, so the tests that read race points take
+the `signed_up` fixture. P1 registers on HU and won his only series, so
+HU takes the 18 first-place points of week 1.
 """
 
 from datetime import timedelta
 from typing import Any
 
+import pytest
 from httpx2 import Client
 
 from app.models.enums import Race
@@ -21,10 +24,33 @@ def get_json(client: Client, path: str) -> Any:  # noqa: ANN401  # a JSON body
     return resp.json()
 
 
+@pytest.fixture
+def signed_up(seeded: dict[str, Any]) -> dict[str, Any]:
+    """The seeded players, registered for the season on their profile race.
+
+    The race points of a season read the race a player registered on, so a
+    league whose players signed up for nothing scores no race at all.
+    """
+    from app.core.db import Session
+    from app.models.relationships import DBUserSeasonSignup
+    from app.models.user import User
+
+    with Session.begin() as session:
+        for user_id in seeded["player_ids"]:
+            user = session.get(User, user_id)
+            assert user is not None
+            session.add(
+                DBUserSeasonSignup(
+                    user_id=user_id, season_id=seeded["season_id"], race=user.race
+                )
+            )
+    return seeded
+
+
 def test_a_team_answers_its_totals_and_its_bet_results(
-    client: Client, seeded: dict[str, Any]
+    client: Client, signed_up: dict[str, Any]
 ) -> None:
-    team = get_json(client, f"/fantasy/teams/{seeded['fantasy_team_id']}")
+    team = get_json(client, f"/fantasy/teams/{signed_up['fantasy_team_id']}")
     assert team["player_points"] == 0
     assert team["bench_points"] == 0
     # The drafted team stands at 2, the sum of its series, not at null
@@ -38,12 +64,12 @@ def test_a_team_answers_its_totals_and_its_bet_results(
 
 
 def test_a_drafted_player_scores_for_his_team(
-    client: Client, seeded: dict[str, Any], auth_headers: dict[str, str]
+    client: Client, signed_up: dict[str, Any], auth_headers: dict[str, str]
 ) -> None:
     """A drafted player earns series points for played weeks and bench
     points for the weeks without a series."""
-    team_id = seeded["fantasy_team_id"]
-    p1 = seeded["player_ids"][0]
+    team_id = signed_up["fantasy_team_id"]
+    p1 = signed_up["player_ids"][0]
     resp = client.post(
         f"/fantasy/teams/{team_id}/players",
         json={"player_ids": [p1]},
@@ -60,14 +86,14 @@ def test_a_drafted_player_scores_for_his_team(
 
 
 def test_breakdown_answers_the_race_value(
-    client: Client, seeded: dict[str, Any]
+    client: Client, signed_up: dict[str, Any]
 ) -> None:
     """The public page keys its race icons by the plain value ("HU"),
     so the breakdown must never answer the enum repr ("Race.HU")."""
     body = get_json(
         client,
-        f"/fantasy/teams/{seeded['fantasy_team_id']}"
-        f"/season/{seeded['season_id']}/breakdown",
+        f"/fantasy/teams/{signed_up['fantasy_team_id']}"
+        f"/season/{signed_up['season_id']}/breakdown",
     )
     race_breakdown = body["race_breakdown"]
     assert race_breakdown["race"] == "HU"

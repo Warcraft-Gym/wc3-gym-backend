@@ -24,10 +24,12 @@ def _second_season(seeded: dict[str, Any]) -> dict[str, Any]:
     from app.core.db import Session
     from app.models.base import ident
     from app.models.match import Match
+    from app.models.relationships import DBUserSeasonSignup
     from app.models.season import Season
     from app.models.series import Series
     from app.models.settings import Settings
     from app.models.team_season import DBTeamSeason
+    from app.models.user import User
     from app.models.user_team_season import DBUserTeamSeason
 
     p1, p2, p3, p4 = seeded["player_ids"]
@@ -41,6 +43,14 @@ def _second_season(seeded: dict[str, Any]) -> dict[str, Any]:
         )
         session.add(season)
         session.flush()
+        # A rostered player registers for the season, so a meeting names his race
+        rostered = [session.get(User, user_id) for user_id in (p1, p2, p3, p4)]
+        session.add_all(
+            DBUserSeasonSignup(user_id=ident(one), season_id=season_id, race=one.race)
+            for season_id in (seeded["season_id"], ident(season))
+            for one in rostered
+            if one
+        )
         session.add_all(
             [
                 DBTeamSeason(team_id=seeded["team_a_id"], season_id=ident(season)),
