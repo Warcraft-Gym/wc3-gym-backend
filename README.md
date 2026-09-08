@@ -67,7 +67,7 @@ The gym-root workspace owns what spans two repositories: Terraform for the Azure
 
 ## Deploying to Vercel
 
-Vercel serves `api/index.py`, which imports the same application the container runs. Set `DB_URL`, `JWT_SECRET_KEY`, `ADMIN_TOKEN`, `BOT_CLIENT_TOKEN` and `FRONTEND_URL` in the project settings; the deployment reads no `.env` file. `CRON_SECRET` is optional; when set, Vercel Cron sends it as a bearer token to `/jobs/w3c-sync`, and the route answers 503 without it.
+Vercel serves `api/index.py`, which imports the same application the container runs. Set `DB_URL`, `JWT_SECRET_KEY`, `ADMIN_TOKEN` and `FRONTEND_URL` in the project settings; the deployment reads no `.env` file. `CRON_SECRET` is optional; when set, Vercel Cron sends it as a bearer token to `/jobs/w3c-sync`, and the route answers 503 without it.
 
 The production build runs `alembic upgrade head` (`vercel.json`) before the new code is promoted, so a migration that fails stops the deploy. Previews run against the staging Supabase project: the shared `wc3gym_staging` database, or a branch's own copy when the branch adds a migration. How and why is in [docs/PREVIEW-DATABASES.md](docs/PREVIEW-DATABASES.md). The old code keeps serving while the build runs, so every migration must work with the code before it and after it: add columns nullable or with a default, drop a column only after the code that read it has shipped.
 
@@ -115,7 +115,6 @@ services:
       - ADMIN_TOKEN=${ADMIN_TOKEN}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
       - JWT_ALGORITHM=HS256
-      - BOT_CLIENT_TOKEN=${BOT_CLIENT_TOKEN}
       - FRONTEND_URL=${FRONTEND_URL}
       - LOG_LEVEL=INFO
     ports:
@@ -163,7 +162,7 @@ What this changes against a MySQL stack of the original app:
 - `DB_URL` uses the `postgresql+psycopg` scheme, port 5432 and the Postgres service name.
 - The backend mounts no volume over `/app`. The image carries the code, so a new image is a new version; a volume there would shadow it.
 - The container runs `alembic upgrade head` before the server, so it creates the schema on an empty database. `depends_on` with `service_healthy` keeps it from starting before Postgres answers.
-- `BOT_CLIENT_TOKEN` and `FRONTEND_URL` are read; without them the bot's public routes and the browser's CORS requests are refused.
+- `FRONTEND_URL` is read; without it the browser's CORS requests are refused.
 - `POSTGRES_INITDB_ARGS` picks the ICU collation, which orders text without regard to case as MySQL did. It is read once, on the first start of an empty volume.
 - The data moves by workbook, not by dump: export every season from the old app, `POST /import` each here, newest season first. Then set the `settings` rows and upload the team icons.
 - A backup is one command: `docker compose exec -T gnl-postgres pg_dump -U gnl_user -Fc GYM_BACKEND > gnl.dump`; restore with `pg_restore -U gnl_user -d GYM_BACKEND < gnl.dump` on the same service.
@@ -214,7 +213,6 @@ DB_URL="postgresql+psycopg://gym_user:gym_user@host.docker.internal:5432/gym_bac
 ADMIN_TOKEN="your-admin-token-here"
 JWT_SECRET_KEY="your-secret-key-here"
 JWT_ALGORITHM="HS256"
-BOT_CLIENT_TOKEN="your-bot-client-token-here"
 FRONTEND_URL="http://localhost:5003"
 ```
 
@@ -226,7 +224,6 @@ FRONTEND_URL="http://localhost:5003"
 | `ADMIN_TOKEN` | Secret token for admin API access (used by Discord bot and admin UI) | `this_is_my_token` |
 | `JWT_SECRET_KEY` | Secret key for JWT token signing (generate with `openssl rand -hex 32`) | 64-character hex string |
 | `JWT_ALGORITHM` | JWT signing algorithm | `HS256` or `HS512` |
-| `BOT_CLIENT_TOKEN` | Authentication token for Discord bot webhooks | 64-character hex string |
 | `FRONTEND_URL` | Admin frontend URL for CORS configuration | `http://localhost:5003` |
 | `TOKEN_TIME` | Access token lifetime in minutes | `60` |
 | `W3C_URL` | w3champions API base | `https://website-backend.w3champions.com/api` |

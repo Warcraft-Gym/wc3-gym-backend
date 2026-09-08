@@ -76,6 +76,5 @@ class SeriesVetoWrite(SQLModel):
     """One move: take the step the order names next, record it for either side
     when the veto happened elsewhere, or take back the last step you entered."""
 
-    token: str | None = None
     action: Literal["step", "record", "undo"]
     map_id: int | None = None

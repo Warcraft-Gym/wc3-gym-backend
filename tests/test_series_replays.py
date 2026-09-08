@@ -11,12 +11,12 @@ from tests.conftest import REPLAY_BYTES
 
 
 def report(
-    client: Client, series_id: int, token: str, p1: int = 2, p2: int = 0
+    client: Client, series_id: int, headers: dict[str, str], p1: int = 2, p2: int = 0
 ) -> Response:
     return client.put(
         f"/player-series/{series_id}",
+        headers=headers,
         data={
-            "token": token,
             "action": "score_updated",
             "player1_score": str(p1),
             "player2_score": str(p2),
@@ -27,13 +27,13 @@ def report(
 def test_a_report_keeps_its_replays(
     client: Client,
     seeded: dict[str, Any],
-    dashboard_token: Callable[..., str],
+    member: Callable[..., dict[str, str]],
     blob_store: dict[str, bytes],
     replay_uploaded: Callable[..., None],
 ) -> None:
     series_id = seeded["series_open_id"]
     replay_uploaded(series_id, 1, 2)
-    resp = report(client, series_id, dashboard_token(discord_id="2"))
+    resp = report(client, series_id, member("2"))
     assert resp.status_code == 200, resp.text
     stored = resp.json()["replays"]
     assert [r["game_no"] for r in stored] == [1, 2]
@@ -46,41 +46,41 @@ def test_a_report_keeps_its_replays(
 
 
 def test_a_player_gets_an_upload_link_and_a_stranger_does_not(
-    client: Client, seeded: dict[str, Any], dashboard_token: Callable[..., str]
+    client: Client, seeded: dict[str, Any], member: Callable[..., dict[str, str]]
 ) -> None:
     series_id = seeded["series_open_id"]
     path = f"/player-series/{series_id}/replays/1/upload-url"
-    resp = client.post(path, params={"token": dashboard_token(discord_id="2")})
+    resp = client.post(path, headers=member("2"))
     assert resp.status_code == 200, resp.text
     assert resp.json()["url"].endswith(f"/replays/{series_id}/game1.w3g")
-    resp = client.post(path, params={"token": dashboard_token(discord_id="9")})
+    resp = client.post(path, headers=member("9"))
     assert resp.status_code in (403, 404), resp.text
 
 
 def test_one_replay_is_replaced_after_the_result(
     client: Client,
     seeded: dict[str, Any],
-    dashboard_token: Callable[..., str],
+    member: Callable[..., dict[str, str]],
     blob_store: dict[str, bytes],
     replay_uploaded: Callable[..., None],
 ) -> None:
     series_id = seeded["series_open_id"]
-    token = dashboard_token(discord_id="2")
+    headers = member("2")
     path = f"/player-series/{series_id}/replays/2"
 
-    resp = client.put(path, params={"token": token})
+    resp = client.put(path, headers=headers)
     assert resp.status_code == 400, resp.text
     assert resp.json() == {"error": "Report the result first"}
 
     replay_uploaded(series_id, 1, 2)
-    assert report(client, series_id, token).status_code == 200
+    assert report(client, series_id, headers).status_code == 200
     replay_uploaded(series_id, 2, data=REPLAY_BYTES + b"\1")
-    resp = client.put(path, params={"token": token})
+    resp = client.put(path, headers=headers)
     assert resp.status_code == 200, resp.text
     assert resp.json()["game_no"] == 2
     assert blob_store[resp.json()["url"]] == REPLAY_BYTES + b"\1"
 
-    resp = client.put(f"/player-series/{series_id}/replays/3", params={"token": token})
+    resp = client.put(f"/player-series/{series_id}/replays/3", headers=headers)
     assert resp.status_code == 400, resp.text
     assert resp.json() == {"error": "This series had 2 games"}
 
@@ -88,13 +88,13 @@ def test_one_replay_is_replaced_after_the_result(
 def test_a_file_that_is_not_a_replay_is_refused(
     client: Client,
     seeded: dict[str, Any],
-    dashboard_token: Callable[..., str],
+    member: Callable[..., dict[str, str]],
     replay_uploaded: Callable[..., None],
 ) -> None:
     series_id = seeded["series_open_id"]
     replay_uploaded(series_id, 1)
     replay_uploaded(series_id, 2, data=b"replay")
-    resp = report(client, series_id, dashboard_token(discord_id="2"))
+    resp = report(client, series_id, member("2"))
     assert resp.status_code == 400, resp.text
     assert resp.json()["error"] == "Game 2 is not a Warcraft III replay"
     assert client.get(f"/series/{series_id}").json()["player1_score"] is None
@@ -113,7 +113,7 @@ def test_the_replays_of_a_missing_match(client: Client) -> None:
 def test_a_deleted_series_or_season_drops_its_replays_from_the_store(
     client: Client,
     seeded: dict[str, Any],
-    dashboard_token: Callable[..., str],
+    member: Callable[..., dict[str, str]],
     blob_store: dict[str, bytes],
     replay_uploaded: Callable[..., None],
 ) -> None:
@@ -125,7 +125,7 @@ def test_a_deleted_series_or_season_drops_its_replays_from_the_store(
         (seeded["series_played_id"], "1"),
     ):
         replay_uploaded(series_id, 1, 2)
-        resp = report(client, series_id, dashboard_token(discord_id=discord_id))
+        resp = report(client, series_id, member(discord_id))
         assert resp.status_code == 200, resp.text
     assert len(blob_store) == 4
 
@@ -138,7 +138,7 @@ def test_a_deleted_series_or_season_drops_its_replays_from_the_store(
 def test_a_deleted_team_drops_its_logo_and_its_replays(
     client: Client,
     seeded: dict[str, Any],
-    dashboard_token: Callable[..., str],
+    member: Callable[..., dict[str, str]],
     blob_store: dict[str, bytes],
     replay_uploaded: Callable[..., None],
 ) -> None:
@@ -147,7 +147,7 @@ def test_a_deleted_team_drops_its_logo_and_its_replays(
     from app.models.team import Team
 
     replay_uploaded(seeded["series_open_id"], 1, 2)
-    resp = report(client, seeded["series_open_id"], dashboard_token(discord_id="2"))
+    resp = report(client, seeded["series_open_id"], member("2"))
     assert resp.status_code == 200, resp.text
     with Session.begin() as session:
         team = session.get(Team, seeded["team_a_id"])

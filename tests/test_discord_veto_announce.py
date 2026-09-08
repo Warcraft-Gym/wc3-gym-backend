@@ -49,12 +49,12 @@ def test_veto_says_complete_once_every_step_is_taken(
     discord_calls: list,
     seeded: dict[str, Any],
     pool: list[int],  # noqa: F811  # the fixture of the veto tests
-    dashboard_token: Any,  # noqa: ANN401  # a factory fixture
+    member: Any,  # noqa: ANN401  # a factory fixture
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("FRONTEND_URL", SITE)
     series_id = seeded["series_open_id"]
-    side_a, side_b = dashboard_token(discord_id="2"), dashboard_token(discord_id="4")
+    side_a, side_b = member("2"), member("4")
     taken(client, series_id, side_a, pool[1])
     taken(client, series_id, side_b, pool[2])
     # The last pick takes itself when one map is left, so three steps complete it
@@ -158,7 +158,7 @@ def test_a_veto_step_edits_every_post_of_the_series(
     discord_calls: list,
     seeded: dict[str, Any],
     pool: list[int],  # noqa: F811  # the fixture of the veto tests
-    dashboard_token: Any,  # noqa: ANN401  # a factory fixture
+    member: Any,  # noqa: ANN401  # a factory fixture
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("FRONTEND_URL", SITE)
@@ -166,7 +166,7 @@ def test_a_veto_step_edits_every_post_of_the_series(
     send(client, command("veto", user="2", series=series_id))
     send(client, command("announce", user="4", series=series_id))
     discord_calls.clear()
-    side_a = dashboard_token(discord_id="2")
+    side_a = member("2")
     taken(client, series_id, side_a, pool[1])
     write(client, series_id, side_a, action="undo")
     veto_post, announce_post = f"{CHANNEL}/msg-1", f"{CHANNEL}/msg-2"
@@ -209,9 +209,9 @@ def test_a_veto_step_without_a_post_calls_discord_not_at_all(
     discord_calls: list,
     seeded: dict[str, Any],
     pool: list[int],  # noqa: F811  # the fixture of the veto tests
-    dashboard_token: Any,  # noqa: ANN401  # a factory fixture
+    member: Any,  # noqa: ANN401  # a factory fixture
 ) -> None:
-    taken(client, seeded["series_open_id"], dashboard_token(discord_id="2"), pool[1])
+    taken(client, seeded["series_open_id"], member("2"), pool[1])
     assert discord_calls == []
 
 

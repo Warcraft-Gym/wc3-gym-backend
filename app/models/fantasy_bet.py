@@ -130,12 +130,11 @@ class FantasyBetUpdate(SQLModel):
 
 
 class PublicFantasyBetWrite(SQLModel):
-    """A bet placed or edited from the public page; the token names the bettor.
+    """A bet placed or edited from the public page; the session names the bettor.
 
     An update keeps whatever field the body leaves out, so read it unset-aware.
     """
 
-    token: str | None = None
     series_id: int | None = None
     season_id: int | None = None
     winner_id: int | None = None

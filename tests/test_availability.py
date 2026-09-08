@@ -14,22 +14,25 @@ from httpx2 import Client
 from tests.test_discord_auth import SESSION, stub_clerk
 
 
-def write(client: Client, token: str, playday: int, available: bool | None) -> Any:  # noqa: ANN401  # a JSON body
+def write(
+    client: Client, headers: dict[str, str], playday: int, available: bool | None
+) -> Any:  # noqa: ANN401  # a JSON body
     resp = client.put(
         "/player-availability",
-        json={"token": token, "playday": playday, "available": available},
+        json={"playday": playday, "available": available},
+        headers=headers,
     )
     assert resp.status_code == 200, resp.text
     return resp.json()
 
 
 def test_a_player_answers_a_week_and_takes_it_back(
-    client: Client, seeded: dict[str, Any], dashboard_token: Callable[..., str]
+    client: Client, seeded: dict[str, Any], member: Callable[..., dict[str, str]]
 ) -> None:
-    token = dashboard_token()
+    headers = member()
     player_id = seeded["player_ids"][0]
 
-    rows = write(client, token, 2, False)
+    rows = write(client, headers, 2, False)
     assert rows == [
         {
             "user_id": player_id,
@@ -40,18 +43,18 @@ def test_a_player_answers_a_week_and_takes_it_back(
         }
     ]
 
-    rows = write(client, token, 2, True)
+    rows = write(client, headers, 2, True)
     assert [(row["playday"], row["available"]) for row in rows] == [(2, True)]
 
-    assert write(client, token, 2, None) == []
+    assert write(client, headers, 2, None) == []
 
 
 def test_a_player_answers_every_week_of_the_season(
-    client: Client, seeded: dict[str, Any], dashboard_token: Callable[..., str]
+    client: Client, seeded: dict[str, Any], member: Callable[..., dict[str, str]]
 ) -> None:
-    token = dashboard_token()
-    write(client, token, 1, False)
-    rows = write(client, token, 4, False)
+    headers = member()
+    write(client, headers, 1, False)
+    rows = write(client, headers, 4, False)
 
     assert [row["playday"] for row in rows] == [1, 4]
 
@@ -60,21 +63,22 @@ def test_a_player_answers_every_week_of_the_season(
 def test_a_week_outside_the_season_is_refused(
     client: Client,
     seeded: dict[str, Any],
-    dashboard_token: Callable[..., str],
+    member: Callable[..., dict[str, str]],
     playday: int,
 ) -> None:
     """The seeded season runs four weeks."""
     resp = client.put(
         "/player-availability",
-        json={"token": dashboard_token(), "playday": playday, "available": False},
+        json={"playday": playday, "available": False},
+        headers=member(),
     )
 
     assert resp.status_code == 400, resp.text
     assert resp.json() == {"error": "playday must be between 1 and 4"}
 
 
-def test_a_token_without_a_season_falls_back_to_the_setting(
-    client: Client, seeded: dict[str, Any], dashboard_token: Callable[..., str]
+def test_the_week_lands_in_the_season_the_setting_names(
+    client: Client, seeded: dict[str, Any], member: Callable[..., dict[str, str]]
 ) -> None:
     from app.core.db import Session
     from app.models.settings import Settings
@@ -83,18 +87,18 @@ def test_a_token_without_a_season_falls_back_to_the_setting(
         session.add(Settings(key="current_gnl_season", value=str(seeded["season_id"])))
         session.commit()
 
-    rows = write(client, dashboard_token(season_id=None), 3, False)
+    rows = write(client, member(), 3, False)
 
     assert [row["playday"] for row in rows] == [3]
 
 
 def test_player_series_carries_the_answers_and_the_rounds(
-    client: Client, seeded: dict[str, Any], dashboard_token: Callable[..., str]
+    client: Client, seeded: dict[str, Any], member: Callable[..., dict[str, str]]
 ) -> None:
-    token = dashboard_token()
-    write(client, token, 3, False)
+    headers = member()
+    write(client, headers, 3, False)
 
-    body = client.get(f"/player-series?token={token}").json()
+    body = client.get("/player-series", headers=headers).json()
 
     assert body["number_weeks"] == 4
     assert [(row["playday"], row["available"]) for row in body["availability"]] == [
@@ -106,16 +110,6 @@ def test_player_series_carries_the_answers_and_the_rounds(
         (3, "2026-01-19"),
         (4, "2026-01-26"),
     ]
-
-
-def test_player_series_without_a_season_answers_no_availability(
-    client: Client, seeded: dict[str, Any], dashboard_token: Callable[..., str]
-) -> None:
-    body = client.get(f"/player-series?token={dashboard_token(season_id=None)}").json()
-
-    assert body["availability"] == []
-    assert body["number_weeks"] is None
-    assert body["rounds"] == []
 
 
 @pytest.fixture
@@ -198,7 +192,7 @@ def test_the_player_writes_over_his_captains_answer(
     client: Client,
     seeded: dict[str, Any],
     captain: dict[str, str],
-    dashboard_token: Callable[..., str],
+    member: Callable[..., dict[str, str]],
 ) -> None:
     """One row per week, so the last writer holds it."""
     mate = seeded["player_ids"][1]
@@ -208,7 +202,7 @@ def test_the_player_writes_over_his_captains_answer(
         headers=captain,
     )
 
-    rows = write(client, dashboard_token(discord_id="2"), 1, True)
+    rows = write(client, member("2"), 1, True)
 
     assert rows == [
         {

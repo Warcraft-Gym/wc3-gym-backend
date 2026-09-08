@@ -13,7 +13,7 @@ from httpx2 import Client
 
 from app.core.db import Session
 from app.models.series import Series
-from tests.test_public_token import member_session
+from tests.test_player_session import member_session
 
 CLOSED = {
     "error": "series_started",
