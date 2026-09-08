@@ -37,7 +37,7 @@ def test_veto_posts_the_board_link_and_the_state(
     assert post[:2] == ("POST", CHANNEL)
     assert post[2] == {
         "content": f"TBD · Wk 1 · P2 (Alpha) vs P4 (Beta) · #{series_id}\n"
-        f"<@2> vs <@4> · veto 0/4, P2 to ban\nFixed map · CH\n"
+        f"<@2> vs <@4> · veto 0/4, P2 to ban\nFixed map · Concealed Hill\n"
         f"{SITE}/player-series/{series_id}/veto"
     }
     assert delete[:2] == ("DELETE", f"{WEBHOOK}/messages/@original")
@@ -61,7 +61,7 @@ def test_veto_says_complete_once_every_step_is_taken(
     taken(client, series_id, side_a, pool[3])
     send(client, command("veto", user="2", series=series_id))
     assert (
-        "· veto complete\nFixed map · CH\nBan · EI · P2\nBan · TS · P4\n"
+        "· veto complete\nFixed map · Concealed Hill\nBan · EI · P2\nBan · TS · P4\n"
         "Pick · LR · P2\nPick · AL · P4\n"
     ) in discord_calls[0][2]["content"]
 
@@ -105,7 +105,7 @@ def test_announce_posts_the_match_card(
                 "title": "Wk 1 · P2 (Alpha) vs P4 (Beta)",
                 "description": f"<t:{stamp}:F> (<t:{stamp}:R>)\n"
                 "Cast on https://www.twitch.tv/gnlcaster\n"
-                "veto 0/4, P2 to ban\nFixed map · CH\n"
+                "veto 0/4, P2 to ban\nFixed map · Concealed Hill\n"
                 f"{SITE}/player-series/{series_id}/veto",
                 "color": 0x4A4DB8,
             }
@@ -176,8 +176,8 @@ def test_a_veto_step_edits_every_post_of_the_series(
         ("PATCH", veto_post),
         ("PATCH", announce_post),
     ]
-    step = "veto 1/4, P4 to ban\nFixed map · CH\nBan · EI · P2\n"
-    undone = "veto 0/4, P2 to ban\nFixed map · CH\n"
+    step = "veto 1/4, P4 to ban\nFixed map · Concealed Hill\nBan · EI · P2\n"
+    undone = "veto 0/4, P2 to ban\nFixed map · Concealed Hill\n"
     assert f"· {step}" in discord_calls[0][2]["content"]
     assert f"\n{step}" in discord_calls[1][2]["embeds"][0]["description"]
     assert f"· {undone}" in discord_calls[2][2]["content"]
