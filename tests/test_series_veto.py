@@ -46,8 +46,8 @@ def pool(seeded: dict[str, Any]) -> list[int]:
     return ids
 
 
-def read(client: Client, series_id: int, token: str) -> dict[str, Any]:
-    resp = client.get(f"/player-series/{series_id}/veto?token={token}")
+def read(client: Client, series_id: int, headers: dict[str, str]) -> dict[str, Any]:
+    resp = client.get(f"/player-series/{series_id}/veto", headers=headers)
     assert resp.status_code == 200, resp.text
     return resp.json()
 
@@ -55,18 +55,21 @@ def read(client: Client, series_id: int, token: str) -> dict[str, Any]:
 def write(
     client: Client,
     series_id: int,
-    token: str,
+    headers: dict[str, str],
     action: str = "step",
     map_id: int | None = None,
 ) -> Any:  # noqa: ANN401  # a JSON body
     return client.put(
         f"/player-series/{series_id}/veto",
-        json={"token": token, "action": action, "map_id": map_id},
+        json={"action": action, "map_id": map_id},
+        headers=headers,
     )
 
 
-def taken(client: Client, series_id: int, token: str, map_id: int) -> dict[str, Any]:
-    resp = write(client, series_id, token, map_id=map_id)
+def taken(
+    client: Client, series_id: int, headers: dict[str, str], map_id: int
+) -> dict[str, Any]:
+    resp = write(client, series_id, headers, map_id=map_id)
     assert resp.status_code == 200, resp.text
     return resp.json()
 
@@ -75,10 +78,10 @@ def test_the_two_players_ban_and_pick_until_the_veto_is_complete(
     client: Client,
     seeded: dict[str, Any],
     pool: list[int],
-    dashboard_token: Callable[..., str],
+    member: Callable[..., dict[str, str]],
 ) -> None:
     series_id = seeded["series_open_id"]
-    side_a, side_b = dashboard_token(discord_id="2"), dashboard_token(discord_id="4")
+    side_a, side_b = member("2"), member("4")
 
     assert read(client, series_id, side_a) == {
         "steps": [],
@@ -137,7 +140,7 @@ def test_a_pick_with_maps_to_spare_forces_nothing(
     client: Client,
     seeded: dict[str, Any],
     pool: list[int],
-    dashboard_token: Callable[..., str],
+    member: Callable[..., dict[str, str]],
 ) -> None:
     from app.core.db import Session
     from app.models.season import Season
@@ -148,7 +151,7 @@ def test_a_pick_with_maps_to_spare_forces_nothing(
         season.pick_ban = "Pick_A|Pick_B"
 
     series_id = seeded["series_open_id"]
-    body = taken(client, series_id, dashboard_token(discord_id="2"), pool[1])
+    body = taken(client, series_id, member("2"), pool[1])
 
     # Three maps are left to B's one entry, so B still chooses
     assert [step["side"] for step in body["steps"]] == ["A"]
@@ -159,12 +162,12 @@ def test_a_player_cannot_take_the_other_sides_turn(
     client: Client,
     seeded: dict[str, Any],
     pool: list[int],
-    dashboard_token: Callable[..., str],
+    member: Callable[..., dict[str, str]],
 ) -> None:
     resp = write(
         client,
         seeded["series_open_id"],
-        dashboard_token(discord_id="4"),
+        member("4"),
         map_id=pool[1],
     )
 
@@ -179,7 +182,7 @@ def test_a_map_off_the_board_is_refused(
     client: Client,
     seeded: dict[str, Any],
     pool: list[int],
-    dashboard_token: Callable[..., str],
+    member: Callable[..., dict[str, str]],
     index: int | None,
     message: str,
 ) -> None:
@@ -189,7 +192,7 @@ def test_a_map_off_the_board_is_refused(
     resp = write(
         client,
         seeded["series_open_id"],
-        dashboard_token(discord_id="2"),
+        member("2"),
         map_id=map_id,
     )
 
@@ -201,13 +204,13 @@ def test_a_map_that_is_gone_cannot_be_taken_again(
     client: Client,
     seeded: dict[str, Any],
     pool: list[int],
-    dashboard_token: Callable[..., str],
+    member: Callable[..., dict[str, str]],
 ) -> None:
     """A ban takes its map off the board as much as a pick does."""
     series_id = seeded["series_open_id"]
-    taken(client, series_id, dashboard_token(discord_id="2"), pool[1])
+    taken(client, series_id, member("2"), pool[1])
 
-    resp = write(client, series_id, dashboard_token(discord_id="4"), map_id=pool[1])
+    resp = write(client, series_id, member("4"), map_id=pool[1])
 
     assert resp.status_code == 400, resp.text
     assert resp.json() == {"error": f"Map already used, map id: {pool[1]}"}
@@ -217,10 +220,10 @@ def test_a_player_takes_back_only_their_own_last_step(
     client: Client,
     seeded: dict[str, Any],
     pool: list[int],
-    dashboard_token: Callable[..., str],
+    member: Callable[..., dict[str, str]],
 ) -> None:
     series_id = seeded["series_open_id"]
-    side_a, side_b = dashboard_token(discord_id="2"), dashboard_token(discord_id="4")
+    side_a, side_b = member("2"), member("4")
 
     taken(client, series_id, side_a, pool[1])
     resp = write(client, series_id, side_a, action="undo")
@@ -241,12 +244,12 @@ def test_one_player_records_a_veto_that_happened_elsewhere(
     client: Client,
     seeded: dict[str, Any],
     pool: list[int],
-    dashboard_token: Callable[..., str],
+    member: Callable[..., dict[str, str]],
 ) -> None:
     """A veto done in a chat is typed in by one player for both sides, in the
     season's order, and every step names who entered it."""
     series_id = seeded["series_open_id"]
-    side_b = dashboard_token(discord_id="4")
+    side_b = member("4")
 
     # B enters A's ban, out of turn for a live step
     resp = write(client, series_id, side_b, action="record", map_id=pool[1])
@@ -294,12 +297,12 @@ def test_an_admin_enters_any_side_and_takes_back_any_step(
     client: Client,
     seeded: dict[str, Any],
     pool: list[int],
-    dashboard_token: Callable[..., str],
+    member: Callable[..., dict[str, str]],
     auth_headers: dict[str, str],
 ) -> None:
-    """The match page lets an admin fix a veto: no side, no turn, no token."""
+    """The match page lets an admin fix a veto: no side, no turn."""
     series_id = seeded["series_open_id"]
-    taken(client, series_id, dashboard_token(discord_id="2"), pool[1])
+    taken(client, series_id, member("2"), pool[1])
 
     resp = client.get(f"/player-series/{series_id}/veto", headers=auth_headers)
     assert resp.status_code == 200, resp.text
@@ -342,12 +345,11 @@ def test_a_player_of_another_series_reads_nothing(
     client: Client,
     seeded: dict[str, Any],
     pool: list[int],
-    dashboard_token: Callable[..., str],
+    member: Callable[..., dict[str, str]],
 ) -> None:
     """P1 plays the other series of the match, so this board is not theirs."""
     resp = client.get(
-        f"/player-series/{seeded['series_open_id']}/veto"
-        f"?token={dashboard_token(discord_id='1')}"
+        f"/player-series/{seeded['series_open_id']}/veto", headers=member("1")
     )
 
     assert resp.status_code == 403, resp.text
@@ -358,23 +360,22 @@ def test_a_result_is_reported_only_once_the_veto_is_complete(
     client: Client,
     seeded: dict[str, Any],
     pool: list[int],
-    dashboard_token: Callable[..., str],
+    member: Callable[..., dict[str, str]],
     replay_uploaded: Callable[..., None],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The record is what the map stats are made of, so a score waits for it.
     Scheduling does not."""
     series_id = seeded["series_open_id"]
-    side_a, side_b = dashboard_token(discord_id="2"), dashboard_token(discord_id="4")
+    side_a, side_b = member("2"), member("4")
     replay_uploaded(series_id, 1, 2)
     scores = {
-        "token": side_a,
         "action": "score_updated",
         "player1_score": "2",
         "player2_score": "0",
     }
 
-    resp = client.put(f"/player-series/{series_id}", data=scores)
+    resp = client.put(f"/player-series/{series_id}", data=scores, headers=side_a)
     assert resp.status_code == 400, resp.text
     assert resp.json() == {
         "error": "The map veto is not complete. Enter it on the veto board first."
@@ -382,14 +383,15 @@ def test_a_result_is_reported_only_once_the_veto_is_complete(
 
     resp = client.put(
         f"/player-series/{series_id}",
-        json={"token": side_a, "date_time": "2026-09-05 18:00:00"},
+        json={"date_time": "2026-09-05 18:00:00"},
+        headers=side_a,
     )
     assert resp.status_code == 200, resp.text
 
     taken(client, series_id, side_a, pool[1])
     taken(client, series_id, side_b, pool[2])
     taken(client, series_id, side_a, pool[3])
-    resp = client.put(f"/player-series/{series_id}", data=scores)
+    resp = client.put(f"/player-series/{series_id}", data=scores, headers=side_a)
     assert resp.status_code == 200, resp.text
     assert (resp.json()["player1_score"], resp.json()["player2_score"]) == (2, 0)
 
@@ -403,7 +405,7 @@ def test_an_admin_who_plays_is_named_on_the_steps_they_enter(
 ) -> None:
     """An admin with a player row enters both sides; every step they take names them."""
     from tests.test_discord_auth import _grant
-    from tests.test_public_token import member_session
+    from tests.test_player_session import member_session
 
     _grant(client, auth_headers, "2")
     headers = member_session(monkeypatch, discord_id="2")

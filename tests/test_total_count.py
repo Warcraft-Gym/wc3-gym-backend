@@ -9,11 +9,10 @@ that one player. POST /fantasy/teams/search answers it too, because the
 two public shortcodes walk that route by the header.
 """
 
-from collections.abc import Callable, Iterator
-from datetime import UTC, date, datetime, timedelta
+from collections.abc import Callable
+from datetime import date
 from typing import Any
 
-import pytest
 from httpx2 import Client
 
 from app.models.base import ident
@@ -50,30 +49,6 @@ def add_series_for_player(
                 )
             )
         session.commit()
-
-
-@pytest.fixture
-def dashboard_token() -> Iterator[Callable[..., str]]:
-    """A factory for dashboard tokens of the seeded player P1."""
-    from app.api.routes.public import _token_store
-
-    issued: list[str] = []
-
-    def issue(season_id: int | None = None) -> str:
-        token = f"test-token-{len(issued)}"
-        _token_store[token] = {
-            "discord_id": "1",
-            "discord_tag": "p1",
-            "season_id": str(season_id) if season_id else None,
-            "access_type": "dashboard",
-            "expires_at": datetime.now(UTC) + timedelta(minutes=5),
-        }
-        issued.append(token)
-        return token
-
-    yield issue
-    for token in issued:
-        _token_store.pop(token, None)
 
 
 def test_users_report_the_total_without_parameters(
@@ -240,33 +215,35 @@ def test_fantasy_team_search_reports_the_same_total_on_every_page(
 
 
 def test_player_series_report_the_total_of_that_player(
-    client: Client, seeded: dict[str, Any], dashboard_token: Callable[..., str]
+    client: Client, seeded: dict[str, Any], member: Callable[..., dict[str, str]]
 ) -> None:
     """P1 has five series, and one page of two still reports five."""
     add_series_for_player(seeded, seeded["player_ids"][0], seeded["player_ids"][2], 4)
-    token = dashboard_token()
+    headers = member()
 
-    everything = client.get(f"/player-series?token={token}")
+    everything = client.get("/player-series", headers=headers)
     assert everything.status_code == 200
     assert everything.headers["X-Total-Count"] == "5"
     assert len(everything.json()["series"]) == 5
 
-    page = client.get(f"/player-series?token={token}&limit=2")
+    page = client.get("/player-series?limit=2", headers=headers)
     assert page.status_code == 200
     assert page.headers["X-Total-Count"] == "5"
     assert len(page.json()["series"]) == 2
 
 
-def test_player_series_count_holds_to_the_season_of_the_token(
-    client: Client, seeded: dict[str, Any], dashboard_token: Callable[..., str]
+def test_player_series_count_holds_to_the_current_season(
+    client: Client, seeded: dict[str, Any], member: Callable[..., dict[str, str]]
 ) -> None:
     """A series of P1 in another season is out of the season total."""
     from app.core.db import Session
     from app.models.match import Match
     from app.models.season import Season
     from app.models.series import Series
+    from app.models.settings import Settings
 
     with Session() as session:
+        session.add(Settings(key="current_gnl_season", value=str(seeded["season_id"])))
         other = Season(
             name="Season 2",
             number_weeks=4,
@@ -294,11 +271,7 @@ def test_player_series_count_holds_to_the_season_of_the_token(
         )
         session.commit()
 
-    everything = client.get(f"/player-series?token={dashboard_token()}")
-    assert everything.headers["X-Total-Count"] == "2"
-
-    scoped = dashboard_token(season_id=seeded["season_id"])
-    in_season = client.get(f"/player-series?token={scoped}")
+    in_season = client.get("/player-series", headers=member())
     assert in_season.status_code == 200
     assert in_season.headers["X-Total-Count"] == "1"
     assert len(in_season.json()["series"]) == 1

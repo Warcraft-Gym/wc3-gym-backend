@@ -99,10 +99,9 @@ class UserUpdate(SQLModel):
 
 
 class PublicSignupWrite(SQLModel):
-    """The public signup form. The Discord identity comes from the token or the
-    session, never from here, and UserCreate is what rejects a bad profile."""
+    """The public signup form. The Discord identity comes from the session,
+    never from here, and UserCreate is what rejects a bad profile."""
 
-    token: str | None = None
     name: Annotated[str | None, NumToStr] = None
     battleTag: Annotated[str | None, NumToStr] = None
     race: str | None = None

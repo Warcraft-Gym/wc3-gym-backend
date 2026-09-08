@@ -6,6 +6,7 @@ result is missing. A signup to a season that is not open saves the profile
 and answers closed; an admin adds the player, or does not.
 """
 
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -16,18 +17,15 @@ from app.core.db import Session
 from app.models.relationships import DBUserSeasonSignup
 from app.models.season import Season
 from tests.test_fantasy_locks import schedule, score
-from tests.test_public_token import SIGNUP_BODY, entry
+from tests.test_player_session import SIGNUP_BODY
 
 
 @pytest.fixture
-def signup_ready(monkeypatch: pytest.MonkeyPatch) -> dict[str, dict[str, Any]]:
-    from app.api.routes.public import _token_store
+def signup_ready(monkeypatch: pytest.MonkeyPatch) -> None:
     from app.services.users import UserService
 
     monkeypatch.setattr(UserService, "validate_battle_tag", lambda self, tag: True)
     monkeypatch.setattr(UserService, "update_w3c_stats_by_id", lambda self, uid: None)
-    _token_store.clear()
-    return _token_store
 
 
 def phase(client: Client, season_id: int) -> str:
@@ -73,13 +71,13 @@ def test_the_phase_follows_the_series(client: Client, seeded: dict[str, Any]) ->
 
 
 def test_a_signup_to_a_commenced_season_saves_the_profile_only(
-    client: Client, seeded: dict[str, Any], signup_ready: dict[str, dict[str, Any]]
+    client: Client,
+    seeded: dict[str, Any],
+    signup_ready: None,
+    member: Callable[..., dict[str, str]],
 ) -> None:
-    signup_ready["t"] = entry() | {
-        "discord_id": "99",
-        "season_id": str(seeded["season_id"]),
-    }
-    resp = client.post("/signup", json={"token": "t"} | SIGNUP_BODY)
+    headers = member("99")
+    resp = client.post("/signup", json=SIGNUP_BODY, headers=headers)
     assert resp.status_code == 201, resp.text
     assert resp.json()["signup"] == "closed"
     assert "no guarantee" in resp.json()["message"]
@@ -90,11 +88,7 @@ def test_a_signup_to_a_commenced_season_saves_the_profile_only(
     # The same form on an open season lands in the season
     score(seeded["series_played_id"], None, None)
     schedule(seeded["series_played_id"], None)
-    signup_ready["t"] = entry() | {
-        "discord_id": "99",
-        "season_id": str(seeded["season_id"]),
-    }
-    resp = client.post("/signup", json={"token": "t"} | SIGNUP_BODY)
+    resp = client.post("/signup", json=SIGNUP_BODY, headers=headers)
     assert resp.status_code == 201, resp.text
     assert "signup" not in resp.json()
     with Session() as session:

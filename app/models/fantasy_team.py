@@ -70,12 +70,11 @@ class FantasyTeamPlayerIds(SQLModel):
 
 
 class PublicFantasyTeamWrite(SQLModel):
-    """The public fantasy registration form; the token names the captain.
+    """The public fantasy registration form; the session names the captain.
 
     A name the body leaves out falls back to the captain's own.
     """
 
-    token: str | None = None
     name: Annotated[str | None, NumToStr] = None
     season_id: int | None = None
     drafted_team_id: int | None = None
