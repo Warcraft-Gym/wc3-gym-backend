@@ -254,6 +254,9 @@ def get_season_ladder(
     """The ladder of a season: its teams, its players and its hours."""
     # matches change once a day at the cron; the edge serves every viewer one read
     response.headers["Cache-Control"] = "public, s-maxage=3600"
+    # the edge keeps the headers of the request that filled it, and CORSMiddleware
+    # writes none when that request has no Origin, so a browser reads a copy it blocks
+    response.headers["Access-Control-Allow-Origin"] = "*"
     return service.season_ladder(season_id)
 
 
