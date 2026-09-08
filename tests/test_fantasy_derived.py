@@ -102,7 +102,7 @@ def league(client: Client) -> dict[str, Any]:
     """One season of two weeks: two teams, four players, three series of which
     one has no result, two fantasy teams with drafts, and three bets."""
     with Session() as session:
-        season = Season(name="Derived", number_weeks=2, series_per_week=2)
+        season = Season(name="Derived", number_rounds=2, series_per_round=2)
         team1, team2 = Team(name="One"), Team(name="Two")
         players = [
             player("D1", Race.HU),
@@ -357,8 +357,8 @@ def two_seasons(client: Client) -> dict[str, Any]:
     A's captain calls his own series right, B's captain calls his wrong.
     """
     with Session() as session:
-        season_a = Season(name="A", number_weeks=2, series_per_week=2)
-        season_b = Season(name="B", number_weeks=1, series_per_week=1)
+        season_a = Season(name="A", number_rounds=2, series_per_round=2)
+        season_b = Season(name="B", number_rounds=1, series_per_round=1)
         team_a1, team_a2 = Team(name="A1"), Team(name="A2")
         team_b1, team_b2 = Team(name="B1"), Team(name="B2")
         pa1, pa2 = player("A one", Race.HU), player("A two", Race.OC)

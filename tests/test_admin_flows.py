@@ -128,8 +128,8 @@ def league(client: Client, auth_headers: dict[str, str]) -> dict[str, Any]:
         "/seasons",
         {
             "name": "Admin Season",
-            "number_weeks": 1,
-            "series_per_week": 1,
+            "number_rounds": 1,
+            "series_per_round": 1,
             "start_date": "2026-03-02",
             "end_date": "2026-03-09",
         },
@@ -368,7 +368,7 @@ def test_a_season_with_no_result_stands_at_zero(
 
 # Recording a result. On the standard scale a 2-0 win is worth 3 points, a
 # 2-1 win 2 points, and the loser keeps its map score. points_available is
-# series_per_week * number_weeks * 3, less the points both sides took, so
+# series_per_round * number_rounds * 3, less the points both sides took, so
 # in this one-series season it reaches 0 as soon as the series is played.
 
 

@@ -104,7 +104,7 @@ def _weeks(session: OrmSession, season_id: int) -> int:
     season = session.get(Season, season_id)
     if not season:
         raise NotFoundError(f"Season not found by Id: {season_id}")
-    return season.number_weeks
+    return season.number_rounds or 0
 
 
 def _rows(

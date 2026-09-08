@@ -63,8 +63,8 @@ def public_seed(app: FastAPI) -> dict[str, Any]:
 
         season_2 = Season(
             name="Season 2",
-            number_weeks=6,
-            series_per_week=2,
+            number_rounds=6,
+            series_per_round=2,
             start_date=date(2026, 3, 2),
             end_date=date(2026, 4, 24),
         )
@@ -317,12 +317,12 @@ def test_team_image_sends_the_caller_to_the_logo(
 # gnl-detailed-standings
 
 
-def test_season_carries_number_weeks_and_the_list_fields(
+def test_season_carries_number_rounds_and_the_list_fields(
     client: Client, public_seed: dict[str, Any]
 ) -> None:
     season = get_json(client, f"/seasons/{public_seed['season_id']}")
-    assert "number_weeks" in season
-    assert season["number_weeks"] is not None
+    assert "number_rounds" in season
+    assert season["number_rounds"] is not None
     # Both fields read as a list, never as null.
     assert isinstance(season["maps"], list)
     assert isinstance(season["user_signup"], list)

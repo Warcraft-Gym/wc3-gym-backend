@@ -54,8 +54,8 @@ REPEATS: dict[str, Rows] = {
         user("B#2", discordId=" 42 "),
     ],
     "seasons.name": lambda _: [
-        Season(name="Season 9", number_weeks=4, series_per_week=2),
-        Season(name="season 9", number_weeks=4, series_per_week=2),
+        Season(name="Season 9", number_rounds=4, series_per_round=2),
+        Season(name="season 9", number_rounds=4, series_per_round=2),
     ],
     "discord_role_binding.discord_role": lambda _: [
         DiscordRoleBinding(kind=RoleKind.captain, discord_role="7788"),
