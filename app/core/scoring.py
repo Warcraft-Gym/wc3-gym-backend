@@ -33,8 +33,15 @@ def wins_needed_sql(
 
 def fits(own: int, opp: int, wins: int) -> bool:
     """Whether two map scores fit a series that takes `wins` maps to win:
-    neither above it, and not both at it."""
+    neither above it, and not both at it. A read prices whatever is stored,
+    and older seasons hold series that were never played."""
     return max(own, opp) <= wins and not own == opp == wins
+
+
+def decided(own: int, opp: int, wins: int) -> bool:
+    """Whether two map scores are a finished series: one side took the maps a
+    win needs and the other took fewer. A Bo3 ends 2-0, 2-1, 1-2 or 0-2."""
+    return max(own, opp) == wins and 0 <= min(own, opp) < wins
 
 
 def max_points(system: str, wins: int = DEFAULT_WINS) -> int:
