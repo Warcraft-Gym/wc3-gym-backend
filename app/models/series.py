@@ -183,7 +183,9 @@ class SeriesPublic(SeriesBase, PublicModel):
             match_id=series.match_id,
             match=MatchPublic.from_match(series.match) if series.match else None,
             date_time=series.date_time,
-            casts=[CastPublic.from_cast(cast) for cast in series.casts],
+            casts=[
+                CastPublic.from_cast(cast, has_result(series)) for cast in series.casts
+            ],
             player1_id=series.player1_id,
             player1=UserPublic.from_user(series.player1) if series.player1 else None,
             player2_id=series.player2_id,
@@ -202,7 +204,9 @@ class SeriesPublic(SeriesBase, PublicModel):
             match_id=series.match_id,
             match=MatchPublic.from_match(series.match) if series.match else None,
             date_time=series.date_time,
-            casts=[CastPublic.from_cast(cast) for cast in series.casts],
+            casts=[
+                CastPublic.from_cast(cast, has_result(series)) for cast in series.casts
+            ],
             player1_id=series.player1_id,
             player1=UserPublic.from_user_reduced(series.player1)
             if series.player1
@@ -216,3 +220,8 @@ class SeriesPublic(SeriesBase, PublicModel):
             host_player_id=series.host_player_id,
             is_fantasy_match=series.is_fantasy_match,
         )
+
+
+def has_result(series: Series | SeriesPublic) -> bool:
+    """A series with a result is over: nothing is left to stream."""
+    return series.player1_score is not None or series.player2_score is not None

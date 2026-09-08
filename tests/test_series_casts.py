@@ -328,3 +328,33 @@ def test_the_caster_names_become_cast_rows_and_back(tmp_path: Path) -> None:
             (4, None),
             (5, None),
         ]
+
+
+def test_a_youtube_stream_url_is_its_own_vod_once_the_series_is_over(
+    client: Client, seeded: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The caster pastes nothing: the watch URL stays the same after the stream."""
+    from app.core.db import Session
+    from app.models.series import Series
+
+    series_id = seeded["series_open_id"]
+    stream = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+    as_member(monkeypatch, "1")
+    (cast,) = client.post(
+        f"/series/{series_id}/casts", json={"channel_url": stream}, headers=SESSION
+    ).json()
+    assert cast["vod_url"] is None
+
+    # One stream is not a channel, so it starts no next claim
+    assert client.get("/casts/last", headers=SESSION).json() == {"channel_url": None}
+
+    with Session.begin() as session:
+        series = session.get(Series, series_id)
+        assert series
+        series.player1_score, series.player2_score = 2, 1
+
+    (cast,) = client.get(f"/series/{series_id}/casts").json()
+    assert cast["vod_url"] == stream
+    # Nothing was pasted, so nothing dates the VOD
+    assert cast["vod_added_at"] is None
+    assert client.get(f"/series/{series_id}").json()["casts"][0]["vod_url"] == stream
