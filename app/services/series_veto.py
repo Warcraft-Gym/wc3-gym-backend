@@ -1,7 +1,7 @@
 """The map veto of a series, step by step.
 
 The board is derived: the season's pick_ban names the order and the side of
-every step, the season pool names the maps, and a week rule takes its map off
+every step, the season pool names the maps, and a fixed rule takes its map off
 the board because it is already game 1. Only the steps taken are stored.
 """
 
@@ -117,16 +117,17 @@ def _side(entry: str) -> str:
 
 
 STEPS = ("Ban_A", "Ban_B", "Pick_A", "Pick_B")
-DEFAULT_RULES = "week,loser,loser"  # no rules set is GNL's Bo3, as the frontend assumes
+# No rules set is GNL's Bo3, as the frontend assumes
+DEFAULT_RULES = "fixed,loser,loser"
 
 
 def veto_limits(season: Season) -> tuple[int, int]:
     """The picks the games take and the bans the pool then allows. A veto or
-    loser game draws its map from the picks, a week game takes one map off
+    loser game draws its map from the picks, a fixed game takes one map off
     the board, and every map left after the picks may be banned."""
     rules = (season.map_rules or DEFAULT_RULES).split(",")
     picks = sum(rule in ("veto", "loser") for rule in rules)
-    pool = len(season.maps) - ("week" in rules)
+    pool = len(season.maps) - ("fixed" in rules)
     return picks, max(pool - picks, 0)
 
 
@@ -151,9 +152,9 @@ def check_order(season: Season) -> None:
         )
 
 
-def _week_map_id(session: OrmSession, season: Season, playday: int) -> int | None:
-    """The map a week rule claims for game 1; it never enters the veto."""
-    if "week" not in (season.map_rules or DEFAULT_RULES).split(","):
+def _fixed_map_id(session: OrmSession, season: Season, playday: int) -> int | None:
+    """The map a fixed rule claims for game 1; it never enters the veto."""
+    if "fixed" not in (season.map_rules or DEFAULT_RULES).split(","):
         return None
     row = session.get(DBSeasonRound, (ident(season), playday))
     return row.map_id if row else None
@@ -178,7 +179,7 @@ def _take_step(
         raise BadRequestError(f"Map not part of the season, map id: {map_id}")
     if map_id in {step.map_id for step in steps}:
         raise BadRequestError(f"Map already used, map id: {map_id}")
-    if map_id == _week_map_id(session, season, series.match.playday):
+    if map_id == _fixed_map_id(session, season, series.match.playday):
         raise BadRequestError(f"Map played as game 1, map id: {map_id}")
     session.add(
         DBSeriesVetoStep(
@@ -197,7 +198,7 @@ def _take_step(
         link.map_id
         for link in season.maps
         if link.map_id not in taken
-        and link.map_id != _week_map_id(session, season, series.match.playday)
+        and link.map_id != _fixed_map_id(session, season, series.match.playday)
     ]
     if len(order) - len(steps) == 2 and len(left) == 1:
         session.add(
@@ -218,9 +219,9 @@ def _forced_last(
     the whole board, so one map was left for it."""
     season = series.match.season
     order = _order(season)
-    week = _week_map_id(session, season, series.match.playday)
+    fixed = _fixed_map_id(session, season, series.match.playday)
     return len(order) >= 2 and len(steps) == len(order) == len(season.maps) - (
-        week is not None
+        fixed is not None
     )
 
 
@@ -247,7 +248,7 @@ def _board(
         on_turn=side is not None and not complete and _side(order[len(steps)]) == side,
         complete=complete,
         pool=[link.map_id for link in season.maps],
-        week_map_id=_week_map_id(session, season, series.match.playday),
+        week_map_id=_fixed_map_id(session, season, series.match.playday),
         map_rules=season.map_rules,
         player1=VetoPlayer(id=series.player1_id, name=series.player1.name),
         player2=VetoPlayer(id=series.player2_id, name=series.player2.name),

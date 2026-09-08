@@ -130,7 +130,7 @@ def _known_time_zone[T](value: T) -> T | None:
     return value
 
 
-MAP_RULES = ("veto", "loser", "host", "week")
+MAP_RULES = ("veto", "loser", "host", "fixed")
 
 
 def _map_rules[T](value: T) -> T | None:
