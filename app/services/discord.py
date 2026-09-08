@@ -108,15 +108,15 @@ def set_role(discord_id: str, role_id: str, grant: bool) -> None:
         )
 
 
-def guild_members() -> dict[str, set[str]] | None:
-    """The roles every guild member holds, by account id; None when the guild has no answer.
+def guild_member_list() -> list[dict[str, Any]] | None:
+    """Every guild member, paged; None when the guild has no answer.
 
     One paged listing instead of one read per account. Needs the Server
     Members intent on the bot; a refusal answers None and the caller falls
     back to member reads.
     """
     guild_id = os.getenv("DISCORD_GUILD_ID", "")
-    members: dict[str, set[str]] = {}
+    members: list[dict[str, Any]] = []
     after = "0"
     while True:
         response = _bot_get(f"/guilds/{guild_id}/members?limit=1000&after={after}")
@@ -127,11 +127,18 @@ def guild_members() -> dict[str, set[str]] | None:
                 )
             return None
         page = response.json()
-        for member in page:
-            members[member["user"]["id"]] = set(member.get("roles", []))
+        members += page
         if len(page) < 1000:
             return members
         after = page[-1]["user"]["id"]
+
+
+def guild_members() -> dict[str, set[str]] | None:
+    """The roles every guild member holds, by account id; None when the guild has no answer."""
+    members = guild_member_list()
+    if members is None:
+        return None
+    return {member["user"]["id"]: set(member.get("roles", [])) for member in members}
 
 
 def guild_roles() -> list[GuildRole]:

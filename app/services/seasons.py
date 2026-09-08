@@ -451,6 +451,12 @@ class SeasonService:
             fields = data.model_dump(exclude_unset=True)
             if "race" in fields:
                 fields["race"] = self._race(fields["race"])
+                phase, _ = signup.season.progress(session)
+                if phase != "open" and fields["race"] != signup.race:
+                    raise BadRequestError(
+                        "A season that has started keeps its signup races. "
+                        "Record the race played on the series instead."
+                    )
             signup.sqlmodel_update(fields)
             session.flush()
             return _public(session, signup.season)
