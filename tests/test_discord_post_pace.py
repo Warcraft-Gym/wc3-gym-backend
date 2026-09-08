@@ -16,11 +16,14 @@ def edits(calls: list[tuple[str, str, Any]]) -> list[str]:
 
 
 @pytest.fixture
-def two_cards(seeded: dict[str, Any]) -> int:
-    """A veto card and an announce card of the open series, in one channel."""
+def two_cards(seeded: dict[str, Any], clock: Clock) -> int:
+    """A veto card and an announce card of the open series, posted in one
+    channel a while ago."""
     series_id = seeded["series_open_id"]
     discord_posts.remember("veto", series_id, "chan", "m1")
     discord_posts.remember("announce", series_id, "chan", "m2")
+    clock.sleep(60)
+    clock.sleeps.clear()
     return series_id
 
 
@@ -60,6 +63,20 @@ def test_a_change_during_the_edit_is_carried_by_the_next_task(
     discord_calls.clear()
     discord_posts.flush_series(two_cards, ("veto",))
     assert edits(discord_calls) == ["m1"]
+
+
+def test_a_new_post_waits_for_the_channels_second(
+    discord_calls: list, seeded: dict[str, Any], clock: Clock
+) -> None:
+    from app.core.db import Session
+    from app.models.settings import Settings
+
+    with Session.begin() as session:
+        session.add(Settings(key="results_channel_id", value="chan"))
+    discord_posts.remember("veto", seeded["series_open_id"], "chan", "m1")
+    discord_posts.post_result(seeded["series_played_id"])
+    assert [call[0] for call in discord_calls] == ["POST"]
+    assert clock.sleeps == [1.0]
 
 
 def test_a_rate_limited_channel_call_waits_and_tries_once_more(

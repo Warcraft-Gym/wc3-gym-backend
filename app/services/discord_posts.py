@@ -55,7 +55,8 @@ CARDS = {"veto": veto.card, "announce": announce.card, RESULT: result_card}
 
 
 def remember(kind: str, subject_id: int, channel_id: str, message_id: str) -> None:
-    """Keep a post the bot made, so a later write to its subject can edit it."""
+    """Keep a post the bot made, so a later write to its subject can edit it.
+    The post counts as the channel's write of this second."""
     with Session.begin() as session:
         session.add(
             DiscordPost(
@@ -63,8 +64,22 @@ def remember(kind: str, subject_id: int, channel_id: str, message_id: str) -> No
                 subject_id=subject_id,
                 channel_id=channel_id,
                 message_id=message_id,
+                edited_at=utcnow(),
             )
         )
+
+
+def wait_for_channel(channel_id: str) -> None:
+    """A new post waits for the channel's second, as an edit does."""
+    with Session() as session:
+        last = session.scalar(
+            select(func.max(DiscordPost.edited_at)).where(
+                col(DiscordPost.channel_id) == channel_id
+            )
+        )
+    wait = (last + EDIT_INTERVAL - utcnow()).total_seconds() if last else 0
+    if wait > 0:
+        sleep(wait)
 
 
 def _posts(series_id: int, kinds: tuple[str, ...]) -> list[DiscordPost]:
@@ -173,6 +188,7 @@ def post_result(series_id: int) -> None:
     channel_id = setting.value if setting else None
     if not channel_id:
         return
+    wait_for_channel(channel_id)
     message_id = discord.post_to_channel(
         channel_id, result_card(SeriesService().get(series_id))
     )
