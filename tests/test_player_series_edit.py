@@ -49,6 +49,23 @@ def test_a_date_before_the_season_start_is_refused(
         )
 
 
+def test_the_evening_before_the_season_start_is_kept(
+    app: FastAPI, seeded: dict[str, Any]
+) -> None:
+    # A season starts on a calendar date; a player's evening can be the UTC day before
+    result = player_series.update_player_series(
+        seeded["series_played_id"],
+        {"date_time": "2026-01-04 20:30:00"},
+        discord_id="1",
+        discord_tag="p1",
+        user_service=UserService(),
+        series_service=SeriesService(),
+    )
+
+    assert isinstance(result, dict), result
+    assert result["date_time"].startswith("2026-01-04T20:30:00")
+
+
 def test_a_flag_set_after_the_read_survives_the_player_edit(
     app: FastAPI, seeded: dict[str, Any], monkeypatch: pytest.MonkeyPatch
 ) -> None:

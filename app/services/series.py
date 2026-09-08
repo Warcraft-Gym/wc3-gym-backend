@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from sqlalchemy import func, select
 from sqlmodel import col
 
@@ -33,9 +35,12 @@ def _both_scores(row: Series) -> None:
 
 def _in_season(row: Series) -> None:
     """A series cannot sit before its season starts: a mistyped year reads as
-    a season that has commenced, and every report of it is wrong."""
+    a season that has commenced, and every report of it is wrong. start_date is
+    a calendar date, so the day of slack covers the player's timezone."""
     start = row.match.season.start_date if row.match else None
-    if row.date_time is not None and start is not None and row.date_time.date() < start:
+    if row.date_time is None or start is None:
+        return
+    if row.date_time.date() < start - timedelta(days=1):
         raise BadRequestError(
             f"A series cannot be earlier than the season start, {start}"
         )
