@@ -4,7 +4,7 @@ from typing import Any
 
 from fastapi.responses import JSONResponse
 
-from app.core.scoring import wins_needed
+from app.core.scoring import decided, wins_needed
 from app.models.series import SeriesUpdate
 from app.services import discord_posts, replays
 from app.services.series import SeriesService
@@ -71,7 +71,7 @@ def update_player_series(
                 {"error": "Invalid or missing player scores for score update."},
                 status_code=400,
             )
-        if max(p1, p2) != wins or min(p1, p2) >= wins:
+        if not decided(p1, p2, wins):
             return JSONResponse(
                 {"error": f"A series of this season ends at {wins} map wins."},
                 status_code=400,

@@ -14,6 +14,7 @@ from sqlalchemy import Integer, literal, select
 
 from app.core.scoring import (
     SYSTEMS,
+    decided,
     max_points,
     points,
     points_case,
@@ -171,3 +172,22 @@ def test_a_new_season_carries_a_score_system(
     fetched: dict[str, Any] = client.get(f"/seasons/{season_id}").json()
     assert fetched["score_system"] == "helpstone"
     assert fetched["name"] == "Season 9"
+
+
+@pytest.mark.parametrize(
+    "wins,ends",
+    [
+        (1, {(1, 0), (0, 1)}),
+        (2, {(2, 0), (2, 1), (1, 2), (0, 2)}),
+        (3, {(3, 0), (3, 1), (3, 2), (2, 3), (1, 3), (0, 3)}),
+    ],
+)
+def test_only_a_finished_series_is_a_result(
+    wins: int, ends: set[tuple[int, int]]
+) -> None:
+    """A written score ends the series: every other pair a person can type is
+    refused, above the best-of as well as below it."""
+    for own in range(wins + 2):
+        for opp in range(wins + 2):
+            assert decided(own, opp, wins) is ((own, opp) in ends), (own, opp, wins)
+    assert decided(-1, wins, wins) is False
