@@ -47,7 +47,6 @@ class AvailabilityWrite(SQLModel):
 
 
 class PlayerAvailabilityWrite(AvailabilityWrite):
-    token: str | None = None
     season_id: int | None = None
 
 

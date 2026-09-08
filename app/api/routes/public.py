@@ -1,7 +1,4 @@
 import logging
-import os
-import secrets
-from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, Response
@@ -38,7 +35,6 @@ from app.models.fantasy_team import (
     FantasyTeamUpdate,
     PublicFantasyTeamWrite,
 )
-from app.models.login import PublicAccessRequest
 from app.models.player_history import PlayerHistory
 from app.models.series import SeriesPublic, SeriesSort
 from app.models.series_replay import SeriesReplayPublic
@@ -70,63 +66,29 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["public"])
 
-# token -> {discord_id, discord_tag, season_id, expires_at, access_type}
-_token_store: dict[str, dict[str, Any]] = {}
 
-
-def _cleanup_expired() -> None:
-    # use timezone-aware UTC now
-    now = datetime.now(UTC)
-    # a snapshot and a pop, because a parallel request can drop a token
-    expired = [t for t, v in list(_token_store.items()) if v["expires_at"] <= now]
-    for t in expired:
-        _token_store.pop(t, None)
-
-
-def _identity(
-    request: Request,
-    credentials: Credentials,
-    token: str | None,
-    access_type: str | None = None,
-) -> dict[str, Any]:
-    """Answer the Discord identity of a player request: the Clerk session, else the token."""
-    # The token half goes when the bot posts static login links instead of signed ones.
-    if credentials is not None:
-        claims = require_member(request, credentials)
-        if claims["sub"] == "admin":
-            raise ApiError(401, {"error": "not_a_discord_member"})
-        account = discord.identify(discord_token(claims["clerk_user_id"]).token)
-        return {
-            "discord_id": str(claims["sub"]),
-            "discord_tag": account.get("global_name")
-            or account.get("username")
-            or str(claims["sub"]),
-            "season_id": discord_roles.current_season(),
-            "access_type": access_type,
-        }
-    if not token:
-        raise BadRequestError("missing token")
-    _cleanup_expired()
-    entry = _token_store.get(token)
-    if not entry:
-        raise NotFoundError("token_not_found_or_expired")
-    if access_type and entry.get("access_type") != access_type:
-        raise BadRequestError("invalid_token_type")
-    return entry
+def _identity(request: Request, credentials: Credentials) -> dict[str, Any]:
+    """The Discord identity behind a player request: the member's Clerk session."""
+    claims = require_member(request, credentials)
+    if claims["sub"] == "admin":
+        raise ApiError(401, {"error": "not_a_discord_member"})
+    account = discord.identify(discord_token(claims["clerk_user_id"]).token)
+    return {
+        "discord_id": str(claims["sub"]),
+        "discord_tag": account.get("global_name")
+        or account.get("username")
+        or str(claims["sub"]),
+        "season_id": discord_roles.current_season(),
+    }
 
 
 def dashboard_player(
     request: Request,
     credentials: Credentials,
     user_service: UserServiceDep,
-    token: str | None = None,
 ) -> tuple[dict[str, Any], UserListPublic]:
-    """The identity behind a dashboard request, and the player row it names.
-
-    As a dependency it reads the token off the query string; a route whose
-    token arrives in the body calls it instead.
-    """
-    entry = _identity(request, credentials, token, "dashboard")
+    """The identity behind a dashboard request, and the player row it names."""
+    entry = _identity(request, credentials)
     users = user_service.find_by_discord_id(str(entry.get("discord_id")))
     if not users:
         raise NotFoundError("player_not_found")
@@ -174,11 +136,10 @@ def _owned_bet(
     user_service: UserServiceDep,
     fantasy_bet_service: FantasyBetServiceDep,
     bet_id: int,
-    token: str | None,
     verb: str,
 ) -> FantasyBetPublic:
     """The bet the identified player placed. Someone else's bet answers 403."""
-    entry = _identity(request, credentials, token)
+    entry = _identity(request, credentials)
     users = user_service.find_by_discord_id(str(entry.get("discord_id")))
     if not users:
         raise NotFoundError("user_not_found")
@@ -193,86 +154,6 @@ def _owned_bet(
             },
         )
     return bet
-
-
-@router.post("/public-access-helper", response_model=None)
-def create_public_access_helper(
-    request: Request,
-    data: PublicAccessRequest | None = None,
-    client_token: str | None = None,
-    discord_id: str | None = None,
-    discord_tag: str | None = None,
-    season_id: str | None = None,
-    access_type: str | None = None,
-    ttl_minutes: str | None = None,
-) -> dict[str, Any]:
-    """Protected endpoint for the Discord bot to request a one-time public access URL. Requires BOT client token."""
-    data = data or PublicAccessRequest()
-    client_token = data.client_token or client_token
-    expected = os.getenv("BOT_CLIENT_TOKEN") or ""
-    if not expected or str(client_token) != str(expected):
-        raise ApiError(401, {"error": "unauthorized"})
-
-    discord_id = data.discord_id or discord_id
-    discord_tag = data.discord_tag or discord_tag
-    season_id = data.season_id or season_id
-    access_type = data.access_type or access_type
-    ttl = int(data.ttl_minutes or ttl_minutes or 30)
-
-    if not discord_id or not discord_tag or not access_type:
-        raise BadRequestError("missing parameters")
-
-    if access_type not in ["signup", "dashboard", "fantasy"]:
-        raise BadRequestError("invalid access_type")
-
-    # cleanup store
-    _cleanup_expired()
-
-    token = secrets.token_urlsafe(16)
-    expires_at = datetime.now(UTC) + timedelta(minutes=ttl)
-    _token_store[token] = {
-        "discord_id": str(discord_id),
-        "discord_tag": str(discord_tag),
-        "season_id": str(season_id) if season_id else None,
-        "access_type": access_type,
-        "expires_at": expires_at,
-    }
-
-    frontend = (os.getenv("FRONTEND_URL") or str(request.base_url)).rstrip("/")
-
-    # Route based on access type
-    if access_type == "signup":
-        access_url = f"{frontend}/signup?token={token}"
-    elif access_type == "dashboard":
-        access_url = f"{frontend}/player-dashboard?token={token}"
-    elif access_type == "fantasy":
-        access_url = f"{frontend}/fantasy-registration?token={token}"
-
-    return {"access_url": access_url, "token": token}
-
-
-@router.get("/public-token/{token}", response_model=None)
-def get_public_token(token: str) -> dict[str, Any]:
-    """Return token metadata (used by public pages to validate token)."""
-    _cleanup_expired()
-    entry = _token_store.get(token)
-    if not entry:
-        raise NotFoundError("not_found")
-    return {
-        "discord_id": entry["discord_id"],
-        "discord_tag": entry["discord_tag"],
-        "season_id": entry["season_id"],
-        "access_type": entry["access_type"],
-    }
-
-
-@router.delete("/public-token/{token}", response_model=None)
-def delete_public_token(token: str) -> dict[str, Any]:
-    """Remove a token after it has been used."""
-    # a pop, because two parallel deletes must not both find the token
-    if _token_store.pop(token, None) is not None:
-        return {"status": "deleted"}
-    raise NotFoundError("not_found")
 
 
 @router.post("/signup", status_code=201, response_model=None)
@@ -300,8 +181,7 @@ def public_create_user(
         )
 
     data = data or PublicSignupWrite()
-    token = data.token
-    entry = _identity(request, credentials, token, "signup")
+    entry = _identity(request, credentials)
 
     # Build user payload. Force discord fields from the identity to avoid spoofing.
     user_payload: dict[str, Any] = {
@@ -335,10 +215,6 @@ def public_create_user(
             f"BattleNet name '{user_payload['battleTag']}' is not valid"
             " - no W3Champions stats found"
         )
-
-    # take the token here, because a pop lets only one parallel request continue
-    if token and _token_store.pop(token, None) is None:
-        raise NotFoundError("token_not_found_or_expired")
 
     # Check for existing user by discord id or tag
     existing_users = user_service.find_by_discord_id_or_tag(
@@ -396,7 +272,6 @@ def get_player_series(
     response: Response,
     request: Request,
     credentials: Credentials,
-    token: str | None = None,
     limit: Annotated[int, Query(ge=1, le=500)] = 500,
     offset: Annotated[int, Query(ge=0)] = 0,
     sort: SeriesSort | None = None,
@@ -407,11 +282,10 @@ def get_player_series(
     sort names the field the page is ordered by, and the series id breaks its ties.
     """
     # not a dependency: that would identify the player before limit is checked
-    entry, user = dashboard_player(request, credentials, user_service, token)
+    entry, user = dashboard_player(request, credentials, user_service)
 
     # Get series where user is player1 or player2
-    # The token stores the season id as text
-    season_id = int(entry["season_id"]) if entry.get("season_id") else None
+    season_id = entry["season_id"]
     if season_id:
         query = QueryUtil.parse_query(
             f"player1_id == {user.id} or player2_id == {user.id}"
@@ -459,7 +333,6 @@ def get_player_series(
 @router.put("/player-availability")
 def set_player_availability(
     availability_service: AvailabilityServiceDep,
-    settings_service: SettingsServiceDep,
     user_service: UserServiceDep,
     request: Request,
     credentials: Credentials,
@@ -469,13 +342,9 @@ def set_player_availability(
 
     A null answer clears the week, which puts the player back to available.
     """
-    entry, user = dashboard_player(request, credentials, user_service, data.token)
+    entry, user = dashboard_player(request, credentials, user_service)
 
-    season_id = (
-        entry.get("season_id")
-        or data.season_id
-        or settings_service.get_settings_dict().get("current_gnl_season")
-    )
+    season_id = entry["season_id"] or data.season_id
     if not season_id:
         raise BadRequestError("missing season_id")
 
@@ -509,10 +378,7 @@ async def update_player_series(
     else:
         data = await request.json() or {}
 
-    token = data.get("token")
-    entry = _identity(
-        request, credentials, token if isinstance(token, str) else None, "dashboard"
-    )
+    entry = _identity(request, credentials)
 
     # Only the parsing and the identity check above need the event loop
     return await run_in_threadpool(
@@ -572,7 +438,6 @@ def replace_replay(
 def _veto_viewer(
     request: Request,
     credentials: Credentials,
-    token: str | None,
     user_service: UserServiceDep,
 ) -> tuple[int | None, int | None]:
     """The player behind the request, or null for an admin, who edits either
@@ -582,7 +447,7 @@ def _veto_viewer(
         if claims.get("role") == "admin" or claims.get("sub") == "admin":
             users = user_service.find_by_discord_id(str(claims["sub"]))
             return None, users[0].id if users else None
-    player = dashboard_player(request, credentials, user_service, token)[1].id
+    player = dashboard_player(request, credentials, user_service)[1].id
     return player, player
 
 
@@ -593,10 +458,9 @@ def get_player_series_veto(
     veto_service: SeriesVetoServiceDep,
     request: Request,
     credentials: Credentials,
-    token: str | None = None,
 ) -> SeriesVetoPublic:
     """The map veto board of a series, read by either player or by an admin."""
-    viewer, player = _veto_viewer(request, credentials, token, user_service)
+    viewer, player = _veto_viewer(request, credentials, user_service)
     return veto_service.board(series_id, viewer, player)
 
 
@@ -613,7 +477,7 @@ def set_player_series_veto(
     """Take the next step of the veto, or take back your own last one. An admin
     enters the step for whichever side is next and takes back any last step.
     The bot's post of the series, if any, is edited after the answer."""
-    viewer, entered_by = _veto_viewer(request, credentials, data.token, user_service)
+    viewer, entered_by = _veto_viewer(request, credentials, user_service)
     board = veto_service.take(series_id, viewer, data.action, data.map_id, entered_by)
     background.add_task(discord_posts.refresh_series, series_id)
     return board
@@ -624,10 +488,9 @@ def get_user_info(
     user_service: UserServiceDep,
     request: Request,
     credentials: Credentials,
-    token: str | None = None,
 ) -> dict[str, Any]:
     """Get user information (for fantasy team captains who may not be players)."""
-    entry = _identity(request, credentials, token)
+    entry = _identity(request, credentials)
 
     # Find the user by discord_id
     users = user_service.find_by_discord_id(str(entry.get("discord_id")))
@@ -658,7 +521,7 @@ def update_user_info(
     data: ProfileUpdate,
 ) -> dict[str, Any]:
     """A member edits their own profile; open signups are not required for this."""
-    entry = _identity(request, credentials, None, "profile")
+    entry = _identity(request, credentials)
     users = user_service.find_by_discord_id(str(entry.get("discord_id")))
     if not users:
         raise NotFoundError("No profile for this account")
@@ -709,7 +572,7 @@ def create_fantasy_team(
         )
 
     data = data or PublicFantasyTeamWrite()
-    entry = _identity(request, credentials, data.token)
+    entry = _identity(request, credentials)
 
     # Validate required fields
     season_id = data.season_id
@@ -810,7 +673,7 @@ def create_fantasy_bet(
 ) -> dict[str, Any] | None:
     """Create a fantasy bet for the identified player."""
     data = data or PublicFantasyBetWrite()
-    entry = _identity(request, credentials, data.token)
+    entry = _identity(request, credentials)
     _refuse_started(series_service, data.series_id)
 
     # Get or create user based on discord info
@@ -863,7 +726,6 @@ def update_fantasy_bet(
         user_service,
         fantasy_bet_service,
         bet_id,
-        data.token,
         "update",
     )
     _refuse_started(series_service, existing_bet.series_id)
@@ -896,11 +758,10 @@ def delete_fantasy_bet(
     series_service: SeriesServiceDep,
     request: Request,
     credentials: Credentials,
-    token: str | None = None,
 ) -> None:
     """Delete a fantasy bet of the identified player."""
     bet = _owned_bet(
-        request, credentials, user_service, fantasy_bet_service, bet_id, token, "delete"
+        request, credentials, user_service, fantasy_bet_service, bet_id, "delete"
     )
     _refuse_started(series_service, bet.series_id)
     fantasy_bet_service.delete(bet_id)

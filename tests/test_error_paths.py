@@ -10,8 +10,7 @@ import importlib
 import inspect
 import logging
 import pkgutil
-from collections.abc import Iterator
-from datetime import UTC, datetime, timedelta
+from collections.abc import Callable
 from typing import Any, Never
 
 import pytest
@@ -25,45 +24,17 @@ from app.services.maps import MapService
 from app.services.users import UserService
 from app.services.w3c import W3CService
 
-BOT_TOKEN = "test-bot-client-token"
 
-
-@pytest.fixture(autouse=True)
-def empty_store() -> Iterator[dict[str, dict[str, Any]]]:
-    """The store is process-global, so empty it around each test."""
-    from app.api.routes.public import _token_store
-
-    _token_store.clear()
-    yield _token_store
-    _token_store.clear()
-
-
-def mint(
-    store: dict[str, dict[str, Any]],
-    access_type: str = "fantasy",
-    discord_id: str = "1",
-    minutes: int = 5,
-) -> str:
-    token = f"token-{access_type}-{discord_id}"
-    store[token] = {
-        "discord_id": discord_id,
-        "discord_tag": f"p{discord_id}",
-        "season_id": None,
-        "access_type": access_type,
-        "expires_at": datetime.now(UTC) + timedelta(minutes=minutes),
-    }
-    return token
-
-
-def call(client: Client, method: str, path: str, token: str | None = None) -> Response:
-    """A token rides in the query on GET and DELETE, in the body elsewhere."""
+def call(
+    client: Client, method: str, path: str, headers: dict[str, str] | None = None
+) -> Response:
     if method in ("GET", "DELETE"):
-        return client.request(method, path, params={"token": token} if token else None)
-    return client.request(method, path, json={"token": token} if token else {})
+        return client.request(method, path, headers=headers)
+    return client.request(method, path, json={}, headers=headers)
 
 
-# Every public route that spends a one-time token.
-TOKEN_ROUTES = [
+# Every public route that identifies the member by their session.
+MEMBER_ROUTES = [
     ("POST", "/signup"),
     ("GET", "/player-history"),
     ("GET", "/player-series"),
@@ -83,61 +54,34 @@ BET_ROUTES = [
 ]
 
 
-@pytest.mark.parametrize("method,path", TOKEN_ROUTES)
-def test_a_request_without_a_token_answers_400(
+@pytest.mark.parametrize("method,path", MEMBER_ROUTES)
+def test_a_request_without_a_session_answers_401(
     client: Client, method: str, path: str
 ) -> None:
     resp = call(client, method, path)
-    assert resp.status_code == 400, resp.text
-    assert resp.json() == {"error": "missing token"}
-
-
-@pytest.mark.parametrize("method,path", TOKEN_ROUTES)
-def test_an_unknown_token_answers_404(client: Client, method: str, path: str) -> None:
-    resp = call(client, method, path, token="no-such-token")
-    assert resp.status_code == 404, resp.text
-    assert resp.json() == {"error": "token_not_found_or_expired"}
-
-
-@pytest.mark.parametrize("method,path", TOKEN_ROUTES)
-def test_an_expired_token_answers_404(
-    client: Client,
-    empty_store: dict[str, dict[str, Any]],
-    method: str,
-    path: str,
-) -> None:
-    token = mint(empty_store, minutes=-1)
-
-    resp = call(client, method, path, token=token)
-
-    assert resp.status_code == 404, resp.text
-    assert resp.json() == {"error": "token_not_found_or_expired"}
-    assert token not in empty_store
+    assert resp.status_code == 401, resp.text
+    assert resp.json() == {"error": "Missing Authorization Header"}
 
 
 @pytest.mark.parametrize("method,path", BET_ROUTES)
 def test_a_bet_for_an_unknown_player_answers_404(
     client: Client,
-    empty_store: dict[str, dict[str, Any]],
+    member: Callable[..., dict[str, str]],
     seeded: dict[str, Any],
     method: str,
     path: str,
 ) -> None:
-    token = mint(empty_store, discord_id="no-such-discord-id")
-
-    resp = call(client, method, path, token=token)
+    resp = call(client, method, path, headers=member("no-such-discord-id"))
 
     assert resp.status_code == 404, resp.text
     assert resp.json()["error"] == "user_not_found"
 
 
 def test_the_dashboard_of_an_unknown_player_answers_404(
-    client: Client, empty_store: dict[str, dict[str, Any]], seeded: dict[str, Any]
+    client: Client, member: Callable[..., dict[str, str]], seeded: dict[str, Any]
 ) -> None:
     """The dashboard says player_not_found where the bet routes say user_not_found."""
-    token = mint(empty_store, access_type="dashboard", discord_id="no-such-discord-id")
-
-    resp = client.get("/player-series", params={"token": token})
+    resp = client.get("/player-series", headers=member("no-such-discord-id"))
 
     assert resp.status_code == 404, resp.text
     assert resp.json() == {"error": "player_not_found"}
@@ -152,23 +96,22 @@ def test_the_dashboard_of_an_unknown_player_answers_404(
 )
 def test_a_bet_of_another_player_answers_403(
     client: Client,
-    empty_store: dict[str, dict[str, Any]],
+    member: Callable[..., dict[str, str]],
     seeded: dict[str, Any],
     method: str,
     message: str,
 ) -> None:
-    """The seeded bet belongs to P1, and the token names P2."""
+    """The seeded bet belongs to P1, and the session names P2."""
     bet_id = client.get("/fantasy/bets").json()[0]["id"]
-    token = mint(empty_store, discord_id="2")
 
-    resp = call(client, method, f"/fantasy-bet/{bet_id}", token=token)
+    resp = call(client, method, f"/fantasy-bet/{bet_id}", headers=member("2"))
 
     assert resp.status_code == 403, resp.text
     assert resp.json() == {"error": "unauthorized", "message": message}
 
 
 def test_fantasy_team_creation_answers_the_closed_string(
-    client: Client, empty_store: dict[str, dict[str, Any]], app: FastAPI
+    client: Client, member: Callable[..., dict[str, str]], app: FastAPI
 ) -> None:
     """The registration page branches on this string, not on the status."""
     from app.core.db import Session
@@ -177,56 +120,10 @@ def test_fantasy_team_creation_answers_the_closed_string(
     with Session() as session:
         session.add(Settings(key="fantasy_team_creation_enabled", value="false"))
         session.commit()
-    token = mint(empty_store)
-
-    resp = client.post("/fantasy-team", json={"token": token})
+    resp = client.post("/fantasy-team", json={}, headers=member())
 
     assert resp.status_code == 403, resp.text
     assert resp.json()["error"] == "fantasy_team_creation_closed"
-
-
-def test_the_access_helper_refuses_a_wrong_client_token(
-    client: Client, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setenv("BOT_CLIENT_TOKEN", BOT_TOKEN)
-
-    resp = client.post("/public-access-helper", json={"client_token": "wrong"})
-
-    assert resp.status_code == 401
-    assert resp.json() == {"error": "unauthorized"}
-
-
-def test_the_access_helper_refuses_a_missing_discord_id(
-    client: Client, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setenv("BOT_CLIENT_TOKEN", BOT_TOKEN)
-
-    resp = client.post(
-        "/public-access-helper",
-        json={"client_token": BOT_TOKEN, "access_type": "signup"},
-    )
-
-    assert resp.status_code == 400
-    assert resp.json() == {"error": "missing parameters"}
-
-
-def test_the_access_helper_refuses_an_unknown_access_type(
-    client: Client, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setenv("BOT_CLIENT_TOKEN", BOT_TOKEN)
-
-    resp = client.post(
-        "/public-access-helper",
-        json={
-            "client_token": BOT_TOKEN,
-            "discord_id": "1",
-            "discord_tag": "p1",
-            "access_type": "admin",
-        },
-    )
-
-    assert resp.status_code == 400
-    assert resp.json() == {"error": "invalid access_type"}
 
 
 def refuse_w3c(monkeypatch: pytest.MonkeyPatch, failure: Exception) -> None:
@@ -331,7 +228,7 @@ def test_a_bug_writes_one_error_record_with_the_traceback(
 
 def test_a_failed_player_lookup_logs_the_traceback(
     client: Client,
-    empty_store: dict[str, dict[str, Any]],
+    member: Callable[..., dict[str, str]],
     caplog: pytest.LogCaptureFixture,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -339,10 +236,10 @@ def test_a_failed_player_lookup_logs_the_traceback(
         raise RuntimeError("the lookup fell over")
 
     monkeypatch.setattr(UserService, "find_by_discord_id", broken)
-    token = mint(empty_store)
+    headers = member()
 
     with caplog.at_level(logging.ERROR):
-        resp = client.post("/fantasy-bet", json={"token": token})
+        resp = client.post("/fantasy-bet", json={}, headers=headers)
 
     assert resp.status_code == 500, resp.text
     assert resp.json() == {"error": "Internal Server Error"}

@@ -18,7 +18,7 @@ from app.models.season import Season
 from app.models.team import Team
 from tests.test_fantasy_locks import schedule, score
 from tests.test_ladder_read import add_match, sign_up
-from tests.test_public_token import member_session
+from tests.test_player_session import member_session
 
 
 def test_the_rank_pays_and_a_tie_shares_it() -> None:

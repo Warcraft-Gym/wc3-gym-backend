@@ -40,11 +40,22 @@ STATS: dict[str, Any] = {
 }
 
 
+# The UK nations Discord draws as flags; Northern Ireland has no emoji
+NATION_FLAGS = ("GB-ENG", "GB-SCT", "GB-WLS")
+
+
 def _flag(country: str | None) -> str:
-    """The flag emoji of a two-letter country code, or nothing."""
-    if not country or len(country) != 2 or not country.isalpha():
-        return ""
-    return "".join(chr(0x1F1E6 + ord(letter) - ord("A")) for letter in country.upper())
+    """The flag emoji of a country code, or nothing: regional indicators for
+    a two-letter code, a tag sequence for a UK nation."""
+    code = (country or "").upper()
+    if len(code) == 2 and code.isalpha():
+        return "".join(chr(0x1F1E6 + ord(letter) - ord("A")) for letter in code)
+    if code in NATION_FLAGS:
+        tags = "".join(
+            chr(0xE0000 + ord(letter)) for letter in code.replace("-", "").lower()
+        )
+        return f"\U0001f3f4{tags}\U000e007f"
+    return ""
 
 
 def _icon(name: str | None, emojis: dict[str, str]) -> str:

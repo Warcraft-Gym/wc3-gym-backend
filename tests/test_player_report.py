@@ -9,14 +9,14 @@ from httpx2 import Client
 def test_a_report_with_its_replays_lands(
     client: Client,
     seeded: dict[str, Any],
-    dashboard_token: Callable[..., str],
+    member: Callable[..., dict[str, str]],
     replay_uploaded: Callable[..., None],
 ) -> None:
     replay_uploaded(seeded["series_open_id"], 1, 2)
     resp = client.put(
         f"/player-series/{seeded['series_open_id']}",
+        headers=member("2"),
         data={
-            "token": dashboard_token(discord_id="2"),
             "action": "score_updated",
             "player1_score": "2",
             "player2_score": "0",
@@ -32,15 +32,15 @@ def test_a_report_with_its_replays_lands(
 def test_a_report_needs_one_replay_per_game_played(
     client: Client,
     seeded: dict[str, Any],
-    dashboard_token: Callable[..., str],
+    member: Callable[..., dict[str, str]],
     replay_uploaded: Callable[..., None],
 ) -> None:
     """A 2-1 went three games, so a report with two replays in the bucket is refused."""
     replay_uploaded(seeded["series_open_id"], 1, 2)
     resp = client.put(
         f"/player-series/{seeded['series_open_id']}",
+        headers=member("2"),
         data={
-            "token": dashboard_token(discord_id="2"),
             "action": "score_updated",
             "player1_score": "2",
             "player2_score": "1",

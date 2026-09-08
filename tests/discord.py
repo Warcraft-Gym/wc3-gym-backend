@@ -3,6 +3,7 @@ recorder for the calls the backend makes to Discord. The fixtures live in confte
 
 import json
 import time
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
@@ -78,3 +79,20 @@ def record(monkeypatch: pytest.MonkeyPatch, status: int) -> list[tuple[str, str,
 
     monkeypatch.setattr(discord.requests, "request", request)
     return calls
+
+
+class Clock:
+    """The clock the bot post pacing reads, and the sleeps it asked for."""
+
+    def __init__(self) -> None:
+        self.now = datetime.now(UTC)
+        self.sleeps: list[float] = []
+
+    def read(self) -> datetime:
+        # time moves between two reads, as it does on a real clock
+        self.now += timedelta(microseconds=1)
+        return self.now
+
+    def sleep(self, seconds: float) -> None:
+        self.sleeps.append(round(seconds, 3))
+        self.now += timedelta(seconds=seconds)

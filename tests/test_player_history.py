@@ -11,38 +11,12 @@ P1 beats P4 2-0 on playday 2 and their series against P3 is not played yet.
 Alpha takes 4 points and Beta 5, so Alpha finishes second of two.
 """
 
-from collections.abc import Callable, Iterator
-from datetime import UTC, date, datetime, timedelta
+from collections.abc import Callable
+from datetime import date, datetime
 from typing import Any
 
 import pytest
 from httpx2 import Client
-
-from tests.test_public_token import member_session
-
-
-@pytest.fixture
-def token_for() -> Iterator[Callable[[str], str]]:
-    """A factory for dashboard tokens of one Discord account."""
-    from app.api.routes.public import _token_store
-
-    issued: list[str] = []
-
-    def issue(discord_id: str = "1") -> str:
-        token = f"history-token-{len(issued)}"
-        _token_store[token] = {
-            "discord_id": discord_id,
-            "discord_tag": f"p{discord_id}",
-            "season_id": None,
-            "access_type": "dashboard",
-            "expires_at": datetime.now(UTC) + timedelta(minutes=5),
-        }
-        issued.append(token)
-        return token
-
-    yield issue
-    for token in issued:
-        _token_store.pop(token, None)
 
 
 def _second_season(seeded: dict[str, Any]) -> dict[str, Any]:
@@ -145,11 +119,11 @@ def two_seasons(seeded: dict[str, Any]) -> dict[str, Any]:
 
 
 def test_events_carry_the_team_and_the_record_of_every_season(
-    client: Client, two_seasons: dict[str, Any], token_for: Callable[[str], str]
+    client: Client, two_seasons: dict[str, Any], member: Callable[..., dict[str, str]]
 ) -> None:
     """P1 stood in both seasons for Alpha, one series in the first and two in
     the second."""
-    resp = client.get("/player-history", params={"token": token_for("1")})
+    resp = client.get("/player-history", headers=member("1"))
 
     assert resp.status_code == 200, resp.text
     events = resp.json()["events"]
@@ -162,10 +136,10 @@ def test_events_carry_the_team_and_the_record_of_every_season(
 
 
 def test_events_carry_the_finish_the_standings_derive(
-    client: Client, two_seasons: dict[str, Any], token_for: Callable[[str], str]
+    client: Client, two_seasons: dict[str, Any], member: Callable[..., dict[str, str]]
 ) -> None:
     """Alpha took the first season on points and lost the second."""
-    resp = client.get("/player-history", params={"token": token_for("1")})
+    resp = client.get("/player-history", headers=member("1"))
 
     events = resp.json()["events"]
     assert [(event["place"], event["team_count"]) for event in events] == [
@@ -175,16 +149,16 @@ def test_events_carry_the_finish_the_standings_derive(
 
 
 def test_the_current_season_reads_as_running(
-    client: Client, two_seasons: dict[str, Any], token_for: Callable[[str], str]
+    client: Client, two_seasons: dict[str, Any], member: Callable[..., dict[str, str]]
 ) -> None:
-    resp = client.get("/player-history", params={"token": token_for("1")})
+    resp = client.get("/player-history", headers=member("1"))
 
     events = resp.json()["events"]
     assert [event["running"] for event in events] == [True, False]
 
 
 def test_a_season_nobody_scored_in_has_no_finish(
-    client: Client, seeded: dict[str, Any], token_for: Callable[[str], str]
+    client: Client, seeded: dict[str, Any], member: Callable[..., dict[str, str]]
 ) -> None:
     """The seeded win is wiped, so no team stands anywhere and no place is invented."""
     from app.core.db import Session
@@ -197,7 +171,7 @@ def test_a_season_nobody_scored_in_has_no_finish(
         series.player2_score = None
         session.commit()
 
-    resp = client.get("/player-history", params={"token": token_for("1")})
+    resp = client.get("/player-history", headers=member("1"))
 
     event = resp.json()["events"][0]
     assert (event["place"], event["team_count"]) == (None, None)
@@ -205,10 +179,10 @@ def test_a_season_nobody_scored_in_has_no_finish(
 
 
 def test_head_to_head_adds_a_player_up_over_every_season(
-    client: Client, two_seasons: dict[str, Any], token_for: Callable[[str], str]
+    client: Client, two_seasons: dict[str, Any], member: Callable[..., dict[str, str]]
 ) -> None:
     """P1 met P3 in both seasons and P4 once, so P3 sorts first."""
-    resp = client.get("/player-history", params={"token": token_for("1")})
+    resp = client.get("/player-history", headers=member("1"))
 
     opponents = resp.json()["opponents"]
     assert [one["name"] for one in opponents] == ["P3", "P4"]
@@ -220,9 +194,9 @@ def test_head_to_head_adds_a_player_up_over_every_season(
 
 
 def test_meetings_read_newest_first_and_carry_both_scores(
-    client: Client, two_seasons: dict[str, Any], token_for: Callable[[str], str]
+    client: Client, two_seasons: dict[str, Any], member: Callable[..., dict[str, str]]
 ) -> None:
-    resp = client.get("/player-history", params={"token": token_for("1")})
+    resp = client.get("/player-history", headers=member("1"))
 
     meetings = resp.json()["opponents"][0]["meetings"]
     assert [one["season_name"] for one in meetings] == ["Season 2", "Season 1"]
@@ -234,7 +208,7 @@ def test_meetings_read_newest_first_and_carry_both_scores(
 
 
 def test_a_meeting_carries_the_fixed_map_and_the_picks(
-    client: Client, seeded: dict[str, Any], token_for: Callable[[str], str]
+    client: Client, seeded: dict[str, Any], member: Callable[..., dict[str, str]]
 ) -> None:
     """The seeded series gets a fixed map and one veto pick; bans stay out."""
     from app.core.db import Session
@@ -271,36 +245,24 @@ def test_a_meeting_carries_the_fixed_map_and_the_picks(
         )
         session.commit()
 
-    resp = client.get("/player-history", params={"token": token_for("1")})
+    resp = client.get("/player-history", headers=member("1"))
 
     meeting = resp.json()["opponents"][0]["meetings"][0]
     assert meeting["maps"] == ["Concealed Hill", "Echo Isles"]
 
 
 def test_an_unplayed_series_is_no_meeting(
-    client: Client, two_seasons: dict[str, Any], token_for: Callable[[str], str]
+    client: Client, two_seasons: dict[str, Any], member: Callable[..., dict[str, str]]
 ) -> None:
     """P1 and P3 have a series with no result in season 2; only two meetings count."""
-    resp = client.get("/player-history", params={"token": token_for("1")})
+    resp = client.get("/player-history", headers=member("1"))
 
     p3 = resp.json()["opponents"][0]
     assert len(p3["meetings"]) == 2 == p3["played"]
 
 
-def test_a_clerk_session_answers_the_same_history(
-    client: Client, two_seasons: dict[str, Any], monkeypatch: pytest.MonkeyPatch
-) -> None:
-    resp = client.get("/player-history", headers=member_session(monkeypatch))
-
-    assert resp.status_code == 200, resp.text
-    assert [event["season_name"] for event in resp.json()["events"]] == [
-        "Season 2",
-        "Season 1",
-    ]
-
-
 def test_a_player_with_no_history_answers_two_empty_lists(
-    client: Client, seeded: dict[str, Any], token_for: Callable[[str], str]
+    client: Client, seeded: dict[str, Any], member: Callable[..., dict[str, str]]
 ) -> None:
     from app.core.db import Session
     from app.models.enums import Race
@@ -318,7 +280,7 @@ def test_a_player_with_no_history_answers_two_empty_lists(
         )
         session.commit()
 
-    resp = client.get("/player-history", params={"token": token_for("9")})
+    resp = client.get("/player-history", headers=member("9"))
 
     assert resp.status_code == 200, resp.text
     assert resp.json() == {"events": [], "opponents": []}
@@ -342,9 +304,9 @@ def test_the_answer_costs_eight_statements_however_long_the_career(
 
 
 def test_an_unknown_player_answers_404(
-    client: Client, seeded: dict[str, Any], token_for: Callable[[str], str]
+    client: Client, seeded: dict[str, Any], member: Callable[..., dict[str, str]]
 ) -> None:
-    resp = client.get("/player-history", params={"token": token_for("404")})
+    resp = client.get("/player-history", headers=member("404"))
 
     assert resp.status_code == 404, resp.text
     assert resp.json() == {"error": "player_not_found"}

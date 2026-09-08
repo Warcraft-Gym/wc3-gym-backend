@@ -18,7 +18,7 @@ import io
 import itertools
 import os
 from collections.abc import Callable, Generator
-from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 from typing import Any
 
 import openpyxl
@@ -39,7 +39,7 @@ os.environ.pop("DISCORD_BOT_TOKEN", None)
 
 from app.main import create_app
 from app.services import blob, r2, replays
-from tests.discord import PUBLIC_KEY, record
+from tests.discord import PUBLIC_KEY, Clock, record
 
 type SheetSpec = tuple[list[str], list[list[Any]]]
 
@@ -181,27 +181,60 @@ def seeded(app: FastAPI) -> dict[str, Any]:
 
 
 @pytest.fixture
-def dashboard_token() -> Generator[Callable[..., str]]:
-    """A factory for dashboard tokens of a seeded player."""
-    from app.api.routes.public import _token_store
+def member(monkeypatch: pytest.MonkeyPatch) -> Callable[..., dict[str, str]]:
+    """A factory for the headers of a signed-in guild member.
 
-    issued: list[str] = []
+    Each Discord id is its own Clerk user, so one test acts as both players.
+    """
+    from clerk_backend_api import Clerk
+    from clerk_backend_api.security.types import AuthStatus, RequestState
+    from clerk_backend_api.users import Users
+    from starlette.requests import Request
 
-    def issue(discord_id: str = "1", season_id: int | None = 1) -> str:
-        token = f"dashboard-token-{len(issued)}"
-        _token_store[token] = {
-            "discord_id": discord_id,
-            "discord_tag": f"p{discord_id}",
-            "season_id": str(season_id) if season_id else None,
-            "access_type": "dashboard",
-            "expires_at": datetime.now(UTC) + timedelta(minutes=5),
+    from app.services import discord
+    from tests.test_discord_auth import GUILD, GUILD_ID, FakeResponse
+
+    accounts: dict[str, dict[str, Any]] = {}
+
+    def authenticate_request(
+        self: Clerk, request: Request, options: object
+    ) -> RequestState:
+        bearer = request.headers.get("authorization", "").removeprefix("Bearer ")
+        if bearer not in accounts:
+            return RequestState(status=AuthStatus.SIGNED_OUT)
+        return RequestState(
+            status=AuthStatus.SIGNED_IN, payload={"sub": f"user_{bearer}", "sid": "s"}
+        )
+
+    def oauth_token(self: Users, **kwargs: str) -> list[SimpleNamespace]:
+        discord_id = kwargs["user_id"].removeprefix("user_")
+        return [SimpleNamespace(token=discord_id, provider_user_id=discord_id)]
+
+    def user_get(access_token: str, path: str) -> FakeResponse:
+        return FakeResponse(200, accounts[access_token])
+
+    def bot_get(path: str) -> FakeResponse:
+        if path == f"/guilds/{GUILD_ID}":
+            return FakeResponse(200, GUILD)
+        return FakeResponse(200, {"roles": []})
+
+    monkeypatch.setenv("DISCORD_GUILD_ID", GUILD_ID)
+    monkeypatch.setenv("DISCORD_BOT_TOKEN", "a-bot-token")
+    monkeypatch.setenv("ADMIN_DISCORD_IDS", "")
+    monkeypatch.setattr(Clerk, "authenticate_request", authenticate_request)
+    monkeypatch.setattr(Users, "get_o_auth_access_token", oauth_token)
+    monkeypatch.setattr(discord, "_user_get", user_get)
+    monkeypatch.setattr(discord, "_bot_get", bot_get)
+
+    def issue(discord_id: str = "1") -> dict[str, str]:
+        accounts[discord_id] = {
+            "id": discord_id,
+            "username": f"p{discord_id}",
+            "avatar": None,
         }
-        issued.append(token)
-        return token
+        return {"Authorization": f"Bearer {discord_id}"}
 
-    yield issue
-    for token in issued:
-        _token_store.pop(token, None)
+    return issue
 
 
 @pytest.fixture
@@ -229,3 +262,14 @@ def discord_calls(
 ) -> list[tuple[str, str, Any]]:
     """Record every call to Discord and answer 200."""
     return record(monkeypatch, 200)
+
+
+@pytest.fixture(autouse=True)
+def clock(monkeypatch: pytest.MonkeyPatch) -> Clock:
+    """The post pacing waits on this clock, so no test sleeps for real."""
+    from app.services import discord_posts
+
+    clock = Clock()
+    monkeypatch.setattr(discord_posts, "utcnow", clock.read)
+    monkeypatch.setattr(discord_posts, "sleep", clock.sleep)
+    return clock

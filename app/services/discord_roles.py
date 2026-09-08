@@ -274,6 +274,18 @@ def team_roles() -> dict[int, str]:
         }
 
 
+def _holders(session: OrmSession, rows: Sequence[DiscordRoleBinding]) -> Counter[str]:
+    """How many accounts with a Discord id earn each of those bindings' roles now."""
+    earned = expected_roles_of(_accounts(session, None), session, rows)
+    return Counter(role for roles in earned.values() for role in roles)
+
+
+def _public(session: OrmSession, row: DiscordRoleBinding) -> DiscordRoleBindingPublic:
+    public = DiscordRoleBindingPublic.model_validate(row)
+    public.holders = _holders(session, [row])[row.discord_role]
+    return public
+
+
 def bindings() -> list[DiscordRoleBindingPublic]:
     with Session.begin() as session:
         rows = DiscordRoleBinding.get_all(session)
@@ -285,9 +297,11 @@ def bindings() -> list[DiscordRoleBindingPublic]:
                 if row.kind is RoleKind.champion and row.season_id is not None
             },
         )
+        holders = _holders(session, rows)
         answer = []
         for row in rows:
             public = DiscordRoleBindingPublic.model_validate(row)
+            public.holders = holders[row.discord_role]
             if row.kind is RoleKind.champion:
                 # Derived, not stored: the page names the winning team with it
                 public.team_id = winners.get(row.season_id)
@@ -444,7 +458,7 @@ def add_binding(data: DiscordRoleBindingCreate) -> DiscordRoleBindingPublic:
     with Session.begin() as session:
         _unhidden(session, data.discord_role)
         binding = DiscordRoleBinding.add(session, data.model_dump())
-        return DiscordRoleBindingPublic.model_validate(binding)
+        return _public(session, binding)
 
 
 def update_binding(
@@ -459,7 +473,7 @@ def update_binding(
         _check(binding)
         _unhidden(session, binding.discord_role)
         _manageable(binding.discord_role)
-        return DiscordRoleBindingPublic.model_validate(binding)
+        return _public(session, binding)
 
 
 def delete_binding(binding_id: int) -> None:

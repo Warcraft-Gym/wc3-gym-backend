@@ -32,7 +32,8 @@ class UserBase(SQLModel):
     discordTag: Annotated[str, NumToStr] = Field(max_length=50)
     discordId: Annotated[str, NumToStr] = Field(max_length=50)
     mmr: int | None = None
-    country: Annotated[str | None, NumToStr] = Field(default=None, max_length=2)
+    # ISO 3166-1 alpha-2, or a UK nation as GB-SCT
+    country: Annotated[str | None, NumToStr] = Field(default=None, max_length=6)
     # IANA name, as the browser reports it: America/New_York
     timezone: Annotated[str | None, KnownTimeZone] = Field(default=None, max_length=64)
 
@@ -99,10 +100,9 @@ class UserUpdate(SQLModel):
 
 
 class PublicSignupWrite(SQLModel):
-    """The public signup form. The Discord identity comes from the token or the
-    session, never from here, and UserCreate is what rejects a bad profile."""
+    """The public signup form. The Discord identity comes from the session,
+    never from here, and UserCreate is what rejects a bad profile."""
 
-    token: str | None = None
     name: Annotated[str | None, NumToStr] = None
     battleTag: Annotated[str | None, NumToStr] = None
     race: str | None = None

@@ -12,7 +12,7 @@ fails the guard test.
 import re
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from datetime import UTC, datetime, timedelta
+from datetime import datetime
 from typing import Any, get_args
 
 import pytest
@@ -49,7 +49,7 @@ PAGED_ROUTES = [
     ("GET", "/draft-series/match/{match_id}"),
     ("GET", "/koth/events/{event_id}/signups"),
     ("GET", "/koth/events/{event_id}/matches"),
-    ("GET", "/player-series?token=none"),
+    ("GET", "/player-series"),
 ]
 
 
@@ -238,35 +238,18 @@ DEFAULT_ORDER = {
         "koth_matches.bracket, koth_matches.id",
         "anon_1.bracket, anon_1.id",
     ],
-    # The first two order the user lookup the route resolves the token with
-    "GET /player-series?token=none": ["users.id", "anon_1.id", "series.id"],
+    # The first two order the user lookup the route resolves the session with;
+    # the last two order the answers and the rounds of the current season
+    "GET /player-series": [
+        "users.id",
+        "anon_1.id",
+        "series.id",
+        "user_season_availability.user_id, user_season_availability.playday",
+        "season_rounds.playday",
+    ],
 }
 
 ORDER_BY = re.compile(r"ORDER BY (.+?)(?:\s+LIMIT|\s*$)", re.DOTALL)
-
-
-@pytest.fixture
-def dashboard_token() -> Iterator[Callable[..., str]]:
-    """A factory for dashboard tokens of the seeded player P1."""
-    from app.api.routes.public import _token_store
-
-    issued: list[str] = []
-
-    def issue(season_id: int | None = None) -> str:
-        token = f"sort-token-{len(issued)}"
-        _token_store[token] = {
-            "discord_id": "1",
-            "discord_tag": "p1",
-            "season_id": str(season_id) if season_id else None,
-            "access_type": "dashboard",
-            "expires_at": datetime.now(UTC) + timedelta(minutes=5),
-        }
-        issued.append(token)
-        return token
-
-    yield issue
-    for token in issued:
-        _token_store.pop(token, None)
 
 
 def order_fragments(statements: list[str]) -> list[str]:
@@ -283,17 +266,17 @@ def test_the_default_order_holds_without_a_sort(
     client: Client,
     auth_headers: dict[str, str],
     league: dict[str, Any],
-    dashboard_token: Callable[..., str],
+    member: Callable[..., dict[str, str]],
     method: str,
     path: str,
 ) -> None:
     """No sort parameter, and every route orders the way it does today."""
     url = build(path, league).rstrip("?&")
-    url = url.replace("token=none", f"token={dashboard_token()}")
+    headers = auth_headers if "/draft-series" in path else {}
+    if path == "/player-series":
+        headers = member()
     with capture_sql() as statements:
-        resp = client.request(
-            method, url, headers=auth_headers if "/draft-series" in path else {}
-        )
+        resp = client.request(method, url, headers=headers)
     assert resp.status_code == 200, url
     fragments = order_fragments(statements)
     expected = DEFAULT_ORDER[f"{method} {path}"]
@@ -315,7 +298,7 @@ def test_the_sort_names_are_declared_once() -> None:
 
 SORTED_ROUTES = [
     ("POST", "/fantasy/bets/search?query=id > 0", "bet_points"),
-    ("GET", "/player-series?token=none", "date_time"),
+    ("GET", "/player-series", "date_time"),
     ("GET", "/stats/career", "rating"),
 ]
 
@@ -324,17 +307,17 @@ SORTED_ROUTES = [
 def test_an_unknown_sort_or_order_is_rejected(
     client: Client,
     league: dict[str, Any],
-    dashboard_token: Callable[..., str],
+    member: Callable[..., dict[str, str]],
     method: str,
     path: str,
     name: str,
 ) -> None:
     """A name outside the map and a direction outside asc/desc answer 422."""
-    url = path.replace("token=none", f"token={dashboard_token()}")
-    separator = "&" if "?" in url else "?"
+    headers = member() if path == "/player-series" else {}
+    separator = "&" if "?" in path else "?"
     for query in ("sort=not_a_column", f"sort={name}&order=sideways"):
-        resp = client.request(method, f"{url}{separator}{query}")
-        assert resp.status_code == 422, f"{method} {url}{separator}{query}"
+        resp = client.request(method, f"{path}{separator}{query}", headers=headers)
+        assert resp.status_code == 422, f"{method} {path}{separator}{query}"
 
 
 def seed_more_bets(league: dict[str, Any]) -> None:
@@ -477,23 +460,21 @@ SERIES_KEYS: dict[str, Callable[[dict[str, Any]], Any]] = {
 }
 
 
-@pytest.mark.parametrize("in_season", [False, True])
 @pytest.mark.parametrize("order", ["asc", "desc"])
 @pytest.mark.parametrize("name", list(SERIES_KEYS))
 def test_player_series_sorts_by_every_name(
     client: Client,
     league: dict[str, Any],
-    dashboard_token: Callable[..., str],
+    member: Callable[..., dict[str, str]],
     name: str,
     order: str,
-    in_season: bool,
 ) -> None:
-    """Both branches of the route sort, and pages of two walk the same order."""
+    """The route sorts, and pages of two walk the same order."""
     seed_more_series(league)
-    token = dashboard_token(league["season_id"] if in_season else None)
-    url = f"/player-series?token={token}&sort={name}&order={order}"
+    headers = member()
+    url = f"/player-series?sort={name}&order={order}"
 
-    resp = client.get(f"{url}&limit=500")
+    resp = client.get(f"{url}&limit=500", headers=headers)
     assert resp.status_code == 200
     rows = resp.json()["series"]
     assert len(rows) == 4
@@ -502,25 +483,25 @@ def test_player_series_sorts_by_every_name(
 
     walked = []
     for offset in (0, 2):
-        page = client.get(f"{url}&limit=2&offset={offset}")
+        page = client.get(f"{url}&limit=2&offset={offset}", headers=headers)
         assert page.status_code == 200
         walked += [series["id"] for series in page.json()["series"]]
     assert walked == [series["id"] for series in rows]
 
 
-@pytest.mark.parametrize("in_season", [False, True])
 def test_a_series_without_a_date_sorts_first_then_last(
     client: Client,
     league: dict[str, Any],
-    dashboard_token: Callable[..., str],
-    in_season: bool,
+    member: Callable[..., dict[str, str]],
 ) -> None:
     """A null date leads the ascending page and closes the descending one."""
     seed_more_series(league)
-    token = dashboard_token(league["season_id"] if in_season else None)
+    headers = member()
     dates = {}
     for order in ("asc", "desc"):
-        resp = client.get(f"/player-series?token={token}&sort=date_time&order={order}")
+        resp = client.get(
+            f"/player-series?sort=date_time&order={order}", headers=headers
+        )
         assert resp.status_code == 200
         dates[order] = [series["date_time"] for series in resp.json()["series"]]
     assert dates["asc"][0] is None
