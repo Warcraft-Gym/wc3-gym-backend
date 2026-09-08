@@ -11,6 +11,7 @@ import os
 from collections import Counter
 from functools import cache
 from pathlib import Path
+from time import sleep
 from typing import Any
 
 import requests
@@ -24,6 +25,8 @@ API_URL = "https://discord.com/api/v10"
 
 # Seconds a Discord call can hold the thread before it fails.
 REQUEST_TIMEOUT = 10
+# The longest a channel call waits out a rate limit before it gives up.
+RETRY_WAIT_LIMIT = 5.0
 
 
 def _user_get(access_token: str, path: str) -> requests.Response:
@@ -233,6 +236,17 @@ def _channel_call(
             json=message,
             timeout=REQUEST_TIMEOUT,
         )
+        # A rate limit names its wait; one wait is enough for the pace discord_posts keeps
+        if response.status_code == 429:
+            wait = float(response.json().get("retry_after", RETRY_WAIT_LIMIT))
+            sleep(min(wait, RETRY_WAIT_LIMIT))
+            response = requests.request(
+                method,
+                f"{API_URL}/channels/{path}",
+                headers=headers,
+                json=message,
+                timeout=REQUEST_TIMEOUT,
+            )
     except requests.RequestException as error:
         logger.warning("Discord channel call failed for %s: %s", path, error)
         return None

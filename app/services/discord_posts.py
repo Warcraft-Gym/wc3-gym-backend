@@ -1,9 +1,11 @@
 """The bot's posts the app keeps true, one discord_post row each."""
 
 import os
+from datetime import timedelta
+from time import sleep
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select, update
 from sqlmodel import col
 
 from app.core.db import Session
@@ -21,6 +23,10 @@ SERIES_KINDS = ("veto", "announce")
 # The result card the app posts itself, in the channel the old bot's setting names
 RESULT = "result"
 RESULTS_CHANNEL = "results_channel_id"
+# Discord takes five edits per five seconds in a channel: one edit a second per channel
+EDIT_INTERVAL = timedelta(seconds=1)
+# Tries, about a second each, a task gives a post before it leaves the edit to the next write
+CLAIM_TRIES = 5
 
 
 def result_card(series: SeriesPublic) -> dict[str, Any]:
@@ -77,16 +83,83 @@ def _posts(series_id: int, kinds: tuple[str, ...]) -> list[DiscordPost]:
 
 def refresh_series(series_id: int, kinds: tuple[str, ...] = SERIES_KINDS) -> None:
     """Rebuild every post of these kinds about the series, so each card says
-    where the series stands now."""
-    posts = _posts(series_id, kinds)
-    if not posts:
-        return
-    series = SeriesService().get(series_id)
-    # ponytail: a post deleted in Discord keeps its row and fails one PATCH per write
-    for post in posts:
-        discord.edit_channel_message(
-            post.channel_id, post.message_id, CARDS[post.kind](series)
+    where the series stands now. A burst of writes edits each card once a
+    second, and the last edit carries the latest state."""
+    mark_series(series_id, kinds)
+    flush_series(series_id, kinds)
+
+
+def mark_series(series_id: int, kinds: tuple[str, ...] = SERIES_KINDS) -> None:
+    """The series changed: every post about it is due an edit."""
+    with Session.begin() as session:
+        session.execute(
+            update(DiscordPost)
+            .where(
+                col(DiscordPost.kind).in_(kinds),
+                col(DiscordPost.subject_id) == series_id,
+            )
+            .values(changed_at=utcnow())
         )
+
+
+def flush_series(series_id: int, kinds: tuple[str, ...] = SERIES_KINDS) -> None:
+    """Edit every post of the series that is due, one a second per channel."""
+    for post in _posts(series_id, kinds):
+        _flush(post)
+
+
+def _claim(post: DiscordPost) -> tuple[bool, float]:
+    """Take the post's edit when it is due and its channel had none this second.
+    Whether it was taken, and otherwise how long to wait for the channel."""
+    now = utcnow()
+    with Session.begin() as session:
+        row = session.get(DiscordPost, post.id)
+        if row is None or row.changed_at is None:
+            return False, 0
+        if row.edited_at and row.edited_at >= row.changed_at:
+            return False, 0  # a later task edited it after the latest change
+        in_channel = col(DiscordPost.channel_id) == row.channel_id
+        last = session.scalar(select(func.max(DiscordPost.edited_at)).where(in_channel))
+        # the whole channel, not the row being updated: correlate(None) keeps the FROM
+        busy = (
+            select(col(DiscordPost.id))
+            .where(in_channel, col(DiscordPost.edited_at) > now - EDIT_INTERVAL)
+            .correlate(None)
+            .exists()
+        )
+        claimed = session.execute(
+            update(DiscordPost)
+            .where(
+                col(DiscordPost.id) == post.id,
+                ~busy,
+                col(DiscordPost.edited_at).is_(None)
+                | (col(DiscordPost.edited_at) < col(DiscordPost.changed_at)),
+            )
+            .values(edited_at=now)
+            .returning(col(DiscordPost.id)),
+            execution_options={"synchronize_session": False},
+        ).scalar()
+    if claimed:
+        return True, 0
+    wait = (last + EDIT_INTERVAL - now).total_seconds() if last else 0
+    return False, max(wait, 0.05)
+
+
+def _flush(post: DiscordPost) -> None:
+    for _ in range(CLAIM_TRIES):
+        claimed, wait = _claim(post)
+        if claimed:
+            # the card is built after the claim, so it carries every change so far
+            series = SeriesService().get(post.subject_id)
+            # ponytail: a post deleted in Discord keeps its row and fails one PATCH per write
+            discord.edit_channel_message(
+                post.channel_id, post.message_id, CARDS[post.kind](series)
+            )
+            return
+        if not wait:
+            return
+        sleep(wait)
+    # ponytail: a channel busy for five seconds keeps this change until the next write
 
 
 def post_result(series_id: int) -> None:

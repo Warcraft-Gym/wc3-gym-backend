@@ -6,10 +6,13 @@ card). A write to the subject edits every post of it, so a card stays true
 in every channel it was posted in. The core tables carry no bot state.
 """
 
+from datetime import datetime
+
 from sqlalchemy import Index
 from sqlmodel import Field
 
 from app.models.base import DBModel
+from app.models.types import UTCDateTime
 
 
 class DiscordPost(DBModel, table=True):
@@ -22,3 +25,6 @@ class DiscordPost(DBModel, table=True):
     subject_id: int
     channel_id: str = Field(max_length=20)
     message_id: str = Field(max_length=20, unique=True)
+    # When the subject last changed, and when the card was last edited for it
+    changed_at: datetime | None = Field(default=None, sa_type=UTCDateTime)
+    edited_at: datetime | None = Field(default=None, sa_type=UTCDateTime)
