@@ -608,6 +608,7 @@ def test_a_binding_is_created_read_and_deleted(
         "team_id": seeded["team_a_id"],
         "discord_role": "team-a",
         "synced": False,
+        "holders": 2,  # Alpha's roster, whether or not the binding is synced
     }
 
     updated = client.put(
