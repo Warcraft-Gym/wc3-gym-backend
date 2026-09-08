@@ -10,8 +10,9 @@ from app.core.db import Session
 from app.models.admin_grant import AdminGrant
 from app.models.base import ident
 from app.models.enums import Race
+from app.models.fantasy_team import FantasyTeam
 from app.models.match import Match
-from app.models.relationships import DBSeasonRound
+from app.models.relationships import DBFantasyTeamPlayer, DBSeasonRound
 from app.models.season import Season
 from app.models.series import Series
 from app.models.series_replay import DBSeriesReplay
@@ -100,6 +101,42 @@ def test_build_copies_the_latest_season_and_seats_the_captains(
         # three guild accounts and three rostered players make three series a round
         assert len(series) == 3 * ROUNDS
         assert session.get(AdminGrant, "1") and session.get(AdminGrant, "9999")
+
+
+def test_a_rebuild_clears_a_fantasy_team_of_the_old_season(
+    seeded: dict[str, Any],
+) -> None:
+    with_ladder_mmr(seeded["player_ids"])
+    build("1", "9999")
+
+    # fantasy_team_player has no cascade from fantasy_teams, so a drafted player
+    # used to block the season delete
+    with Session.begin() as session:
+        sid = session.scalar(select(col(Season.id)).where(col(Season.name) == NAME))
+        team = FantasyTeam(
+            season_id=sid, name="test team", captain_id=seeded["player_ids"][0]
+        )
+        session.add(team)
+        session.flush()
+        team_id = ident(team)
+        session.add(
+            DBFantasyTeamPlayer(
+                fantasy_team_id=team_id, user_id=seeded["player_ids"][1]
+            )
+        )
+
+    build("1", "9999")
+
+    with Session() as session:
+        assert session.get(FantasyTeam, team_id) is None
+        assert (
+            session.scalars(
+                select(DBFantasyTeamPlayer).where(
+                    col(DBFantasyTeamPlayer.fantasy_team_id) == team_id
+                )
+            ).all()
+            == []
+        )
 
 
 def test_pairings_rotate_and_guild_series_stay_unscheduled(

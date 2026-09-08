@@ -21,6 +21,7 @@ from app.core.exceptions import NotFoundError
 from app.models.admin_grant import AdminGrant
 from app.models.base import ident
 from app.models.enums import Race
+from app.models.fantasy_team import FantasyTeam
 from app.models.match import Match
 from app.models.relationships import (
     DBMapSeason,
@@ -81,6 +82,12 @@ def build(discord_a: str, discord_b: str) -> str:
             # The two link tables without a cascade from the season
             for table in (DBUserSeasonAvailability, DBTeamSeasonCaptain):
                 session.execute(delete(table).where(col(table.season_id) == old.id))
+            # fantasy_team_player has no cascade from fantasy_teams, so the ORM
+            # takes the drafted players out before Postgres cascades the teams
+            for team in session.scalars(
+                select(FantasyTeam).where(col(FantasyTeam.season_id) == old.id)
+            ):
+                session.delete(team)
             session.delete(old)
             session.flush()
         source = session.scalar(select(Season).order_by(col(Season.id).desc()))
