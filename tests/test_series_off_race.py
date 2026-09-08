@@ -85,6 +85,29 @@ def test_a_side_the_season_holds_no_signup_for_reads_no_race(
     assert series["player2_race"] is None
 
 
+def test_a_draft_series_carries_the_race_each_side_plays(
+    league: dict[str, Any],
+) -> None:
+    """A draft has no result and so no off race, but the same field names it,
+    so the tables read one race whether the series is drafted or played."""
+    from app.models.draft_series import DraftSeries
+    from app.services.draft_series import DraftSeriesService
+
+    with Session.begin() as session:
+        session.add(
+            DraftSeries(
+                match_id=league["match_id"],
+                player1_id=league["player_ids"][0],
+                player2_id=league["player_ids"][1],
+                host_player_id=league["player_ids"][0],
+            )
+        )
+    draft = DraftSeriesService().get_by_match_id(league["match_id"])[0]
+    assert draft.player1_race == "UD"
+    # Player 2 never registered for the season
+    assert draft.player2_race is None
+
+
 def test_an_echoed_answer_leaves_the_stored_off_race_alone(
     client: Client, auth_headers: dict[str, str], league: dict[str, Any]
 ) -> None:

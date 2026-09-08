@@ -7,7 +7,7 @@ from sqlmodel import Field, Relationship, SQLModel
 from app.core.db import rel
 from app.models.base import DBModel, ident
 from app.models.match import MatchPublic
-from app.models.types import AwareUTC, UTCDateTime
+from app.models.types import AwareUTC, EnumValue, UTCDateTime
 from app.models.user import UserPublic
 
 if TYPE_CHECKING:
@@ -91,6 +91,10 @@ class DraftSeriesPublic(DraftSeriesBase):
     match: MatchPublic | None = None
     player1: UserPublic | None = None
     player2: UserPublic | None = None
+    # The race each side plays, which app.services.derived resolves. A draft
+    # has no result and so no off race: it is the race he signed the season up on.
+    player1_race: Annotated[str | None, EnumValue] = None
+    player2_race: Annotated[str | None, EnumValue] = None
 
     @classmethod
     def from_draft_series(cls, draft_series: DraftSeries) -> Self:

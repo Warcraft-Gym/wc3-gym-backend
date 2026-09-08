@@ -208,14 +208,11 @@ def fill_signup_races(
         ],
     )
     for row in filled:
-        if not isinstance(row, SeriesPublic):
-            continue
-        row.player1_race = row.player1_off_race or (
-            row.player1.signup_race if row.player1 else None
-        )
-        row.player2_race = row.player2_off_race or (
-            row.player2.signup_race if row.player2 else None
-        )
+        # A draft has no result and so no off race, only the signup race
+        off1 = row.player1_off_race if isinstance(row, SeriesPublic) else None
+        off2 = row.player2_off_race if isinstance(row, SeriesPublic) else None
+        row.player1_race = off1 or (row.player1.signup_race if row.player1 else None)
+        row.player2_race = off2 or (row.player2.signup_race if row.player2 else None)
 
 
 def fill_series(session: Session, series_list: Iterable[SeriesPublic | None]) -> None:
