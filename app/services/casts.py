@@ -21,11 +21,16 @@ WINDOW_BEFORE = timedelta(minutes=30)
 WINDOW_AFTER = timedelta(hours=4)
 
 
+def has_result(series: Series | SeriesPublic) -> bool:
+    """A series with a result is over: nothing is left to stream."""
+    return series.player1_score is not None or series.player2_score is not None
+
+
 def on_now(series: SeriesPublic, now: datetime) -> bool:
     """A claimed series with no result, inside its window. No platform is asked."""
     if not series.casts or series.date_time is None:
         return False
-    if series.player1_score is not None or series.player2_score is not None:
+    if has_result(series):
         return False
     return series.date_time - WINDOW_BEFORE <= now <= series.date_time + WINDOW_AFTER
 
@@ -68,9 +73,7 @@ def claim(
         series = session.get(Series, series_id)
         if not series:
             raise NotFoundError("Series not found")
-        if not vod_url and (
-            series.player1_score is not None or series.player2_score is not None
-        ):
+        if not vod_url and has_result(series):
             raise BadRequestError("This series is over; a VOD link is needed")
         taken = session.scalar(
             select(SeriesCast.id).where(
