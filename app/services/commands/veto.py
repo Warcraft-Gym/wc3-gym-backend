@@ -74,9 +74,9 @@ def state(series: SeriesPublic) -> str:
     if board.week_map_id:
         with Session() as session:
             fixed = session.get(Map, board.week_map_id)
-        lines.append(f"Fixed map · {(fixed.shortname or fixed.name) if fixed else '?'}")
+        lines.append(f"Fixed map · {fixed.name if fixed else '?'}")
     lines += [
-        f"{step.action.title()} · {step.shortname or step.name} · {name(step.side)}"
+        f"{step.action.title()} · {step.name} · {name(step.side)}"
         for step in board.steps
     ]
     if board.complete:

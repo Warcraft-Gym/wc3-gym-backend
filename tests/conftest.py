@@ -39,7 +39,7 @@ os.environ.pop("DISCORD_BOT_TOKEN", None)
 
 from app.main import create_app
 from app.services import blob, r2, replays
-from tests.discord import PUBLIC_KEY, record
+from tests.discord import PUBLIC_KEY, Clock, record
 
 type SheetSpec = tuple[list[str], list[list[Any]]]
 
@@ -262,3 +262,14 @@ def discord_calls(
 ) -> list[tuple[str, str, Any]]:
     """Record every call to Discord and answer 200."""
     return record(monkeypatch, 200)
+
+
+@pytest.fixture(autouse=True)
+def clock(monkeypatch: pytest.MonkeyPatch) -> Clock:
+    """The post pacing waits on this clock, so no test sleeps for real."""
+    from app.services import discord_posts
+
+    clock = Clock()
+    monkeypatch.setattr(discord_posts, "utcnow", clock.read)
+    monkeypatch.setattr(discord_posts, "sleep", clock.sleep)
+    return clock

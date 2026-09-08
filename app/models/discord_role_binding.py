@@ -64,6 +64,7 @@ class DiscordRoleBindingUpdate(SQLModel):
 
 class DiscordRoleBindingPublic(DiscordRoleBindingBase):
     id: int
+    holders: int = 0  # accounts with a Discord id that earn the role now
 
 
 class DiscordRoleHiddenWrite(SQLModel):
