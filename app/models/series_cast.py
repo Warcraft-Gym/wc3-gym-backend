@@ -47,14 +47,19 @@ VOD_PATHS = {
 }
 
 
+def is_video_url(value: str) -> bool:
+    """One video rather than a channel: a YouTube stream URL is its own VOD."""
+    _, host, path = _host_path(value)
+    return host in VOD_PATHS and re.fullmatch(VOD_PATHS[host], path) is not None
+
+
 def vod_url(value: str) -> str:
     """The video URL with its scheme, or a ValueError. A `?t=` start stays."""
-    value, host, path = _host_path(value)
-    if host not in VOD_PATHS or not re.fullmatch(VOD_PATHS[host], path):
+    if not is_video_url(value):
         raise ValueError(
             "A twitch.tv/videos, youtube.com/watch, youtube.com/live or youtu.be link is needed"
         )
-    return value
+    return _host_path(value)[0]
 
 
 def channel_name(url: str) -> str:
@@ -111,19 +116,23 @@ class CastPublic(PublicModel):
     # The account's name, or the channel for a cast with no account
     name: str
     channel_url: str
+    # The recording: the pasted URL, or the channel when it is itself the video
     vod_url: str | None = None
+    # When a VOD was pasted; a derived one has none
     vod_added_at: datetime | None = None
     created_at: datetime
 
     @classmethod
-    def from_cast(cls, cast: SeriesCast) -> Self:
+    def from_cast(cls, cast: SeriesCast, scored: bool = False) -> Self:
+        # A video URL claimed as the channel is its own VOD once the series is over
+        derived = scored and is_video_url(cast.channel_url)
         return cls(
             id=ident(cast),
             series_id=cast.series_id,
             user_id=cast.user_id,
             name=cast.user.name if cast.user else channel_name(cast.channel_url),
             channel_url=cast.channel_url,
-            vod_url=cast.vod_url,
+            vod_url=cast.vod_url or (cast.channel_url if derived else None),
             vod_added_at=cast.vod_added_at,
             created_at=cast.created_at,
         )
