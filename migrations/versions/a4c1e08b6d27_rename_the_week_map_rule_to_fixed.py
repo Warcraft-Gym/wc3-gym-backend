@@ -5,7 +5,7 @@ the round's map was called "week", which said when the map was chosen, not what
 it is. It is now "fixed".
 
 Revision ID: a4c1e08b6d27
-Revises: d7e3a9c1f5b2
+Revises: a3f9d17c6b40
 Create Date: 2026-09-09 10:00:00.000000
 
 """
@@ -16,7 +16,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "a4c1e08b6d27"
-down_revision: str | None = "d7e3a9c1f5b2"
+down_revision: str | None = "a3f9d17c6b40"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
