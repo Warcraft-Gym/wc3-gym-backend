@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from typing import TYPE_CHECKING, Annotated, Any, Literal, NamedTuple, Self
 
-from pydantic import NonNegativeInt, PositiveInt
+from pydantic import NonNegativeInt, PositiveInt, model_validator
 from sqlalchemy import JSON, Index, and_, case, false, func, or_, select, text
 from sqlalchemy.orm import Session
 from sqlmodel import Field, Relationship, SQLModel, col
@@ -32,10 +32,44 @@ if TYPE_CHECKING:
     from app.models.user_team_season import DBUserTeamSeason
 
 
-class SeasonBase(SQLModel):
+# The round columns and the week columns they replace
+ROUND_NAMES = (
+    ("number_rounds", "number_weeks"),
+    ("series_per_round", "series_per_week"),
+)
+
+
+class RoundCounts(SQLModel):
+    """How many rounds a season is played over, and how many series each player
+    plays per round. A round is one or two weeks, so the week names are wrong.
+    They stay filled and readable until the deploy after the readers move off."""
+
+    number_rounds: int | None = None
+    series_per_round: int | None = None
+    number_weeks: int | None = None
+    series_per_week: int | None = None
+
+    @model_validator(mode="after")
+    def fill_the_other_name(self) -> Self:
+        """Either name fills the other, so an old client still writes both."""
+        for new_name, old_name in ROUND_NAMES:
+            new_value, old_value = getattr(self, new_name), getattr(self, old_name)
+            # A name left out of a partial update stays out of it, or the write
+            # would set the column to null
+            if new_value is None and old_value is not None:
+                self._set(new_name, old_value)
+            elif old_value is None and new_value is not None:
+                self._set(old_name, new_value)
+        return self
+
+    def _set(self, name: str, value: int) -> None:
+        setattr(self, name, value)
+        # model_dump(exclude_unset=True) writes a column only when it is set
+        self.__pydantic_fields_set__.add(name)
+
+
+class SeasonBase(RoundCounts):
     name: Annotated[str, NumToStr] = Field(max_length=50)
-    number_weeks: int
-    series_per_week: int
     pick_ban: Annotated[str | None, NumToStr] = Field(default=None, max_length=100)
     start_date: Annotated[date | None, LenientDate] = None
     end_date: Annotated[date | None, LenientDate] = None
@@ -146,10 +180,8 @@ class SeasonCreate(SeasonBase):
     pass
 
 
-class SeasonUpdate(SQLModel):
+class SeasonUpdate(RoundCounts):
     name: Annotated[str | None, NumToStr] = None
-    number_weeks: int | None = None
-    series_per_week: int | None = None
     pick_ban: Annotated[str | None, NumToStr] = None
     start_date: Annotated[date | None, LenientDate] = None
     end_date: Annotated[date | None, LenientDate] = None
@@ -197,8 +229,6 @@ class SeasonSignupUpdate(SQLModel):
 class SeasonPublic(SeasonBase):
     id: int
     # The short form of a season carries only the name, so these read null
-    number_weeks: int | None = None
-    series_per_week: int | None = None
     score_system: str | None = None
     fantasy_grind: bool | None = None
     # Derived: one more than the cuts, 0 until the season is allocated
@@ -222,8 +252,8 @@ class SeasonPublic(SeasonBase):
         return cls(
             id=ident(season),
             name=season.name,
-            number_weeks=season.number_weeks,
-            series_per_week=season.series_per_week,
+            number_rounds=season.number_rounds,
+            series_per_round=season.series_per_round,
             pick_ban=season.pick_ban,
             start_date=season.start_date,
             end_date=season.end_date,
@@ -262,8 +292,8 @@ class SeasonPublic(SeasonBase):
         return cls(
             id=ident(season),
             name=season.name,
-            number_weeks=season.number_weeks,
-            series_per_week=season.series_per_week,
+            number_rounds=season.number_rounds,
+            series_per_round=season.series_per_round,
             pick_ban=season.pick_ban,
             start_date=season.start_date,
             end_date=season.end_date,

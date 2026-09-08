@@ -224,8 +224,8 @@ def _season(
     row = sheets["Season"][0]
     values = SeasonCreate(
         name=row["Name"],
-        number_weeks=whole_number(row["Number of Weeks"]) or 0,
-        series_per_week=whole_number(row["Series Per Week"]) or 0,
+        number_rounds=whole_number(row["Number of Weeks"]) or 0,
+        series_per_round=whole_number(row["Series Per Week"]) or 0,
         score_system=score_system,
         **_cells(
             row,

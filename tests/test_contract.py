@@ -113,11 +113,11 @@ def test_season_signups_answer_list_rows(
 def test_match_by_id_carries_the_season_length(
     client: Client, seeded: dict[str, Any]
 ) -> None:
-    """The match page reads number_weeks here, not from /seasons/{id}."""
+    """The match page reads number_rounds here, not from /seasons/{id}."""
     match = get_json(client, f"/matches/{seeded['match_id']}")
     assert match["season"]["id"] == seeded["season_id"]
-    assert match["season"]["number_weeks"] == 4
-    assert match["season"]["series_per_week"] == 2
+    assert match["season"]["number_rounds"] == 4
+    assert match["season"]["series_per_round"] == 2
 
 
 def test_seasons_list(client: Client, seeded: dict[str, Any]) -> None:
@@ -125,8 +125,8 @@ def test_seasons_list(client: Client, seeded: dict[str, Any]) -> None:
     assert len(seasons) == 1
     season = seasons[0]
     assert season["name"] == "Season 1"
-    assert season["number_weeks"] == 4
-    assert season["series_per_week"] == 2
+    assert season["number_rounds"] == 4
+    assert season["series_per_round"] == 2
     # Dates serialize as ISO strings.
     assert season["start_date"] == "2026-01-05"
     assert season["end_date"] == "2026-02-27"
@@ -215,7 +215,7 @@ def test_fantasy_bets_list_keeps_every_key_with_empty_collections(
 
     # The scalars of the embedded models stay.
     assert bet["season"]["name"] == "Season 1"
-    assert bet["season"]["number_weeks"] == 4
+    assert bet["season"]["number_rounds"] == 4
     assert bet["season"]["start_date"] == "2026-01-05"
     assert bet["series"]["match"]["playday"] == 1
     assert bet["series"]["match"]["team1"]["name"] == "Alpha"

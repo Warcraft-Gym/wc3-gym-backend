@@ -323,7 +323,7 @@ def get_player_series(
         "availability": availability_service.for_user(user.id, season_id)
         if season_id
         else [],
-        "number_weeks": availability_service.season_weeks(season_id)
+        "number_rounds": availability_service.season_weeks(season_id)
         if season_id
         else None,
         "rounds": availability_service.season_rounds(season_id) if season_id else [],

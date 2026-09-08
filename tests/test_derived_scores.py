@@ -50,8 +50,8 @@ def build_season(
         "/seasons",
         {
             "name": name,
-            "number_weeks": 2,
-            "series_per_week": 5,
+            "number_rounds": 2,
+            "series_per_round": 5,
             "score_system": system,
         },
     )
@@ -242,7 +242,7 @@ def test_a_season_pays_by_its_own_system_and_not_by_the_setting(
 
 
 # Standings. A team stands at the sum of its derived series points, and the
-# season pays series_per_week * number_weeks * the top of its own scale.
+# season pays series_per_round * number_rounds * the top of its own scale.
 
 
 def standings(team: dict[str, Any], season_id: int) -> tuple[int, int, int]:
@@ -258,7 +258,7 @@ def test_a_season_with_no_match_stands_every_team_at_zero(
         client,
         auth_headers,
         "/seasons",
-        {"name": "Empty", "number_weeks": 3, "series_per_week": 4},
+        {"name": "Empty", "number_rounds": 3, "series_per_round": 4},
     )
     teams = [
         post(client, auth_headers, "/teams", {"name": f"Empty {index}"})

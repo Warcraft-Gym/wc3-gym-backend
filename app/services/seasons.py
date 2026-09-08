@@ -76,7 +76,7 @@ def _fill_rounds(session: OrmSession, season: Season) -> None:
     """One round per playday. A missing round is added a week after the one
     before it; a round past the last playday is dropped; a set date stays."""
     rounds = {row.playday: row for row in season.rounds}
-    for playday in range(1, season.number_weeks + 1):
+    for playday in range(1, (season.number_rounds or 0) + 1):
         row = rounds.get(playday) or DBSeasonRound(
             season_id=ident(season), playday=playday
         )
@@ -86,7 +86,7 @@ def _fill_rounds(session: OrmSession, season: Season) -> None:
             row.end_date = row.start_date + timedelta(days=6)
         session.add(row)
     for playday, row in rounds.items():
-        if playday > season.number_weeks:
+        if playday > (season.number_rounds or 0):
             session.delete(row)
     session.flush()
     session.expire(season, ["rounds"])
@@ -124,7 +124,7 @@ class SeasonService:
                 raise NotFoundError("Season not found")
             if season.model_fields_set & {"pick_ban", "map_rules"}:
                 check_order(row)
-            if season.model_fields_set & {"number_weeks", "start_date"}:
+            if season.model_fields_set & {"number_rounds", "start_date"}:
                 _fill_rounds(session, row)
             return _public(session, row)
 
@@ -331,9 +331,9 @@ class SeasonService:
             season = session.get(Season, season_id)
             if not season:
                 raise NotFoundError(f"Season not found by id: {season_id}")
-            if not 1 <= data.playday <= season.number_weeks:
+            if not 1 <= data.playday <= (season.number_rounds or 0):
                 raise BadRequestError(
-                    f"playday must be between 1 and {season.number_weeks}"
+                    f"playday must be between 1 and {season.number_rounds}"
                 )
             fields = data.model_dump(exclude_unset=True, exclude={"playday"})
             map_id = fields.get("map_id")
