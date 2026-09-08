@@ -17,7 +17,7 @@ from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from fastapi.responses import JSONResponse
 
-from app.core.exceptions import ApiError
+from app.core.exceptions import ApiError, BadRequestError
 from app.core.query import QueryUtil
 from app.models.season import SeasonPublic
 from app.models.types import utcnow
@@ -185,14 +185,17 @@ def schedule(
     if when.tzinfo is None:
         when = when.replace(tzinfo=UTC)
     discord_id, discord_tag = caller(payload)
-    result = player_series.update_player_series(
-        int(options["series"]),
-        {"date_time": when.isoformat()},
-        discord_id=discord_id,
-        discord_tag=discord_tag,
-        user_service=services.users,
-        series_service=services.series,
-    )
+    try:
+        result = player_series.update_player_series(
+            int(options["series"]),
+            {"date_time": when.isoformat()},
+            discord_id=discord_id,
+            discord_tag=discord_tag,
+            user_service=services.users,
+            series_service=services.series,
+        )
+    except BadRequestError as error:
+        return {"content": str(error)}, PRIVATE
     if isinstance(result, JSONResponse):
         return {"content": json.loads(bytes(result.body))["error"]}, PRIVATE
     line = series_line(services.series.get(int(options["series"])))

@@ -509,6 +509,11 @@ def test_a_signup_carries_the_draft_position_an_admin_sets(
     client: Client, seeded: dict[str, Any], auth_headers: dict[str, str]
 ) -> None:
     """PUT sets the position or the race on the signup row, null clears it, no signup is 404."""
+    from sqlmodel import select
+
+    from app.core.db import Session
+    from app.models.series import Series
+
     season = seeded["season_id"]
     p1, p2 = seeded["player_ids"][:2]
     client.post(
@@ -542,6 +547,10 @@ def test_a_signup_carries_the_draft_position_an_admin_sets(
         return next(row["signup_race"] for row in rows if row["id"] == p1)
 
     assert race() == "HU"
+    # Only an open season takes a race change, so the seeded result stands down
+    with Session.begin() as session:
+        for series in session.scalars(select(Series)):
+            series.player1_score = series.player2_score = series.date_time = None
     resp = client.put(
         f"/seasons/{season}/signups/{p1}", json={"race": "UD"}, headers=auth_headers
     )
