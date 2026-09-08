@@ -10,6 +10,7 @@ from typing import Any
 import pytest
 from sqlalchemy import create_engine, text
 
+from app.models.series_cast import vod_url
 from tests.conftest import Client
 from tests.migrate import fresh_database, upgrade_to
 from tests.test_discord_auth import SESSION, stub_clerk
@@ -133,6 +134,101 @@ def test_a_link_off_twitch_or_youtube_is_refused(
     assert resp.status_code == 422, resp.text
 
 
+def test_the_caster_pastes_and_clears_a_vod(
+    client: Client, seeded: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    series_id = seeded["series_open_id"]
+    as_member(monkeypatch, "1")
+    (cast,) = client.post(
+        f"/series/{series_id}/casts", json={"channel_url": TWITCH}, headers=SESSION
+    ).json()
+    vod = f"/series/{series_id}/casts/{cast['id']}/vod"
+
+    # A channel is not a VOD
+    resp = client.put(vod, json={"vod_url": TWITCH}, headers=SESSION)
+    assert resp.status_code == 422, resp.text
+
+    video = "https://www.twitch.tv/videos/2233445566?t=1h2m"
+    resp = client.put(vod, json={"vod_url": video}, headers=SESSION)
+    assert resp.status_code == 200, resp.text
+    (cast,) = resp.json()
+    assert cast["vod_url"] == video
+    assert cast["vod_added_at"] is not None
+
+    # Another member cannot touch it; clearing drops the URL and its time
+    as_member(monkeypatch, "2")
+    assert client.put(vod, json={"vod_url": None}, headers=SESSION).status_code == 403
+    as_member(monkeypatch, "1")
+    (cast,) = client.put(vod, json={"vod_url": None}, headers=SESSION).json()
+    assert cast["vod_url"] is None
+    assert cast["vod_added_at"] is None
+
+
+def test_a_series_that_is_over_is_claimed_with_its_vod(
+    client: Client, seeded: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Nothing is left to stream, so the claim carries the video page as its channel."""
+    over = seeded["series_played_id"]
+    as_member(monkeypatch, "1")
+    assert (
+        client.post(
+            f"/series/{seeded['series_open_id']}/casts",
+            json={"channel_url": TWITCH},
+            headers=SESSION,
+        ).status_code
+        == 201
+    )
+
+    resp = client.post(
+        f"/series/{over}/casts", json={"channel_url": TWITCH}, headers=SESSION
+    )
+    assert resp.status_code == 400
+    assert resp.json() == {"error": "This series is over; a VOD link is needed"}
+
+    # A channel is not a VOD
+    resp = client.post(
+        f"/series/{over}/casts",
+        json={"channel_url": TWITCH, "vod_url": TWITCH},
+        headers=SESSION,
+    )
+    assert resp.status_code == 422, resp.text
+
+    video = "https://www.twitch.tv/videos/2233445566"
+    resp = client.post(
+        f"/series/{over}/casts",
+        json={"channel_url": video, "vod_url": video},
+        headers=SESSION,
+    )
+    assert resp.status_code == 201, resp.text
+    (cast,) = resp.json()
+    assert cast["vod_url"] == video
+    assert cast["vod_added_at"] is not None
+
+    # The video page is a channel no next claim starts from
+    assert client.get("/casts/last", headers=SESSION).json() == {"channel_url": TWITCH}
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "youtu.be/dQw4w9WgXcQ?t=42",
+        "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        "https://youtube.com/live/dQw4w9WgXcQ",
+        "twitch.tv/videos/2233445566",
+    ],
+)
+def test_every_video_link_form_is_a_vod(url: str) -> None:
+    assert vod_url(url).endswith(url.removeprefix("https://"))
+
+
+@pytest.mark.parametrize(
+    "url", ["youtube.com/@grubby", "twitch.tv/grubby", "kick.com/videos/1"]
+)
+def test_a_channel_is_not_a_vod(url: str) -> None:
+    with pytest.raises(ValueError):
+        vod_url(url)
+
+
 def test_a_guest_cannot_claim(
     client: Client, seeded: dict[str, Any], monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -232,3 +328,33 @@ def test_the_caster_names_become_cast_rows_and_back(tmp_path: Path) -> None:
             (4, None),
             (5, None),
         ]
+
+
+def test_a_youtube_stream_url_is_its_own_vod_once_the_series_is_over(
+    client: Client, seeded: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The caster pastes nothing: the watch URL stays the same after the stream."""
+    from app.core.db import Session
+    from app.models.series import Series
+
+    series_id = seeded["series_open_id"]
+    stream = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+    as_member(monkeypatch, "1")
+    (cast,) = client.post(
+        f"/series/{series_id}/casts", json={"channel_url": stream}, headers=SESSION
+    ).json()
+    assert cast["vod_url"] is None
+
+    # One stream is not a channel, so it starts no next claim
+    assert client.get("/casts/last", headers=SESSION).json() == {"channel_url": None}
+
+    with Session.begin() as session:
+        series = session.get(Series, series_id)
+        assert series
+        series.player1_score, series.player2_score = 2, 1
+
+    (cast,) = client.get(f"/series/{series_id}/casts").json()
+    assert cast["vod_url"] == stream
+    # Nothing was pasted, so nothing dates the VOD
+    assert cast["vod_added_at"] is None
+    assert client.get(f"/series/{series_id}").json()["casts"][0]["vod_url"] == stream

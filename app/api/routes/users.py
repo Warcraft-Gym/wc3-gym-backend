@@ -5,8 +5,10 @@ from fastapi import APIRouter, Depends, Query, Response
 
 from app.api.deps import LadderServiceDep, UserServiceDep, require_admin
 from app.api.search import SearchQuery
+from app.models.player_history import PlayerHistory
 from app.models.user import UserCreate, UserListPublic, UserPublic, UserUpdate
 from app.models.w3c_ladder_match import UserLadder
+from app.services import player_history
 
 logger = logging.getLogger(__name__)
 
@@ -94,3 +96,9 @@ def get_user_ladder(
     Without a season the answer covers every match the player has.
     """
     return service.user_ladder(user_id, season_id, limit=limit, offset=offset)
+
+
+@router.get("/users/{user_id}/history")
+def get_user_history(user_id: int) -> PlayerHistory:
+    """Every GNL season this player took part in, and every opponent they met."""
+    return player_history.history(user_id)

@@ -848,6 +848,14 @@ def test_the_season_ladder_is_cacheable_at_the_edge(
 ) -> None:
     ladder = client.get(f"/seasons/{league['season_id']}/ladder")
     assert ladder.headers["cache-control"] == "public, s-maxage=3600"
+    # this client sends no Origin, the shape of a fill by curl or a bot. The copy the
+    # edge stores must still let a browser read it.
+    assert ladder.headers["access-control-allow-origin"] == "*"
+
+    origin = client.get(
+        f"/seasons/{league['season_id']}/ladder", headers={"Origin": "https://gnl.test"}
+    )
+    assert origin.headers.get_list("access-control-allow-origin") == ["*"]
 
 
 def test_both_routes_answer_404_for_an_unknown_id(
