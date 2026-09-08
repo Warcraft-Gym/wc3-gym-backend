@@ -112,9 +112,12 @@ def test_a_rebuild_clears_a_fantasy_team_of_the_old_season(
     # fantasy_team_player has no cascade from fantasy_teams, so a drafted player
     # used to block the season delete
     with Session.begin() as session:
-        sid = session.scalar(select(col(Season.id)).where(col(Season.name) == NAME))
+        season = session.scalar(select(Season).where(col(Season.name) == NAME))
+        assert season
         team = FantasyTeam(
-            season_id=sid, name="test team", captain_id=seeded["player_ids"][0]
+            season_id=ident(season),
+            name="test team",
+            captain_id=seeded["player_ids"][0],
         )
         session.add(team)
         session.flush()
