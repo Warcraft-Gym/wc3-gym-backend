@@ -18,29 +18,40 @@ from app.services import discord, replays
 from app.services.commands import announce, veto
 from app.services.series import SeriesService
 
-# The cards about a series that show its time and veto, by the command that posts them
-SERIES_KINDS = ("veto", "announce")
 # The result card the app posts itself, in the channel the old bot's setting names
 RESULT = "result"
-RESULTS_CHANNEL = "results_channel_id"
+# The card that says a member claimed the series, posted when the claim lands
+CAST = "cast"
+# The card that calls the audience to the stream, posted shortly before the start
+REMINDER = "reminder"
+# The cards about a series that show its time, its veto or its casters. The
+# reminder is not one: it carries a relative time Discord renders itself.
+SERIES_KINDS = ("veto", "announce", CAST)
+# The channel each card the app posts itself goes to, by settings key. A claim
+# and its reminder both belong where the league shares content.
+CHANNEL_OF = {
+    RESULT: "results_channel_id",
+    CAST: "content_channel_id",
+    REMINDER: "content_channel_id",
+}
 # Discord takes five edits per five seconds in a channel: one edit a second per channel
 EDIT_INTERVAL = timedelta(seconds=1)
 # Tries, about a second each, a task gives a post before it leaves the edit to the next write
 CLAIM_TRIES = 5
 
 
+def _name(player: UserPublic | None) -> str:
+    return (player.name if player else None) or "?"
+
+
 def result_card(series: SeriesPublic) -> dict[str, Any]:
     """The score, one download link per game, the match on the site, and when
     the card was last written."""
-
-    def name(player: UserPublic | None) -> str:
-        return (player.name if player else None) or "?"
-
     match = series.match
     score = f"{series.player1_score}-{series.player2_score}"
     week = match.playday if match else "?"
     lines = [
-        f"{name(series.player1)} {score} {name(series.player2)} · Wk {week} · #{series.id}"
+        f"{_name(series.player1)} {score} {_name(series.player2)} · Wk {week} · #{series.id}"
     ]
     # ponytail: the links expire after 7 days; the match page keeps the files
     lines += [f"Game {row.game_no}: {row.url}" for row in replays.for_series(series.id)]
@@ -51,7 +62,38 @@ def result_card(series: SeriesPublic) -> dict[str, Any]:
     return {"content": "\n".join(lines)}
 
 
-CARDS = {"veto": veto.card, "announce": announce.card, RESULT: result_card}
+def cast_card(series: SeriesPublic) -> dict[str, Any]:
+    """The match card, plus what the two players have to do about the cast."""
+    card = announce.card(series)
+    if series.casts:
+        who = ", ".join(cast.name for cast in series.casts)
+        card["embeds"][0]["description"] += (
+            f"\n{who} casts this series. Both players: message the caster before"
+            " the start and share the game name."
+        )
+    return card
+
+
+def reminder_card(series: SeriesPublic) -> dict[str, Any]:
+    """The audience card: who plays, when it starts, and where to watch. The
+    links sit in the content so Discord shows a preview of each stream."""
+    stamp = int(series.date_time.timestamp()) if series.date_time else None
+    when = f"starts <t:{stamp}:R>" if stamp else "starts soon"
+    who = ", ".join(cast.name for cast in series.casts) or "?"
+    lines = [
+        f"{_name(series.player1)} vs {_name(series.player2)} {when}, cast by {who}"
+    ]
+    lines += [cast.channel_url for cast in series.casts]
+    return {"content": "\n".join(lines)}
+
+
+CARDS = {
+    "veto": veto.card,
+    "announce": announce.card,
+    RESULT: result_card,
+    CAST: cast_card,
+    REMINDER: reminder_card,
+}
 
 
 def remember(kind: str, subject_id: int, channel_id: str, message_id: str) -> None:
@@ -177,20 +219,46 @@ def _flush(post: DiscordPost) -> None:
     # ponytail: a channel busy for five seconds keeps this change until the next write
 
 
+def _post_card(kind: str, series_id: int) -> bool:
+    """Post the kind's card about the series in the channel its setting names.
+    Nothing happens without the setting, and False says nothing was posted."""
+    with Session() as session:
+        setting = Settings.get_by_key(session, CHANNEL_OF[kind])
+    channel_id = setting.value if setting else None
+    if not channel_id:
+        return False
+    wait_for_channel(channel_id)
+    message_id = discord.post_to_channel(
+        channel_id, CARDS[kind](SeriesService().get(series_id))
+    )
+    if not message_id:
+        return False
+    remember(kind, series_id, channel_id, message_id)
+    return True
+
+
 def post_result(series_id: int) -> None:
     """Post the result card in the results channel the first time a series has
-    a score; a corrected score edits that post. Nothing without the setting."""
+    a score; a corrected score edits that post."""
     if _posts(series_id, (RESULT,)):
         refresh_series(series_id, (RESULT,))
         return
-    with Session() as session:
-        setting = Settings.get_by_key(session, RESULTS_CHANNEL)
-    channel_id = setting.value if setting else None
-    if not channel_id:
+    _post_card(RESULT, series_id)
+
+
+def post_cast(series_id: int) -> None:
+    """Post the claim card in the content channel the first time the series is
+    claimed; a second claim edits it, as every other write to the series does."""
+    if _posts(series_id, (CAST,)):
+        refresh_series(series_id, (CAST,))
         return
-    wait_for_channel(channel_id)
-    message_id = discord.post_to_channel(
-        channel_id, result_card(SeriesService().get(series_id))
-    )
-    if message_id:
-        remember(RESULT, series_id, channel_id, message_id)
+    _post_card(CAST, series_id)
+
+
+def post_reminder(series_id: int) -> bool:
+    """Call the audience to a stream about to start, once per series. A series
+    that already has its card is left alone, so a job that runs every few
+    minutes posts nothing twice."""
+    if _posts(series_id, (REMINDER,)):
+        return False
+    return _post_card(REMINDER, series_id)
