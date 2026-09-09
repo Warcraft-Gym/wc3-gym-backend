@@ -433,3 +433,27 @@ def test_an_admin_who_plays_is_named_on_the_steps_they_enter(
     ]
     assert [s["entered_by"] for s in steps] == [seeded["player_ids"][1]] * 3 + [None]
     assert (resp.json()["viewer_side"], resp.json()["on_turn"]) == ("A", False)
+
+
+def test_the_series_row_names_the_map_each_side_picked(
+    client: Client,
+    seeded: dict[str, Any],
+    pool: list[int],
+    member: Callable[..., dict[str, str]],
+) -> None:
+    """The series card reads the picks off the series, never the whole board."""
+    series_id = seeded["series_open_id"]
+    side_a, side_b = member("2"), member("4")
+
+    body = client.get("/player-series", headers=side_a).json()
+    row = next(s for s in body["series"] if s["id"] == series_id)
+    assert (row["player1_pick_map"], row["player2_pick_map"]) == (None, None)
+
+    taken(client, series_id, side_a, pool[1])
+    taken(client, series_id, side_b, pool[2])
+    # A's pick leaves one map to the one entry left, so B's pick applies itself
+    taken(client, series_id, side_a, pool[3])
+
+    body = client.get("/player-series", headers=side_a).json()
+    row = next(s for s in body["series"] if s["id"] == series_id)
+    assert (row["player1_pick_map"], row["player2_pick_map"]) == ("LR", "AL")

@@ -532,3 +532,19 @@ def test_saving_captains_without_a_bot_token_calls_nothing(
         client, auth_headers, seeded["team_a_id"], [seeded["player_ids"][0]]
     )
     assert team["discord_role_missing"] == []
+
+
+def test_me_names_the_team_a_member_rosters_for(
+    client: Client, monkeypatch: pytest.MonkeyPatch, seeded: dict[str, Any]
+) -> None:
+    """The nav links a member to his team, so /me names it for any role."""
+    from app.models.settings import Settings
+    from tests.test_player_session import member_session
+
+    with Session.begin() as session:
+        session.add(Settings(key="current_gnl_season", value=str(seeded["season_id"])))
+
+    headers = member_session(monkeypatch, discord_id="1")
+    body = client.get("/me", headers=headers).json()
+
+    assert body["team"] == {"id": seeded["team_a_id"], "name": "Alpha"}

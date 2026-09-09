@@ -13,6 +13,7 @@ from app.models.base import DBModel, PublicModel, ident
 from app.models.enums import Race
 from app.models.match import Match, MatchPublic
 from app.models.series_cast import CastPublic, SeriesCast
+from app.models.series_veto_step import DBSeriesVetoStep
 from app.models.types import AwareUTC, EnumValue, SuggestRace, UTCDateTime
 from app.models.user import User, UserPublic
 
@@ -59,6 +60,9 @@ class Series(SeriesBase, DBModel, table=True):
         sa_relationship_kwargs={"foreign_keys": "[Series.player2_id]"}
     )
     casts: list[SeriesCast] = Relationship(
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"}
+    )
+    veto_steps: list[DBSeriesVetoStep] = Relationship(
         sa_relationship_kwargs={"cascade": "all, delete-orphan"}
     )
 
@@ -121,6 +125,7 @@ class Series(SeriesBase, DBModel, table=True):
             joinedload(rel(cls.player1)),
             joinedload(rel(cls.player2)),
             selectinload(rel(cls.casts)).joinedload(rel(SeriesCast.user)),
+            selectinload(rel(cls.veto_steps)).joinedload(rel(DBSeriesVetoStep.map)),
         )
 
     @classmethod
@@ -137,6 +142,7 @@ class Series(SeriesBase, DBModel, table=True):
             joinedload(rel(cls.player2)).selectinload(rel(User.team_seasons)),
             joinedload(rel(cls.player2)).selectinload(rel(User.signup_seasons)),
             selectinload(rel(cls.casts)).joinedload(rel(SeriesCast.user)),
+            selectinload(rel(cls.veto_steps)).joinedload(rel(DBSeriesVetoStep.map)),
         )
 
 
@@ -167,6 +173,14 @@ class SeriesUpdate(SQLModel):
     player2_off_race: Annotated[Race | None, SuggestRace] = None
 
 
+def _pick_map(series: Series, side: str) -> str | None:
+    """The map one side picked in the veto, by name; null before the pick."""
+    for step in series.veto_steps:
+        if step.action == "pick" and step.side == side:
+            return step.map.name if step.map else None
+    return None
+
+
 class SeriesPublic(SeriesBase, PublicModel):
     id: int
     match_id: int | None = None
@@ -187,6 +201,10 @@ class SeriesPublic(SeriesBase, PublicModel):
     # a write model names the off race, so an echoed answer cannot pin a row.
     player1_race: Annotated[str | None, EnumValue] = None
     player2_race: Annotated[str | None, EnumValue] = None
+    # The map each side picked in the veto, so a series card names its games
+    # without reading the whole board. Side A is player1.
+    player1_pick_map: str | None = None
+    player2_pick_map: str | None = None
     casts: list[CastPublic] = []
 
     @classmethod
@@ -209,6 +227,8 @@ class SeriesPublic(SeriesBase, PublicModel):
             is_fantasy_match=series.is_fantasy_match,
             player1_off_race=series.player1_off_race,
             player2_off_race=series.player2_off_race,
+            player1_pick_map=_pick_map(series, "A"),
+            player2_pick_map=_pick_map(series, "B"),
         )
 
     @classmethod
@@ -236,6 +256,8 @@ class SeriesPublic(SeriesBase, PublicModel):
             is_fantasy_match=series.is_fantasy_match,
             player1_off_race=series.player1_off_race,
             player2_off_race=series.player2_off_race,
+            player1_pick_map=_pick_map(series, "A"),
+            player2_pick_map=_pick_map(series, "B"),
         )
 
 

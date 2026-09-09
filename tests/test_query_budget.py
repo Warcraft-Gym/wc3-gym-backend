@@ -130,17 +130,18 @@ def league(app: FastAPI, seeded: dict[str, Any]) -> dict[str, Any]:
     return seeded
 
 
-def test_get_series_costs_thirteen_statements(league: dict[str, Any]) -> None:
+def test_get_series_costs_fourteen_statements(league: dict[str, Any]) -> None:
     service = SeriesService()
     with count_statements() as tally:
         series = service.get(league["series_played_id"])
     assert series.player1 is not None
     assert series.player1.w3c_stats
-    assert tally[0] == 13
+    assert tally[0] == 14
 
 
-def test_search_for_season_costs_five_statements(league: dict[str, Any]) -> None:
-    """The season list is reduced: one statement for the casts, none per player."""
+def test_search_for_season_costs_six_statements(league: dict[str, Any]) -> None:
+    """The season list is reduced: one statement for the casts, one for the veto
+    steps, none per player and none per series."""
     service = SeriesService()
     query = QueryUtil.parse_query("player1_id > 0")
     with count_statements() as tally:
@@ -149,7 +150,7 @@ def test_search_for_season_costs_five_statements(league: dict[str, Any]) -> None
     assert series_list[0].player1 is not None
     assert series_list[0].player1.name
     assert series_list[0].player1.w3c_stats == []
-    assert tally[0] == 5
+    assert tally[0] == 6
 
 
 def test_the_season_record_costs_two_statements(league: dict[str, Any]) -> None:
@@ -192,7 +193,7 @@ def test_statement_count_holds_when_the_collections_grow(
         series = service.get(league["series_played_id"])
     assert series.player1 is not None
     assert len(series.player1.w3c_stats) == 4 * STATS_PER_PLAYER
-    assert tally[0] == 13
+    assert tally[0] == 14
 
 
 def test_options_cover_the_player_graph(league: dict[str, Any]) -> None:
@@ -221,8 +222,9 @@ def test_options_cover_the_player_graph(league: dict[str, Any]) -> None:
     assert len(public.player1.signup_seasons) == 1
 
 
-def test_fantasy_bets_list_costs_five_statements(league: dict[str, Any]) -> None:
-    """The list carries the casts of each series and the derived points.
+def test_fantasy_bets_list_costs_six_statements(league: dict[str, Any]) -> None:
+    """The list carries the casts and the veto picks of each series, and the
+    derived points.
 
     The bet result reads the map scores of the series the answer already
     carries, so it adds no statement of its own.
@@ -235,7 +237,7 @@ def test_fantasy_bets_list_costs_five_statements(league: dict[str, Any]) -> None
     assert bets[0].bet_result == 10
     assert bets[0].user is not None
     assert bets[0].user.w3c_stats == []
-    assert tally[0] == 5
+    assert tally[0] == 6
 
 
 def add_bets_to_the_season(seeded: dict[str, Any], count: int) -> None:
@@ -248,7 +250,7 @@ def add_bets_to_the_season(seeded: dict[str, Any], count: int) -> None:
 
 
 def test_the_bets_count_holds_when_the_bets_grow(league: dict[str, Any]) -> None:
-    """Four more bets, the same five statements."""
+    """Four more bets, the same six statements."""
     add_bets_to_the_season(league, 4)
 
     service = FantasyBetService()
@@ -256,7 +258,7 @@ def test_the_bets_count_holds_when_the_bets_grow(league: dict[str, Any]) -> None
         bets, _ = service.get_all()
     assert len(bets) == 5
     assert all(bet.bet_result == 10 for bet in bets)
-    assert tally[0] == 5
+    assert tally[0] == 6
 
 
 from sqlmodel import col

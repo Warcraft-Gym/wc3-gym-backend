@@ -7,7 +7,7 @@ series, and a map used by any step, ban or pick alike, leaves the board.
 
 from typing import Literal, Self
 
-from sqlmodel import Field, SQLModel
+from sqlmodel import Field, Relationship, SQLModel
 
 from app.models.base import DBModel
 from app.models.map import Map
@@ -27,6 +27,7 @@ class DBSeriesVetoStep(DBModel, table=True):
     entered_by: int | None = Field(
         default=None, foreign_key="users.id", ondelete="SET NULL"
     )
+    map: Map | None = Relationship()
 
 
 class SeriesVetoStepPublic(SQLModel):

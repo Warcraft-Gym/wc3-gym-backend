@@ -12,6 +12,7 @@ from app.models.relationships import DBMapSeason, DBUserSeasonSignup
 from app.models.season import Season, SeasonPublic
 from app.models.series import Series, SeriesPublic
 from app.models.series_cast import SeriesCast
+from app.models.series_veto_step import DBSeriesVetoStep
 from app.models.types import EmptyStrToNone
 from app.models.user import User, UserPublic
 
@@ -60,6 +61,10 @@ class FantasyBet(FantasyBetBase, DBModel, table=True):
             .joinedload(rel(SeriesCast.user)),
         )
         return (
+            # Every path in players ends at a user; this one ends at a map
+            joinedload(rel(cls.series))
+            .selectinload(rel(Series.veto_steps))
+            .joinedload(rel(DBSeriesVetoStep.map)),
             # Collections use selectinload; a joined collection multiplies the rows
             joinedload(rel(cls.season))
             .selectinload(rel(Season.maps))
@@ -113,6 +118,9 @@ class FantasyBet(FantasyBetBase, DBModel, table=True):
             joinedload(rel(cls.series))
             .selectinload(rel(Series.casts))
             .joinedload(rel(SeriesCast.user)),
+            joinedload(rel(cls.series))
+            .selectinload(rel(Series.veto_steps))
+            .joinedload(rel(DBSeriesVetoStep.map)),
         )
 
 
