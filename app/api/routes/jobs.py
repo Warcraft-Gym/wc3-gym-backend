@@ -12,6 +12,7 @@ from app.models.relationships import DBUserSeasonSignup
 from app.models.types import utcnow
 from app.models.user import User, UserReduced
 from app.models.w3c_stats import W3CSyncResult
+from app.services import casts, discord_posts
 from app.services.users import W3C_SYNC_WORKERS
 
 router = APIRouter(tags=["jobs"])
@@ -20,21 +21,37 @@ router = APIRouter(tags=["jobs"])
 DRAIN_SECONDS = 50
 
 
+def only_the_scheduler(credentials: Credentials) -> None:
+    """Bearer auth against CRON_SECRET; unset answers 503, so a /jobs route is
+    never a public trigger."""
+    secret = os.getenv("CRON_SECRET")
+    if not secret:
+        raise ApiError(503, {"error": "CRON_SECRET is not set"})
+    if credentials is None or credentials.credentials != secret:
+        raise ApiError(401, {"error": "Unauthorized"})
+
+
+@router.get("/jobs/cast-reminders")
+def cast_reminders(credentials: Credentials) -> dict[str, int]:
+    """Call the audience to every claimed series about to start, one card each.
+
+    Vercel Hobby runs a cron once a day, so a GitHub Actions schedule in
+    wc3-gym-discord-bot calls this every few minutes. A series already carrying
+    its card is skipped, so a run that repeats posts nothing twice.
+    """
+    only_the_scheduler(credentials)
+    due = casts.starting_soon(utcnow())
+    return {"posted": sum(discord_posts.post_reminder(row) for row in due)}
+
+
 @router.get("/jobs/w3c-sync")
 def sync_w3c_cron(credentials: Credentials, service: LadderServiceDep) -> W3CSyncResult:
     """The stalest members, over their stored ladder history, one wave at a
     time, for Vercel Cron. A member is anyone signed up for a season. It
     stops when the time is up, when a wave comes around to players this run
     stamped, or when a wave syncs nobody.
-
-    Bearer auth against CRON_SECRET; unset answers 503, so the route is never
-    a public trigger.
     """
-    secret = os.getenv("CRON_SECRET")
-    if not secret:
-        raise ApiError(503, {"error": "CRON_SECRET is not set"})
-    if credentials is None or credentials.credentials != secret:
-        raise ApiError(401, {"error": "Unauthorized"})
+    only_the_scheduler(credentials)
 
     started = utcnow()
     deadline = monotonic() + DRAIN_SECONDS
