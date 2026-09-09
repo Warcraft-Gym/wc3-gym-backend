@@ -45,6 +45,7 @@ def test_the_champion_roster_of_a_finished_season_earns_a_trophy(
         {
             "title": "Season 1 Champion",
             "season_id": seeded["season_id"],
+            "season_name": "Season 1",
             "team_id": seeded["team_a_id"],
             "team_name": "Alpha",
             "team_icon_url": None,
