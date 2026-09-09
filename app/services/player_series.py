@@ -50,17 +50,12 @@ def update_player_series(
     wins = wins_needed(season.map_rules if season else None)
     action = data.get("action")
 
-    # A result carries its veto: the record is what the map stats are made of
     reporting = action == "score_updated" or any(
         key in data for key in ("player1_score", "player2_score")
     )
-    if reporting and not SeriesVetoService().is_complete(series_id):
-        return JSONResponse(
-            {
-                "error": "The map veto is not complete. Enter it on the veto board first."
-            },
-            status_code=400,
-        )
+    # A result carries its veto, but a missing veto never holds a result back:
+    # the answer says so and the caller warns
+    veto_complete = SeriesVetoService().is_complete(series_id) if reporting else True
 
     # A result needs one replay per game played
     if reporting:
@@ -138,4 +133,5 @@ def update_player_series(
     result = updated_series.to_dict()
     if reporting:
         result["replays"] = [replay.model_dump(mode="json") for replay in stored]
+        result["veto_complete"] = veto_complete
     return result

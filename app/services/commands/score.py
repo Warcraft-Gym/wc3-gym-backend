@@ -121,20 +121,17 @@ def _refused(text: str) -> tuple[dict[str, Any], bool]:
     }, PRIVATE
 
 
-def _veto_help(series_id: int) -> str:
-    """Where to enter the veto, then where to report the score."""
+def _veto_warning(series_id: int) -> str:
+    """The result stands, and the veto still belongs with it."""
     site = (os.getenv("FRONTEND_URL") or "").rstrip("/")
     board = (
         f"[veto board]({site}/player-series/{series_id}/veto)"
         if site
         else "veto board on the website"
     )
-    dashboard = (
-        f"[your dashboard]({site}/player-dashboard)" if site else "your dashboard"
-    )
     return (
-        f"The map veto is not complete, so the result cannot be saved. Enter the veto on the {board} first."
-        f" Then report the score here, or in Report Result on {dashboard}."
+        f"The map veto of this series is not complete. The result is saved, and a"
+        f" veto belongs with it: enter it on the {board}."
     )
 
 
@@ -173,7 +170,7 @@ def run(payload: dict[str, Any], services: Services) -> tuple[dict[str, Any], bo
         return _refused(str(error))
     if isinstance(result, JSONResponse):
         error = json.loads(bytes(result.body))["error"]
-        return _refused(_veto_help(series_id) if "map veto" in error else error)
+        return _refused(error)
 
     series = services.series.get(series_id)
     match = series.match
@@ -184,4 +181,6 @@ def run(payload: dict[str, Any], services: Services) -> tuple[dict[str, Any], bo
     )
     lines = [result_line]
     lines += [f"Game {row['game_no']}: {row['url']}" for row in result["replays"]]
+    if not result.get("veto_complete", True):
+        lines.append(_veto_warning(series_id))
     return {"content": "\n".join(lines)}, PUBLIC

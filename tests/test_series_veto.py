@@ -356,7 +356,7 @@ def test_a_player_of_another_series_reads_nothing(
     assert resp.json() == {"error": "not_authorized_for_this_series"}
 
 
-def test_a_result_is_reported_only_once_the_veto_is_complete(
+def test_a_result_says_whether_its_veto_is_complete(
     client: Client,
     seeded: dict[str, Any],
     pool: list[int],
@@ -364,8 +364,8 @@ def test_a_result_is_reported_only_once_the_veto_is_complete(
     replay_uploaded: Callable[..., None],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The record is what the map stats are made of, so a score waits for it.
-    Scheduling does not."""
+    """The record is what the map stats are made of, so every answer says
+    whether the veto is there. It never refuses the result."""
     series_id = seeded["series_open_id"]
     side_a, side_b = member("2"), member("4")
     replay_uploaded(series_id, 1, 2)
@@ -375,11 +375,10 @@ def test_a_result_is_reported_only_once_the_veto_is_complete(
         "player2_score": "0",
     }
 
+    # An incomplete veto never holds a result back; the answer says it is missing
     resp = client.put(f"/player-series/{series_id}", data=scores, headers=side_a)
-    assert resp.status_code == 400, resp.text
-    assert resp.json() == {
-        "error": "The map veto is not complete. Enter it on the veto board first."
-    }
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["veto_complete"] is False
 
     resp = client.put(
         f"/player-series/{series_id}",
@@ -393,6 +392,7 @@ def test_a_result_is_reported_only_once_the_veto_is_complete(
     taken(client, series_id, side_a, pool[3])
     resp = client.put(f"/player-series/{series_id}", data=scores, headers=side_a)
     assert resp.status_code == 200, resp.text
+    assert resp.json()["veto_complete"] is True
     assert (resp.json()["player1_score"], resp.json()["player2_score"]) == (2, 0)
 
 
