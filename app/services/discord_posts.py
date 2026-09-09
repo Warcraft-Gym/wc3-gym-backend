@@ -24,8 +24,9 @@ RESULT = "result"
 CAST = "cast"
 # The card that calls the audience to the stream, posted shortly before the start
 REMINDER = "reminder"
-# The cards about a series that show its time, its veto or its casters
-SERIES_KINDS = ("veto", "announce", CAST, REMINDER)
+# The cards about a series that show its time, its veto or its casters. The
+# reminder is not one: it carries a relative time Discord renders itself.
+SERIES_KINDS = ("veto", "announce", CAST)
 # The channel each card the app posts itself goes to, by settings key. A claim
 # and its reminder both belong where the league shares content.
 CHANNEL_OF = {
