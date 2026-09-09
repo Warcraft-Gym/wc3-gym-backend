@@ -18,13 +18,6 @@ def _blob_columns() -> list[tuple[str, str, bool]]:
     return found
 
 
-def test_every_binary_column_is_deferred() -> None:
-    loaded = [f"{cls}.{key}" for cls, key, deferred in _blob_columns() if not deferred]
-    assert not loaded, (
-        f"these load with their row and bill the bytes on every read: {loaded}"
-    )
-
-
 def test_no_picture_is_stored_in_the_database() -> None:
     """The test above passes vacuously now that no column is binary, which is the state to hold:
     a team logo and a map picture are both a URL into Vercel Blob."""

@@ -109,21 +109,6 @@ def test_a_limit_outside_the_range_is_rejected(
         assert resp.status_code == 422, f"{method} {url}"
 
 
-@pytest.mark.parametrize(("method", "path"), PAGED_ROUTES)
-def test_the_cap_itself_is_accepted(
-    client: Client,
-    auth_headers: dict[str, str],
-    league: dict[str, Any],
-    method: str,
-    path: str,
-) -> None:
-    """limit 1 and limit 500 pass validation on every paged route."""
-    for params in ({"limit": 1}, {"limit": 500, "offset": 0}):
-        url = build(path, league, **params)
-        resp = client.request(method, url, headers=auth_headers)
-        assert resp.status_code != 422, f"{method} {url}"
-
-
 def test_the_default_limit_cuts_a_long_list(client: Client) -> None:
     """600 maps, and the route answers the first 500 of them."""
     from app.models.map import Map

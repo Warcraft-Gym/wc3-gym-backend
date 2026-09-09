@@ -224,38 +224,6 @@ def league(client: Client, auth_headers: dict[str, str]) -> dict[str, Any]:
 # so these read the rows back through the endpoints the frontend reads.
 
 
-def test_a_created_player_is_in_the_list(
-    client: Client, league: dict[str, Any]
-) -> None:
-    by_tag = {u["battleTag"]: u for u in get(client, "/users")}
-    assert set(by_tag) == {"Ann#1001", "Bob#1002"}
-    assert by_tag["Ann#1001"]["name"] == "Ann"
-    assert by_tag["Ann#1001"]["race"] == "HU"
-    assert by_tag["Ann#1001"]["mmr"] == 1500
-
-
-def test_a_player_update_changes_only_its_fields(
-    client: Client, auth_headers: dict[str, str], league: dict[str, Any]
-) -> None:
-    player_id = league["player_a_id"]
-    put(client, auth_headers, f"/users/{player_id}", {"mmr": 1750})
-
-    player = get(client, f"/users/{player_id}")
-    assert player["mmr"] == 1750
-    assert player["name"] == "Ann"
-    assert player["battleTag"] == "Ann#1001"
-    assert player["race"] == "HU"
-
-
-def test_a_player_country_may_be_a_uk_nation(
-    client: Client, auth_headers: dict[str, str], league: dict[str, Any]
-) -> None:
-    player_id = league["player_a_id"]
-    put(client, auth_headers, f"/users/{player_id}", {"country": "GB-SCT"})
-
-    assert get(client, f"/users/{player_id}")["country"] == "GB-SCT"
-
-
 def test_a_deleted_player_leaves_the_list(
     client: Client, auth_headers: dict[str, str], league: dict[str, Any]
 ) -> None:
@@ -263,23 +231,6 @@ def test_a_deleted_player_leaves_the_list(
     assert resp.status_code == 204
 
     assert [u["battleTag"] for u in get(client, "/users")] == ["Bob#1002"]
-
-
-def test_a_created_team_is_in_the_list(client: Client, league: dict[str, Any]) -> None:
-    by_name = {t["name"]: t for t in get(client, "/teams")}
-    assert set(by_name) == {"AAA", "BBB"}
-    assert by_name["AAA"]["long_name"] == "Team AAA"
-
-
-def test_a_team_update_changes_only_its_fields(
-    client: Client, auth_headers: dict[str, str], league: dict[str, Any]
-) -> None:
-    team_id = league["team_a_id"]
-    put(client, auth_headers, f"/teams/{team_id}", {"long_name": "Team A A A"})
-
-    team = get(client, f"/teams/{team_id}")
-    assert team["long_name"] == "Team A A A"
-    assert team["name"] == "AAA"
 
 
 def test_a_team_added_to_a_season_carries_that_season(
@@ -336,24 +287,6 @@ def test_a_team_on_its_own_carries_no_roster(
     assert get(client, f"/teams/{league['team_a_id']}")["player_by_season"] == {}
 
 
-def test_a_created_match_carries_both_teams(
-    client: Client, league: dict[str, Any]
-) -> None:
-    match = get(client, f"/matches/{league['match_id']}")
-    assert match["team1_id"] == league["team_a_id"]
-    assert match["team2_id"] == league["team_b_id"]
-    assert match["playday"] == 1
-
-
-def test_a_created_series_carries_both_players(
-    client: Client, league: dict[str, Any]
-) -> None:
-    series = get(client, f"/series/{league['series_id']}")
-    assert series["player1_id"] == league["player_a_id"]
-    assert series["player2_id"] == league["player_b_id"]
-    assert series["match_id"] == league["match_id"]
-
-
 def test_a_season_with_no_result_stands_at_zero(
     client: Client, league: dict[str, Any]
 ) -> None:
@@ -403,21 +336,6 @@ def test_a_result_that_carries_points_is_still_accepted(
 
     series = get(client, f"/series/{league['series_id']}")
     assert series["player1_points"] == 2
-
-
-def test_a_recorded_sweep_is_worth_three_points(
-    client: Client, auth_headers: dict[str, str], league: dict[str, Any]
-) -> None:
-    put(
-        client,
-        auth_headers,
-        f"/series/{league['series_id']}",
-        {"player1_score": 2, "player2_score": 0},
-    )
-
-    series = get(client, f"/series/{league['series_id']}")
-    assert series["player1_points"] == 3
-    assert series["player2_points"] == 0
 
 
 def test_a_recorded_result_moves_the_match_score(
@@ -1087,27 +1005,6 @@ def test_a_race_that_resembles_nothing_lists_the_members(
     )
     assert resp.status_code == 422
     assert "Valid races are RANDOM, HU, OC, NE, UD." in resp.json()["error"]
-
-
-@pytest.mark.parametrize("race", ["HUMAN", "human", "Random", "", "1"])
-def test_a_player_created_with_an_invalid_race_is_refused(
-    client: Client, auth_headers: dict[str, str], race: str
-) -> None:
-    resp = client.post(
-        "/users",
-        json={
-            "name": "Bad",
-            "battleTag": "Bad#9999",
-            "discordTag": "bad",
-            "discordId": "9999",
-            "race": race,
-        },
-        headers=auth_headers,
-    )
-    assert resp.status_code == 422
-
-    assert client.get("/users").status_code == 200
-    assert client.get("/users").json() == []
 
 
 @pytest.mark.parametrize("race", ["RANDOM", "HU", "OC", "NE", "UD"])

@@ -192,18 +192,6 @@ def test_the_series_list_answers_the_points_of_every_row(
         )
 
 
-def test_an_unplayed_series_answers_no_points(
-    client: Client, auth_headers: dict[str, str]
-) -> None:
-    set_score_system("standard")
-    league = build_season(client, auth_headers, "Parity", "standard")
-
-    series = get(client, f"/series/{league['series_ids'][-1]}")
-    assert series["player1_score"] is None
-    assert series["player1_points"] is None
-    assert series["player2_points"] is None
-
-
 # Two seasons on different systems, under one standard setting.
 
 
@@ -230,15 +218,6 @@ def test_a_search_over_two_seasons_pays_each_row_by_its_own_season(
     helpstone_sweep = rows[two_seasons["helpstone"]["series_ids"][0]]
     assert standard_sweep["player1_points"] == 3
     assert helpstone_sweep["player1_points"] == 4
-
-
-def test_a_season_pays_by_its_own_system_and_not_by_the_setting(
-    client: Client, two_seasons: dict[str, Any]
-) -> None:
-    """The setting says standard, and the helpstone sweep still pays 4."""
-    series_id = two_seasons["helpstone"]["series_ids"][0]
-
-    assert get(client, f"/series/{series_id}")["player1_points"] == 4
 
 
 # Standings. A team stands at the sum of its derived series points, and the

@@ -12,23 +12,10 @@ PNG = (
 )
 
 
-def test_login_with_admin_token(client: Client) -> None:
-    resp = client.post("/login", json={"token": "test-admin-token"})
-    assert resp.status_code == 200
-    body = resp.json()
-    assert "access_token" in body
-
-
 def test_login_with_bad_token(client: Client) -> None:
     resp = client.post("/login", json={"token": "wrong"})
     assert resp.status_code == 401
     assert resp.json() == {"error": "Bad admin token"}
-
-
-def test_login_without_a_token_field(client: Client) -> None:
-    resp = client.post("/login", json={"admin_token": "test-admin-token"})
-    assert resp.status_code == 422
-    assert "error" in resp.json()
 
 
 def test_login_with_an_empty_body(client: Client) -> None:

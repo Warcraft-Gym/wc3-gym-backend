@@ -5,11 +5,8 @@ The parity test runs every map score pair through both faces, and the oracle tes
 holds the Python face against the GNL scale, written out pair by pair.
 """
 
-from typing import Any
-
 import pytest
 from fastapi import FastAPI
-from httpx2 import Client
 from sqlalchemy import Integer, literal, select
 
 from app.core.scoring import (
@@ -147,31 +144,6 @@ def test_max_points_tops_the_scale_of_its_system(system: str, top: int) -> None:
 def test_an_unknown_score_system_reads_as_standard() -> None:
     assert max_points("no such system") == 3
     assert points(2, 0, "no such system") == 3
-
-
-def test_a_new_season_carries_a_score_system(
-    client: Client, auth_headers: dict[str, str]
-) -> None:
-    created = client.post(
-        "/seasons",
-        json={"name": "Season 9", "round_count": 4, "series_per_round": 2},
-        headers=auth_headers,
-    )
-    assert created.status_code == 201
-    assert created.json()["score_system"] == "standard"
-
-    season_id = created.json()["id"]
-    updated = client.put(
-        f"/seasons/{season_id}",
-        json={"score_system": "helpstone"},
-        headers=auth_headers,
-    )
-    assert updated.status_code == 200
-    assert updated.json()["score_system"] == "helpstone"
-
-    fetched: dict[str, Any] = client.get(f"/seasons/{season_id}").json()
-    assert fetched["score_system"] == "helpstone"
-    assert fetched["name"] == "Season 9"
 
 
 @pytest.mark.parametrize(

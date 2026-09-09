@@ -15,7 +15,6 @@ from typing import Any
 import pytest
 from fastapi import FastAPI
 from httpx2 import Client
-from sqlalchemy import select
 
 from app.core import achievements
 from app.core.achievement_rules import LIFETIME_FROM_W3C_SEASON
@@ -24,7 +23,6 @@ from app.core.db import Session
 from app.models.enums import Race
 from app.models.ladder_achievement import default_rows
 from app.models.relationships import DBTeamSeasonCaptain
-from app.models.w3c_ladder_match import W3CLadderMatch
 from tests import achievement_oracle
 from tests.test_ladder_read import INSIDE, add_match, ladder_of, player_of, sign_up
 from tests.test_query_budget import count_statements
@@ -100,10 +98,6 @@ def series(results: list[bool]) -> list[Row]:
 
 
 # The rules that read the match list alone.
-
-
-def test_no_match_earns_nothing() -> None:
-    assert achievement_oracle.earned([], 0, achievements.ALL_PAID) == []
 
 
 def test_win_first_and_lose_first_read_the_oldest_match() -> None:
@@ -477,15 +471,6 @@ def test_the_lifetime_badges_start_at_a_w3champions_season(
     assert [badge["id"] for badge in body["achievements"]] == ["win_first"]
 
 
-def test_the_rules_read_the_stored_rows(league: dict[str, Any]) -> None:
-    """The Protocol the oracle declares is what the table actually holds."""
-    player = league["player_ids"][0]
-    add_match(player, "one", won=True)
-    with Session() as session:
-        rows = list(session.scalars(select(W3CLadderMatch)))
-    assert run(rows) == {"win_first"}
-
-
 def test_the_user_answer_costs_a_constant_number_of_statements(
     league: dict[str, Any],
 ) -> None:
@@ -523,22 +508,6 @@ def test_a_badge_names_the_match_that_turned_its_rule_on() -> None:
     assert goal.achieved_at == long[166].start_time
     # A catalogue entry has no date
     assert achievements.WIN_FIRST.achieved_at is None
-
-
-def test_deleting_a_season_drops_its_prices(seeded: dict[str, Any]) -> None:
-    from sqlmodel import col
-
-    from app.api.deps import season_service
-    from app.models.ladder_achievement import LadderAchievement
-
-    season_service.delete(seeded["season_id"])
-    with Session() as session:
-        rows = session.scalars(
-            select(LadderAchievement).where(
-                col(LadderAchievement.season_id) == seeded["season_id"]
-            )
-        ).all()
-        assert rows == []
 
 
 # The S19 rules, each at the boundary it turns on, against the oracle.

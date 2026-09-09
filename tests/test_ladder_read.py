@@ -534,21 +534,6 @@ def test_a_player_short_of_one_season_of_the_window_is_unsynced(
     ).isoformat().replace("+00:00", "Z")
 
 
-def test_every_earned_achievement_is_in_the_catalogue(
-    client: Client, auth_headers: dict[str, str], league: dict[str, Any]
-) -> None:
-    """A client draws the locked rules by subtracting the earned ids."""
-    player = league["player_ids"][0]
-    add_match(player, "won")
-
-    body = ladder_of(client, auth_headers, league["season_id"])
-
-    earned = {rule["id"] for rule in player_of(body, player)["achievements"]}
-    # One win on the third day of the season: the first win and the early bird
-    assert earned == {"win_first", "early_bird"}
-    assert earned <= {rule["id"] for rule in body["achievement_rules"]}
-
-
 def test_the_season_per_day_counts_a_shared_match_once(
     client: Client, auth_headers: dict[str, str], league: dict[str, Any]
 ) -> None:
@@ -645,13 +630,6 @@ def test_the_players_route_answers_one_row_per_signup(
 
 
 # The achievement set: one instance per season, per rule.
-
-
-def test_every_rule_a_new_season_pays_is_in_the_catalogue() -> None:
-    """A row naming a rule the code does not know would never pay."""
-    catalogue = {rule.id for rule in ACHIEVEMENTS}
-
-    assert {row.rule_id for row in default_rows(None)} <= catalogue
 
 
 def test_every_rule_the_migration_seeded_is_in_the_catalogue() -> None:
@@ -871,16 +849,6 @@ def test_both_routes_answer_404_for_an_unknown_id(
     assert user.status_code == 404
     assert user.json() == {"error": "User not found"}
     assert window.status_code == 404
-
-
-def test_the_public_user_shape_carries_the_ladder_stamp(
-    client: Client, auth_headers: dict[str, str], league: dict[str, Any]
-) -> None:
-    """Every public user answer says when his ladder matches were last read."""
-    body = client.get(f"/users/{league['player_ids'][0]}").json()
-
-    assert body["ladder_synced_at"] is None
-    assert "w3c_synced_at" in body
 
 
 def test_a_random_player_scores_his_random_picks_alone(

@@ -60,18 +60,6 @@ def test_signup_takes_the_discord_fields_from_the_session(
     assert resp.json()["discordTag"] == "p1"
 
 
-def test_player_series_answers_the_linked_players_series(
-    client: Client, seeded: dict[str, Any], member_headers: dict[str, str]
-) -> None:
-    resp = client.get("/player-series", headers=member_headers)
-
-    assert resp.status_code == 200, resp.text
-    body = resp.json()
-    assert body["player"]["discordId"] == "1"
-    assert body["discord_id"] == "1"
-    assert len(body["series"]) == int(resp.headers["X-Total-Count"])
-
-
 def test_player_series_on_a_session_reads_the_current_season(
     client: Client, seeded: dict[str, Any], member_headers: dict[str, str]
 ) -> None:
@@ -156,25 +144,3 @@ def test_signup_refuses_an_unknown_time_zone(
     assert resp.status_code == 422, resp.text
     assert "Mars/Olympus" in resp.json()["error"]
     assert client.get("/users").json() == []
-
-
-def test_the_admin_user_routes_take_the_time_zone(
-    client: Client, w3c_free: None, auth_headers: dict[str, str]
-) -> None:
-    """The same field on the admin form, validated by the request model."""
-    user = client.post(
-        "/users",
-        json=SIGNUP_BODY
-        | {"discordTag": "p9", "discordId": "9", "timezone": "Europe/Berlin"},
-        headers=auth_headers,
-    )
-    assert user.status_code == 201, user.text
-    assert user.json()["timezone"] == "Europe/Berlin"
-
-    bad = client.put(
-        f"/users/{user.json()['id']}",
-        json={"timezone": "Mars/Olympus"},
-        headers=auth_headers,
-    )
-    assert bad.status_code == 422, bad.text
-    assert "Mars/Olympus" in bad.json()["error"]

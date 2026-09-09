@@ -1,16 +1,15 @@
-"""The fantasy score breakdown names races by their plain value.
+"""No route that carries a race writes the enum repr, and a bet row carries
+its two sides.
 
-The breakdown is read by the public fantasy page, which prints
-race_breakdown.race straight into the markup and passes it to RaceIcon,
-where it is matched against the ids in the frontend's races.js. A value
-carrying the enum repr, "Race.HU", printed as that text and matched
-nothing, so the icon rendered as blank.
+The public fantasy page prints race_breakdown.race straight into the markup and
+passes it to RaceIcon, where it is matched against the ids in the frontend's
+races.js. A value carrying the enum repr, "Race.HU", printed as that text and
+matched nothing, so the icon rendered as blank.
 
-The rest of the file pins the other shapes the breakdown page reads.
+test_fantasy_flows pins the values of that breakdown; this file pins that no
+route anywhere writes the repr.
 """
 
-import json
-import re
 from typing import Any
 
 from httpx2 import Client
@@ -22,30 +21,6 @@ def breakdown(client: Client, seeded: dict[str, Any]) -> dict[str, Any]:
     )
     assert resp.status_code == 200, resp.text
     return resp.json()
-
-
-def test_the_drafted_race_is_the_plain_value(
-    client: Client, seeded: dict[str, Any]
-) -> None:
-    assert breakdown(client, seeded)["race_breakdown"]["race"] == "HU"
-
-
-def test_every_race_key_is_a_plain_value(
-    client: Client, seeded: dict[str, Any]
-) -> None:
-    """all_race_points is keyed by race, and the page colours the chip
-    whose key equals race_breakdown.race, so the keys and that value have
-    to be written the same way."""
-    race_breakdown = breakdown(client, seeded)["race_breakdown"]
-    valid = {"RANDOM", "HU", "OC", "NE", "UD"}
-
-    assert set(race_breakdown["all_race_points"]) <= valid
-    assert race_breakdown["race"] in valid
-
-
-def test_no_enum_repr_reaches_the_page(client: Client, seeded: dict[str, Any]) -> None:
-    """Nothing anywhere in the body carries the repr."""
-    assert "Race." not in json.dumps(breakdown(client, seeded))
 
 
 def test_no_route_that_carries_a_race_writes_the_repr(
@@ -77,5 +52,8 @@ def test_a_bet_row_carries_the_two_players_and_the_score(
     them as fields rather than the page splitting `series` on " vs "."""
     row = breakdown(client, seeded)["bet_breakdown"][0]
 
-    assert row["series"] == f"{row['player1']} vs {row['player2']}"
-    assert re.fullmatch(r"\d+-\d+", row["score"])
+    assert row["player1"] == "P1"
+    assert row["player2"] == "P3"
+    assert row["series"] == "P1 vs P3"
+    assert row["score"] == "2-1"
+    assert row["actual_winner"] == "P1"

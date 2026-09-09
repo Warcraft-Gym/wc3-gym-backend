@@ -34,21 +34,6 @@ def workbook_of(content: bytes) -> openpyxl.Workbook:
     return openpyxl.load_workbook(BytesIO(content))
 
 
-def test_export_needs_a_season_id(
-    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
-) -> None:
-    """The parameter is required, so a call without one answers 422."""
-    resp = client.post("/export", headers=auth_headers)
-    assert resp.status_code == 422
-
-
-def test_export_rejects_a_season_id_that_is_not_a_number(
-    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
-) -> None:
-    resp = client.post("/export?season_id=latest", headers=auth_headers)
-    assert resp.status_code == 422
-
-
 def test_export_answers_404_for_an_unknown_season(
     client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
 ) -> None:

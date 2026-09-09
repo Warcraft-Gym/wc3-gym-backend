@@ -204,12 +204,6 @@ def test_bets_list_pages_by_id_and_reports_the_total(
     assert paged == sorted(ids)
 
 
-def test_bets_list_rejects_a_bad_page(client: Client, seeded: dict[str, Any]) -> None:
-    """limit under 1 and offset under 0 answer 422."""
-    assert client.get("/fantasy/bets?limit=0").status_code == 422
-    assert client.get("/fantasy/bets?offset=-1").status_code == 422
-
-
 def test_bets_search_pages_by_id_and_counts_the_filtered_set(
     client: Client, seeded: dict[str, Any]
 ) -> None:

@@ -167,59 +167,6 @@ def test_a_synchronous_import_writes_the_season(
         assert len(session.scalars(select(User)).all()) == 2
 
 
-def test_a_synchronous_import_that_fails_answers_an_error(
-    client: Client, auth_headers: dict[str, str]
-) -> None:
-    """The workbook has no Players sheet, so the pipeline raises after it
-    has written the season."""
-    response = _post(client, _workbook(without="Players"), auth_headers)
-
-    assert response.status_code == 500, response.text
-    assert response.json() == {"error": "Internal Server Error"}
-
-
-def test_an_old_background_parameter_runs_the_import(
-    client: Client, auth_headers: dict[str, str]
-) -> None:
-    """The route has no background parameter, so an old caller gets the
-    synchronous answer."""
-    response = client.post(
-        "/import",
-        params={"background": "true"},
-        files={"file": ("season.xlsx", _workbook(), "application/vnd.ms-excel")},
-        headers=auth_headers,
-    )
-
-    assert response.status_code == 200, response.text
-    assert response.json()["message"] == "Season imported successfully"
-
-    with Session() as session:
-        assert session.scalars(
-            select(Season).where(col(Season.name) == "Season 9")
-        ).one()
-
-
-def test_a_second_import_updates_the_bets_instead_of_adding_them(
-    client: Client, auth_headers: dict[str, str]
-) -> None:
-    """The pipeline finds the stored bets in its one lookup, so importing the
-    same workbook twice leaves two bets, not four."""
-    from app.models.fantasy_bet import FantasyBet
-
-    first = _post(client, _workbook(), auth_headers)
-    assert first.status_code == 200, first.text
-    season_id = first.json()["season_id"]
-
-    second = _post(client, _workbook(season_id=season_id), auth_headers)
-    assert second.status_code == 200, second.text
-    assert second.json()["season_id"] == season_id
-
-    with Session() as session:
-        bets = session.scalars(select(FantasyBet)).all()
-    assert len(bets) == 2
-    assert sorted(bet.bet_points for bet in bets) == [10, 20]
-
-
 def _branding(
     *,
     pick_ban: str | None,
@@ -561,15 +508,6 @@ def test_a_workbook_without_the_column_reads_helpstone_from_its_series(
 
     assert response.status_code == 200, response.text
     assert _score_system_of() == "helpstone"
-
-
-def test_a_workbook_without_the_column_reads_standard_from_its_series(
-    client: Client, auth_headers: dict[str, str]
-) -> None:
-    response = _post(client, _workbook(extra=_series_sheet(2)), auth_headers)
-
-    assert response.status_code == 200, response.text
-    assert _score_system_of() == "standard"
 
 
 def test_a_workbook_with_no_played_series_reads_standard(

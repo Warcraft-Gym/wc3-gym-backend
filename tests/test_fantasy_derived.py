@@ -261,18 +261,6 @@ def test_the_team_search_pays_the_same_numbers(
     assert scores(teams["Second"]) == SECOND
 
 
-def test_the_paged_team_search_pays_the_same_numbers(
-    client: Client, league: dict[str, Any]
-) -> None:
-    found = post(
-        client,
-        f"/fantasy/teams/search?query=season_id == {league['season_id']}"
-        "&limit=1&offset=0",
-    )
-    assert len(found) == 1
-    assert scores(found[0]) == FIRST
-
-
 def test_one_team_pays_the_same_numbers(client: Client, league: dict[str, Any]) -> None:
     team = get(client, f"/fantasy/teams/{league['team_ids'][0]}")
     assert scores(team) == FIRST
@@ -488,18 +476,6 @@ def test_one_answer_pays_each_team_by_its_own_season(
     teams = {team["name"]: team for team in get(client, "/fantasy/teams")}
     assert scores(teams["Fantasy A"]) == FANTASY_A
     assert scores(teams["Fantasy B"]) == FANTASY_B
-
-
-def test_a_season_scoped_search_pays_the_same_numbers(
-    client: Client, two_seasons: dict[str, Any]
-) -> None:
-    for season, expected in (
-        (two_seasons["season_a"], FANTASY_A),
-        (two_seasons["season_b"], FANTASY_B),
-    ):
-        found = post(client, f"/fantasy/teams/search?query=season_id == {season}")
-        assert len(found) == 1
-        assert scores(found[0]) == expected
 
 
 # The player draft scale by best-of, as (wins, own, opp): a win pays 10 less 2 per

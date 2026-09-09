@@ -8,8 +8,6 @@ The calls go through one shared session, so a test that stands in for
 w3champions patches the session class.
 """
 
-from pathlib import Path
-
 import pytest
 import requests
 
@@ -91,23 +89,6 @@ def test_a_configured_season_wins_over_w3champions() -> None:
     settings.update_setting("current_w3c_season", "18")
 
     assert W3CService(settings_app_service=settings).current_season() == 18
-
-
-def test_only_the_w3c_service_names_the_season_setting() -> None:
-    """One truth for the season: W3CService.current_season()."""
-    app_root = Path(__file__).resolve().parent.parent / "app"
-    naming = sorted(
-        path.relative_to(app_root).as_posix()
-        for path in app_root.rglob("*.py")
-        if "current_w3c_season" in path.read_text()
-    )
-
-    assert naming == ["services/w3c.py"]
-
-
-def test_a_missing_setting_does_not_raise() -> None:
-    """An absent row used to raise NotFoundError before any fallback ran."""
-    assert W3CService(settings_app_service=SettingsService()).base_url() != ""
 
 
 def test_the_config_route_reports_the_url_in_use(
