@@ -37,6 +37,7 @@ from app.models.fantasy_team import (
 )
 from app.models.player_history import PlayerHistory
 from app.models.series import SeriesPublic, SeriesSort
+from app.models.series_game import SeriesGamePublic
 from app.models.series_replay import SeriesReplayPublic
 from app.models.series_veto_step import SeriesVetoPublic, SeriesVetoWrite
 from app.models.types import utcnow
@@ -58,6 +59,7 @@ from app.services import (
     player_history,
     player_series,
     replays,
+    series_games,
 )
 from app.services.seasons import SeasonService
 from app.services.series import SeriesService
@@ -449,6 +451,12 @@ def _veto_viewer(
             return None, users[0].id if users else None
     player = dashboard_player(request, credentials, user_service)[1].id
     return player, player
+
+
+@router.get("/series/{series_id}/games")
+def get_series_games(series_id: int) -> list[SeriesGamePublic]:
+    """Every game of a series, with the map the season's rules offer for each."""
+    return series_games.for_series(series_id)
 
 
 @router.get("/player-series/{series_id}/veto")
