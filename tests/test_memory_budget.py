@@ -52,13 +52,53 @@ def crowded(app: FastAPI, seeded: dict[str, Any]) -> dict[str, Any]:
     return seeded
 
 
-def test_bets_list_peak_stays_in_budget(crowded: dict[str, Any]) -> None:
-    """The list answer keeps its peak under the pinned budget."""
+def _peak() -> tuple[int, int]:
+    """The bets the list answers and the peak bytes it cost."""
     service = FantasyBetService()
     tracemalloc.start()
     bets, total = service.get_all()
     _, peak = tracemalloc.get_traced_memory()
     tracemalloc.stop()
-    assert len(bets) == BETS + 1
     assert total is None
+    return len(bets), peak
+
+
+def test_bets_list_peak_stays_in_budget(crowded: dict[str, Any]) -> None:
+    """The list answer keeps its peak under the pinned budget."""
+    count, peak = _peak()
+
+    assert count == BETS + 1
     assert peak < BUDGET_BYTES, f"peak {peak / 1024 / 1024:.1f} MB"
+
+
+def test_the_peak_holds_when_the_seasons_grow(crowded: dict[str, Any]) -> None:
+    """Four times the seasons cost the same peak.
+
+    The budget above passes on any one shape of the data. This is the test that
+    fails when a per-user collection goes back into the list serialization: the
+    peak then follows the season count instead of the bet count.
+    """
+    _, before = _peak()
+
+    with Session() as session:
+        seasons = [
+            Season(name=f"Extra {n}", series_per_round=2) for n in range(3 * SEASONS)
+        ]
+        session.add_all(seasons)
+        session.flush()
+        for user_id in crowded["player_ids"]:
+            for season in seasons:
+                session.add(
+                    DBUserSeasonSignup(
+                        user_id=user_id, season_id=ident(season), race=Race.HU
+                    )
+                )
+        session.commit()
+
+    count, after = _peak()
+
+    assert count == BETS + 1
+    assert after < before * 1.5, (
+        f"{before / 1024 / 1024:.1f} MB became {after / 1024 / 1024:.1f} MB "
+        f"when the seasons went from {SEASONS} to {4 * SEASONS}"
+    )
