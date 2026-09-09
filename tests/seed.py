@@ -35,6 +35,19 @@ from app.models.user import User
 from app.models.user_team_season import DBUserTeamSeason
 
 
+def add_season(session: Session, rounds: int, **fields: Any) -> Season:  # noqa: ANN401
+    """A season row plus the round rows that are its count. Build a season this
+    way, never with `Season(...)` alone: nothing stores the count, so a season
+    with no round rows has no rounds."""
+    from app.services.seasons import fill_rounds
+
+    row = Season(**fields)
+    session.add(row)
+    session.flush()
+    fill_rounds(session, row, rounds)
+    return row
+
+
 def seed_league(session: Session) -> dict[str, Any]:
     season = Season(
         name="Season 1",
