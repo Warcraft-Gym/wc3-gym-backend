@@ -35,7 +35,7 @@ from app.models.user import User
 from app.models.user_team_season import DBUserTeamSeason
 
 
-def add_season(session: Session, rounds: int, **fields: Any) -> Season:
+def add_season(session: Session, rounds: int, **fields: Any) -> Season:  # noqa: ANN401
     """A season row plus the round rows that are its count. Build a season this
     way, never with `Season(...)` alone: nothing stores the count, so a season
     with no round rows has no rounds."""

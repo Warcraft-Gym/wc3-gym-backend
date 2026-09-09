@@ -23,11 +23,11 @@ from app.models.fantasy_team import FantasyTeam
 from app.models.match import Match
 from app.models.relationships import DBFantasyTeamPlayer
 from app.models.season import Season  # noqa: F401  # re-exported by the fixtures below
-from tests.seed import add_season
 from app.models.series import Series
 from app.models.team import Team
 from app.models.team_season import DBTeamSeason
 from app.models.user import User
+from tests.seed import add_season
 
 SCORE_FIELDS = (
     "player_points",
