@@ -239,11 +239,17 @@ class LadderService:
         season_id: int | None = None,
         limit: int = 500,
         offset: int = 0,
+        race: Race | None = None,
     ) -> UserLadder:
         """One player's record, and one page of the matches behind it.
 
+        The record reads his signup race alone, because that is the race the
+        league scores, and the list follows it. `race` asks for another race
+        he played instead, and `by_race` counts every one of them, so the
+        client can offer them beside the list.
+
         A season names the window; without one the answer is his whole
-        history. Nine statements, thirteen with a season, which adds the
+        history. Nine statements, fourteen with a season, which adds the
         season, the w3champions seasons its window sits in, its roster and its
         captains for the achievements that read a team.
         """
@@ -298,7 +304,10 @@ class LadderService:
                 # A season reads the race he registered on, null when he did not
                 signed = next((r for r in roster if r.user_id == user_id), None)
                 answer.race = signed.race.value if signed and signed.race else None
-            answer.matches = _matches(session, scope, limit, offset)
+            answer.by_race = _by_race(session, _match_scope(user_id, window))
+            # No race asked for reads the one that scores him, the list's default
+            matches = scope if race is None else _match_scope(user_id, window, race)
+            answer.matches = _matches(session, matches, limit, offset)
             return answer
 
     def sync_season(
@@ -1054,6 +1063,23 @@ def _per_day(
     return days
 
 
+def _by_race(session: OrmSession, scope: list[ColumnElement[bool]]) -> dict[str, int]:
+    """How many matches the player has on each race he selected.
+
+    The match list offers these as a filter, so a player who laddered off his
+    signup race can see those games and read why they pay him nothing.
+    """
+    rows = session.execute(
+        select(
+            col(W3CLadderMatch.race).label("race"),
+            func.count().label("games"),
+        )
+        .where(*scope, col(W3CLadderMatch.race).is_not(None))
+        .group_by(col(W3CLadderMatch.race))
+    ).all()
+    return {row.race.value: int(row.games) for row in rows}
+
+
 def _vs_race(
     session: OrmSession, scope: list[ColumnElement[bool]]
 ) -> dict[int, dict[str, list[int]]]:
@@ -1214,6 +1240,22 @@ def _any_race(
     if window is not None:
         where.append(col(W3CLadderMatch.start_time) >= window[0])
         where.append(col(W3CLadderMatch.start_time) <= window[1])
+    return where
+
+
+def _match_scope(
+    user_id: int,
+    window: tuple[datetime, datetime] | None,
+    race: Race | None = None,
+) -> list[ColumnElement[bool]]:
+    """Every match he played in the window, or the ones on one race.
+
+    Wider than the scope that scores him, which reads his signup race alone.
+    The match list reads it to show a race the league does not pay him for.
+    """
+    where = _any_race([user_id], window)
+    if race is not None:
+        where.append(col(W3CLadderMatch.race) == race)
     return where
 
 

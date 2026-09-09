@@ -978,3 +978,136 @@ def test_a_match_on_another_race_is_practice(
 
     assert body["total_games"] == 1
     assert player_of(body, player)["games"] == 1
+
+
+# The race filter of the match list.
+
+
+def test_the_counts_name_the_races_the_record_does_not_pay(
+    client: Client, auth_headers: dict[str, str], league: dict[str, Any]
+) -> None:
+    """Without a race the list stays on the one that scores him, and the
+    counts still name the off-race games he played."""
+    player = league["player_ids"][0]
+    set_signup_race(league["season_id"], player, Race.OC)
+    add_match(player, "scored", race=Race.OC)
+    add_match(player, "off1", race=Race.NE, start_time=INSIDE + timedelta(hours=1))
+    add_match(player, "off2", race=Race.NE, start_time=INSIDE + timedelta(hours=2))
+
+    body = client.get(
+        f"/users/{player}/ladder?season_id={league['season_id']}",
+        headers=auth_headers,
+    ).json()
+
+    assert body["games"] == 1
+    assert body["race"] == "OC"
+    assert [m["w3c_match_id"] for m in body["matches"]] == ["scored"]
+    assert body["by_race"] == {"OC": 1, "NE": 2}
+
+
+def test_the_race_narrows_the_match_list(
+    client: Client, auth_headers: dict[str, str], league: dict[str, Any]
+) -> None:
+    player = league["player_ids"][0]
+    set_signup_race(league["season_id"], player, Race.OC)
+    add_match(player, "scored", race=Race.OC)
+    add_match(player, "off", race=Race.NE, start_time=INSIDE + timedelta(hours=1))
+
+    body = client.get(
+        f"/users/{player}/ladder?season_id={league['season_id']}&race=NE",
+        headers=auth_headers,
+    ).json()
+
+    assert [m["w3c_match_id"] for m in body["matches"]] == ["off"]
+    # the counts describe every race, whichever one the list is narrowed to
+    assert body["by_race"] == {"OC": 1, "NE": 1}
+    assert body["games"] == 1
+
+
+def test_the_race_counts_page_the_list(
+    client: Client, auth_headers: dict[str, str], league: dict[str, Any]
+) -> None:
+    """by_race is the total the client pages by, so it matches what it gets."""
+    player = league["player_ids"][0]
+    set_signup_race(league["season_id"], player, Race.OC)
+    for n in range(5):
+        add_match(
+            player, f"ne{n}", race=Race.NE, start_time=INSIDE + timedelta(hours=n)
+        )
+
+    first = client.get(
+        f"/users/{player}/ladder?season_id={league['season_id']}&race=NE&limit=3",
+        headers=auth_headers,
+    ).json()
+    second = client.get(
+        f"/users/{player}/ladder?season_id={league['season_id']}"
+        f"&race=NE&limit=3&offset=3",
+        headers=auth_headers,
+    ).json()
+
+    assert first["by_race"]["NE"] == 5
+    assert len(first["matches"]) == 3
+    assert len(second["matches"]) == 2
+    ids = [m["w3c_match_id"] for m in first["matches"] + second["matches"]]
+    assert len(set(ids)) == 5
+
+
+def test_a_race_the_player_never_played_answers_an_empty_list(
+    client: Client, auth_headers: dict[str, str], league: dict[str, Any]
+) -> None:
+    player = league["player_ids"][0]
+    set_signup_race(league["season_id"], player, Race.OC)
+    add_match(player, "scored", race=Race.OC)
+
+    body = client.get(
+        f"/users/{player}/ladder?season_id={league['season_id']}&race=UD",
+        headers=auth_headers,
+    ).json()
+
+    assert body["matches"] == []
+    assert body["by_race"] == {"OC": 1}
+
+
+def test_an_unknown_race_is_refused(
+    client: Client, auth_headers: dict[str, str], league: dict[str, Any]
+) -> None:
+    player = league["player_ids"][0]
+
+    resp = client.get(
+        f"/users/{player}/ladder?season_id={league['season_id']}&race=ELF",
+        headers=auth_headers,
+    )
+
+    assert resp.status_code == 422
+
+
+def test_the_signup_race_count_equals_the_scored_games(
+    client: Client, auth_headers: dict[str, str], league: dict[str, Any]
+) -> None:
+    """The client pages the list by the count of the race it shows, so the
+    signup race's count and the scored games must be the same number."""
+    player = league["player_ids"][0]
+    set_signup_race(league["season_id"], player, Race.OC)
+    for n in range(4):
+        add_match(
+            player, f"oc{n}", race=Race.OC, start_time=INSIDE + timedelta(hours=n)
+        )
+    add_match(player, "ne", race=Race.NE, start_time=INSIDE + timedelta(hours=9))
+    # too short to count, so neither number may hold it
+    add_match(
+        player,
+        "short",
+        race=Race.OC,
+        duration_s=10,
+        start_time=INSIDE + timedelta(hours=10),
+    )
+
+    body = client.get(
+        f"/users/{player}/ladder?season_id={league['season_id']}",
+        headers=auth_headers,
+    ).json()
+
+    assert body["games"] == 4
+    assert body["by_race"]["OC"] == body["games"]
+    assert len(body["matches"]) == body["games"]
+    assert body["by_race"]["NE"] == 1
