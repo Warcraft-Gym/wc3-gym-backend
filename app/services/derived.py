@@ -48,6 +48,7 @@ from app.core.scoring import (
     wins_needed,
     wins_needed_sql,
 )
+from app.models.base import ident
 from app.models.draft_series import DraftSeriesPublic
 from app.models.enums import Race
 from app.models.fantasy_bet import FantasyBet, FantasyBetPublic
@@ -57,8 +58,14 @@ from app.models.player_career_stats import PlayerCareerStatsPublic
 from app.models.relationships import DBUserSeasonSignup
 from app.models.season import ROUND_COUNT, Season
 from app.models.series import Series, SeriesPublic
-from app.models.team import TeamPublic
-from app.models.user import User, UserListPublic, UserPublic, UserReduced
+from app.models.team import Team, TeamPublic
+from app.models.user import (
+    TrophyPublic,
+    User,
+    UserListPublic,
+    UserPublic,
+    UserReduced,
+)
 
 type MatchScores = dict[int, tuple[int, int]]
 # score system and maps to win, the two arguments of the scoring rule
@@ -317,6 +324,25 @@ def _sums_by_team(session: Session, rules: SeasonRules) -> TeamSums:
     return sums
 
 
+def season_winners(session: Session, season_ids: set[int]) -> dict[int, int]:
+    """The team that tops each of those seasons' derived standings.
+
+    Ties break by fewer points against, then the older team, matching what
+    the standings read as first place. The caller decides whether the season
+    is finished; a season still running has a leader, not a champion.
+    """
+    if not season_ids:
+        return {}
+    rules = _rules_by_season(session, season_ids)
+    sums = _sums_by_team(session, rules)
+    best: dict[int, tuple[int, int, int]] = {}
+    for (team_id, season_id), (final, against) in sums.items():
+        key = (-final, against, team_id)
+        if season_id not in best or key < best[season_id]:
+            best[season_id] = key
+    return {season_id: team_id for season_id, (_, _, team_id) in best.items()}
+
+
 def fill_standings(session: Session, teams: Iterable[TeamPublic | None]) -> None:
     """Fill final_score, points_against and points_available on every
     seasons_info row of every team."""
@@ -452,6 +478,61 @@ def _gnl_matchups(
     for user_id, season_id, race in rows:
         history.setdefault((user_id, season_id), []).append(fantasy.race_value(race))
     return history
+
+
+def fill_trophies(session: Session, users: Iterable[UserPublic | None]) -> None:
+    """Fill the trophies of every user: the finished seasons his team won.
+
+    A season still running has a leader, not a champion, so only a complete
+    season pays. The phase costs one statement per season the users played.
+    """
+    rows = [user for user in users if user is not None]
+    roster = {
+        (stat.team_id, stat.season_id)
+        for user in rows
+        for stat in user.gnl_stats
+        if stat.team_id is not None and stat.season_id is not None
+    }
+    if not roster:
+        return
+
+    seasons = {
+        ident(season): season
+        for season in session.scalars(
+            select(Season).where(col(Season.id).in_({sid for _, sid in roster}))
+        )
+    }
+    winners = season_winners(
+        session,
+        {
+            sid
+            for sid, season in seasons.items()
+            if season.progress(session).phase == "complete"
+        },
+    )
+    won = {(team_id, sid) for sid, team_id in winners.items()}
+    teams = {
+        ident(team): team
+        for team in session.scalars(
+            select(Team).where(col(Team.id).in_(set(winners.values())))
+        )
+    }
+
+    for user in rows:
+        played = {(stat.team_id, stat.season_id) for stat in user.gnl_stats}
+        user.trophies = [
+            TrophyPublic(
+                title=f"{seasons[season_id].name} Champion",
+                season_id=season_id,
+                season_name=seasons[season_id].name,
+                team_id=team_id,
+                team_name=teams[team_id].name,
+                team_icon_url=teams[team_id].icon_url,
+            )
+            # newest season first, the way a shelf reads
+            for team_id, season_id in sorted(won, key=lambda pair: -pair[1])
+            if (team_id, season_id) in played
+        ]
 
 
 def fill_gnl_stats(session: Session, users: Iterable[UserPublic | None]) -> None:
