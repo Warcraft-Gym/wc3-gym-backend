@@ -672,49 +672,51 @@ S19_CASES: dict[str, tuple[list[Row], dict[str, Any]]] = {
 }
 
 
+# One row short of each boundary above, so the rule has to stay off
+S19_OFF_CASES: list[tuple[str, list[Row]]] = [
+    ("week_one", series([True] * 4)),
+    ("games_25", series([True] * 24)),
+    ("plus_twenty", series([True] * 19)),
+    ("streak_week", days(6) + [Row(minutes=7 * DAY)]),
+    ("five_a_day", busy_days(10, 4)),
+    ("welcome_back", [Row(), Row(minutes=14 * DAY - 1)]),
+    ("one_sitting", [Row(minutes=m) for m in (0, 1, 2, 3, 181)]),
+    ("repeat_offender", series([True, True, True, False] * 2 + [True, True])),
+    ("climber", [Row(mmr_before=1500, mmr_after=1599)]),
+    ("hold_the_line", series([True] * 29)),
+    (
+        "comeback",
+        [Row(mmr_before=1500, mmr_after=1400)]
+        + [Row(minutes=i, mmr_before=1400, mmr_after=1499) for i in range(1, 30)],
+    ),
+    ("hat_trick", series([True, True, False, True, True])),
+    (
+        "revenge",
+        [
+            Row(opp_battletag="foe#9"),
+            Row(won=False, minutes=1, opp_battletag="foe#9"),
+        ],
+    ),
+    ("mirror_master", [Row(minutes=i, opp_played_race=Race.OC) for i in range(5)]),
+    ("slayer_hu", series([True] * 6 + [False] * 4)),
+    ("nemesis", versus(["foe#9"] * 2 + ["foe#8"])),
+    ("wide_net", versus([f"o{i}#1" for i in range(19)] + ["o0#1"])),
+    ("grand_tour", versus(["foe#1", "foe#2"])),  # the same other team twice
+    ("speedrunner", [Row(duration_s=421)]),
+    ("marathon", [Row(duration_s=2699)]),
+    ("captains_duty", series([True] * 20)),  # not a captain
+]
+
+
 @pytest.mark.parametrize("rule_id", sorted(S19_CASES))
 def test_the_s19_rule_turns_on_at_its_boundary(rule_id: str) -> None:
     rows, options = S19_CASES[rule_id]
+    options = dict(options)  # the table is read again by test_achievement_parity
     season = options.pop("season", SEASON)
     assert rule_id in run(rows, season=season, **options)
 
 
-@pytest.mark.parametrize(
-    ("rule_id", "rows"),
-    [
-        ("week_one", series([True] * 4)),
-        ("games_25", series([True] * 24)),
-        ("plus_twenty", series([True] * 19)),
-        ("streak_week", days(6) + [Row(minutes=7 * DAY)]),
-        ("five_a_day", busy_days(10, 4)),
-        ("welcome_back", [Row(), Row(minutes=14 * DAY - 1)]),
-        ("one_sitting", [Row(minutes=m) for m in (0, 1, 2, 3, 181)]),
-        ("repeat_offender", series([True, True, True, False] * 2 + [True, True])),
-        ("climber", [Row(mmr_before=1500, mmr_after=1599)]),
-        ("hold_the_line", series([True] * 29)),
-        (
-            "comeback",
-            [Row(mmr_before=1500, mmr_after=1400)]
-            + [Row(minutes=i, mmr_before=1400, mmr_after=1499) for i in range(1, 30)],
-        ),
-        ("hat_trick", series([True, True, False, True, True])),
-        (
-            "revenge",
-            [
-                Row(opp_battletag="foe#9"),
-                Row(won=False, minutes=1, opp_battletag="foe#9"),
-            ],
-        ),
-        ("mirror_master", [Row(minutes=i, opp_played_race=Race.OC) for i in range(5)]),
-        ("slayer_hu", series([True] * 6 + [False] * 4)),
-        ("nemesis", versus(["foe#9"] * 2 + ["foe#8"])),
-        ("wide_net", versus([f"o{i}#1" for i in range(19)] + ["o0#1"])),
-        ("grand_tour", versus(["foe#1", "foe#2"])),  # the same other team twice
-        ("speedrunner", [Row(duration_s=421)]),
-        ("marathon", [Row(duration_s=2699)]),
-        ("captains_duty", series([True] * 20)),  # not a captain
-    ],
-)
+@pytest.mark.parametrize(("rule_id", "rows"), S19_OFF_CASES)
 def test_the_s19_rule_stays_off_short_of_its_boundary(
     rule_id: str, rows: list[Row]
 ) -> None:
