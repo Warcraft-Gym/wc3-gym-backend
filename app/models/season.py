@@ -193,11 +193,14 @@ Season.round_count = column_property(ROUND_COUNT)
 
 
 class SeasonCreate(SeasonBase):
-    pass
+    # How many rounds to make. Nothing stores it; the round rows are the count.
+    round_count: int | None = None
 
 
 class SeasonUpdate(RoundCounts):
     name: Annotated[str | None, NumToStr] = None
+    # How many rounds to keep. Nothing stores it; the round rows are the count.
+    round_count: int | None = None
     pick_ban: Annotated[str | None, NumToStr] = None
     start_date: Annotated[date | None, LenientDate] = None
     end_date: Annotated[date | None, LenientDate] = None
@@ -244,6 +247,8 @@ class SeasonSignupUpdate(SQLModel):
 
 class SeasonPublic(SeasonBase):
     id: int
+    # How many rounds the season has, counted from its round rows
+    round_count: int | None = None
     # The short form of a season carries only the name, so these read null
     score_system: str | None = None
     fantasy_grind: bool | None = None
@@ -268,6 +273,7 @@ class SeasonPublic(SeasonBase):
         return cls(
             id=ident(season),
             name=season.name,
+            round_count=season.round_count,
             number_rounds=season.round_count,
             series_per_round=season.series_per_round,
             pick_ban=season.pick_ban,
@@ -308,6 +314,7 @@ class SeasonPublic(SeasonBase):
         return cls(
             id=ident(season),
             name=season.name,
+            round_count=season.round_count,
             number_rounds=season.round_count,
             series_per_round=season.series_per_round,
             pick_ban=season.pick_ban,

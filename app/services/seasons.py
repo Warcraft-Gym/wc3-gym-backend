@@ -72,6 +72,14 @@ def _achievement_set(
     ]
 
 
+def _wanted(season: SeasonCreate | SeasonUpdate) -> int | None:
+    """The round count the caller asked for. `round_count` is the name; the
+    older `number_rounds` still answers until the frontend stops sending it."""
+    return (
+        season.round_count if season.round_count is not None else season.number_rounds
+    )
+
+
 def fill_rounds(session: OrmSession, season: Season, wanted: int) -> None:
     """One round per playday, `wanted` of them. A missing round is added a week
     after the one before it; a round past the last playday is dropped; a set
@@ -109,24 +117,26 @@ class SeasonService:
 
     def add(self, season: SeasonCreate) -> SeasonPublic:
         with Session.begin() as session:
-            new_season = Season.add(session, season.model_dump())
+            new_season = Season.add(session, season.model_dump(exclude={"round_count"}))
             # A new season scores like the last one until an admin re-prices it
             session.add_all(default_rows(new_season.id))
             session.flush()
-            fill_rounds(session, new_season, season.number_rounds or 0)
+            fill_rounds(session, new_season, _wanted(season) or 0)
             return _public(session, new_season)
 
     def update(self, season_id: int, season: SeasonUpdate) -> SeasonPublic:
         with Session.begin() as session:
             row = Season.update(
-                session, season_id, **season.model_dump(exclude_unset=True)
+                session,
+                season_id,
+                **season.model_dump(exclude_unset=True, exclude={"round_count"}),
             )
             if not row:
                 raise NotFoundError("Season not found")
             if season.model_fields_set & {"pick_ban", "map_rules"}:
                 check_order(row)
-            if season.model_fields_set & {"number_rounds", "start_date"}:
-                wanted = season.number_rounds
+            if season.model_fields_set & {"round_count", "number_rounds", "start_date"}:
+                wanted = _wanted(season)
                 fill_rounds(session, row, row.round_count if wanted is None else wanted)
             return _public(session, row)
 
