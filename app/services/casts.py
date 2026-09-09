@@ -11,10 +11,12 @@ from sqlalchemy.orm import Session as OrmSession
 from sqlmodel import col, select
 
 from app.core.db import Session
+from app.models.base import ident
 from app.core.exceptions import ApiError, BadRequestError, NotFoundError
 from app.models.series import Series, SeriesPublic, has_result
 from app.models.series_cast import CastPublic, SeriesCast, is_video_url
 from app.models.types import utcnow
+from app.services import discord_posts
 
 # A cast series counts as on now from half an hour before its time to four hours after
 WINDOW_BEFORE = timedelta(minutes=30)
@@ -22,6 +24,29 @@ WINDOW_AFTER = timedelta(hours=4)
 
 # How far back last_channel looks for a channel that is not a one-off video URL
 LAST_CLAIMS = 10
+
+# The reminder goes out this far before the start. The job behind it runs every
+# few minutes, so the audience sees the card about ten minutes before the games.
+REMINDER_LEAD = timedelta(minutes=15)
+# A scheduled run can be late; a series that started this recently still gets its card
+REMINDER_LATE = timedelta(minutes=30)
+
+
+def starting_soon(now: datetime) -> list[int]:
+    """The claimed series about to start and not yet played, soonest first."""
+    with Session() as session:
+        rows = session.scalars(
+            select(Series)
+            .where(
+                col(Series.id).in_(select(col(SeriesCast.series_id))),
+                col(Series.date_time) >= now - REMINDER_LATE,
+                col(Series.date_time) <= now + REMINDER_LEAD,
+                col(Series.player1_score).is_(None),
+                col(Series.player2_score).is_(None),
+            )
+            .order_by(col(Series.date_time))
+        )
+        return [ident(row) for row in rows]
 
 
 def on_now(series: SeriesPublic, now: datetime) -> bool:
@@ -93,7 +118,12 @@ def claim(
             )
         )
         session.flush()
-        return _rows(session, series_id)
+        rows = _rows(session, series_id)
+        over = has_result(series)
+    # A series that is over is claimed for its VOD alone: there is nothing to announce
+    if not over:
+        discord_posts.post_cast(series_id)
+    return rows
 
 
 def update(
