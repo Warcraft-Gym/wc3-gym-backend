@@ -64,7 +64,7 @@ def _captain(team_id: int, season_id: int, user_id: int) -> None:
 def _later_season() -> int:
     """A second season, which the roles follow as the current one."""
     with Session() as session:
-        later = Season(name="Season 2", number_rounds=4, series_per_round=2)
+        later = Season(name="Season 2", series_per_round=2)
         session.add(later)
         session.commit()
         return ident(later)

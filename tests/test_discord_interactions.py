@@ -161,7 +161,6 @@ def test_season_span_counts_the_weeks_of_the_range(
     season = SeasonPublic(
         id=5,
         name="Review",
-        number_rounds=4,
         series_per_round=1,
         start_date=date(2026, 8, 10),
         end_date=date(2026, 10, 7),

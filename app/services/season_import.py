@@ -224,7 +224,7 @@ def _season(
     row = sheets["Season"][0]
     values = SeasonCreate(
         name=row["Name"],
-        number_rounds=whole_number(row["Number of Weeks"]) or 0,
+        round_count=whole_number(row["Number of Weeks"]) or 0,
         series_per_round=whole_number(row["Series Per Week"]) or 0,
         score_system=score_system,
         **_cells(
@@ -247,7 +247,7 @@ def _season(
 
     if stored:
         stored.sqlmodel_update(values.model_dump(exclude_unset=True))
-        fill_rounds(session, stored, values.number_rounds or 0)
+        fill_rounds(session, stored, values.round_count or 0)
         logger.info(f"Updating season {values.name} with ID: {stored.id}")
         return stored
 
@@ -255,7 +255,7 @@ def _season(
     session.add(season)
     session.flush()
     # The round rows are the round count, so the import writes them too
-    fill_rounds(session, season, values.number_rounds or 0)
+    fill_rounds(session, season, values.round_count or 0)
     logger.info(f"Created new season with ID: {season.id}")
     return season
 

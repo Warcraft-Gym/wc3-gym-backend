@@ -23,7 +23,7 @@ def test_a_new_season_gets_a_week_long_round_per_playday(
         "/seasons",
         json={
             "name": "S2",
-            "number_rounds": 3,
+            "round_count": 3,
             "series_per_round": 2,
             "start_date": "2026-09-14",
         },
@@ -43,7 +43,7 @@ def test_a_season_without_a_start_has_undated_rounds_until_one_is_set(
 ) -> None:
     resp = client.post(
         "/seasons",
-        json={"name": "S2", "number_rounds": 2, "series_per_round": 2},
+        json={"name": "S2", "round_count": 2, "series_per_round": 2},
         headers=auth_headers,
     )
     assert rounds(resp.json()) == [(1, None, None), (2, None, None)]
@@ -71,7 +71,7 @@ def test_changing_the_week_count_adds_and_drops_rounds_but_moves_none(
     )
 
     resp = client.put(
-        f"/seasons/{season_id}", json={"number_rounds": 5}, headers=auth_headers
+        f"/seasons/{season_id}", json={"round_count": 5}, headers=auth_headers
     )
     assert rounds(resp.json()) == [
         (1, "2026-01-05", "2026-01-11"),
@@ -82,7 +82,7 @@ def test_changing_the_week_count_adds_and_drops_rounds_but_moves_none(
     ]
 
     resp = client.put(
-        f"/seasons/{season_id}", json={"number_rounds": 2}, headers=auth_headers
+        f"/seasons/{season_id}", json={"round_count": 2}, headers=auth_headers
     )
     assert rounds(resp.json()) == [
         (1, "2026-01-05", "2026-01-11"),
@@ -182,29 +182,6 @@ def test_the_contract_migration_drops_the_view_and_the_date_frame(
     assert "date_frame" in {c["name"] for c in inspect(engine).get_columns("matches")}
 
 
-def test_the_week_names_still_write_and_still_read(
-    client: Client, auth_headers: dict[str, str]
-) -> None:
-    """The frontend of the deploy before this one sends `number_weeks`. Either
-    name fills the other, so it keeps working until the columns are dropped."""
-    resp = client.post(
-        "/seasons",
-        json={"name": "Old client", "number_weeks": 3, "series_per_week": 2},
-        headers=auth_headers,
-    )
-    assert resp.status_code == 201, resp.text
-    body = resp.json()
-    assert (body["number_rounds"], body["series_per_round"]) == (3, 2)
-    assert (body["number_weeks"], body["series_per_week"]) == (3, 2)
-    assert len(body["rounds"]) == 3
-
-    changed = client.put(
-        f"/seasons/{body['id']}", json={"number_weeks": 5}, headers=auth_headers
-    ).json()
-    assert (changed["number_rounds"], changed["number_weeks"]) == (5, 5)
-    assert len(changed["rounds"]) == 5
-
-
 def test_the_round_count_follows_the_rows_not_a_stored_number(
     client: Client, auth_headers: dict[str, str]
 ) -> None:
@@ -212,18 +189,18 @@ def test_the_round_count_follows_the_rows_not_a_stored_number(
     through the season's own endpoint moves it."""
     body = client.post(
         "/seasons",
-        json={"name": "Counted", "number_rounds": 4, "series_per_round": 2},
+        json={"name": "Counted", "round_count": 4, "series_per_round": 2},
         headers=auth_headers,
     ).json()
-    assert (body["number_rounds"], len(body["rounds"])) == (4, 4)
+    assert (body["round_count"], len(body["rounds"])) == (4, 4)
 
     fewer = client.put(
-        f"/seasons/{body['id']}", json={"number_rounds": 2}, headers=auth_headers
+        f"/seasons/{body['id']}", json={"round_count": 2}, headers=auth_headers
     ).json()
-    assert (fewer["number_rounds"], len(fewer["rounds"])) == (2, 2)
+    assert (fewer["round_count"], len(fewer["rounds"])) == (2, 2)
 
     # a change that touches neither the count nor the dates leaves the rows alone
     same = client.put(
         f"/seasons/{body['id']}", json={"name": "Renamed"}, headers=auth_headers
     ).json()
-    assert (same["number_rounds"], len(same["rounds"])) == (2, 2)
+    assert (same["round_count"], len(same["rounds"])) == (2, 2)

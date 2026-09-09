@@ -39,7 +39,7 @@ def test_a_season_update_keeps_the_fields_it_was_not_given(
     assert after["pick_ban"] == "Pick_A"
     for field in (
         "name",
-        "number_rounds",
+        "round_count",
         "series_per_round",
         "start_date",
         "end_date",

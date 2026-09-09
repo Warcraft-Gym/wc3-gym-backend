@@ -460,7 +460,7 @@ def test_tiers_are_refused_for_players_not_signed_up(
     p1 = seeded["player_ids"][0]
     season = client.post(
         "/seasons",
-        json={"name": "No signups", "number_rounds": 1, "series_per_round": 1},
+        json={"name": "No signups", "round_count": 1, "series_per_round": 1},
         headers=auth_headers,
     ).json()["id"]
     resp = client.put(
@@ -480,7 +480,7 @@ def test_each_season_keeps_its_own_tiers(
     p1 = seeded["player_ids"][0]
     second = client.post(
         "/seasons",
-        json={"name": "Second", "number_rounds": 1, "series_per_round": 1},
+        json={"name": "Second", "round_count": 1, "series_per_round": 1},
         headers=auth_headers,
     ).json()["id"]
     for season in (first, second):

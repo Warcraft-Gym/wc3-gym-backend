@@ -154,7 +154,7 @@ def test_a_new_season_carries_a_score_system(
 ) -> None:
     created = client.post(
         "/seasons",
-        json={"name": "Season 9", "number_rounds": 4, "series_per_round": 2},
+        json={"name": "Season 9", "round_count": 4, "series_per_round": 2},
         headers=auth_headers,
     )
     assert created.status_code == 201

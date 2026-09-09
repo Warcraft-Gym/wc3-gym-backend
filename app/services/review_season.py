@@ -117,7 +117,6 @@ def build(discord_a: str, discord_b: str) -> str:
 
         season = Season(
             name=NAME,
-            number_rounds=ROUNDS,
             series_per_round=size,
             pick_ban=source.pick_ban,
             map_rules="fixed,loser,loser",

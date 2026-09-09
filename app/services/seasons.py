@@ -73,11 +73,8 @@ def _achievement_set(
 
 
 def _wanted(season: SeasonCreate | SeasonUpdate) -> int | None:
-    """The round count the caller asked for. `round_count` is the name; the
-    older `number_rounds` still answers until the frontend stops sending it."""
-    return (
-        season.round_count if season.round_count is not None else season.number_rounds
-    )
+    """The round count the caller asked for."""
+    return season.round_count
 
 
 def fill_rounds(session: OrmSession, season: Season, wanted: int) -> None:
@@ -98,7 +95,7 @@ def fill_rounds(session: OrmSession, season: Season, wanted: int) -> None:
         if playday > wanted:
             session.delete(row)
     session.flush()
-    session.expire(season, ["rounds"])
+    session.expire(season, ["rounds", "round_count"])
 
 
 def _public(session: OrmSession, season: Season) -> SeasonPublic:
@@ -135,7 +132,7 @@ class SeasonService:
                 raise NotFoundError("Season not found")
             if season.model_fields_set & {"pick_ban", "map_rules"}:
                 check_order(row)
-            if season.model_fields_set & {"round_count", "number_rounds", "start_date"}:
+            if season.model_fields_set & {"round_count", "start_date"}:
                 wanted = _wanted(season)
                 fill_rounds(session, row, row.round_count if wanted is None else wanted)
             return _public(session, row)
@@ -363,7 +360,7 @@ class SeasonService:
                 raise BadRequestError("end_date must not be before start_date")
             session.add(row)
             session.flush()
-            session.expire(season, ["rounds"])
+            session.expire(season, ["rounds", "round_count"])
             return _public(session, season)
 
     def remove_maps(self, season_id: int, map_ids: list[int]) -> SeasonPublic:
