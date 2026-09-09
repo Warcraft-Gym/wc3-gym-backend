@@ -31,6 +31,10 @@ class DBUserSeasonSignup(DBModel, table=True):
     fantasy_tier: int | None = None
     # The slot an admin moved the player to in the draft order; null sorts by MMR
     draft_position: int | None = None
+    # An admin took the player out of the pick list, so he holds no draft slot
+    draft_excluded: bool = Field(
+        default=False, sa_column_kwargs={"server_default": "false"}
+    )
     user: "User" = Relationship(back_populates="signup_seasons")
     season: "Season" = Relationship(back_populates="signup_users")
 
