@@ -11,8 +11,8 @@ from sqlalchemy.orm import Session as OrmSession
 from sqlmodel import col, select
 
 from app.core.db import Session
-from app.models.base import ident
 from app.core.exceptions import ApiError, BadRequestError, NotFoundError
+from app.models.base import ident
 from app.models.series import Series, SeriesPublic, has_result
 from app.models.series_cast import CastPublic, SeriesCast, is_video_url
 from app.models.types import utcnow
