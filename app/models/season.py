@@ -3,13 +3,13 @@ from typing import TYPE_CHECKING, Annotated, Any, Literal, NamedTuple, Self
 
 from pydantic import NonNegativeInt, PositiveInt, model_validator
 from sqlalchemy import JSON, Index, and_, case, false, func, or_, select, text
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, column_property
 from sqlmodel import Field, Relationship, SQLModel, col
 
 from app.models.base import DBModel, ident
 from app.models.enums import Race
 from app.models.map import MapPublic
-from app.models.relationships import SeasonRoundPublic
+from app.models.relationships import DBSeasonRound, SeasonRoundPublic
 from app.models.types import (
     AwareUTC,
     EnumValue,
@@ -25,7 +25,6 @@ from app.models.types import (
 if TYPE_CHECKING:
     from app.models.relationships import (
         DBMapSeason,
-        DBSeasonRound,
         DBUserSeasonSignup,
     )
     from app.models.team_season import DBTeamSeason
@@ -111,6 +110,11 @@ class SeasonProgress(NamedTuple):
 
 class Season(SeasonBase, DBModel, table=True):
     __tablename__ = "seasons"
+    if TYPE_CHECKING:
+        # Mapped below the class, where Season.id exists; declared here so a
+        # type checker sees it
+        round_count: int
+
     # The import matches a season by name, so two seasons cannot share one
     __table_args__ = (Index("uq_seasons_name", text("lower(trim(name))"), unique=True),)
 
@@ -174,6 +178,18 @@ class Season(SeasonBase, DBModel, table=True):
     signup_users: list["DBUserSeasonSignup"] = Relationship(
         back_populates="season", sa_relationship_kwargs={"cascade": "all, delete"}
     )
+
+
+# How many rounds the season is played over: the round rows are the count, so
+# nothing stores it. A scalar subquery, so it survives a noload on a nested season.
+ROUND_COUNT = (
+    select(func.count())
+    .select_from(DBSeasonRound)
+    .where(col(DBSeasonRound.season_id) == Season.id)
+    .scalar_subquery()
+    .label("round_count")
+)
+Season.round_count = column_property(ROUND_COUNT)
 
 
 class SeasonCreate(SeasonBase):
@@ -252,7 +268,7 @@ class SeasonPublic(SeasonBase):
         return cls(
             id=ident(season),
             name=season.name,
-            number_rounds=season.number_rounds,
+            number_rounds=season.round_count,
             series_per_round=season.series_per_round,
             pick_ban=season.pick_ban,
             start_date=season.start_date,
@@ -292,7 +308,7 @@ class SeasonPublic(SeasonBase):
         return cls(
             id=ident(season),
             name=season.name,
-            number_rounds=season.number_rounds,
+            number_rounds=season.round_count,
             series_per_round=season.series_per_round,
             pick_ban=season.pick_ban,
             start_date=season.start_date,

@@ -203,3 +203,27 @@ def test_the_week_names_still_write_and_still_read(
     ).json()
     assert (changed["number_rounds"], changed["number_weeks"]) == (5, 5)
     assert len(changed["rounds"]) == 5
+
+
+def test_the_round_count_follows_the_rows_not_a_stored_number(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """Nothing stores the count. The round rows are the count, so deleting one
+    through the season's own endpoint moves it."""
+    body = client.post(
+        "/seasons",
+        json={"name": "Counted", "number_rounds": 4, "series_per_round": 2},
+        headers=auth_headers,
+    ).json()
+    assert (body["number_rounds"], len(body["rounds"])) == (4, 4)
+
+    fewer = client.put(
+        f"/seasons/{body['id']}", json={"number_rounds": 2}, headers=auth_headers
+    ).json()
+    assert (fewer["number_rounds"], len(fewer["rounds"])) == (2, 2)
+
+    # a change that touches neither the count nor the dates leaves the rows alone
+    same = client.put(
+        f"/seasons/{body['id']}", json={"name": "Renamed"}, headers=auth_headers
+    ).json()
+    assert (same["number_rounds"], len(same["rounds"])) == (2, 2)

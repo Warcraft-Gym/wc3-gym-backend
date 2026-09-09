@@ -54,7 +54,7 @@ from app.models.fantasy_team import FantasyTeamPublic
 from app.models.match import Match, MatchPublic
 from app.models.player_career_stats import PlayerCareerStatsPublic
 from app.models.relationships import DBUserSeasonSignup
-from app.models.season import Season
+from app.models.season import ROUND_COUNT, Season
 from app.models.series import Series, SeriesPublic
 from app.models.team import TeamPublic
 from app.models.user import User, UserListPublic, UserPublic, UserReduced
@@ -220,7 +220,7 @@ def _rules_by_season(session: Session, season_ids: set[int]) -> SeasonRules:
             col(Season.score_system),
             col(Season.map_rules),
             col(Season.series_per_round),
-            col(Season.number_rounds),
+            ROUND_COUNT,
         ).where(col(Season.id).in_(season_ids))
     ).all()
     return {
