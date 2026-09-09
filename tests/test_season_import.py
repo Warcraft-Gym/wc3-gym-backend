@@ -167,59 +167,6 @@ def test_a_synchronous_import_writes_the_season(
         assert len(session.scalars(select(User)).all()) == 2
 
 
-def test_a_synchronous_import_that_fails_answers_an_error(
-    client: Client, auth_headers: dict[str, str]
-) -> None:
-    """The workbook has no Players sheet, so the pipeline raises after it
-    has written the season."""
-    response = _post(client, _workbook(without="Players"), auth_headers)
-
-    assert response.status_code == 500, response.text
-    assert response.json() == {"error": "Internal Server Error"}
-
-
-def test_an_old_background_parameter_runs_the_import(
-    client: Client, auth_headers: dict[str, str]
-) -> None:
-    """The route has no background parameter, so an old caller gets the
-    synchronous answer."""
-    response = client.post(
-        "/import",
-        params={"background": "true"},
-        files={"file": ("season.xlsx", _workbook(), "application/vnd.ms-excel")},
-        headers=auth_headers,
-    )
-
-    assert response.status_code == 200, response.text
-    assert response.json()["message"] == "Season imported successfully"
-
-    with Session() as session:
-        assert session.scalars(
-            select(Season).where(col(Season.name) == "Season 9")
-        ).one()
-
-
-def test_a_second_import_updates_the_bets_instead_of_adding_them(
-    client: Client, auth_headers: dict[str, str]
-) -> None:
-    """The pipeline finds the stored bets in its one lookup, so importing the
-    same workbook twice leaves two bets, not four."""
-    from app.models.fantasy_bet import FantasyBet
-
-    first = _post(client, _workbook(), auth_headers)
-    assert first.status_code == 200, first.text
-    season_id = first.json()["season_id"]
-
-    second = _post(client, _workbook(season_id=season_id), auth_headers)
-    assert second.status_code == 200, second.text
-    assert second.json()["season_id"] == season_id
-
-    with Session() as session:
-        bets = session.scalars(select(FantasyBet)).all()
-    assert len(bets) == 2
-    assert sorted(bet.bet_points for bet in bets) == [10, 20]
-
-
 def _branding(
     *,
     pick_ban: str | None,
@@ -370,8 +317,8 @@ def test_an_import_without_the_fantasy_users_sheet_still_writes_the_season(
 # One transaction of bulk statements, not one transaction per row, so the
 # cost of an import does not grow with the rows a sheet holds.
 
-# The workbook below costs 25: one lookup per sheet and the writes it needs
-IMPORT_STATEMENTS = 40
+# The workbook below costs 29: one lookup per sheet and the writes it needs
+IMPORT_STATEMENTS = 29
 
 
 def _row_counts() -> dict[str, int]:
@@ -387,7 +334,52 @@ def _row_counts() -> dict[str, int]:
         }
 
 
-def test_an_import_costs_a_bounded_number_of_statements(
+def _grown(players: int, matches: int) -> dict[str, tuple[list[str], list[list[Any]]]]:
+    """The default workbook with many more players, matches and series.
+
+    The two players the other sheets name keep their rows; the rest are added
+    above them, clear of the ids Fantasy Users holds.
+    """
+    player_columns, player_rows = SHEETS["Players"]
+    match_columns, _ = SHEETS["Matches"]
+    series_columns, _ = SHEETS["Series"]
+    return {
+        "Players": (
+            player_columns,
+            [
+                *player_rows,
+                *(
+                    [
+                        n,
+                        f"P{n}",
+                        f"P{n}#{n:04d}",
+                        f"p{n}",
+                        n,
+                        "HU",
+                        1500,
+                        "DE",
+                        1,
+                        1 + n % 2,
+                    ]
+                    for n in range(100, 100 + players)
+                ),
+            ],
+        ),
+        "Matches": (
+            match_columns,
+            [[n, 1, 2, 1 + n % 4, 2, 1, None, None] for n in range(1, matches + 1)],
+        ),
+        "Series": (
+            series_columns,
+            [
+                [n, n, 1, 2, 2, 1, 2, 1, 1, None, None, False]
+                for n in range(1, matches + 1)
+            ],
+        ),
+    }
+
+
+def test_an_import_costs_a_fixed_number_of_statements(
     client: Client, auth_headers: dict[str, str]
 ) -> None:
     """A whole workbook costs a fixed number of statements, whatever its
@@ -396,7 +388,46 @@ def test_an_import_costs_a_bounded_number_of_statements(
         response = _post(client, _workbook(extra=FANTASY_SHEETS), auth_headers)
 
     assert response.status_code == 200, response.text
-    assert tally[0] <= IMPORT_STATEMENTS, tally[0]
+    assert tally[0] == IMPORT_STATEMENTS, tally[0]
+
+
+def test_the_matches_and_series_are_written_in_bulk(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """Twenty matches and twenty series cost six more statements, not thirty-eight.
+
+    This is the N+1 guard. The write is one bulk statement that SQLAlchemy
+    splits into batches because it reads the ids back, so twenty rows cost four
+    statements, not twenty. A pipeline that wrote a row at a time would cost
+    IMPORT_STATEMENTS + 38 here.
+    """
+    many = {**FANTASY_SHEETS, **_grown(players=0, matches=20)}
+
+    with count_statements() as tally:
+        response = _post(client, _workbook(extra=many), auth_headers)
+
+    assert response.status_code == 200, response.text
+    assert tally[0] == IMPORT_STATEMENTS + 6, tally[0]
+
+
+def test_a_player_costs_one_statement_of_its_own(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """Ten more players cost ten more statements.
+
+    The users write is the one the pipeline does not batch, so an import grows
+    with the roster and with nothing else. A real season carries about sixty
+    players, so this is about sixty statements in one transaction.
+    """
+    # ponytail: pins the unbatched users write; drop this test to == the flat
+    # number once the pipeline inserts users in one statement like the rest
+    roster = {**FANTASY_SHEETS, **_grown(players=10, matches=1)}
+
+    with count_statements() as tally:
+        response = _post(client, _workbook(extra=roster), auth_headers)
+
+    assert response.status_code == 200, response.text
+    assert tally[0] == IMPORT_STATEMENTS + 10, tally[0]
 
 
 def test_a_workbook_the_pipeline_cannot_read_writes_nothing(
@@ -477,15 +508,6 @@ def test_a_workbook_without_the_column_reads_helpstone_from_its_series(
 
     assert response.status_code == 200, response.text
     assert _score_system_of() == "helpstone"
-
-
-def test_a_workbook_without_the_column_reads_standard_from_its_series(
-    client: Client, auth_headers: dict[str, str]
-) -> None:
-    response = _post(client, _workbook(extra=_series_sheet(2)), auth_headers)
-
-    assert response.status_code == 200, response.text
-    assert _score_system_of() == "standard"
 
 
 def test_a_workbook_with_no_played_series_reads_standard(

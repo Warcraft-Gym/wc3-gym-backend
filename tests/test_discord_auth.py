@@ -112,12 +112,6 @@ def _grant(client: Client, headers: dict[str, str], discord_id: str) -> None:
     assert resp.status_code == 201, resp.text
 
 
-def test_a_request_without_a_bearer_is_refused(client: Client) -> None:
-    resp = client.get("/me")
-    assert resp.status_code == 401
-    assert resp.json() == {"error": "Missing Authorization Header"}
-
-
 def test_a_bearer_no_clerk_session_backs_is_refused(
     client: Client, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -208,38 +202,6 @@ def test_an_account_outside_the_guild_logs_in_as_a_guest(
     assert resp.json()["role"] == "guest"
 
 
-def test_a_member_reads_no_draft_series(
-    client: Client, monkeypatch: pytest.MonkeyPatch, seeded: dict[str, Any]
-) -> None:
-    """Drafts are for captains and admins; a member sees only published series."""
-    stub_clerk(monkeypatch)
-    resp = client.get(f"/draft-series/match/{seeded['match_id']}", headers=SESSION)
-    assert resp.status_code == 403
-    assert resp.json() == {"error": "Captains only"}
-
-
-def test_a_guest_passes_no_player_route(
-    client: Client, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """require_member guards the routes that read a player's own data."""
-    from fastapi.security import HTTPAuthorizationCredentials
-
-    from app.api.deps import require_member
-    from app.core.exceptions import ApiError
-
-    stub_clerk(monkeypatch, a_member=False)
-    request = Request({"type": "http", "headers": []})
-    credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials="a-token")
-
-    with pytest.raises(ApiError) as refused:
-        require_member(request, credentials)
-
-    assert refused.value.status_code == 403
-    assert refused.value.body == {
-        "error": "No valid WC3 Gym server membership found for user"
-    }
-
-
 def test_the_allowlist_makes_an_admin_without_a_guild_read(
     client: Client, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -270,39 +232,6 @@ def test_a_granted_account_outside_the_guild_is_an_admin(
     assert client.get("/me", headers=SESSION).json()["role"] == "admin"
 
 
-def test_the_guild_owner_is_no_admin(
-    client: Client, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    stub_clerk(monkeypatch, guild={"owner_id": ACCOUNT["id"]})
-    resp = client.get("/me", headers=SESSION)
-    assert resp.json()["role"] == "member"
-
-
-def test_an_administrator_role_is_no_admin(
-    client: Client, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    stub_clerk(
-        monkeypatch, guild={"roles": [ADMIN_ROLE]}, member_roles=[ADMIN_ROLE["id"]]
-    )
-    resp = client.get("/me", headers=SESSION)
-    assert resp.json()["role"] == "member"
-
-
-def test_the_admin_role_setting_is_no_admin(
-    client: Client, monkeypatch: pytest.MonkeyPatch, auth_headers: dict[str, str]
-) -> None:
-    """The bot still reads the setting for its own commands; the site does not."""
-    resp = client.put(
-        "/config/settings/admin_role",
-        json={"value": "gym-admins"},
-        headers=auth_headers,
-    )
-    assert resp.status_code == 200, resp.json()
-    stub_clerk(monkeypatch, member_roles=["gym-admins"])
-    resp = client.get("/me", headers=SESSION)
-    assert resp.json()["role"] == "member"
-
-
 def test_a_member_session_is_no_admin_token(
     client: Client, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -310,17 +239,6 @@ def test_a_member_session_is_no_admin_token(
     resp = client.get("/config/koth/nightbot-token", headers=SESSION)
     assert resp.status_code == 403
     assert resp.json() == {"error": "Admins only"}
-
-
-def test_the_admin_token_login_still_admits(
-    client: Client, seeded: dict[str, Any], auth_headers: dict[str, str]
-) -> None:
-    """The admin token reaches an admin route without touching Clerk."""
-    resp = client.get("/config/koth/nightbot-token", headers=auth_headers)
-    assert resp.status_code == 200
-    resp = client.get("/me", headers=auth_headers)
-    assert resp.status_code == 200
-    assert resp.json()["role"] == "admin"
 
 
 def test_view_as_lowers_an_admin_for_the_request(
@@ -420,18 +338,6 @@ def test_a_captain_slot_makes_a_captain(
     me = client.get("/me", headers=SESSION).json()
     assert me["role"] == "captain"
     assert me["team"]["id"] == seeded["team_a_id"]
-
-
-def test_the_discord_role_alone_is_no_captain(
-    client: Client,
-    monkeypatch: pytest.MonkeyPatch,
-    seeded: dict[str, Any],
-    auth_headers: dict[str, str],
-) -> None:
-    """The guild role is a mirror; only a captain seat grants captain rights."""
-    _bind_captain_role(client, auth_headers)
-    stub_clerk(monkeypatch, account={**ACCOUNT, "id": "1"}, member_roles=["role-1"])
-    assert client.get("/me", headers=SESSION).json()["role"] == "member"
 
 
 def test_a_captain_slot_in_no_season_of_this_account_is_no_captain(

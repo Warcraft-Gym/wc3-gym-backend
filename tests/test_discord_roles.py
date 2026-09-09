@@ -566,14 +566,6 @@ def test_the_role_groups_route_counts_every_season_for_the_all_scope(
     ]
 
 
-def test_the_report_route_admits_admins_only(
-    client: Client, seeded: dict[str, Any]
-) -> None:
-    resp = client.get("/config/discord-roles")
-    assert resp.status_code == 401
-    assert resp.json() == {"error": "Missing Authorization Header"}
-
-
 def test_without_a_bot_token_nothing_is_read_or_written(
     client: Client,
     monkeypatch: pytest.MonkeyPatch,

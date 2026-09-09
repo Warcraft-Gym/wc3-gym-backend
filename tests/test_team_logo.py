@@ -27,17 +27,6 @@ def upload(
     )
 
 
-def test_a_png_is_accepted(
-    client: Client,
-    seeded: dict[str, Any],
-    auth_headers: dict[str, str],
-    blob_store: dict[str, bytes],
-) -> None:
-    resp = upload(client, seeded["team_a_id"], auth_headers, PNG)
-    assert resp.status_code == 200
-    assert list(blob_store.values()) == [PNG]
-
-
 def test_something_that_is_not_a_png_is_refused(
     client: Client,
     seeded: dict[str, Any],

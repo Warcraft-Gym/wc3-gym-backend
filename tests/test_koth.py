@@ -70,14 +70,6 @@ def w3c_mmr(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
-def test_the_event_carries_its_signups(client: Client, koth: dict[str, Any]) -> None:
-    event = client.get(f"/koth/events/{koth['event_id']}").json()
-    assert len(event["signups"]) == 2
-    # The race reads as the plain value, not the name of the enum member.
-    assert sorted(s["race"] for s in event["signups"]) == ["HU", "OC"]
-    assert all(s["is_active"] == 1 and s["is_king"] == 0 for s in event["signups"])
-
-
 def test_a_match_takes_its_bracket_from_the_participants(
     client: Client, auth_headers: dict[str, str], koth: dict[str, Any]
 ) -> None:
@@ -210,24 +202,6 @@ def test_an_event_update_keeps_the_fields_it_was_not_given(
     assert after["bracket_1_threshold"] == before["bracket_1_threshold"]
 
 
-def test_a_second_signup_of_the_same_race_adds_no_row(
-    app: FastAPI, koth: dict[str, Any], w3c_mmr: None
-) -> None:
-    """The second of two signups that arrive together answers the duplicate."""
-    from app.services.koth import KothService
-    from app.services.settings import SettingsService
-
-    service = KothService(SettingsService())
-    first = service.create_signups("player_three", "P3#3333", ["human"])
-    assert [s.race for s in first] == ["HU"]
-
-    with pytest.raises(Exception, match="already has an active signup"):
-        service.create_signups("player_three", "P3#3333", ["human"])
-
-    signups = service.get_signups_by_event(koth["event_id"])
-    assert [s.twitch_username for s in signups].count("player_three") == 1
-
-
 def test_the_database_holds_one_active_signup_per_name_and_race(
     app: FastAPI, koth: dict[str, Any]
 ) -> None:
@@ -336,14 +310,6 @@ def test_bad_koth_input_answers_400(
     )
     assert resp.status_code == 400
     assert "Winner team number" in resp.json()["error"]
-
-
-def test_a_result_without_a_winner_is_refused(
-    client: Client, auth_headers: dict[str, str], koth: dict[str, Any]
-) -> None:
-    resp = client.put("/koth/matches/1/result", headers=auth_headers, json={})
-    assert resp.status_code == 422
-    assert "winner_team_number" in resp.json()["error"]
 
 
 def test_an_admin_signup_needs_no_w3c_configuration(

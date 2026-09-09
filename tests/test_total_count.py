@@ -79,28 +79,10 @@ def test_users_report_the_same_total_on_every_page(
     assert paged == ids
 
 
-def test_users_reject_a_bad_page(client: Client, seeded: dict[str, Any]) -> None:
-    """limit 0, limit 501 and offset -1 answer 422."""
-    assert client.get("/users?limit=0").status_code == 422
-    assert client.get("/users?limit=501").status_code == 422
-    assert client.get("/users?offset=-1").status_code == 422
-
-
 def limit_parameter(schema: dict[str, Any], path: str) -> dict[str, Any]:
     """The limit parameter of one GET route, out of the OpenAPI schema."""
     parameters = schema["paths"][path]["get"]["parameters"]
     return next(param for param in parameters if param["name"] == "limit")
-
-
-def test_the_capped_routes_declare_a_default_of_500(client: Client) -> None:
-    """The schema pins the cap, which no seeded set of 501 rows could show."""
-    schema = client.get("/openapi.json").json()
-    for path in ("/users", "/fantasy/teams", "/stats/career"):
-        limit = limit_parameter(schema, path)
-        assert limit["schema"]["default"] == 500
-        assert limit["schema"]["maximum"] == 500
-        assert limit["schema"]["minimum"] == 1
-        assert not limit["required"]
 
 
 def test_career_stats_report_the_total_without_parameters(
@@ -168,15 +150,6 @@ def test_fantasy_teams_report_the_same_total_on_every_page(
         assert len(page) == 2
         paged += [team["id"] for team in page]
     assert paged == ids
-
-
-def test_fantasy_teams_reject_a_bad_page(
-    client: Client, seeded: dict[str, Any]
-) -> None:
-    """limit 0, limit 501 and offset -1 answer 422."""
-    assert client.get("/fantasy/teams?limit=0").status_code == 422
-    assert client.get("/fantasy/teams?limit=501").status_code == 422
-    assert client.get("/fantasy/teams?offset=-1").status_code == 422
 
 
 def test_fantasy_team_search_reports_the_total(

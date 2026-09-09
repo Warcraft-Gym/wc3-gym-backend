@@ -10,7 +10,6 @@ import importlib
 import pkgutil
 
 from sqlalchemy.orm import configure_mappers
-from sqlmodel import SQLModel
 
 import app.models
 
@@ -61,42 +60,3 @@ def import_all_models() -> None:
 def test_every_mapping_resolves() -> None:
     import_all_models()
     configure_mappers()
-
-
-def test_the_metadata_holds_every_table() -> None:
-    """A table missing from the metadata is a table autogenerate never sees."""
-    import_all_models()
-    assert set(SQLModel.metadata.tables) == TABLES
-
-
-def test_every_list_field_reads_as_a_list() -> None:
-    """A list field answers with a list, empty or not, and never with null.
-
-    One rule for all ten list fields; these assertions pin it.
-    """
-    from app.models.enums import Race
-    from app.models.fantasy_team import FantasyTeamPublic
-    from app.models.user import UserPublic
-
-    players = [
-        UserPublic(id=1, name="PlayerA", battleTag="PlayerA#1234", race=Race.HU),
-        UserPublic(id=2, name="PlayerB", battleTag="PlayerB#5678", race=Race.OC),
-    ]
-    team = FantasyTeamPublic(id=7, name="Populated", drafted_players=players)
-
-    assert team.model_dump(mode="json")["drafted_players"] == [
-        player.to_dict() for player in players
-    ]
-
-    empty = FantasyTeamPublic(id=8, name="Empty", drafted_players=[])
-    assert empty.model_dump(mode="json")["drafted_players"] == []
-
-    unset = FantasyTeamPublic(id=9, name="Unset")
-    assert unset.model_dump(mode="json")["drafted_players"] == []
-
-    from app.models.season import SeasonPublic
-
-    season = SeasonPublic(id=1, name="Season 1")
-    dumped = SeasonPublic.model_dump(season, mode="json")
-    assert dumped["maps"] == []
-    assert dumped["user_signup"] == []

@@ -15,6 +15,7 @@ between two badges of one instant is read too.
 """
 
 import random
+from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -50,6 +51,7 @@ from app.services.ladder import (
 )
 from tests import achievement_oracle
 from tests.achievement_oracle import Season as OracleSeason
+from tests.test_ladder_achievements import S19_CASES, S19_OFF_CASES
 from tests.test_ladder_read import sign_up
 
 # How many rounds of matches the two rule sets are compared over
@@ -109,6 +111,71 @@ def test_the_statement_answers_what_the_oracle_answers(league: dict[str, Any]) -
     # rules pay a team, which this test does not read
     wanted = {rule.id for rule in ACHIEVEMENTS if rule.id not in TEAM_IDS} - RARE
     assert seen >= wanted, f"never earned: {sorted(wanted - seen)}"
+
+
+def test_the_statement_answers_the_oracle_at_every_boundary(
+    league: dict[str, Any],
+) -> None:
+    """The rows that turn each rule on, and the rows one short of it, read the
+    same on both sides.
+
+    The rounds above cross the boundaries at random, so a rule whose SQL is off
+    by one still matches the oracle most rounds. These rows sit on the boundary
+    itself. Four cases of the table need a season context the database cannot
+    hold (a captain, the first to fifty, a four-horsemen roster, an off-race
+    league); they stay with the oracle test.
+    """
+    season_id = league["season_id"]
+    user_id = league["player_ids"][0]
+    service = LadderService()
+    cases = [
+        (f"{rule_id} on", rows)
+        for rule_id, (rows, options) in sorted(S19_CASES.items())
+        if not options
+    ] + [(f"{rule_id} off", rows) for rule_id, rows in S19_OFF_CASES]
+
+    for label, rows in cases:
+        _store_one(user_id, rows)
+
+        answer = service.season_ladder(season_id)
+        found = {
+            player.id: player.achievements
+            for team in answer.teams
+            for player in team.players
+        }
+
+        expected = _oracle(season_id)
+        assert found == expected, f"{label}: {_diff(found, expected)}"
+
+
+def _store_one(user_id: int, rows: Sequence[Any]) -> None:
+    """Replace every stored match with one player's crafted rows."""
+    with Session() as session:
+        session.execute(delete(W3CLadderMatch))
+        if rows:
+            session.execute(
+                insert(W3CLadderMatch),
+                [
+                    {
+                        "w3c_match_id": f"{user_id}-{index}",
+                        "user_id": user_id,
+                        "wc3_season": 25,
+                        "start_time": row.start_time,
+                        "duration_s": row.duration_s,
+                        "map_name": row.map_name,
+                        "race": row.race,
+                        "played_race": row.played_race,
+                        "opp_battletag": row.opp_battletag,
+                        "opp_race": row.opp_race,
+                        "opp_played_race": row.opp_played_race,
+                        "won": row.won,
+                        "mmr_before": row.mmr_before,
+                        "mmr_after": row.mmr_after,
+                    }
+                    for index, row in enumerate(rows)
+                ],
+            )
+        session.commit()
 
 
 def _store(rng: random.Random, season_id: int) -> None:

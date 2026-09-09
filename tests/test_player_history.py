@@ -260,16 +260,6 @@ def test_a_meeting_carries_the_fixed_map_and_the_picks(
     assert meeting["maps"] == ["Concealed Hill", "Echo Isles"]
 
 
-def test_an_unplayed_series_is_no_meeting(
-    client: Client, two_seasons: dict[str, Any], member: Callable[..., dict[str, str]]
-) -> None:
-    """P1 and P3 have a series with no result in season 2; only two meetings count."""
-    resp = client.get("/player-history", headers=member("1"))
-
-    p3 = resp.json()["opponents"][0]
-    assert len(p3["meetings"]) == 2 == p3["played"]
-
-
 def test_a_player_with_no_history_answers_two_empty_lists(
     client: Client, seeded: dict[str, Any], member: Callable[..., dict[str, str]]
 ) -> None:

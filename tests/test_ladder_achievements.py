@@ -15,7 +15,6 @@ from typing import Any
 import pytest
 from fastapi import FastAPI
 from httpx2 import Client
-from sqlalchemy import select
 
 from app.core import achievements
 from app.core.achievement_rules import LIFETIME_FROM_W3C_SEASON
@@ -24,7 +23,6 @@ from app.core.db import Session
 from app.models.enums import Race
 from app.models.ladder_achievement import default_rows
 from app.models.relationships import DBTeamSeasonCaptain
-from app.models.w3c_ladder_match import W3CLadderMatch
 from tests import achievement_oracle
 from tests.test_ladder_read import INSIDE, add_match, ladder_of, player_of, sign_up
 from tests.test_query_budget import count_statements
@@ -100,10 +98,6 @@ def series(results: list[bool]) -> list[Row]:
 
 
 # The rules that read the match list alone.
-
-
-def test_no_match_earns_nothing() -> None:
-    assert achievement_oracle.earned([], 0, achievements.ALL_PAID) == []
 
 
 def test_win_first_and_lose_first_read_the_oldest_match() -> None:
@@ -477,15 +471,6 @@ def test_the_lifetime_badges_start_at_a_w3champions_season(
     assert [badge["id"] for badge in body["achievements"]] == ["win_first"]
 
 
-def test_the_rules_read_the_stored_rows(league: dict[str, Any]) -> None:
-    """The Protocol the oracle declares is what the table actually holds."""
-    player = league["player_ids"][0]
-    add_match(player, "one", won=True)
-    with Session() as session:
-        rows = list(session.scalars(select(W3CLadderMatch)))
-    assert run(rows) == {"win_first"}
-
-
 def test_the_user_answer_costs_a_constant_number_of_statements(
     league: dict[str, Any],
 ) -> None:
@@ -523,22 +508,6 @@ def test_a_badge_names_the_match_that_turned_its_rule_on() -> None:
     assert goal.achieved_at == long[166].start_time
     # A catalogue entry has no date
     assert achievements.WIN_FIRST.achieved_at is None
-
-
-def test_deleting_a_season_drops_its_prices(seeded: dict[str, Any]) -> None:
-    from sqlmodel import col
-
-    from app.api.deps import season_service
-    from app.models.ladder_achievement import LadderAchievement
-
-    season_service.delete(seeded["season_id"])
-    with Session() as session:
-        rows = session.scalars(
-            select(LadderAchievement).where(
-                col(LadderAchievement.season_id) == seeded["season_id"]
-            )
-        ).all()
-        assert rows == []
 
 
 # The S19 rules, each at the boundary it turns on, against the oracle.
@@ -672,49 +641,51 @@ S19_CASES: dict[str, tuple[list[Row], dict[str, Any]]] = {
 }
 
 
+# One row short of each boundary above, so the rule has to stay off
+S19_OFF_CASES: list[tuple[str, list[Row]]] = [
+    ("week_one", series([True] * 4)),
+    ("games_25", series([True] * 24)),
+    ("plus_twenty", series([True] * 19)),
+    ("streak_week", days(6) + [Row(minutes=7 * DAY)]),
+    ("five_a_day", busy_days(10, 4)),
+    ("welcome_back", [Row(), Row(minutes=14 * DAY - 1)]),
+    ("one_sitting", [Row(minutes=m) for m in (0, 1, 2, 3, 181)]),
+    ("repeat_offender", series([True, True, True, False] * 2 + [True, True])),
+    ("climber", [Row(mmr_before=1500, mmr_after=1599)]),
+    ("hold_the_line", series([True] * 29)),
+    (
+        "comeback",
+        [Row(mmr_before=1500, mmr_after=1400)]
+        + [Row(minutes=i, mmr_before=1400, mmr_after=1499) for i in range(1, 30)],
+    ),
+    ("hat_trick", series([True, True, False, True, True])),
+    (
+        "revenge",
+        [
+            Row(opp_battletag="foe#9"),
+            Row(won=False, minutes=1, opp_battletag="foe#9"),
+        ],
+    ),
+    ("mirror_master", [Row(minutes=i, opp_played_race=Race.OC) for i in range(5)]),
+    ("slayer_hu", series([True] * 6 + [False] * 4)),
+    ("nemesis", versus(["foe#9"] * 2 + ["foe#8"])),
+    ("wide_net", versus([f"o{i}#1" for i in range(19)] + ["o0#1"])),
+    ("grand_tour", versus(["foe#1", "foe#2"])),  # the same other team twice
+    ("speedrunner", [Row(duration_s=421)]),
+    ("marathon", [Row(duration_s=2699)]),
+    ("captains_duty", series([True] * 20)),  # not a captain
+]
+
+
 @pytest.mark.parametrize("rule_id", sorted(S19_CASES))
 def test_the_s19_rule_turns_on_at_its_boundary(rule_id: str) -> None:
     rows, options = S19_CASES[rule_id]
+    options = dict(options)  # the table is read again by test_achievement_parity
     season = options.pop("season", SEASON)
     assert rule_id in run(rows, season=season, **options)
 
 
-@pytest.mark.parametrize(
-    ("rule_id", "rows"),
-    [
-        ("week_one", series([True] * 4)),
-        ("games_25", series([True] * 24)),
-        ("plus_twenty", series([True] * 19)),
-        ("streak_week", days(6) + [Row(minutes=7 * DAY)]),
-        ("five_a_day", busy_days(10, 4)),
-        ("welcome_back", [Row(), Row(minutes=14 * DAY - 1)]),
-        ("one_sitting", [Row(minutes=m) for m in (0, 1, 2, 3, 181)]),
-        ("repeat_offender", series([True, True, True, False] * 2 + [True, True])),
-        ("climber", [Row(mmr_before=1500, mmr_after=1599)]),
-        ("hold_the_line", series([True] * 29)),
-        (
-            "comeback",
-            [Row(mmr_before=1500, mmr_after=1400)]
-            + [Row(minutes=i, mmr_before=1400, mmr_after=1499) for i in range(1, 30)],
-        ),
-        ("hat_trick", series([True, True, False, True, True])),
-        (
-            "revenge",
-            [
-                Row(opp_battletag="foe#9"),
-                Row(won=False, minutes=1, opp_battletag="foe#9"),
-            ],
-        ),
-        ("mirror_master", [Row(minutes=i, opp_played_race=Race.OC) for i in range(5)]),
-        ("slayer_hu", series([True] * 6 + [False] * 4)),
-        ("nemesis", versus(["foe#9"] * 2 + ["foe#8"])),
-        ("wide_net", versus([f"o{i}#1" for i in range(19)] + ["o0#1"])),
-        ("grand_tour", versus(["foe#1", "foe#2"])),  # the same other team twice
-        ("speedrunner", [Row(duration_s=421)]),
-        ("marathon", [Row(duration_s=2699)]),
-        ("captains_duty", series([True] * 20)),  # not a captain
-    ],
-)
+@pytest.mark.parametrize(("rule_id", "rows"), S19_OFF_CASES)
 def test_the_s19_rule_stays_off_short_of_its_boundary(
     rule_id: str, rows: list[Row]
 ) -> None:

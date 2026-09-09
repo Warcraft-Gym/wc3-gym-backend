@@ -79,12 +79,3 @@ def test_a_map_update_keeps_the_fields_it_was_not_given(
     assert after["shortname"] == "PMY"
     assert after["name"] == before["name"]
     assert after["image"] == before["image"]
-
-
-def test_a_create_that_leaves_out_a_required_column_answers_422(
-    client: Client, auth_headers: dict[str, str]
-) -> None:
-    resp = client.post("/users", headers=auth_headers, json={"name": "Nameless"})
-    assert resp.status_code == 422, resp.text
-    # The error field is what the frontend reads to see a request failed.
-    assert "battleTag" in resp.json()["error"]

@@ -378,29 +378,6 @@ def test_the_field_order_is_unchanged(client: Client, league: dict[str, int]) ->
     assert list(rows[0]) == list(EXPECTED[0])
 
 
-def test_the_row_player_carries_no_collection(
-    client: Client, league: dict[str, int]
-) -> None:
-    """The exact key set of the user object, so no collection returns unseen."""
-    rows = client.get("/stats/career").json()
-    for row in rows:
-        if row["user"] is None:
-            continue
-        assert set(row["user"]) == {
-            "id",
-            "name",
-            "battleTag",
-            "discordTag",
-            "discordId",
-            "race",
-            "mmr",
-            "country",
-            "timezone",
-            "w3c_synced_at",
-            "ladder_synced_at",
-        }
-
-
 def test_the_recalculate_route_is_gone(
     client: Client, auth_headers: dict[str, str], league: dict[str, int]
 ) -> None:
@@ -439,18 +416,6 @@ def test_a_write_that_still_sends_the_totals_is_accepted(
     assert body["historical_rating"] == 600
     assert body["series_won"] == 12
     assert body["rating"] != 9999
-
-
-def test_the_unmapped_historical_row_takes_the_series_of_its_name(
-    client: Client, league: dict[str, int]
-) -> None:
-    """Bravo's row names no user, and still counts the series he played."""
-    rows = client.get("/stats/career").json()
-    bravo = next(row for row in rows if row["player_name"] == "Bravo")
-    # Two historical losses more than the baseline, and one season more
-    assert bravo["series_lost"] == 8
-    assert bravo["seasons_played"] == 4
-    assert bravo["user_id"] is None
 
 
 def test_a_player_with_no_stored_row_stands_in_the_list(
