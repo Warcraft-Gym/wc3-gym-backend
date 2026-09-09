@@ -56,8 +56,11 @@ def me(
     users = user_service.find_by_discord_id(claims["sub"])
     user = users[0] if users else None
     season_id = discord_roles.current_season()
-    # A captain's claims name the team it captains this season.
+    # A captain's claims name the team it captains this season. Any other member
+    # is named by the roster row of that season, so the nav can link his team.
     team_id = claims.get("team_id")
+    if not team_id and user and season_id:
+        team_id = team_service.player_team(user.id, season_id)
     team = team_service.get(team_id) if team_id else None
     return {
         "discord_id": claims["sub"],
