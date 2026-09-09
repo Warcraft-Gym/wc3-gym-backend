@@ -49,9 +49,9 @@ def add_season(session: Session, rounds: int, **fields: Any) -> Season:  # noqa:
 
 
 def seed_league(session: Session) -> dict[str, Any]:
+    rounds = 4
     season = Season(
         name="Season 1",
-        number_rounds=4,
         series_per_round=2,
         start_date=date(2026, 1, 5),
         end_date=date(2026, 2, 27),
@@ -198,7 +198,7 @@ def seed_league(session: Session) -> dict[str, Any]:
             start_date=season.start_date + timedelta(weeks=playday - 1),
             end_date=season.start_date + timedelta(weeks=playday - 1, days=6),
         )
-        for playday in range(1, season.number_rounds + 1)
+        for playday in range(1, rounds + 1)
     )
     # The wc3.no rules too, so the legacy tests find their prices
     session.add_all(

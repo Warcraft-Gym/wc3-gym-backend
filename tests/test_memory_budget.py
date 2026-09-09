@@ -32,7 +32,7 @@ def crowded(app: FastAPI, seeded: dict[str, Any]) -> dict[str, Any]:
     """The seeded league with many bets and many seasons per player."""
     with Session() as session:
         seasons = [
-            Season(name=f"Season {n}", number_rounds=4, series_per_round=2)
+            Season(name=f"Season {n}", series_per_round=2)
             for n in range(2, SEASONS + 2)
         ]
         session.add_all(seasons)

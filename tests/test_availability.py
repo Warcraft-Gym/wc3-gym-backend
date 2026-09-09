@@ -100,7 +100,7 @@ def test_player_series_carries_the_answers_and_the_rounds(
 
     body = client.get("/player-series", headers=headers).json()
 
-    assert body["number_rounds"] == 4
+    assert body["round_count"] == 4
     assert [(row["playday"], row["available"]) for row in body["availability"]] == [
         (3, False)
     ]

@@ -86,7 +86,7 @@ def test_player_series_on_a_session_reads_the_current_season(
     body = client.get("/player-series", headers=member_headers).json()
 
     assert body["season_id"] == seeded["season_id"]
-    assert body["number_rounds"] == 4
+    assert body["round_count"] == 4
     assert body["availability"] == []
 
 

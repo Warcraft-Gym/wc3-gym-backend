@@ -79,7 +79,7 @@ def team_score_breakdown(
         series_by_week = derived.fantasy_series(session, {season.id}).get(season.id, {})
         grind = _grind(session, fantasy_team, season)
     race_points, race_stats, race_weekly_details = fantasy.race_points(
-        season.number_rounds, series_by_week, True
+        season.round_count, series_by_week, True
     )
 
     query = QueryUtil.parse_query(
@@ -100,7 +100,7 @@ def team_score_breakdown(
         ],
         race_points=race_points,
         series_by_week=series_by_week,
-        number_rounds=season.number_rounds,
+        round_count=season.round_count,
         grind=grind,
         include_breakdown=True,
     )
