@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 from app.core.scoring import decided, wins_needed
 from app.models.enums import Race
 from app.models.series import SeriesUpdate
-from app.services import discord_posts, replays
+from app.services import discord_posts, replays, series_games
 from app.services.series import SeriesService
 from app.services.series_veto import SeriesVetoService
 from app.services.users import UserService
@@ -117,6 +117,11 @@ def update_player_series(
         except ValueError as error:
             return JSONResponse({"error": str(error)}, status_code=400)
 
+    # The games of the report, checked against the score before anything is written
+    games = series_games.parse(data.get("games")) if reporting else []
+    if games:
+        series_games.check(games, p1, p2)
+
     # The replays first: a game with no file in the bucket leaves the score unreported
     stored = (
         replays.confirm(series_id, range(1, p1 + p2 + 1), user.id) if reporting else []
@@ -138,4 +143,9 @@ def update_player_series(
     result = updated_series.to_dict()
     if reporting:
         result["replays"] = [replay.model_dump(mode="json") for replay in stored]
+        if games:
+            result["games"] = [
+                game.model_dump(mode="json")
+                for game in series_games.record(series_id, games)
+            ]
     return result
