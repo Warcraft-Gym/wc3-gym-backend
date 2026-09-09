@@ -1046,7 +1046,7 @@ def fill_fantasy_teams(
             bets=bets.get((team.captain_id, season_id), []),
             race_points=races.get(season_id, {}),
             series_by_week=series.get(season_id, {}),
-            number_rounds=_season_weeks(rules, season_id),
+            round_count=_season_weeks(rules, season_id),
             grind=_grind(grinds, team.grind_team_id, season_id),
         )
         team.player_points = scores["player_points"]

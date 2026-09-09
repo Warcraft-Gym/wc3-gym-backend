@@ -136,19 +136,19 @@ def series_points(own: int, opp: int, wins: int = DEFAULT_WINS) -> int:
 
 @overload
 def race_points(
-    number_rounds: int | None,
+    round_count: int | None,
     series_by_week: SeriesByWeek,
     include_weekly_details: Literal[False] = False,
 ) -> RacePoints: ...
 @overload
 def race_points(
-    number_rounds: int | None,
+    round_count: int | None,
     series_by_week: SeriesByWeek,
     include_weekly_details: Literal[True],
 ) -> tuple[RacePoints, RaceStats, RaceWeeklyDetails]: ...
 # include_weekly_details also changes the return type
 def race_points(
-    number_rounds: int | None,
+    round_count: int | None,
     series_by_week: SeriesByWeek,
     include_weekly_details: bool = False,
 ) -> RacePoints | tuple[RacePoints, RaceStats, RaceWeeklyDetails]:
@@ -156,7 +156,7 @@ def race_points(
     Calculate race points for all races in a season.
 
     Args:
-        number_rounds: The number of rounds the season is played over
+        round_count: The number of rounds the season is played over
         series_by_week: The season's series keyed by week
         include_weekly_details: If True, includes weekly breakdown and overall stats
 
@@ -168,7 +168,7 @@ def race_points(
     race_stats: RaceStats = {}
     race_weekly_details: RaceWeeklyDetails = {}
 
-    for week in range(1, (number_rounds or 0) + 1):
+    for week in range(1, (round_count or 0) + 1):
         season_week_series = series_by_week.get(week, [])
         week_race_wins = {}
         week_race_looses = {}
@@ -291,7 +291,7 @@ def team_scores(
     bets: Sequence[Bet],
     race_points: RacePoints,
     series_by_week: SeriesByWeek,
-    number_rounds: int | None,
+    round_count: int | None,
     grind: Grind | None = None,
     include_breakdown: bool = False,
 ) -> dict[str, Any]:
@@ -305,7 +305,7 @@ def team_scores(
         bets: The bets the captain holds in the season
         race_points: Pre-calculated race points dictionary
         series_by_week: The season's series keyed by week
-        number_rounds: The number of rounds the season is played over
+        round_count: The number of rounds the season is played over
         grind: The grind pick of the team, if the season offers one and it picked
         include_breakdown: If True, returns detailed breakdown; if False, returns just totals
 
@@ -340,7 +340,7 @@ def team_scores(
                 "total": 0,
             }
 
-        for week in range(1, (number_rounds or 0) + 1):
+        for week in range(1, (round_count or 0) + 1):
             week_player_series = [
                 series
                 for series in series_by_week.get(week, [])

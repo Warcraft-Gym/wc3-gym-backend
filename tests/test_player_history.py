@@ -36,7 +36,6 @@ def _second_season(seeded: dict[str, Any]) -> dict[str, Any]:
     with Session() as session:
         season = Season(
             name="Season 2",
-            number_rounds=4,
             series_per_round=2,
             start_date=date(2026, 3, 5),
             end_date=date(2026, 4, 27),

@@ -78,7 +78,7 @@ def test_build_copies_the_latest_season_and_seats_the_captains(
         season = seasons[0]
         sid = season.id
         assert season.start_date == START
-        assert season.number_rounds == ROUNDS
+        assert season.round_count == ROUNDS
         assert session.scalars(select(DBSeriesReplay)).all() == []
         current = Settings.get_by_key(session, "current_gnl_season")
         assert current and current.value == str(sid)
