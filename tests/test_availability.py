@@ -80,16 +80,31 @@ def test_a_week_outside_the_season_is_refused(
 def test_the_week_lands_in_the_season_the_setting_names(
     client: Client, seeded: dict[str, Any], member: Callable[..., dict[str, str]]
 ) -> None:
+    """A newer season exists and the setting names the older one.
+
+    With one season the fallback to the highest season id answers the same, so
+    the setting is unproven. The newer season carries no rounds, so a week is
+    refused there and accepted in the season the setting names.
+    """
     from app.core.db import Session
+    from app.models.season import Season
     from app.models.settings import Settings
 
     with Session() as session:
+        session.add(Season(name="Later Season", series_per_round=2))
         session.add(Settings(key="current_gnl_season", value=str(seeded["season_id"])))
         session.commit()
 
     rows = write(client, member(), 3, False)
-
     assert [row["playday"] for row in rows] == [3]
+
+    refused = client.put(
+        "/player-availability",
+        json={"playday": 6, "available": False},
+        headers=member(),
+    )
+    assert refused.status_code == 400, refused.text
+    assert refused.json() == {"error": "playday must be between 1 and 4"}
 
 
 def test_player_series_carries_the_answers_and_the_rounds(

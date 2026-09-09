@@ -75,11 +75,18 @@ def test_player_series_answers_the_linked_players_series(
 def test_player_series_on_a_session_reads_the_current_season(
     client: Client, seeded: dict[str, Any], member_headers: dict[str, str]
 ) -> None:
-    """A signed-in player has no token to carry the season, so the pinned one is used."""
+    """A signed-in player has no token to carry the season, so the pinned one is used.
+
+    A newer season is stored and the setting names the older one. Without it the
+    fallback to the highest season id would answer the newer season, which
+    carries no rounds.
+    """
     from app.core.db import Session
+    from app.models.season import Season
     from app.models.settings import Settings
 
     with Session() as session:
+        session.add(Season(name="Later Season", series_per_round=2))
         session.add(Settings(key="current_gnl_season", value=str(seeded["season_id"])))
         session.commit()
 
