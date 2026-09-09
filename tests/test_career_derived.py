@@ -197,8 +197,8 @@ def league(client: Client) -> dict[str, Any]:
         seasons = [
             Season(
                 name=f"Season {number}",
-                number_weeks=4,
-                series_per_week=2,
+                number_rounds=4,
+                series_per_round=2,
                 start_date=date(2025 + number, 1, 6),
                 end_date=date(2025 + number, 3, 6),
             )

@@ -55,7 +55,7 @@ from app.models.fantasy_team import FantasyTeamPublic
 from app.models.match import Match, MatchPublic
 from app.models.player_career_stats import PlayerCareerStatsPublic
 from app.models.relationships import DBUserSeasonSignup
-from app.models.season import Season
+from app.models.season import ROUND_COUNT, Season
 from app.models.series import Series, SeriesPublic
 from app.models.team import TeamPublic
 from app.models.user import User, UserListPublic, UserPublic, UserReduced
@@ -266,8 +266,8 @@ def _rules_by_season(session: Session, season_ids: set[int]) -> SeasonRules:
             col(Season.id),
             col(Season.score_system),
             col(Season.map_rules),
-            col(Season.series_per_week),
-            col(Season.number_weeks),
+            col(Season.series_per_round),
+            ROUND_COUNT,
         ).where(col(Season.id).in_(season_ids))
     ).all()
     return {
@@ -1046,7 +1046,7 @@ def fill_fantasy_teams(
             bets=bets.get((team.captain_id, season_id), []),
             race_points=races.get(season_id, {}),
             series_by_week=series.get(season_id, {}),
-            number_weeks=_season_weeks(rules, season_id),
+            number_rounds=_season_weeks(rules, season_id),
             grind=_grind(grinds, team.grind_team_id, season_id),
         )
         team.player_points = scores["player_points"]

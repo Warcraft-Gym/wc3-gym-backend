@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from sqlalchemy import func, select
 from sqlmodel import col
 
@@ -6,7 +8,7 @@ from app.core.db import Session
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.core.ordering import SortOrder, ordered
 from app.core.query import QueryElement, QueryUtil
-from app.core.scoring import fits, wins_needed
+from app.core.scoring import decided, wins_needed
 from app.models.match import Match
 from app.models.series import (
     SERIES_SORTS,
@@ -20,15 +22,28 @@ from app.services import derived
 
 
 def _both_scores(row: Series) -> None:
-    """A result is both map scores or neither, and neither above the maps a
-    win takes in this season: points() has no value for a half or over result."""
+    """A result is both map scores or neither, and the pair finishes the series:
+    one side on the maps a win takes in this season, the other on fewer."""
     if (row.player1_score is None) != (row.player2_score is None):
         raise BadRequestError("A result needs both map scores")
     if row.player1_score is None or row.player2_score is None:
         return
     wins = wins_needed(row.match.season.map_rules if row.match else None)
-    if not fits(row.player1_score, row.player2_score, wins):
+    if not decided(row.player1_score, row.player2_score, wins):
         raise BadRequestError(f"A series of this season ends at {wins} map wins")
+
+
+def _in_season(row: Series) -> None:
+    """A series cannot sit before its season starts: a mistyped year reads as
+    a season that has commenced, and every report of it is wrong. start_date is
+    a calendar date, so the day of slack covers the player's timezone."""
+    start = row.match.season.start_date if row.match else None
+    if row.date_time is None or start is None:
+        return
+    if row.date_time.date() < start - timedelta(days=1):
+        raise BadRequestError(
+            f"A series cannot be earlier than the season start, {start}"
+        )
 
 
 class SeriesService:
@@ -36,6 +51,7 @@ class SeriesService:
         with Session.begin() as session:
             row = Series.add(session, series.model_dump())
             _both_scores(row)
+            _in_season(row)
             derived.clear_kept_off_race(session, row)
             public = SeriesPublic.from_series(row)
             derived.fill_series(session, [public])
@@ -49,6 +65,7 @@ class SeriesService:
             if not row:
                 raise NotFoundError("Series not found")
             _both_scores(row)
+            _in_season(row)
             derived.clear_kept_off_race(session, row)
             public = SeriesPublic.from_series(row)
             derived.fill_series(session, [public])

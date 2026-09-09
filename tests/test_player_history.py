@@ -36,8 +36,8 @@ def _second_season(seeded: dict[str, Any]) -> dict[str, Any]:
     with Session() as session:
         season = Season(
             name="Season 2",
-            number_weeks=4,
-            series_per_week=2,
+            number_rounds=4,
+            series_per_round=2,
             start_date=date(2026, 3, 5),
             end_date=date(2026, 4, 27),
         )
@@ -320,3 +320,26 @@ def test_an_unknown_player_answers_404(
 
     assert resp.status_code == 404, resp.text
     assert resp.json() == {"error": "player_not_found"}
+
+
+def test_anyone_reads_another_player_history_by_id(
+    client: Client, seeded: dict[str, Any], member: Callable[..., dict[str, str]]
+) -> None:
+    """The page of a player is public, so the same answer needs no session."""
+    p1 = seeded["player_ids"][0]
+
+    public = client.get(f"/users/{p1}/history")
+    own = client.get("/player-history", headers=member("1"))
+
+    assert public.status_code == 200, public.text
+    assert public.json() == own.json()
+
+
+def test_the_history_of_an_unknown_id_is_empty(
+    client: Client, seeded: dict[str, Any]
+) -> None:
+    """The page reads the player first, so the history route needs no second check."""
+    resp = client.get("/users/404404/history")
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == {"events": [], "opponents": []}

@@ -1,15 +1,15 @@
 from datetime import date, datetime
 from typing import TYPE_CHECKING, Annotated, Any, Literal, NamedTuple, Self
 
-from pydantic import NonNegativeInt, PositiveInt
+from pydantic import NonNegativeInt, PositiveInt, model_validator
 from sqlalchemy import JSON, Index, and_, case, false, func, or_, select, text
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, column_property
 from sqlmodel import Field, Relationship, SQLModel, col
 
 from app.models.base import DBModel, ident
 from app.models.enums import Race
 from app.models.map import MapPublic
-from app.models.relationships import SeasonRoundPublic
+from app.models.relationships import DBSeasonRound, SeasonRoundPublic
 from app.models.types import (
     AwareUTC,
     EnumValue,
@@ -25,22 +25,55 @@ from app.models.types import (
 if TYPE_CHECKING:
     from app.models.relationships import (
         DBMapSeason,
-        DBSeasonRound,
         DBUserSeasonSignup,
     )
     from app.models.team_season import DBTeamSeason
     from app.models.user_team_season import DBUserTeamSeason
 
 
-class SeasonBase(SQLModel):
+# The round columns and the week columns they replace
+ROUND_NAMES = (
+    ("number_rounds", "number_weeks"),
+    ("series_per_round", "series_per_week"),
+)
+
+
+class RoundCounts(SQLModel):
+    """How many rounds a season is played over, and how many series each player
+    plays per round. A round is one or two weeks, so the week names are wrong.
+    They stay filled and readable until the deploy after the readers move off."""
+
+    number_rounds: int | None = None
+    series_per_round: int | None = None
+    number_weeks: int | None = None
+    series_per_week: int | None = None
+
+    @model_validator(mode="after")
+    def fill_the_other_name(self) -> Self:
+        """Either name fills the other, so an old client still writes both."""
+        for new_name, old_name in ROUND_NAMES:
+            new_value, old_value = getattr(self, new_name), getattr(self, old_name)
+            # A name left out of a partial update stays out of it, or the write
+            # would set the column to null
+            if new_value is None and old_value is not None:
+                self._set(new_name, old_value)
+            elif old_value is None and new_value is not None:
+                self._set(old_name, new_value)
+        return self
+
+    def _set(self, name: str, value: int) -> None:
+        setattr(self, name, value)
+        # model_dump(exclude_unset=True) writes a column only when it is set
+        self.__pydantic_fields_set__.add(name)
+
+
+class SeasonBase(RoundCounts):
     name: Annotated[str, NumToStr] = Field(max_length=50)
-    number_weeks: int
-    series_per_week: int
     pick_ban: Annotated[str | None, NumToStr] = Field(default=None, max_length=100)
     start_date: Annotated[date | None, LenientDate] = None
     end_date: Annotated[date | None, LenientDate] = None
     discordRole: Annotated[str | None, NumToStr] = Field(default=None, max_length=50)
-    # One rule per game of a series: veto, loser, host or week
+    # One rule per game of a series: veto, loser, host or fixed
     map_rules: Annotated[str | None, MapRules] = Field(default=None, max_length=100)
     # The scale the series points use: "standard" or "helpstone"
     score_system: str = Field(
@@ -77,6 +110,11 @@ class SeasonProgress(NamedTuple):
 
 class Season(SeasonBase, DBModel, table=True):
     __tablename__ = "seasons"
+    if TYPE_CHECKING:
+        # Mapped below the class, where Season.id exists; declared here so a
+        # type checker sees it
+        round_count: int
+
     # The import matches a season by name, so two seasons cannot share one
     __table_args__ = (Index("uq_seasons_name", text("lower(trim(name))"), unique=True),)
 
@@ -142,14 +180,27 @@ class Season(SeasonBase, DBModel, table=True):
     )
 
 
+# How many rounds the season is played over: the round rows are the count, so
+# nothing stores it. A scalar subquery, so it survives a noload on a nested season.
+ROUND_COUNT = (
+    select(func.count())
+    .select_from(DBSeasonRound)
+    .where(col(DBSeasonRound.season_id) == Season.id)
+    .scalar_subquery()
+    .label("round_count")
+)
+Season.round_count = column_property(ROUND_COUNT)
+
+
 class SeasonCreate(SeasonBase):
-    pass
+    # How many rounds to make. Nothing stores it; the round rows are the count.
+    round_count: int | None = None
 
 
-class SeasonUpdate(SQLModel):
+class SeasonUpdate(RoundCounts):
     name: Annotated[str | None, NumToStr] = None
-    number_weeks: int | None = None
-    series_per_week: int | None = None
+    # How many rounds to keep. Nothing stores it; the round rows are the count.
+    round_count: int | None = None
     pick_ban: Annotated[str | None, NumToStr] = None
     start_date: Annotated[date | None, LenientDate] = None
     end_date: Annotated[date | None, LenientDate] = None
@@ -196,9 +247,9 @@ class SeasonSignupUpdate(SQLModel):
 
 class SeasonPublic(SeasonBase):
     id: int
+    # How many rounds the season has, counted from its round rows
+    round_count: int | None = None
     # The short form of a season carries only the name, so these read null
-    number_weeks: int | None = None
-    series_per_week: int | None = None
     score_system: str | None = None
     fantasy_grind: bool | None = None
     # Derived: one more than the cuts, 0 until the season is allocated
@@ -222,8 +273,9 @@ class SeasonPublic(SeasonBase):
         return cls(
             id=ident(season),
             name=season.name,
-            number_weeks=season.number_weeks,
-            series_per_week=season.series_per_week,
+            round_count=season.round_count,
+            number_rounds=season.round_count,
+            series_per_round=season.series_per_round,
             pick_ban=season.pick_ban,
             start_date=season.start_date,
             end_date=season.end_date,
@@ -262,8 +314,9 @@ class SeasonPublic(SeasonBase):
         return cls(
             id=ident(season),
             name=season.name,
-            number_weeks=season.number_weeks,
-            series_per_week=season.series_per_week,
+            round_count=season.round_count,
+            number_rounds=season.round_count,
+            series_per_round=season.series_per_round,
             pick_ban=season.pick_ban,
             start_date=season.start_date,
             end_date=season.end_date,

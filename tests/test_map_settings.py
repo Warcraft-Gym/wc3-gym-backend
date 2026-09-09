@@ -1,6 +1,6 @@
 """The map settings of a season: the ordered pool, the rules and the week maps.
 
-A season names one rule per game of a series, and a week rule reads its map
+A season names one rule per game of a series, and a fixed rule reads its map
 from the playday. The pool is ordered, so the draft screens list it the way an
 admin arranged it. The upload of a map picture is covered by test_map_picture.
 """
@@ -123,7 +123,7 @@ def test_an_order_that_is_not_the_whole_pool_is_refused(
     assert pool(client, seeded["season_id"]) == ["CH", "EI", "TS"]
 
 
-@pytest.mark.parametrize("rules", ["week,loser,loser", "veto,veto,veto", "host"])
+@pytest.mark.parametrize("rules", ["fixed,loser,loser", "veto,veto,veto", "host"])
 def test_a_season_takes_its_map_rules(
     client: Client, seeded: dict[str, Any], auth_headers: dict[str, str], rules: str
 ) -> None:
@@ -138,7 +138,7 @@ def test_a_season_takes_its_map_rules(
     assert client.get(f"/seasons/{seeded['season_id']}").json()["map_rules"] == rules
 
 
-@pytest.mark.parametrize("rules", ["ban", "week,ban", "week loser"])
+@pytest.mark.parametrize("rules", ["ban", "week", "fixed loser"])
 def test_a_rule_the_season_does_not_know_is_refused(
     client: Client, seeded: dict[str, Any], auth_headers: dict[str, str], rules: str
 ) -> None:
@@ -300,15 +300,15 @@ def test_the_games_take_the_picks_and_the_pool_allows_the_bans(
         == "The pool allows 0 bans after 3 picks, the order has 1"
     )
 
-    # A week game takes one map off the board and no pick; two loser games take two picks
-    week = settings(
+    # A fixed game takes one map off the board and no pick; two loser games take two picks
+    fixed = settings(
         client,
         season_id,
         auth_headers,
-        map_rules="week,loser,loser",
+        map_rules="fixed,loser,loser",
         pick_ban="Pick_A|Pick_B",
     )
-    assert week.status_code == 200, week.text
+    assert fixed.status_code == 200, fixed.text
     over = settings(client, season_id, auth_headers, pick_ban="Ban_A|Pick_A|Pick_B")
     assert over.status_code == 400, over.text
     assert client.get(f"/seasons/{season_id}").json()["pick_ban"] == "Pick_A|Pick_B"

@@ -98,8 +98,8 @@ def export_season(
         [
             season.id,
             season.name,
-            season.number_weeks,
-            season.series_per_week,
+            season.number_rounds,
+            season.series_per_round,
             season.pick_ban or "",
             season.start_date.strftime("%Y-%m-%d") if season.start_date else "",
             season.end_date.strftime("%Y-%m-%d") if season.end_date else "",

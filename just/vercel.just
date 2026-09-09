@@ -93,6 +93,36 @@ review-season env reviewer me="":
     me="{{ me }}"
     DB_URL="$url" uv run python -c 'import sys; from app.services.review_season import build; from app.core.db import init_engine; init_engine(); print(build(*sys.argv[1:]))' "${me:-${ADMIN_DISCORD_IDS%%,*}}" "{{ reviewer }}"
 
+# Give a season the badge rows a new season gets, keeping the rows it already has:
+# `just vercel season-badges staging 6`. A season built outside the seasons API has none.
+season-badges env season:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    url=$(just vercel url {{ env }})
+    if [ "{{ env }}" = staging ]; then
+        url=$(DB_URL="$url" uv run python -c 'import os; from api.preview_db import SHARED, with_database; print(with_database(os.environ["DB_URL"], SHARED))')
+    fi
+    DB_URL="$url" SEASON={{ season }} uv run python - <<'PY'
+    import os
+    from sqlmodel import col, select
+    from app.core.db import Session, init_engine
+    from app.models.ladder_achievement import LadderAchievement, default_rows
+
+    init_engine()
+    season_id = int(os.environ["SEASON"])
+    with Session.begin() as session:
+        held = set(
+            session.scalars(
+                select(col(LadderAchievement.rule_id)).where(
+                    col(LadderAchievement.season_id) == season_id
+                )
+            )
+        )
+        rows = [row for row in default_rows(season_id) if row.rule_id not in held]
+        session.add_all(rows)
+        print(len(rows), "rows added,", len(held), "kept")
+    PY
+
 # List the staging databases: the template, the shared database and the branch copies.
 list:
     DB_URL="$(just vercel url staging)" uv run python -m api.preview_db list

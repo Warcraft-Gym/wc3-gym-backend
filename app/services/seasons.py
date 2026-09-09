@@ -72,11 +72,20 @@ def _achievement_set(
     ]
 
 
-def _fill_rounds(session: OrmSession, season: Season) -> None:
-    """One round per playday. A missing round is added a week after the one
-    before it; a round past the last playday is dropped; a set date stays."""
+def _wanted(season: SeasonCreate | SeasonUpdate) -> int | None:
+    """The round count the caller asked for. `round_count` is the name; the
+    older `number_rounds` still answers until the frontend stops sending it."""
+    return (
+        season.round_count if season.round_count is not None else season.number_rounds
+    )
+
+
+def fill_rounds(session: OrmSession, season: Season, wanted: int) -> None:
+    """One round per playday, `wanted` of them. A missing round is added a week
+    after the one before it; a round past the last playday is dropped; a set
+    date stays. The rows are the round count, so nothing stores it."""
     rounds = {row.playday: row for row in season.rounds}
-    for playday in range(1, season.number_weeks + 1):
+    for playday in range(1, wanted + 1):
         row = rounds.get(playday) or DBSeasonRound(
             season_id=ident(season), playday=playday
         )
@@ -86,7 +95,7 @@ def _fill_rounds(session: OrmSession, season: Season) -> None:
             row.end_date = row.start_date + timedelta(days=6)
         session.add(row)
     for playday, row in rounds.items():
-        if playday > season.number_weeks:
+        if playday > wanted:
             session.delete(row)
     session.flush()
     session.expire(season, ["rounds"])
@@ -108,24 +117,27 @@ class SeasonService:
 
     def add(self, season: SeasonCreate) -> SeasonPublic:
         with Session.begin() as session:
-            new_season = Season.add(session, season.model_dump())
+            new_season = Season.add(session, season.model_dump(exclude={"round_count"}))
             # A new season scores like the last one until an admin re-prices it
             session.add_all(default_rows(new_season.id))
             session.flush()
-            _fill_rounds(session, new_season)
+            fill_rounds(session, new_season, _wanted(season) or 0)
             return _public(session, new_season)
 
     def update(self, season_id: int, season: SeasonUpdate) -> SeasonPublic:
         with Session.begin() as session:
             row = Season.update(
-                session, season_id, **season.model_dump(exclude_unset=True)
+                session,
+                season_id,
+                **season.model_dump(exclude_unset=True, exclude={"round_count"}),
             )
             if not row:
                 raise NotFoundError("Season not found")
             if season.model_fields_set & {"pick_ban", "map_rules"}:
                 check_order(row)
-            if season.model_fields_set & {"number_weeks", "start_date"}:
-                _fill_rounds(session, row)
+            if season.model_fields_set & {"round_count", "number_rounds", "start_date"}:
+                wanted = _wanted(season)
+                fill_rounds(session, row, row.round_count if wanted is None else wanted)
             return _public(session, row)
 
     def delete(self, season_id: int) -> None:
@@ -331,9 +343,9 @@ class SeasonService:
             season = session.get(Season, season_id)
             if not season:
                 raise NotFoundError(f"Season not found by id: {season_id}")
-            if not 1 <= data.playday <= season.number_weeks:
+            if not 1 <= data.playday <= season.round_count:
                 raise BadRequestError(
-                    f"playday must be between 1 and {season.number_weeks}"
+                    f"playday must be between 1 and {season.round_count}"
                 )
             fields = data.model_dump(exclude_unset=True, exclude={"playday"})
             map_id = fields.get("map_id")
@@ -451,6 +463,12 @@ class SeasonService:
             fields = data.model_dump(exclude_unset=True)
             if "race" in fields:
                 fields["race"] = self._race(fields["race"])
+                phase, _ = signup.season.progress(session)
+                if phase != "open" and fields["race"] != signup.race:
+                    raise BadRequestError(
+                        "A season that has started keeps its signup races. "
+                        "Record the race played on the series instead."
+                    )
             signup.sqlmodel_update(fields)
             session.flush()
             return _public(session, signup.season)

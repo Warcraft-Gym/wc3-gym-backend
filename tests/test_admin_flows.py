@@ -22,7 +22,7 @@ from fastapi.testclient import TestClient
 from httpx2 import Client
 from sqlalchemy import update
 from sqlalchemy.exc import SQLAlchemyError
-from sqlmodel import col
+from sqlmodel import col, select
 
 from app.core.db import Session
 from app.core.exceptions import W3CThrottledError
@@ -128,8 +128,8 @@ def league(client: Client, auth_headers: dict[str, str]) -> dict[str, Any]:
         "/seasons",
         {
             "name": "Admin Season",
-            "number_weeks": 1,
-            "series_per_week": 1,
+            "number_rounds": 1,
+            "series_per_round": 1,
             "start_date": "2026-03-02",
             "end_date": "2026-03-09",
         },
@@ -368,7 +368,7 @@ def test_a_season_with_no_result_stands_at_zero(
 
 # Recording a result. On the standard scale a 2-0 win is worth 3 points, a
 # 2-1 win 2 points, and the loser keeps its map score. points_available is
-# series_per_week * number_weeks * 3, less the points both sides took, so
+# series_per_round * number_rounds * 3, less the points both sides took, so
 # in this one-series season it reaches 0 as soon as the series is played.
 
 
@@ -895,6 +895,57 @@ def test_a_signup_needs_a_race(
     assert resp.status_code == 400
     body = get(client, f"/seasons/{season_id}/signups")
     assert next(row["signup_race"] for row in body if row["id"] == player) == "HU"
+
+
+def test_a_season_that_has_started_keeps_its_signup_races(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """A race change rewrites the ladder points, the fantasy tier and the icon
+    of every series already played, so only an open season takes one. The race
+    a player played once belongs to that series."""
+    from app.models.series import Series
+
+    player = seeded["player_ids"][0]
+    season_id = seeded["season_id"]
+    sign_up(client, auth_headers, season_id, [player])
+
+    # The seeded season holds a played series, so it has commenced
+    resp = client.put(
+        f"/seasons/{season_id}/signups/{player}",
+        json={"race": "UD"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 400
+    assert "keeps its signup races" in resp.json()["error"]
+
+    # The same write on an open season stands
+    with Session.begin() as session:
+        for series in session.scalars(select(Series)):
+            series.player1_score = series.player2_score = series.date_time = None
+    resp = client.put(
+        f"/seasons/{season_id}/signups/{player}",
+        json={"race": "UD"},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    body = get(client, f"/seasons/{season_id}/signups")
+    assert next(row["signup_race"] for row in body if row["id"] == player) == "UD"
+
+
+def test_a_signup_that_names_its_own_race_again_is_no_change(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """A write that repeats the stored race changes nothing, so it stands even
+    after the season has started: the draft position rides the same call."""
+    player = seeded["player_ids"][0]
+    season_id = seeded["season_id"]
+    sign_up(client, auth_headers, season_id, [player])
+    resp = client.put(
+        f"/seasons/{season_id}/signups/{player}",
+        json={"race": "HU", "draft_position": 2},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200, resp.text
 
 
 def test_a_signup_refuses_a_race_that_is_not_one(

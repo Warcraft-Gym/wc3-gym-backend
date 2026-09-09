@@ -22,11 +22,12 @@ from app.models.fantasy_bet import FantasyBet
 from app.models.fantasy_team import FantasyTeam
 from app.models.match import Match
 from app.models.relationships import DBFantasyTeamPlayer, DBUserSeasonSignup
-from app.models.season import Season
+from app.models.season import Season  # noqa: F401  # re-exported by the fixtures below
 from app.models.series import Series
 from app.models.team import Team
 from app.models.team_season import DBTeamSeason
 from app.models.user import User
+from tests.seed import add_season
 
 SCORE_FIELDS = (
     "player_points",
@@ -102,7 +103,7 @@ def league(client: Client) -> dict[str, Any]:
     """One season of two weeks: two teams, four players, three series of which
     one has no result, two fantasy teams with drafts, and three bets."""
     with Session() as session:
-        season = Season(name="Derived", number_weeks=2, series_per_week=2)
+        season = add_season(session, 2, name="Derived", series_per_round=2)
         team1, team2 = Team(name="One"), Team(name="Two")
         players = [
             player("D1", Race.HU),
@@ -110,7 +111,7 @@ def league(client: Client) -> dict[str, Any]:
             player("D3", Race.NE),
             player("D4", Race.UD),
         ]
-        session.add_all([season, team1, team2, *players])
+        session.add_all([team1, team2, *players])
         session.flush()
 
         # The race points of a season read the race each player registered on
@@ -364,15 +365,13 @@ def two_seasons(client: Client) -> dict[str, Any]:
     A's captain calls his own series right, B's captain calls his wrong.
     """
     with Session() as session:
-        season_a = Season(name="A", number_weeks=2, series_per_week=2)
-        season_b = Season(name="B", number_weeks=1, series_per_week=1)
+        season_a = add_season(session, 2, name="A", series_per_round=2)
+        season_b = add_season(session, 1, name="B", series_per_round=1)
         team_a1, team_a2 = Team(name="A1"), Team(name="A2")
         team_b1, team_b2 = Team(name="B1"), Team(name="B2")
         pa1, pa2 = player("A one", Race.HU), player("A two", Race.OC)
         pb1, pb2 = player("B one", Race.NE), player("B two", Race.UD)
-        session.add_all(
-            [season_a, season_b, team_a1, team_a2, team_b1, team_b2, pa1, pa2, pb1, pb2]
-        )
+        session.add_all([team_a1, team_a2, team_b1, team_b2, pa1, pa2, pb1, pb2])
         session.flush()
 
         session.add_all(
