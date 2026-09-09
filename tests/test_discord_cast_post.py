@@ -79,6 +79,25 @@ def test_a_claim_posts_the_card_and_a_second_claim_edits_it(
     assert "P1, P3 casts this series" in discord_calls[0][2]["embeds"][0]["description"]
 
 
+def test_an_unclaim_drops_the_caster_from_the_card(
+    client: Client,
+    discord_calls: list,
+    seeded: dict[str, Any],
+    content_channel: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    series_id = seeded["series_open_id"]
+    as_member(monkeypatch, "1")
+    claim(client, series_id)
+    cast_id = client.get(f"/series/{series_id}/casts").json()[0]["id"]
+
+    discord_calls.clear()
+    resp = client.delete(f"/series/{series_id}/casts/{cast_id}", headers=SESSION)
+    assert resp.status_code == 204, resp.text
+    assert [call[:2] for call in discord_calls] == [("PATCH", f"{CONTENT}/msg-1")]
+    assert "casts this series" not in discord_calls[0][2]["embeds"][0]["description"]
+
+
 def test_a_claim_posts_nothing_without_the_setting_or_after_the_series(
     client: Client,
     discord_calls: list,

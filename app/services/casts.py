@@ -151,6 +151,8 @@ def set_vod(
 def unclaim(series_id: int, cast_id: int, user_id: int, admin: bool) -> None:
     with Session.begin() as session:
         session.delete(_owned(session, series_id, cast_id, user_id, admin))
+    # the card names the casters, so it has to drop the one who left
+    discord_posts.refresh_series(series_id, (discord_posts.CAST,))
 
 
 def last_channel(user_id: int) -> str | None:
