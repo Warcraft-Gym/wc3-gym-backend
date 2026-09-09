@@ -33,8 +33,8 @@ A team with no played series stands at zero, not at null.
 from collections.abc import Callable, Iterable
 from typing import Any, Literal, NamedTuple
 
-from sqlalchemy import case, func, or_, select, tuple_, union_all
-from sqlalchemy.orm import Session, aliased
+from sqlalchemy import ColumnElement, case, func, or_, select, tuple_, union_all
+from sqlalchemy.orm import Mapped, Session, aliased
 from sqlmodel import col
 
 from app.core import career, fantasy
@@ -49,6 +49,7 @@ from app.core.scoring import (
     wins_needed_sql,
 )
 from app.models.draft_series import DraftSeriesPublic
+from app.models.enums import Race
 from app.models.fantasy_bet import FantasyBet, FantasyBetPublic
 from app.models.fantasy_team import FantasyTeamPublic
 from app.models.match import Match, MatchPublic
@@ -142,6 +143,43 @@ def _signup_races(
     }
 
 
+def signup_on(
+    signup: type[DBUserSeasonSignup], user_id: Mapped[int]
+) -> ColumnElement[bool]:
+    """The join of a season signup: the player AND the season of the series.
+    One key alone reads the race off some other season the player signed up for."""
+    return (col(signup.user_id) == user_id) & (col(signup.season_id) == Match.season_id)
+
+
+def race_of(
+    off_race: Mapped[Race | None], signup: type[DBUserSeasonSignup]
+) -> ColumnElement[Any]:
+    """The race a side played: the off race he reported, else his signup race."""
+    return func.coalesce(off_race, col(signup.race))
+
+
+def clear_kept_off_race(session: Session, row: Series) -> None:
+    """Drop an off race that names the race the side signed the season up on.
+
+    The admin edit and the Discord score command both send the whole series
+    back, so a stored value has to mean a real exception and nothing else.
+    A write that names no off race pays no statement.
+    """
+    season_id = row.match.season_id if row.match else None
+    if season_id is None or not (row.player1_off_race or row.player2_off_race):
+        return
+    signed = _signup_races(
+        session, {(row.player1_id, season_id), (row.player2_id, season_id)}
+    )
+    for user_id, field in (
+        (row.player1_id, "player1_off_race"),
+        (row.player2_id, "player2_off_race"),
+    ):
+        off_race = fantasy.race_value(getattr(row, field))
+        if off_race is not None and off_race == signed.get((user_id, season_id)):
+            setattr(row, field, None)
+
+
 def fill_user_signup_races(
     session: Session, pairs: Iterable[tuple[UserListPublic, int | None]]
 ) -> None:
@@ -155,17 +193,26 @@ def fill_user_signup_races(
 def fill_signup_races(
     session: Session, rows: Iterable[SeriesPublic | DraftSeriesPublic | None]
 ) -> None:
-    """Fill the signup race of both players for the season of each row's match."""
+    """Fill the signup race of both players for the season of each row's match,
+    then the race each side of a series played. The second one costs no
+    statement: it reads the signup race this call just filled."""
+    filled = [row for row in rows if row is not None]
     fill_user_signup_races(
         session,
         [
             (player, row.match.season_id)
-            for row in rows
-            if row is not None and row.match
+            for row in filled
+            if row.match
             for player in (row.player1, row.player2)
             if player
         ],
     )
+    for row in filled:
+        # A draft has no result and so no off race, only the signup race
+        off1 = row.player1_off_race if isinstance(row, SeriesPublic) else None
+        off2 = row.player2_off_race if isinstance(row, SeriesPublic) else None
+        row.player1_race = off1 or (row.player1.signup_race if row.player1 else None)
+        row.player2_race = off2 or (row.player2.signup_race if row.player2 else None)
 
 
 def fill_series(session: Session, series_list: Iterable[SeriesPublic | None]) -> None:
@@ -380,29 +427,19 @@ def _gnl_matchups(
             col(Match.season_id).label("season_id"),
             col(Match.playday).label("playday"),
             col(Series.id).label("series_id"),
-            col(signup1.race).label("race"),
+            race_of(col(Series.player2_off_race), signup1).label("race"),
         )
         .join(Match, col(Match.id) == Series.match_id)
-        .join(
-            signup1,
-            (col(signup1.user_id) == Series.player2_id)
-            & (col(signup1.season_id) == Match.season_id),
-            isouter=True,
-        ),
+        .join(signup1, signup_on(signup1, col(Series.player2_id)), isouter=True),
         select(
             col(Series.player2_id),
             col(Match.season_id),
             col(Match.playday),
             col(Series.id),
-            col(signup2.race),
+            race_of(col(Series.player1_off_race), signup2),
         )
         .join(Match, col(Match.id) == Series.match_id)
-        .join(
-            signup2,
-            (col(signup2.user_id) == Series.player1_id)
-            & (col(signup2.season_id) == Match.season_id),
-            isouter=True,
-        ),
+        .join(signup2, signup_on(signup2, col(Series.player1_id)), isouter=True),
     ).subquery()
 
     rows = session.execute(
@@ -413,9 +450,7 @@ def _gnl_matchups(
 
     history: dict[tuple[int, int], list[str | None]] = {}
     for user_id, season_id, race in rows:
-        history.setdefault((user_id, season_id), []).append(
-            race.value if race else None
-        )
+        history.setdefault((user_id, season_id), []).append(fantasy.race_value(race))
     return history
 
 
@@ -731,22 +766,24 @@ def fantasy_series(
     """The series of every named season, by season and by week, in one statement.
 
     The fantasy rules read the map scores and the two races, so the players join
-    in as columns rather than load as objects.
+    in as columns rather than load as objects. A side counts on the race he
+    played: the off race of the series, else the race he signed the season up on.
     """
     if not season_ids:
         return {}
 
     player1, player2 = aliased(User), aliased(User)
+    signup1, signup2 = aliased(DBUserSeasonSignup), aliased(DBUserSeasonSignup)
     rows = session.execute(
         select(
             col(Match.season_id),
             col(Match.playday),
             col(Series.player1_id),
             col(player1.name),
-            col(player1.race),
+            race_of(col(Series.player1_off_race), signup1),
             col(Series.player2_id),
             col(player2.name),
-            col(player2.race),
+            race_of(col(Series.player2_off_race), signup2),
             col(Series.player1_score),
             col(Series.player2_score),
             col(Season.map_rules),
@@ -755,6 +792,8 @@ def fantasy_series(
         .join(Season, col(Season.id) == Match.season_id)
         .join(player1, col(player1.id) == Series.player1_id, isouter=True)
         .join(player2, col(player2.id) == Series.player2_id, isouter=True)
+        .join(signup1, signup_on(signup1, col(Series.player1_id)), isouter=True)
+        .join(signup2, signup_on(signup2, col(Series.player2_id)), isouter=True)
         .where(col(Match.season_id).in_(season_ids))
     ).all()
 
@@ -871,12 +910,12 @@ def public_series(series: SeriesPublic | None) -> fantasy.Series | None:
         player1=fantasy.Player(
             series.player1_id,
             series.player1.name if series.player1 else None,
-            fantasy.race_value(series.player1.race) if series.player1 else None,
+            series.player1_race,
         ),
         player2=fantasy.Player(
             series.player2_id,
             series.player2.name if series.player2 else None,
-            fantasy.race_value(series.player2.race) if series.player2 else None,
+            series.player2_race,
         ),
         player1_score=series.player1_score,
         player2_score=series.player2_score,

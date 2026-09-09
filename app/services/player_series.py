@@ -5,6 +5,7 @@ from typing import Any
 from fastapi.responses import JSONResponse
 
 from app.core.scoring import decided, wins_needed
+from app.models.enums import Race
 from app.models.series import SeriesUpdate
 from app.services import discord_posts, replays
 from app.services.series import SeriesService
@@ -101,6 +102,20 @@ def update_player_series(
         changes["player1_score"] = int(data["player1_score"])
     if "player2_score" in data and data["player2_score"] is not None:
         changes["player2_score"] = int(data["player2_score"])
+
+    # The race a side played, when it is not the one he signed the season up on.
+    # An empty field clears it, so a player can take back a wrong report.
+    for side in ("player1_off_race", "player2_off_race"):
+        if side not in data:
+            continue
+        named = str(data[side] or "").strip()
+        if not named:
+            changes[side] = None
+            continue
+        try:
+            changes[side] = Race.from_text(named)
+        except ValueError as error:
+            return JSONResponse({"error": str(error)}, status_code=400)
 
     # The replays first: a game with no file in the bucket leaves the score unreported
     stored = (

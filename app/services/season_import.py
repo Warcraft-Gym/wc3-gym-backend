@@ -554,8 +554,8 @@ def _matches(
 def _series_values(
     row: Row, match_id: int, player1: User, player2: User, host: User
 ) -> SeriesCreate:
-    """A series of the Series sheet. An empty date leaves the field unset,
-    so a stored series keeps the time it already holds."""
+    """A series of the Series sheet. An empty date or off race leaves the field
+    unset, so a stored series keeps the time and the races it already holds."""
     data: dict[str, Any] = {
         "match_id": match_id,
         "player1_id": player1.id,
@@ -567,6 +567,12 @@ def _series_values(
     }
     if row.get("Date Time") is not None:
         data["date_time"] = row["Date Time"]
+    for side, column in (
+        ("player1_off_race", "Player1 Off Race"),
+        ("player2_off_race", "Player2 Off Race"),
+    ):
+        if row.get(column):
+            data[side] = Race.from_text(str(row[column]))
     return SeriesCreate(**data)
 
 

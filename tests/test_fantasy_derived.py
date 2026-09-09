@@ -21,7 +21,7 @@ from app.models.enums import Race
 from app.models.fantasy_bet import FantasyBet
 from app.models.fantasy_team import FantasyTeam
 from app.models.match import Match
-from app.models.relationships import DBFantasyTeamPlayer
+from app.models.relationships import DBFantasyTeamPlayer, DBUserSeasonSignup
 from app.models.season import Season  # noqa: F401  # re-exported by the fixtures below
 from app.models.series import Series
 from app.models.team import Team
@@ -114,6 +114,13 @@ def league(client: Client) -> dict[str, Any]:
         session.add_all([team1, team2, *players])
         session.flush()
 
+        # The race points of a season read the race each player registered on
+        session.add_all(
+            DBUserSeasonSignup(
+                user_id=ident(one), season_id=ident(season), race=one.race
+            )
+            for one in players
+        )
         session.add_all(
             [
                 DBTeamSeason(team_id=ident(team1), season_id=ident(season)),
@@ -367,6 +374,13 @@ def two_seasons(client: Client) -> dict[str, Any]:
         session.add_all([team_a1, team_a2, team_b1, team_b2, pa1, pa2, pb1, pb2])
         session.flush()
 
+        session.add_all(
+            DBUserSeasonSignup(
+                user_id=ident(one), season_id=ident(season), race=one.race
+            )
+            for season, sides in ((season_a, (pa1, pa2)), (season_b, (pb1, pb2)))
+            for one in sides
+        )
         session.add_all(
             [
                 DBTeamSeason(team_id=ident(team_a1), season_id=ident(season_a)),

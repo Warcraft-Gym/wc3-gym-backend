@@ -178,8 +178,11 @@ def race_points(
             if winner is None:
                 continue
             loser = series.player2 if winner is series.player1 else series.player1
-            week_race_wins[winner.race] = week_race_wins.get(winner.race, 0) + 1
-            week_race_looses[loser.race] = week_race_looses.get(loser.race, 0) + 1
+            # A side the season holds no signup for names no race and scores none
+            if winner.race is not None:
+                week_race_wins[winner.race] = week_race_wins.get(winner.race, 0) + 1
+            if loser.race is not None:
+                week_race_looses[loser.race] = week_race_looses.get(loser.race, 0) + 1
 
         week_result = {}
         all_races = set(list(week_race_wins.keys()) + list(week_race_looses.keys()))
@@ -396,6 +399,10 @@ def team_scores(
                             week_data["series"].append(
                                 {
                                     "opponent": opponent_name,
+                                    # the race the opponent played in this series
+                                    "opponent_race": series.player2.race
+                                    if is_player1
+                                    else series.player1.race,
                                     "score": f"{player_score}-{opponent_score}",
                                     "points": points,
                                 }

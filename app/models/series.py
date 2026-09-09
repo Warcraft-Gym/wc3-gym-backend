@@ -10,9 +10,10 @@ from sqlmodel import Field, Relationship, SQLModel, col
 from app.core.db import rel
 from app.core.ordering import SortOrder, ordered
 from app.models.base import DBModel, PublicModel, ident
+from app.models.enums import Race
 from app.models.match import Match, MatchPublic
 from app.models.series_cast import CastPublic, SeriesCast
-from app.models.types import AwareUTC, UTCDateTime
+from app.models.types import AwareUTC, EnumValue, SuggestRace, UTCDateTime
 from app.models.user import User, UserPublic
 
 SeriesSort = Literal["date_time", "week", "id"]
@@ -29,6 +30,9 @@ class SeriesBase(SQLModel):
     player2_score: int | None = None
     host_player_id: int
     is_fantasy_match: bool | None = None
+    # The race a side played when it is not the one he signed the season up on
+    player1_off_race: Annotated[Race | None, SuggestRace] = None
+    player2_off_race: Annotated[Race | None, SuggestRace] = None
 
 
 class Series(SeriesBase, DBModel, table=True):
@@ -159,6 +163,8 @@ class SeriesUpdate(SQLModel):
     player2_score: int | None = Field(default=None, ge=0)
     host_player_id: int | None = None
     is_fantasy_match: bool | None = None
+    player1_off_race: Annotated[Race | None, SuggestRace] = None
+    player2_off_race: Annotated[Race | None, SuggestRace] = None
 
 
 class SeriesPublic(SeriesBase, PublicModel):
@@ -174,6 +180,13 @@ class SeriesPublic(SeriesBase, PublicModel):
     # app.services.derived fills the points from the map scores
     player1_points: int | None = None
     player2_points: int | None = None
+    # The off race a side reported, and null when he played his signup race
+    player1_off_race: Annotated[str | None, EnumValue] = None
+    player2_off_race: Annotated[str | None, EnumValue] = None
+    # The race each side played, which app.services.derived resolves. Read only:
+    # a write model names the off race, so an echoed answer cannot pin a row.
+    player1_race: Annotated[str | None, EnumValue] = None
+    player2_race: Annotated[str | None, EnumValue] = None
     casts: list[CastPublic] = []
 
     @classmethod
@@ -194,6 +207,8 @@ class SeriesPublic(SeriesBase, PublicModel):
             player2_score=series.player2_score,
             host_player_id=series.host_player_id,
             is_fantasy_match=series.is_fantasy_match,
+            player1_off_race=series.player1_off_race,
+            player2_off_race=series.player2_off_race,
         )
 
     @classmethod
@@ -219,6 +234,8 @@ class SeriesPublic(SeriesBase, PublicModel):
             player2_score=series.player2_score,
             host_player_id=series.host_player_id,
             is_fantasy_match=series.is_fantasy_match,
+            player1_off_race=series.player1_off_race,
+            player2_off_race=series.player2_off_race,
         )
 
 

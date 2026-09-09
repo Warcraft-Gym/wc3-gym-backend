@@ -52,6 +52,7 @@ class SeriesService:
             row = Series.add(session, series.model_dump())
             _both_scores(row)
             _in_season(row)
+            derived.clear_kept_off_race(session, row)
             public = SeriesPublic.from_series(row)
             derived.fill_series(session, [public])
             return public
@@ -65,6 +66,7 @@ class SeriesService:
                 raise NotFoundError("Series not found")
             _both_scores(row)
             _in_season(row)
+            derived.clear_kept_off_race(session, row)
             public = SeriesPublic.from_series(row)
             derived.fill_series(session, [public])
             return public

@@ -22,6 +22,7 @@ from sqlalchemy.orm import aliased
 from sqlmodel import col
 
 from app.core.db import Session
+from app.core.fantasy import race_value
 from app.models.map import Map
 from app.models.match import Match
 from app.models.player_history import (
@@ -30,6 +31,7 @@ from app.models.player_history import (
     HistoryOpponent,
     PlayerHistory,
 )
+from app.models.relationships import DBUserSeasonSignup
 from app.models.season import Season
 from app.models.series import Series
 from app.models.series_veto_step import DBSeriesVetoStep
@@ -53,6 +55,7 @@ def _meetings(session: OrmSession, user_id: int) -> Sequence[Row[Any]]:
     other side is the opponent.
     """
     opponent1, opponent2 = aliased(User), aliased(User)
+    signup1, signup2 = aliased(DBUserSeasonSignup), aliased(DBUserSeasonSignup)
     sides = union_all(
         select(
             col(Series.id).label("series_id"),
@@ -63,11 +66,12 @@ def _meetings(session: OrmSession, user_id: int) -> Sequence[Row[Any]]:
             func.coalesce(Series.player2_score, 0).label("opp"),
             col(opponent1.id).label("opponent_id"),
             col(opponent1.name).label("opponent_name"),
-            col(opponent1.race).label("race"),
+            derived.race_of(col(Series.player2_off_race), signup1).label("race"),
             col(opponent1.country).label("country"),
         )
         .join(Match, col(Match.id) == Series.match_id)
         .join(opponent1, col(opponent1.id) == Series.player2_id)
+        .join(signup1, derived.signup_on(signup1, col(Series.player2_id)), isouter=True)
         .where(col(Series.player1_id) == user_id),
         select(
             col(Series.id),
@@ -78,11 +82,12 @@ def _meetings(session: OrmSession, user_id: int) -> Sequence[Row[Any]]:
             func.coalesce(Series.player1_score, 0),
             col(opponent2.id),
             col(opponent2.name),
-            col(opponent2.race),
+            derived.race_of(col(Series.player1_off_race), signup2).label("race"),
             col(opponent2.country),
         )
         .join(Match, col(Match.id) == Series.match_id)
         .join(opponent2, col(opponent2.id) == Series.player1_id)
+        .join(signup2, derived.signup_on(signup2, col(Series.player1_id)), isouter=True)
         .where(col(Series.player2_id) == user_id),
     ).subquery()
 
@@ -237,7 +242,7 @@ def _opponents(
             opponent = opponents[row.opponent_id] = HistoryOpponent(
                 id=row.opponent_id,
                 name=row.opponent_name,
-                race=row.race.value if row.race else None,
+                race=race_value(row.race),
                 country=row.country,
                 played=0,
                 won=0,
