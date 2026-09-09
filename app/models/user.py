@@ -165,6 +165,8 @@ class UserListPublic(UserReduced):
     # Set by hand on the signup row; an unpinned tier derives from the MMR
     fantasy_tier_pinned: bool = False
     draft_position: int | None = None
+    # An admin took the player out of the pick list of the season
+    draft_excluded: bool = False
 
     @classmethod
     def from_user(cls, user: User) -> Self:

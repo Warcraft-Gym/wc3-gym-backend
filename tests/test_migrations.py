@@ -39,6 +39,7 @@ BEFORE_COUNT_DROP = "c4d1e7f9a2b3"
 BEFORE_READ_FROM = "d7b3e5a91c26"
 # The revision before a signup carries a draft position
 BEFORE_DRAFT_POSITION = "c8e2a6d4f913"
+BEFORE_DRAFT_EXCLUDED = "f3a8c71b0d24"
 
 
 def comparable(
@@ -510,3 +511,16 @@ def test_the_signup_draft_position_column_is_added_and_dropped(tmp_path: Path) -
     assert "draft_position" in columns()
     downgrade_to(url, BEFORE_DRAFT_POSITION)
     assert "draft_position" not in columns()
+
+
+def test_the_signup_draft_excluded_column_is_added_and_dropped(tmp_path: Path) -> None:
+    url = fresh_database(tmp_path, "draft-excluded")
+    upgrade_to_head(url)
+    engine = create_engine(url)
+
+    def columns() -> set[str]:
+        return {c["name"] for c in inspect(engine).get_columns("user_season_signup")}
+
+    assert "draft_excluded" in columns()
+    downgrade_to(url, BEFORE_DRAFT_EXCLUDED)
+    assert "draft_excluded" not in columns()

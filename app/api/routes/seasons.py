@@ -182,7 +182,7 @@ def remove_user_signup(
 def update_user_signup(
     season_id: int, user_id: int, data: SeasonSignupUpdate, service: SeasonServiceDep
 ) -> SeasonPublic:
-    """Set the draft position or the race of one signup. A null position sorts by MMR."""
+    """Set the draft position, the pick-list flag or the race of one signup."""
     return service.update_signup(season_id, user_id, data)
 
 

@@ -209,6 +209,8 @@ class SeasonSignupUpdate(SQLModel):
     """The draft fields of one signup. A null position sorts the player by MMR."""
 
     draft_position: NonNegativeInt | None = None
+    # True takes the player out of the pick list; a field left out keeps the flag
+    draft_excluded: bool = False
     # The race the player registered on; a field left out keeps it, null is refused
     race: str | None = None
 

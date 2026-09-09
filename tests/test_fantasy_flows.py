@@ -585,3 +585,53 @@ def test_a_signup_carries_the_draft_position_an_admin_sets(
     assert resp.status_code == 404
     resp = client.put(f"/seasons/{season}/signups/{p1}", json={"draft_position": 12})
     assert resp.status_code == 401
+
+
+def test_a_signup_is_flagged_out_of_the_pick_list_and_back_in(
+    client: Client, seeded: dict[str, Any], auth_headers: dict[str, str]
+) -> None:
+    """PUT takes a player out of the pick list; another field left out keeps the flag."""
+    season = seeded["season_id"]
+    p1 = seeded["player_ids"][0]
+    client.post(
+        f"/seasons/{season}/signups",
+        json={"user_ids": [p1], "race": "HU"},
+        headers=auth_headers,
+    )
+
+    def excluded() -> bool:
+        rows = get_json(client, f"/seasons/{season}/signups")
+        return next(row["draft_excluded"] for row in rows if row["id"] == p1)
+
+    assert excluded() is False
+    resp = client.put(
+        f"/seasons/{season}/signups/{p1}",
+        json={"draft_excluded": True},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    assert excluded() is True
+
+    # A move sends only the position, so the player stays out of the pick list
+    resp = client.put(
+        f"/seasons/{season}/signups/{p1}",
+        json={"draft_position": 3},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    assert excluded() is True
+
+    resp = client.put(
+        f"/seasons/{season}/signups/{p1}",
+        json={"draft_excluded": False},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200
+    assert excluded() is False
+
+    resp = client.put(
+        f"/seasons/{season}/signups/{p1}",
+        json={"draft_excluded": None},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 422
