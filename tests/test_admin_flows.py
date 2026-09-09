@@ -1065,7 +1065,9 @@ def test_a_result_is_capped_at_the_maps_a_win_takes(
         path, json={"player1_score": 3, "player2_score": 1}, headers=auth_headers
     )
     assert resp.status_code == 400, resp.text
-    assert resp.json() == {"error": "A series of this season ends at 2 map wins"}
+    assert resp.json() == {
+        "error": "A series of this season ends at 2 map wins, or 0-0 when it was never played"
+    }
 
     season = client.put(
         f"/seasons/{league['season_id']}",

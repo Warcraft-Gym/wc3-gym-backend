@@ -8,7 +8,7 @@ from app.core.db import Session
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.core.ordering import SortOrder, ordered
 from app.core.query import QueryElement, QueryUtil
-from app.core.scoring import decided, wins_needed
+from app.core.scoring import recordable, wins_needed
 from app.models.match import Match
 from app.models.series import (
     SERIES_SORTS,
@@ -22,15 +22,18 @@ from app.services import derived
 
 
 def _both_scores(row: Series) -> None:
-    """A result is both map scores or neither, and the pair finishes the series:
-    one side on the maps a win takes in this season, the other on fewer."""
+    """A result is both map scores or neither, and the pair either finishes the
+    series or is 0-0, which records a series that was never played."""
     if (row.player1_score is None) != (row.player2_score is None):
         raise BadRequestError("A result needs both map scores")
     if row.player1_score is None or row.player2_score is None:
         return
     wins = wins_needed(row.match.season.map_rules if row.match else None)
-    if not decided(row.player1_score, row.player2_score, wins):
-        raise BadRequestError(f"A series of this season ends at {wins} map wins")
+    if not recordable(row.player1_score, row.player2_score, wins):
+        raise BadRequestError(
+            f"A series of this season ends at {wins} map wins, or 0-0 when it "
+            "was never played"
+        )
 
 
 def _in_season(row: Series) -> None:

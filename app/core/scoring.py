@@ -44,6 +44,13 @@ def decided(own: int, opp: int, wins: int) -> bool:
     return max(own, opp) == wins and 0 <= min(own, opp) < wins
 
 
+def recordable(own: int, opp: int, wins: int) -> bool:
+    """Whether an admin may store these two map scores: a finished series, or
+    0-0 for a series that was never played. A 0-0 pays both sides nothing and
+    counts as a result, so the season it sits in can read complete."""
+    return decided(own, opp, wins) or own == opp == 0
+
+
 def max_points(system: str, wins: int = DEFAULT_WINS) -> int:
     """The points a series pays for a clean win under this score system."""
     return 2 * wins + SYSTEMS.get(system, SYSTEMS[DEFAULT_SYSTEM])
