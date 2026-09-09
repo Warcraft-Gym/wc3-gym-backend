@@ -181,8 +181,24 @@ class UserListPublic(UserReduced):
         return row
 
 
+class TrophyPublic(SQLModel):
+    """One thing a player won, drawn as a crowned team logo on his dashboard.
+
+    Today the only trophy is the league championship of a finished season.
+    A tournament win is the same row under another title.
+    """
+
+    title: str
+    season_id: int | None = None
+    team_id: int | None = None
+    team_name: Annotated[str | None, NumToStr] = None
+    team_icon_url: str | None = None
+
+
 class UserPublic(UserListPublic):
     gnl_stats: Annotated[list[UserTeamSeasonStatsPublic], NoneToList] = []
+    # Derived by app.services.derived.fill_trophies; empty until it runs
+    trophies: Annotated[list[TrophyPublic], NoneToList] = []
 
     @classmethod
     def from_user(cls, user: User) -> Self:

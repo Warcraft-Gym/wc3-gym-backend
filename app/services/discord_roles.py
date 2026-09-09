@@ -73,24 +73,6 @@ def _synced_bindings(session: OrmSession) -> Sequence[DiscordRoleBinding]:
     ).all()
 
 
-def _season_winners(session: OrmSession, season_ids: set[int]) -> dict[int, int]:
-    """The team that tops each of those seasons' derived standings.
-
-    Ties break by fewer points against, then the older team, matching what
-    the standings read as first place.
-    """
-    if not season_ids:
-        return {}
-    rules = derived._rules_by_season(session, season_ids)
-    sums = derived._sums_by_team(session, rules)
-    best: dict[int, tuple[int, int, int]] = {}
-    for (team_id, season_id), (final, against) in sums.items():
-        key = (-final, against, team_id)
-        if season_id not in best or key < best[season_id]:
-            best[season_id] = key
-    return {season_id: team_id for season_id, (_, _, team_id) in best.items()}
-
-
 def _earned_in(seasons: set[int], season: int | None) -> bool:
     """Whether one of those records falls in the season, or in any when the scope is all."""
     return bool(seasons) if season is None else season in seasons
@@ -138,7 +120,7 @@ def expected_roles_of(
         drafted[captain_id].add(drafted_season)
     if bindings is None:
         bindings = _synced_bindings(session)
-    winners = _season_winners(
+    winners = derived.season_winners(
         session,
         {
             binding.season_id
@@ -289,7 +271,7 @@ def _public(session: OrmSession, row: DiscordRoleBinding) -> DiscordRoleBindingP
 def bindings() -> list[DiscordRoleBindingPublic]:
     with Session.begin() as session:
         rows = DiscordRoleBinding.get_all(session)
-        winners = _season_winners(
+        winners = derived.season_winners(
             session,
             {
                 row.season_id

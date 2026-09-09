@@ -54,9 +54,10 @@ _LIST_OPTIONS = (
 
 
 def _public(session: OrmSession, user: User) -> UserPublic:
-    """One user, with the season record of every team he played for."""
+    """One user, with the season record of every team he played for and his trophies."""
     public = UserPublic.from_user(user)
     derived.fill_gnl_stats(session, [public])
+    derived.fill_trophies(session, [public])
     return public
 
 
