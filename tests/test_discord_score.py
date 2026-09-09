@@ -266,3 +266,24 @@ def test_a_file_over_ten_megabytes_is_refused(
     )
     assert discord_calls == [("PATCH", EDIT, refused("Replay 1 is over 10 MB."))]
     assert blob_store == {}
+
+
+def test_the_command_asks_for_both_scores_and_the_first_two_replays() -> None:
+    """A Bo3 is over at 2-0, so game 3 is the only option Discord may omit.
+
+    Discord refuses a missing option before the interaction reaches us, so an
+    option that stops being required is a result reported with no replay.
+    """
+    required = {
+        option["name"]: option.get("required", False)
+        for option in score.COMMAND["options"]
+    }
+
+    assert required == {
+        "series": True,
+        "player1_score": True,
+        "player2_score": True,
+        "game1": True,
+        "game2": True,
+        "game3": False,
+    }
