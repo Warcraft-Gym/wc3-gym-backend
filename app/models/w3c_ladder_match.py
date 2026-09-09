@@ -182,3 +182,5 @@ class UserLadder(LadderPlayer):
     """One player's record, and the page of matches behind it."""
 
     matches: list[LadderMatchPublic] = []
+    # Matches on each race he selected, so the list can offer them as a filter
+    by_race: dict[str, int] = {}

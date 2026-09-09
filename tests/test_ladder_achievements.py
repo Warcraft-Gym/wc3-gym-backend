@@ -490,7 +490,7 @@ def test_the_user_answer_costs_a_constant_number_of_statements(
     league: dict[str, Any],
 ) -> None:
     """The count is a constant: it does not grow with the number of matches.
-    Fourteen: the thirteen of the user answer and the map pool."""
+    Fifteen: the fourteen of the user answer and the map pool."""
     from app.services.ladder import LadderService
 
     player = league["player_ids"][0]
@@ -501,7 +501,7 @@ def test_the_user_answer_costs_a_constant_number_of_statements(
         answer = LadderService().user_ladder(player, league["season_id"])
 
     assert answer.games == 4
-    assert tally[0] == 14
+    assert tally[0] == 15
 
 
 def test_a_badge_names_the_match_that_turned_its_rule_on() -> None:
