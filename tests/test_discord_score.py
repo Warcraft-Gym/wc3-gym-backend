@@ -156,7 +156,7 @@ def refused(text: str) -> dict[str, Any]:
     }
 
 
-def test_an_incomplete_veto_answers_the_board_link(
+def test_an_incomplete_veto_saves_the_result_and_warns(
     client: Client,
     public_key: None,
     discord_calls: list,
@@ -173,22 +173,18 @@ def test_an_incomplete_veto_answers_the_board_link(
     series_id = seeded["series_open_id"]
     send(client, scoring(attached, series_id, 2, 0, games=2))
 
-    assert discord_calls == [
-        (
-            "PATCH",
-            EDIT,
-            refused(
-                "The map veto is not complete, so the result cannot be saved. Enter the"
-                f" veto on the [veto board](https://gnl.test/player-series/{series_id}/veto)"
-                " first. Then report the score here, or in Report Result on"
-                " [your dashboard](https://gnl.test/player-dashboard)."
-            ),
-        )
-    ]
+    post = discord_calls[0]
+    assert post[:2] == ("POST", CHANNEL)
+    posted = post[2]["content"]
+    assert "2-0" in posted
+    assert "The map veto of this series is not complete" in posted
+    assert f"https://gnl.test/player-series/{series_id}/veto" in posted
+
+    # The result is saved, warning or not
     with Session() as session:
         series = session.get(Series, series_id)
-        assert series and series.player1_score is None
-        assert session.get(DBSeriesReplay, (series_id, 1)) is None
+        assert series and series.player1_score == 2
+        assert session.get(DBSeriesReplay, (series_id, 1)) is not None
 
 
 def test_the_attachments_must_match_the_games_played(
