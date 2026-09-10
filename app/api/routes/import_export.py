@@ -33,8 +33,8 @@ router = APIRouter(tags=["import export"])
 BET_PAGE = 500  # how many bets the export reads per statement
 
 
-# Deprecated: kept until backup and recovery are settled
-@router.post("/import", dependencies=[Depends(require_admin)], deprecated=True)
+# import export endpoints
+@router.post("/import", dependencies=[Depends(require_admin)])
 def import_season(
     file: Annotated[UploadFile | None, File()] = None,
     create_new: bool = False,
@@ -55,7 +55,7 @@ def import_season(
     }
 
 
-@router.post("/export", dependencies=[Depends(require_admin)], deprecated=True)
+@router.post("/export", dependencies=[Depends(require_admin)])
 def export_season(
     season_service: SeasonServiceDep,
     team_service: TeamServiceDep,
@@ -382,6 +382,7 @@ def _workbook_bytes(file: UploadFile | None) -> bytes:
     return file.file.read()
 
 
+# Deprecated: no caller; kept until the backup and restore review
 @router.post(
     "/fantasy/import/teams", dependencies=[Depends(require_admin)], deprecated=True
 )

@@ -71,7 +71,7 @@ def delete_career_stats(stat_id: int, service: StatsServiceDep) -> dict[str, Any
     return {"success": True}
 
 
-# Deprecated: kept until backup and recovery are settled
+# Deprecated: no caller; kept until the backup and restore review
 @router.post(
     "/stats/career/import-csv", dependencies=[Depends(require_admin)], deprecated=True
 )
