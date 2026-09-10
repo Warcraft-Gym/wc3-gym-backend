@@ -5,10 +5,9 @@ from fastapi import APIRouter, Depends, Query, Response
 
 from app.api.deps import LadderServiceDep, UserServiceDep, require_admin
 from app.api.search import SearchQuery
-from app.models.enums import Race
 from app.models.player_history import PlayerHistory
 from app.models.user import UserCreate, UserListPublic, UserPublic, UserUpdate
-from app.models.w3c_ladder_match import UserLadder
+from app.models.w3c_ladder_match import LadderPlayer
 from app.services import player_history
 
 logger = logging.getLogger(__name__)
@@ -89,20 +88,13 @@ def get_user_ladder(
     user_id: int,
     service: LadderServiceDep,
     season_id: int | None = None,
-    race: Race | None = None,
-    limit: Annotated[int, Query(ge=1, le=500)] = 500,
-    offset: Annotated[int, Query(ge=0)] = 0,
-) -> UserLadder:
-    """One player's ladder record, and one page of the matches behind it.
+) -> LadderPlayer:
+    """One player's ladder record, on the race the league scores him on.
 
-    Without a season the answer covers every match the player has. The list
-    holds the race the league scores him on; `race` asks for another race he
-    played, and `by_race` counts every one of them. The record itself always
-    reads his signup race alone.
+    Without a season the answer covers every match the player has. The
+    matches themselves stay on w3champions, which the client links to.
     """
-    return service.user_ladder(
-        user_id, season_id, limit=limit, offset=offset, race=race
-    )
+    return service.user_ladder(user_id, season_id)
 
 
 @router.get("/users/{user_id}/history")

@@ -14,7 +14,7 @@ from app.core.exceptions import NotFoundError
 from app.core.query import QueryUtil
 from app.models.series import SeriesPublic
 from app.models.user import UserPublic
-from app.models.w3c_ladder_match import UserLadder
+from app.models.w3c_ladder_match import LadderPlayer
 from app.services import discord, discord_roles
 from app.services.commands.base import (
     PUBLIC,
@@ -68,7 +68,7 @@ def _record(race: str, wins: int, losses: int, emojis: dict[str, str]) -> str:
     return f"{_icon(race, emojis)}{race} {wins}-{losses}"
 
 
-def _header(user: UserPublic, answer: UserLadder, emojis: dict[str, str]) -> str:
+def _header(user: UserPublic, answer: LadderPlayer, emojis: dict[str, str]) -> str:
     """Race, flag and name, then the links to his GNL page and his
     w3champions profile."""
     line = (
@@ -124,7 +124,7 @@ def stats(payload: dict[str, Any], services: Services) -> tuple[dict[str, Any], 
         return {"content": "No current season."}, PUBLIC
     user_id = int(options_of(payload)["player"])
     try:
-        answer = services.ladder.user_ladder(user_id, season_id, limit=1)
+        answer = services.ladder.user_ladder(user_id, season_id)
     except NotFoundError:
         return {"content": "No player with that id."}, PUBLIC
     user = services.users.get(user_id)

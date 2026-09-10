@@ -157,30 +157,3 @@ class SeasonLadder(SQLModel):
     # The team rules the season pays, drawn beside the player ones
     team_achievement_rules: list[Achievement] = []
     teams: list[LadderTeam] = []
-
-
-class LadderMatchPublic(SQLModel):
-    """One match of the player's list."""
-
-    w3c_match_id: str
-    start_time: datetime
-    duration_s: int
-    map_name: str | None = None
-    race: Annotated[str | None, EnumValue] = None
-    played_race: Annotated[str | None, EnumValue] = None
-    opp_battletag: str | None = None
-    opp_race: Annotated[str | None, EnumValue] = None
-    opp_played_race: Annotated[str | None, EnumValue] = None
-    won: bool
-    mmr_before: int | None = None
-    mmr_after: int | None = None
-    # The GNL user the opponent is, null when he plays no GNL
-    opp_user_id: int | None = None
-
-
-class UserLadder(LadderPlayer):
-    """One player's record, and the page of matches behind it."""
-
-    matches: list[LadderMatchPublic] = []
-    # Matches on each race he selected, so the list can offer them as a filter
-    by_race: dict[str, int] = {}
