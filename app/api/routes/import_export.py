@@ -33,8 +33,8 @@ router = APIRouter(tags=["import export"])
 BET_PAGE = 500  # how many bets the export reads per statement
 
 
-# import export endpoints
-@router.post("/import", dependencies=[Depends(require_admin)])
+# Deprecated: kept until backup and recovery are settled
+@router.post("/import", dependencies=[Depends(require_admin)], deprecated=True)
 def import_season(
     file: Annotated[UploadFile | None, File()] = None,
     create_new: bool = False,
@@ -55,7 +55,7 @@ def import_season(
     }
 
 
-@router.post("/export", dependencies=[Depends(require_admin)])
+@router.post("/export", dependencies=[Depends(require_admin)], deprecated=True)
 def export_season(
     season_service: SeasonServiceDep,
     team_service: TeamServiceDep,
@@ -382,7 +382,9 @@ def _workbook_bytes(file: UploadFile | None) -> bytes:
     return file.file.read()
 
 
-@router.post("/fantasy/import/teams", dependencies=[Depends(require_admin)])
+@router.post(
+    "/fantasy/import/teams", dependencies=[Depends(require_admin)], deprecated=True
+)
 def import_fantasy_teams(
     file: Annotated[UploadFile | None, File()] = None,
     season_id: Annotated[int | None, EmptyStrToNone] = None,
@@ -396,7 +398,9 @@ def import_fantasy_teams(
     return Message(message="File uploaded successfully and data inserted into database")
 
 
-@router.post("/fantasy/import/bets", dependencies=[Depends(require_admin)])
+@router.post(
+    "/fantasy/import/bets", dependencies=[Depends(require_admin)], deprecated=True
+)
 def import_fantasy_bets(
     file: Annotated[UploadFile | None, File()] = None,
     season_id: Annotated[int | None, EmptyStrToNone] = None,

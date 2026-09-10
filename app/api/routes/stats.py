@@ -71,7 +71,10 @@ def delete_career_stats(stat_id: int, service: StatsServiceDep) -> dict[str, Any
     return {"success": True}
 
 
-@router.post("/stats/career/import-csv", dependencies=[Depends(require_admin)])
+# Deprecated: kept until backup and recovery are settled
+@router.post(
+    "/stats/career/import-csv", dependencies=[Depends(require_admin)], deprecated=True
+)
 def import_historical_csv(
     service: StatsServiceDep, file: Annotated[UploadFile | None, File()] = None
 ) -> dict[str, Any]:
