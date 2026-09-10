@@ -301,7 +301,10 @@ def post_reply(
 @cache
 def app_emojis(application_id: str) -> dict[str, str]:
     """The application's emojis by name, read once per process; empty until
-    `just discord-emojis` uploads them, or when Discord cannot be reached."""
+    `just discord-emojis` uploads them, without an application id, or when
+    Discord cannot be reached."""
+    if not application_id:
+        return {}
     response = _bot_get(f"/applications/{application_id}/emojis")
     if response is None or not response.ok:
         return {}

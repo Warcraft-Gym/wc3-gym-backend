@@ -2,6 +2,8 @@
 the readers of a payload. The command modules import this, never
 app.services.interactions, which imports them."""
 
+import os
+import re
 from math import ceil
 from typing import Any, NamedTuple
 
@@ -12,7 +14,7 @@ from app.models.series_cast import channel_name
 from app.models.team import TeamReduced
 from app.models.types import utcnow
 from app.models.user import UserPublic
-from app.services import discord_roles
+from app.services import discord, discord_roles
 from app.services.fantasy_teams import FantasyTeamService
 from app.services.ladder import LadderService
 from app.services.seasons import SeasonService
@@ -21,6 +23,12 @@ from app.services.users import UserService
 
 # A reply is public in the channel, or a private edit of the deferred "thinking" reply
 PUBLIC, PRIVATE = True, False
+# The app emoji before a cast link, by the link's host; `just discord-emojis` uploads them
+PLATFORM_EMOJI = {
+    "twitch.tv": "twitch",
+    "youtube.com": "youtube",
+    "youtu.be": "youtube",
+}
 
 
 class Services(NamedTuple):
@@ -58,18 +66,40 @@ def typed_option(payload: dict[str, Any]) -> str:
     )
 
 
-def series_line(series: SeriesPublic) -> str:
+def md(text: str) -> str:
+    """Text Discord shows as typed: `thank_s_` would otherwise end in an italic s."""
+    return re.sub(r"([\\*_~`|\[\]])", r"\\\1", text)
+
+
+def series_title(series: SeriesPublic) -> str:
+    """The week and both sides as plain text: "Wk 1 · A (Alpha) vs B (Beta)"."""
+
     def side(player: UserPublic | None, team: TeamReduced | None) -> str:
         name = (player.name if player else None) or "?"
         return f"{name} ({team.name})" if team else name
 
     match = series.match
+    title = f"Wk {match.playday if match else '?'} · "
+    title += side(series.player1, match.team1 if match else None)
+    return title + " vs " + side(series.player2, match.team2 if match else None)
+
+
+def cast_link(url: str) -> str:
+    """A cast as its platform's app emoji and its URL; the <> stops Discord from
+    adding a preview of the stream. A bare URL, not a [label](url): Discord
+    reads `thank_s_` in a label as italics and shows a backslash escape as typed."""
+    emoji = PLATFORM_EMOJI.get(channel_name(url).split("/")[0])
+    emojis = discord.app_emojis(os.getenv("DISCORD_APPLICATION_ID", ""))
+    icon = f"<:{emoji}:{emojis[emoji]}> " if emoji in emojis else ""
+    return f"{icon}<{url}>"
+
+
+def series_line(series: SeriesPublic) -> str:
+    """The series as one Markdown line: time, sides, a link per cast, and its id."""
     stamp = f"<t:{int(series.date_time.timestamp())}:f>" if series.date_time else "TBD"
-    line = f"{stamp} · Wk {match.playday if match else '?'} · "
-    line += side(series.player1, match.team1 if match else None)
-    line += " vs " + side(series.player2, match.team2 if match else None)
+    line = f"{stamp} · {md(series_title(series))}"
     for cast in series.casts:
-        line += f" · {channel_name(cast.channel_url)}"
+        line += f" · {cast_link(cast.channel_url)}"
     return line + f" · #{series.id}"
 
 

@@ -46,6 +46,7 @@ from app.services.commands.base import (
     own_series,
     season_span,
     series_line,
+    series_title,
     typed_option,
 )
 from app.services.seasons import SeasonService
@@ -159,14 +160,20 @@ def upcoming(
     )
     if not rows:
         return {"content": f"No series in the next {days} days."}, PUBLIC
+    lines = [
+        ("🔴 " if casts.on_now(row, start) else "") + series_line(row) for row in rows
+    ]
+    cast = "\n".join(line for row, line in zip(rows, lines) if row.casts)
+    rest = "\n".join(line for row, line in zip(rows, lines) if not row.casts)
+    # The claimed series come first under their own header; with no claim, no headers
+    description = f"**On stream**\n{cast}" if cast else rest
+    if cast and rest:
+        description += f"\n\n**Other series**\n{rest}"
     return {
         "embeds": [
             {
                 "title": f"Series in the next {days} days",
-                "description": "\n".join(
-                    ("🔴 " if casts.on_now(row, start) else "") + series_line(row)
-                    for row in rows
-                ),
+                "description": description,
                 "color": 0x4A4DB8,
             }
         ]
@@ -206,7 +213,7 @@ def choices(payload: dict[str, Any], services: Services) -> list[dict[str, Any]]
     """The autocomplete choices for a `series` option: the caller's own series."""
     typed = typed_option(payload)
     names = (
-        (series_line(row).split(" · ", 1)[1][:100], row.id)
+        (f"{series_title(row)} · #{row.id}"[:100], row.id)
         for row in own_series(payload, services)
     )
     return [

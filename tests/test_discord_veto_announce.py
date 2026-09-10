@@ -104,7 +104,7 @@ def test_announce_posts_the_match_card(
             {
                 "title": "Wk 1 · P2 (Alpha) vs P4 (Beta)",
                 "description": f"<t:{stamp}:F> (<t:{stamp}:R>)\n"
-                "Cast on https://www.twitch.tv/gnlcaster\n"
+                "Cast on <https://www.twitch.tv/gnlcaster>\n"
                 "veto 0/4, P2 to ban\nFixed map · Concealed Hill\n"
                 f"{SITE}/player-series/{series_id}/veto",
                 "color": 0x4A4DB8,
