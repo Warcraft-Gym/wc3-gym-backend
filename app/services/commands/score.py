@@ -174,10 +174,10 @@ def run(payload: dict[str, Any], services: Services) -> tuple[dict[str, Any], bo
 
     series = services.series.get(series_id)
     match = series.match
-    week = match.playday if match else "?"
+    round_no = match.playday if match else "?"
     result_line = (
         f"Result by <@{discord_id}>: {_name(series.player1)} {p1}-{p2}"
-        f" {_name(series.player2)} · Wk {week} · #{series_id}"
+        f" {_name(series.player2)} · Round {round_no}"
     )
     lines = [result_line]
     lines += [f"Game {row['game_no']}: {row['url']}" for row in result["replays"]]
