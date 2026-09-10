@@ -88,7 +88,7 @@ def test_stats_posts_the_gnl_season_as_an_embed(
     # The seed plays P1 against P3 of Beta on playday 1, 2-1 to P1
     assert embed["fields"][0] == {
         "name": "GNL Series · 1-0",
-        "value": "Wk 1 · vs P3 (Beta) · 2-1 W",
+        "value": "Round 1 · vs P3 (Beta) · 2-1 W",
     }
     # 3 a win and 1 a loss make the ladder points; the badges pay the rest.
     # The Orc game counts as an off-race, not in the record or the points.
@@ -170,10 +170,10 @@ def test_player_autocomplete_lists_the_seasons_players(
 
 
 def test_a_flag_is_drawn_for_a_country_or_a_uk_nation() -> None:
-    from app.services.commands.w3c import _flag
+    from app.services.commands.base import flag
 
-    assert _flag("DE") == "🇩🇪"
-    assert _flag("de") == "🇩🇪"
-    assert _flag("GB-SCT") == "🏴󠁧󠁢󠁳󠁣󠁴󠁿"
-    assert _flag("GB-NIR") == ""
-    assert _flag(None) == ""
+    assert flag("DE") == "🇩🇪"
+    assert flag("de") == "🇩🇪"
+    assert flag("GB-SCT") == "🏴󠁧󠁢󠁳󠁣󠁴󠁿"
+    assert flag("GB-NIR") == ""
+    assert flag(None) == ""

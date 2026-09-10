@@ -51,7 +51,7 @@ def test_a_result_posts_once_and_a_correction_edits_it(
     report(client, series_id, headers, 2, 0)
     assert [call[:2] for call in discord_calls] == [("POST", RESULTS)]
     lines = discord_calls[0][2]["content"].splitlines()
-    assert lines[0] == f"P2 2-0 P4 · Wk 1 · #{series_id}"
+    assert lines[0] == "P2 2-0 P4 · Round 1"
     assert lines[1:3] == [
         f"Game 1: https://r2.test/development/replays/{series_id}/game1.w3g",
         f"Game 2: https://r2.test/development/replays/{series_id}/game2.w3g",
@@ -64,7 +64,7 @@ def test_a_result_posts_once_and_a_correction_edits_it(
     report(client, series_id, headers, 2, 1)
     assert [call[:2] for call in discord_calls] == [("PATCH", f"{RESULTS}/msg-1")]
     lines = discord_calls[0][2]["content"].splitlines()
-    assert lines[0] == f"P2 2-1 P4 · Wk 1 · #{series_id}"
+    assert lines[0] == "P2 2-1 P4 · Round 1"
     assert len(lines) == 6
 
 

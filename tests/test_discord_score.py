@@ -135,7 +135,7 @@ def test_a_player_reports_the_result_and_its_replays(
     (post, delete) = discord_calls
     assert post[:2] == ("POST", CHANNEL)
     assert post[2]["content"].splitlines() == [
-        f"Result by <@2>: P2 2-1 P4 · Wk 1 · #{series_id}",
+        "Result by <@2>: P2 2-1 P4 · Round 1",
         f"Game 1: https://r2.test/development/replays/{series_id}/game1.w3g",
         f"Game 2: https://r2.test/development/replays/{series_id}/game2.w3g",
         f"Game 3: https://r2.test/development/replays/{series_id}/game3.w3g",

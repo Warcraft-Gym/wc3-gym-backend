@@ -28,6 +28,7 @@ from app.services import (
     discord_posts,
     discord_roles,
     player_series,
+    series_cards,
 )
 from app.services.commands import (
     announce,
@@ -160,24 +161,7 @@ def upcoming(
     )
     if not rows:
         return {"content": f"No series in the next {days} days."}, PUBLIC
-    lines = [
-        ("🔴 " if casts.on_now(row, start) else "") + series_line(row) for row in rows
-    ]
-    cast = "\n".join(line for row, line in zip(rows, lines) if row.casts)
-    rest = "\n".join(line for row, line in zip(rows, lines) if not row.casts)
-    # The claimed series come first under their own header; with no claim, no headers
-    description = f"**On stream**\n{cast}" if cast else rest
-    if cast and rest:
-        description += f"\n\n**Other series**\n{rest}"
-    return {
-        "embeds": [
-            {
-                "title": f"Series in the next {days} days",
-                "description": description,
-                "color": 0x4A4DB8,
-            }
-        ]
-    }, PUBLIC
+    return series_cards.upcoming(rows, lambda row: casts.on_now(row, start)), PUBLIC
 
 
 def schedule(

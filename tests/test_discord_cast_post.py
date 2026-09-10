@@ -64,19 +64,22 @@ def test_a_claim_posts_the_card_and_a_second_claim_edits_it(
 
     assert [call[:2] for call in discord_calls] == [("POST", CONTENT)]
     card = discord_calls[0][2]
-    assert card["content"] == "<@2> vs <@4>"
+    # The claim card tags nobody: nothing on it asks for an answer now
+    assert card["content"] == ""
     description = card["embeds"][0]["description"]
-    assert "https://twitch.tv/gnlcaster" in description
+    assert "**Casts**\n- <https://twitch.tv/gnlcaster> · P1" in description
     assert description.endswith(
-        "P1 casts this series. Both players: message the caster before the"
-        " start and share the game name."
+        "Players: message each caster before the start and share the game name."
     )
 
     discord_calls.clear()
     as_member(monkeypatch, "3")
     claim(client, series_id)
     assert [call[:2] for call in discord_calls] == [("PATCH", f"{CONTENT}/msg-1")]
-    assert "P1, P3 casts this series" in discord_calls[0][2]["embeds"][0]["description"]
+    assert (
+        "- <https://twitch.tv/gnlcaster> · P1\n- <https://twitch.tv/gnlcaster> · P3"
+        in discord_calls[0][2]["embeds"][0]["description"]
+    )
 
 
 def test_an_unclaim_drops_the_caster_from_the_card(
@@ -95,7 +98,7 @@ def test_an_unclaim_drops_the_caster_from_the_card(
     resp = client.delete(f"/series/{series_id}/casts/{cast_id}", headers=SESSION)
     assert resp.status_code == 204, resp.text
     assert [call[:2] for call in discord_calls] == [("PATCH", f"{CONTENT}/msg-1")]
-    assert "casts this series" not in discord_calls[0][2]["embeds"][0]["description"]
+    assert "**Casts**" not in discord_calls[0][2]["embeds"][0]["description"]
 
 
 def test_a_claim_posts_nothing_without_the_setting_or_after_the_series(
@@ -132,10 +135,14 @@ def test_the_reminder_calls_the_audience_once(
     assert resp.status_code == 200, resp.text
     assert resp.json() == {"posted": 1}
     assert [call[:2] for call in discord_calls] == [("POST", CONTENT)] * 2
-    lines = discord_calls[1][2]["content"].splitlines()
-    assert lines[0].startswith("P2 vs P4 starts <t:")
-    assert lines[0].endswith(">, cast by P1")
-    assert lines[1] == "<https://twitch.tv/gnlcaster>"
+    reminder = discord_calls[1][2]
+    # The players are called to the game, and to wait for the caster, who is tagged too
+    assert reminder["content"].startswith("<@2> <@4>, your game starts <t:")
+    assert reminder["content"].endswith(
+        ":R>. Wait for your casters, <@1>, before you start."
+    )
+    description = reminder["embeds"][0]["description"]
+    assert "**Casts**\n- <https://twitch.tv/gnlcaster> · P1" in description
 
     # A run every few minutes posts the card once, not once a run
     assert client.get(JOB, headers=SECRET).json() == {"posted": 0}
