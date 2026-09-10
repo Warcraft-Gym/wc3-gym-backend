@@ -16,6 +16,7 @@ from app.models.types import utcnow
 from app.models.user import UserPublic
 from app.services import discord, replays
 from app.services.commands import announce, veto
+from app.services.commands.base import md
 from app.services.series import SeriesService
 
 # The result card the app posts itself, in the channel the old bot's setting names
@@ -41,7 +42,7 @@ CLAIM_TRIES = 5
 
 
 def _name(player: UserPublic | None) -> str:
-    return (player.name if player else None) or "?"
+    return md((player.name if player else None) or "?")
 
 
 def result_card(series: SeriesPublic) -> dict[str, Any]:
@@ -66,7 +67,7 @@ def cast_card(series: SeriesPublic) -> dict[str, Any]:
     """The match card, plus what the two players have to do about the cast."""
     card = announce.card(series)
     if series.casts:
-        who = ", ".join(cast.name for cast in series.casts)
+        who = ", ".join(md(cast.name) for cast in series.casts)
         card["embeds"][0]["description"] += (
             f"\n{who} casts this series. Both players: message the caster before"
             " the start and share the game name."
@@ -79,7 +80,7 @@ def reminder_card(series: SeriesPublic) -> dict[str, Any]:
     links sit in the content so Discord shows a preview of each stream."""
     stamp = int(series.date_time.timestamp()) if series.date_time else None
     when = f"starts <t:{stamp}:R>" if stamp else "starts soon"
-    who = ", ".join(cast.name for cast in series.casts) or "?"
+    who = ", ".join(md(cast.name) for cast in series.casts) or "?"
     lines = [
         f"{_name(series.player1)} vs {_name(series.player2)} {when}, cast by {who}"
     ]

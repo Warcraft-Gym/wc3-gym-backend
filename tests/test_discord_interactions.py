@@ -68,7 +68,7 @@ def test_upcoming_marks_a_cast_series_that_is_on_now(
         == 200
     )
     line = discord_calls[0][2]["embeds"][0]["description"]
-    assert line.startswith(f"🔴 <t:{int(soon.timestamp())}:f> · Wk 1 · ")
+    assert line.startswith(f"**On stream**\n🔴 <t:{int(soon.timestamp())}:f> · Wk 1 · ")
 
 
 def test_upcoming_posts_the_window_publicly(
@@ -88,10 +88,31 @@ def test_upcoming_posts_the_window_publicly(
     assert post[:2] == ("POST", CHANNEL)
     line = post[2]["embeds"][0]["description"]
     assert line == (
-        f"<t:{int(soon.timestamp())}:f> · Wk 1 · P2 (Alpha) vs P4 (Beta)"
-        f" · twitch.tv/gnlcaster · #{seeded['series_open_id']}"
+        f"**On stream**\n<t:{int(soon.timestamp())}:f> · Wk 1 · P2 (Alpha) vs P4 (Beta)"
+        " · [twitch.tv/gnlcaster](<https://www.twitch.tv/gnlcaster>)"
+        f" · #{seeded['series_open_id']}"
     )
     assert delete[:2] == ("DELETE", f"{WEBHOOK}/messages/@original")
+
+
+def test_upcoming_puts_the_cast_series_first_and_links_each_channel(
+    client: Client, public_key: None, discord_calls: list, seeded: dict[str, Any]
+) -> None:
+    """An underscore in a channel stays an underscore inside a link, not italics."""
+    first, later = utcnow() + timedelta(days=1), utcnow() + timedelta(days=2)
+    with Session.begin() as session:
+        unclaimed = session.get(Series, seeded["series_played_id"])
+        claimed = session.get(Series, seeded["series_open_id"])
+        assert unclaimed and claimed
+        unclaimed.date_time = first
+        claimed.date_time = later
+        claimed.casts.append(SeriesCast(channel_url="https://twitch.tv/thank_s_"))
+    body, headers = signed(command("upcoming"))
+    client.post("/discord/interactions", content=body, headers=headers)
+    on_stream, other = discord_calls[0][2]["embeds"][0]["description"].split("\n\n")
+    assert on_stream.startswith(f"**On stream**\n<t:{int(later.timestamp())}:f>")
+    assert "[twitch.tv/thank\\_s\\_](<https://twitch.tv/thank_s_>)" in on_stream
+    assert other.startswith(f"**Other series**\n<t:{int(first.timestamp())}:f>")
 
 
 def test_upcoming_window_and_fantasy_filter(
