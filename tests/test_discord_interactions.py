@@ -89,8 +89,7 @@ def test_upcoming_posts_the_window_publicly(
     line = post[2]["embeds"][0]["description"]
     assert line == (
         f"**On stream**\n<t:{int(soon.timestamp())}:f> · Wk 1 · P2 (Alpha) vs P4 (Beta)"
-        " · [twitch.tv/gnlcaster](<https://www.twitch.tv/gnlcaster>)"
-        f" · #{seeded['series_open_id']}"
+        f" · <https://www.twitch.tv/gnlcaster> · #{seeded['series_open_id']}"
     )
     assert delete[:2] == ("DELETE", f"{WEBHOOK}/messages/@original")
 
@@ -98,7 +97,7 @@ def test_upcoming_posts_the_window_publicly(
 def test_upcoming_puts_the_cast_series_first_and_links_each_channel(
     client: Client, public_key: None, discord_calls: list, seeded: dict[str, Any]
 ) -> None:
-    """An underscore in a channel stays an underscore inside a link, not italics."""
+    """A channel with underscores goes out as its bare URL, which Discord never italicizes."""
     first, later = utcnow() + timedelta(days=1), utcnow() + timedelta(days=2)
     with Session.begin() as session:
         unclaimed = session.get(Series, seeded["series_played_id"])
@@ -111,8 +110,19 @@ def test_upcoming_puts_the_cast_series_first_and_links_each_channel(
     client.post("/discord/interactions", content=body, headers=headers)
     on_stream, other = discord_calls[0][2]["embeds"][0]["description"].split("\n\n")
     assert on_stream.startswith(f"**On stream**\n<t:{int(later.timestamp())}:f>")
-    assert "[twitch.tv/thank\\_s\\_](<https://twitch.tv/thank_s_>)" in on_stream
+    assert " · <https://twitch.tv/thank_s_> · " in on_stream
     assert other.startswith(f"**Other series**\n<t:{int(first.timestamp())}:f>")
+
+
+def test_a_cast_link_carries_its_platform_icon_and_no_preview(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The icon shows once `just discord-emojis` has uploaded it, and not before."""
+    monkeypatch.setattr(discord, "app_emojis", lambda _: {"twitch": "42"})
+    assert base.cast_link("https://twitch.tv/thank_s_") == (
+        "<:twitch:42> <https://twitch.tv/thank_s_>"
+    )
+    assert base.cast_link("https://youtu.be/abc") == "<https://youtu.be/abc>"
 
 
 def test_upcoming_window_and_fantasy_filter(

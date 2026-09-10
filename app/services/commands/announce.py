@@ -3,7 +3,13 @@
 from typing import Any
 
 from app.models.series import SeriesPublic
-from app.services.commands.base import PRIVATE, PUBLIC, Services, series_title
+from app.services.commands.base import (
+    PRIVATE,
+    PUBLIC,
+    Services,
+    cast_link,
+    series_title,
+)
 from app.services.commands.veto import (
     SERIES_OPTION,
     board_link,
@@ -24,7 +30,7 @@ def card(series: SeriesPublic) -> dict[str, Any]:
     title = series_title(series)
     stamp = int(series.date_time.timestamp()) if series.date_time else None
     lines = [f"<t:{stamp}:F> (<t:{stamp}:R>)" if stamp else "Not scheduled yet"]
-    lines += [f"Cast on {cast.channel_url}" for cast in series.casts]
+    lines += [f"Cast on {cast_link(cast.channel_url)}" for cast in series.casts]
     lines += [state(series), board_link(series.id)]
     return {
         "content": f"{ping(series.player1)} vs {ping(series.player2)}",

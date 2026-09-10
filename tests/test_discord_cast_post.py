@@ -135,7 +135,7 @@ def test_the_reminder_calls_the_audience_once(
     lines = discord_calls[1][2]["content"].splitlines()
     assert lines[0].startswith("P2 vs P4 starts <t:")
     assert lines[0].endswith(">, cast by P1")
-    assert lines[1] == "https://twitch.tv/gnlcaster"
+    assert lines[1] == "<https://twitch.tv/gnlcaster>"
 
     # A run every few minutes posts the card once, not once a run
     assert client.get(JOB, headers=SECRET).json() == {"posted": 0}
