@@ -7,9 +7,16 @@ are plain links and carry no token.
 import os
 from typing import Any
 
-from app.services import admins, discord, discord_roles
-from app.services.commands.availability import _stamp
-from app.services.commands.base import PRIVATE, PUBLIC, Services, caller, options_of
+from app.models.season import SeasonPhase
+from app.services import admins, discord, discord_roles, series_cards
+from app.services.commands.base import (
+    PRIVATE,
+    PUBLIC,
+    Services,
+    caller,
+    md,
+    options_of,
+)
 
 COMMAND: dict[str, Any] = {
     "name": "postlinks",
@@ -24,18 +31,26 @@ COMMAND: dict[str, Any] = {
 }
 
 SIGN_IN = "Sign in with your Discord account to use these."
+CLOSED = "Signups are closed. A signup is subject to admin approval."
+SIGNUPS: dict[SeasonPhase | None, str] = {
+    "open": "Signups are open.",
+    "complete": "Signups are closed.",
+}
 
 
 def _content(services: Services) -> str:
-    """The current season, its Round 1 date and whether signups are open."""
+    """The current season, its Round 1 dates and whether signups are open."""
     season_id = discord_roles.current_season()
     if season_id is None:
         return f"**Warcraft Gym**\n{SIGN_IN}"
     season = services.seasons.get(season_id)
-    first = next((r for r in season.rounds if r.playday == 1), None)
-    when = f" {_stamp(first.start_date)}" if first and first.start_date else ""
-    signups = "open" if season.phase == "open" else "closed"
-    return f"**{season.name}** · Round 1{when}\nSignups are {signups}. {SIGN_IN}"
+    return "\n".join(
+        [
+            f"**{md(season.name or '?')}**",
+            series_cards.round_line(season_id, 1),
+            f"{SIGNUPS.get(season.phase, CLOSED)} {SIGN_IN}",
+        ]
+    )
 
 
 # label, path
