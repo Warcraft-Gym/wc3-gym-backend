@@ -42,7 +42,7 @@ W3C_SEASON = 25
 # Before every match in the fixtures.
 SINCE = datetime(2026, 1, 1, tzinfo=UTC)
 
-DISCORD_IDS = itertools.count(1)
+DISCORD_IDS = itertools.count(100_000)  # above every discordId tests/seed.py hands out
 
 
 def fixture(name: str) -> list[dict[str, Any]]:
