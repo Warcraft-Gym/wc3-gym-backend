@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session as OrmSession
 from sqlmodel import col
 
 from app.core.db import Session
-from app.core.exceptions import BadRequestError, NotFoundError
+from app.core.exceptions import ApiError, BadRequestError, NotFoundError
 from app.models.relationships import SeasonRoundPublic
 from app.models.season import Season
 from app.models.user import User
@@ -19,18 +19,18 @@ from app.models.user_season_availability import (
 )
 from app.models.user_team_season import DBUserTeamSeason
 
+NO_SCHEDULING = "This event does not use availability."
+
 
 class AvailabilityService:
     def season_weeks(self, season_id: int) -> int:
         with Session.begin() as session:
-            return _weeks(session, season_id)
+            return _season(session, season_id).round_count or 0
 
     def season_rounds(self, season_id: int) -> list[SeasonRoundPublic]:
         """The rounds the dashboard asks about, with their date windows."""
         with Session.begin() as session:
-            season = session.get(Season, season_id)
-            if not season:
-                raise NotFoundError(f"Season not found by Id: {season_id}")
+            season = _season(session, season_id)
             return [SeasonRoundPublic.from_row(row) for row in season.rounds]
 
     def for_user(
@@ -71,9 +71,18 @@ class AvailabilityService:
         available: bool | None,
         set_by_user_id: int,
     ) -> list[UserSeasonAvailabilityPublic]:
-        """Write one week's answer, or clear it, and answer the player's season."""
+        """Write one week's answer, or clear it, and answer the player's season.
+
+        Every writer comes through here, so a season without scheduling refuses
+        the player, the captain and the Discord button alike.
+        """
         with Session.begin() as session:
-            weeks = _weeks(session, season_id)
+            season = _season(session, season_id)
+            if not season.scheduling_enabled:
+                raise ApiError(
+                    403, {"error": "scheduling_disabled", "message": NO_SCHEDULING}
+                )
+            weeks = season.round_count or 0
             if not 1 <= playday <= weeks:
                 raise BadRequestError(f"playday must be between 1 and {weeks}")
             if available is None:
@@ -100,11 +109,11 @@ class AvailabilityService:
             )
 
 
-def _weeks(session: OrmSession, season_id: int) -> int:
+def _season(session: OrmSession, season_id: int) -> Season:
     season = session.get(Season, season_id)
     if not season:
         raise NotFoundError(f"Season not found by Id: {season_id}")
-    return season.round_count or 0
+    return season
 
 
 def _rows(
