@@ -158,6 +158,15 @@ def _owned_bet(
     return bet
 
 
+def _signups_open(settings_service: SettingsServiceDep) -> bool:
+    """The global signups_enabled switch; a missing row leaves signups open."""
+    try:
+        value = settings_service.get_by_key("signups_enabled").value
+    except NotFoundError:
+        return True
+    return not value or value.lower() != "false"
+
+
 @router.post("/signup", status_code=201, response_model=None)
 def public_create_user(
     settings_service: SettingsServiceDep,
@@ -168,20 +177,6 @@ def public_create_user(
     data: PublicSignupWrite | None = None,
 ) -> dict[str, Any]:
     """Create user and optionally assign to season for the signed-in Discord member."""
-    # A missing signups_enabled row leaves signups open
-    try:
-        signups_enabled = settings_service.get_by_key("signups_enabled").value
-    except NotFoundError:
-        signups_enabled = None
-    if signups_enabled and signups_enabled.lower() == "false":
-        raise ApiError(
-            403,
-            {
-                "error": "signups_closed",
-                "message": "Signups are currently closed",
-            },
-        )
-
     data = data or PublicSignupWrite()
     entry = _identity(request, credentials)
 
@@ -234,12 +229,12 @@ def public_create_user(
         user = user_service.add(user_create)
 
     # Add to season if specified, on the race the form names
-    # A commenced season takes the profile but no signup; an admin may add the player
+    # A closed switch or a non-open season takes the profile only; an admin may add them
     season_id = entry.get("season_id") or data.season_id or data.seasonId
     closed: str | None = None
     if season_id:
         season = season_service.get(int(season_id))
-        if season.phase == "open":
+        if season.phase == "open" and _signups_open(settings_service):
             season_service.add_user_signup(
                 int(season_id), [user.id], user_create.race.value
             )
