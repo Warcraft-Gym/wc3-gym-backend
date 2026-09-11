@@ -252,6 +252,23 @@ def test_an_event_without_scheduling_refuses_the_answer(
     )
 
 
+def test_an_event_without_scheduling_refuses_the_captain(
+    client: Client, seeded: dict[str, Any], captain: dict[str, str]
+) -> None:
+    team_id, season_id = seeded["team_a_id"], seeded["season_id"]
+    turn_off_scheduling(season_id)
+
+    resp = client.put(
+        f"/teams/{team_id}/seasons/{season_id}/availability",
+        json={"user_id": seeded["player_ids"][1], "playday": 1, "available": False},
+        headers=captain,
+    )
+
+    assert resp.status_code == 403, resp.text
+    assert resp.json()["error"] == "scheduling_disabled"
+    assert AvailabilityService().for_team(team_id, season_id) == []
+
+
 def turn_off_scheduling(season_id: int) -> None:
     with Session.begin() as session:
         season = session.get(Season, season_id)

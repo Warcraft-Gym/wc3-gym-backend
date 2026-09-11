@@ -61,7 +61,6 @@ from app.services import (
     replays,
     series_games,
 )
-from app.services.commands.availability import NO_SCHEDULING
 from app.services.seasons import SeasonService
 from app.services.series import SeriesService
 
@@ -322,7 +321,6 @@ def get_player_series(
 def set_player_availability(
     availability_service: AvailabilityServiceDep,
     user_service: UserServiceDep,
-    season_service: SeasonServiceDep,
     request: Request,
     credentials: Credentials,
     data: PlayerAvailabilityWrite,
@@ -336,11 +334,6 @@ def set_player_availability(
     season_id = entry["season_id"] or data.season_id
     if not season_id:
         raise BadRequestError("missing season_id")
-    if not season_service.get(int(season_id)).scheduling_enabled:
-        raise ApiError(
-            403,
-            {"error": "scheduling_disabled", "message": NO_SCHEDULING},
-        )
 
     return availability_service.set(
         user.id, int(season_id), data.playday, data.available, set_by_user_id=user.id

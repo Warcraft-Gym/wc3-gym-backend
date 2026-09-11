@@ -8,10 +8,10 @@ captain grid use, so the three places always agree.
 from datetime import UTC, date, datetime, time
 from typing import TYPE_CHECKING, Any
 
-from app.core.exceptions import BadRequestError
+from app.core.exceptions import ApiError, BadRequestError
 from app.models.relationships import SeasonRoundPublic
 from app.services import discord_roles
-from app.services.availability import AvailabilityService
+from app.services.availability import NO_SCHEDULING, AvailabilityService
 from app.services.commands.base import PRIVATE, PUBLIC, caller, options_of
 
 if TYPE_CHECKING:
@@ -34,7 +34,6 @@ COMMAND: dict[str, Any] = {
 # Button styles: green, red, grey
 ANSWERS = (("yes", "Can play", 3), ("no", "Cannot play", 4), ("clear", "Clear", 2))
 VALUES = {"yes": True, "no": False, "clear": None}
-NO_SCHEDULING = "This event does not use availability."
 SAVED = {
     "yes": "Saved: you can play round {n} of {season}.",
     "no": "Saved: you cannot play round {n} of {season}.",
@@ -111,12 +110,12 @@ def press(payload: dict[str, Any], services: "Services") -> tuple[dict[str, Any]
         }, PRIVATE
     user_id = found[0].id
     season = services.seasons.get(int(season_id))
-    if not season.scheduling_enabled:
-        return {"content": NO_SCHEDULING}, PRIVATE
     try:
         AvailabilityService().set(
             user_id, int(season_id), int(playday), VALUES[answer], user_id
         )
     except BadRequestError as error:
         return {"content": str(error)}, PRIVATE
+    except ApiError as error:
+        return {"content": error.body.get("message", str(error))}, PRIVATE
     return {"content": SAVED[answer].format(n=playday, season=season.name)}, PRIVATE
