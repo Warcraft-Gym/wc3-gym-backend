@@ -57,6 +57,9 @@ def comparable(
     element the model holds, so alembic reports it as changed on every run.
     The natural keys are checked by the writes they refuse instead, in
     tests/test_natural_keys.py.
+
+    A reflected column with no model counterpart is skipped only when it is
+    in MIGRATED_BEFORE_THE_MODEL.
     """
     if isinstance(obj, Index):
         return all(isinstance(part, Column) for part in obj.expressions)
