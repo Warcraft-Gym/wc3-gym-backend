@@ -2,7 +2,7 @@ from datetime import date, datetime
 from typing import TYPE_CHECKING, Annotated, Any, Literal, NamedTuple, Self
 
 from pydantic import NonNegativeInt, PositiveInt
-from sqlalchemy import JSON, Index, and_, case, false, func, or_, select, text
+from sqlalchemy import JSON, Index, and_, case, false, func, or_, select, text, true
 from sqlalchemy.orm import Session, column_property
 from sqlmodel import Field, Relationship, SQLModel, col
 
@@ -51,6 +51,14 @@ class SeasonBase(SQLModel):
     # Whether the season offers the fantasy grind pick: a second team, paid by rank
     fantasy_grind: bool = Field(
         default=False, sa_column_kwargs={"server_default": false()}
+    )
+    # Off: a signup to the season is a request an admin may grant
+    signups_open: bool = Field(
+        default=True, sa_column_kwargs={"server_default": true()}
+    )
+    # Off: the event takes no availability answers
+    scheduling_enabled: bool = Field(
+        default=True, sa_column_kwargs={"server_default": true()}
     )
 
 
@@ -176,6 +184,8 @@ class SeasonUpdate(SQLModel):
     map_rules: Annotated[str | None, MapRules] = None
     score_system: str | None = None
     fantasy_grind: bool | None = None
+    signups_open: bool | None = None
+    scheduling_enabled: bool | None = None
 
 
 class SeasonTeamIds(SQLModel):
@@ -259,6 +269,8 @@ class SeasonPublic(SeasonBase):
             map_rules=season.map_rules,
             score_system=season.score_system,
             fantasy_grind=season.fantasy_grind,
+            signups_open=season.signups_open,
+            scheduling_enabled=season.scheduling_enabled,
             fantasy_tiers=tier_count(season.fantasy_tier_cuts),
             fantasy_tier_cuts=season.fantasy_tier_cuts or [],
             fantasy_tiers_applied_at=season.fantasy_tiers_applied_at,
@@ -275,6 +287,8 @@ class SeasonPublic(SeasonBase):
             name=season.name,
             map_rules=season.map_rules,
             fantasy_grind=season.fantasy_grind,
+            signups_open=season.signups_open,
+            scheduling_enabled=season.scheduling_enabled,
             signup_race=signup_race,
         )
 
@@ -293,6 +307,8 @@ class SeasonPublic(SeasonBase):
             map_rules=season.map_rules,
             score_system=season.score_system,
             fantasy_grind=season.fantasy_grind,
+            signups_open=season.signups_open,
+            scheduling_enabled=season.scheduling_enabled,
             fantasy_tiers=tier_count(season.fantasy_tier_cuts),
             fantasy_tier_cuts=season.fantasy_tier_cuts or [],
             fantasy_tiers_applied_at=season.fantasy_tiers_applied_at,

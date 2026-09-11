@@ -1,6 +1,6 @@
 """PUT /user-info: a member edits their own profile, and only their own.
 
-Signups being closed does not gate the edit; the battle tag is validated.
+The battle tag is validated.
 """
 
 from typing import Any
@@ -40,23 +40,6 @@ def test_a_member_edits_their_own_profile(
     # the edit touched nothing else
     resp = client.get(f"/users/{user['id']}")
     assert resp.json()["battleTag"] == user["battleTag"]
-
-
-def test_a_closed_signup_window_does_not_gate_the_edit(
-    client: Client,
-    seeded: dict[str, Any],
-    member: dict[str, str],
-    auth_headers: dict[str, str],
-) -> None:
-    resp = client.put(
-        "/config/settings/signups_enabled",
-        json={"value": "false"},
-        headers=auth_headers,
-    )
-    assert resp.status_code == 200, resp.text
-
-    resp = client.put("/user-info", json={"country": "SE"}, headers=member)
-    assert resp.status_code == 200, resp.text
 
 
 def test_a_bad_battle_tag_is_refused(

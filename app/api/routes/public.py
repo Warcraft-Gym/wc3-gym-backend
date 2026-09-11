@@ -61,6 +61,7 @@ from app.services import (
     replays,
     series_games,
 )
+from app.services.commands.availability import NO_SCHEDULING
 from app.services.seasons import SeasonService
 from app.services.series import SeriesService
 
@@ -158,18 +159,8 @@ def _owned_bet(
     return bet
 
 
-def _signups_open(settings_service: SettingsServiceDep) -> bool:
-    """The global signups_enabled switch; a missing row leaves signups open."""
-    try:
-        value = settings_service.get_by_key("signups_enabled").value
-    except NotFoundError:
-        return True
-    return not value or value.lower() != "false"
-
-
 @router.post("/signup", status_code=201, response_model=None)
 def public_create_user(
-    settings_service: SettingsServiceDep,
     user_service: UserServiceDep,
     season_service: SeasonServiceDep,
     request: Request,
@@ -229,12 +220,12 @@ def public_create_user(
         user = user_service.add(user_create)
 
     # Add to season if specified, on the race the form names
-    # A closed switch or a non-open season takes the profile only; an admin may add them
+    # A closed or non-open season takes the profile only; an admin may add them
     season_id = entry.get("season_id") or data.season_id or data.seasonId
     closed: str | None = None
     if season_id:
         season = season_service.get(int(season_id))
-        if season.phase == "open" and _signups_open(settings_service):
+        if season.phase == "open" and season.signups_open:
             season_service.add_user_signup(
                 int(season_id), [user.id], user_create.race.value
             )
@@ -331,6 +322,7 @@ def get_player_series(
 def set_player_availability(
     availability_service: AvailabilityServiceDep,
     user_service: UserServiceDep,
+    season_service: SeasonServiceDep,
     request: Request,
     credentials: Credentials,
     data: PlayerAvailabilityWrite,
@@ -344,6 +336,11 @@ def set_player_availability(
     season_id = entry["season_id"] or data.season_id
     if not season_id:
         raise BadRequestError("missing season_id")
+    if not season_service.get(int(season_id)).scheduling_enabled:
+        raise ApiError(
+            403,
+            {"error": "scheduling_disabled", "message": NO_SCHEDULING},
+        )
 
     return availability_service.set(
         user.id, int(season_id), data.playday, data.available, set_by_user_id=user.id
