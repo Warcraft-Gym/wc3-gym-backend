@@ -5,6 +5,7 @@ from sqlalchemy.orm.interfaces import ORMOption
 from sqlmodel import Field, Relationship, SQLModel
 
 from app.core.db import rel
+from app.core.scoring import DEFAULT_WINS
 from app.models.base import DBModel, ident
 from app.models.match import MatchPublic
 from app.models.types import AwareUTC, EnumValue, UTCDateTime
@@ -66,7 +67,8 @@ class DraftSeries(DraftSeriesBase, DBModel, table=True):
 
 
 class DraftSeriesCreate(DraftSeriesBase):
-    pass
+    player1_score: int | None = Field(default=None, ge=0, le=DEFAULT_WINS)  # Bo3
+    player2_score: int | None = Field(default=None, ge=0, le=DEFAULT_WINS)
 
 
 class DraftSeriesUpdate(SQLModel):
@@ -74,8 +76,8 @@ class DraftSeriesUpdate(SQLModel):
     date_time: Annotated[datetime | None, AwareUTC] = None
     player1_id: int | None = None
     player2_id: int | None = None
-    player1_score: int | None = None
-    player2_score: int | None = None
+    player1_score: int | None = Field(default=None, ge=0, le=DEFAULT_WINS)
+    player2_score: int | None = Field(default=None, ge=0, le=DEFAULT_WINS)
     host_player_id: int | None = None
     is_fantasy_match: bool | None = None
 

@@ -7,8 +7,16 @@ are plain links and carry no token.
 import os
 from typing import Any
 
-from app.services import admins, discord
-from app.services.commands.base import PRIVATE, PUBLIC, Services, caller, options_of
+from app.models.season import SeasonPhase
+from app.services import admins, discord, discord_roles, series_cards
+from app.services.commands.base import (
+    PRIVATE,
+    PUBLIC,
+    Services,
+    caller,
+    md,
+    options_of,
+)
 
 COMMAND: dict[str, Any] = {
     "name": "postlinks",
@@ -22,7 +30,28 @@ COMMAND: dict[str, Any] = {
     ],
 }
 
-CONTENT = "**Warcraft Gym**\nSign in with your Discord account to use these."
+SIGN_IN = "Sign in with your Discord account to use these."
+CLOSED = "Signups are closed. A signup is subject to admin approval."
+SIGNUPS: dict[SeasonPhase | None, str] = {
+    "open": "Signups are open.",
+    "complete": "Signups are closed.",
+}
+
+
+def _content(services: Services) -> str:
+    """The current season, its Round 1 dates and whether signups are open."""
+    season_id = discord_roles.current_season()
+    if season_id is None:
+        return f"**Warcraft Gym**\n{SIGN_IN}"
+    season = services.seasons.get(season_id)
+    return "\n".join(
+        [
+            f"**{md(season.name or '?')}**",
+            series_cards.round_line(season_id, 1),
+            f"{SIGNUPS.get(season.phase, CLOSED)} {SIGN_IN}",
+        ]
+    )
+
 
 # label, path
 LINKS = [
@@ -41,7 +70,7 @@ def run(payload: dict[str, Any], services: Services) -> tuple[dict[str, Any], bo
     if not site:
         return {"content": "FRONTEND_URL is not set."}, PRIVATE
     message = {
-        "content": CONTENT,
+        "content": _content(services),
         "components": [
             {
                 "type": 1,
