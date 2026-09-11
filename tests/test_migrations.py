@@ -11,6 +11,7 @@ import pytest
 from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
 from sqlalchemy import Column, Index, column, create_engine, inspect, table, text
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import SQLModel
 
 from tests.migrate import downgrade_to, fresh_database, upgrade_to, upgrade_to_head
@@ -41,6 +42,9 @@ BEFORE_READ_FROM = "d7b3e5a91c26"
 BEFORE_DRAFT_POSITION = "c8e2a6d4f913"
 BEFORE_DRAFT_EXCLUDED = "f3a8c71b0d24"
 BEFORE_SEASON_FLAGS = "a5c9f2e71b48"
+BEFORE_SOFT_BLOCKS = "160f8f7bf2d4"
+# Tables the database gains one deploy before a model reads them
+MIGRATED_BEFORE_THE_MODEL = {"user_block", "user_busy"}
 
 
 def comparable(
@@ -52,9 +56,14 @@ def comparable(
     element the model holds, so alembic reports it as changed on every run.
     The natural keys are checked by the writes they refuse instead, in
     tests/test_natural_keys.py.
+
+    A reflected table with no model is skipped only when it is in
+    MIGRATED_BEFORE_THE_MODEL.
     """
     if isinstance(obj, Index):
         return all(isinstance(part, Column) for part in obj.expressions)
+    if type_ == "table" and reflected and compare_to is None:
+        return name not in MIGRATED_BEFORE_THE_MODEL
     return True
 
 
@@ -546,3 +555,68 @@ def test_the_season_flags_default_on_and_are_dropped(tmp_path: Path) -> None:
     downgrade_to(url, BEFORE_SEASON_FLAGS)
     flags = {"signups_open", "scheduling_enabled"}
     assert not flags & {c["name"] for c in inspect(engine).get_columns("seasons")}
+
+
+BLOCK = "user_block (user_id, weekdays, start_local, end_local) VALUES "
+
+
+@pytest.mark.parametrize(
+    "row",
+    [
+        BLOCK + "(1, 0, '09:00', '17:00')",
+        BLOCK + "(1, 128, '09:00', '17:00')",
+        BLOCK + "(1, 31, '09:00', '09:00')",
+        "user_busy (user_id, first_day, last_day) VALUES (1, '2026-09-12', '2026-09-11')",
+    ],
+)
+def test_the_soft_block_tables_refuse_a_bad_row_and_are_dropped(
+    tmp_path: Path, row: str
+) -> None:
+    """A block past midnight and a one-day busy range are stored; no weekday,
+    an unknown weekday bit, an empty block or a reversed range are refused."""
+    url = fresh_database(tmp_path, "soft-blocks")
+    upgrade_to_head(url)
+    engine = create_engine(url)
+    with engine.begin() as connection:
+        connection.execute(
+            table(
+                "users",
+                *(
+                    column(c)
+                    for c in (
+                        "id",
+                        "name",
+                        "battleTag",
+                        "discordTag",
+                        "discordId",
+                        "race",
+                    )
+                ),
+            )
+            .insert()
+            .values(
+                id=1,
+                name="P1",
+                battleTag="P1#1",
+                discordTag="p1",
+                discordId="1",
+                race="HU",
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO user_block (user_id, weekdays, start_local, end_local) "
+                "VALUES (1, 127, '23:00', '01:30')"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO user_busy (user_id, first_day, last_day) "
+                "VALUES (1, '2026-09-12', '2026-09-12')"
+            )
+        )
+    with pytest.raises(IntegrityError), engine.begin() as connection:
+        connection.execute(text(f"INSERT INTO {row}"))
+
+    downgrade_to(url, BEFORE_SOFT_BLOCKS)
+    assert not {"user_block", "user_busy"} & set(inspect(engine).get_table_names())
