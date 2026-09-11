@@ -7,7 +7,8 @@ are plain links and carry no token.
 import os
 from typing import Any
 
-from app.services import admins, discord
+from app.services import admins, discord, discord_roles
+from app.services.commands.availability import _stamp
 from app.services.commands.base import PRIVATE, PUBLIC, Services, caller, options_of
 
 COMMAND: dict[str, Any] = {
@@ -22,7 +23,20 @@ COMMAND: dict[str, Any] = {
     ],
 }
 
-CONTENT = "**Warcraft Gym**\nSign in with your Discord account to use these."
+SIGN_IN = "Sign in with your Discord account to use these."
+
+
+def _content(services: Services) -> str:
+    """The current season, its Round 1 date and whether signups are open."""
+    season_id = discord_roles.current_season()
+    if season_id is None:
+        return f"**Warcraft Gym**\n{SIGN_IN}"
+    season = services.seasons.get(season_id)
+    first = next((r for r in season.rounds if r.playday == 1), None)
+    when = f" {_stamp(first.start_date)}" if first and first.start_date else ""
+    signups = "open" if season.phase == "open" else "closed"
+    return f"**{season.name}** · Round 1{when}\nSignups are {signups}. {SIGN_IN}"
+
 
 # label, path
 LINKS = [
@@ -41,7 +55,7 @@ def run(payload: dict[str, Any], services: Services) -> tuple[dict[str, Any], bo
     if not site:
         return {"content": "FRONTEND_URL is not set."}, PRIVATE
     message = {
-        "content": CONTENT,
+        "content": _content(services),
         "components": [
             {
                 "type": 1,
