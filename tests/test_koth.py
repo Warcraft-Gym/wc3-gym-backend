@@ -133,6 +133,23 @@ def test_a_result_crowns_the_winner_and_retires_the_loser(
     assert signups[two]["is_active"] == 0
 
 
+def test_set_king_retires_the_old_king_and_keeps_its_row(
+    client: Client, auth_headers: dict[str, str], koth: dict[str, Any]
+) -> None:
+    one, two = koth["signup_ids"]
+
+    def crown(signup_id: int) -> dict[int, tuple[int, int]]:
+        """Crown one signup; answer each signup's (is_king, is_active) as stored."""
+        resp = client.post(f"/koth/signups/{signup_id}/king", headers=auth_headers)
+        assert resp.status_code == 200, resp.text
+        event = client.get(f"/koth/events/{koth['event_id']}").json()
+        return {s["id"]: (s["is_king"], s["is_active"]) for s in event["signups"]}
+
+    crown(one)
+    assert crown(one) == {one: (1, 1), two: (0, 1)}  # crowning the king again
+    assert crown(two) == {one: (0, 0), two: (1, 1)}
+
+
 def test_a_bracket_change_touches_only_the_bracket(
     client: Client, auth_headers: dict[str, str], koth: dict[str, Any]
 ) -> None:
