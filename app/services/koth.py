@@ -318,12 +318,23 @@ class KothService:
         return self.update_signup(signup_id, KothSignupUpdate(bracket=new_bracket))
 
     def set_king(self, signup_id: int) -> KothSignupPublic:
-        """Set a player as king of their bracket (clears other kings in bracket)"""
+        """Set a player as king of their bracket; the other kings there go inactive."""
         with Session.begin() as session:
             signup = session.get(KothSignup, signup_id)
             if not signup:
                 raise NotFoundError(f"Signup not found by Id: {signup_id}")
-            self._clear_bracket_kings(session, signup.event_id, signup.bracket)
+            # A dethroned king goes inactive so that player can sign up again
+            session.execute(
+                update(KothSignup)
+                .where(
+                    col(KothSignup.event_id) == signup.event_id,
+                    col(KothSignup.bracket) == signup.bracket,
+                    col(KothSignup.is_king) == 1,
+                    col(KothSignup.id) != signup_id,
+                )
+                .values(is_king=0, is_active=0),
+                execution_options={"synchronize_session": False},
+            )
             signup.is_king = 1
             session.flush()
             return KothSignupPublic.model_validate(signup)
