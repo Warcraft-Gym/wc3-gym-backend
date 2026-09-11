@@ -3,10 +3,16 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Response
 
-from app.api.deps import LadderServiceDep, UserServiceDep, require_admin
+from app.api.deps import (
+    LadderServiceDep,
+    SoftBlockServiceDep,
+    UserServiceDep,
+    require_admin,
+)
 from app.api.search import SearchQuery
 from app.models.player_history import PlayerHistory
 from app.models.user import UserCreate, UserListPublic, UserPublic, UserUpdate
+from app.models.user_block import SoftBlocksPublic
 from app.models.w3c_ladder_match import LadderPlayer
 from app.services import player_history
 
@@ -42,6 +48,12 @@ def update_user(user_id: int, data: UserUpdate, service: UserServiceDep) -> User
 def delete_user(user_id: int, service: UserServiceDep) -> None:
     """Delete a user by their ID."""
     service.delete(user_id)
+
+
+@router.get("/users/{user_id}/blocks", dependencies=[Depends(require_admin)])
+def get_user_blocks(user_id: int, service: SoftBlockServiceDep) -> SoftBlocksPublic:
+    """One player's repeating blocks and busy days, for an admin."""
+    return service.for_user(user_id)
 
 
 @router.get("/users/{key}")

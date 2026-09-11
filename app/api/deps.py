@@ -34,6 +34,7 @@ from app.services.seasons import SeasonService
 from app.services.series import SeriesService
 from app.services.series_veto import SeriesVetoService
 from app.services.settings import SettingsService
+from app.services.soft_blocks import SoftBlockService
 from app.services.teams import TeamService
 from app.services.users import UserService
 
@@ -206,6 +207,7 @@ koth_service = KothService(settings_app_service=settings_service)
 ladder_service = LadderService(settings_app_service=settings_service)
 stats_service = PlayerCareerStatsService()
 availability_service = AvailabilityService()
+soft_block_service = SoftBlockService()
 
 
 SettingsServiceDep = Annotated[SettingsService, Depends(lambda: settings_service)]
@@ -233,3 +235,4 @@ StatsServiceDep = Annotated[PlayerCareerStatsService, Depends(lambda: stats_serv
 AvailabilityServiceDep = Annotated[
     AvailabilityService, Depends(lambda: availability_service)
 ]
+SoftBlockServiceDep = Annotated[SoftBlockService, Depends(lambda: soft_block_service)]

@@ -43,8 +43,6 @@ BEFORE_DRAFT_POSITION = "c8e2a6d4f913"
 BEFORE_DRAFT_EXCLUDED = "f3a8c71b0d24"
 BEFORE_SEASON_FLAGS = "a5c9f2e71b48"
 BEFORE_SOFT_BLOCKS = "160f8f7bf2d4"
-# Tables the database gains one deploy before a model reads them
-MIGRATED_BEFORE_THE_MODEL = {"user_block", "user_busy"}
 
 
 def comparable(
@@ -56,14 +54,9 @@ def comparable(
     element the model holds, so alembic reports it as changed on every run.
     The natural keys are checked by the writes they refuse instead, in
     tests/test_natural_keys.py.
-
-    A reflected table with no model is skipped only when it is in
-    MIGRATED_BEFORE_THE_MODEL.
     """
     if isinstance(obj, Index):
         return all(isinstance(part, Column) for part in obj.expressions)
-    if type_ == "table" and reflected and compare_to is None:
-        return name not in MIGRATED_BEFORE_THE_MODEL
     return True
 
 

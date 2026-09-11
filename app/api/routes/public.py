@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime
 from typing import Annotated, Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, Response
@@ -16,6 +17,7 @@ from app.api.deps import (
     SeriesServiceDep,
     SeriesVetoServiceDep,
     SettingsServiceDep,
+    SoftBlockServiceDep,
     UserServiceDep,
     discord_token,
     require_login,
@@ -47,6 +49,16 @@ from app.models.user import (
     UserCreate,
     UserListPublic,
     UserUpdate,
+)
+from app.models.user_block import (
+    FreeTimePublic,
+    SoftBlocksPublic,
+    UserBlockCreate,
+    UserBlockPublic,
+    UserBlockUpdate,
+    UserBusyCreate,
+    UserBusyPublic,
+    UserBusyUpdate,
 )
 from app.models.user_season_availability import (
     PlayerAvailabilityWrite,
@@ -337,6 +349,97 @@ def set_player_availability(
 
     return availability_service.set(
         user.id, int(season_id), data.playday, data.available, set_by_user_id=user.id
+    )
+
+
+@router.get("/player-blocks")
+def get_player_blocks(
+    player: DashboardPlayer, service: SoftBlockServiceDep
+) -> SoftBlocksPublic:
+    """The signed-in player's own repeating blocks and busy days."""
+    return service.for_user(player[1].id)
+
+
+@router.post("/player-blocks/repeating", status_code=201)
+def add_player_block(
+    data: UserBlockCreate, player: DashboardPlayer, service: SoftBlockServiceDep
+) -> UserBlockPublic:
+    """Add a repeating block: local hours on some weekdays, in the player's zone."""
+    return service.add_block(player[1].id, data)
+
+
+@router.put("/player-blocks/repeating/{block_id}")
+def update_player_block(
+    block_id: int,
+    data: UserBlockUpdate,
+    player: DashboardPlayer,
+    service: SoftBlockServiceDep,
+) -> UserBlockPublic:
+    return service.update_block(player[1].id, block_id, data)
+
+
+@router.delete("/player-blocks/repeating/{block_id}", status_code=204)
+def delete_player_block(
+    block_id: int, player: DashboardPlayer, service: SoftBlockServiceDep
+) -> None:
+    service.delete_block(player[1].id, block_id)
+
+
+@router.post("/player-blocks/busy", status_code=201)
+def add_player_busy(
+    data: UserBusyCreate, player: DashboardPlayer, service: SoftBlockServiceDep
+) -> UserBusyPublic:
+    """Add a run of whole local days the player is busy."""
+    return service.add_busy(player[1].id, data)
+
+
+@router.put("/player-blocks/busy/{busy_id}")
+def update_player_busy(
+    busy_id: int,
+    data: UserBusyUpdate,
+    player: DashboardPlayer,
+    service: SoftBlockServiceDep,
+) -> UserBusyPublic:
+    return service.update_busy(player[1].id, busy_id, data)
+
+
+@router.delete("/player-blocks/busy/{busy_id}", status_code=204)
+def delete_player_busy(
+    busy_id: int, player: DashboardPlayer, service: SoftBlockServiceDep
+) -> None:
+    service.delete_busy(player[1].id, busy_id)
+
+
+@router.get("/player-series/{series_id}/free-time")
+def get_series_free_time(
+    series_id: int,
+    request: Request,
+    credentials: Credentials,
+    user_service: UserServiceDep,
+    service: SoftBlockServiceDep,
+    start: datetime | None = None,
+    end: datetime | None = None,
+) -> FreeTimePublic:
+    """The hours both players have free, by default across the series' round.
+
+    A player of the series, a captain of either team or an admin reads it. It
+    answers shared ranges and their sum, never whose block is whose.
+    """
+    claims = require_member(request, credentials)
+    admin = claims.get("role") == "admin" or claims["sub"] == "admin"
+    seat = (
+        (claims["team_id"], claims["season_id"])
+        if claims.get("role") == "captain" and "season_id" in claims
+        else None
+    )
+    users = [] if admin else user_service.find_by_discord_id(str(claims["sub"]))
+    return service.free_time(
+        series_id,
+        admin=admin,
+        user_id=users[0].id if users else None,
+        seat=seat,
+        start=start,
+        end=end,
     )
 
 
