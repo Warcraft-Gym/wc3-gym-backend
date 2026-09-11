@@ -7,6 +7,7 @@ from httpx2 import Client
 from app.services import interactions
 from app.services.availability import AvailabilityService
 from tests.discord import APP_ID, CHANNEL, TOKEN, WEBHOOK, command, signed
+from tests.test_availability import turn_off_scheduling
 
 
 def post(client: Client, payload: dict[str, Any]) -> None:
@@ -96,3 +97,23 @@ def test_a_round_the_season_lacks_is_refused(
 
     post(client, press("1", "availability:1:9:yes"))
     assert discord_calls[-1][2] == {"content": "playday must be between 1 and 4"}
+
+
+def test_an_event_without_scheduling_posts_no_card_and_takes_no_press(
+    client: Client, seeded: dict[str, Any], public_key: None, discord_calls: list
+) -> None:
+    turn_off_scheduling(seeded["season_id"])
+    refusal = {"content": "This event does not use availability."}
+
+    post(client, command("availability", user="1", round=3))
+    assert [call[:2] for call in discord_calls] == [
+        ("PATCH", f"{WEBHOOK}/messages/@original")
+    ]
+    assert discord_calls[-1][2] == refusal
+
+    post(client, press("1", "availability:1:3:no"))
+    assert discord_calls[-1][2] == refusal
+    assert (
+        AvailabilityService().for_user(seeded["player_ids"][0], seeded["season_id"])
+        == []
+    )

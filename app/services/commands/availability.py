@@ -34,6 +34,7 @@ COMMAND: dict[str, Any] = {
 # Button styles: green, red, grey
 ANSWERS = (("yes", "Can play", 3), ("no", "Cannot play", 4), ("clear", "Clear", 2))
 VALUES = {"yes": True, "no": False, "clear": None}
+NO_SCHEDULING = "This event does not use availability."
 SAVED = {
     "yes": "Saved: you can play round {n} of {season}.",
     "no": "Saved: you cannot play round {n} of {season}.",
@@ -68,6 +69,8 @@ def run(payload: dict[str, Any], services: "Services") -> tuple[dict[str, Any], 
     if season_id is None:
         return {"content": "No current season."}, PRIVATE
     season = services.seasons.get(season_id)
+    if not season.scheduling_enabled:
+        return {"content": NO_SCHEDULING}, PRIVATE
     wanted = options_of(payload).get("round")
     round_ = (
         next((r for r in season.rounds if r.playday == wanted), None)
@@ -107,11 +110,13 @@ def press(payload: dict[str, Any], services: "Services") -> tuple[dict[str, Any]
             "Sign in on the site once, then press again."
         }, PRIVATE
     user_id = found[0].id
+    season = services.seasons.get(int(season_id))
+    if not season.scheduling_enabled:
+        return {"content": NO_SCHEDULING}, PRIVATE
     try:
         AvailabilityService().set(
             user_id, int(season_id), int(playday), VALUES[answer], user_id
         )
     except BadRequestError as error:
         return {"content": str(error)}, PRIVATE
-    season = services.seasons.get(int(season_id)).name
-    return {"content": SAVED[answer].format(n=playday, season=season)}, PRIVATE
+    return {"content": SAVED[answer].format(n=playday, season=season.name)}, PRIVATE
