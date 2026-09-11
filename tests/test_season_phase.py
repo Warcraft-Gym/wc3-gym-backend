@@ -93,3 +93,43 @@ def test_a_signup_to_a_commenced_season_saves_the_profile_only(
     assert "signup" not in resp.json()
     with Session() as session:
         assert session.get(DBUserSeasonSignup, key) is not None
+
+
+def test_the_signup_switch_gates_the_season_not_the_profile(
+    client: Client,
+    seeded: dict[str, Any],
+    signup_ready: None,
+    member: Callable[..., dict[str, str]],
+    auth_headers: dict[str, str],
+) -> None:
+    score(seeded["series_played_id"], None, None)
+    schedule(seeded["series_played_id"], None)
+    assert phase(client, seeded["season_id"]) == "open"
+
+    def switch(value: str) -> None:
+        resp = client.put(
+            "/config/settings/signups_enabled",
+            json={"value": value},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200, resp.text
+
+    # Off: the profile edit saves, the open season refuses the signup
+    switch("false")
+    headers = member("99")
+    resp = client.post("/signup", json=SIGNUP_BODY | {"country": "SE"}, headers=headers)
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["signup"] == "closed"
+    assert client.get(f"/users/{resp.json()['id']}").json()["country"] == "SE"
+    key = {"user_id": resp.json()["id"], "season_id": seeded["season_id"]}
+    with Session() as session:
+        assert session.get(DBUserSeasonSignup, key) is None
+
+    # On: the same form saves the profile and lands in the season
+    switch("true")
+    resp = client.post("/signup", json=SIGNUP_BODY | {"country": "NO"}, headers=headers)
+    assert resp.status_code == 201, resp.text
+    assert "signup" not in resp.json()
+    assert client.get(f"/users/{resp.json()['id']}").json()["country"] == "NO"
+    with Session() as session:
+        assert session.get(DBUserSeasonSignup, key) is not None
