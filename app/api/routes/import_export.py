@@ -382,7 +382,10 @@ def _workbook_bytes(file: UploadFile | None) -> bytes:
     return file.file.read()
 
 
-@router.post("/fantasy/import/teams", dependencies=[Depends(require_admin)])
+# Deprecated: no caller; kept until the backup and restore review
+@router.post(
+    "/fantasy/import/teams", dependencies=[Depends(require_admin)], deprecated=True
+)
 def import_fantasy_teams(
     file: Annotated[UploadFile | None, File()] = None,
     season_id: Annotated[int | None, EmptyStrToNone] = None,
@@ -396,7 +399,9 @@ def import_fantasy_teams(
     return Message(message="File uploaded successfully and data inserted into database")
 
 
-@router.post("/fantasy/import/bets", dependencies=[Depends(require_admin)])
+@router.post(
+    "/fantasy/import/bets", dependencies=[Depends(require_admin)], deprecated=True
+)
 def import_fantasy_bets(
     file: Annotated[UploadFile | None, File()] = None,
     season_id: Annotated[int | None, EmptyStrToNone] = None,
