@@ -40,6 +40,12 @@ BEFORE_READ_FROM = "d7b3e5a91c26"
 # The revision before a signup carries a draft position
 BEFORE_DRAFT_POSITION = "c8e2a6d4f913"
 BEFORE_DRAFT_EXCLUDED = "f3a8c71b0d24"
+BEFORE_SEASON_FLAGS = "a5c9f2e71b48"
+# Columns the database gains one deploy before the model reads them
+MIGRATED_BEFORE_THE_MODEL = {
+    ("seasons", "signups_open"),
+    ("seasons", "scheduling_enabled"),
+}
 
 
 def comparable(
@@ -51,9 +57,14 @@ def comparable(
     element the model holds, so alembic reports it as changed on every run.
     The natural keys are checked by the writes they refuse instead, in
     tests/test_natural_keys.py.
+
+    A reflected column with no model counterpart is skipped only when it is
+    in MIGRATED_BEFORE_THE_MODEL.
     """
     if isinstance(obj, Index):
         return all(isinstance(part, Column) for part in obj.expressions)
+    if isinstance(obj, Column) and reflected and compare_to is None:
+        return (obj.table.name, name) not in MIGRATED_BEFORE_THE_MODEL
     return True
 
 
@@ -524,3 +535,24 @@ def test_the_signup_draft_excluded_column_is_added_and_dropped(tmp_path: Path) -
     assert "draft_excluded" in columns()
     downgrade_to(url, BEFORE_DRAFT_EXCLUDED)
     assert "draft_excluded" not in columns()
+
+
+def test_the_season_flags_default_on_and_are_dropped(tmp_path: Path) -> None:
+    """A season that exists before the migration keeps signups and scheduling on."""
+    url = fresh_database(tmp_path, "season-flags")
+    upgrade_to(url, BEFORE_SEASON_FLAGS)
+    engine = create_engine(url)
+    with engine.begin() as connection:
+        connection.execute(
+            text("INSERT INTO seasons (name, series_per_round) VALUES ('Season 1', 2)")
+        )
+
+    upgrade_to(url, "head")
+    with engine.connect() as connection:
+        assert connection.execute(
+            text("SELECT signups_open, scheduling_enabled FROM seasons")
+        ).all() == [(True, True)]
+
+    downgrade_to(url, BEFORE_SEASON_FLAGS)
+    flags = {"signups_open", "scheduling_enabled"}
+    assert not flags & {c["name"] for c in inspect(engine).get_columns("seasons")}
