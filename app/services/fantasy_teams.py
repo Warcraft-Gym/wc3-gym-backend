@@ -15,8 +15,8 @@ from app.models.fantasy_team import (
     FantasyTeamPublic,
     FantasyTeamUpdate,
 )
-from app.models.relationships import DBFantasyTeamPlayer
-from app.models.season import Season
+from app.models.relationships import DBFantasyTeamPlayer, DBUserSeasonSignup
+from app.models.season import Season, tier_count
 from app.models.team_season import DBTeamSeason
 from app.models.user import User
 from app.services import derived, discord_roles
@@ -38,6 +38,30 @@ def _check_grind(
 
 
 class FantasyTeamService:
+    def check_roster(self, season_id: int, player_ids: list[int]) -> None:
+        """A roster holds one signup from each tier the season cuts."""
+        with Session.begin() as session:
+            season = session.get(Season, season_id)
+            if season is None:
+                raise NotFoundError(f"Season not found by id: {season_id}")
+            count = tier_count(season.fantasy_tier_cuts)
+            if count == 0:
+                raise BadRequestError("This season has no fantasy tiers yet")
+            tiers = session.scalars(
+                select(col(DBUserSeasonSignup.fantasy_tier)).where(
+                    col(DBUserSeasonSignup.season_id) == season_id,
+                    col(DBUserSeasonSignup.user_id).in_(player_ids),
+                )
+            ).all()
+            if (
+                len(player_ids) != count
+                or len(tiers) != count
+                or set(tiers) != set(range(1, count + 1))
+            ):
+                raise BadRequestError(
+                    f"A fantasy team drafts one player from each of the {count} tiers"
+                )
+
     def add(self, fantasy_team: FantasyTeamCreate) -> FantasyTeamPublic:
         with Session.begin() as session:
             _check_grind(session, fantasy_team.grind_team_id, fantasy_team.season_id)
