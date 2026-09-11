@@ -41,6 +41,7 @@ from app.models.team import Team, TeamCreate
 from app.models.team_season import DBTeamSeason
 from app.models.user import User, UserCreate
 from app.models.user_team_season import DBUserTeamSeason
+from app.services.series import both_scores, in_season
 
 logger = logging.getLogger(__name__)
 
@@ -506,7 +507,7 @@ def _matches(
     season: Season,
     teams: dict[int, int],
     maps: dict[int, int],
-) -> dict[int, int]:
+) -> dict[int, Match]:
     """The matches of the season, matched by the two teams and the playday."""
     rows = _rows(sheets["Matches"], ["Team1 ID", "Team2 ID", "Playday"])
     stored = {
@@ -546,9 +547,7 @@ def _matches(
             old_ids[old_id] = match
     session.add_all(written)
     session.flush()
-    return {
-        old_id: match.id for old_id, match in old_ids.items() if match.id is not None
-    }
+    return old_ids
 
 
 def _series_values(
@@ -577,11 +576,11 @@ def _series_values(
 
 
 def _series(
-    session: OrmSession, sheets: Sheets, matches: dict[int, int], users: Users
+    session: OrmSession, sheets: Sheets, matches: dict[int, Match], users: Users
 ) -> dict[int, int]:
     """The series of those matches, matched by match and the two players."""
     rows = _rows(sheets["Series"], ["Match ID", "Player1 ID", "Player2 ID"])
-    match_ids = set(matches.values())
+    match_ids = {ident(match) for match in matches.values()}
     stored: dict[tuple[int, int, int], Series] = {}
     if match_ids:
         stored = {
@@ -592,19 +591,20 @@ def _series(
         }
 
     written: list[Series] = []
+    touched: list[Series] = []
     old_ids: dict[int, Series] = {}
     casters: list[tuple[Series, str]] = []
     for row in rows:
-        match_id = matches.get(whole_number(row["Match ID"]))
+        match = matches.get(whole_number(row["Match ID"]))
         player1 = users.by_old_id.get(whole_number(row["Player1 ID"]))
         player2 = users.by_old_id.get(whole_number(row["Player2 ID"]))
-        if not match_id or not player1 or not player2:
+        if not match or not player1 or not player2:
             raise BadRequestError(
                 f"Series {row['ID']} names a match or a player the workbook lacks"
             )
         host = users.by_old_id.get(whole_number(row["Host Player ID"])) or player1
-        values = _series_values(row, match_id, player1, player2, host)
-        key = (match_id, player1.id, player2.id)
+        values = _series_values(row, ident(match), player1, player2, host)
+        key = (ident(match), player1.id, player2.id)
         series = stored.get(key)
         if series:
             series.sqlmodel_update(values.model_dump(exclude_unset=True))
@@ -612,6 +612,7 @@ def _series(
             series = Series(**values.model_dump())
             written.append(series)
             stored[key] = series
+        touched.append(series)
         old_id = whole_number(row["ID"])
         if old_id:
             old_ids[old_id] = series
@@ -619,6 +620,10 @@ def _series(
             casters.append((series, str(row["Caster"])))
     session.add_all(written)
     session.flush()
+    # The rules SeriesService applies; a refused row rolls the import back
+    for series in touched:
+        both_scores(series)
+        in_season(series)
     # A Caster cell is a channel link or a Twitch login; the cast has no account
     for series, caster in casters:
         url = _cast_url(caster)

@@ -21,7 +21,7 @@ from app.models.series import (
 from app.services import derived
 
 
-def _both_scores(row: Series) -> None:
+def both_scores(row: Series) -> None:
     """A result is both map scores or neither, and the pair either finishes the
     series or is 0-0, which records a series that was never played."""
     if (row.player1_score is None) != (row.player2_score is None):
@@ -36,7 +36,7 @@ def _both_scores(row: Series) -> None:
         )
 
 
-def _in_season(row: Series) -> None:
+def in_season(row: Series) -> None:
     """A series cannot sit before its season starts: a mistyped year reads as
     a season that has commenced, and every report of it is wrong. start_date is
     a calendar date, so the day of slack covers the player's timezone."""
@@ -53,8 +53,8 @@ class SeriesService:
     def add(self, series: SeriesCreate) -> SeriesPublic:
         with Session.begin() as session:
             row = Series.add(session, series.model_dump())
-            _both_scores(row)
-            _in_season(row)
+            both_scores(row)
+            in_season(row)
             derived.clear_kept_off_race(session, row)
             public = SeriesPublic.from_series(row)
             derived.fill_series(session, [public])
@@ -67,8 +67,8 @@ class SeriesService:
             )
             if not row:
                 raise NotFoundError("Series not found")
-            _both_scores(row)
-            _in_season(row)
+            both_scores(row)
+            in_season(row)
             derived.clear_kept_off_race(session, row)
             public = SeriesPublic.from_series(row)
             derived.fill_series(session, [public])

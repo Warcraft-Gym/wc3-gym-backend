@@ -413,14 +413,11 @@ def test_the_matches_and_series_are_written_in_bulk(
 def test_a_player_costs_one_statement_of_its_own(
     client: Client, auth_headers: dict[str, str]
 ) -> None:
-    """Ten more players cost ten more statements.
+    """Ten more players cost ten more statements on SQLite.
 
-    The users write is the one the pipeline does not batch, so an import grows
-    with the roster and with nothing else. A real season carries about sixty
-    players, so this is about sixty statements in one transaction.
+    SQLite cannot return new ids in row order, so SQLAlchemy sends one row per
+    statement there. Postgres sends the whole users write as one statement.
     """
-    # ponytail: pins the unbatched users write; drop this test to == the flat
-    # number once the pipeline inserts users in one statement like the rest
     roster = {**FANTASY_SHEETS, **_grown(players=10, matches=1)}
 
     with count_statements() as tally:
@@ -449,6 +446,41 @@ def test_a_workbook_the_pipeline_cannot_read_writes_nothing(
         assert session.scalars(select(Season)).all() == []
         assert session.scalars(select(Team)).all() == []
         assert session.scalars(select(User)).all() == []
+
+
+def _refused(client: Client, auth_headers: dict[str, str], row: list[Any]) -> str:
+    """Import a workbook whose one series is the row. Answers the error, after
+    checking the import left no season behind."""
+    columns, _ = SHEETS["Series"]
+    book = _workbook(extra={"Series": (columns, [row])})
+
+    response = _post(client, book, auth_headers)
+
+    assert response.status_code == 400, response.text
+    with Session() as session:
+        assert session.scalars(select(Season)).all() == []
+    return response.json()["error"]
+
+
+def test_a_series_with_one_map_score_is_refused(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    row = [1, 1, 1, 2, 2, None, 2, 1, 1, None, None, False]
+
+    assert _refused(client, auth_headers, row) == "A result needs both map scores"
+
+
+def test_a_series_before_the_season_start_is_refused(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """The season starts 2026-01-05, and a year typed wrong reads a year early."""
+    from datetime import datetime
+
+    row = [1, 1, 1, 2, 2, 1, 2, 1, 1, datetime(2025, 1, 10, 20), None, False]
+
+    assert _refused(client, auth_headers, row) == (
+        "A series cannot be earlier than the season start, 2026-01-05"
+    )
 
 
 def test_importing_the_same_workbook_twice_adds_no_row(
