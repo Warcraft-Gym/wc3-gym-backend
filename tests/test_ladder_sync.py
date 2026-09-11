@@ -5,6 +5,7 @@ written by capture.py), so the shape under test is the shape the service
 answers with.
 """
 
+import itertools
 import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -40,6 +41,8 @@ W3C_SEASON = 25
 
 # Before every match in the fixtures.
 SINCE = datetime(2026, 1, 1, tzinfo=UTC)
+
+DISCORD_IDS = itertools.count(100_000)  # above every discordId tests/seed.py hands out
 
 
 def fixture(name: str) -> list[dict[str, Any]]:
@@ -130,7 +133,7 @@ def add_player(name: str, battle_tag: str) -> UserReduced:
             name=name,
             battleTag=battle_tag,
             discordTag=name,
-            discordId=str(abs(hash(name)) % 10000),
+            discordId=str(next(DISCORD_IDS)),
             race=Race.HU,
         )
     )
