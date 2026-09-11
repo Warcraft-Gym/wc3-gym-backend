@@ -2,8 +2,11 @@
 the readers of a payload. The command modules import this, never
 app.services.interactions, which imports them."""
 
+import os
+import re
 from math import ceil
 from typing import Any, NamedTuple
+from urllib.parse import quote
 
 from app.core.query import QueryUtil
 from app.models.season import SeasonPublic
@@ -12,7 +15,7 @@ from app.models.series_cast import channel_name
 from app.models.team import TeamReduced
 from app.models.types import utcnow
 from app.models.user import UserPublic
-from app.services import discord_roles
+from app.services import discord, discord_roles
 from app.services.fantasy_teams import FantasyTeamService
 from app.services.ladder import LadderService
 from app.services.seasons import SeasonService
@@ -21,6 +24,14 @@ from app.services.users import UserService
 
 # A reply is public in the channel, or a private edit of the deferred "thinking" reply
 PUBLIC, PRIVATE = True, False
+# The UK nations Discord draws as flags; Northern Ireland has no emoji
+NATION_FLAGS = ("GB-ENG", "GB-SCT", "GB-WLS")
+# The app emoji before a cast link, by the link's host; `just discord-emojis` uploads them
+PLATFORM_EMOJI = {
+    "twitch.tv": "twitch",
+    "youtube.com": "youtube",
+    "youtu.be": "youtube",
+}
 
 
 class Services(NamedTuple):
@@ -58,19 +69,74 @@ def typed_option(payload: dict[str, Any]) -> str:
     )
 
 
-def series_line(series: SeriesPublic) -> str:
+def md(text: str) -> str:
+    """Text Discord shows as typed: `thank_s_` would otherwise end in an italic s."""
+    return re.sub(r"([\\*_~`|\[\]])", r"\\\1", text)
+
+
+def emoji(name: str) -> str:
+    """The app emoji as Discord writes it, or nothing until `just discord-emojis` uploads it."""
+    emojis = discord.app_emojis(os.getenv("DISCORD_APPLICATION_ID", ""))
+    return f"<:{name}:{emojis[name]}>" if name in emojis else ""
+
+
+def flag(country: str | None) -> str:
+    """The flag emoji of a country code, or nothing: regional indicators for
+    a two-letter code, a tag sequence for a UK nation."""
+    code = (country or "").upper()
+    if len(code) == 2 and code.isalpha():
+        return "".join(chr(0x1F1E6 + ord(letter) - ord("A")) for letter in code)
+    if code in NATION_FLAGS:
+        tags = "".join(
+            chr(0xE0000 + ord(letter)) for letter in code.replace("-", "").lower()
+        )
+        return f"\U0001f3f4{tags}\U000e007f"
+    return ""
+
+
+def player_url(user: UserPublic) -> str | None:
+    """The player's GNL page, by BattleTag when he has one; none without FRONTEND_URL."""
+    site = (os.getenv("FRONTEND_URL") or "").rstrip("/")
+    if not site:
+        return None
+    key = quote(user.battleTag, safe="") if user.battleTag else user.id
+    return f"{site}/player/{key}"
+
+
+def team_name(team: TeamReduced) -> str:
+    """The full name with the short one in brackets: "Team Alpha (Alpha)"."""
+    short = team.name or "?"
+    return f"{team.long_name} ({short})" if team.long_name else short
+
+
+def series_title(series: SeriesPublic) -> str:
+    """The round and both sides as plain text: "Round 1 · A (Alpha) vs B (Beta)"."""
+
     def side(player: UserPublic | None, team: TeamReduced | None) -> str:
         name = (player.name if player else None) or "?"
         return f"{name} ({team.name})" if team else name
 
     match = series.match
+    title = f"Round {match.playday if match else '?'} · "
+    title += side(series.player1, match.team1 if match else None)
+    return title + " vs " + side(series.player2, match.team2 if match else None)
+
+
+def cast_link(url: str) -> str:
+    """A cast as its platform's app emoji and its URL; the <> stops Discord from
+    adding a preview of the stream. A bare URL, not a [label](url): Discord
+    reads `thank_s_` in a label as italics and shows a backslash escape as typed."""
+    icon = emoji(PLATFORM_EMOJI.get(channel_name(url).split("/")[0], ""))
+    return f"{icon} <{url}>" if icon else f"<{url}>"
+
+
+def series_line(series: SeriesPublic) -> str:
+    """The series as one Markdown line: time, sides and a link per cast."""
     stamp = f"<t:{int(series.date_time.timestamp())}:f>" if series.date_time else "TBD"
-    line = f"{stamp} · Wk {match.playday if match else '?'} · "
-    line += side(series.player1, match.team1 if match else None)
-    line += " vs " + side(series.player2, match.team2 if match else None)
+    line = f"{stamp} · {md(series_title(series))}"
     for cast in series.casts:
-        line += f" · {channel_name(cast.channel_url)}"
-    return line + f" · #{series.id}"
+        line += f" · {cast_link(cast.channel_url)}"
+    return line
 
 
 def own_series(payload: dict[str, Any], services: Services) -> list[SeriesPublic]:

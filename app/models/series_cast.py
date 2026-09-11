@@ -115,6 +115,8 @@ class CastPublic(PublicModel):
     user_id: int | None = None
     # The account's name, or the channel for a cast with no account
     name: str
+    # The caster's Discord account, so the reminder can tag him
+    discord_id: str | None = None
     channel_url: str
     # The recording: the pasted URL, or the channel when it is itself the video
     vod_url: str | None = None
@@ -131,6 +133,7 @@ class CastPublic(PublicModel):
             series_id=cast.series_id,
             user_id=cast.user_id,
             name=cast.user.name if cast.user else channel_name(cast.channel_url),
+            discord_id=cast.user.discordId if cast.user else None,
             channel_url=cast.channel_url,
             vod_url=cast.vod_url or (cast.channel_url if derived else None),
             vod_added_at=cast.vod_added_at,

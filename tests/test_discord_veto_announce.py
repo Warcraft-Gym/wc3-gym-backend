@@ -36,8 +36,9 @@ def test_veto_posts_the_board_link_and_the_state(
     (post, delete) = discord_calls
     assert post[:2] == ("POST", CHANNEL)
     assert post[2] == {
-        "content": f"TBD · Wk 1 · P2 (Alpha) vs P4 (Beta) · #{series_id}\n"
-        f"<@2> vs <@4> · veto 0/4, P2 to ban\nFixed map · Concealed Hill\n"
+        # Only the player whose turn it is gets the tag
+        "content": "TBD · Round 1 · P2 (Alpha) vs P4 (Beta)\n"
+        "<@2> · veto 0/4, P2 to ban\nFixed map · Concealed Hill\n"
         f"{SITE}/player-series/{series_id}/veto"
     }
     assert delete[:2] == ("DELETE", f"{WEBHOOK}/messages/@original")
@@ -61,7 +62,8 @@ def test_veto_says_complete_once_every_step_is_taken(
     taken(client, series_id, side_a, pool[3])
     send(client, command("veto", user="2", series=series_id))
     assert (
-        "· veto complete\nFixed map · Concealed Hill\nBan · EI · P2\nBan · TS · P4\n"
+        # A complete veto has nobody to tag
+        "\nveto complete\nFixed map · Concealed Hill\nBan · EI · P2\nBan · TS · P4\n"
         "Pick · LR · P2\nPick · AL · P4\n"
     ) in discord_calls[0][2]["content"]
 
@@ -98,16 +100,31 @@ def test_announce_posts_the_match_card(
     (post, delete) = discord_calls
     assert post[:2] == ("POST", CHANNEL)
     stamp = int(when.timestamp())
+    # Round 1 runs 5 to 11 January 2026; each date is noon UTC
+    first, last = (
+        int(datetime(2026, 1, d, 12, tzinfo=UTC).timestamp()) for d in (5, 11)
+    )
     assert post[2] == {
         "content": "<@2> vs <@4>",
         "embeds": [
             {
-                "title": "Wk 1 · P2 (Alpha) vs P4 (Beta)",
-                "description": f"<t:{stamp}:F> (<t:{stamp}:R>)\n"
-                "Cast on https://www.twitch.tv/gnlcaster\n"
-                "veto 0/4, P2 to ban\nFixed map · Concealed Hill\n"
-                f"{SITE}/player-series/{series_id}/veto",
+                "description": "## Season 1\n"
+                f"Round 1: <t:{first}:d> to <t:{last}:d>\n\n"
+                "### Team Alpha (Alpha) vs Team Beta (Beta)\n"
+                f"🇺🇸 **[P2](<{SITE}/player/P2%232222>)** vs "
+                f"🇸🇪 **[P4](<{SITE}/player/P4%234444>)**\n"
+                f"<t:{stamp}:F> · <t:{stamp}:R>\n\n"
+                "**Veto**\n"
+                "Game 1 · Concealed Hill, fixed map\n"
+                "Game 2 · loser of game 1 picks\n"
+                "Game 3 · loser of game 2 picks\n"
+                "Picks · P2: not picked yet · P4: not picked yet\n"
+                "Veto 0/4, P2 to ban\n"
+                f"[Veto board](<{SITE}/player-series/{series_id}/veto>)\n\n"
+                "**Casts**\n"
+                "- <https://www.twitch.tv/gnlcaster> · twitch.tv/gnlcaster",
                 "color": 0x4A4DB8,
+                "footer": {"text": "MMR not synced yet"},
             }
         ],
     }
@@ -122,7 +139,7 @@ def test_announce_says_when_a_series_has_no_time_yet(
 ) -> None:
     send(client, command("announce", user="2", series=seeded["series_open_id"]))
     description = discord_calls[0][2]["embeds"][0]["description"]
-    assert description.splitlines()[0] == "Not scheduled yet"
+    assert "Not scheduled yet" in description.splitlines()
 
 
 def test_both_commands_refuse_a_series_the_caller_does_not_play(
@@ -142,7 +159,7 @@ def test_both_commands_autocomplete_the_callers_own_series(
     client: Client, public_key: None, seeded: dict[str, Any]
 ) -> None:
     choice = {
-        "name": f"Wk 1 · P2 (Alpha) vs P4 (Beta) · #{seeded['series_open_id']}",
+        "name": f"Round 1 · P2 (Alpha) vs P4 (Beta) · #{seeded['series_open_id']}",
         "value": seeded["series_open_id"],
     }
     for name in ("veto", "announce"):
@@ -179,9 +196,10 @@ def test_a_veto_step_edits_every_post_of_the_series(
     step = "veto 1/4, P4 to ban\nFixed map · Concealed Hill\nBan · EI · P2\n"
     undone = "veto 0/4, P2 to ban\nFixed map · Concealed Hill\n"
     assert f"· {step}" in discord_calls[0][2]["content"]
-    assert f"\n{step}" in discord_calls[1][2]["embeds"][0]["description"]
+    # The match card sums the veto up in one line: how far it is and whose turn
+    assert "\nVeto 1/4, P4 to ban\n" in discord_calls[1][2]["embeds"][0]["description"]
     assert f"· {undone}" in discord_calls[2][2]["content"]
-    assert f"\n{undone}" in discord_calls[3][2]["embeds"][0]["description"]
+    assert "\nVeto 0/4, P2 to ban\n" in discord_calls[3][2]["embeds"][0]["description"]
 
 
 def test_a_new_time_edits_the_announce_card(
@@ -201,7 +219,7 @@ def test_a_new_time_edits_the_announce_card(
     edit = next(call for call in discord_calls if call[0] == "PATCH")
     stamp = int(datetime(2026, 9, 9, 20, tzinfo=UTC).timestamp())
     assert edit[1] == f"{CHANNEL}/msg-1"
-    assert edit[2]["embeds"][0]["description"].startswith(f"<t:{stamp}:F>")
+    assert f"\n<t:{stamp}:F> · <t:{stamp}:R>\n" in edit[2]["embeds"][0]["description"]
 
 
 def test_a_veto_step_without_a_post_calls_discord_not_at_all(

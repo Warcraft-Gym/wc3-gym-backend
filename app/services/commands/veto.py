@@ -87,12 +87,21 @@ def state(series: SeriesPublic) -> str:
 
 
 def card(series: SeriesPublic) -> dict[str, Any]:
-    """The series, both players and where the veto stands."""
+    """The series and where the veto stands. It tags only the player whose
+    turn it is: an edit notifies nobody, so the tag counts when /veto posts."""
+    board = SeriesVetoService().board(series.id, None)
+    turn = ""
+    if not board.complete and len(board.steps) < len(board.order):
+        side = _side(board.order[len(board.steps)])
+        turn = f"{ping(series.player1 if side == 'A' else series.player2)} · "
     return {
-        "content": f"{series_line(series)}\n"
-        f"{ping(series.player1)} vs {ping(series.player2)} · {state(series)}\n"
+        "content": f"{series_line(series)}\n{turn}{state(series)}\n"
         f"{board_link(series.id)}"
     }
+
+
+def _side(entry: str) -> str:
+    return entry.rsplit("_", 1)[-1].upper()
 
 
 def run(payload: dict[str, Any], services: Services) -> tuple[dict[str, Any], bool]:

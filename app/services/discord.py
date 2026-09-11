@@ -301,7 +301,10 @@ def post_reply(
 @cache
 def app_emojis(application_id: str) -> dict[str, str]:
     """The application's emojis by name, read once per process; empty until
-    `just discord-emojis` uploads them, or when Discord cannot be reached."""
+    `just discord-emojis` uploads them, without an application id, or when
+    Discord cannot be reached."""
+    if not application_id:
+        return {}
     response = _bot_get(f"/applications/{application_id}/emojis")
     if response is None or not response.ok:
         return {}
@@ -313,32 +316,39 @@ def emoji_url(emoji_id: str) -> str:
     return f"https://cdn.discordapp.com/emojis/{emoji_id}.png"
 
 
-def upload_app_emojis(folder: Path) -> list[str]:
-    """Upload every PNG in the folder as an application emoji named by its
-    file stem; an emoji that exists already is left as it is."""
+def upload_app_emoji(name: str, image: bytes, mime: str = "image/png") -> bool:
+    """Upload one image as an application emoji under the name. An emoji that
+    exists already is left as it is, and False says so: Discord cannot swap an
+    emoji's image, so a new picture needs the old emoji deleted first."""
     headers = _bot_headers()
     application_id = os.getenv("DISCORD_APPLICATION_ID", "")
     if not headers or not application_id:
         raise ApiError(
             503, {"error": "DISCORD_BOT_TOKEN and DISCORD_APPLICATION_ID are needed"}
         )
-    have = app_emojis(application_id)
-    uploaded = []
-    for png in sorted(folder.glob("*.png")):
-        if png.stem in have:
-            continue
-        image = base64.b64encode(png.read_bytes()).decode()
-        response = requests.request(
-            "POST",
-            f"{API_URL}/applications/{application_id}/emojis",
-            headers=headers,
-            json={"name": png.stem, "image": f"data:image/png;base64,{image}"},
-            timeout=REQUEST_TIMEOUT,
-        )
-        if not response.ok:
-            raise ApiError(response.status_code, {"error": response.text})
-        uploaded.append(png.stem)
-    return uploaded
+    if name in app_emojis(application_id):
+        return False
+    encoded = base64.b64encode(image).decode()
+    response = requests.request(
+        "POST",
+        f"{API_URL}/applications/{application_id}/emojis",
+        headers=headers,
+        json={"name": name, "image": f"data:{mime};base64,{encoded}"},
+        timeout=REQUEST_TIMEOUT,
+    )
+    if not response.ok:
+        raise ApiError(response.status_code, {"error": response.text})
+    return True
+
+
+def upload_app_emojis(folder: Path) -> list[str]:
+    """Upload every PNG in the folder as an application emoji named by its
+    file stem; an emoji that exists already is left as it is."""
+    return [
+        png.stem
+        for png in sorted(folder.glob("*.png"))
+        if upload_app_emoji(png.stem, png.read_bytes())
+    ]
 
 
 def register_guild_commands(commands: list[dict[str, Any]]) -> list[str]:

@@ -68,7 +68,7 @@ def test_upcoming_marks_a_cast_series_that_is_on_now(
         == 200
     )
     line = discord_calls[0][2]["embeds"][0]["description"]
-    assert line.startswith(f"🔴 <t:{int(soon.timestamp())}:f> · Wk 1 · ")
+    assert f"🔴 <t:{int(soon.timestamp())}:F> · " in line
 
 
 def test_upcoming_posts_the_window_publicly(
@@ -86,12 +86,51 @@ def test_upcoming_posts_the_window_publicly(
     assert resp.json() == {"ok": True}
     (post, delete) = discord_calls
     assert post[:2] == ("POST", CHANNEL)
-    line = post[2]["embeds"][0]["description"]
-    assert line == (
-        f"<t:{int(soon.timestamp())}:f> · Wk 1 · P2 (Alpha) vs P4 (Beta)"
-        f" · twitch.tv/gnlcaster · #{seeded['series_open_id']}"
+    stamp = int(soon.timestamp())
+    # Round 1 runs 5 to 11 January 2026; each date is noon UTC
+    first, last = (
+        int(datetime(2026, 1, d, 12, tzinfo=UTC).timestamp()) for d in (5, 11)
+    )
+    assert post[2]["embeds"][0]["description"] == (
+        f"## Season 1\nRound 1: <t:{first}:d> to <t:{last}:d>\n\n"
+        "### Team Alpha (Alpha) vs Team Beta (Beta)\n"
+        "🇺🇸 **P2** vs 🇸🇪 **P4**\n"
+        f"<t:{stamp}:F> · <t:{stamp}:R>\n"
+        "- <https://www.twitch.tv/gnlcaster>"
     )
     assert delete[:2] == ("DELETE", f"{WEBHOOK}/messages/@original")
+
+
+def test_upcoming_puts_the_claimed_series_first_in_its_match(
+    client: Client, public_key: None, discord_calls: list, seeded: dict[str, Any]
+) -> None:
+    """The claimed series leads its match though the other starts a day
+    earlier; its channel goes out as a bare URL, which Discord never italicizes."""
+    first, later = utcnow() + timedelta(days=1), utcnow() + timedelta(days=2)
+    with Session.begin() as session:
+        unclaimed = session.get(Series, seeded["series_played_id"])
+        claimed = session.get(Series, seeded["series_open_id"])
+        assert unclaimed and claimed
+        unclaimed.date_time = first
+        claimed.date_time = later
+        claimed.casts.append(SeriesCast(channel_url="https://twitch.tv/thank_s_"))
+    body, headers = signed(command("upcoming"))
+    client.post("/discord/interactions", content=body, headers=headers)
+    description = discord_calls[0][2]["embeds"][0]["description"]
+    claimed = description.index(f"<t:{int(later.timestamp())}:F>")
+    assert claimed < description.index(f"<t:{int(first.timestamp())}:F>")
+    assert "- <https://twitch.tv/thank_s_>" in description
+
+
+def test_a_cast_link_carries_its_platform_icon_and_no_preview(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The icon shows once `just discord-emojis` has uploaded it, and not before."""
+    monkeypatch.setattr(discord, "app_emojis", lambda _: {"twitch": "42"})
+    assert base.cast_link("https://twitch.tv/thank_s_") == (
+        "<:twitch:42> <https://twitch.tv/thank_s_>"
+    )
+    assert base.cast_link("https://youtu.be/abc") == "<https://youtu.be/abc>"
 
 
 def test_upcoming_window_and_fantasy_filter(
@@ -109,7 +148,7 @@ def test_upcoming_window_and_fantasy_filter(
     assert discord_calls[2][2] == {"content": "No series in the next 30 days."}
     body, headers = signed(command("upcoming", days=30))
     client.post("/discord/interactions", content=body, headers=headers)
-    assert "Wk 1" in discord_calls[4][2]["embeds"][0]["description"]
+    assert "Round 1" in discord_calls[4][2]["embeds"][0]["description"]
 
 
 def test_leaderboard_ranks_badge_points_then_ladder_points(
@@ -238,7 +277,7 @@ def test_autocomplete_lists_the_callers_own_series(
         "data": {
             "choices": [
                 {
-                    "name": f"Wk 1 · P2 (Alpha) vs P4 (Beta) · #{seeded['series_open_id']}",
+                    "name": f"Round 1 · P2 (Alpha) vs P4 (Beta) · #{seeded['series_open_id']}",
                     "value": seeded["series_open_id"],
                 }
             ]
@@ -269,8 +308,7 @@ def test_schedule_sets_the_time_and_posts_publicly(
     assert post[:2] == ("POST", CHANNEL)
     stamp = int(datetime(2026, 9, 9, 20, tzinfo=UTC).timestamp())
     assert post[2] == {
-        "content": f"Scheduled by <@2>: <t:{stamp}:f> · Wk 1 · P2 (Alpha) vs P4 (Beta)"
-        f" · #{series_id}"
+        "content": f"Scheduled by <@2>: <t:{stamp}:f> · Round 1 · P2 (Alpha) vs P4 (Beta)"
     }
     assert delete[:2] == ("DELETE", f"{WEBHOOK}/messages/@original")
 

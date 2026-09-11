@@ -6,7 +6,6 @@ race's record and MMR lead, and the other races he laddered in the window
 follow as off-races.
 """
 
-import os
 from typing import Any
 from urllib.parse import quote
 
@@ -19,7 +18,9 @@ from app.services import discord, discord_roles
 from app.services.commands.base import (
     PUBLIC,
     Services,
+    flag,
     options_of,
+    player_url,
     season_span,
     typed_option,
 )
@@ -40,24 +41,6 @@ STATS: dict[str, Any] = {
 }
 
 
-# The UK nations Discord draws as flags; Northern Ireland has no emoji
-NATION_FLAGS = ("GB-ENG", "GB-SCT", "GB-WLS")
-
-
-def _flag(country: str | None) -> str:
-    """The flag emoji of a country code, or nothing: regional indicators for
-    a two-letter code, a tag sequence for a UK nation."""
-    code = (country or "").upper()
-    if len(code) == 2 and code.isalpha():
-        return "".join(chr(0x1F1E6 + ord(letter) - ord("A")) for letter in code)
-    if code in NATION_FLAGS:
-        tags = "".join(
-            chr(0xE0000 + ord(letter)) for letter in code.replace("-", "").lower()
-        )
-        return f"\U0001f3f4{tags}\U000e007f"
-    return ""
-
-
 def _icon(name: str | None, emojis: dict[str, str]) -> str:
     """The app emoji of a race, the GNL mark or the crown before a text, or
     nothing until `just discord-emojis` has uploaded it."""
@@ -71,13 +54,9 @@ def _record(race: str, wins: int, losses: int, emojis: dict[str, str]) -> str:
 def _header(user: UserPublic, answer: LadderPlayer, emojis: dict[str, str]) -> str:
     """Race, flag and name, then the links to his GNL page and his
     w3champions profile."""
-    line = (
-        f"{_icon(answer.race, emojis)}{_flag(user.country)} **{answer.name}**".strip()
-    )
-    site = (os.getenv("FRONTEND_URL") or "").rstrip("/")
-    if site:
-        key = quote(user.battleTag, safe="") if user.battleTag else user.id
-        line += f" · {_icon('gnl', emojis)}[GNL profile]({site}/player/{key})"
+    line = f"{_icon(answer.race, emojis)}{flag(user.country)} **{answer.name}**".strip()
+    if profile_page := player_url(user):
+        line += f" · {_icon('gnl', emojis)}[GNL profile]({profile_page})"
     if user.battleTag:
         profile = f"https://www.w3champions.com/player/{quote(user.battleTag, safe='')}"
         line += f" · {_icon('w3champions', emojis)}[w3champions ↗]({profile})"
@@ -95,7 +74,7 @@ def _series_lines(series: list[SeriesPublic], user_id: int) -> tuple[str, list[s
         match = one.match
         team = (match.team2 if mine else match.team1) if match else None
         name = (other.name if other else None) or "?"
-        line = f"Wk {match.playday if match else '?'} · vs "
+        line = f"Round {match.playday if match else '?'} · vs "
         line += f"{name} ({team.name})" if team else name
         own, theirs = (
             (one.player1_score, one.player2_score)

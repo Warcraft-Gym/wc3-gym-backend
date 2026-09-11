@@ -28,6 +28,7 @@ from app.services import (
     discord_posts,
     discord_roles,
     player_series,
+    series_cards,
 )
 from app.services.commands import (
     announce,
@@ -46,6 +47,7 @@ from app.services.commands.base import (
     own_series,
     season_span,
     series_line,
+    series_title,
     typed_option,
 )
 from app.services.seasons import SeasonService
@@ -159,18 +161,7 @@ def upcoming(
     )
     if not rows:
         return {"content": f"No series in the next {days} days."}, PUBLIC
-    return {
-        "embeds": [
-            {
-                "title": f"Series in the next {days} days",
-                "description": "\n".join(
-                    ("🔴 " if casts.on_now(row, start) else "") + series_line(row)
-                    for row in rows
-                ),
-                "color": 0x4A4DB8,
-            }
-        ]
-    }, PUBLIC
+    return series_cards.upcoming(rows, lambda row: casts.on_now(row, start)), PUBLIC
 
 
 def schedule(
@@ -206,7 +197,7 @@ def choices(payload: dict[str, Any], services: Services) -> list[dict[str, Any]]
     """The autocomplete choices for a `series` option: the caller's own series."""
     typed = typed_option(payload)
     names = (
-        (series_line(row).split(" · ", 1)[1][:100], row.id)
+        (f"{series_title(row)} · #{row.id}"[:100], row.id)
         for row in own_series(payload, services)
     )
     return [
