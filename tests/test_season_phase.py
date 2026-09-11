@@ -15,7 +15,7 @@ from httpx2 import Client
 
 from app.core.db import Session
 from app.models.relationships import DBUserSeasonSignup
-from app.models.season import Season
+from app.models.season import Season, SeasonPublic
 from tests.test_fantasy_locks import schedule, score
 from tests.test_player_session import SIGNUP_BODY
 
@@ -95,7 +95,7 @@ def test_a_signup_to_a_commenced_season_saves_the_profile_only(
         assert session.get(DBUserSeasonSignup, key) is not None
 
 
-def test_the_signup_switch_gates_the_season_not_the_profile(
+def test_the_season_signups_open_flag_gates_the_season_not_the_profile(
     client: Client,
     seeded: dict[str, Any],
     signup_ready: None,
@@ -106,16 +106,17 @@ def test_the_signup_switch_gates_the_season_not_the_profile(
     schedule(seeded["series_played_id"], None)
     assert phase(client, seeded["season_id"]) == "open"
 
-    def switch(value: str) -> None:
+    def switch(value: bool) -> None:
         resp = client.put(
-            "/config/settings/signups_enabled",
-            json={"value": value},
+            f"/seasons/{seeded['season_id']}",
+            json={"signups_open": value},
             headers=auth_headers,
         )
         assert resp.status_code == 200, resp.text
+        assert resp.json()["signups_open"] is value
 
-    # Off: the profile edit saves, the open season refuses the signup
-    switch("false")
+    # Off: the profile edit saves, the open season takes a request only
+    switch(False)
     headers = member("99")
     resp = client.post("/signup", json=SIGNUP_BODY | {"country": "SE"}, headers=headers)
     assert resp.status_code == 201, resp.text
@@ -126,10 +127,30 @@ def test_the_signup_switch_gates_the_season_not_the_profile(
         assert session.get(DBUserSeasonSignup, key) is None
 
     # On: the same form saves the profile and lands in the season
-    switch("true")
+    switch(True)
     resp = client.post("/signup", json=SIGNUP_BODY | {"country": "NO"}, headers=headers)
     assert resp.status_code == 201, resp.text
     assert "signup" not in resp.json()
     assert client.get(f"/users/{resp.json()['id']}").json()["country"] == "NO"
     with Session() as session:
         assert session.get(DBUserSeasonSignup, key) is not None
+
+
+@pytest.mark.parametrize(
+    "build",
+    [
+        SeasonPublic.from_season,
+        SeasonPublic.from_season_reduced,
+        SeasonPublic.from_season_without_maps,
+    ],
+)
+def test_every_season_answer_carries_both_flags(build: Callable[..., Any]) -> None:
+    season = Season(
+        id=1,
+        name="Cup",
+        series_per_round=1,
+        signups_open=False,
+        scheduling_enabled=False,
+    )
+    public = build(season)
+    assert (public.signups_open, public.scheduling_enabled) == (False, False)

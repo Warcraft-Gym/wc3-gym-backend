@@ -41,11 +41,6 @@ BEFORE_READ_FROM = "d7b3e5a91c26"
 BEFORE_DRAFT_POSITION = "c8e2a6d4f913"
 BEFORE_DRAFT_EXCLUDED = "f3a8c71b0d24"
 BEFORE_SEASON_FLAGS = "a5c9f2e71b48"
-# Columns the database gains one deploy before the model reads them
-MIGRATED_BEFORE_THE_MODEL = {
-    ("seasons", "signups_open"),
-    ("seasons", "scheduling_enabled"),
-}
 
 
 def comparable(
@@ -63,8 +58,6 @@ def comparable(
     """
     if isinstance(obj, Index):
         return all(isinstance(part, Column) for part in obj.expressions)
-    if isinstance(obj, Column) and reflected and compare_to is None:
-        return (obj.table.name, name) not in MIGRATED_BEFORE_THE_MODEL
     return True
 
 

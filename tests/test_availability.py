@@ -11,6 +11,9 @@ from typing import Any
 import pytest
 from httpx2 import Client
 
+from app.core.db import Session
+from app.models.season import Season
+from app.services.availability import AvailabilityService
 from tests.test_discord_auth import SESSION, stub_clerk
 
 
@@ -228,3 +231,29 @@ def test_the_player_writes_over_his_captains_answer(
             "set_by_name": "P2",
         }
     ]
+
+
+def test_an_event_without_scheduling_refuses_the_answer(
+    client: Client, seeded: dict[str, Any], member: Callable[..., dict[str, str]]
+) -> None:
+    turn_off_scheduling(seeded["season_id"])
+
+    resp = client.put(
+        "/player-availability",
+        json={"playday": 2, "available": False},
+        headers=member(),
+    )
+
+    assert resp.status_code == 403, resp.text
+    assert resp.json()["error"] == "scheduling_disabled"
+    assert (
+        AvailabilityService().for_user(seeded["player_ids"][0], seeded["season_id"])
+        == []
+    )
+
+
+def turn_off_scheduling(season_id: int) -> None:
+    with Session.begin() as session:
+        season = session.get(Season, season_id)
+        assert season is not None
+        season.scheduling_enabled = False
