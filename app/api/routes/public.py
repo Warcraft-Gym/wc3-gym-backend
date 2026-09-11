@@ -586,6 +586,8 @@ def create_fantasy_team(
     if not season_id or not drafted_team_id or not drafted_race:
         raise BadRequestError("missing required fields")
     _refuse_unless_open(season_service, season_id)
+    if player_ids:
+        fantasy_team_service.check_roster(season_id, player_ids)
 
     # Find or create user
     users = user_service.find_by_discord_id(str(entry.get("discord_id")))

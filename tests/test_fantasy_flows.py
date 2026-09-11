@@ -16,6 +16,8 @@ from httpx2 import Client
 
 from app.models.enums import Race
 from app.models.types import utcnow
+from tests.test_fantasy_locks import schedule, score
+from tests.test_player_session import member_session
 
 
 def get_json(client: Client, path: str) -> Any:  # noqa: ANN401  # a JSON body
@@ -153,6 +155,46 @@ def test_add_and_remove_players(
     )
     assert resp.status_code == 200
     assert {p["id"] for p in resp.json()["drafted_players"]} == {p1}
+
+
+def test_a_member_roster_holds_one_player_per_tier(
+    client: Client,
+    signed_up: dict[str, Any],
+    auth_headers: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    season = signed_up["season_id"]
+    p1, p2, p3, p4 = signed_up["player_ids"]
+    score(signed_up["series_played_id"], None, None)
+    schedule(signed_up["series_played_id"], utcnow() + timedelta(days=1))
+    resp = client.put(
+        f"/fantasy/tiers?season_id={season}",
+        json={
+            "cuts": [1100, 1300],
+            "tiers": {str(p1): 1, str(p2): 2, str(p3): 3, str(p4): 2},
+        },
+        headers=auth_headers,
+    )
+    assert resp.status_code == 204, resp.text
+
+    headers = member_session(monkeypatch, "2", "p2")
+    team = {
+        "season_id": season,
+        "drafted_team_id": signed_up["team_a_id"],
+        "drafted_race": "HU",
+    }
+    refused = {"error": "A fantasy team drafts one player from each of the 3 tiers"}
+    for roster in ([p1, p2], [p1, p2, p4], [p1, p1, p2]):
+        resp = client.post(
+            "/fantasy-team", json={**team, "player_ids": roster}, headers=headers
+        )
+        assert (resp.status_code, resp.json()) == (400, refused), roster
+
+    resp = client.post(
+        "/fantasy-team", json={**team, "player_ids": [p1, p2, p3]}, headers=headers
+    )
+    assert resp.status_code == 201, resp.text
+    assert {p["id"] for p in resp.json()["drafted_players"]} == {p1, p2, p3}
 
 
 def test_player_management_rejects_bad_input(
