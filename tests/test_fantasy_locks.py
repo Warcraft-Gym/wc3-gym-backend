@@ -76,13 +76,51 @@ def test_a_bet_closes_once_its_series_has_started(
 def test_a_series_moved_later_reopens_its_bets(
     client: Client, seeded: dict[str, Any], monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Only an unplayed series reopens: a result closes its bets for good."""
     headers = member_session(monkeypatch, "1", "p1")
     bet_id = client.get("/fantasy/bets").json()[0]["id"]
     schedule(seeded["series_played_id"], datetime.now(UTC) + timedelta(days=1))
 
     resp = client.put(f"/fantasy-bet/{bet_id}", json={"bet_points": 5}, headers=headers)
+    assert (resp.status_code, resp.json()) == (403, CLOSED), resp.text
+
+    score(seeded["series_played_id"], None, None)
+    resp = client.put(f"/fantasy-bet/{bet_id}", json={"bet_points": 5}, headers=headers)
     assert resp.status_code == 200, resp.text
     assert resp.json()["bet_points"] == 5
+
+
+def test_a_bet_closes_on_a_reported_series_that_carries_no_time(
+    client: Client, seeded: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A player reports his own series without ever scheduling it, and the
+    result closes its bets all the same."""
+    headers = member_session(monkeypatch, "1", "p1")
+    score(seeded["series_open_id"], 2, 0)
+
+    bet = {
+        "series_id": seeded["series_open_id"],
+        "winner_id": seeded["player_ids"][1],
+        "bet_points": 10,
+    }
+    resp = client.post("/fantasy-bet", json=bet, headers=headers)
+    assert (resp.status_code, resp.json()) == (403, CLOSED), resp.text
+
+
+def test_a_bet_takes_the_season_of_its_series(
+    client: Client, seeded: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The body never names the season, so a bet cannot be tagged onto another one."""
+    headers = member_session(monkeypatch, "1", "p1")
+    bet = {
+        "series_id": seeded["series_open_id"],
+        "season_id": 9999,
+        "winner_id": seeded["player_ids"][1],
+        "bet_points": 10,
+    }
+    resp = client.post("/fantasy-bet", json=bet, headers=headers)
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["season_id"] == seeded["season_id"]
 
 
 def test_a_team_is_drafted_only_while_the_season_is_open(

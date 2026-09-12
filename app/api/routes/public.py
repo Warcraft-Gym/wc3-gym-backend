@@ -73,7 +73,6 @@ from app.services import (
     replays,
     series_games,
 )
-from app.services.seasons import SeasonService
 from app.services.series import SeriesService
 
 logger = logging.getLogger(__name__)
@@ -126,12 +125,17 @@ DashboardPlayer = Annotated[
 ]
 
 
-def _refuse_started(series_service: SeriesService, series_id: int | None) -> None:
-    """A bet closes once its series has started, and reopens if the series moves later."""
+def _refuse_started(
+    series_service: SeriesService, series_id: int | None
+) -> SeriesPublic | None:
+    """The series the bet names, once it is still open: a bet closes when the
+    series is scored or past its time, and reopens if the series moves later."""
     if series_id is None:
-        return
+        return None
     series = series_service.get(series_id)
-    if series.date_time is not None and series.date_time <= utcnow():
+    # The same rule the season phase reads (app/models/season.py started)
+    scored = series.player1_score is not None and series.player2_score is not None
+    if scored or (series.date_time is not None and series.date_time <= utcnow()):
         raise ApiError(
             403,
             {
@@ -139,21 +143,7 @@ def _refuse_started(series_service: SeriesService, series_id: int | None) -> Non
                 "message": "Bets close once the series has started",
             },
         )
-
-
-def _refuse_unless_open(season_service: SeasonService, season_id: int) -> None:
-    """A fantasy team is drafted before the season commences; the admin routes stay open."""
-    phase = season_service.get(season_id).phase
-    if phase in ("commenced", "overdue"):
-        raise ApiError(
-            403,
-            {"error": "season_commenced", "message": "The season has commenced"},
-        )
-    if phase == "complete":
-        raise ApiError(
-            403,
-            {"error": "season_ended", "message": "The season has ended"},
-        )
+    return series
 
 
 def _owned_bet(
@@ -701,7 +691,7 @@ def create_fantasy_team(
 
     if not season_id or not drafted_team_id or not drafted_race:
         raise BadRequestError("missing required fields")
-    _refuse_unless_open(season_service, season_id)
+    season_service.refuse_unless_open(season_id)
     if player_ids:
         fantasy_team_service.check_roster(season_id, player_ids)
 
@@ -795,7 +785,7 @@ def create_fantasy_bet(
     """Create a fantasy bet for the identified player."""
     data = data or PublicFantasyBetWrite()
     entry = _identity(request, credentials)
-    _refuse_started(series_service, data.series_id)
+    series = _refuse_started(series_service, data.series_id)
 
     # Get or create user based on discord info
     existing_users = user_service.find_by_discord_id(str(entry.get("discord_id")))
@@ -811,9 +801,10 @@ def create_fantasy_bet(
         )
 
     # Create the bet
+    # The season is the series' own, so a bet cannot be tagged onto another one
     bet_payload: dict[str, Any] = {
         "series_id": data.series_id,
-        "season_id": data.season_id,
+        "season_id": series.match.season_id if series and series.match else None,
         "user_id": user.id,
         "winner_id": data.winner_id,
         "bet_points": data.bet_points,

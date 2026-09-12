@@ -1,4 +1,5 @@
 import logging
+from collections.abc import Sequence
 from datetime import timedelta
 
 from sqlalchemy import delete, select
@@ -8,7 +9,7 @@ from sqlalchemy.orm import joinedload, noload, selectinload
 from sqlmodel import col
 
 from app.core.db import Session, rel
-from app.core.exceptions import BadRequestError, NotFoundError
+from app.core.exceptions import ApiError, BadRequestError, NotFoundError
 from app.core.query import QueryElement, QueryUtil
 from app.models.base import ident
 from app.models.enums import Race
@@ -108,6 +109,25 @@ def fill_rounds(session: OrmSession, season: Season, wanted: int) -> None:
     session.expire(season, ["rounds", "round_count"])
 
 
+def resolved_tiers(
+    session: OrmSession, season: Season, signups: Sequence[DBUserSeasonSignup]
+) -> dict[int, int | None]:
+    """Each signup's fantasy tier: the pin, else the band its MMR on the Apply date falls in."""
+    cuts, applied = season.fantasy_tier_cuts, season.fantasy_tiers_applied_at
+    mmrs = (
+        mmr_on(session, [signup.user_id for signup in signups], applied)
+        if cuts and applied
+        else {}
+    )
+    tiers = {}
+    for signup in signups:
+        mmr = mmrs.get((signup.user_id, signup.race))
+        tiers[signup.user_id] = signup.fantasy_tier or (
+            tier_of(mmr, cuts) if mmr is not None and cuts else None
+        )
+    return tiers
+
+
 def _public(session: OrmSession, season: Season) -> SeasonPublic:
     """The full season with its phase; the phase is one aggregate over its series."""
     public = SeasonPublic.from_season(season)
@@ -205,6 +225,20 @@ class SeasonService:
             if not season:
                 raise NotFoundError("Season not found")
             return _public(session, season)
+
+    def refuse_unless_open(self, season_id: int) -> None:
+        """A fantasy team is drafted before the season commences; the admin routes stay open."""
+        phase = self.get(season_id).phase
+        if phase in ("commenced", "overdue"):
+            raise ApiError(
+                403,
+                {"error": "season_commenced", "message": "The season has commenced"},
+            )
+        if phase == "complete":
+            raise ApiError(
+                403,
+                {"error": "season_ended", "message": "The season has ended"},
+            )
 
     def get_all(self, limit: int | None = None, offset: int = 0) -> list[SeasonPublic]:
         with Session.begin() as session:
@@ -507,13 +541,9 @@ class SeasonService:
             )
 
             signups = session.scalars(statement).unique().all()
-            cuts, applied = season.fantasy_tier_cuts, season.fantasy_tiers_applied_at
+            applied = season.fantasy_tiers_applied_at
             # An unpinned tier is the band the player's MMR on the Apply date falls in
-            mmrs = (
-                mmr_on(session, [signup.user_id for signup in signups], applied)
-                if cuts and applied
-                else {}
-            )
+            tiers = resolved_tiers(session, season, signups)
             result = []
             for signup in signups:
                 if signup.user:
@@ -529,10 +559,7 @@ class SeasonService:
                         )
                         user_public.draft_position = signup.draft_position
                         user_public.draft_excluded = signup.draft_excluded
-                        mmr = mmrs.get((signup.user_id, signup.race))
-                        user_public.fantasy_tier = signup.fantasy_tier or (
-                            tier_of(mmr, cuts) if mmr is not None and cuts else None
-                        )
+                        user_public.fantasy_tier = tiers.get(signup.user_id)
                         result.append(user_public)
 
             return result
