@@ -1,8 +1,9 @@
 """The replays of a series: one file per game in the R2 bucket, one row per slot.
 
 The browser uploads each file to the bucket itself, at a link this module signs. A slot is
-written only once the file is there and starts like a replay, so a row never points at
-nothing. A re-upload lands on the same key, so nothing is deleted.
+written only once the file is there, starts like a replay and is under `MAX_BYTES`, so a row
+never points at nothing. A re-upload lands on the same key, so nothing is deleted; an oversized
+file is dropped from the bucket instead.
 """
 
 from collections.abc import Iterable
@@ -18,10 +19,16 @@ from app.models.types import utcnow
 from app.services import r2
 
 REPLAY_MAGIC = b"Warcraft III recorded game\x1a\x00"
+# A real replay is a few hundred KB; the Discord path refuses the same size
+MAX_BYTES = 10 * 1024 * 1024
+# A bound no real series reaches, so one series signs a bounded set of keys
+MAX_GAMES = 9
 
 
 def upload_url(series_id: int, game_no: int) -> str:
     """Where the browser puts one game's replay."""
+    if not 1 <= game_no <= MAX_GAMES:
+        raise BadRequestError(f"Game number must be between 1 and {MAX_GAMES}")
     return r2.upload_url(r2.key(series_id, game_no))
 
 
@@ -48,6 +55,9 @@ def confirm(
             raise BadRequestError(f"Game {game_no} replay is missing")
         if not found[0].startswith(REPLAY_MAGIC):
             raise BadRequestError(f"Game {game_no} is not a Warcraft III replay")
+        if found[1] > MAX_BYTES:
+            r2.delete(key)
+            raise BadRequestError(f"Game {game_no} replay is over 10 MB")
     with Session.begin() as session:
         for game_no, key in keys.items():
             row = session.get(DBSeriesReplay, (series_id, game_no))

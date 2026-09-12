@@ -199,6 +199,16 @@ class LadderService:
                 players.append(player)
             return sorted(players, key=lambda player: player.name or "")
 
+    def season_roster(self, season_id: int) -> Sequence[Row]:
+        """Every signup of the season with his team, by name: one statement.
+
+        The Discord autocomplete reads this on every keystroke, so it takes
+        the roster alone and none of the ladder aggregation season_players
+        draws for the draft page.
+        """
+        with Session.begin() as session:
+            return sorted(_roster(session, season_id), key=lambda row: row.name or "")
+
     def off_race_records(self, user_id: int, season_id: int) -> dict[str, list[int]]:
         """One player's wins and losses in the season's window on every race
         but the one the league scores him on, keyed by the race he selected."""
