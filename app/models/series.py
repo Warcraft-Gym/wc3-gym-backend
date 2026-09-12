@@ -173,6 +173,21 @@ class SeriesUpdate(SQLModel):
     player2_off_race: Annotated[Race | None, SuggestRace] = None
 
 
+class PlayerSeriesWrite(SQLModel):
+    """What a player may send for one of their own series, as JSON or as the
+    dashboard's form. The service decides which of these it acts on."""
+
+    action: str | None = None
+    date_time: datetime | None = None
+    player1_score: int | None = None
+    player2_score: int | None = None
+    # An empty value clears the stored off-race, so the text is read later
+    player1_off_race: str | None = None
+    player2_off_race: str | None = None
+    # The form sends the games as a JSON string, a JSON body sends the list
+    games: list[dict[str, Any]] | str | None = None
+
+
 def _pick_map(series: Series, side: str) -> str | None:
     """The map one side picked in the veto, by name; null before the pick."""
     for step in series.veto_steps:

@@ -60,6 +60,26 @@ def test_signup_takes_the_discord_fields_from_the_session(
     assert resp.json()["discordTag"] == "p1"
 
 
+def test_a_re_signup_keeps_the_fields_the_form_leaves_out(
+    client: Client,
+    seeded: dict[str, Any],
+    w3c_free: None,
+    member_headers: dict[str, str],
+) -> None:
+    """The join card posts no mmr, so a re-save must not clear the stored one."""
+    assert client.get("/users/1").json()["mmr"] == 1500
+
+    resp = client.post(
+        "/signup",
+        json=SIGNUP_BODY | {"name": "P1", "battleTag": "P1#1111", "country": "SE"},
+        headers=member_headers,
+    )
+
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["mmr"] == 1500
+    assert resp.json()["country"] == "SE"
+
+
 def test_player_series_on_a_session_reads_the_current_season(
     client: Client, seeded: dict[str, Any], member_headers: dict[str, str]
 ) -> None:

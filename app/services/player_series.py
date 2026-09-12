@@ -2,8 +2,7 @@ import logging
 from datetime import datetime
 from typing import Any
 
-from fastapi.responses import JSONResponse
-
+from app.core.exceptions import ApiError, BadRequestError, NotFoundError
 from app.core.scoring import decided, wins_needed
 from app.models.enums import Race
 from app.models.series import SeriesUpdate
@@ -22,23 +21,21 @@ def update_player_series(
     discord_tag: str,
     user_service: UserService,
     series_service: SeriesService,
-) -> JSONResponse | dict[str, Any]:
+) -> dict[str, Any]:
     # Find the user by discord_id
     users = user_service.find_by_discord_id(discord_id)
     if not users:
-        return JSONResponse({"error": "player_not_found"}, status_code=404)
+        raise NotFoundError("player_not_found")
     user = users[0]
 
     # Get the series and verify ownership
     series = series_service.get(series_id)
     if not series:
-        return JSONResponse({"error": "series_not_found"}, status_code=404)
+        raise NotFoundError("series_not_found")
 
     # Check if user is player1 or player2 in this series
     if series.player1_id != user.id and series.player2_id != user.id:
-        return JSONResponse(
-            {"error": "not_authorized_for_this_series"}, status_code=403
-        )
+        raise ApiError(403, {"error": "not_authorized_for_this_series"})
 
     # Track what's being updated for Discord notification
     original_datetime = series.date_time
@@ -62,16 +59,12 @@ def update_player_series(
         try:
             p1 = int(data["player1_score"])
             p2 = int(data["player2_score"])
-        except Exception:
-            return JSONResponse(
-                {"error": "Invalid or missing player scores for score update."},
-                status_code=400,
-            )
+        except Exception as invalid:
+            raise BadRequestError(
+                "Invalid or missing player scores for score update."
+            ) from invalid
         if not decided(p1, p2, wins):
-            return JSONResponse(
-                {"error": f"A series of this season ends at {wins} map wins."},
-                status_code=400,
-            )
+            raise BadRequestError(f"A series of this season ends at {wins} map wins.")
 
     # Update allowed fields (players can only update date_time and scores)
     changes: dict[str, Any] = {}
@@ -85,12 +78,9 @@ def update_player_series(
                 logger.error(
                     f"Invalid datetime format: {data['date_time']}, error: {e}"
                 )
-                return JSONResponse(
-                    {
-                        "error": "Invalid datetime format. Expected format: YYYY-MM-DD HH:MM:SS"
-                    },
-                    status_code=400,
-                )
+                raise BadRequestError(
+                    "Invalid datetime format. Expected format: YYYY-MM-DD HH:MM:SS"
+                ) from e
         else:
             changes["date_time"] = data["date_time"]
     if "player1_score" in data and data["player1_score"] is not None:
@@ -110,7 +100,7 @@ def update_player_series(
         try:
             changes[side] = Race.from_text(named)
         except ValueError as error:
-            return JSONResponse({"error": str(error)}, status_code=400)
+            raise BadRequestError(str(error)) from error
 
     # The games of the report, checked against the score before anything is written
     games = series_games.parse(data.get("games")) if reporting else []

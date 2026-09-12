@@ -71,7 +71,8 @@ class SettingsService:
     def update_setting(
         self, key: str, value: str | None, description: str | None = None
     ) -> dict[str, Any]:
-        """Update or create a single setting"""
+        """Update or create a single setting. A call with no description keeps
+        the stored one, so a bulk save does not wipe every description."""
         try:
             existing = self.get_by_key(key)
         except NotFoundError:
@@ -83,10 +84,10 @@ class SettingsService:
             except IntegrityError:
                 # The unique key says another request added it first
                 existing = self.get_by_key(key)
-        updated = self.update(
-            existing.id,
-            SettingsUpdate(key=key, value=value, description=description),
-        )
+        changes: dict[str, Any] = {"key": key, "value": value}
+        if description is not None:
+            changes["description"] = description
+        updated = self.update(existing.id, SettingsUpdate(**changes))
         return updated.to_dict()
 
     def update_settings(

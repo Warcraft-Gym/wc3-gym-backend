@@ -14,6 +14,7 @@ from app.models.types import (
     AwareUTC,
     EnumValue,
     IsoDate,
+    KnownScoreSystem,
     LenientDate,
     MapRules,
     NoneToList,
@@ -42,8 +43,8 @@ class SeasonBase(SQLModel):
     discordRole: Annotated[str | None, NumToStr] = Field(default=None, max_length=50)
     # One rule per game of a series: veto, loser, host or fixed
     map_rules: Annotated[str | None, MapRules] = Field(default=None, max_length=100)
-    # The scale the series points use: "standard" or "helpstone"
-    score_system: str = Field(
+    # The scale the series points use; an unknown value would re-score the season
+    score_system: Annotated[str, KnownScoreSystem] = Field(
         default="standard",
         max_length=20,
         sa_column_kwargs={"server_default": "standard"},
@@ -182,7 +183,7 @@ class SeasonUpdate(SQLModel):
     end_date: Annotated[date | None, LenientDate] = None
     discordRole: Annotated[str | None, NumToStr] = None
     map_rules: Annotated[str | None, MapRules] = None
-    score_system: str | None = None
+    score_system: Annotated[str | None, KnownScoreSystem] = None
     fantasy_grind: bool | None = None
     signups_open: bool | None = None
     scheduling_enabled: bool | None = None
