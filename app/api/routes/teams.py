@@ -10,6 +10,7 @@ from app.api.deps import (
     RequireCaptain,
     TeamServiceDep,
     UserServiceDep,
+    claim_seats,
     require_admin,
 )
 from app.api.search import SearchQuery
@@ -33,11 +34,11 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["teams"])
 
 
-def _own_team(claims: dict[str, Any], team_id: int) -> None:
-    """A captain reaches their own team; an admin reaches any."""
+def _own_team(claims: dict[str, Any], team_id: int, season_id: int) -> None:
+    """A captain reaches a team they captain that season; an admin reaches any."""
     if claims.get("role") == "admin" or claims["sub"] == "admin":
         return
-    if claims.get("team_id") != team_id:
+    if (team_id, season_id) not in claim_seats(claims):
         raise ApiError(403, {"error": "Not your team"})
 
 
@@ -102,7 +103,7 @@ def get_team_availability(
     service: AvailabilityServiceDep,
 ) -> list[UserSeasonAvailabilityPublic]:
     """The weeks the players of that team season have answered for."""
-    _own_team(claims, team_id)
+    _own_team(claims, team_id, season_id)
     return service.for_team(team_id, season_id)
 
 
@@ -116,7 +117,7 @@ def set_team_availability(
     user_service: UserServiceDep,
 ) -> list[UserSeasonAvailabilityPublic]:
     """Answer one week for a player of the team, as their captain."""
-    _own_team(claims, team_id)
+    _own_team(claims, team_id, season_id)
     if not service.on_roster(team_id, season_id, data.user_id):
         raise BadRequestError(f"Player {data.user_id} is not on this team this season")
     caller_id = user_service.id_by_discord_id(str(claims["sub"]))

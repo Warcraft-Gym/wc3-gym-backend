@@ -1,7 +1,7 @@
 import logging
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as OrmSession
 from sqlalchemy.orm import joinedload, noload, selectinload
@@ -11,7 +11,7 @@ from app.core.db import Session, rel
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.core.query import QueryElement, QueryUtil
 from app.models.relationships import DBTeamSeasonCaptain
-from app.models.season import Season
+from app.models.season import Season, progress_by_seasons
 from app.models.team import Team, TeamCreate, TeamPublic, TeamUpdate
 from app.models.team_season import DBTeamSeason
 from app.models.user import User, UserPublic
@@ -232,43 +232,47 @@ class TeamService:
         ]
         return public
 
-    def captain_seat(
-        self, discord_id: str, season: str | None
-    ) -> tuple[int, int] | None:
-        """The team and season this Discord account captains now, or None.
+    def captain_seats(self, discord_id: str) -> list[tuple[int, int]]:
+        """Every (team, season) this Discord account captains, newest season first.
 
-        The season is the `current_gnl_season` setting, or the newest season,
-        as the admin pages resolve it.
+        A season that has run to its end carries no powers, so a complete
+        season is left out; every other phase counts.
         """
         with Session.begin() as session:
-            season_id = (
-                int(season)
-                if season and season.isdigit()
-                else session.scalar(select(func.max(col(Season.id))))
-            )
-            if season_id is None:
-                return None
-            seat = session.execute(
+            seats = session.execute(
                 select(
                     col(DBTeamSeasonCaptain.team_id), col(DBTeamSeasonCaptain.season_id)
                 )
                 .join(User, col(DBTeamSeasonCaptain.user_id) == col(User.id))
-                .where(
-                    col(User.discordId) == discord_id,
-                    col(DBTeamSeasonCaptain.season_id) == season_id,
+                .where(col(User.discordId) == discord_id)
+            ).all()
+            if not seats:
+                return []
+            seasons = session.scalars(
+                select(Season).where(
+                    col(Season.id).in_({seat.season_id for seat in seats})
                 )
-            ).first()
-            return (seat.team_id, seat.season_id) if seat else None
-
-    def player_team(self, user_id: int, season_id: int) -> int | None:
-        """The team this player rosters for in one season, or None."""
-        with Session.begin() as session:
-            return session.scalar(
-                select(col(DBUserTeamSeason.team_id)).where(
-                    col(DBUserTeamSeason.user_id) == user_id,
-                    col(DBUserTeamSeason.season_id) == season_id,
-                )
+            ).all()
+            phases = progress_by_seasons(session, seasons)
+            return sorted(
+                (
+                    (seat.team_id, seat.season_id)
+                    for seat in seats
+                    if phases[seat.season_id].phase != "complete"
+                ),
+                key=lambda seat: seat[1],
+                reverse=True,
             )
+
+    def player_teams(self, user_id: int) -> dict[int, tuple[int, str]]:
+        """The team this player rosters for in each season: season id -> (id, name)."""
+        with Session.begin() as session:
+            rows = session.execute(
+                select(col(DBUserTeamSeason.season_id), col(Team.id), col(Team.name))
+                .join(Team, col(Team.id) == col(DBUserTeamSeason.team_id))
+                .where(col(DBUserTeamSeason.user_id) == user_id)
+            ).all()
+            return {row[0]: (row[1], row[2]) for row in rows}
 
     def delete(self, team_id: int) -> None:
         with Session.begin() as session:

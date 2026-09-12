@@ -145,6 +145,8 @@ def test_a_member_reads_me(client: Client, monkeypatch: pytest.MonkeyPatch) -> N
         "signed_up": False,
         "season_id": None,
         "team": None,
+        "seats": [],
+        "seasons": [],
     }
 
 
@@ -284,6 +286,12 @@ def test_view_as_captain_names_the_chosen_team(
     me = client.get("/me", headers=viewing).json()
     assert me["role"] == "captain"
     assert me["team"]["id"] == seeded["team_a_id"]
+    # the older header stands for one seat, so a seat-guarded route admits it
+    guarded = client.get(
+        f"/teams/{seeded['team_a_id']}/seasons/{seeded['season_id']}/availability",
+        headers=viewing,
+    )
+    assert guarded.status_code == 200, guarded.text
 
 
 def test_view_as_is_ignored_for_a_member(
