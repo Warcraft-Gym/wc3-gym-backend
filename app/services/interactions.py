@@ -7,7 +7,6 @@ runs the command and replies through the interaction token: a private edit
 of the deferred reply, or a public follow-up in the channel.
 """
 
-import json
 import os
 from collections.abc import Callable, Mapping
 from datetime import UTC, datetime, timedelta
@@ -15,9 +14,8 @@ from typing import Any
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
-from fastapi.responses import JSONResponse
 
-from app.core.exceptions import ApiError, BadRequestError
+from app.core.exceptions import ApiError, BadRequestError, NotFoundError
 from app.core.query import QueryUtil
 from app.models.season import SeasonPublic
 from app.models.types import utcnow
@@ -177,7 +175,7 @@ def schedule(
         when = when.replace(tzinfo=UTC)
     discord_id, discord_tag = caller(payload)
     try:
-        result = player_series.update_player_series(
+        player_series.update_player_series(
             int(options["series"]),
             {"date_time": when.isoformat()},
             discord_id=discord_id,
@@ -185,10 +183,8 @@ def schedule(
             user_service=services.users,
             series_service=services.series,
         )
-    except BadRequestError as error:
+    except (ApiError, BadRequestError, NotFoundError) as error:
         return {"content": str(error)}, PRIVATE
-    if isinstance(result, JSONResponse):
-        return {"content": json.loads(bytes(result.body))["error"]}, PRIVATE
     line = series_line(services.series.get(int(options["series"])))
     return {"content": f"Scheduled by <@{discord_id}>: {line}"}, PUBLIC
 

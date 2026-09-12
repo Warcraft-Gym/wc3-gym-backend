@@ -5,14 +5,12 @@ links the browser uses, then the result goes through the write the dashboard use
 so the veto rule and the best-of rule are the same in both places.
 """
 
-import json
 import os
 from typing import Any
 
 import requests
-from fastapi.responses import JSONResponse
 
-from app.core.exceptions import BadRequestError
+from app.core.exceptions import ApiError, BadRequestError, NotFoundError
 from app.models.user import UserPublic
 from app.services import discord, player_series, replays
 from app.services.commands.base import (
@@ -165,12 +163,9 @@ def run(payload: dict[str, Any], services: Services) -> tuple[dict[str, Any], bo
             user_service=services.users,
             series_service=services.series,
         )
-    except BadRequestError as error:
-        # what the replay check refuses, such as a file that is not a replay
+    except (ApiError, BadRequestError, NotFoundError) as error:
+        # what the write refuses: an unknown series, someone else's, a bad replay
         return _refused(str(error))
-    if isinstance(result, JSONResponse):
-        error = json.loads(bytes(result.body))["error"]
-        return _refused(error)
 
     series = services.series.get(series_id)
     match = series.match
