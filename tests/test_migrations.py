@@ -45,6 +45,8 @@ BEFORE_SEASON_FLAGS = "a5c9f2e71b48"
 BEFORE_SOFT_BLOCKS = "160f8f7bf2d4"
 # The revision before the seasons table is the event table
 BEFORE_EVENT_RENAME = "75b9f3b280c2"
+# The rename itself, which leaves the seasons view behind until B2
+EVENT_RENAME = "1e0287eacccf"
 
 
 def comparable(
@@ -108,7 +110,7 @@ def test_the_score_system_backfill_reads_the_settings_row(
     upgrade_to(url, "head")
 
     with engine.connect() as connection:
-        assert connection.scalars(text("SELECT score_system FROM seasons")).all() == [
+        assert connection.scalars(text("SELECT score_system FROM event")).all() == [
             expected
         ]
 
@@ -355,7 +357,7 @@ def test_the_tier_backfill_picks_the_season_that_signed_up_every_tiered_player(
         assert rows == [(1, 1, 1), (1, 2, 2), (2, 1, None)]
         # Neither player has a synced MMR, so no cuts are rebuilt for either season
         assert connection.scalars(
-            text("SELECT fantasy_tier_cuts FROM seasons")
+            text("SELECT fantasy_tier_cuts FROM event")
         ).all() == [None, None]
 
 
@@ -416,10 +418,10 @@ def test_the_count_drop_rebuilds_the_cuts_from_the_tiers_and_the_mmr(
     upgrade_to(url, "head")
     with engine.connect() as connection:
         assert "fantasy_tiers" not in {
-            column["name"] for column in inspect(engine).get_columns("seasons")
+            column["name"] for column in inspect(engine).get_columns("event")
         }
         cuts = connection.scalars(
-            text("SELECT fantasy_tier_cuts FROM seasons ORDER BY id")
+            text("SELECT fantasy_tier_cuts FROM event ORDER BY id")
         ).all()
         # SQLite hands the JSON back as text
         assert [json.loads(c) if isinstance(c, str) else c for c in cuts] == [
@@ -544,7 +546,7 @@ def test_the_season_flags_default_on_and_are_dropped(tmp_path: Path) -> None:
     upgrade_to(url, "head")
     with engine.connect() as connection:
         assert connection.execute(
-            text("SELECT signups_open, scheduling_enabled FROM seasons")
+            text("SELECT signups_open, scheduling_enabled FROM event")
         ).all() == [(True, True)]
 
     downgrade_to(url, BEFORE_SEASON_FLAGS)
@@ -638,7 +640,7 @@ def test_the_seasons_become_events_of_the_gnl_league(tmp_path: Path) -> None:
             )
         )
 
-    upgrade_to(url, "head")
+    upgrade_to(url, EVENT_RENAME)
     with engine.connect() as connection:
         assert connection.execute(
             text("SELECT id, name, kind, published, league_id FROM event")
@@ -666,3 +668,16 @@ def test_the_seasons_become_events_of_the_gnl_league(tmp_path: Path) -> None:
     )
     # The event columns, league_id and koth_events.round_id went with it
     assert {table: columns(table) for table in before} == before
+
+
+def test_the_seasons_view_is_dropped_and_comes_back_on_downgrade(
+    tmp_path: Path,
+) -> None:
+    """B1 leaves the view for the running deploy; B2 takes it away."""
+    url = fresh_database(tmp_path, "seasons-view")
+    upgrade_to_head(url)
+    engine = create_engine(url)
+
+    assert "seasons" not in inspect(engine).get_view_names()
+    downgrade_to(url, EVENT_RENAME)
+    assert "seasons" in inspect(engine).get_view_names()

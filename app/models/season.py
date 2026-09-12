@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from datetime import date, datetime
 from typing import TYPE_CHECKING, Annotated, Any, Literal, NamedTuple, Self
 
@@ -8,6 +9,8 @@ from sqlmodel import Field, Relationship, SQLModel, col
 
 from app.models.base import DBModel, ident
 from app.models.enums import EventKind, Race
+from app.models.event_division import EventDivisionPublic
+from app.models.event_stage import EventStagePublic
 from app.models.map import MapPublic
 from app.models.relationships import DBSeasonRound, SeasonRoundPublic
 from app.models.types import (
@@ -83,6 +86,52 @@ class SeasonProgress(NamedTuple):
     unscored_series: int
 
 
+def series_counts(session: Session, event_id: int | None) -> tuple[int, int, int]:
+    """How many series the event holds, how many have started, how many are scored."""
+    if event_id is None:
+        return 0, 0, 0
+    return series_counts_by_event(session, [event_id]).get(event_id, (0, 0, 0))
+
+
+def series_counts_by_event(
+    session: Session, event_ids: Sequence[int | None]
+) -> dict[int, tuple[int, int, int]]:
+    """The same three counts per event, in one query, for a page of events.
+
+    A series has started once it is scored or its time has passed. The series
+    of an event still hang off its matches, so the count joins through them.
+    An event with no series has no row here.
+    """
+    from app.models.match import Match
+    from app.models.series import Series
+
+    scored = and_(
+        col(Series.player1_score).is_not(None),
+        col(Series.player2_score).is_not(None),
+    )
+    started = or_(scored, col(Series.date_time) <= utcnow())
+    rows = session.execute(
+        select(
+            col(Match.season_id),
+            func.count(),
+            func.coalesce(func.sum(case((started, 1), else_=0)), 0),
+            func.coalesce(func.sum(case((scored, 1), else_=0)), 0),
+        )
+        .select_from(Series)
+        .join(Match, col(Match.id) == col(Series.match_id))
+        .where(col(Match.season_id).in_([i for i in event_ids if i is not None]))
+        .group_by(col(Match.season_id))
+    )
+    return {row[0]: (row[1], row[2], row[3]) for row in rows}
+
+
+# The event phase, derived from published, the check-in window and the series
+# (NE-9); nothing stores it. app/services/events.py computes it.
+EventPhase = Literal[
+    "draft", "signups_open", "checkin", "seeded", "running", "finished"
+]
+
+
 class Season(SeasonBase, DBModel, table=True):
     # A GNL season is one event of the GNL league; "season" stays its name in the payloads
     __tablename__ = "event"
@@ -154,24 +203,7 @@ class Season(SeasonBase, DBModel, table=True):
 
     def progress(self, session: Session) -> SeasonProgress:
         """The season's phase from its series; a season with no series is open."""
-        from app.models.match import Match
-        from app.models.series import Series
-
-        scored = and_(
-            col(Series.player1_score).is_not(None),
-            col(Series.player2_score).is_not(None),
-        )
-        started = or_(scored, col(Series.date_time) <= utcnow())
-        total, n_started, n_scored = session.execute(
-            select(
-                func.count(),
-                func.coalesce(func.sum(case((started, 1), else_=0)), 0),
-                func.coalesce(func.sum(case((scored, 1), else_=0)), 0),
-            )
-            .select_from(Series)
-            .join(Match, col(Match.id) == col(Series.match_id))
-            .where(col(Match.season_id) == self.id)
-        ).one()
+        total, n_started, n_scored = series_counts(session, self.id)
         unscored = total - n_scored
         if not n_started:
             return SeasonProgress("open", unscored)
@@ -374,3 +406,29 @@ class EventPublic(SQLModel):
     min_games: int | None = None
     mmr_max: int | None = None
     entrant_cap: int | None = None
+    # Computed by the service when the event is the subject; null when nested
+    phase: EventPhase | None = None
+    # The entrants who have not withdrawn; null on a list read
+    entrant_count: int | None = None
+    stages: list[EventStagePublic] = []
+    divisions: list[EventDivisionPublic] = []
+
+
+class MemberEventRow(SQLModel):
+    """One row of the member home's events list, over every kind of event.
+
+    It replaces the season and KOTH split: the rows are keyed by event id,
+    which no longer collides now that a KOTH night is an event too.
+    """
+
+    kind: EventKind
+    id: int
+    name: Annotated[str | None, NumToStr] = None
+    start: Annotated[IsoDate | None, LenientDate] = None
+    end: Annotated[IsoDate | None, LenientDate] = None
+    phase: EventPhase
+    signups_open: bool
+    # The caller holds an entrant row, or a GNL signup, for this event
+    joined: bool
+    # The event's optional "Page" link; the home builds its own in-app link
+    url: str | None = None
