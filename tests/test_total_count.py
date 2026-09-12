@@ -27,26 +27,23 @@ def add_series_for_player(
     A pair of players meet once inside a match, so every series takes a
     match of its own, one playday after the seeded one."""
     from app.core.db import Session
-    from app.models.match import Match
-    from app.models.series import Series
+    from tests.seed import add_match, add_series
 
     with Session() as session:
         for index in range(count):
-            match = Match(
+            match = add_match(
+                session,
                 team1_id=seeded["team_a_id"],
                 team2_id=seeded["team_b_id"],
                 season_id=seeded["season_id"],
                 playday=index + 2,
             )
-            session.add(match)
-            session.flush()
-            session.add(
-                Series(
-                    match_id=ident(match),
-                    player1_id=player_id,
-                    player2_id=opponent_id,
-                    host_player_id=player_id,
-                )
+            add_series(
+                session,
+                match,
+                player1_id=player_id,
+                player2_id=opponent_id,
+                host_player_id=player_id,
             )
         session.commit()
 
@@ -225,21 +222,19 @@ def test_player_series_count_holds_to_the_current_season(
         )
         session.add(other)
         session.flush()
-        match = Match(
+        match = add_match(
+            session,
             team1_id=seeded["team_a_id"],
             team2_id=seeded["team_b_id"],
             season_id=ident(other),
             playday=1,
         )
-        session.add(match)
-        session.flush()
-        session.add(
-            Series(
-                match_id=ident(match),
-                player1_id=seeded["player_ids"][0],
-                player2_id=seeded["player_ids"][2],
-                host_player_id=seeded["player_ids"][0],
-            )
+        add_series(
+            session,
+            match,
+            player1_id=seeded["player_ids"][0],
+            player2_id=seeded["player_ids"][2],
+            host_player_id=seeded["player_ids"][0],
         )
         session.commit()
 

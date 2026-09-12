@@ -9,6 +9,7 @@ from app.models.season import SeasonPublic
 from app.models.team_reduced import TeamReduced
 
 if TYPE_CHECKING:
+    from app.models.relationships import DBEventRound
     from app.models.season import Season
     from app.models.team import Team
 
@@ -23,8 +24,8 @@ class MatchBase(SQLModel):
 
 class Match(MatchBase, DBModel, table=True):
     __tablename__ = "matches"
-    # Two teams meet once on a playday. A-vs-B and B-vs-A are different rows.
     __table_args__ = (
+        # Two teams meet once on a playday. A-vs-B and B-vs-A are different rows.
         Index(
             "uq_matches_season_id_team1_id_team2_id_playday",
             "season_id",
@@ -33,12 +34,14 @@ class Match(MatchBase, DBModel, table=True):
             "playday",
             unique=True,
         ),
+        # The parent key the (match_id, round_id) pair of a series points at
+        Index("uq_matches_id_round_id", "id", "round_id", unique=True),
     )
 
     id: int | None = Field(default=None, primary_key=True)
-    # The round this tie belongs to; backfilled in C1, required from C2. It
-    # stays off MatchBase, so the match payloads are unchanged.
-    round_id: int | None = Field(default=None, index=True, foreign_key="event_round.id")
+    # The round this tie is played in. It stays off MatchBase, so the match
+    # payloads are unchanged.
+    round_id: int = Field(index=True, foreign_key="event_round.id")
     team1: "Team" = Relationship(
         sa_relationship_kwargs={"foreign_keys": "[Match.team1_id]"}
     )
@@ -50,6 +53,9 @@ class Match(MatchBase, DBModel, table=True):
     )
     fixed_map: Map | None = Relationship(
         sa_relationship_kwargs={"foreign_keys": "[Match.fixed_map_id]"}
+    )
+    round: "DBEventRound" = Relationship(
+        sa_relationship_kwargs={"foreign_keys": "[Match.round_id]"}
     )
 
 

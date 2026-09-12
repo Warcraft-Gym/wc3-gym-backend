@@ -26,6 +26,7 @@ from app.models.series import Series
 from app.models.user import User, UserPublic
 from app.models.user_team_season import UserTeamSeasonStatsPublic
 from app.services import derived
+from tests.seed import add_match
 
 
 @pytest.fixture(autouse=True)
@@ -51,8 +52,11 @@ def record(user_id: int, season_id: int) -> UserTeamSeasonStatsPublic:
 
 
 def add_series(**values: Any) -> int:  # noqa: ANN401  # the Series fields
+    """A series of an existing tie, played in the round of that tie."""
     with Session() as session:
-        series = Series(**values)
+        match = session.get(Match, values["match_id"])
+        assert match is not None
+        series = Series(round_id=match.round_id, **values)
         session.add(series)
         session.commit()
         assert series.id is not None
@@ -96,13 +100,13 @@ def test_matchup_history_follows_playday_not_series_id(
 ) -> None:
     """A series added later on an earlier playday comes first."""
     with Session() as session:
-        later_playday = Match(
+        later_playday = add_match(
+            session,
             team1_id=seeded["team_a_id"],
             team2_id=seeded["team_b_id"],
             season_id=seeded["season_id"],
             playday=2,
         )
-        session.add(later_playday)
         session.commit()
         later_playday_id = later_playday.id
 

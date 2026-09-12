@@ -4,8 +4,9 @@ No row is no answer, and no answer counts as available. The player writes the
 row from the dashboard and their captain writes the same row, so the last
 write wins and set_by_user_id names whoever wrote it.
 
-C1 renamed the table and added round_id beside the season and the playday;
-the older pair is dropped a deploy later, once every reader keys on the round.
+C1 renamed the table and added round_id beside the season and the playday, and
+C2 made the round half of the key; the older pair is dropped a deploy later,
+once every reader keys on the round.
 """
 
 from typing import Self
@@ -18,11 +19,14 @@ from app.models.base import DBModel
 class DBRoundAvailability(DBModel, table=True):
     __tablename__ = "round_availability"
     user_id: int = Field(foreign_key="users.id", primary_key=True)
-    season_id: int = Field(index=True, foreign_key="event.id", primary_key=True)
-    playday: int = Field(primary_key=True)
-    # The round the answer is about; C2 makes it the key and refuses a null
-    round_id: int | None = Field(
-        default=None, index=True, foreign_key="event_round.id", ondelete="CASCADE"
+    season_id: int = Field(index=True, foreign_key="event.id")
+    playday: int
+    # The round the answer is about, and the other half of the key
+    round_id: int = Field(
+        primary_key=True,
+        index=True,
+        foreign_key="event_round.id",
+        ondelete="CASCADE",
     )
     available: bool
     set_by_user_id: int = Field(foreign_key="users.id")

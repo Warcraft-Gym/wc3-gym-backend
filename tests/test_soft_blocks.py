@@ -18,6 +18,7 @@ from app.models.season import Season
 from app.models.series import Series
 from app.models.user import User
 from app.services.availability import NO_SCHEDULING, AvailabilityService
+from tests.seed import add_match, add_series
 from tests.test_discord_auth import SESSION, stub_clerk
 
 WORK = {"label": "Work", "weekdays": 31, "start_local": "09:00", "end_local": "17:00"}
@@ -374,22 +375,20 @@ def test_a_captain_does_not_read_a_series_of_another_team(
         season = Season(name="Other Season", series_per_round=2)
         session.add(season)
         session.flush()
-        match = Match(
+        match = add_match(
+            session,
             team1_id=seeded["team_a_id"],
             team2_id=seeded["team_b_id"],
             season_id=ident(season),
             playday=1,
         )
-        session.add(match)
-        session.flush()
-        series = Series(
-            match_id=ident(match),
+        series = add_series(
+            session,
+            match,
             player1_id=seeded["player_ids"][1],
             player2_id=seeded["player_ids"][3],
             host_player_id=seeded["player_ids"][1],
         )
-        session.add(series)
-        session.flush()
         series_id = ident(series)
 
     resp = client.get(f"/player-series/{series_id}/free-time", headers=captain)

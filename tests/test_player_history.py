@@ -31,6 +31,7 @@ def _second_season(seeded: dict[str, Any]) -> dict[str, Any]:
     from app.models.team_season import DBTeamSeason
     from app.models.user import User
     from app.models.user_team_season import DBUserTeamSeason
+    from tests.seed import add_match, add_series
 
     p1, p2, p3, p4 = seeded["player_ids"]
     with Session() as session:
@@ -71,7 +72,8 @@ def _second_season(seeded: dict[str, Any]) -> dict[str, Any]:
             ]
         )
         matches = [
-            Match(
+            add_match(
+                session,
                 team1_id=seeded["team_a_id"],
                 team2_id=seeded["team_b_id"],
                 season_id=ident(season),
@@ -79,44 +81,42 @@ def _second_season(seeded: dict[str, Any]) -> dict[str, Any]:
             )
             for playday in (1, 2)
         ]
-        session.add_all(matches)
-        session.flush()
-        session.add_all(
-            [
-                Series(
-                    match_id=ident(matches[0]),
-                    date_time=datetime(2026, 3, 7, 19, 0),
-                    player1_id=p1,
-                    player2_id=p3,
-                    player1_score=0,
-                    player2_score=2,
-                    host_player_id=p1,
-                ),
-                Series(
-                    match_id=ident(matches[0]),
-                    player1_id=p2,
-                    player2_id=p4,
-                    player1_score=1,
-                    player2_score=2,
-                    host_player_id=p2,
-                ),
-                Series(
-                    match_id=ident(matches[1]),
-                    date_time=datetime(2026, 3, 14, 19, 0),
-                    player1_id=p1,
-                    player2_id=p4,
-                    player1_score=2,
-                    player2_score=0,
-                    host_player_id=p1,
-                ),
-                # not played yet, so it pays no record and shows in no meeting
-                Series(
-                    match_id=ident(matches[1]),
-                    player1_id=p1,
-                    player2_id=p3,
-                    host_player_id=p1,
-                ),
-            ]
+        add_series(
+            session,
+            matches[0],
+            date_time=datetime(2026, 3, 7, 19, 0),
+            player1_id=p1,
+            player2_id=p3,
+            player1_score=0,
+            player2_score=2,
+            host_player_id=p1,
+        )
+        add_series(
+            session,
+            matches[0],
+            player1_id=p2,
+            player2_id=p4,
+            player1_score=1,
+            player2_score=2,
+            host_player_id=p2,
+        )
+        add_series(
+            session,
+            matches[1],
+            date_time=datetime(2026, 3, 14, 19, 0),
+            player1_id=p1,
+            player2_id=p4,
+            player1_score=2,
+            player2_score=0,
+            host_player_id=p1,
+        )
+        # not played yet, so it pays no record and shows in no meeting
+        add_series(
+            session,
+            matches[1],
+            player1_id=p1,
+            player2_id=p3,
+            host_player_id=p1,
         )
         session.commit()
         return seeded | {"season2_id": ident(season)}

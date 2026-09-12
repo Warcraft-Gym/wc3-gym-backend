@@ -25,7 +25,12 @@ from app.models.ladder_achievement import LadderAchievement, default_rows
 from app.models.map import Map
 from app.models.match import Match
 from app.models.player_career_stats import PlayerCareerStats
-from app.models.relationships import DBEventRound, DBFantasyTeamPlayer, DBMapSeason
+from app.models.relationships import (
+    DBEventRound,
+    DBFantasyTeamPlayer,
+    DBMapSeason,
+    round_for,
+)
 from app.models.season import Season
 from app.models.series import Series
 from app.models.settings import Settings
@@ -46,6 +51,26 @@ def add_season(session: Session, rounds: int, **fields: Any) -> Season:  # noqa:
     session.flush()
     fill_rounds(session, row, rounds)
     return row
+
+
+def add_match(session: Session, **fields: Any) -> Match:  # noqa: ANN401
+    """A team tie, in the round its season holds for its playday. Build a match
+    this way, never with `Match(...)` alone: every tie names a round."""
+    match = Match(
+        round_id=ident(round_for(session, fields["season_id"], fields["playday"])),
+        **fields,
+    )
+    session.add(match)
+    session.flush()
+    return match
+
+
+def add_series(session: Session, match: Match, **fields: Any) -> Series:  # noqa: ANN401
+    """A series of a tie, played in the round of that tie."""
+    series = Series(match_id=ident(match), round_id=match.round_id, **fields)
+    session.add(series)
+    session.flush()
+    return series
 
 
 def seed_league(session: Session) -> dict[str, Any]:
@@ -132,17 +157,32 @@ def seed_league(session: Session) -> dict[str, Any]:
         ]
     )
 
+    # A real season is created with a round a week apart, and every tie sits in one
+    round_rows = {
+        playday: DBEventRound(
+            season_id=ident(season),
+            number=playday,
+            start_date=season.start_date + timedelta(weeks=playday - 1),
+            end_date=season.start_date + timedelta(weeks=playday - 1, days=6),
+        )
+        for playday in range(1, rounds + 1)
+    }
+    session.add_all(round_rows.values())
+    session.flush()
+
     match = Match(
         team1_id=ident(team_a),
         team2_id=ident(team_b),
         season_id=ident(season),
         playday=1,
+        round_id=ident(round_rows[1]),
     )
     session.add(match)
     session.flush()
 
     series_played = Series(
         match_id=ident(match),
+        round_id=ident(round_rows[1]),
         date_time=datetime(2026, 1, 7, 19, 0),
         player1_id=ident(players[0]),
         player2_id=ident(players[2]),
@@ -152,6 +192,7 @@ def seed_league(session: Session) -> dict[str, Any]:
     )
     series_open = Series(
         match_id=ident(match),
+        round_id=ident(round_rows[1]),
         player1_id=ident(players[1]),
         player2_id=ident(players[3]),
         host_player_id=ident(players[3]),
@@ -189,17 +230,8 @@ def seed_league(session: Session) -> dict[str, Any]:
         ]
     )
     session.flush()
-    # A real season is created with its achievement set and a round a week apart
+    # A real season is created with its achievement set
     session.add_all(default_rows(season.id))
-    session.add_all(
-        DBEventRound(
-            season_id=ident(season),
-            number=playday,
-            start_date=season.start_date + timedelta(weeks=playday - 1),
-            end_date=season.start_date + timedelta(weeks=playday - 1, days=6),
-        )
-        for playday in range(1, rounds + 1)
-    )
     # The wc3.no rules too, so the legacy tests find their prices
     session.add_all(
         LadderAchievement(season_id=season.id, rule_id=rule_id, points=points)
@@ -214,6 +246,7 @@ def seed_league(session: Session) -> dict[str, Any]:
         "team_b_id": team_b.id,
         "player_ids": [p.id for p in players],
         "match_id": match.id,
+        "round_ids": [ident(row) for row in round_rows.values()],
         "series_played_id": series_played.id,
         "series_open_id": series_open.id,
         "fantasy_team_id": fantasy_team.id,
@@ -231,7 +264,8 @@ def add_bets(session: Session, seeded: dict[str, Any], count: int) -> None:
     """
     players = seeded["player_ids"]
     matches = [
-        Match(
+        add_match(
+            session,
             team1_id=seeded["team_a_id"],
             team2_id=seeded["team_b_id"],
             season_id=seeded["season_id"],
@@ -239,11 +273,10 @@ def add_bets(session: Session, seeded: dict[str, Any], count: int) -> None:
         )
         for index in range(count)
     ]
-    session.add_all(matches)
-    session.flush()
     series = [
-        Series(
-            match_id=ident(match),
+        add_series(
+            session,
+            match,
             player1_id=players[0],
             player2_id=players[2],
             player1_score=2,
@@ -252,8 +285,6 @@ def add_bets(session: Session, seeded: dict[str, Any], count: int) -> None:
         )
         for match in matches
     ]
-    session.add_all(series)
-    session.flush()
     session.add_all(
         [
             FantasyBet(

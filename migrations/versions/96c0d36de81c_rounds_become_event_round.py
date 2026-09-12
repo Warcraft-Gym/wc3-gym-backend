@@ -69,20 +69,20 @@ def add_round_id(table: str, ondelete: str | None = None) -> None:
     op.create_index(op.f(f"ix_{table}_round_id"), table, ["round_id"])
 
 
-def drop_round_id(table: str, rebuild: bool = False) -> None:
+def drop_round_id(table: str) -> None:
     """Undo add_round_id. SQLite drops no column a table-level key names, so
-    the table add_round_id rebuilt is rebuilt again without it."""
+    the table is rebuilt without it, and the convention names the keys the
+    earlier rebuilds left unnamed."""
     name = op.f(f"fk_{table}_round_id_event_round")
     op.drop_index(op.f(f"ix_{table}_round_id"), table_name=table)
     if op.get_bind().dialect.name != "sqlite":
         op.drop_constraint(name, table, type_="foreignkey")
         op.drop_column(table, "round_id")
-    elif rebuild:
-        with op.batch_alter_table(table) as batch:
-            batch.drop_constraint(name, type_="foreignkey")
-            batch.drop_column("round_id")
-    else:
-        op.drop_column(table, "round_id")
+        return
+    convention = {"fk": "fk_%(table_name)s_%(column_0_name)s_%(referred_table_name)s"}
+    with op.batch_alter_table(table, naming_convention=convention) as batch:
+        batch.drop_constraint(name, type_="foreignkey")
+        batch.drop_column("round_id")
 
 
 def koth_rounds() -> None:
@@ -257,7 +257,7 @@ def downgrade() -> None:
             {"name": KOTH_LEAGUE},
         )
 
-    drop_round_id("round_availability", rebuild=True)
+    drop_round_id("round_availability")
     op.drop_index(
         op.f("ix_round_availability_season_id"), table_name="round_availability"
     )

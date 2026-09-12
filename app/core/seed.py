@@ -21,8 +21,22 @@ from app.core.achievements import WC3NO_PAID
 
 csv.field_size_limit(sys.maxsize)
 
-# The seed repo still names the dump after the old table, and `seasons` is now a view
-RENAMED = {"seasons": "event"}
+# The seed repo still names the dumps after the old tables
+RENAMED = {"seasons": "event", "user_season_availability": "round_availability"}
+# The dump predates the rounds, so the round ids are filled after the copy
+RELAX = (
+    "ALTER TABLE matches ALTER COLUMN round_id DROP NOT NULL",
+    "ALTER TABLE series ALTER COLUMN round_id DROP NOT NULL",
+    "ALTER TABLE round_availability DROP CONSTRAINT pk_round_availability",
+    "ALTER TABLE round_availability ALTER COLUMN round_id DROP NOT NULL",
+)
+RESTORE = (
+    "ALTER TABLE matches ALTER COLUMN round_id SET NOT NULL",
+    "ALTER TABLE series ALTER COLUMN round_id SET NOT NULL",
+    "ALTER TABLE round_availability ALTER COLUMN round_id SET NOT NULL",
+    "ALTER TABLE round_availability ADD CONSTRAINT pk_round_availability"
+    " PRIMARY KEY (user_id, round_id)",
+)
 KOTH_LEAGUE = "Gym KOTH"
 
 
@@ -94,6 +108,8 @@ def main(seed_dir: str, url: str) -> None:
     files = sorted(Path(seed_dir).glob("*.csv"))
     with psycopg.connect(url, autocommit=False) as conn, conn.cursor() as cur:
         cur.execute("SET session_replication_role = replica")
+        for statement in RELAX:
+            cur.execute(statement)
         tables = [RENAMED.get(f.stem, f.stem) for f in files]
         # CASCADE: tables outside the seed set reference these (ladder_achievements,
         # ladder_sync, w3c_ladder_matches, team_season_captain, discord_role_binding)
@@ -147,14 +163,16 @@ def main(seed_dir: str, url: str) -> None:
             " (SELECT 1 FROM event_stage s WHERE s.event_id = e.id)"
         )
         # The CASCADE took the rounds too, and the dump predates them: one round
-        # per playday the matches name, then the round ids the matches and the
-        # series carry (the backfills of 96c0d36de81c)
+        # per playday a match or an answer names, then the round ids the matches,
+        # the series and the answers carry (the backfills of 96c0d36de81c)
         cur.execute(
             "INSERT INTO event_round (season_id, stage_id, number)"
-            " SELECT DISTINCT m.season_id, s.id, m.playday FROM matches m"
-            " LEFT JOIN event_stage s ON s.event_id = m.season_id AND s.position = 1"
+            " SELECT DISTINCT p.season_id, s.id, p.number FROM"
+            " (SELECT season_id, playday AS number FROM matches"
+            " UNION SELECT season_id, playday FROM round_availability) p"
+            " LEFT JOIN event_stage s ON s.event_id = p.season_id AND s.position = 1"
             " WHERE NOT EXISTS (SELECT 1 FROM event_round r"
-            " WHERE r.season_id = m.season_id AND r.number = m.playday)"
+            " WHERE r.season_id = p.season_id AND r.number = p.number)"
         )
         cur.execute(
             "UPDATE matches SET round_id = (SELECT r.id FROM event_round r"
@@ -164,6 +182,13 @@ def main(seed_dir: str, url: str) -> None:
             "UPDATE series SET round_id ="
             " (SELECT m.round_id FROM matches m WHERE m.id = series.match_id)"
         )
+        cur.execute(
+            "UPDATE round_availability SET round_id = (SELECT r.id FROM event_round r"
+            " WHERE r.season_id = round_availability.season_id"
+            " AND r.number = round_availability.playday)"
+        )
+        for statement in RESTORE:
+            cur.execute(statement)
         # The prices went with the CASCADE. Every season in the dump ran under
         # wc3.no, so each gets those exact rows; a season made in the app takes
         # DEFAULT_PAID at creation instead.

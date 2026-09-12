@@ -23,6 +23,7 @@ from app.models.season import Season
 from app.models.series import Series
 from app.models.team import Team
 from app.models.user import User
+from tests.seed import add_match, add_series
 
 # Ids, scores and season of every series of the league, by player name
 RESULTS = [
@@ -208,7 +209,8 @@ def league(client: Client) -> dict[str, Any]:
         session.flush()
 
         matches = [
-            Match(
+            add_match(
+                session,
                 team1_id=ident(teams[0]),
                 team2_id=ident(teams[1]),
                 season_id=ident(season),
@@ -216,20 +218,17 @@ def league(client: Client) -> dict[str, Any]:
             )
             for season in seasons
         ]
-        session.add_all(matches)
-        session.flush()
 
         for one, two, own, opp, season in RESULTS:
-            session.add(
-                Series(
-                    match_id=ident(matches[season]),
-                    date_time=datetime(2026, 1, 7, 19, 0),
-                    player1_id=ident(players[one]),
-                    player2_id=ident(players[two]),
-                    player1_score=own,
-                    player2_score=opp,
-                    host_player_id=ident(players[one]),
-                )
+            add_series(
+                session,
+                matches[season],
+                date_time=datetime(2026, 1, 7, 19, 0),
+                player1_id=ident(players[one]),
+                player2_id=ident(players[two]),
+                player1_score=own,
+                player2_score=opp,
+                host_player_id=ident(players[one]),
             )
 
         for name, rating, won, lost, maps_won, maps_lost, played in BASELINES:

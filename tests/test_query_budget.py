@@ -350,6 +350,7 @@ def test_career_statement_count_holds_when_the_players_grow(
         session.add(
             Series(
                 match_id=league["match_id"],
+                round_id=league["round_ids"][0],
                 player1_id=ident(players[0]),
                 player2_id=ident(players[1]),
                 player1_score=2,

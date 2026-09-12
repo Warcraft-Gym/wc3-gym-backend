@@ -394,12 +394,15 @@ def seed_more_series(league: dict[str, Any]) -> None:
     One of them carries no date, which is the null the order has to place.
     """
     from app.models.match import Match
-    from app.models.series import Series
+    from tests.seed import add_match, add_series
 
     players = league["player_ids"]
     with Session() as session:
+        first = session.get(Match, league["match_id"])
+        assert first is not None
         later = [
-            Match(
+            add_match(
+                session,
                 team1_id=league["team_a_id"],
                 team2_id=league["team_b_id"],
                 season_id=league["season_id"],
@@ -407,32 +410,29 @@ def seed_more_series(league: dict[str, Any]) -> None:
             )
             for playday in (2, 3)
         ]
-        session.add_all(later)
-        session.flush()
-        session.add_all(
-            [
-                Series(
-                    match_id=league["match_id"],
-                    date_time=datetime(2026, 1, 8, 19, 0),
-                    player1_id=players[0],
-                    player2_id=players[3],
-                    host_player_id=players[0],
-                ),
-                Series(
-                    match_id=ident(later[0]),
-                    date_time=datetime(2026, 1, 14, 19, 0),
-                    player1_id=players[0],
-                    player2_id=players[2],
-                    host_player_id=players[0],
-                ),
-                Series(
-                    match_id=ident(later[1]),
-                    date_time=None,
-                    player1_id=players[0],
-                    player2_id=players[3],
-                    host_player_id=players[0],
-                ),
-            ]
+        add_series(
+            session,
+            first,
+            date_time=datetime(2026, 1, 8, 19, 0),
+            player1_id=players[0],
+            player2_id=players[3],
+            host_player_id=players[0],
+        )
+        add_series(
+            session,
+            later[0],
+            date_time=datetime(2026, 1, 14, 19, 0),
+            player1_id=players[0],
+            player2_id=players[2],
+            host_player_id=players[0],
+        )
+        add_series(
+            session,
+            later[1],
+            date_time=None,
+            player1_id=players[0],
+            player2_id=players[3],
+            host_player_id=players[0],
         )
         session.commit()
 

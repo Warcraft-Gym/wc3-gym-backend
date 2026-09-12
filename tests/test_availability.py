@@ -48,11 +48,12 @@ def test_a_player_answers_a_week_and_takes_it_back(
         }
     ]
 
-    # The answer names the round it is about, the column C2 makes the key
+    # The answer is keyed by the player and the round it is about
     with Session() as session:
         round_2 = round_row(session, seeded["season_id"], 2)
-        row = session.get(DBRoundAvailability, (player_id, seeded["season_id"], 2))
-        assert round_2 and row and row.round_id == round_2.id
+        assert round_2 and round_2.id
+        row = session.get(DBRoundAvailability, (player_id, round_2.id))
+        assert row and row.playday == 2
 
     rows = write(client, headers, 2, True)
     assert [(row["playday"], row["available"]) for row in rows] == [(2, True)]

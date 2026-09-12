@@ -27,7 +27,7 @@ from app.models.series import Series
 from app.models.team import Team
 from app.models.team_season import DBTeamSeason
 from app.models.user import User
-from tests.seed import add_season
+from tests.seed import add_match, add_season, add_series
 
 SCORE_FIELDS = (
     "player_points",
@@ -127,44 +127,46 @@ def league(client: Client) -> dict[str, Any]:
                 DBTeamSeason(team_id=ident(team2), season_id=ident(season)),
             ]
         )
-        week1 = Match(
+        week1 = add_match(
+            session,
             team1_id=ident(team1),
             team2_id=ident(team2),
             season_id=ident(season),
             playday=1,
         )
-        week2 = Match(
+        week2 = add_match(
+            session,
             team1_id=ident(team1),
             team2_id=ident(team2),
             season_id=ident(season),
             playday=2,
         )
-        session.add_all([week1, week2])
-        session.flush()
 
-        sweep = Series(
-            match_id=ident(week1),
+        sweep = add_series(
+            session,
+            week1,
             player1_id=ident(players[0]),
             player2_id=ident(players[2]),
             player1_score=2,
             player2_score=0,
             host_player_id=ident(players[0]),
         )
-        open_series = Series(
-            match_id=ident(week1),
+        open_series = add_series(
+            session,
+            week1,
             player1_id=ident(players[1]),
             player2_id=ident(players[3]),
             host_player_id=ident(players[1]),
         )
-        close = Series(
-            match_id=ident(week2),
+        close = add_series(
+            session,
+            week2,
             player1_id=ident(players[0]),
             player2_id=ident(players[2]),
             player1_score=1,
             player2_score=2,
             host_player_id=ident(players[0]),
         )
-        session.add_all([sweep, open_series, close])
 
         first = FantasyTeam(
             name="First",
@@ -377,38 +379,39 @@ def two_seasons(client: Client) -> dict[str, Any]:
                 DBTeamSeason(team_id=ident(team_b2), season_id=ident(season_b)),
             ]
         )
-        match_a = Match(
+        match_a = add_match(
+            session,
             team1_id=ident(team_a1),
             team2_id=ident(team_a2),
             season_id=ident(season_a),
             playday=1,
         )
-        match_b = Match(
+        match_b = add_match(
+            session,
             team1_id=ident(team_b1),
             team2_id=ident(team_b2),
             season_id=ident(season_b),
             playday=1,
         )
-        session.add_all([match_a, match_b])
-        session.flush()
 
-        series_a = Series(
-            match_id=ident(match_a),
+        series_a = add_series(
+            session,
+            match_a,
             player1_id=ident(pa1),
             player2_id=ident(pa2),
             player1_score=2,
             player2_score=0,
             host_player_id=ident(pa1),
         )
-        series_b = Series(
-            match_id=ident(match_b),
+        series_b = add_series(
+            session,
+            match_b,
             player1_id=ident(pb1),
             player2_id=ident(pb2),
             player1_score=2,
             player2_score=1,
             host_player_id=ident(pb1),
         )
-        session.add_all([series_a, series_b])
 
         fantasy_a = FantasyTeam(
             name="Fantasy A",

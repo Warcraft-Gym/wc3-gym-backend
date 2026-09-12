@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from app.models.fantasy_team import FantasyTeam
     from app.models.map import Map
     from app.models.season import Season
+    from app.models.series import Series
     from app.models.team import Team
     from app.models.user import User
 
@@ -92,6 +93,10 @@ class DBEventRound(DBModel, table=True):
     # Overrides the stage's best of for this round; null follows the stage
     best_of: int | None = None
     season: "Season" = Relationship(back_populates="rounds")
+    series: list["Series"] = Relationship(
+        back_populates="round",
+        sa_relationship_kwargs={"foreign_keys": "[Series.round_id]"},
+    )
 
 
 def round_row(session: OrmSession, season_id: int, number: int) -> DBEventRound | None:
@@ -103,6 +108,21 @@ def round_row(session: OrmSession, season_id: int, number: int) -> DBEventRound 
             col(DBEventRound.number) == number,
         )
     ).first()
+
+
+def round_for(session: OrmSession, season_id: int, number: int) -> DBEventRound:
+    """The round of one event by its number, written when the event has none.
+
+    The round rows are the round count, so a match on a playday past the last
+    round adds the round it names rather than refusing the write, the same call
+    the C1 backfill made for the rounds the older seasons never stored.
+    """
+    row = round_row(session, season_id, number)
+    if row is None:
+        row = DBEventRound(season_id=season_id, number=number)
+        session.add(row)
+        session.flush()
+    return row
 
 
 class SeasonRoundPublic(SQLModel):

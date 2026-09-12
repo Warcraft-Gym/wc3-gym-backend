@@ -7,7 +7,9 @@ from sqlmodel import col
 from app.core.db import Session, rel
 from app.core.exceptions import NotFoundError
 from app.core.query import QueryElement, QueryUtil
+from app.models.base import ident
 from app.models.match import Match, MatchCreate, MatchPublic, MatchUpdate
+from app.models.relationships import round_for
 from app.services import derived
 
 logger = logging.getLogger(__name__)
@@ -16,7 +18,12 @@ logger = logging.getLogger(__name__)
 class MatchService:
     def add(self, match: MatchCreate) -> MatchPublic:
         with Session.begin() as session:
-            row = Match.add(session, match.model_dump())
+            data = match.model_dump()
+            # A tie is played in the round its playday names
+            data["round_id"] = ident(
+                round_for(session, data["season_id"], data["playday"])
+            )
+            row = Match.add(session, data)
             public = MatchPublic.from_match(row)
             derived.fill_matches(session, [public])
             return public
@@ -29,6 +36,10 @@ class MatchService:
             if not row:
                 logger.error("Match could not be updated!")
                 raise NotFoundError("Match not found")
+            if match.model_fields_set & {"season_id", "playday"}:
+                # The tie moved, and its series follow the round key on update
+                row.round_id = ident(round_for(session, row.season_id, row.playday))
+                session.flush()
             public = MatchPublic.from_match(row)
             derived.fill_matches(session, [public])
             return public

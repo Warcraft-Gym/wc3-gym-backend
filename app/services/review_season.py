@@ -145,16 +145,17 @@ def build(discord_a: str, discord_b: str) -> str:
         starts = [
             START + timedelta(weeks=(r - 1) * ROUND_WEEKS) for r in range(1, ROUNDS + 1)
         ]
-        for playday, start in enumerate(starts, start=1):
-            session.add(
-                DBEventRound(
-                    season_id=sid,
-                    number=playday,
-                    start_date=start,
-                    end_date=start + timedelta(weeks=ROUND_WEEKS, days=-1),
-                    map_id=pool_maps[(playday - 1) % len(pool_maps)],
-                )
+        rounds = {
+            playday: DBEventRound(
+                season_id=sid,
+                number=playday,
+                start_date=start,
+                end_date=start + timedelta(weeks=ROUND_WEEKS, days=-1),
+                map_id=pool_maps[(playday - 1) % len(pool_maps)],
             )
+            for playday, start in enumerate(starts, start=1)
+        }
+        session.add_all(rounds.values())
 
         team_a, team_b = session.scalars(
             select(col(DBTeamSeason.team_id))
@@ -196,7 +197,11 @@ def build(discord_a: str, discord_b: str) -> str:
         tester_set = {user.id for user in testers}
         for playday, start in enumerate(starts, start=1):
             match = Match(
-                team1_id=team_a, team2_id=team_b, season_id=sid, playday=playday
+                team1_id=team_a,
+                team2_id=team_b,
+                season_id=sid,
+                playday=playday,
+                round_id=ident(rounds[playday]),
             )
             session.add(match)
             session.flush()
@@ -209,6 +214,7 @@ def build(discord_a: str, discord_b: str) -> str:
                 session.add(
                     Series(
                         match_id=ident(match),
+                        round_id=ident(rounds[playday]),
                         player1_id=ident(p1),
                         player2_id=ident(p2),
                         host_player_id=ident(p1),

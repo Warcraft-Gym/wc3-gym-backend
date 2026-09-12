@@ -10,6 +10,7 @@ from sqlmodel import col
 
 from app.core.db import Session
 from app.core.exceptions import ApiError, BadRequestError, NotFoundError
+from app.models.base import ident
 from app.models.relationships import SeasonRoundPublic, round_row
 from app.models.round_availability import (
     DBRoundAvailability,
@@ -81,18 +82,20 @@ class AvailabilityService:
             weeks = season.round_count or 0
             if not 1 <= playday <= weeks:
                 raise BadRequestError(f"playday must be between 1 and {weeks}")
+            round_ = round_row(session, season_id, playday)
+            if round_ is None:
+                raise NotFoundError(f"Round not found by number: {playday}")
             if available is None:
-                row = session.get(DBRoundAvailability, (user_id, season_id, playday))
+                row = session.get(DBRoundAvailability, (user_id, ident(round_)))
                 if row:
                     session.delete(row)
             else:
-                round_ = round_row(session, season_id, playday)
                 session.merge(
                     DBRoundAvailability(
                         user_id=user_id,
                         season_id=season_id,
                         playday=playday,
-                        round_id=round_.id if round_ else None,
+                        round_id=ident(round_),
                         available=available,
                         set_by_user_id=set_by_user_id,
                     )

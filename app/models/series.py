@@ -2,7 +2,15 @@ from collections.abc import Sequence
 from datetime import datetime
 from typing import Annotated, Any, Literal, Self
 
-from sqlalchemy import ColumnElement, ColumnExpressionArgument, Index, and_, select
+from sqlalchemy import (
+    ColumnElement,
+    ColumnExpressionArgument,
+    ForeignKeyConstraint,
+    Index,
+    and_,
+    select,
+    text,
+)
 from sqlalchemy.orm import Session, joinedload, selectinload
 from sqlalchemy.orm.interfaces import ORMOption
 from sqlmodel import Field, Relationship, SQLModel, col
@@ -12,6 +20,7 @@ from app.core.ordering import SortOrder, ordered
 from app.models.base import DBModel, PublicModel, ident
 from app.models.enums import Race
 from app.models.match import Match, MatchPublic
+from app.models.relationships import DBEventRound
 from app.models.series_cast import CastPublic, SeriesCast
 from app.models.series_veto_step import DBSeriesVetoStep
 from app.models.types import AwareUTC, EnumValue, SuggestRace, UTCDateTime
@@ -21,7 +30,10 @@ SeriesSort = Literal["date_time", "week", "id"]
 
 
 class SeriesBase(SQLModel):
-    match_id: int = Field(index=True, foreign_key="matches.id", ondelete="CASCADE")
+    # Null when no team tie groups the series; a GNL series always names one
+    match_id: int | None = Field(
+        default=None, index=True, foreign_key="matches.id", ondelete="CASCADE"
+    )
     date_time: Annotated[datetime | None, AwareUTC] = Field(
         default=None, sa_type=UTCDateTime
     )
@@ -38,8 +50,8 @@ class SeriesBase(SQLModel):
 
 class Series(SeriesBase, DBModel, table=True):
     __tablename__ = "series"
-    # A pair of players meet once inside a team series
     __table_args__ = (
+        # A pair of players meet once inside a team series
         Index(
             "uq_series_match_id_player1_id_player2_id",
             "match_id",
@@ -47,14 +59,37 @@ class Series(SeriesBase, DBModel, table=True):
             "player2_id",
             unique=True,
         ),
+        # And once in a round when no team tie groups them
+        Index(
+            "uq_series_round_id_player1_id_player2_id",
+            "round_id",
+            "player1_id",
+            "player2_id",
+            unique=True,
+            postgresql_where=text("match_id IS NULL"),
+            sqlite_where=text("match_id IS NULL"),
+        ),
+        # A series inside a tie is played in the round of that tie, and moves
+        # with it when the tie moves round
+        ForeignKeyConstraint(
+            ["match_id", "round_id"],
+            ["matches.id", "matches.round_id"],
+            name="fk_series_match_id_round_id_matches",
+            ondelete="CASCADE",
+            onupdate="CASCADE",
+        ),
     )
 
     id: int | None = Field(default=None, primary_key=True)
-    # The round this series is played in; backfilled in C1, required from C2.
-    # It stays off SeriesBase, so the series payloads are unchanged.
-    round_id: int | None = Field(default=None, index=True, foreign_key="event_round.id")
+    # The round this series is played in. It stays off SeriesBase, so the
+    # series payloads are unchanged.
+    round_id: int = Field(index=True, foreign_key="event_round.id")
     match: "Match" = Relationship(
         sa_relationship_kwargs={"foreign_keys": "[Series.match_id]"}
+    )
+    round: DBEventRound = Relationship(
+        back_populates="series",
+        sa_relationship_kwargs={"foreign_keys": "[Series.round_id]"},
     )
     player1: "User" = Relationship(
         sa_relationship_kwargs={"foreign_keys": "[Series.player1_id]"}
@@ -158,6 +193,8 @@ SERIES_SORTS: dict[SeriesSort, ColumnElement[Any]] = {
 
 
 class SeriesCreate(SeriesBase):
+    # Every series written today sits in a team tie, which names its round
+    match_id: int
     # SeriesService caps a score at the maps a win takes in the season
     player1_score: int | None = Field(default=None, ge=0)
     player2_score: int | None = Field(default=None, ge=0)

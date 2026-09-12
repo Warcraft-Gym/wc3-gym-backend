@@ -3,14 +3,20 @@
 from pathlib import Path
 from typing import Any
 
+import pytest
 from httpx2 import Client
 from sqlalchemy import create_engine, text
+from sqlalchemy.exc import IntegrityError
 
 from app.core.db import Session
-from app.models.match import Match
+from app.models.match import Match, MatchCreate
 from app.models.relationships import round_row
 from app.models.round_availability import DBRoundAvailability
+from app.models.series import Series, SeriesCreate
+from app.services.matches import MatchService
+from app.services.series import SeriesService
 from tests.migrate import downgrade_to, fresh_database, upgrade_to, upgrade_to_head
+from tests.seed import add_match
 
 # The revision before the week map became the rounds table
 BEFORE_ROUNDS = "d5e8f1a2b3c4"
@@ -218,7 +224,8 @@ def test_an_answer_goes_with_the_round_the_count_drops(
     season_id, player_id = seeded["season_id"], seeded["player_ids"][0]
     with Session.begin() as session:
         round_4 = round_row(session, season_id, 4)
-        assert round_4
+        assert round_4 and round_4.id
+        round_4_id = round_4.id
         session.add(
             DBRoundAvailability(
                 user_id=player_id,
@@ -236,7 +243,7 @@ def test_an_answer_goes_with_the_round_the_count_drops(
 
     assert resp.status_code == 200, resp.text
     with Session() as session:
-        assert session.get(DBRoundAvailability, (player_id, season_id, 4)) is None
+        assert session.get(DBRoundAvailability, (player_id, round_4_id)) is None
 
 
 def test_a_round_a_match_sits_on_holds_the_count_up(
@@ -245,13 +252,12 @@ def test_a_round_a_match_sits_on_holds_the_count_up(
     """A match holds a tie and its series, so the drop is refused and named."""
     season_id = seeded["season_id"]
     with Session.begin() as session:
-        session.add(
-            Match(
-                team1_id=seeded["team_a_id"],
-                team2_id=seeded["team_b_id"],
-                season_id=season_id,
-                playday=3,
-            )
+        add_match(
+            session,
+            team1_id=seeded["team_a_id"],
+            team2_id=seeded["team_b_id"],
+            season_id=season_id,
+            playday=3,
         )
 
     resp = client.put(
@@ -262,3 +268,73 @@ def test_a_round_a_match_sits_on_holds_the_count_up(
     assert resp.json() == {
         "error": "round 3 still holds matches; delete them before the count falls"
     }
+
+
+def test_the_services_give_a_new_tie_and_its_series_the_round(
+    seeded: dict[str, Any],
+) -> None:
+    """A match names the round its playday holds, and a series takes the round
+    of the tie it is written into."""
+    match = MatchService().add(
+        MatchCreate(
+            team1_id=seeded["team_a_id"],
+            team2_id=seeded["team_b_id"],
+            season_id=seeded["season_id"],
+            playday=2,
+        )
+    )
+    series = SeriesService().add(
+        SeriesCreate(
+            match_id=match.id,
+            player1_id=seeded["player_ids"][0],
+            player2_id=seeded["player_ids"][2],
+            host_player_id=seeded["player_ids"][0],
+        )
+    )
+
+    with Session() as session:
+        round_2 = round_row(session, seeded["season_id"], 2)
+        stored = session.get(Series, series.id)
+        assert round_2 and stored
+        assert session.get(Match, match.id).round_id == round_2.id  # type: ignore[union-attr]
+        assert stored.round_id == round_2.id
+
+
+def test_a_series_cannot_sit_in_another_round_than_its_tie(
+    seeded: dict[str, Any],
+) -> None:
+    """The (match_id, round_id) key points at the tie and its round together,
+    so a series of the round 1 tie cannot claim round 2."""
+    with Session() as session, pytest.raises(IntegrityError):
+        session.add(
+            Series(
+                match_id=seeded["match_id"],
+                round_id=seeded["round_ids"][1],
+                player1_id=seeded["player_ids"][0],
+                player2_id=seeded["player_ids"][3],
+                host_player_id=seeded["player_ids"][0],
+            )
+        )
+        session.flush()
+
+
+def test_two_players_meet_once_in_a_round_without_a_tie(
+    seeded: dict[str, Any],
+) -> None:
+    """No team tie groups a cup series, so the round and the two players are
+    the key; the same pair in another round is a different series."""
+    def pair(round_id: int) -> Series:
+        return Series(
+            match_id=None,
+            round_id=round_id,
+            player1_id=seeded["player_ids"][0],
+            player2_id=seeded["player_ids"][3],
+            host_player_id=seeded["player_ids"][0],
+        )
+
+    with Session.begin() as session:
+        session.add_all([pair(seeded["round_ids"][0]), pair(seeded["round_ids"][1])])
+
+    with Session() as session, pytest.raises(IntegrityError):
+        session.add(pair(seeded["round_ids"][0]))
+        session.flush()

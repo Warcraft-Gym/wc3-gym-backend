@@ -1,6 +1,7 @@
 from datetime import timedelta
 
 from sqlalchemy import func, select
+from sqlalchemy.orm import Session as OrmSession
 from sqlmodel import col
 
 from app.core import fantasy
@@ -19,6 +20,14 @@ from app.models.series import (
     SeriesUpdate,
 )
 from app.services import derived
+
+
+def round_of(session: OrmSession, match_id: int) -> int:
+    """The round a series inherits from its team tie."""
+    match = session.get(Match, match_id)
+    if match is None:
+        raise NotFoundError(f"Match not found by Id: {match_id}")
+    return match.round_id
 
 
 def both_scores(row: Series) -> None:
@@ -52,7 +61,9 @@ def in_season(row: Series) -> None:
 class SeriesService:
     def add(self, series: SeriesCreate) -> SeriesPublic:
         with Session.begin() as session:
-            row = Series.add(session, series.model_dump())
+            data = series.model_dump()
+            data["round_id"] = round_of(session, series.match_id)
+            row = Series.add(session, data)
             both_scores(row)
             in_season(row)
             derived.clear_kept_off_race(session, row)
@@ -62,9 +73,11 @@ class SeriesService:
 
     def update(self, series_id: int, series: SeriesUpdate) -> SeriesPublic:
         with Session.begin() as session:
-            row = Series.update(
-                session, series_id, **series.model_dump(exclude_unset=True)
-            )
+            fields = series.model_dump(exclude_unset=True)
+            if series.match_id is not None:
+                # Moved to another tie, so it is played in that tie's round
+                fields["round_id"] = round_of(session, series.match_id)
+            row = Series.update(session, series_id, **fields)
             if not row:
                 raise NotFoundError("Series not found")
             both_scores(row)

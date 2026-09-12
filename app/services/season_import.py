@@ -33,6 +33,7 @@ from app.models.relationships import (
     DBFantasyTeamPlayer,
     DBMapSeason,
     DBUserSeasonSignup,
+    round_for,
 )
 from app.models.season import Season, SeasonCreate
 from app.models.series import Series, SeriesCreate
@@ -539,7 +540,9 @@ def _matches(
         if match:
             match.sqlmodel_update(values.model_dump(exclude_unset=True))
         else:
-            match = Match(**values.model_dump())
+            # A tie is played in the round its playday names
+            round_id = ident(round_for(session, ident(season), playday))
+            match = Match(**values.model_dump(), round_id=round_id)
             written.append(match)
             stored[key] = match
         old_id = whole_number(row["ID"])
@@ -609,7 +612,7 @@ def _series(
         if series:
             series.sqlmodel_update(values.model_dump(exclude_unset=True))
         else:
-            series = Series(**values.model_dump())
+            series = Series(**values.model_dump(), round_id=match.round_id)
             written.append(series)
             stored[key] = series
         touched.append(series)

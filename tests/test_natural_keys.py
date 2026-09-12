@@ -94,18 +94,21 @@ REPEATS: dict[str, Rows] = {
             team1_id=seeded["team_a_id"],
             team2_id=seeded["team_b_id"],
             season_id=seeded["season_id"],
-            playday=9,
+            playday=2,
+            round_id=seeded["round_ids"][1],
         ),
         Match(
             team1_id=seeded["team_a_id"],
             team2_id=seeded["team_b_id"],
             season_id=seeded["season_id"],
-            playday=9,
+            playday=2,
+            round_id=seeded["round_ids"][1],
         ),
     ],
     "series.players": lambda seeded: [
         Series(
             match_id=seeded["match_id"],
+            round_id=seeded["round_ids"][0],
             player1_id=seeded["player_ids"][0],
             player2_id=seeded["player_ids"][3],
             host_player_id=seeded["player_ids"][0],
