@@ -213,8 +213,10 @@ class KothService:
         twitch_username: str,
         battle_tag: str,
         races: list[str] | None = None,
+        event_id: int | None = None,
     ) -> list[KothSignupPublic]:
-        """Sign a player up for the active event, one signup per race.
+        """Sign a player up for one event, one signup per race; the active event
+        when no event is named.
 
         Each race carries its own W3C MMR and lands in the bracket that MMR
         cuts into, so one player can sit in several brackets. An empty race
@@ -231,7 +233,7 @@ class KothService:
             if value not in signup_races:
                 signup_races.append(value)
 
-        event = self.get_active_event()
+        event = self.get_event(event_id) if event_id else self.get_active_event()
 
         # The W3C calls below take seconds, so the insert checks this again
         with Session.begin() as session:

@@ -44,3 +44,22 @@ def test_secret_settings_never_leave_through_the_open_reads(
     resp = client.get("/config/koth/nightbot-token", headers=auth_headers)
     assert resp.status_code == 200, resp.text
     assert resp.json()["token"] == token
+
+
+def test_a_bulk_save_keeps_the_description_of_each_setting(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """The bulk body carries keys and values only, so the stored text stays."""
+    before = client.get("/config/settings/score_system").json()
+    assert before["description"]
+
+    resp = client.put(
+        "/config/settings",
+        headers=auth_headers,
+        json={"settings": {"score_system": "helpstone"}},
+    )
+    assert resp.status_code == 200, resp.text
+
+    after = client.get("/config/settings/score_system").json()
+    assert after["value"] == "helpstone"
+    assert after["description"] == before["description"]
