@@ -39,6 +39,11 @@ def channel_url(value: str) -> str:
     return value
 
 
+def channel_host(value: str) -> str:
+    """The host of a stream link, without www or m."""
+    return _host_path(value)[1]
+
+
 # A Twitch video, a YouTube watch or live page, or a youtu.be short link
 VOD_PATHS = {
     "twitch.tv": r"/videos/\d+",

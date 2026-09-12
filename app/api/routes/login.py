@@ -59,6 +59,11 @@ def me(
         account = discord.identify(token.token)
     users = user_service.find_by_discord_id(claims["sub"])
     user = users[0] if users else None
+    avatar = discord.avatar_url(account)
+    # the profile keeps the picture Discord shows now, so pages read it without a login
+    if account and user and user.avatar_url != avatar:
+        user_service.set_avatar(user.id, avatar)
+        user.avatar_url = avatar
     season_id = discord_roles.current_season()
     # A captain's claims name the team it captains this season. Any other member
     # is named by the roster row of that season, so the nav can link his team.
@@ -71,7 +76,7 @@ def me(
         "name": "Super Admin"
         if superadmin
         else account.get("global_name") or account.get("username"),
-        "avatar": discord.avatar_url(account),
+        "avatar": avatar,
         "role": claims.get("role", "admin"),
         # the role behind an X-View-As switch, so the frontend keeps the switch visible
         "actual_role": claims.get("actual_role", claims.get("role", "admin")),

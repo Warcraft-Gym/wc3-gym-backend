@@ -14,7 +14,9 @@ from app.models.types import (
     NoneToList,
     NumToStr,
     SuggestRace,
+    TwitchChannel,
     UTCDateTime,
+    YouTubeChannel,
 )
 from app.models.user_team_season import UserTeamSeasonStatsPublic
 from app.models.w3c_stats import W3CStats, W3CStatsPublic
@@ -36,6 +38,15 @@ class UserBase(SQLModel):
     country: Annotated[str | None, NumToStr] = Field(default=None, max_length=6)
     # IANA name, as the browser reports it: America/New_York
     timezone: Annotated[str | None, KnownTimeZone] = Field(default=None, max_length=64)
+    # The player's own channels, as links; a video link is refused
+    twitch_url: Annotated[str | None, TwitchChannel] = Field(
+        default=None, max_length=200
+    )
+    youtube_url: Annotated[str | None, YouTubeChannel] = Field(
+        default=None, max_length=200
+    )
+    # The Discord avatar image the login last read, written by the app
+    avatar_url: str | None = Field(default=None, max_length=300)
 
 
 class User(UserBase, DBModel, table=True):
@@ -97,6 +108,8 @@ class UserUpdate(SQLModel):
     mmr: int | None = None
     country: Annotated[str | None, NumToStr] = None
     timezone: Annotated[str | None, KnownTimeZone] = None
+    twitch_url: Annotated[str | None, TwitchChannel] = None
+    youtube_url: Annotated[str | None, YouTubeChannel] = None
 
 
 class PublicSignupWrite(SQLModel):
@@ -121,6 +134,8 @@ class ProfileUpdate(SQLModel):
     race: Annotated[Race | None, SuggestRace] = None
     country: Annotated[str | None, NumToStr] = None
     timezone: Annotated[str | None, KnownTimeZone] = None
+    twitch_url: Annotated[str | None, TwitchChannel] = None
+    youtube_url: Annotated[str | None, YouTubeChannel] = None
 
 
 class UserReduced(UserBase, PublicModel):
@@ -149,6 +164,9 @@ class UserReduced(UserBase, PublicModel):
             mmr=user.mmr,
             country=user.country,
             timezone=user.timezone,
+            twitch_url=user.twitch_url,
+            youtube_url=user.youtube_url,
+            avatar_url=user.avatar_url,
             w3c_synced_at=user.w3c_synced_at,
             ladder_synced_at=user.ladder_synced_at,
         )

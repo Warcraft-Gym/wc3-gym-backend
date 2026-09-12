@@ -16,6 +16,7 @@ from app.models.base import ident
 from app.models.series import Series, SeriesPublic, has_result
 from app.models.series_cast import CastPublic, SeriesCast, is_video_url
 from app.models.types import utcnow
+from app.models.user import User
 from app.services import discord_posts
 
 # A cast series counts as on now from half an hour before its time to four hours after
@@ -156,13 +157,16 @@ def unclaim(series_id: int, cast_id: int, user_id: int, admin: bool) -> None:
 
 
 def last_channel(user_id: int) -> str | None:
-    """The channel of the account's newest claim, to pre-fill the next one.
+    """The channel to pre-fill the next claim with: the profile, else the newest claim.
 
     A video URL is one stream, not a channel, so it pre-fills nothing: a YouTube
     caster's last claim carries that stream's watch URL, which the next series
     must not reuse.
     """
     with Session() as session:
+        profile = session.get(User, user_id)
+        if profile and (profile.twitch_url or profile.youtube_url):
+            return profile.twitch_url or profile.youtube_url
         urls = session.scalars(
             select(SeriesCast.channel_url)
             .where(col(SeriesCast.user_id) == user_id)

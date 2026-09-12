@@ -156,6 +156,39 @@ def _score_system[T](value: T) -> T:
     return value
 
 
+def _channel[T](value: T, host: str, message: str) -> T | str | None:
+    """A profile channel on one platform: a bare handle, or that platform's channel URL."""
+    # series_cast reads the user model, so its URL helpers load on use
+    from app.models.series_cast import channel_host, channel_url, is_video_url
+
+    if not isinstance(value, str):
+        return value
+    text = value.strip()
+    if not text:
+        return None
+    if "/" not in text and "." not in text:
+        text = f"https://{host}/{text}"
+    try:
+        url = channel_url(text)
+    except ValueError:
+        url = ""
+    if not url or channel_host(url) != host or is_video_url(url):
+        raise ValueError(message)
+    return url
+
+
+def _twitch_channel[T](value: T) -> T | str | None:
+    return _channel(value, "twitch.tv", "A Twitch channel link is needed, not a video")
+
+
+def _youtube_channel[T](value: T) -> T | str | None:
+    return _channel(
+        value,
+        "youtube.com",
+        "A YouTube channel link such as youtube.com/@name is needed, not a video",
+    )
+
+
 def _round_to_int[T](value: T) -> int | T:
     # The w3champions API returns fractions for integer columns.
     if isinstance(value, float) and not value.is_integer():
@@ -190,6 +223,10 @@ RoundToInt = BeforeValidator(_round_to_int)
 KnownTimeZone = BeforeValidator(_known_time_zone)
 # Input. Race fields, where a rejected value names the member it resembles.
 SuggestRace = BeforeValidator(_suggest_race)
+# Input. A profile's Twitch channel, which takes a handle or a channel link.
+TwitchChannel = BeforeValidator(_twitch_channel)
+# Input. A profile's YouTube channel, which takes a handle or a channel link.
+YouTubeChannel = BeforeValidator(_youtube_channel)
 # Input. The map rules of a season, which take the four rule names and nothing else.
 MapRules = BeforeValidator(_map_rules)
 # Input. The score system of a season, which takes the systems the scoring rule knows.
