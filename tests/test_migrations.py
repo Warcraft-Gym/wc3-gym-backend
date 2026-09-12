@@ -625,6 +625,11 @@ def test_the_seasons_become_events_of_the_gnl_league(tmp_path: Path) -> None:
     upgrade_to(url, BEFORE_EVENT_RENAME)
 
     engine = create_engine(url)
+
+    def columns(table: str) -> set[str]:
+        return {c["name"] for c in inspect(engine).get_columns(table)}
+
+    before = {table: columns(table) for table in ("seasons", "koth_events")}
     with engine.begin() as connection:
         connection.execute(
             text(
@@ -651,9 +656,13 @@ def test_the_seasons_become_events_of_the_gnl_league(tmp_path: Path) -> None:
             "Season 17"
         ]
 
+    assert columns("seasons") > before["seasons"]
+
     downgrade_to(url, BEFORE_EVENT_RENAME)
     with engine.connect() as connection:
         assert connection.scalars(text("SELECT id FROM seasons")).all() == [17]
     assert not {"league", "event_stage", "event_division", "event_entrant"} & set(
         inspect(engine).get_table_names()
     )
+    # The event columns, league_id and koth_events.round_id went with it
+    assert {table: columns(table) for table in before} == before

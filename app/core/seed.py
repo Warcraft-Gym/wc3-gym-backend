@@ -77,6 +77,19 @@ def main(seed_dir: str, url: str) -> None:
         cur.execute(
             "UPDATE event SET score_system = 'helpstone'"
         )  # MySQL kept it in settings, one value for every season
+        # The dump predates the rename, so the copied events carry no league and
+        # the CASCADE took their stages: redo the two backfills of 1e0287eacccf
+        cur.execute(
+            "UPDATE event SET league_id = (SELECT id FROM league WHERE name = 'GNL')"
+            " WHERE league_id IS NULL"
+        )
+        cur.execute(
+            "INSERT INTO event_stage (event_id, position, format, best_of, map_rules,"
+            " scheduling_mode, ranking_rule, points_series_won, points_series_drawn,"
+            " points_game_won) SELECT id, 1, 'round_robin', 3, map_rules, 'agreed',"
+            " 'points,game_diff,head_to_head', 1, 0, 0 FROM event e WHERE NOT EXISTS"
+            " (SELECT 1 FROM event_stage s WHERE s.event_id = e.id)"
+        )
         # The prices went with the CASCADE. Every season in the dump ran under
         # wc3.no, so each gets those exact rows; a season made in the app takes
         # DEFAULT_PAID at creation instead.
