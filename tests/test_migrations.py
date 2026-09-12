@@ -43,6 +43,8 @@ BEFORE_DRAFT_POSITION = "c8e2a6d4f913"
 BEFORE_DRAFT_EXCLUDED = "f3a8c71b0d24"
 BEFORE_SEASON_FLAGS = "a5c9f2e71b48"
 BEFORE_SOFT_BLOCKS = "160f8f7bf2d4"
+# The revision before the seasons table is the event table
+BEFORE_EVENT_RENAME = "75b9f3b280c2"
 
 
 def comparable(
@@ -613,3 +615,45 @@ def test_the_soft_block_tables_refuse_a_bad_row_and_are_dropped(
 
     downgrade_to(url, BEFORE_SOFT_BLOCKS)
     assert not {"user_block", "user_busy"} & set(inspect(engine).get_table_names())
+
+
+def test_the_seasons_become_events_of_the_gnl_league(tmp_path: Path) -> None:
+    """The rename keeps the ids, joins every event to one GNL league and gives
+    each a round-robin stage; the seasons view still reads the rows, and the
+    downgrade puts the table back."""
+    url = fresh_database(tmp_path, "event-rename")
+    upgrade_to(url, BEFORE_EVENT_RENAME)
+
+    engine = create_engine(url)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO seasons (id, name, series_per_round, map_rules) "
+                "VALUES (17, 'Season 17', 2, 'fixed,loser,loser')"
+            )
+        )
+
+    upgrade_to(url, "head")
+    with engine.connect() as connection:
+        assert connection.execute(
+            text("SELECT id, name, kind, published, league_id FROM event")
+        ).all() == [(17, "Season 17", "gnl", True, 1)]
+        assert connection.execute(
+            text("SELECT id, name, entrant_kind FROM league")
+        ).all() == [(1, "GNL", "drafted_teams")]
+        assert connection.execute(
+            text(
+                "SELECT event_id, position, format, best_of, map_rules FROM event_stage"
+            )
+        ).all() == [(17, 1, "round_robin", 3, "fixed,loser,loser")]
+        # The view stands in for the renamed table until B2 drops it
+        assert connection.scalars(text("SELECT name FROM seasons")).all() == [
+            "Season 17"
+        ]
+
+    downgrade_to(url, BEFORE_EVENT_RENAME)
+    with engine.connect() as connection:
+        assert connection.scalars(text("SELECT id FROM seasons")).all() == [17]
+    assert not {"league", "event_stage", "event_division", "event_entrant"} & set(
+        inspect(engine).get_table_names()
+    )

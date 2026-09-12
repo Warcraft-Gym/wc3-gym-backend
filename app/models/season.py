@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session, column_property
 from sqlmodel import Field, Relationship, SQLModel, col
 
 from app.models.base import DBModel, ident
-from app.models.enums import Race
+from app.models.enums import EventKind, Race
 from app.models.map import MapPublic
 from app.models.relationships import DBSeasonRound, SeasonRoundPublic
 from app.models.types import (
@@ -84,7 +84,8 @@ class SeasonProgress(NamedTuple):
 
 
 class Season(SeasonBase, DBModel, table=True):
-    __tablename__ = "seasons"
+    # A GNL season is one event of the GNL league; "season" stays its name in the payloads
+    __tablename__ = "event"
     if TYPE_CHECKING:
         # Mapped below the class, where Season.id exists; declared here so a
         # type checker sees it
@@ -94,6 +95,36 @@ class Season(SeasonBase, DBModel, table=True):
     __table_args__ = (Index("uq_seasons_name", text("lower(trim(name))"), unique=True),)
 
     id: int | None = Field(default=None, primary_key=True)
+    # The event columns. They stay off SeasonBase, so the GNL season payloads
+    # keep their fields; EventPublic below is what reads them.
+    league_id: int | None = Field(default=None, index=True, foreign_key="league.id")
+    kind: EventKind = Field(
+        default=EventKind.gnl, sa_column_kwargs={"server_default": "gnl"}
+    )
+    # Off: a draft only an admin sees
+    published: bool = Field(default=True, sa_column_kwargs={"server_default": true()})
+    checkin_opens_at: Annotated[datetime | None, AwareUTC] = Field(
+        default=None, sa_type=UTCDateTime
+    )
+    checkin_closes_at: Annotated[datetime | None, AwareUTC] = Field(
+        default=None, sa_type=UTCDateTime
+    )
+    # The rules or landing page of the event, shown as one "Page" link
+    page_url: str | None = Field(default=None, max_length=500)
+    stream_url: str | None = Field(default=None, max_length=500)
+    # The guild scheduled event this one posted, so a repost edits it
+    discord_event_id: Annotated[str | None, NumToStr] = Field(
+        default=None, max_length=50
+    )
+    description: str | None = Field(default=None, max_length=2000)
+    # A cup or a KOTH night starts at a time; a GNL season keeps its dates
+    starts_at: Annotated[datetime | None, AwareUTC] = Field(
+        default=None, sa_type=UTCDateTime
+    )
+    # Eligibility bounds. They warn on the entrant row and never refuse a signup.
+    min_games: int | None = None
+    mmr_max: int | None = None
+    entrant_cap: int | None = None
     # The ascending MMR each fantasy tier opens at; the tier count is one more
     fantasy_tier_cuts: list[int] | None = Field(default=None, sa_type=JSON)
     # When the tiers were applied; an unpinned tier derives from the MMR on this date
@@ -313,3 +344,33 @@ class SeasonPublic(SeasonBase):
             fantasy_tier_cuts=season.fantasy_tier_cuts or [],
             fantasy_tiers_applied_at=season.fantasy_tiers_applied_at,
         )
+
+
+class EventPublic(SQLModel):
+    """One event as the events pages read it, GNL season or not.
+
+    The GNL payloads are SeasonPublic and stay as they are; this model is the
+    one that carries the event columns. Nothing here is stored derived: the
+    phase is computed from published, the check-in window and the series.
+    """
+
+    id: int
+    league_id: int | None = None
+    kind: EventKind = EventKind.gnl
+    name: Annotated[str | None, NumToStr] = None
+    description: str | None = None
+    published: bool = True
+    signups_open: bool = True
+    scheduling_enabled: bool = True
+    start_date: Annotated[IsoDate | None, LenientDate] = None
+    end_date: Annotated[IsoDate | None, LenientDate] = None
+    starts_at: Annotated[datetime | None, AwareUTC] = None
+    checkin_opens_at: Annotated[datetime | None, AwareUTC] = None
+    checkin_closes_at: Annotated[datetime | None, AwareUTC] = None
+    page_url: str | None = None
+    stream_url: str | None = None
+    discord_event_id: Annotated[str | None, NumToStr] = None
+    map_rules: Annotated[str | None, MapRules] = None
+    min_games: int | None = None
+    mmr_max: int | None = None
+    entrant_cap: int | None = None

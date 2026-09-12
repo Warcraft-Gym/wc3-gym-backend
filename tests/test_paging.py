@@ -182,9 +182,9 @@ def test_the_limit_reaches_the_statement(league: dict[str, Any]) -> None:
 # The ORDER BY every route writes when no sort parameter is sent
 DEFAULT_ORDER = {
     # The two collection statements order the map pool and the rounds
-    "GET /seasons": ["seasons.id", "season_rounds.playday", "map_season.position"],
+    "GET /seasons": ["event.id", "season_rounds.playday", "map_season.position"],
     "POST /seasons/search?query=id > 0": [
-        "seasons.id",
+        "event.id",
         "season_rounds.playday",
         "map_season.position",
     ],
