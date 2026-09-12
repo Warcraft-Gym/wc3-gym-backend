@@ -96,9 +96,7 @@ def me(
         "actual_role": claims.get("actual_role", claims.get("role", "admin")),
         "user": user,
         "superadmin": superadmin,
-        "signed_up": bool(
-            user and any(season.id == season_id for season in user.signup_seasons)
-        ),
+        "signed_up": season_id in signed_up,
         "season_id": season_id,
         "team": {"id": captained_team.id, "name": captained_team.name}
         if captained_team
@@ -113,8 +111,8 @@ def me(
                 "name": season.name,
                 "phase": season.phase,
                 "signed_up": season.id in signed_up,
-                "team": {"id": roster[0], "name": roster[1]}
-                if (roster := rosters.get(season.id))
+                "team": {"id": season_team[0], "name": season_team[1]}
+                if (season_team := rosters.get(season.id))
                 else None,
                 "captain": season.id in captained,
             }
