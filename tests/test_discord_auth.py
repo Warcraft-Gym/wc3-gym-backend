@@ -163,6 +163,23 @@ def test_clerk_names_the_account_once(
     assert resp.status_code == 403  # a member, known without Clerk
 
 
+def test_a_double_guard_resolves_the_claims_once(
+    client: Client, monkeypatch: pytest.MonkeyPatch, seeded: dict[str, Any]
+) -> None:
+    """The veto read guards twice, so its claims are resolved once per request.
+
+    The board is polled every few seconds while two players trade picks, and
+    Discord rate limit is a standing constraint.
+    """
+    calls: list[str] = []
+    stub_clerk(monkeypatch, account={**ACCOUNT, "id": "1"}, calls=calls)
+    resp = client.get(
+        f"/player-series/{seeded['series_played_id']}/veto", headers=SESSION
+    )
+    assert resp.status_code == 200, resp.text
+    assert calls.count(f"/guilds/{GUILD_ID}/members/1") == 1
+
+
 def test_a_relinked_discord_account_shows_at_the_next_login(
     client: Client, monkeypatch: pytest.MonkeyPatch
 ) -> None:

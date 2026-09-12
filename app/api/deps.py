@@ -51,6 +51,25 @@ def _clerk() -> Clerk:
 
 
 def clerk_claims(request: Request) -> dict[str, Any]:
+    """The claims of this request's Clerk session, resolved once per request.
+
+    Several routes guard twice (a route dependency and a helper it calls), so
+    the answer is kept on request.state: one Clerk verification, one guild read
+    and one captain query per request instead of one per guard.
+    """
+    cached = getattr(request.state, "claims", None)
+    if cached is not None:
+        return cached
+    return refresh_claims(request)
+
+
+def refresh_claims(request: Request) -> dict[str, Any]:
+    """Resolve the claims again, for a route that just changed them (a relink)."""
+    request.state.claims = _resolve_claims(request)
+    return request.state.claims
+
+
+def _resolve_claims(request: Request) -> dict[str, Any]:
     """The Discord identity and the role behind the request's Clerk session.
 
     Clerk verifies the session token locally (its JWKS is cached). The Discord
@@ -125,8 +144,9 @@ def _discord_id(clerk_user_id: str) -> str:
 def discord_token(clerk_user_id: str) -> OAuthAccessToken:
     """The Discord OAuth token Clerk holds for that user, for reads as the account.
 
-    Every answer rewrites the clerk_account row, so a Discord account relinked
-    in Clerk is picked up by the next login (/me reads the token every time).
+    The clerk_account row is rewritten only when Clerk names another Discord
+    account, so a relink is picked up by the next login (/me reads the token
+    every time) and an unchanged login writes nothing.
     """
     tokens = _clerk().users.get_o_auth_access_token(
         user_id=clerk_user_id, provider="oauth_discord"
@@ -134,11 +154,15 @@ def discord_token(clerk_user_id: str) -> OAuthAccessToken:
     if not tokens:
         raise ApiError(401, {"error": "No Discord account on this login"})
     with Session.begin() as session:
-        session.merge(
-            ClerkAccount(
-                clerk_user_id=clerk_user_id, discord_id=tokens[0].provider_user_id
+        account = session.get(ClerkAccount, clerk_user_id)
+        # the row only changes when Clerk relinks the account, so a read costs
+        # less than a write on every guarded request
+        if account is None or account.discord_id != tokens[0].provider_user_id:
+            session.merge(
+                ClerkAccount(
+                    clerk_user_id=clerk_user_id, discord_id=tokens[0].provider_user_id
+                )
             )
-        )
     return tokens[0]
 
 
