@@ -360,13 +360,22 @@ def handle(payload: dict[str, Any], services: Services) -> dict[str, Any]:
     if handler is None:
         discord.edit_reply(application_id, token, {"content": "Unknown command."})
         return {"ok": True}
-    message, public = handler(payload, services)
+    try:
+        message, public = handler(payload, services)
+    except Exception:
+        # Every answer travels through the interaction token, so a raise would
+        # otherwise leave the member's deferred reply spinning
+        discord.edit_reply(
+            application_id, token, {"content": "Something went wrong. Try again."}
+        )
+        raise
     if not public:
         discord.edit_reply(application_id, token, message)
         return {"ok": True}
     channel_id = payload["channel_id"]
     message_id = discord.post_reply(application_id, token, channel_id, message)
-    name = payload["data"]["name"]
+    # A component payload carries custom_id, not name, and matches no kind
+    name = payload["data"].get("name", "")
     if message_id and name in discord_posts.SERIES_KINDS:
         # A write to the series edits the card
         discord_posts.remember(
