@@ -275,3 +275,20 @@ def test_the_member_home_of_a_player_with_no_id_joins_nothing(
 ) -> None:
     rows = EventService().events_for_member(None)
     assert [row.joined for row in rows] == [False]
+
+
+def test_the_season_lists_leave_a_koth_event_out(client: Client) -> None:
+    """A KOTH night is an event of its own league; the GNL season pages list
+    GNL events only, so the reads they are built from stay unchanged."""
+    gnl = add_event(name="Season 18")
+    koth = add_event(name="KOTH night", kind=EventKind.koth)
+
+    listed = client.get("/seasons")
+    assert listed.status_code == 200, listed.text
+    searched = client.post("/seasons/search?query=id > 0", json={})
+    assert searched.status_code == 200, searched.text
+
+    for body in (listed.json(), searched.json()):
+        ids = [season["id"] for season in body]
+        assert gnl in ids
+        assert koth not in ids

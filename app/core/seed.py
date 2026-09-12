@@ -90,6 +90,24 @@ def main(seed_dir: str, url: str) -> None:
             " 'points,game_diff,head_to_head', 1, 0, 0 FROM event e WHERE NOT EXISTS"
             " (SELECT 1 FROM event_stage s WHERE s.event_id = e.id)"
         )
+        # The CASCADE took the rounds too, and the dump predates them: one round
+        # per playday the matches name, then the round ids the matches and the
+        # series carry (the backfills of 96c0d36de81c)
+        cur.execute(
+            "INSERT INTO event_round (season_id, stage_id, number)"
+            " SELECT DISTINCT m.season_id, s.id, m.playday FROM matches m"
+            " LEFT JOIN event_stage s ON s.event_id = m.season_id AND s.position = 1"
+            " WHERE NOT EXISTS (SELECT 1 FROM event_round r"
+            " WHERE r.season_id = m.season_id AND r.number = m.playday)"
+        )
+        cur.execute(
+            "UPDATE matches SET round_id = (SELECT r.id FROM event_round r"
+            " WHERE r.season_id = matches.season_id AND r.number = matches.playday)"
+        )
+        cur.execute(
+            "UPDATE series SET round_id ="
+            " (SELECT m.round_id FROM matches m WHERE m.id = series.match_id)"
+        )
         # The prices went with the CASCADE. Every season in the dump ran under
         # wc3.no, so each gets those exact rows; a season made in the app takes
         # DEFAULT_PAID at creation instead.

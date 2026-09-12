@@ -7,7 +7,9 @@ team_season.py and user_team_season.py.
 from datetime import date
 from typing import TYPE_CHECKING, Annotated, Self
 
-from sqlmodel import Field, Relationship, SQLModel
+from sqlalchemy import UniqueConstraint, select
+from sqlalchemy.orm import Session as OrmSession
+from sqlmodel import Field, Relationship, SQLModel, col
 
 from app.models.base import DBModel
 from app.models.enums import Race
@@ -58,17 +60,45 @@ class DBMapSeason(DBModel, table=True):
     map: "Map" = Relationship(back_populates="seasons")
 
 
-class DBSeasonRound(DBModel, table=True):
-    """One scheduled round of a season: its date window and the map of game 1."""
+class DBEventRound(DBModel, table=True):
+    """One scheduled round of a stage: its number, its window and game 1's map.
 
-    __tablename__ = "season_rounds"
-    season_id: int = Field(foreign_key="event.id", primary_key=True)
-    playday: int = Field(primary_key=True)
+    Renamed from season_rounds in C1, which gave it an id. season_id stays
+    beside stage_id until every reader keys on the stage, so the season_rounds
+    view the running deploy reads is still one plain select over this table.
+    """
+
+    __tablename__ = "event_round"
+    # The key the rounds were stored under before the id; C2 adds (stage_id, number)
+    __table_args__ = (UniqueConstraint("season_id", "number"),)
+
+    id: int | None = Field(default=None, primary_key=True)
+    # Null while the season_rounds view still takes inserts; C2 refuses a null
+    stage_id: int | None = Field(
+        default=None, index=True, foreign_key="event_stage.id", ondelete="CASCADE"
+    )
+    season_id: int = Field(foreign_key="event.id")
+    # The place of the round in its stage; the GNL playday
+    number: int
+    name: str | None = Field(default=None, max_length=50)
     # The window the round is played in; no end date means a one-day round
     start_date: date | None = None
     end_date: date | None = None
     map_id: int | None = Field(default=None, index=True, foreign_key="maps.id")
+    # Overrides the stage's best of for this round; null follows the stage
+    best_of: int | None = None
     season: "Season" = Relationship(back_populates="rounds")
+
+
+def round_row(session: OrmSession, season_id: int, number: int) -> DBEventRound | None:
+    """The round of one event by its number. The table is keyed by an id now,
+    so the pair no longer reads as a primary key."""
+    return session.scalars(
+        select(DBEventRound).where(
+            col(DBEventRound.season_id) == season_id,
+            col(DBEventRound.number) == number,
+        )
+    ).first()
 
 
 class SeasonRoundPublic(SQLModel):
@@ -78,9 +108,9 @@ class SeasonRoundPublic(SQLModel):
     map_id: int | None = None
 
     @classmethod
-    def from_row(cls, row: DBSeasonRound) -> Self:
+    def from_row(cls, row: DBEventRound) -> Self:
         return cls(
-            playday=row.playday,
+            playday=row.number,
             start_date=row.start_date,
             end_date=row.end_date,
             map_id=row.map_id,

@@ -151,8 +151,8 @@ def test_the_migration_dates_every_round_and_keeps_the_week_maps(
     with engine.connect() as connection:
         rows = connection.execute(
             text(
-                "SELECT season_id, playday, start_date, end_date, map_id "
-                "FROM season_rounds ORDER BY season_id, playday"
+                "SELECT season_id, number, start_date, end_date, map_id "
+                "FROM event_round ORDER BY season_id, number"
             )
         ).all()
     assert [tuple(map(str, row)) for row in rows] == [

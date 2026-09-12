@@ -50,6 +50,9 @@ class Series(SeriesBase, DBModel, table=True):
     )
 
     id: int | None = Field(default=None, primary_key=True)
+    # The round this series is played in; backfilled in C1, required from C2.
+    # It stays off SeriesBase, so the series payloads are unchanged.
+    round_id: int | None = Field(default=None, index=True, foreign_key="event_round.id")
     match: "Match" = Relationship(
         sa_relationship_kwargs={"foreign_keys": "[Series.match_id]"}
     )

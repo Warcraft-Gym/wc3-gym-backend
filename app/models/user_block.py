@@ -2,7 +2,7 @@
 
 Both are soft hints for the scheduling tools. They belong to the player, not
 to an event, so they carry over, and they never write the per-round answer in
-user_season_availability. Times are local to users.timezone and resolve to
+round_availability. Times are local to users.timezone and resolve to
 instants only against a real date, in app.core.free_time.
 """
 

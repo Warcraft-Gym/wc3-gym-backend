@@ -36,6 +36,9 @@ class Match(MatchBase, DBModel, table=True):
     )
 
     id: int | None = Field(default=None, primary_key=True)
+    # The round this tie belongs to; backfilled in C1, required from C2. It
+    # stays off MatchBase, so the match payloads are unchanged.
+    round_id: int | None = Field(default=None, index=True, foreign_key="event_round.id")
     team1: "Team" = Relationship(
         sa_relationship_kwargs={"foreign_keys": "[Match.team1_id]"}
     )

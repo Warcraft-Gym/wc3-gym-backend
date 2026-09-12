@@ -1,4 +1,4 @@
-"""Which weeks of a season a player cannot play.
+"""Which rounds of an event a player cannot play.
 
 A row is an answer, and no row is no answer, so clearing an answer deletes the
 row. The player and their captain write the same row and the last write wins.
@@ -10,13 +10,13 @@ from sqlmodel import col
 
 from app.core.db import Session
 from app.core.exceptions import ApiError, BadRequestError, NotFoundError
-from app.models.relationships import SeasonRoundPublic
+from app.models.relationships import SeasonRoundPublic, round_row
+from app.models.round_availability import (
+    DBRoundAvailability,
+    RoundAvailabilityPublic,
+)
 from app.models.season import Season
 from app.models.user import User
-from app.models.user_season_availability import (
-    DBUserSeasonAvailability,
-    UserSeasonAvailabilityPublic,
-)
 from app.models.user_team_season import DBUserTeamSeason
 
 NO_SCHEDULING = "This event does not use availability."
@@ -33,19 +33,15 @@ class AvailabilityService:
             season = _season(session, season_id)
             return [SeasonRoundPublic.from_row(row) for row in season.rounds]
 
-    def for_user(
-        self, user_id: int, season_id: int
-    ) -> list[UserSeasonAvailabilityPublic]:
+    def for_user(self, user_id: int, season_id: int) -> list[RoundAvailabilityPublic]:
         with Session.begin() as session:
             return _rows(
                 session,
-                col(DBUserSeasonAvailability.user_id) == user_id,
-                col(DBUserSeasonAvailability.season_id) == season_id,
+                col(DBRoundAvailability.user_id) == user_id,
+                col(DBRoundAvailability.season_id) == season_id,
             )
 
-    def for_team(
-        self, team_id: int, season_id: int
-    ) -> list[UserSeasonAvailabilityPublic]:
+    def for_team(self, team_id: int, season_id: int) -> list[RoundAvailabilityPublic]:
         """The answers of the players the team holds that season."""
         with Session.begin() as session:
             roster = select(col(DBUserTeamSeason.user_id)).where(
@@ -54,8 +50,8 @@ class AvailabilityService:
             )
             return _rows(
                 session,
-                col(DBUserSeasonAvailability.season_id) == season_id,
-                col(DBUserSeasonAvailability.user_id).in_(roster),
+                col(DBRoundAvailability.season_id) == season_id,
+                col(DBRoundAvailability.user_id).in_(roster),
             )
 
     def on_roster(self, team_id: int, season_id: int, user_id: int) -> bool:
@@ -70,8 +66,8 @@ class AvailabilityService:
         playday: int,
         available: bool | None,
         set_by_user_id: int,
-    ) -> list[UserSeasonAvailabilityPublic]:
-        """Write one week's answer, or clear it, and answer the player's season.
+    ) -> list[RoundAvailabilityPublic]:
+        """Write one round's answer, or clear it, and answer the player's season.
 
         Every writer comes through here, so a season without scheduling refuses
         the player, the captain and the Discord button alike.
@@ -86,17 +82,17 @@ class AvailabilityService:
             if not 1 <= playday <= weeks:
                 raise BadRequestError(f"playday must be between 1 and {weeks}")
             if available is None:
-                row = session.get(
-                    DBUserSeasonAvailability, (user_id, season_id, playday)
-                )
+                row = session.get(DBRoundAvailability, (user_id, season_id, playday))
                 if row:
                     session.delete(row)
             else:
+                round_ = round_row(session, season_id, playday)
                 session.merge(
-                    DBUserSeasonAvailability(
+                    DBRoundAvailability(
                         user_id=user_id,
                         season_id=season_id,
                         playday=playday,
+                        round_id=round_.id if round_ else None,
                         available=available,
                         set_by_user_id=set_by_user_id,
                     )
@@ -104,8 +100,8 @@ class AvailabilityService:
             session.flush()
             return _rows(
                 session,
-                col(DBUserSeasonAvailability.user_id) == user_id,
-                col(DBUserSeasonAvailability.season_id) == season_id,
+                col(DBRoundAvailability.user_id) == user_id,
+                col(DBRoundAvailability.season_id) == season_id,
             )
 
 
@@ -118,15 +114,15 @@ def _season(session: OrmSession, season_id: int) -> Season:
 
 def _rows(
     session: OrmSession, *where: ColumnExpressionArgument[bool]
-) -> list[UserSeasonAvailabilityPublic]:
+) -> list[RoundAvailabilityPublic]:
     """The rows the filter keeps, each carrying the name of its last writer."""
     rows = session.execute(
-        select(DBUserSeasonAvailability, col(User.name))
-        .join(User, col(User.id) == col(DBUserSeasonAvailability.set_by_user_id))
+        select(DBRoundAvailability, col(User.name))
+        .join(User, col(User.id) == col(DBRoundAvailability.set_by_user_id))
         .where(*where)
         .order_by(
-            col(DBUserSeasonAvailability.user_id),
-            col(DBUserSeasonAvailability.playday),
+            col(DBRoundAvailability.user_id),
+            col(DBRoundAvailability.playday),
         )
     ).all()
-    return [UserSeasonAvailabilityPublic.from_row(row, name) for row, name in rows]
+    return [RoundAvailabilityPublic.from_row(row, name) for row, name in rows]

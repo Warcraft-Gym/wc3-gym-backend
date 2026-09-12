@@ -453,5 +453,5 @@ def test_nothing_writes_the_round_answer(
 
     assert body["hours"] == 0
     assert statements
-    assert not [sql for sql in statements if "user_season_availability" in sql]
+    assert not [sql for sql in statements if "round_availability" in sql]
     assert AvailabilityService().for_user(p2, seeded["season_id"]) == []
