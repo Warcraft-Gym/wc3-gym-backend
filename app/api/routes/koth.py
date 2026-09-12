@@ -170,12 +170,14 @@ def create_signup_admin(
     """Create a signup manually (Admin).
 
     Manually create a KOTH signup with automatic W3C MMR validation and
-    bracket assignment, one signup per race named. For admin UI use.
+    bracket assignment, one signup per race named. The signup lands on the
+    event the admin is looking at, or on the active event. For admin UI use.
     """
     return service.create_signups(
         twitch_username=data.twitch_username,
         battle_tag=data.battle_tag,
         races=data.races,
+        event_id=data.event_id,
     )
 
 

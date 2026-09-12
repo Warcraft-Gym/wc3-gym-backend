@@ -5,6 +5,7 @@ signups through the session and then drive the match, king and bracket
 endpoints through the API.
 """
 
+from datetime import datetime
 from typing import Any
 
 import pytest
@@ -737,3 +738,38 @@ def test_a_signup_carries_the_flag_of_its_player_row(
         "P1#1111": "DE",
         "P2#2222": "US",
     }
+
+
+def test_the_admin_signup_lands_on_the_event_he_names(
+    client: Client,
+    koth: dict[str, Any],
+    auth_headers: dict[str, str],
+    w3c_two_races: None,
+) -> None:
+    """The admin adds a player to the event on screen, not to the active one."""
+    from app.core.db import Session
+    from app.models.koth_event import KothEvent
+
+    with Session() as session:
+        later = KothEvent(
+            name="KOTH 2", event_date=datetime(2026, 2, 10, 20, 0), is_active=False
+        )
+        session.add(later)
+        session.commit()
+        later_id = ident(later)
+
+    resp = client.post(
+        "/koth/signups/admin",
+        headers=auth_headers,
+        json={
+            "twitch_username": "player_three",
+            "battle_tag": "P3#3333",
+            "races": ["human"],
+            "event_id": later_id,
+        },
+    )
+
+    assert resp.status_code == 201, resp.text
+    assert [s["event_id"] for s in resp.json()] == [later_id]
+    active = client.get(f"/koth/events/{koth['event_id']}/signups").json()
+    assert "P3#3333" not in [s["battle_tag"] for s in active]

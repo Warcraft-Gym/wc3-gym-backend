@@ -107,11 +107,13 @@ class KothSignupRequest(SQLModel):
 
 class KothSignupAdminRequest(SQLModel):
     """The admin signup body: the admin may leave the Twitch name blank, and
-    an empty race list lets the W3C stats pick the best race."""
+    an empty race list lets the W3C stats pick the best race. The signup lands
+    on the event named, or on the active event when none is."""
 
     twitch_username: str = ""
     battle_tag: str
     races: list[str] = []
+    event_id: int | None = None
 
 
 class KothSignupMeRequest(SQLModel):
