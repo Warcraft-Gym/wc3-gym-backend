@@ -101,10 +101,21 @@ def test_a_player_adds_edits_and_deletes_busy_days(
     assert client.get("/player-blocks", headers=headers).json()["busy"] == []
 
 
+@pytest.mark.parametrize(
+    "path,body",
+    [
+        ("repeating", WORK),
+        ("busy", {"first_day": "2026-01-06", "last_day": "2026-01-08"}),
+    ],
+)
 def test_a_block_needs_a_timezone_first(
-    client: Client, seeded: dict[str, Any], member: Callable[..., dict[str, str]]
+    client: Client,
+    seeded: dict[str, Any],
+    member: Callable[..., dict[str, str]],
+    path: str,
+    body: dict[str, Any],
 ) -> None:
-    resp = client.post("/player-blocks/repeating", json=WORK, headers=member())
+    resp = client.post(f"/player-blocks/{path}", json=body, headers=member())
 
     assert resp.status_code == 400, resp.text
     assert resp.json() == {"error": "Set your timezone before you add a block"}
@@ -121,7 +132,7 @@ def test_a_block_needs_a_timezone_first(
         (
             "busy",
             {"first_day": "2026-01-09", "last_day": "2026-01-08"},
-            "last_day must not be before first_day",
+            "The last day must not be before the first day",
         ),
     ],
 )
