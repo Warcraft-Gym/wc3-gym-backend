@@ -4,6 +4,8 @@ A row is an answer, and no row is no answer, so clearing an answer deletes the
 row. The player and their captain write the same row and the last write wins.
 """
 
+from datetime import UTC, date, datetime, timedelta
+
 from sqlalchemy import ColumnExpressionArgument, select
 from sqlalchemy.orm import Session as OrmSession
 from sqlmodel import col
@@ -20,6 +22,10 @@ from app.models.user_season_availability import (
 from app.models.user_team_season import DBUserTeamSeason
 
 NO_SCHEDULING = "This event does not use availability."
+
+
+def today() -> date:
+    return datetime.now(UTC).date()
 
 
 class AvailabilityService:
@@ -74,7 +80,8 @@ class AvailabilityService:
         """Write one week's answer, or clear it, and answer the player's season.
 
         Every writer comes through here, so a season without scheduling refuses
-        the player, the captain and the Discord button alike.
+        the player, the captain and the Discord button alike. A player answers
+        only inside the check-in window; a captain or an admin at any time.
         """
         with Session.begin() as session:
             season = _season(session, season_id)
@@ -85,6 +92,8 @@ class AvailabilityService:
             weeks = season.round_count or 0
             if not 1 <= playday <= weeks:
                 raise BadRequestError(f"playday must be between 1 and {weeks}")
+            if set_by_user_id == user_id:
+                _checkin_window(season, playday)
             if available is None:
                 row = session.get(
                     DBUserSeasonAvailability, (user_id, season_id, playday)
@@ -107,6 +116,23 @@ class AvailabilityService:
                 col(DBUserSeasonAvailability.user_id) == user_id,
                 col(DBUserSeasonAvailability.season_id) == season_id,
             )
+
+
+def _checkin_window(season: Season, playday: int) -> None:
+    """Refuse a player before the round's check-in opens and after it ends."""
+    row = next((r for r in season.rounds if r.playday == playday), None)
+    if row is None or row.start_date is None:
+        return
+    now = today()
+    opens = row.start_date - timedelta(days=season.checkin_days)
+    if now < opens:
+        raise _closed(f"Check-in for round {playday} opens on {opens.day} {opens:%b}.")
+    if row.end_date and now > row.end_date:
+        raise _closed(f"Round {playday} is over.")
+
+
+def _closed(message: str) -> ApiError:
+    return ApiError(403, {"error": "checkin_closed", "message": message})
 
 
 def _season(session: OrmSession, season_id: int) -> Season:

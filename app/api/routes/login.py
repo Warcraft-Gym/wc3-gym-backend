@@ -112,6 +112,7 @@ def me(
                 "phase": season.phase,
                 "signups_open": season.signups_open,
                 "scheduling_enabled": season.scheduling_enabled,
+                "checkin_days": season.checkin_days,
                 "start_date": season.start_date,
                 "end_date": season.end_date,
                 "signed_up": season.id in signed_up,
