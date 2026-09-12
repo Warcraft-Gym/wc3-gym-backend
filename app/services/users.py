@@ -77,6 +77,11 @@ class UserService:
                 raise NotFoundError("User not found")
             return _public(session, row)
 
+    def set_avatar(self, user_id: int, avatar_url: str | None) -> None:
+        """The Discord avatar the login just read: one UPDATE, nothing derived."""
+        with Session.begin() as session:
+            User.update(session, user_id, avatar_url=avatar_url)
+
     def set_fantasy_tiers(
         self, season_id: int, cuts: list[int], tiers: dict[int, int]
     ) -> None:
