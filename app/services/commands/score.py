@@ -23,10 +23,10 @@ from app.services.commands.base import (
     options_of,
     own_series,
 )
-from app.services.replays import MAX_BYTES
 
 # What Discord accepts as an attachment option
 ATTACHMENT = 11
+MAX_BYTES = 10 * 1024 * 1024
 
 COMMAND: dict[str, Any] = {
     "name": "score",

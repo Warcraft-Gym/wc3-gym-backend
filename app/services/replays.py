@@ -21,7 +21,7 @@ from app.services import r2
 REPLAY_MAGIC = b"Warcraft III recorded game\x1a\x00"
 # A real replay is a few hundred KB; the Discord path refuses the same size
 MAX_BYTES = 10 * 1024 * 1024
-# The longest series anyone plays, so one series signs a bounded set of keys
+# A bound no real series reaches, so one series signs a bounded set of keys
 MAX_GAMES = 9
 
 
