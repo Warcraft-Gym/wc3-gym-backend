@@ -12,6 +12,7 @@ from sqlmodel import col, select
 
 from app.core.db import Session
 from app.core.exceptions import BadRequestError, NotFoundError
+from app.core.scoring import wins_needed
 from app.models.match import Match
 from app.models.series import Series
 from app.models.series_replay import DBSeriesReplay, SeriesReplayPublic
@@ -21,14 +22,23 @@ from app.services import r2
 REPLAY_MAGIC = b"Warcraft III recorded game\x1a\x00"
 # A real replay is a few hundred KB; the Discord path refuses the same size
 MAX_BYTES = 10 * 1024 * 1024
-# A bound no real series reaches, so one series signs a bounded set of keys
-MAX_GAMES = 9
+
+
+def max_games(series_id: int) -> int:
+    """The most games this series can hold: one short of twice the map wins its
+    season needs, so a Bo3 tops out at 3."""
+    with Session() as session:
+        row = session.get(Series, series_id)
+        season = row.match.season if row and row.match else None
+        return 2 * wins_needed(season.map_rules if season else None) - 1
 
 
 def upload_url(series_id: int, game_no: int) -> str:
-    """Where the browser puts one game's replay."""
-    if not 1 <= game_no <= MAX_GAMES:
-        raise BadRequestError(f"Game number must be between 1 and {MAX_GAMES}")
+    """Where the browser puts one game's replay. The season's best-of bounds the
+    game number, so one series signs a bounded set of keys."""
+    games = max_games(series_id)
+    if not 1 <= game_no <= games:
+        raise BadRequestError(f"Game number must be between 1 and {games}")
     return r2.upload_url(r2.key(series_id, game_no))
 
 

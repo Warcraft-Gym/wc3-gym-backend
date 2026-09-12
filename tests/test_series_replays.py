@@ -7,7 +7,7 @@ from typing import Any
 from httpx2 import Client, Response
 
 from app.services import blob
-from app.services.replays import MAX_BYTES, MAX_GAMES
+from app.services.replays import MAX_BYTES
 from tests.conftest import REPLAY_BYTES
 
 
@@ -128,13 +128,17 @@ def test_a_replay_over_ten_megabytes_is_refused_and_dropped(
 def test_an_upload_link_is_signed_only_for_a_game_of_a_series(
     client: Client, seeded: dict[str, Any], member: Callable[..., dict[str, str]]
 ) -> None:
+    """A Bo3 signs three keys, so game 4 is refused."""
     series_id = seeded["series_open_id"]
     resp = client.post(
-        f"/player-series/{series_id}/replays/{MAX_GAMES + 1}/upload-url",
-        headers=member("2"),
+        f"/player-series/{series_id}/replays/3/upload-url", headers=member("2")
+    )
+    assert resp.status_code == 200, resp.text
+    resp = client.post(
+        f"/player-series/{series_id}/replays/4/upload-url", headers=member("2")
     )
     assert resp.status_code == 400, resp.text
-    assert resp.json()["error"] == f"Game number must be between 1 and {MAX_GAMES}"
+    assert resp.json()["error"] == "Game number must be between 1 and 3"
 
 
 def test_the_replays_of_a_missing_match(client: Client) -> None:
