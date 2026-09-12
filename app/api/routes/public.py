@@ -222,10 +222,17 @@ def public_create_user(
 
     if existing_users and len(existing_users) > 0:
         # update first matched user
-        existing = existing_users[0]
-        # Validated as a whole profile, then written as the update it is
-        user_create = UserCreate(**user_payload)
-        user = user_service.update(existing.id, UserUpdate(**user_create.model_dump()))
+        # Only the fields the form sent: an omitted one, such as mmr, keeps its value
+        user = user_service.update(
+            existing_users[0].id,
+            UserUpdate(
+                **data.model_dump(
+                    exclude_unset=True, exclude={"season_id", "seasonId"}
+                ),
+                discordId=entry.get("discord_id"),
+                discordTag=entry.get("discord_tag"),
+            ),
+        )
     else:
         # create new user
         user = user_service.add(user_create)
