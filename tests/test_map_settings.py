@@ -153,6 +153,23 @@ def test_a_rule_the_season_does_not_know_is_refused(
     assert client.get(f"/seasons/{seeded['season_id']}").json()["map_rules"] is None
 
 
+@pytest.mark.parametrize("system", ["Helpstone", "helpStone", "standart"])
+def test_the_season_write_refuses_an_unknown_score_system(
+    client: Client, seeded: dict[str, Any], auth_headers: dict[str, str], system: str
+) -> None:
+    """A typo would re-score every series of the season one point low."""
+    resp = client.put(
+        f"/seasons/{seeded['season_id']}",
+        json={"score_system": system},
+        headers=auth_headers,
+    )
+
+    assert resp.status_code == 422, resp.text
+    assert "is not a score system" in resp.json()["error"]
+    stored = client.get(f"/seasons/{seeded['season_id']}").json()["score_system"]
+    assert stored == "standard"
+
+
 def test_the_admin_names_and_clears_the_map_of_a_week(
     client: Client,
     seeded: dict[str, Any],
