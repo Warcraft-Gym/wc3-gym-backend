@@ -168,6 +168,17 @@ class UserService:
     def find_by_discord_id(self, discord_id: str) -> list[UserListPublic]:
         return self._where(col(User.discordId) == discord_id)
 
+    def id_by_discord_id(self, discord_id: str) -> int | None:
+        """The id of the player behind a Discord account, in one statement.
+
+        A route that only identifies its caller reads this; find_by_discord_id
+        also loads his whole W3C history and every season he signed up for.
+        """
+        with Session.begin() as session:
+            return session.scalar(
+                select(col(User.id)).where(col(User.discordId) == discord_id)
+            )
+
     def find_by_discord_id_or_tag(
         self, discord_id: str, discord_tag: str
     ) -> list[UserListPublic]:

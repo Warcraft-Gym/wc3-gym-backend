@@ -29,9 +29,11 @@ from app.models.relationships import (
 from app.models.season import (
     Season,
     SeasonCreate,
+    SeasonProgress,
     SeasonPublic,
     SeasonSignupUpdate,
     SeasonUpdate,
+    progress_by_seasons,
     tier_of,
 )
 from app.models.team import Team
@@ -128,11 +130,22 @@ def resolved_tiers(
     return tiers
 
 
-def _public(session: OrmSession, season: Season) -> SeasonPublic:
-    """The full season with its phase; the phase is one aggregate over its series."""
+def _public(
+    session: OrmSession, season: Season, progress: SeasonProgress | None = None
+) -> SeasonPublic:
+    """The full season with its phase; the phase is one aggregate over its series.
+
+    A list answer reads the phase of every season at once and passes it in.
+    """
     public = SeasonPublic.from_season(season)
-    public.phase, public.unscored_series = season.progress(session)
+    public.phase, public.unscored_series = progress or season.progress(session)
     return public
+
+
+def _publics(session: OrmSession, seasons: Sequence[Season]) -> list[SeasonPublic]:
+    """A list of seasons, with one aggregate for the phase of all of them."""
+    progress = progress_by_seasons(session, seasons)
+    return [_public(session, season, progress[season.id]) for season in seasons]
 
 
 class SeasonService:
@@ -251,7 +264,7 @@ class SeasonService:
                 .limit(limit)
             )
             seasons = session.scalars(statement).unique().all()
-            return [_public(session, season) for season in seasons]
+            return _publics(session, seasons)
 
     def add_teams(self, season_id: int, team_ids: list[int]) -> SeasonPublic:
         with Session.begin() as session:
@@ -288,7 +301,7 @@ class SeasonService:
                 .limit(limit)
             )
             seasons = session.scalars(statement).unique().all()
-            return [_public(session, season) for season in seasons]
+            return _publics(session, seasons)
 
     def remove_teams(self, season_id: int, team_ids: list[int]) -> SeasonPublic:
         with Session.begin() as session:

@@ -102,13 +102,12 @@ def press(payload: dict[str, Any], services: "Services") -> tuple[dict[str, Any]
     """A button press writes the presser's own answer and confirms it privately."""
     _, season_id, playday, answer = payload["data"]["custom_id"].split(":")
     discord_id, _ = caller(payload)
-    found = services.users.find_by_discord_id(discord_id)
-    if not found:
+    user_id = services.users.id_by_discord_id(discord_id)
+    if user_id is None:
         return {
             "content": "Your Discord account is not linked to a player yet. "
             "Sign in on the site once, then press again."
         }, PRIVATE
-    user_id = found[0].id
     season = services.seasons.get(int(season_id))
     try:
         AvailabilityService().set(

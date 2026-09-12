@@ -56,7 +56,7 @@ from app.models.fantasy_team import FantasyTeamPublic
 from app.models.match import Match, MatchPublic
 from app.models.player_career_stats import PlayerCareerStatsPublic
 from app.models.relationships import DBUserSeasonSignup
-from app.models.season import ROUND_COUNT, Season
+from app.models.season import ROUND_COUNT, Season, progress_by_seasons
 from app.models.series import Series, SeriesPublic
 from app.models.team import Team, TeamPublic
 from app.models.user import (
@@ -484,7 +484,7 @@ def fill_trophies(session: Session, users: Iterable[UserPublic | None]) -> None:
     """Fill the trophies of every user: the finished seasons his team won.
 
     A season still running has a leader, not a champion, so only a complete
-    season pays. The phase costs one statement per season the users played.
+    season pays. The phase of every season they played is one statement.
     """
     rows = [user for user in users if user is not None]
     roster = {
@@ -502,13 +502,10 @@ def fill_trophies(session: Session, users: Iterable[UserPublic | None]) -> None:
             select(Season).where(col(Season.id).in_({sid for _, sid in roster}))
         )
     }
+    progress = progress_by_seasons(session, seasons.values())
     winners = season_winners(
         session,
-        {
-            sid
-            for sid, season in seasons.items()
-            if season.progress(session).phase == "complete"
-        },
+        {sid for sid in seasons if progress[sid].phase == "complete"},
     )
     won = {(team_id, sid) for sid, team_id in winners.items()}
     teams = {

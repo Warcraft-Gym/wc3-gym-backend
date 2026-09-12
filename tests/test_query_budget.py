@@ -32,6 +32,10 @@ the players who hold no stored row from one. Neither part grows with the
 number of players or of rows in the answer, and a search over those rows
 adds none.
 
+The season list reads the phase of every season it answers in one grouped
+aggregate, so it does not grow with the number of seasons. Identifying the
+caller behind a Discord account is one statement, not the whole player row.
+
 A fantasy team answer derives its six score fields from four more statements:
 the standings pair, one for the series of every season in the answer and one
 for the bets of its captains. None of the four grows with the number of teams.
@@ -60,6 +64,7 @@ from app.models.player_career_stats import (
     PlayerCareerStatsPublic,
 )
 from app.models.relationships import DBUserSeasonSignup
+from app.models.season import Season
 from app.models.series import Series, SeriesPublic
 from app.models.user import User
 from app.models.w3c_stats import W3CStats
@@ -67,7 +72,9 @@ from app.services import derived
 from app.services.draft_series import DraftSeriesService
 from app.services.fantasy_bets import FantasyBetService
 from app.services.fantasy_teams import FantasyTeamService
+from app.services.maps import MapService
 from app.services.player_career_stats import PlayerCareerStatsService
+from app.services.seasons import SeasonService
 from app.services.series import SeriesService
 from app.services.teams import TeamService
 from app.services.users import UserService
@@ -468,3 +475,35 @@ def test_the_user_list_costs_three_statements(league: dict[str, Any]) -> None:
     assert total == len(users) == len(league["player_ids"])
     assert all(len(user.signup_seasons) == 1 for user in users)
     assert tally[0] == 3
+
+
+def test_the_caller_lookup_costs_one_statement(league: dict[str, Any]) -> None:
+    """A route that only identifies its caller reads the id, not the player's
+    whole W3C history and every season he signed up for."""
+    service = UserService()
+    with count_statements() as tally:
+        user_id = service.id_by_discord_id("1")
+    assert user_id == league["player_ids"][0]
+    assert tally[0] == 1
+
+
+def test_the_season_list_costs_the_same_when_seasons_grow(
+    league: dict[str, Any],
+) -> None:
+    """The phase of every season is one grouped aggregate, not one per season."""
+    service = SeasonService(
+        user_app_service=UserService(), map_app_service=MapService()
+    )
+    with count_statements() as tally:
+        assert len(service.get_all()) == 1
+    one_season = tally[0]
+
+    with Session.begin() as session:
+        for index in range(4):
+            session.add(Season(name=f"Budget season {index}", series_per_round=1))
+
+    with count_statements() as tally:
+        seasons = service.get_all()
+    assert len(seasons) == 5
+    assert [season.phase for season in seasons[1:]] == ["open"] * 4
+    assert tally[0] == one_season

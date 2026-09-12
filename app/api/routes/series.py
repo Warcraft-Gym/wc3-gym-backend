@@ -113,11 +113,11 @@ def search_series_by_season(
 
 def caster(claims: RequireMember, user_service: UserServiceDep) -> tuple[int, bool]:
     """The users row behind a member's session, and whether it is an admin."""
-    users = user_service.find_by_discord_id(str(claims["sub"]))
-    if not users:
+    user_id = user_service.id_by_discord_id(str(claims["sub"]))
+    if user_id is None:
         raise NotFoundError("player_not_found")
     admin = claims.get("role") == "admin" or claims["sub"] == "admin"
-    return users[0].id, admin
+    return user_id, admin
 
 
 Caster = Annotated[tuple[int, bool], Depends(caster)]
