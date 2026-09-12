@@ -119,15 +119,15 @@ def set_team_availability(
     _own_team(claims, team_id)
     if not service.on_roster(team_id, season_id, data.user_id):
         raise BadRequestError(f"Player {data.user_id} is not on this team this season")
-    callers = user_service.find_by_discord_id(str(claims["sub"]))
-    if not callers:
+    caller_id = user_service.id_by_discord_id(str(claims["sub"]))
+    if caller_id is None:
         raise NotFoundError("user_not_found")
     return service.set(
         data.user_id,
         season_id,
         data.playday,
         data.available,
-        set_by_user_id=callers[0].id,
+        set_by_user_id=caller_id,
     )
 
 
