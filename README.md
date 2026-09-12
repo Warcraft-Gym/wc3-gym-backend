@@ -1,6 +1,6 @@
 # GNL Backend
 
-FastAPI REST API for the GNL (Gym Newbie League) esports platform: user management, team operations, match scheduling, series tracking and fantasy betting. Reads are anonymous-open; writes are checked per request against a Clerk session (see `app/api/deps.py`), with a legacy `ADMIN_TOKEN` login for the admin UI and the bot.
+FastAPI REST API for the GNL (Gym Newbie League) esports platform: user management, team operations, match scheduling, series tracking and fantasy betting. The public pages read without a login; the writes and a player's own pages are checked per request in `app/api/deps.py`, against a Clerk session or the access token the `ADMIN_TOKEN` login mints for the admin UI and the bot.
 
 ## Prerequisites
 
@@ -174,7 +174,7 @@ The import writes no ids of its own. A season matches by name, a player by battl
 
 `tests/data/` holds the real S17 and S18 exports; `just import-xlsx` imports both into a running backend (S18 first, so shared players keep the newer attributes) and the suite round-trips them.
 
-Ten sheets carry the season's competitive core: the season row, its maps, teams, rostered players, matches, the series head with one cast link, and the fantasy teams, rosters, bets and users. Everything else stays behind — per-game results, veto steps, replays, rounds, availability answers, soft blocks, signups, career and w3champions stats, achievements, ladder history, KOTH, the draft, the `settings` rows and the `icon_url` of `teams`. Carry those over another way.
+Ten sheets travel, and `app/services/season_import.py` writes one step of the import per sheet: Season, Maps, Teams, Players, Matches, Series, Fantasy Users, Fantasy Teams, Fantasy Team Players and Fantasy Bets. Two carry more than their names: the Discord Role cell of a Teams row binds that team's Discord role, and a Players row also writes the player's signup for the season. No sheet carries the `settings` rows or the `icon_url` of `teams`; carry those over another way.
 
 ## Project Setup
 
@@ -201,11 +201,11 @@ Dependencies live in `pyproject.toml`: runtime packages under `[project] depende
 
 The backend reads its configuration from the environment. `just up` passes development-only values, so nothing here needs setting by hand to run the project locally. Read this table before deploying, and when a container starts but behaves oddly.
 
-`.env` is gitignored; copy `.env.example` to `.env` and fill in what you use. The `just` modules load it (`set dotenv-load`; the root justfile does not, so `just logos` reads `BLOB_READ_WRITE_TOKEN` from the environment), and `api/index.py` loads it for a bare `uvicorn api.index:app`. `create_app` and the migrations read the process environment only, so the tests never see a `.env` value. Each value has a default in the code. The deployment secrets are passed in by the stack.
+`.env` is gitignored; copy `.env.example` to `.env` and fill in what you use. The three `just` modules load it (`set dotenv-load`); the root justfile does not, so its own recipes pass `--env-file .env` when they need a value (`just discord-commands`, `just discord-emojis`). A root recipe a module calls still sees the module's values, inherited from the calling recipe. `api/index.py` loads it for a bare `uvicorn api.index:app`. `create_app` and the migrations read the process environment only, so the tests never see a `.env` value. Each value has a default in the code. The deployment secrets are passed in by the stack.
 
 More values live in the `settings` table, not the environment, and are edited on the admin Config page: `w3c_url` (wins over the `W3C_URL` variable when present), `current_w3c_season` (the w3champions season the MMR columns read; when the row is missing the backend takes the newest season from w3champions), `KOTH_NIGHTBOT_TOKEN`, `current_gnl_season` (the season the captain check and the role sync read; when the row is missing they take the newest season), `results_channel_id` (the channel the bot posts a series result card in; when the row is missing no card is posted), and `content_channel_id` (the channel the bot posts a cast claim and its start reminder in; when the row is missing neither card is posted). The Discord roles the app owns are rows of `discord_role_binding`, not settings, and the site admins are rows of `admin_grant`, managed under Config -> Access with `ADMIN_DISCORD_IDS` as the bootstrap. Discord grants no site admin: the guild owner, a role with the ADMINISTRATOR bit and the `admin_role` setting all read as members, and `admin_role` stays a setting because the Discord bot reads it for its own commands. `GET /config/w3c` shows the URL and season the backend resolved.
 
-Two switches are columns on the season, not settings: `signups_open` (off, a signup is a request an admin may grant) and `scheduling_enabled` (off, the event takes no availability answers and a write answers 403 `scheduling_disabled`). A season's phase is derived from its series and never stored. An availability answer hangs on a `season_rounds` row, and `user_block` and `user_busy` are the player's own soft hints that never write a round answer; `app/services/soft_blocks.py` has the rest.
+Two switches are columns on the season, not settings: `signups_open` (off, a signup is a request an admin may grant) and `scheduling_enabled` (off, the event takes no availability answers and a write answers 403 `scheduling_disabled`). A season's phase is derived from its series and never stored. An availability answer is one row per player per round of a season (`user_season_availability`, keyed by `playday`), and the matching `season_rounds` row carries that round's date window and the map of game 1. `user_block` and `user_busy` are the player's own soft hints: they belong to the player rather than to a season, and they never write the per-round answer.
 
 **Key environment variables:**
 
@@ -237,13 +237,13 @@ FRONTEND_URL="http://localhost:5003"
 | `DISCORD_PUBLIC_KEY` | The app's public key from the Discord Developer Portal; `POST /discord/interactions` checks Discord's signature with it and answers 503 while it is unset | 64-character hex string |
 | `DISCORD_APPLICATION_ID` | The Discord application id; `just discord-commands` registers the slash commands on the guild with it | `123456789012345678` |
 | `CRON_SECRET` | Bearer token the `/jobs` routes check; unset, every `/jobs` route answers 503 | 64-character hex string |
-| `BLOB_READ_WRITE_TOKEN` | Vercel Blob token for the team logos; unset, `seed` leaves teams on the default logo | `vercel_blob_rw_...` |
+| `BLOB_READ_WRITE_TOKEN` | Token of the Vercel Blob store holding the team logos and map thumbnails; the icon upload routes and the `seed` recipes write with it | `vercel_blob_rw_...` |
 | `CLOUDFLARE_ACCOUNT_ID` | The Cloudflare account holding the replay bucket | `a1b2c3...` |
 | `CLOUDFLARE_R2_BUCKET` | The R2 bucket the replays live in; see `.env.example` for which bucket each target uses | `gnl-replays` |
 | `CLOUDFLARE_ACCESS_KEY_ID` | The R2 API token's key id, scoped to that bucket | `a1b2c3...` |
 | `CLOUDFLARE_SECRET_ACCESS_KEY` | The R2 API token's secret | 64-character hex string |
 
-This table is the deploy list: every variable a deployment sets. Vercel injects two more the code reads: `VERCEL_ENV`, which prefixes every replay key (`gnl-replays` under `production`, the development prefix elsewhere), and `VERCEL_GIT_COMMIT_REF`, which names the branch a preview serves its database from. `.env.example` is the local list, the subset a working tree needs, and the four `CLOUDFLARE_*` rows carry their bucket note there.
+This table is the deploy list: every variable a deployment sets. Vercel injects two more the code reads. `VERCEL_ENV` opens every replay key in the R2 bucket, so one deployment never overwrites another's file (`production/replays/12/game1.w3g`; off Vercel the key starts with `development`). `VERCEL_ENV` also gates the preview database: only a deployment reading `preview` picks a database at all, and it takes the copy named by `VERCEL_GIT_COMMIT_REF` when the build made one, the shared `wc3gym_staging` otherwise. `.env.example` is the local list, the subset a working tree needs, and the four `CLOUDFLARE_*` rows carry their bucket note there.
 
 **Important Notes:**
 - `host.docker.internal` is a special DNS name that resolves to the host machine from within a Docker container
