@@ -1,0 +1,641 @@
+{
+  "/upcoming": {
+    "embeds": [
+      {
+        "color": 4869560,
+        "description": "## Season 1\nRound 1: <t:1767614400:d> to <t:1768132800:d>\n\n### Team Alpha (Alpha) vs Team Beta (Beta)\n\ud83c\udde9\ud83c\uddea **P1** vs \ud83c\uddeb\ud83c\uddf7 **P3**\n<t:1767812400:F> \u00b7 <t:1767812400:R>\nNo caster yet\n\n\ud83c\uddfa\ud83c\uddf8 **P2** vs \ud83c\uddf8\ud83c\uddea **P4**\nNot scheduled yet\nNo caster yet",
+        "footer": {
+          "text": "MMR not synced yet"
+        }
+      }
+    ]
+  },
+  "GET /player-series": {
+    "availability": [],
+    "discord_id": "1",
+    "discord_tag": "p1",
+    "player": {
+      "battleTag": "P1#1111",
+      "country": "DE",
+      "discordId": "1",
+      "discordTag": "p1",
+      "draft_excluded": false,
+      "draft_position": null,
+      "fantasy_tier": null,
+      "fantasy_tier_pinned": false,
+      "id": 1,
+      "ladder_synced_at": null,
+      "mmr": 1500,
+      "name": "P1",
+      "race": "HU",
+      "signup_race": null,
+      "signup_seasons": [],
+      "timezone": null,
+      "w3c_stats": [],
+      "w3c_synced_at": null
+    },
+    "round_count": 4,
+    "rounds": [
+      {
+        "end_date": "2026-01-11",
+        "map_id": null,
+        "playday": 1,
+        "start_date": "2026-01-05"
+      },
+      {
+        "end_date": "2026-01-18",
+        "map_id": null,
+        "playday": 2,
+        "start_date": "2026-01-12"
+      },
+      {
+        "end_date": "2026-01-25",
+        "map_id": null,
+        "playday": 3,
+        "start_date": "2026-01-19"
+      },
+      {
+        "end_date": "2026-02-01",
+        "map_id": null,
+        "playday": 4,
+        "start_date": "2026-01-26"
+      }
+    ],
+    "season_id": 1,
+    "series": [
+      {
+        "casts": [],
+        "date_time": "2026-01-07T19:00:00Z",
+        "host_player_id": 1,
+        "id": 1,
+        "is_fantasy_match": null,
+        "match": {
+          "fixed_map": null,
+          "fixed_map_id": null,
+          "id": 1,
+          "playday": 1,
+          "season": {
+            "discordRole": null,
+            "end_date": null,
+            "fantasy_grind": false,
+            "fantasy_tier_cuts": [],
+            "fantasy_tiers": null,
+            "fantasy_tiers_applied_at": null,
+            "id": 1,
+            "map_rules": null,
+            "maps": [],
+            "name": "Season 1",
+            "phase": null,
+            "pick_ban": null,
+            "round_count": null,
+            "rounds": [],
+            "scheduling_enabled": true,
+            "score_system": null,
+            "series_per_round": null,
+            "signup_race": null,
+            "signups_open": true,
+            "start_date": null,
+            "unscored_series": null,
+            "user_signup": []
+          },
+          "season_id": 1,
+          "team1": {
+            "icon_url": null,
+            "id": 1,
+            "long_name": "Team Alpha",
+            "name": "Alpha"
+          },
+          "team1_id": 1,
+          "team1_score": 2,
+          "team2": {
+            "icon_url": null,
+            "id": 2,
+            "long_name": "Team Beta",
+            "name": "Beta"
+          },
+          "team2_id": 2,
+          "team2_score": 1
+        },
+        "match_id": 1,
+        "player1": {
+          "battleTag": "P1#1111",
+          "country": "DE",
+          "discordId": "1",
+          "discordTag": "p1",
+          "draft_excluded": false,
+          "draft_position": null,
+          "fantasy_tier": null,
+          "fantasy_tier_pinned": false,
+          "gnl_stats": [],
+          "id": 1,
+          "ladder_synced_at": null,
+          "mmr": 1500,
+          "name": "P1",
+          "race": "HU",
+          "signup_race": null,
+          "signup_seasons": [],
+          "timezone": null,
+          "trophies": [],
+          "w3c_stats": [],
+          "w3c_synced_at": null
+        },
+        "player1_id": 1,
+        "player1_off_race": null,
+        "player1_pick_map": null,
+        "player1_points": 2,
+        "player1_race": null,
+        "player1_score": 2,
+        "player2": {
+          "battleTag": "P3#3333",
+          "country": "FR",
+          "discordId": "3",
+          "discordTag": "p3",
+          "draft_excluded": false,
+          "draft_position": null,
+          "fantasy_tier": null,
+          "fantasy_tier_pinned": false,
+          "gnl_stats": [],
+          "id": 3,
+          "ladder_synced_at": null,
+          "mmr": 1600,
+          "name": "P3",
+          "race": "NE",
+          "signup_race": null,
+          "signup_seasons": [],
+          "timezone": null,
+          "trophies": [],
+          "w3c_stats": [],
+          "w3c_synced_at": null
+        },
+        "player2_id": 3,
+        "player2_off_race": null,
+        "player2_pick_map": null,
+        "player2_points": 1,
+        "player2_race": null,
+        "player2_score": 1
+      }
+    ]
+  },
+  "GET /seasons": [
+    {
+      "discordRole": null,
+      "end_date": "2026-02-27",
+      "fantasy_grind": false,
+      "fantasy_tier_cuts": [],
+      "fantasy_tiers": 0,
+      "fantasy_tiers_applied_at": null,
+      "id": 1,
+      "map_rules": null,
+      "maps": [
+        {
+          "id": 1,
+          "image": null,
+          "name": "Concealed Hill",
+          "shortname": "CH"
+        }
+      ],
+      "name": "Season 1",
+      "phase": "overdue",
+      "pick_ban": null,
+      "round_count": 4,
+      "rounds": [
+        {
+          "end_date": "2026-01-11",
+          "map_id": null,
+          "playday": 1,
+          "start_date": "2026-01-05"
+        },
+        {
+          "end_date": "2026-01-18",
+          "map_id": null,
+          "playday": 2,
+          "start_date": "2026-01-12"
+        },
+        {
+          "end_date": "2026-01-25",
+          "map_id": null,
+          "playday": 3,
+          "start_date": "2026-01-19"
+        },
+        {
+          "end_date": "2026-02-01",
+          "map_id": null,
+          "playday": 4,
+          "start_date": "2026-01-26"
+        }
+      ],
+      "scheduling_enabled": true,
+      "score_system": "standard",
+      "series_per_round": 2,
+      "signup_race": null,
+      "signups_open": true,
+      "start_date": "2026-01-05",
+      "unscored_series": 1,
+      "user_signup": []
+    }
+  ],
+  "GET /seasons/1": {
+    "discordRole": null,
+    "end_date": "2026-02-27",
+    "fantasy_grind": false,
+    "fantasy_tier_cuts": [],
+    "fantasy_tiers": 0,
+    "fantasy_tiers_applied_at": null,
+    "id": 1,
+    "map_rules": null,
+    "maps": [
+      {
+        "id": 1,
+        "image": null,
+        "name": "Concealed Hill",
+        "shortname": "CH"
+      }
+    ],
+    "name": "Season 1",
+    "phase": "overdue",
+    "pick_ban": null,
+    "round_count": 4,
+    "rounds": [
+      {
+        "end_date": "2026-01-11",
+        "map_id": null,
+        "playday": 1,
+        "start_date": "2026-01-05"
+      },
+      {
+        "end_date": "2026-01-18",
+        "map_id": null,
+        "playday": 2,
+        "start_date": "2026-01-12"
+      },
+      {
+        "end_date": "2026-01-25",
+        "map_id": null,
+        "playday": 3,
+        "start_date": "2026-01-19"
+      },
+      {
+        "end_date": "2026-02-01",
+        "map_id": null,
+        "playday": 4,
+        "start_date": "2026-01-26"
+      }
+    ],
+    "scheduling_enabled": true,
+    "score_system": "standard",
+    "series_per_round": 2,
+    "signup_race": null,
+    "signups_open": true,
+    "start_date": "2026-01-05",
+    "unscored_series": 1,
+    "user_signup": []
+  },
+  "GET /series/season/1": [
+    {
+      "casts": [],
+      "date_time": "2026-01-07T19:00:00Z",
+      "host_player_id": 1,
+      "id": 1,
+      "is_fantasy_match": null,
+      "match": {
+        "fixed_map": null,
+        "fixed_map_id": null,
+        "id": 1,
+        "playday": 1,
+        "season": {
+          "discordRole": null,
+          "end_date": null,
+          "fantasy_grind": false,
+          "fantasy_tier_cuts": [],
+          "fantasy_tiers": null,
+          "fantasy_tiers_applied_at": null,
+          "id": 1,
+          "map_rules": null,
+          "maps": [],
+          "name": "Season 1",
+          "phase": null,
+          "pick_ban": null,
+          "round_count": null,
+          "rounds": [],
+          "scheduling_enabled": true,
+          "score_system": null,
+          "series_per_round": null,
+          "signup_race": null,
+          "signups_open": true,
+          "start_date": null,
+          "unscored_series": null,
+          "user_signup": []
+        },
+        "season_id": 1,
+        "team1": {
+          "icon_url": null,
+          "id": 1,
+          "long_name": "Team Alpha",
+          "name": "Alpha"
+        },
+        "team1_id": 1,
+        "team1_score": 2,
+        "team2": {
+          "icon_url": null,
+          "id": 2,
+          "long_name": "Team Beta",
+          "name": "Beta"
+        },
+        "team2_id": 2,
+        "team2_score": 1
+      },
+      "match_id": 1,
+      "player1": {
+        "battleTag": "P1#1111",
+        "country": "DE",
+        "discordId": "1",
+        "discordTag": "p1",
+        "draft_excluded": false,
+        "draft_position": null,
+        "fantasy_tier": null,
+        "fantasy_tier_pinned": false,
+        "gnl_stats": [],
+        "id": 1,
+        "ladder_synced_at": null,
+        "mmr": 1500,
+        "name": "P1",
+        "race": "HU",
+        "signup_race": null,
+        "signup_seasons": [],
+        "timezone": null,
+        "trophies": [],
+        "w3c_stats": [],
+        "w3c_synced_at": null
+      },
+      "player1_id": 1,
+      "player1_off_race": null,
+      "player1_pick_map": null,
+      "player1_points": 2,
+      "player1_race": null,
+      "player1_score": 2,
+      "player2": {
+        "battleTag": "P3#3333",
+        "country": "FR",
+        "discordId": "3",
+        "discordTag": "p3",
+        "draft_excluded": false,
+        "draft_position": null,
+        "fantasy_tier": null,
+        "fantasy_tier_pinned": false,
+        "gnl_stats": [],
+        "id": 3,
+        "ladder_synced_at": null,
+        "mmr": 1600,
+        "name": "P3",
+        "race": "NE",
+        "signup_race": null,
+        "signup_seasons": [],
+        "timezone": null,
+        "trophies": [],
+        "w3c_stats": [],
+        "w3c_synced_at": null
+      },
+      "player2_id": 3,
+      "player2_off_race": null,
+      "player2_pick_map": null,
+      "player2_points": 1,
+      "player2_race": null,
+      "player2_score": 1
+    },
+    {
+      "casts": [],
+      "date_time": null,
+      "host_player_id": 4,
+      "id": 2,
+      "is_fantasy_match": null,
+      "match": {
+        "fixed_map": null,
+        "fixed_map_id": null,
+        "id": 1,
+        "playday": 1,
+        "season": {
+          "discordRole": null,
+          "end_date": null,
+          "fantasy_grind": false,
+          "fantasy_tier_cuts": [],
+          "fantasy_tiers": null,
+          "fantasy_tiers_applied_at": null,
+          "id": 1,
+          "map_rules": null,
+          "maps": [],
+          "name": "Season 1",
+          "phase": null,
+          "pick_ban": null,
+          "round_count": null,
+          "rounds": [],
+          "scheduling_enabled": true,
+          "score_system": null,
+          "series_per_round": null,
+          "signup_race": null,
+          "signups_open": true,
+          "start_date": null,
+          "unscored_series": null,
+          "user_signup": []
+        },
+        "season_id": 1,
+        "team1": {
+          "icon_url": null,
+          "id": 1,
+          "long_name": "Team Alpha",
+          "name": "Alpha"
+        },
+        "team1_id": 1,
+        "team1_score": 2,
+        "team2": {
+          "icon_url": null,
+          "id": 2,
+          "long_name": "Team Beta",
+          "name": "Beta"
+        },
+        "team2_id": 2,
+        "team2_score": 1
+      },
+      "match_id": 1,
+      "player1": {
+        "battleTag": "P2#2222",
+        "country": "US",
+        "discordId": "2",
+        "discordTag": "p2",
+        "draft_excluded": false,
+        "draft_position": null,
+        "fantasy_tier": null,
+        "fantasy_tier_pinned": false,
+        "gnl_stats": [],
+        "id": 2,
+        "ladder_synced_at": null,
+        "mmr": 1400,
+        "name": "P2",
+        "race": "OC",
+        "signup_race": null,
+        "signup_seasons": [],
+        "timezone": null,
+        "trophies": [],
+        "w3c_stats": [],
+        "w3c_synced_at": null
+      },
+      "player1_id": 2,
+      "player1_off_race": null,
+      "player1_pick_map": null,
+      "player1_points": null,
+      "player1_race": null,
+      "player1_score": null,
+      "player2": {
+        "battleTag": "P4#4444",
+        "country": "SE",
+        "discordId": "4",
+        "discordTag": "p4",
+        "draft_excluded": false,
+        "draft_position": null,
+        "fantasy_tier": null,
+        "fantasy_tier_pinned": false,
+        "gnl_stats": [],
+        "id": 4,
+        "ladder_synced_at": null,
+        "mmr": 1300,
+        "name": "P4",
+        "race": "UD",
+        "signup_race": null,
+        "signup_seasons": [],
+        "timezone": null,
+        "trophies": [],
+        "w3c_stats": [],
+        "w3c_synced_at": null
+      },
+      "player2_id": 4,
+      "player2_off_race": null,
+      "player2_pick_map": null,
+      "player2_points": null,
+      "player2_race": null,
+      "player2_score": null
+    }
+  ],
+  "GET /users/1": {
+    "battleTag": "P1#1111",
+    "country": "DE",
+    "discordId": "1",
+    "discordTag": "p1",
+    "draft_excluded": false,
+    "draft_position": null,
+    "fantasy_tier": null,
+    "fantasy_tier_pinned": false,
+    "gnl_stats": [
+      {
+        "games": 1,
+        "losses": 0,
+        "matchup_history": [
+          null
+        ],
+        "season_id": 1,
+        "team_id": 1,
+        "user_id": 1,
+        "wins": 1
+      }
+    ],
+    "id": 1,
+    "ladder_synced_at": null,
+    "mmr": 1500,
+    "name": "P1",
+    "race": "HU",
+    "signup_race": null,
+    "signup_seasons": [],
+    "timezone": null,
+    "trophies": [],
+    "w3c_stats": [],
+    "w3c_synced_at": null
+  },
+  "GET /users/1/history": {
+    "events": [
+      {
+        "lost": 0,
+        "place": 1,
+        "played": 1,
+        "running": true,
+        "season_id": 1,
+        "season_name": "Season 1",
+        "team_count": 2,
+        "team_id": 1,
+        "team_name": "Alpha",
+        "won": 1
+      }
+    ],
+    "opponents": [
+      {
+        "country": "FR",
+        "id": 3,
+        "last_playday": 1,
+        "last_season_name": "Season 1",
+        "lost": 0,
+        "meetings": [
+          {
+            "date_time": "2026-01-07T19:00:00Z",
+            "maps": [],
+            "my_score": 2,
+            "playday": 1,
+            "season_id": 1,
+            "season_name": "Season 1",
+            "series_id": 1,
+            "their_score": 1
+          }
+        ],
+        "name": "P3",
+        "played": 1,
+        "race": null,
+        "won": 1
+      }
+    ]
+  },
+  "POST /matches/search?query=season_id": [
+    {
+      "fixed_map": null,
+      "fixed_map_id": null,
+      "id": 1,
+      "playday": 1,
+      "season": {
+        "discordRole": null,
+        "end_date": null,
+        "fantasy_grind": false,
+        "fantasy_tier_cuts": [],
+        "fantasy_tiers": null,
+        "fantasy_tiers_applied_at": null,
+        "id": 1,
+        "map_rules": null,
+        "maps": [],
+        "name": "Season 1",
+        "phase": null,
+        "pick_ban": null,
+        "round_count": null,
+        "rounds": [],
+        "scheduling_enabled": true,
+        "score_system": null,
+        "series_per_round": null,
+        "signup_race": null,
+        "signups_open": true,
+        "start_date": null,
+        "unscored_series": null,
+        "user_signup": []
+      },
+      "season_id": 1,
+      "team1": {
+        "icon_url": null,
+        "id": 1,
+        "long_name": "Team Alpha",
+        "name": "Alpha"
+      },
+      "team1_id": 1,
+      "team1_score": 2,
+      "team2": {
+        "icon_url": null,
+        "id": 2,
+        "long_name": "Team Beta",
+        "name": "Beta"
+      },
+      "team2_id": 2,
+      "team2_score": 1
+    }
+  ]
+}
