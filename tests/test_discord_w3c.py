@@ -11,6 +11,7 @@ from app.models.base import ident
 from app.models.enums import Race
 from app.models.user import User
 from app.services import discord
+from app.services.ladder import LadderService
 from tests.discord import CHANNEL, autocomplete, command, signed
 from tests.test_ladder_read import INSIDE, add_match, sign_up, stamp_ladder
 
@@ -144,8 +145,18 @@ def test_stats_says_when_nothing_is_synced(
 
 
 def test_player_autocomplete_lists_the_seasons_players(
-    client: Client, public_key: None, seeded: dict[str, Any]
+    client: Client,
+    public_key: None,
+    seeded: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Discord fires one interaction per keystroke inside a 2 s wall, so the
+    choices read the roster alone, never the draft page's aggregation."""
+
+    def refuse(self: LadderService, season_id: int) -> list:
+        raise AssertionError("the autocomplete must not read the ladder aggregation")
+
+    monkeypatch.setattr(LadderService, "season_players", refuse)
     first, second = seeded["player_ids"][:2]
     sign_up(seeded["season_id"], [first, second])
     body, headers = signed(autocomplete("stats", "1", ""))

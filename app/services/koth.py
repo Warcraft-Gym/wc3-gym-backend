@@ -213,8 +213,10 @@ class KothService:
         twitch_username: str,
         battle_tag: str,
         races: list[str] | None = None,
+        event_id: int | None = None,
     ) -> list[KothSignupPublic]:
-        """Sign a player up for the active event, one signup per race.
+        """Sign a player up for one event, one signup per race; the active event
+        when no event is named.
 
         Each race carries its own W3C MMR and lands in the bracket that MMR
         cuts into, so one player can sit in several brackets. An empty race
@@ -231,7 +233,7 @@ class KothService:
             if value not in signup_races:
                 signup_races.append(value)
 
-        event = self.get_active_event()
+        event = self.get_event(event_id) if event_id else self.get_active_event()
 
         # The W3C calls below take seconds, so the insert checks this again
         with Session.begin() as session:
@@ -323,17 +325,8 @@ class KothService:
             signup = session.get(KothSignup, signup_id)
             if not signup:
                 raise NotFoundError(f"Signup not found by Id: {signup_id}")
-            # A dethroned king goes inactive so that player can sign up again
-            session.execute(
-                update(KothSignup)
-                .where(
-                    col(KothSignup.event_id) == signup.event_id,
-                    col(KothSignup.bracket) == signup.bracket,
-                    col(KothSignup.is_king) == 1,
-                    col(KothSignup.id) != signup_id,
-                )
-                .values(is_king=0, is_active=0),
-                execution_options={"synchronize_session": False},
+            self._clear_bracket_kings(
+                session, signup.event_id, signup.bracket, except_ids=[signup_id]
             )
             signup.is_king = 1
             session.flush()
@@ -469,7 +462,6 @@ class KothService:
                 )
 
             match.winner_team_number = winner_team_number
-            self._clear_bracket_kings(session, match.event_id, match.bracket)
 
             # Winning team members become kings; losing signups go inactive
             # so those players can sign up again
@@ -483,6 +475,9 @@ class KothService:
                 for p in match.participants
                 if p.team_number != winner_team_number
             ]
+            self._clear_bracket_kings(
+                session, match.event_id, match.bracket, except_ids=winners
+            )
             if winners:
                 session.execute(
                     update(KothSignup)
@@ -570,16 +565,23 @@ class KothService:
         return self.update_signup(signup_id, KothSignupUpdate(is_king=value))
 
     def _clear_bracket_kings(
-        self, session: OrmSession, event_id: int, bracket: int
+        self,
+        session: OrmSession,
+        event_id: int,
+        bracket: int,
+        except_ids: list[int] | None = None,
     ) -> None:
-        """Take the crown from every signup in the bracket, in the caller's transaction."""
+        """Take the crown from every king of the bracket but `except_ids`, in the caller's
+        transaction. A dethroned king goes inactive so that player can sign up again."""
         session.execute(
             update(KothSignup)
             .where(
                 col(KothSignup.event_id) == event_id,
                 col(KothSignup.bracket) == bracket,
+                col(KothSignup.is_king) == 1,
+                col(KothSignup.id).not_in(except_ids or []),
             )
-            .values(is_king=0),
+            .values(is_king=0, is_active=0),
             execution_options={"synchronize_session": False},
         )
 

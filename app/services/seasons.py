@@ -39,6 +39,7 @@ from app.models.season import (
 from app.models.team import Team
 from app.models.team_season import DBTeamSeason
 from app.models.user import User, UserListPublic
+from app.models.user_season_availability import DBUserSeasonAvailability
 from app.services import ladder_maps
 from app.services.ladder import mmr_on
 from app.services.maps import MapService
@@ -82,8 +83,9 @@ def _wanted(season: SeasonCreate | SeasonUpdate) -> int | None:
 
 def fill_rounds(session: OrmSession, season: Season, wanted: int) -> None:
     """One round per playday, `wanted` of them. A missing round is added a week
-    after the one before it; a round past the last playday is dropped; a set
-    date stays. The rows are the round count, so nothing stores it."""
+    after the one before it; a round past the last playday is dropped with the
+    availability answers for it; a set date stays. The rows are the round count,
+    so nothing stores it."""
     rounds = {row.playday: row for row in season.rounds}
     for playday in range(1, wanted + 1):
         row = rounds.get(playday) or DBSeasonRound(
@@ -94,9 +96,17 @@ def fill_rounds(session: OrmSession, season: Season, wanted: int) -> None:
             row.start_date = season.start_date + timedelta(weeks=playday - 1)
             row.end_date = row.start_date + timedelta(days=6)
         session.add(row)
-    for playday, row in rounds.items():
-        if playday > wanted:
-            session.delete(row)
+    dropped = [playday for playday in rounds if playday > wanted]
+    for playday in dropped:
+        session.delete(rounds[playday])
+    if dropped:
+        # the answers go with the round, so re-extending never revives them
+        session.execute(
+            delete(DBUserSeasonAvailability).where(
+                col(DBUserSeasonAvailability.season_id) == ident(season),
+                col(DBUserSeasonAvailability.playday) > wanted,
+            )
+        )
     session.flush()
     session.expire(season, ["rounds", "round_count"])
 
