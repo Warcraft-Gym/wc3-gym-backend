@@ -4,7 +4,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, Query
 
 from app.api.deps import KothServiceDep, RequireLogin, UserServiceDep, require_admin
-from app.core.exceptions import ApiError, BadRequestError
+from app.core.exceptions import ApiError, BadRequestError, NotFoundError
 from app.models.koth_event import (
     KothEventCreate,
     KothEventPublic,
@@ -34,7 +34,11 @@ router = APIRouter(tags=["koth"])
 
 def _check_nightbot_token(service: KothService, token: str | None) -> None:
     """401 unless the caller carries the Nightbot token (chat bots, not admins)."""
-    expected = service.settings_app_service.get_by_key("KOTH_NIGHTBOT_TOKEN").value
+    try:
+        expected = service.settings_app_service.get_by_key("KOTH_NIGHTBOT_TOKEN").value
+    except NotFoundError:
+        # a deployment that never generated a token refuses every caller
+        expected = None
     if not expected or str(token) != str(expected):
         raise ApiError(401, {"error": "Unauthorized - invalid client token"})
 
