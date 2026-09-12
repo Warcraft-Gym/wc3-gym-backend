@@ -274,16 +274,6 @@ class TeamService:
             ).all()
             return {row[0]: (row[1], row[2]) for row in rows}
 
-    def player_team(self, user_id: int, season_id: int) -> int | None:
-        """The team this player rosters for in one season, or None."""
-        with Session.begin() as session:
-            return session.scalar(
-                select(col(DBUserTeamSeason.team_id)).where(
-                    col(DBUserTeamSeason.user_id) == user_id,
-                    col(DBUserTeamSeason.season_id) == season_id,
-                )
-            )
-
     def delete(self, team_id: int) -> None:
         with Session.begin() as session:
             Team.delete(session, team_id)

@@ -20,7 +20,7 @@ from app.core.db import Session
 from app.core.exceptions import ApiError
 from app.core.security import decode_token
 from app.models.clerk_account import ClerkAccount
-from app.services import admins, discord
+from app.services import admins, discord, discord_roles
 from app.services.availability import AvailabilityService
 from app.services.draft_series import DraftSeriesService
 from app.services.fantasy_bets import FantasyBetService
@@ -105,7 +105,8 @@ def _resolve_claims(request: Request) -> dict[str, Any]:
     if claims["role"] == "member":
         seats = team_service.captain_seats(discord_id)
         if seats:
-            claims |= {"role": "captain"} | _seat_claims(seats, _current_season())
+            current = discord_roles.current_season()
+            claims |= {"role": "captain"} | _seat_claims(seats, current)
     return claims
 
 
@@ -121,12 +122,6 @@ def _seat_claims(seats: list[tuple[int, int]], current: int | None) -> dict[str,
         "team_id": seat[0],
         "season_id": seat[1],
     }
-
-
-def _current_season() -> int | None:
-    """The `current_gnl_season` setting as a number, or None if it is unset."""
-    value = settings_service.get_settings_dict().get("current_gnl_season")
-    return int(value) if value and value.isdigit() else None
 
 
 def claim_seats(claims: dict[str, Any]) -> set[tuple[int, int]]:
@@ -162,7 +157,7 @@ def _view_as(request: Request, claims: dict[str, Any]) -> dict[str, Any]:
     claims |= {"role": role, "actual_role": "admin"}
     if role != "captain":
         return claims
-    season = _current_season()
+    season = discord_roles.current_season()
     seats = _view_seats(request.headers.get("x-view-seats", ""))
     team = request.headers.get("x-view-team", "")
     if not seats and team.isdigit():
@@ -242,7 +237,7 @@ def require_admin(request: Request, credentials: Credentials) -> str:
 
 
 def require_captain(request: Request, credentials: Credentials) -> dict[str, Any]:
-    """Admit a captain of the current season, or an admin."""
+    """Admit a captain of any running season, or an admin."""
     claims = require_login(request, credentials)
     if claims.get("role") not in ("captain", "admin") and claims["sub"] != "admin":
         raise ApiError(403, {"error": "Captains only"})

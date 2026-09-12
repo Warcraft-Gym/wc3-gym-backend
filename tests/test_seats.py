@@ -118,6 +118,7 @@ def test_a_captain_of_two_running_seasons_holds_both_seats(
         {"team_id": seeded["team_b_id"], "season_id": later},
         {"team_id": seeded["team_a_id"], "season_id": seeded["season_id"]},
     ]
+    assert [season["captain"] for season in me["seasons"]] == [True, True]
 
 
 def test_the_availability_guard_reads_the_pair_not_the_team(

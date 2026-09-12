@@ -68,12 +68,6 @@ def me(
         user_service.set_avatar(user.id, avatar)
         user.avatar_url = avatar
     season_id = discord_roles.current_season()
-    # A captain's claims name the team it captains this season. Any other member
-    # is named by the roster row of that season, so the nav can link his team.
-    team_id = claims.get("team_id")
-    if not team_id and user and season_id:
-        team_id = team_service.player_team(user.id, season_id)
-    team = team_service.get(team_id) if team_id else None
     seats = claims.get("seats", [])
     captained = {seat["season_id"] for seat in seats}
     # Every season the account can still act in, newest first; a complete one is done
@@ -84,6 +78,13 @@ def me(
     )
     signed_up = {season.id for season in (user.signup_seasons if user else [])}
     rosters = team_service.player_teams(user.id) if user else {}
+    # The nav links one team: the seat this account captains in the season this
+    # answer names, else the roster row of that season.
+    seat_team = next(
+        (seat["team_id"] for seat in seats if seat["season_id"] == season_id), None
+    )
+    captained_team = team_service.get(seat_team) if seat_team else None
+    roster = rosters.get(season_id) if season_id else None
     return {
         "discord_id": claims["sub"],
         "name": "Super Admin"
@@ -99,7 +100,11 @@ def me(
             user and any(season.id == season_id for season in user.signup_seasons)
         ),
         "season_id": season_id,
-        "team": {"id": team.id, "name": team.name} if team else None,
+        "team": {"id": captained_team.id, "name": captained_team.name}
+        if captained_team
+        else {"id": roster[0], "name": roster[1]}
+        if roster
+        else None,
         # The (team, season) pairs this account captains, one per running season
         "seats": seats,
         "seasons": [
