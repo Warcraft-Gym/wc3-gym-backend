@@ -864,6 +864,11 @@ def test_every_koth_night_becomes_a_round_of_the_koth_event(tmp_path: Path) -> N
             (2, 1, "First night", "2026-02-03", 1),
             (1, 2, "Second night", "2026-02-10", 1),
         ]
+    # A night outlives the round it names, so the key clears the column
+    assert [
+        (key["referred_table"], key["options"].get("ondelete"))
+        for key in inspect(engine).get_foreign_keys("koth_events")
+    ] == [("event_round", "SET NULL")]
 
     downgrade_to(url, BEFORE_EVENT_ROUND)
     with engine.connect() as connection:

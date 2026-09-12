@@ -12,7 +12,7 @@ no round row gets one, so no series is left without a parent.
 
 KOTH joins the model: a "Gym KOTH" league holds one running event with one
 koth stage, each existing `koth_events` row becomes one round of it, and
-`koth_events.round_id` names that round.
+`koth_events.round_id` names that round, keyed to clear if the round goes.
 
 Revision ID: 96c0d36de81c
 Revises: 8cc6dd6d93eb
@@ -197,12 +197,13 @@ def upgrade() -> None:
     # The running deploy still reads `season_rounds`; C2 drops the view
     op.execute(ROUNDS_VIEW)
 
-    add_round_id("matches")
+    # A round taken with its season takes its ties and their series with it
+    add_round_id("matches", ondelete="CASCADE")
     op.execute(
         "UPDATE matches SET round_id = (SELECT r.id FROM event_round r "
         "WHERE r.season_id = matches.season_id AND r.number = matches.playday)"
     )
-    add_round_id("series")
+    add_round_id("series", ondelete="CASCADE")
     op.execute(
         "UPDATE series SET round_id = "
         "(SELECT m.round_id FROM matches m WHERE m.id = series.match_id)"
@@ -227,11 +228,28 @@ def upgrade() -> None:
     op.execute(AVAILABILITY_VIEW)
 
     koth_rounds()
+    # B1 added the column; the table it names exists only now. A KOTH night
+    # outlives its round, so the key clears the column instead of cascading.
+    with op.batch_alter_table("koth_events") as batch:
+        batch.create_foreign_key(
+            op.f("fk_koth_events_round_id_event_round"),
+            "event_round",
+            ["round_id"],
+            ["id"],
+            ondelete="SET NULL",
+        )
+    op.create_index(op.f("ix_koth_events_round_id"), "koth_events", ["round_id"])
 
 
 def downgrade() -> None:
     op.execute("DROP VIEW user_season_availability")
     op.execute("DROP VIEW season_rounds")
+
+    op.drop_index(op.f("ix_koth_events_round_id"), table_name="koth_events")
+    with op.batch_alter_table("koth_events") as batch:
+        batch.drop_constraint(
+            op.f("fk_koth_events_round_id_event_round"), type_="foreignkey"
+        )
 
     # Only the event the nights point at, so an event an admin made stays
     bind = op.get_bind()
@@ -267,8 +285,8 @@ def downgrade() -> None:
         "user_season_availability",
         ["season_id"],
     )
-    drop_round_id("series")
-    drop_round_id("matches")
+    drop_round_id("series", rebuild=True)
+    drop_round_id("matches", rebuild=True)
 
     op.create_table(
         "season_rounds",

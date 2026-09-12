@@ -4,12 +4,17 @@ from pathlib import Path
 from typing import Any
 
 from httpx2 import Client
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, text, update
 
 from app.core.db import Session
 from app.models.match import Match
-from app.models.relationships import round_row
+from app.models.relationships import DBEventRound, round_row
 from app.models.round_availability import DBRoundAvailability
+from app.models.season import Season
+from app.models.series import Series
+from app.services.maps import MapService
+from app.services.seasons import SeasonService
+from app.services.users import UserService
 from tests.migrate import downgrade_to, fresh_database, upgrade_to, upgrade_to_head
 
 # The revision before the week map became the rounds table
@@ -262,3 +267,28 @@ def test_a_round_a_match_sits_on_holds_the_count_up(
     assert resp.json() == {
         "error": "round 3 still holds matches; delete them before the count falls"
     }
+
+
+def test_deleting_a_season_takes_its_rounds_matches_and_series_with_it(
+    seeded: dict[str, Any],
+) -> None:
+    """The rounds go with the season and the ties and series that name a round
+    go with the round, so the delete leaves nothing pointing at a row that is
+    gone."""
+    season_id = seeded["season_id"]
+    with Session.begin() as session:
+        round_ = round_row(session, season_id, 1)
+        assert round_ is not None
+        round_id = round_.id
+        session.execute(update(Match).values(round_id=round_id))
+        session.execute(update(Series).values(round_id=round_id))
+
+    SeasonService(user_app_service=UserService(), map_app_service=MapService()).delete(
+        season_id
+    )
+
+    with Session() as session:
+        assert session.get(Season, season_id) is None
+        assert session.get(DBEventRound, round_id) is None
+        assert session.get(Match, seeded["match_id"]) is None
+        assert session.get(Series, seeded["series_played_id"]) is None
