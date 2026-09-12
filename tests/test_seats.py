@@ -204,6 +204,15 @@ def test_me_lists_every_running_season(
     assert [season["signed_up"] for season in seasons] == [False, True]
     assert all(season["team"]["id"] == seeded["team_a_id"] for season in seasons)
     assert [season["captain"] for season in seasons] == [False, False]
+    # the availability page filters on these, so the answer must carry them
+    for season in seasons:
+        assert {
+            "signups_open",
+            "scheduling_enabled",
+            "start_date",
+            "end_date",
+        } <= season.keys()
+        assert season["scheduling_enabled"] is True
 
 
 def test_a_signup_lands_in_the_season_the_body_names(
