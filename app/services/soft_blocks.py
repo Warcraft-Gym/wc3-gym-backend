@@ -181,10 +181,10 @@ def _update[T: (UserBlock, UserBusy)](
 def _check(row: UserBlock | UserBusy) -> None:
     if isinstance(row, UserBusy):
         if row.last_day < row.first_day:
-            raise BadRequestError("last_day must not be before first_day")
+            raise BadRequestError("The last day must not be before the first day")
         return
     if row.start_local.tzinfo or row.end_local.tzinfo:
-        raise BadRequestError("Local times carry no offset")
+        raise BadRequestError("Times must be clock times without an offset")
     if row.start_local == row.end_local:
         raise BadRequestError("A block must end at a different time than it starts")
 
