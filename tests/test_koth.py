@@ -100,7 +100,26 @@ def test_a_match_takes_its_bracket_from_the_participants(
 def test_a_result_crowns_the_winner_and_retires_the_loser(
     client: Client, auth_headers: dict[str, str], koth: dict[str, Any]
 ) -> None:
+    from app.core.db import Session
+    from app.models.enums import Race
+    from app.models.koth_signup import KothSignup
+
     one, two = koth["signup_ids"]
+    # a third player holds the crown of the bracket without playing the match
+    with Session.begin() as session:
+        bystander = KothSignup(
+            event_id=koth["event_id"],
+            twitch_username="player_three",
+            battle_tag="P3#3333",
+            w3c_name="P3",
+            race=Race.NE,
+            mmr=1450,
+            bracket=1,
+            is_king=1,
+        )
+        session.add(bystander)
+        session.flush()
+        bystander_id = ident(bystander)
     match = client.post(
         "/koth/matches",
         headers=auth_headers,
@@ -131,6 +150,9 @@ def test_a_result_crowns_the_winner_and_retires_the_loser(
     assert signups[one]["is_active"] == 1
     assert signups[two]["is_king"] == 0
     assert signups[two]["is_active"] == 0
+    # the king of the bracket who did not play is dethroned and retired too
+    assert signups[bystander_id]["is_king"] == 0
+    assert signups[bystander_id]["is_active"] == 0
 
 
 def test_set_king_retires_the_old_king_and_keeps_its_row(
@@ -433,6 +455,22 @@ def test_a_wrong_nightbot_query_token_answers_401(
         "/koth/signup", params={"token": "wrong", "twitch": "s", "battletag": "S#1"}
     )
     assert resp.status_code == 401
+
+
+def test_a_deployment_without_a_nightbot_token_answers_401(
+    client: Client, seeded: dict[str, Any]
+) -> None:
+    """A missing setting is an auth failure, not a 404 naming the setting."""
+    from app.core.db import Session
+    from app.models.settings import Settings
+
+    with Session.begin() as session:
+        session.query(Settings).filter_by(key="KOTH_NIGHTBOT_TOKEN").delete()
+
+    resp = client.get(
+        "/koth/signup", params={"token": "x", "twitch": "s", "battletag": "S#1"}
+    )
+    assert resp.status_code == 401, resp.text
 
 
 def test_a_signup_missing_a_field_is_refused(
