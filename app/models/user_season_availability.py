@@ -15,7 +15,7 @@ from app.models.base import DBModel
 class DBUserSeasonAvailability(DBModel, table=True):
     __tablename__ = "user_season_availability"
     user_id: int = Field(foreign_key="users.id", primary_key=True)
-    season_id: int = Field(index=True, foreign_key="seasons.id", primary_key=True)
+    season_id: int = Field(index=True, foreign_key="event.id", primary_key=True)
     playday: int = Field(primary_key=True)
     available: bool
     set_by_user_id: int = Field(foreign_key="users.id")

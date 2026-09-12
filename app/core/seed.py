@@ -20,6 +20,9 @@ from app.core.achievements import WC3NO_PAID
 
 csv.field_size_limit(sys.maxsize)
 
+# The seed repo still names the dump after the old table, and `seasons` is now a view
+RENAMED = {"seasons": "event"}
+
 
 def convert(cell: str, data_type: str) -> str:
     """The two cells COPY cannot take as written: repr(bytes) BLOBs and MySQL 0/1 booleans"""
@@ -35,7 +38,7 @@ def main(seed_dir: str, url: str) -> None:
     files = sorted(Path(seed_dir).glob("*.csv"))
     with psycopg.connect(url, autocommit=False) as conn, conn.cursor() as cur:
         cur.execute("SET session_replication_role = replica")
-        tables = [f.stem for f in files]
+        tables = [RENAMED.get(f.stem, f.stem) for f in files]
         # CASCADE: tables outside the seed set reference these (ladder_achievements,
         # ladder_sync, w3c_ladder_matches, team_season_captain, discord_role_binding)
         cur.execute(
@@ -72,14 +75,27 @@ def main(seed_dir: str, url: str) -> None:
             )
         cur.execute("SET session_replication_role = DEFAULT")
         cur.execute(
-            "UPDATE seasons SET score_system = 'helpstone'"
+            "UPDATE event SET score_system = 'helpstone'"
         )  # MySQL kept it in settings, one value for every season
+        # The dump predates the rename, so the copied events carry no league and
+        # the CASCADE took their stages: redo the two backfills of 1e0287eacccf
+        cur.execute(
+            "UPDATE event SET league_id = (SELECT id FROM league WHERE name = 'GNL')"
+            " WHERE league_id IS NULL"
+        )
+        cur.execute(
+            "INSERT INTO event_stage (event_id, position, format, best_of, map_rules,"
+            " scheduling_mode, ranking_rule, points_series_won, points_series_drawn,"
+            " points_game_won) SELECT id, 1, 'round_robin', 3, map_rules, 'agreed',"
+            " 'points,game_diff,head_to_head', 1, 0, 0 FROM event e WHERE NOT EXISTS"
+            " (SELECT 1 FROM event_stage s WHERE s.event_id = e.id)"
+        )
         # The prices went with the CASCADE. Every season in the dump ran under
         # wc3.no, so each gets those exact rows; a season made in the app takes
         # DEFAULT_PAID at creation instead.
         cur.executemany(
             "INSERT INTO ladder_achievements (season_id, rule_id, points)"
-            " SELECT id, %s, %s FROM seasons",
+            " SELECT id, %s, %s FROM event",
             list(WC3NO_PAID.items()),
         )
         cur.execute(

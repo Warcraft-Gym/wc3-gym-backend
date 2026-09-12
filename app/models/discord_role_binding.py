@@ -29,7 +29,7 @@ class DiscordRoleBindingBase(SQLModel):
     scope: RoleScope = Field(default=RoleScope.current)
     # Read only by a binding scoped to a season
     season_id: int | None = Field(
-        default=None, index=True, foreign_key="seasons.id", ondelete="CASCADE"
+        default=None, index=True, foreign_key="event.id", ondelete="CASCADE"
     )
     team_id: int | None = Field(
         default=None, index=True, foreign_key="teams.id", ondelete="CASCADE"

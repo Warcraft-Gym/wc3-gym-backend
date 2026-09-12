@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 
 class FantasyTeamBase(SQLModel):
     name: Annotated[str, NumToStr] = Field(max_length=100)
-    season_id: int = Field(index=True, foreign_key="seasons.id", ondelete="CASCADE")
+    season_id: int = Field(index=True, foreign_key="event.id", ondelete="CASCADE")
     captain_id: int = Field(index=True, foreign_key="users.id", ondelete="CASCADE")
     drafted_team_id: int | None = Field(
         index=True, default=None, foreign_key="teams.id", ondelete="CASCADE"
