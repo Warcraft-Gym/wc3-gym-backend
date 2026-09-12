@@ -2,6 +2,7 @@
 
 from typing import Any
 
+import pytest
 from httpx2 import Client
 
 # A 1x1 PNG. The route stores the bytes as they arrive.
@@ -16,6 +17,16 @@ def test_login_with_bad_token(client: Client) -> None:
     resp = client.post("/login", json={"token": "wrong"})
     assert resp.status_code == 401
     assert resp.json() == {"error": "Bad admin token"}
+
+
+def test_login_refuses_to_mint_when_the_admin_token_is_unset(
+    client: Client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A blank ADMIN_TOKEN is not a password: no caller gets a superadmin token."""
+    monkeypatch.setenv("ADMIN_TOKEN", "")
+    resp = client.post("/login", json={"token": ""})
+    assert resp.status_code == 503
+    assert resp.json() == {"error": "ADMIN_TOKEN is not set"}
 
 
 def test_login_with_an_empty_body(client: Client) -> None:

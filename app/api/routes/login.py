@@ -1,4 +1,5 @@
 import os
+import secrets
 from typing import Any
 
 from fastapi import APIRouter, Request
@@ -8,8 +9,8 @@ from app.api.deps import (
     RequireLogin,
     TeamServiceDep,
     UserServiceDep,
-    clerk_claims,
     discord_token,
+    refresh_claims,
 )
 from app.core.exceptions import ApiError
 from app.core.security import create_access_token
@@ -28,7 +29,10 @@ def index() -> RedirectResponse:
 @router.post("/login")
 def login(data: LoginRequest) -> dict[str, str]:
     """Exchange the admin token for an access token."""
-    if data.token != os.getenv("ADMIN_TOKEN"):
+    expected = os.getenv("ADMIN_TOKEN")
+    if not expected:
+        raise ApiError(503, {"error": "ADMIN_TOKEN is not set"})
+    if not secrets.compare_digest(data.token.encode(), expected.encode()):
         raise ApiError(401, {"error": "Bad admin token"})
     return {
         "access_token": create_access_token("admin", int(os.getenv("TOKEN_TIME", "60")))
@@ -51,7 +55,7 @@ def me(
         if token.provider_user_id != claims["sub"]:
             # the frontend keeps this answer all session, so a Discord account
             # relinked in Clerk must show now, not one request later
-            claims = clerk_claims(request)
+            claims = refresh_claims(request)
         account = discord.identify(token.token)
     users = user_service.find_by_discord_id(claims["sub"])
     user = users[0] if users else None
