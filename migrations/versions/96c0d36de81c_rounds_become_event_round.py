@@ -42,33 +42,47 @@ AVAILABILITY_VIEW = (
 )
 
 
-def add_round_id(table: str) -> None:
-    """A nullable round_id with its foreign key and index, on either dialect."""
-    if op.get_bind().dialect.name == "sqlite":
-        # SQLite alters no constraint, but it takes REFERENCES on a column it adds
+def add_round_id(table: str, ondelete: str | None = None) -> None:
+    """A nullable round_id with its foreign key and index, on either dialect.
+
+    SQLite reads an ON DELETE back only off a table-level key, so a key that
+    carries one rebuilds the table; a plain key rides on the column it adds.
+    """
+    name = op.f(f"fk_{table}_round_id_event_round")
+    column = sa.Column("round_id", sa.Integer(), nullable=True)
+    if op.get_bind().dialect.name == "sqlite" and not ondelete:
         op.execute(
             f"ALTER TABLE {table} ADD COLUMN round_id INTEGER "
             "REFERENCES event_round (id)"
         )
+    elif op.get_bind().dialect.name == "sqlite":
+        with op.batch_alter_table(table) as batch:
+            batch.add_column(column)
+            batch.create_foreign_key(
+                name, "event_round", ["round_id"], ["id"], ondelete=ondelete
+            )
     else:
-        op.add_column(table, sa.Column("round_id", sa.Integer(), nullable=True))
+        op.add_column(table, column)
         op.create_foreign_key(
-            op.f(f"fk_{table}_round_id_event_round"),
-            table,
-            "event_round",
-            ["round_id"],
-            ["id"],
+            name, table, "event_round", ["round_id"], ["id"], ondelete=ondelete
         )
     op.create_index(op.f(f"ix_{table}_round_id"), table, ["round_id"])
 
 
-def drop_round_id(table: str) -> None:
+def drop_round_id(table: str, rebuild: bool = False) -> None:
+    """Undo add_round_id. SQLite drops no column a table-level key names, so
+    the table add_round_id rebuilt is rebuilt again without it."""
+    name = op.f(f"fk_{table}_round_id_event_round")
     op.drop_index(op.f(f"ix_{table}_round_id"), table_name=table)
     if op.get_bind().dialect.name != "sqlite":
-        op.drop_constraint(
-            op.f(f"fk_{table}_round_id_event_round"), table, type_="foreignkey"
-        )
-    op.drop_column(table, "round_id")
+        op.drop_constraint(name, table, type_="foreignkey")
+        op.drop_column(table, "round_id")
+    elif rebuild:
+        with op.batch_alter_table(table) as batch:
+            batch.drop_constraint(name, type_="foreignkey")
+            batch.drop_column("round_id")
+    else:
+        op.drop_column(table, "round_id")
 
 
 def koth_rounds() -> None:
@@ -79,39 +93,38 @@ def koth_rounds() -> None:
     ).all()
     if not nights:
         return
-    bind.execute(
+    league_id = bind.scalar(
         sa.text(
             "INSERT INTO league (name, short_name, entrant_kind) "
-            "VALUES (:name, 'KOTH', 'solo')"
+            "VALUES (:name, 'KOTH', 'solo') RETURNING id"
         ),
         {"name": KOTH_LEAGUE},
     )
-    bind.execute(
+    # Signups closed: KOTH takes its entrants in Twitch chat, not on the member home
+    event_id = bind.scalar(
         sa.text(
-            "INSERT INTO event (name, series_per_round, kind, published, league_id) "
-            "SELECT :name, 1, 'koth', TRUE, id FROM league WHERE name = :name"
+            "INSERT INTO event (name, series_per_round, kind, published, "
+            "signups_open, league_id) "
+            "VALUES (:name, 1, 'koth', TRUE, FALSE, :league_id) RETURNING id"
         ),
-        {"name": KOTH_LEAGUE},
-    )
-    event_id = bind.scalar(sa.text("SELECT id FROM event WHERE kind = 'koth'"))
-    bind.execute(
-        sa.text(
-            "INSERT INTO event_stage (event_id, position, format, best_of, "
-            "scheduling_mode) VALUES (:event_id, 1, 'koth', 1, 'immediate')"
-        ),
-        {"event_id": event_id},
+        {"name": KOTH_LEAGUE, "league_id": league_id},
     )
     stage_id = bind.scalar(
-        sa.text("SELECT id FROM event_stage WHERE event_id = :event_id"),
+        sa.text(
+            "INSERT INTO event_stage (event_id, position, format, best_of, "
+            "scheduling_mode) VALUES (:event_id, 1, 'koth', 1, 'immediate') "
+            "RETURNING id"
+        ),
         {"event_id": event_id},
     )
     for number, (koth_id, name, event_date) in enumerate(nights, start=1):
         day = event_date.date() if hasattr(event_date, "date") else str(event_date)[:10]
-        bind.execute(
+        round_id = bind.scalar(
             sa.text(
                 "INSERT INTO event_round (season_id, stage_id, number, name, "
                 "start_date, end_date, best_of) "
-                "VALUES (:event_id, :stage_id, :number, :name, :day, :day, 1)"
+                "VALUES (:event_id, :stage_id, :number, :name, :day, :day, 1) "
+                "RETURNING id"
             ),
             {
                 "event_id": event_id,
@@ -122,11 +135,8 @@ def koth_rounds() -> None:
             },
         )
         bind.execute(
-            sa.text(
-                "UPDATE koth_events SET round_id = (SELECT id FROM event_round "
-                "WHERE season_id = :event_id AND number = :number) WHERE id = :koth_id"
-            ),
-            {"event_id": event_id, "number": number, "koth_id": koth_id},
+            sa.text("UPDATE koth_events SET round_id = :round_id WHERE id = :koth_id"),
+            {"round_id": round_id, "koth_id": koth_id},
         )
 
 
@@ -153,12 +163,15 @@ def upgrade() -> None:
             ["season_id"], ["event.id"], name=op.f("fk_event_round_season_id_event")
         ),
         sa.ForeignKeyConstraint(
-            ["map_id"], ["maps.id"], name=op.f("fk_event_round_map_id_maps")
+            ["map_id"],
+            ["maps.id"],
+            name=op.f("fk_event_round_map_id_maps"),
+            ondelete="SET NULL",
         ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_event_round")),
         # The key the rounds were stored under before the id
         sa.UniqueConstraint(
-            "season_id", "number", name=op.f("uq_event_round_season_id")
+            "season_id", "number", name=op.f("uq_event_round_season_id_number")
         ),
     )
     op.create_index(op.f("ix_event_round_stage_id"), "event_round", ["stage_id"])
@@ -204,7 +217,8 @@ def upgrade() -> None:
     op.create_index(
         op.f("ix_round_availability_season_id"), "round_availability", ["season_id"]
     )
-    add_round_id("round_availability")
+    # An answer is about one round and goes with it, so a round count can fall
+    add_round_id("round_availability", ondelete="CASCADE")
     op.execute(
         "UPDATE round_availability SET round_id = (SELECT r.id FROM event_round r "
         "WHERE r.season_id = round_availability.season_id "
@@ -219,19 +233,31 @@ def downgrade() -> None:
     op.execute("DROP VIEW user_season_availability")
     op.execute("DROP VIEW season_rounds")
 
+    # Only the event the nights point at, so an event an admin made stays
+    bind = op.get_bind()
+    event_id = bind.scalar(
+        sa.text(
+            "SELECT r.season_id FROM event_round r "
+            "JOIN koth_events k ON k.round_id = r.id LIMIT 1"
+        )
+    )
     op.execute("UPDATE koth_events SET round_id = NULL")
-    op.execute(
-        "DELETE FROM event_round WHERE season_id IN "
-        "(SELECT id FROM event WHERE kind = 'koth')"
-    )
-    op.execute(
-        "DELETE FROM event_stage WHERE event_id IN "
-        "(SELECT id FROM event WHERE kind = 'koth')"
-    )
-    op.execute("DELETE FROM event WHERE kind = 'koth'")
-    op.execute(f"DELETE FROM league WHERE name = '{KOTH_LEAGUE}'")
+    if event_id is not None:
+        for statement in (
+            "DELETE FROM event_round WHERE season_id = :event_id",
+            "DELETE FROM event_stage WHERE event_id = :event_id",
+            "DELETE FROM event WHERE id = :event_id",
+        ):
+            bind.execute(sa.text(statement), {"event_id": event_id})
+        bind.execute(
+            sa.text(
+                "DELETE FROM league WHERE name = :name AND NOT EXISTS "
+                "(SELECT 1 FROM event WHERE event.league_id = league.id)"
+            ),
+            {"name": KOTH_LEAGUE},
+        )
 
-    drop_round_id("round_availability")
+    drop_round_id("round_availability", rebuild=True)
     op.drop_index(
         op.f("ix_round_availability_season_id"), table_name="round_availability"
     )

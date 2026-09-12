@@ -21,7 +21,9 @@ class DBRoundAvailability(DBModel, table=True):
     season_id: int = Field(index=True, foreign_key="event.id", primary_key=True)
     playday: int = Field(primary_key=True)
     # The round the answer is about; C2 makes it the key and refuses a null
-    round_id: int | None = Field(default=None, index=True, foreign_key="event_round.id")
+    round_id: int | None = Field(
+        default=None, index=True, foreign_key="event_round.id", ondelete="CASCADE"
+    )
     available: bool
     set_by_user_id: int = Field(foreign_key="users.id")
 

@@ -41,6 +41,7 @@ from app.models.user import User
 from app.models.user_team_season import DBUserTeamSeason
 from app.models.w3c_stats import W3CStats
 from app.services import discord
+from app.services.seasons import GNL_ONLY
 
 NAME = "GNL Review Season"
 START = date(2026, 9, 1)
@@ -93,7 +94,10 @@ def build(discord_a: str, discord_b: str) -> str:
                 session.delete(team)
             session.delete(old)
             session.flush()
-        source = session.scalar(select(Season).order_by(col(Season.id).desc()))
+        # The newest GNL season: a KOTH event has no map pool, rules or roster to copy
+        source = session.scalar(
+            select(Season).where(GNL_ONLY).order_by(col(Season.id).desc())
+        )
         if source is None:
             raise NotFoundError("no season to copy the maps, rules and roster from")
 

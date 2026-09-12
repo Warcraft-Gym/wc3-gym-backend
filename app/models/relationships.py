@@ -70,7 +70,9 @@ class DBEventRound(DBModel, table=True):
 
     __tablename__ = "event_round"
     # The key the rounds were stored under before the id; C2 adds (stage_id, number)
-    __table_args__ = (UniqueConstraint("season_id", "number"),)
+    __table_args__ = (
+        UniqueConstraint("season_id", "number", name="uq_event_round_season_id_number"),
+    )
 
     id: int | None = Field(default=None, primary_key=True)
     # Null while the season_rounds view still takes inserts; C2 refuses a null
@@ -84,7 +86,9 @@ class DBEventRound(DBModel, table=True):
     # The window the round is played in; no end date means a one-day round
     start_date: date | None = None
     end_date: date | None = None
-    map_id: int | None = Field(default=None, index=True, foreign_key="maps.id")
+    map_id: int | None = Field(
+        default=None, index=True, foreign_key="maps.id", ondelete="SET NULL"
+    )
     # Overrides the stage's best of for this round; null follows the stage
     best_of: int | None = None
     season: "Season" = Relationship(back_populates="rounds")

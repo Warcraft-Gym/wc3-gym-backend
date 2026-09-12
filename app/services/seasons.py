@@ -19,6 +19,7 @@ from app.models.ladder_achievement import (
     default_rows,
 )
 from app.models.map import LadderMapRow, Map
+from app.models.match import Match
 from app.models.relationships import (
     DBEventRound,
     DBMapSeason,
@@ -96,11 +97,32 @@ def fill_rounds(session: OrmSession, season: Season, wanted: int) -> None:
             row.start_date = season.start_date + timedelta(weeks=playday - 1)
             row.end_date = row.start_date + timedelta(days=6)
         session.add(row)
-    for playday, row in rounds.items():
-        if playday > wanted:
-            session.delete(row)
+    dropped = [playday for playday in rounds if playday > wanted]
+    if dropped:
+        _refuse_played(session, ident(season), dropped)
+        for playday in dropped:
+            session.delete(rounds[playday])
     session.flush()
     session.expire(season, ["rounds", "round_count"])
+
+
+def _refuse_played(session: OrmSession, season_id: int, dropped: list[int]) -> None:
+    """Refuse to drop a round a match sits on.
+
+    An availability answer cascades with its round, but a match holds a tie and
+    its series, and C2 refuses a match without a round. Every series hangs off a
+    match here, so the matches answer for them both.
+    """
+    held = session.scalars(
+        select(col(Match.playday))
+        .where(col(Match.season_id) == season_id, col(Match.playday).in_(dropped))
+        .distinct()
+    ).all()
+    if held:
+        numbers = ", ".join(str(playday) for playday in sorted(held))
+        raise BadRequestError(
+            f"round {numbers} still holds matches; delete them before the count falls"
+        )
 
 
 def _public(session: OrmSession, season: Season) -> SeasonPublic:
@@ -192,7 +214,7 @@ class SeasonService:
                 session.scalars(
                     select(Season)
                     .options(*_SEASON_OPTIONS)
-                    .where(col(Season.id) == season_id)
+                    .where(GNL_ONLY, col(Season.id) == season_id)
                 )
                 .unique()
                 .first()

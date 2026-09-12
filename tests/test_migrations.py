@@ -773,14 +773,14 @@ def test_the_rounds_become_event_round_and_everything_points_at_them(
         )
         # SQLite hands a date back as text, so the window is read as written
         assert [
-            (number, stage_id, str(start))
+            (number, stage_id, start)
             for number, stage_id, start in connection.execute(
                 text(
                     "SELECT number, stage_id, start_date FROM event_round "
                     "ORDER BY number"
                 )
             )
-        ] == [(1, stage, "2026-01-05"), (2, stage, "None")]
+        ] == [(1, stage, "2026-01-05"), (2, stage, None)]
         rounds = {
             number: round_id
             for number, round_id in connection.execute(

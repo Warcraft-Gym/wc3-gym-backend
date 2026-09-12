@@ -12,6 +12,7 @@ import csv
 import io
 import sys
 from pathlib import Path
+from typing import Any, LiteralString
 
 import psycopg
 from psycopg import sql
@@ -22,6 +23,7 @@ csv.field_size_limit(sys.maxsize)
 
 # The seed repo still names the dump after the old table, and `seasons` is now a view
 RENAMED = {"seasons": "event"}
+KOTH_LEAGUE = "Gym KOTH"
 
 
 def convert(cell: str, data_type: str) -> str:
@@ -31,6 +33,60 @@ def convert(cell: str, data_type: str) -> str:
     if data_type == "boolean" and cell in ("0", "1"):
         return "true" if cell == "1" else "false"
     return cell
+
+
+def scalar(
+    cur: psycopg.Cursor,
+    statement: LiteralString,
+    params: tuple[Any, ...] = (),
+) -> Any:  # noqa: ANN401  # any column type
+    """The first column of the first row, or None."""
+    cur.execute(statement, params)
+    row = cur.fetchone()
+    return row[0] if row else None
+
+
+def koth_rounds(cur: psycopg.Cursor) -> None:
+    """The KOTH half of 96c0d36de81c: the truncate takes the event and its nights.
+
+    The dump brings the koth_events rows back, so the event, its stage and one
+    round per night are made again and each night points at its round. The
+    league row survives the truncate, so the event hangs off the one there.
+    """
+    cur.execute("SELECT id, name, event_date FROM koth_events ORDER BY event_date, id")
+    nights = cur.fetchall()
+    if not nights:
+        return
+    cur.execute(
+        "INSERT INTO league (name, short_name, entrant_kind)"
+        " VALUES (%s, 'KOTH', 'solo') ON CONFLICT (name) DO NOTHING",
+        (KOTH_LEAGUE,),
+    )
+    league_id = scalar(cur, "SELECT id FROM league WHERE name = %s", (KOTH_LEAGUE,))
+    # Signups closed: KOTH takes its entrants in Twitch chat, not on the member home
+    event_id = scalar(
+        cur,
+        "INSERT INTO event (name, series_per_round, kind, published, signups_open,"
+        " league_id) VALUES (%s, 1, 'koth', TRUE, FALSE, %s) RETURNING id",
+        (KOTH_LEAGUE, league_id),
+    )
+    stage_id = scalar(
+        cur,
+        "INSERT INTO event_stage (event_id, position, format, best_of,"
+        " scheduling_mode) VALUES (%s, 1, 'koth', 1, 'immediate') RETURNING id",
+        (event_id,),
+    )
+    for number, (koth_id, name, event_date) in enumerate(nights, start=1):
+        day = event_date.date()
+        round_id = scalar(
+            cur,
+            "INSERT INTO event_round (season_id, stage_id, number, name, start_date,"
+            " end_date, best_of) VALUES (%s, %s, %s, %s, %s, %s, 1) RETURNING id",
+            (event_id, stage_id, number, name, day, day),
+        )
+        cur.execute(
+            "UPDATE koth_events SET round_id = %s WHERE id = %s", (round_id, koth_id)
+        )
 
 
 def main(seed_dir: str, url: str) -> None:
@@ -132,6 +188,8 @@ def main(seed_dir: str, url: str) -> None:
                     sql.Identifier(table),
                 )
             )
+        # After the sequences: the new event takes an id the copied rows do not hold
+        koth_rounds(cur)
         conn.commit()
 
 
