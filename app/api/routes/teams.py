@@ -14,16 +14,16 @@ from app.api.deps import (
 )
 from app.api.search import SearchQuery
 from app.core.exceptions import ApiError, BadRequestError, NotFoundError
+from app.models.round_availability import (
+    RoundAvailabilityPublic,
+    TeamAvailabilityWrite,
+)
 from app.models.team import (
     TeamCaptainIds,
     TeamCreate,
     TeamPlayerIds,
     TeamPublic,
     TeamUpdate,
-)
-from app.models.user_season_availability import (
-    TeamAvailabilityWrite,
-    UserSeasonAvailabilityPublic,
 )
 from app.models.w3c_stats import W3CSyncResult
 from app.services.users import SYNC_MAX_AGE
@@ -100,7 +100,7 @@ def get_team_availability(
     season_id: int,
     claims: RequireCaptain,
     service: AvailabilityServiceDep,
-) -> list[UserSeasonAvailabilityPublic]:
+) -> list[RoundAvailabilityPublic]:
     """The weeks the players of that team season have answered for."""
     _own_team(claims, team_id)
     return service.for_team(team_id, season_id)
@@ -114,7 +114,7 @@ def set_team_availability(
     claims: RequireCaptain,
     service: AvailabilityServiceDep,
     user_service: UserServiceDep,
-) -> list[UserSeasonAvailabilityPublic]:
+) -> list[RoundAvailabilityPublic]:
     """Answer one week for a player of the team, as their captain."""
     _own_team(claims, team_id)
     if not service.on_roster(team_id, season_id, data.user_id):

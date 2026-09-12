@@ -11,7 +11,7 @@ from app.core.db import Session, rel
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.core.query import QueryElement, QueryUtil
 from app.models.base import ident
-from app.models.enums import Race
+from app.models.enums import EventKind, Race
 from app.models.ladder_achievement import (
     LadderAchievement,
     SeasonAchievementPublic,
@@ -19,11 +19,13 @@ from app.models.ladder_achievement import (
     default_rows,
 )
 from app.models.map import LadderMapRow, Map
+from app.models.match import Match
 from app.models.relationships import (
+    DBEventRound,
     DBMapSeason,
-    DBSeasonRound,
     DBUserSeasonSignup,
     SeasonRoundWrite,
+    round_row,
 )
 from app.models.season import (
     Season,
@@ -43,6 +45,10 @@ from app.services.series_veto import check_order
 from app.services.users import UserService
 
 logger = logging.getLogger(__name__)
+
+
+# The season pages list GNL events only; a KOTH night is an event too
+GNL_ONLY = col(Season.kind) == EventKind.gnl
 
 
 # A season answers its map pool and its week maps and nothing else; noload
@@ -81,21 +87,42 @@ def fill_rounds(session: OrmSession, season: Season, wanted: int) -> None:
     """One round per playday, `wanted` of them. A missing round is added a week
     after the one before it; a round past the last playday is dropped; a set
     date stays. The rows are the round count, so nothing stores it."""
-    rounds = {row.playday: row for row in season.rounds}
+    rounds = {row.number: row for row in season.rounds}
     for playday in range(1, wanted + 1):
-        row = rounds.get(playday) or DBSeasonRound(
-            season_id=ident(season), playday=playday
+        row = rounds.get(playday) or DBEventRound(
+            season_id=ident(season), number=playday
         )
         # ponytail: weekly rounds, the GNL cadence; a stage cadence when cups need it
         if row.start_date is None and season.start_date:
             row.start_date = season.start_date + timedelta(weeks=playday - 1)
             row.end_date = row.start_date + timedelta(days=6)
         session.add(row)
-    for playday, row in rounds.items():
-        if playday > wanted:
-            session.delete(row)
+    dropped = [playday for playday in rounds if playday > wanted]
+    if dropped:
+        _refuse_played(session, ident(season), dropped)
+        for playday in dropped:
+            session.delete(rounds[playday])
     session.flush()
     session.expire(season, ["rounds", "round_count"])
+
+
+def _refuse_played(session: OrmSession, season_id: int, dropped: list[int]) -> None:
+    """Refuse to drop a round a match sits on.
+
+    An availability answer cascades with its round, but a match holds a tie and
+    its series, and C2 refuses a match without a round. Every series hangs off a
+    match here, so the matches answer for them both.
+    """
+    held = session.scalars(
+        select(col(Match.playday))
+        .where(col(Match.season_id) == season_id, col(Match.playday).in_(dropped))
+        .distinct()
+    ).all()
+    if held:
+        numbers = ", ".join(str(playday) for playday in sorted(held))
+        raise BadRequestError(
+            f"round {numbers} still holds matches; delete them before the count falls"
+        )
 
 
 def _public(session: OrmSession, season: Season) -> SeasonPublic:
@@ -187,7 +214,7 @@ class SeasonService:
                 session.scalars(
                     select(Season)
                     .options(*_SEASON_OPTIONS)
-                    .where(col(Season.id) == season_id)
+                    .where(GNL_ONLY, col(Season.id) == season_id)
                 )
                 .unique()
                 .first()
@@ -202,6 +229,7 @@ class SeasonService:
             statement = (
                 select(Season)
                 .options(*_SEASON_OPTIONS)
+                .where(GNL_ONLY)
                 .order_by(col(Season.id))
                 .offset(offset)
                 .limit(limit)
@@ -238,7 +266,7 @@ class SeasonService:
             statement = (
                 select(Season)
                 .options(*_SEASON_OPTIONS)
-                .where(filter)
+                .where(filter, GNL_ONLY)
                 .order_by(col(Season.id))
                 .offset(offset)
                 .limit(limit)
@@ -352,9 +380,9 @@ class SeasonService:
                 raise BadRequestError(
                     f"Map not part of the season, map id: {map_id}, season id {season_id}"
                 )
-            row = session.get(
-                DBSeasonRound, (season_id, data.playday)
-            ) or DBSeasonRound(season_id=season_id, playday=data.playday)
+            row = round_row(session, season_id, data.playday) or DBEventRound(
+                season_id=season_id, number=data.playday
+            )
             row.sqlmodel_update(fields)
             if row.end_date and row.start_date and row.end_date < row.start_date:
                 raise BadRequestError("end_date must not be before start_date")

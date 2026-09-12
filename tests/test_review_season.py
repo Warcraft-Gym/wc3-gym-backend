@@ -10,11 +10,11 @@ from app.core.achievements import DEFAULT_PAID
 from app.core.db import Session
 from app.models.admin_grant import AdminGrant
 from app.models.base import ident
-from app.models.enums import Race
+from app.models.enums import EventKind, Race
 from app.models.fantasy_team import FantasyTeam
 from app.models.ladder_achievement import LadderAchievement
 from app.models.match import Match
-from app.models.relationships import DBFantasyTeamPlayer, DBSeasonRound
+from app.models.relationships import DBEventRound, DBFantasyTeamPlayer
 from app.models.season import Season
 from app.models.series import Series
 from app.models.series_replay import DBSeriesReplay
@@ -92,9 +92,9 @@ def test_build_copies_the_latest_season_and_seats_the_captains(
         assert set(paid) == set(DEFAULT_PAID)
 
         rounds = session.scalars(
-            select(DBSeasonRound)
-            .where(col(DBSeasonRound.season_id) == sid)
-            .order_by(col(DBSeasonRound.playday))
+            select(DBEventRound)
+            .where(col(DBEventRound.season_id) == sid)
+            .order_by(col(DBEventRound.number))
         ).all()
         assert len(rounds) == ROUNDS
         assert rounds[0].start_date == START
@@ -186,3 +186,25 @@ def test_pairings_rotate_and_guild_series_stay_unscheduled(
     for row in scheduled:
         assert not {row.player1_id, row.player2_id} & guild_users
         assert row.date_time and row.date_time.hour == 20
+
+
+def test_build_copies_the_newest_gnl_season_not_a_koth_event(
+    seeded: dict[str, Any],
+) -> None:
+    """A KOTH event holds the highest id once C1 runs, and it has no map pool,
+    rules or roster to copy, so the source query asks for a GNL season."""
+    with_ladder_mmr(seeded["player_ids"])
+    with Session.begin() as session:
+        session.add(Season(name="Gym KOTH", kind=EventKind.koth, series_per_round=1))
+
+    build("1", "9999")
+
+    with Session() as session:
+        season = session.scalar(select(Season).where(col(Season.name) == NAME))
+        assert season
+        rounds = session.scalars(
+            select(DBEventRound).where(col(DBEventRound.season_id) == ident(season))
+        ).all()
+        # the maps came from the seeded GNL season; a KOTH event has none
+        assert len(rounds) == ROUNDS
+        assert all(row.map_id for row in rounds)

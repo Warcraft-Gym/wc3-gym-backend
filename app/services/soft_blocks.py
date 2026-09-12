@@ -2,7 +2,7 @@
 
 The routes pass the signed-in player's id, so a player writes only their own
 rows, and a row of anyone else answers 403. Nothing here writes
-user_season_availability: a block is a hint, never the round answer.
+round_availability: a block is a hint, never the round answer.
 """
 
 from datetime import UTC, date, datetime, time, timedelta
@@ -16,7 +16,7 @@ from app.core import free_time
 from app.core.db import Session
 from app.core.exceptions import ApiError, BadRequestError, NotFoundError
 from app.models.match import Match
-from app.models.relationships import DBSeasonRound
+from app.models.relationships import round_row
 from app.models.season import Season
 from app.models.series import Series
 from app.models.user import User
@@ -202,7 +202,7 @@ def _window(
 ) -> tuple[datetime, datetime]:
     """The window asked for, or else the round's dates as whole UTC days."""
     if start is None and end is None:
-        row = session.get(DBSeasonRound, (match.season_id, match.playday))
+        row = round_row(session, match.season_id, match.playday)
         if row is None or row.start_date is None:
             raise BadRequestError("The round has no dates; pass start and end")
         start = _midnight(row.start_date)

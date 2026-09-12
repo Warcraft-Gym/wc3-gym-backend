@@ -13,7 +13,7 @@ from sqlmodel import col
 from app.core.db import Session
 from app.models.enums import Race
 from app.models.map import Map
-from app.models.relationships import DBSeasonRound
+from app.models.relationships import round_row
 from app.models.series import SeriesPublic
 from app.models.types import utcnow
 from app.models.user import User, UserPublic
@@ -88,7 +88,7 @@ def _day(value: date) -> str:
 def round_line(season_id: int, playday: int) -> str:
     """Round N and its dates, one date for a one-day round."""
     with Session() as session:
-        row = session.get(DBSeasonRound, (season_id, playday))
+        row = round_row(session, season_id, playday)
     if row is None or row.start_date is None:
         return f"Round {playday}"
     dates = _day(row.start_date)

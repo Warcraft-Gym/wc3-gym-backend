@@ -317,8 +317,9 @@ def test_an_import_without_the_fantasy_users_sheet_still_writes_the_season(
 # One transaction of bulk statements, not one transaction per row, so the
 # cost of an import does not grow with the rows a sheet holds.
 
-# The workbook below costs 29: one lookup per sheet and the writes it needs
-IMPORT_STATEMENTS = 29
+# The workbook below costs 32: one lookup per sheet, the writes it needs, and
+# one insert per round, which event_round takes singly now that it has an id
+IMPORT_STATEMENTS = 32
 
 
 def _row_counts() -> dict[str, int]:
