@@ -18,6 +18,7 @@ import io
 import itertools
 import os
 from collections.abc import Callable, Generator
+from datetime import date
 from types import SimpleNamespace
 from typing import Any
 
@@ -262,6 +263,19 @@ def discord_calls(
 ) -> list[tuple[str, str, Any]]:
     """Record every call to Discord and answer 200."""
     return record(monkeypatch, 200)
+
+
+@pytest.fixture(autouse=True)
+def checkin_day(monkeypatch: pytest.MonkeyPatch) -> Callable[[str], None]:
+    """The day check-in reads. The seeded rounds run four weeks from 5 Jan 2026,
+    so the default opens round 1 and round 2 and a test names another day."""
+    from app.services import availability
+
+    def on(day: str) -> None:
+        monkeypatch.setattr(availability, "today", lambda: date.fromisoformat(day))
+
+    on("2026-01-09")
+    return on
 
 
 @pytest.fixture(autouse=True)

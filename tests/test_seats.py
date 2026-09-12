@@ -209,10 +209,12 @@ def test_me_lists_every_running_season(
         assert {
             "signups_open",
             "scheduling_enabled",
+            "checkin_days",
             "start_date",
             "end_date",
         } <= season.keys()
         assert season["scheduling_enabled"] is True
+        assert season["checkin_days"] == 3
 
 
 def test_a_signup_lands_in_the_season_the_body_names(

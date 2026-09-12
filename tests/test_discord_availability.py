@@ -1,5 +1,6 @@
 """/availability: a public card per round; each press writes the presser's own week."""
 
+from collections.abc import Callable
 from typing import Any
 
 from httpx2 import Client
@@ -37,11 +38,11 @@ def test_the_card_names_the_season_and_round_and_carries_three_buttons(
     posted = discord_calls[0]
     assert posted[:2] == ("POST", CHANNEL)
     assert posted[2]["content"].startswith("**Season 1 · Round 3** · <t:")
-    assert posted[2]["content"].endswith(" — can you play?")
+    assert posted[2]["content"].endswith(" — check in")
     buttons = posted[2]["components"][0]["components"]
     assert [(b["label"], b["style"], b["custom_id"]) for b in buttons] == [
-        ("Can play", 3, "availability:1:3:yes"),
-        ("Cannot play", 4, "availability:1:3:no"),
+        ("Check in", 3, "availability:1:3:yes"),
+        ("Can't play", 4, "availability:1:3:no"),
         ("Clear", 2, "availability:1:3:clear"),
     ]
 
@@ -56,12 +57,17 @@ def test_without_a_round_the_card_is_for_the_current_one(
 
 
 def test_a_press_writes_the_pressers_own_answer(
-    client: Client, seeded: dict[str, Any], public_key: None, discord_calls: list
+    client: Client,
+    seeded: dict[str, Any],
+    public_key: None,
+    discord_calls: list,
+    checkin_day: Callable[[str], None],
 ) -> None:
+    checkin_day("2026-01-19")
     post(client, press("1", "availability:1:3:no"))
     assert discord_calls[-1][:2] == ("PATCH", f"{WEBHOOK}/messages/@original")
     assert discord_calls[-1][2] == {
-        "content": "Saved: you cannot play round 3 of Season 1."
+        "content": "Saved: you can't play round 3 of Season 1."
     }
 
     rows = AvailabilityService().for_user(seeded["player_ids"][0], seeded["season_id"])
@@ -71,7 +77,7 @@ def test_a_press_writes_the_pressers_own_answer(
 
     post(client, press("1", "availability:1:3:clear"))
     assert discord_calls[-1][2] == {
-        "content": "Saved: your answer for round 3 of Season 1 is cleared."
+        "content": "Cleared your answer for round 3 of Season 1."
     }
     assert (
         AvailabilityService().for_user(seeded["player_ids"][0], seeded["season_id"])
@@ -113,6 +119,19 @@ def test_an_event_without_scheduling_posts_no_card_and_takes_no_press(
 
     post(client, press("1", "availability:1:3:no"))
     assert discord_calls[-1][2] == refusal
+    assert (
+        AvailabilityService().for_user(seeded["player_ids"][0], seeded["season_id"])
+        == []
+    )
+
+
+def test_a_press_before_the_window_is_answered_privately(
+    client: Client, seeded: dict[str, Any], public_key: None, discord_calls: list
+) -> None:
+    """The default test day is two days before round 3's check-in opens."""
+    post(client, press("1", "availability:1:3:no"))
+
+    assert discord_calls[-1][2] == {"content": "Check-in for round 3 opens on 16 Jan."}
     assert (
         AvailabilityService().for_user(seeded["player_ids"][0], seeded["season_id"])
         == []

@@ -53,10 +53,15 @@ def test_a_player_answers_a_week_and_takes_it_back(
 
 
 def test_a_player_answers_every_week_of_the_season(
-    client: Client, seeded: dict[str, Any], member: Callable[..., dict[str, str]]
+    client: Client,
+    seeded: dict[str, Any],
+    member: Callable[..., dict[str, str]],
+    checkin_day: Callable[[str], None],
 ) -> None:
+    """Each round takes its answer on its own days, so the clock moves with them."""
     headers = member()
     write(client, headers, 1, False)
+    checkin_day("2026-01-26")
     rows = write(client, headers, 4, False)
 
     assert [row["playday"] for row in rows] == [1, 4]
@@ -81,7 +86,10 @@ def test_a_week_outside_the_season_is_refused(
 
 
 def test_the_week_lands_in_the_season_the_setting_names(
-    client: Client, seeded: dict[str, Any], member: Callable[..., dict[str, str]]
+    client: Client,
+    seeded: dict[str, Any],
+    member: Callable[..., dict[str, str]],
+    checkin_day: Callable[[str], None],
 ) -> None:
     """A newer season exists and the setting names the older one.
 
@@ -98,6 +106,7 @@ def test_the_week_lands_in_the_season_the_setting_names(
         session.add(Settings(key="current_gnl_season", value=str(seeded["season_id"])))
         session.commit()
 
+    checkin_day("2026-01-19")
     rows = write(client, member(), 3, False)
     assert [row["playday"] for row in rows] == [3]
 
@@ -111,9 +120,13 @@ def test_the_week_lands_in_the_season_the_setting_names(
 
 
 def test_player_series_carries_the_answers_and_the_rounds(
-    client: Client, seeded: dict[str, Any], member: Callable[..., dict[str, str]]
+    client: Client,
+    seeded: dict[str, Any],
+    member: Callable[..., dict[str, str]],
+    checkin_day: Callable[[str], None],
 ) -> None:
     headers = member()
+    checkin_day("2026-01-19")
     write(client, headers, 3, False)
 
     body = client.get("/player-series", headers=headers).json()
@@ -281,10 +294,12 @@ def test_shrinking_the_season_drops_the_answers_past_the_last_round(
     seeded: dict[str, Any],
     auth_headers: dict[str, str],
     member: Callable[..., dict[str, str]],
+    checkin_day: Callable[[str], None],
 ) -> None:
     """An admin who fixes a round-count typo must not revive the old answers."""
     headers = member()
     season_id = seeded["season_id"]
+    checkin_day("2026-01-26")
     assert [row["playday"] for row in write(client, headers, 4, False)] == [4]
 
     for count in (3, 4):
@@ -293,4 +308,97 @@ def test_shrinking_the_season_drops_the_answers_past_the_last_round(
         )
         assert resp.status_code == 200, resp.text
 
+    checkin_day("2026-01-09")
     assert [row["playday"] for row in write(client, headers, 1, False)] == [1]
+
+
+def refuse(
+    client: Client, headers: dict[str, str], playday: int, available: bool | None
+) -> str:
+    """The 403 body of a player write outside the round's check-in window."""
+    resp = client.put(
+        "/player-availability",
+        json={"playday": playday, "available": available},
+        headers=headers,
+    )
+    assert resp.status_code == 403, resp.text
+    assert resp.json()["error"] == "checkin_closed"
+    return resp.json()["message"]
+
+
+def test_a_player_cannot_check_in_before_the_window_opens(
+    client: Client,
+    seeded: dict[str, Any],
+    member: Callable[..., dict[str, str]],
+    checkin_day: Callable[[str], None],
+) -> None:
+    """Round 2 runs 12 to 18 Jan, so its check-in opens three days before."""
+    headers = member()
+    checkin_day("2026-01-07")
+
+    assert refuse(client, headers, 2, False) == "Check-in for round 2 opens on 9 Jan."
+    assert (
+        AvailabilityService().for_user(seeded["player_ids"][0], seeded["season_id"])
+        == []
+    )
+
+    checkin_day("2026-01-09")
+    assert [row["playday"] for row in write(client, headers, 2, False)] == [2]
+
+
+def test_a_player_cannot_clear_an_answer_before_the_window_opens(
+    client: Client,
+    seeded: dict[str, Any],
+    member: Callable[..., dict[str, str]],
+    checkin_day: Callable[[str], None],
+) -> None:
+    checkin_day("2026-01-07")
+
+    assert refuse(client, member(), 2, None) == "Check-in for round 2 opens on 9 Jan."
+
+
+def test_a_player_cannot_answer_a_round_that_is_over(
+    client: Client,
+    seeded: dict[str, Any],
+    member: Callable[..., dict[str, str]],
+    checkin_day: Callable[[str], None],
+) -> None:
+    checkin_day("2026-01-19")
+
+    assert refuse(client, member(), 2, False) == "Round 2 is over."
+
+
+def test_a_captain_answers_outside_the_window(
+    client: Client,
+    seeded: dict[str, Any],
+    captain: dict[str, str],
+    checkin_day: Callable[[str], None],
+) -> None:
+    """The window holds the player only; a captain fills the grid any day."""
+    team_id, season_id = seeded["team_a_id"], seeded["season_id"]
+    checkin_day("2026-01-07")
+
+    resp = client.put(
+        f"/teams/{team_id}/seasons/{season_id}/availability",
+        json={"user_id": seeded["player_ids"][1], "playday": 2, "available": False},
+        headers=captain,
+    )
+
+    assert resp.status_code == 200, resp.text
+    rows = AvailabilityService().for_team(team_id, season_id)
+    assert [row.playday for row in rows] == [2]
+
+
+def test_a_season_answers_its_check_in_window_and_takes_a_new_one(
+    client: Client, seeded: dict[str, Any], auth_headers: dict[str, str]
+) -> None:
+    season_id = seeded["season_id"]
+    assert client.get(f"/seasons/{season_id}").json()["checkin_days"] == 3
+
+    resp = client.put(
+        f"/seasons/{season_id}", json={"checkin_days": 5}, headers=auth_headers
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["checkin_days"] == 5
+    assert client.get(f"/seasons/{season_id}").json()["checkin_days"] == 5

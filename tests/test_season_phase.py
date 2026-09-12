@@ -144,13 +144,17 @@ def test_the_season_signups_open_flag_gates_the_season_not_the_profile(
         SeasonPublic.from_season_without_maps,
     ],
 )
-def test_every_season_answer_carries_both_flags(build: Callable[..., Any]) -> None:
+def test_every_season_answer_carries_the_flags_and_the_window(
+    build: Callable[..., Any],
+) -> None:
     season = Season(
         id=1,
         name="Cup",
         series_per_round=1,
         signups_open=False,
         scheduling_enabled=False,
+        checkin_days=5,
     )
     public = build(season)
     assert (public.signups_open, public.scheduling_enabled) == (False, False)
+    assert public.checkin_days == 5

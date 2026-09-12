@@ -62,6 +62,8 @@ class SeasonBase(SQLModel):
     scheduling_enabled: bool = Field(
         default=True, sa_column_kwargs={"server_default": true()}
     )
+    # How many days before a round starts its check-in opens for the players
+    checkin_days: int = Field(default=3, sa_column_kwargs={"server_default": "3"})
 
 
 def tier_count(cuts: list[int] | None) -> int:
@@ -216,6 +218,7 @@ class SeasonUpdate(SQLModel):
     fantasy_grind: bool | None = None
     signups_open: bool | None = None
     scheduling_enabled: bool | None = None
+    checkin_days: int | None = None
 
 
 class SeasonTeamIds(SQLModel):
@@ -301,6 +304,7 @@ class SeasonPublic(SeasonBase):
             fantasy_grind=season.fantasy_grind,
             signups_open=season.signups_open,
             scheduling_enabled=season.scheduling_enabled,
+            checkin_days=season.checkin_days,
             fantasy_tiers=tier_count(season.fantasy_tier_cuts),
             fantasy_tier_cuts=season.fantasy_tier_cuts or [],
             fantasy_tiers_applied_at=season.fantasy_tiers_applied_at,
@@ -319,6 +323,7 @@ class SeasonPublic(SeasonBase):
             fantasy_grind=season.fantasy_grind,
             signups_open=season.signups_open,
             scheduling_enabled=season.scheduling_enabled,
+            checkin_days=season.checkin_days,
             signup_race=signup_race,
         )
 
@@ -339,6 +344,7 @@ class SeasonPublic(SeasonBase):
             fantasy_grind=season.fantasy_grind,
             signups_open=season.signups_open,
             scheduling_enabled=season.scheduling_enabled,
+            checkin_days=season.checkin_days,
             fantasy_tiers=tier_count(season.fantasy_tier_cuts),
             fantasy_tier_cuts=season.fantasy_tier_cuts or [],
             fantasy_tiers_applied_at=season.fantasy_tiers_applied_at,
