@@ -110,6 +110,10 @@ def me(
                 "id": season.id,
                 "name": season.name,
                 "phase": season.phase,
+                "signups_open": season.signups_open,
+                "scheduling_enabled": season.scheduling_enabled,
+                "start_date": season.start_date,
+                "end_date": season.end_date,
                 "signed_up": season.id in signed_up,
                 "team": {"id": season_team[0], "name": season_team[1]}
                 if (season_team := rosters.get(season.id))
