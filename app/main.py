@@ -54,6 +54,7 @@ def create_app(db_url: str | None = None) -> FastAPI:
     )
     app.add_middleware(
         CORSMiddleware,
+        # Reads are anonymous-open and no cookie is sent cross-site, so origins are not restricted
         allow_origins=["*"],
         allow_methods=["*"],
         allow_headers=["*"],
