@@ -12,7 +12,7 @@ from typing import Any
 
 from httpx2 import Client
 
-from tests.test_fantasy_locks import schedule
+from tests.test_fantasy_locks import schedule, score
 
 
 def test_a_bet_update_without_the_points_keeps_the_stored_points(
@@ -20,9 +20,9 @@ def test_a_bet_update_without_the_points_keeps_the_stored_points(
 ) -> None:
     """A key the body leaves out is not a null; the bet keeps what it held."""
     bet = client.get("/fantasy/bets").json()[0]
-    schedule(
-        seeded["series_played_id"], datetime.now(UTC) + timedelta(days=1)
-    )  # the series is still open
+    # Unplayed and set later, the series is open again and its bets with it
+    score(seeded["series_played_id"], None, None)
+    schedule(seeded["series_played_id"], datetime.now(UTC) + timedelta(days=1))
 
     resp = client.put(f"/fantasy-bet/{bet['id']}", json={}, headers=member())
 
