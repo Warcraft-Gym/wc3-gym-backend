@@ -7,6 +7,7 @@ from typing import Any
 from httpx2 import Client, Response
 
 from app.services import blob
+from app.services.replays import MAX_BYTES
 from tests.conftest import REPLAY_BYTES
 
 
@@ -104,6 +105,40 @@ def test_a_file_that_is_not_a_replay_is_refused(
         else None
     )
     assert listed is None or listed.json() == []
+
+
+def test_a_replay_over_ten_megabytes_is_refused_and_dropped(
+    client: Client,
+    seeded: dict[str, Any],
+    member: Callable[..., dict[str, str]],
+    blob_store: dict[str, bytes],
+    replay_uploaded: Callable[..., None],
+) -> None:
+    """A file the browser put in the bucket is deleted when it is too big to be a replay."""
+    series_id = seeded["series_open_id"]
+    replay_uploaded(series_id, 1)
+    replay_uploaded(series_id, 2, data=REPLAY_BYTES + b"\0" * MAX_BYTES)
+    resp = report(client, series_id, member("2"))
+    assert resp.status_code == 400, resp.text
+    assert resp.json()["error"] == "Game 2 replay is over 10 MB"
+    assert len(blob_store) == 1
+    assert client.get(f"/series/{series_id}").json()["player1_score"] is None
+
+
+def test_an_upload_link_is_signed_only_for_a_game_of_a_series(
+    client: Client, seeded: dict[str, Any], member: Callable[..., dict[str, str]]
+) -> None:
+    """A Bo3 signs three keys, so game 4 is refused."""
+    series_id = seeded["series_open_id"]
+    resp = client.post(
+        f"/player-series/{series_id}/replays/3/upload-url", headers=member("2")
+    )
+    assert resp.status_code == 200, resp.text
+    resp = client.post(
+        f"/player-series/{series_id}/replays/4/upload-url", headers=member("2")
+    )
+    assert resp.status_code == 400, resp.text
+    assert resp.json()["error"] == "Game number must be between 1 and 3"
 
 
 def test_the_replays_of_a_missing_match(client: Client) -> None:

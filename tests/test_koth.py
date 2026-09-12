@@ -5,6 +5,7 @@ signups through the session and then drive the match, king and bracket
 endpoints through the API.
 """
 
+from datetime import datetime
 from typing import Any
 
 import pytest
@@ -100,7 +101,26 @@ def test_a_match_takes_its_bracket_from_the_participants(
 def test_a_result_crowns_the_winner_and_retires_the_loser(
     client: Client, auth_headers: dict[str, str], koth: dict[str, Any]
 ) -> None:
+    from app.core.db import Session
+    from app.models.enums import Race
+    from app.models.koth_signup import KothSignup
+
     one, two = koth["signup_ids"]
+    # a third player holds the crown of the bracket without playing the match
+    with Session.begin() as session:
+        bystander = KothSignup(
+            event_id=koth["event_id"],
+            twitch_username="player_three",
+            battle_tag="P3#3333",
+            w3c_name="P3",
+            race=Race.NE,
+            mmr=1450,
+            bracket=1,
+            is_king=1,
+        )
+        session.add(bystander)
+        session.flush()
+        bystander_id = ident(bystander)
     match = client.post(
         "/koth/matches",
         headers=auth_headers,
@@ -131,6 +151,9 @@ def test_a_result_crowns_the_winner_and_retires_the_loser(
     assert signups[one]["is_active"] == 1
     assert signups[two]["is_king"] == 0
     assert signups[two]["is_active"] == 0
+    # the king of the bracket who did not play is dethroned and retired too
+    assert signups[bystander_id]["is_king"] == 0
+    assert signups[bystander_id]["is_active"] == 0
 
 
 def test_set_king_retires_the_old_king_and_keeps_its_row(
@@ -435,6 +458,22 @@ def test_a_wrong_nightbot_query_token_answers_401(
     assert resp.status_code == 401
 
 
+def test_a_deployment_without_a_nightbot_token_answers_401(
+    client: Client, seeded: dict[str, Any]
+) -> None:
+    """A missing setting is an auth failure, not a 404 naming the setting."""
+    from app.core.db import Session
+    from app.models.settings import Settings
+
+    with Session.begin() as session:
+        session.query(Settings).filter_by(key="KOTH_NIGHTBOT_TOKEN").delete()
+
+    resp = client.get(
+        "/koth/signup", params={"token": "x", "twitch": "s", "battletag": "S#1"}
+    )
+    assert resp.status_code == 401, resp.text
+
+
 def test_a_signup_missing_a_field_is_refused(
     client: Client, seeded: dict[str, Any]
 ) -> None:
@@ -699,3 +738,38 @@ def test_a_signup_carries_the_flag_of_its_player_row(
         "P1#1111": "DE",
         "P2#2222": "US",
     }
+
+
+def test_the_admin_signup_lands_on_the_event_he_names(
+    client: Client,
+    koth: dict[str, Any],
+    auth_headers: dict[str, str],
+    w3c_two_races: None,
+) -> None:
+    """The admin adds a player to the event on screen, not to the active one."""
+    from app.core.db import Session
+    from app.models.koth_event import KothEvent
+
+    with Session() as session:
+        later = KothEvent(
+            name="KOTH 2", event_date=datetime(2026, 2, 10, 20, 0), is_active=False
+        )
+        session.add(later)
+        session.commit()
+        later_id = ident(later)
+
+    resp = client.post(
+        "/koth/signups/admin",
+        headers=auth_headers,
+        json={
+            "twitch_username": "player_three",
+            "battle_tag": "P3#3333",
+            "races": ["human"],
+            "event_id": later_id,
+        },
+    )
+
+    assert resp.status_code == 201, resp.text
+    assert [s["event_id"] for s in resp.json()] == [later_id]
+    active = client.get(f"/koth/events/{koth['event_id']}/signups").json()
+    assert "P3#3333" not in [s["battle_tag"] for s in active]

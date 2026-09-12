@@ -274,3 +274,23 @@ def turn_off_scheduling(season_id: int) -> None:
         season = session.get(Season, season_id)
         assert season is not None
         season.scheduling_enabled = False
+
+
+def test_shrinking_the_season_drops_the_answers_past_the_last_round(
+    client: Client,
+    seeded: dict[str, Any],
+    auth_headers: dict[str, str],
+    member: Callable[..., dict[str, str]],
+) -> None:
+    """An admin who fixes a round-count typo must not revive the old answers."""
+    headers = member()
+    season_id = seeded["season_id"]
+    assert [row["playday"] for row in write(client, headers, 4, False)] == [4]
+
+    for count in (3, 4):
+        resp = client.put(
+            f"/seasons/{season_id}", json={"round_count": count}, headers=auth_headers
+        )
+        assert resp.status_code == 200, resp.text
+
+    assert [row["playday"] for row in write(client, headers, 1, False)] == [1]

@@ -175,8 +175,11 @@ def player_choices(payload: dict[str, Any], services: Services) -> list[dict[str
         return []
     typed = typed_option(payload)
     names = (
-        (f"{row.name} ({row.team})" if row.team else str(row.name), row.id)
-        for row in services.ladder.season_players(season_id)
+        (
+            f"{row.name} ({row.team_name})" if row.team_name else str(row.name),
+            row.user_id,
+        )
+        for row in services.ladder.season_roster(season_id)
     )
     return [
         {"name": name[:100], "value": user_id}
