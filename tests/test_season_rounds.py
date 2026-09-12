@@ -294,9 +294,10 @@ def test_the_services_give_a_new_tie_and_its_series_the_round(
 
     with Session() as session:
         round_2 = round_row(session, seeded["season_id"], 2)
+        stored_match = session.get(Match, match.id)
         stored = session.get(Series, series.id)
-        assert round_2 and stored
-        assert session.get(Match, match.id).round_id == round_2.id  # type: ignore[union-attr]
+        assert round_2 and stored_match and stored
+        assert stored_match.round_id == round_2.id
         assert stored.round_id == round_2.id
 
 
@@ -323,6 +324,7 @@ def test_two_players_meet_once_in_a_round_without_a_tie(
 ) -> None:
     """No team tie groups a cup series, so the round and the two players are
     the key; the same pair in another round is a different series."""
+
     def pair(round_id: int) -> Series:
         return Series(
             match_id=None,

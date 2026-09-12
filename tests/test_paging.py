@@ -21,7 +21,6 @@ from sqlalchemy import event, select
 from sqlmodel import col
 
 from app.core.db import Session
-from app.models.base import ident
 
 # The path templates take the ids of the seeded league
 PAGED_ROUTES = [

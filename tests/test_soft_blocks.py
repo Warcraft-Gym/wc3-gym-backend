@@ -13,9 +13,7 @@ from sqlalchemy import event
 
 from app.core.db import Session
 from app.models.base import ident
-from app.models.match import Match
 from app.models.season import Season
-from app.models.series import Series
 from app.models.user import User
 from app.services.availability import NO_SCHEDULING, AvailabilityService
 from tests.seed import add_match, add_series

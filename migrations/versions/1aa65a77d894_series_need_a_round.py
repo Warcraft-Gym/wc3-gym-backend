@@ -20,6 +20,7 @@ from collections.abc import Sequence
 
 import sqlalchemy as sa
 from alembic import op
+from sqlalchemy.sql.elements import conv
 
 # revision identifiers, used by Alembic.
 revision: str = "1aa65a77d894"
@@ -35,10 +36,12 @@ AVAILABILITY_VIEW = (
     "CREATE VIEW user_season_availability AS SELECT user_id, season_id, playday, "
     "available, set_by_user_id FROM round_availability"
 )
-COMPOSITE_FK = op.f("fk_series_match_id_round_id_matches")
-PAIR_PER_ROUND = op.f("uq_series_round_id_player1_id_player2_id")
-MATCH_ROUND = op.f("uq_matches_id_round_id")
-AVAILABILITY_COLUMNS = "user_id, season_id, playday, round_id, available, set_by_user_id"
+COMPOSITE_FK = conv("fk_series_match_id_round_id_matches")
+PAIR_PER_ROUND = conv("uq_series_round_id_player1_id_player2_id")
+MATCH_ROUND = conv("uq_matches_id_round_id")
+AVAILABILITY_COLUMNS = (
+    "user_id, season_id, playday, round_id, available, set_by_user_id"
+)
 
 
 def rebuild_availability(key: list[str], round_nullable: bool) -> None:

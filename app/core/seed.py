@@ -34,8 +34,10 @@ RESTORE = (
     "ALTER TABLE matches ALTER COLUMN round_id SET NOT NULL",
     "ALTER TABLE series ALTER COLUMN round_id SET NOT NULL",
     "ALTER TABLE round_availability ALTER COLUMN round_id SET NOT NULL",
-    "ALTER TABLE round_availability ADD CONSTRAINT pk_round_availability"
-    " PRIMARY KEY (user_id, round_id)",
+    (
+        "ALTER TABLE round_availability ADD CONSTRAINT pk_round_availability"
+        " PRIMARY KEY (user_id, round_id)"
+    ),
 )
 KOTH_LEAGUE = "Gym KOTH"
 

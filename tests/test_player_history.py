@@ -23,10 +23,8 @@ def _second_season(seeded: dict[str, Any]) -> dict[str, Any]:
     """The seeded season, plus a second one the same two teams played."""
     from app.core.db import Session
     from app.models.base import ident
-    from app.models.match import Match
     from app.models.relationships import DBUserSeasonSignup
     from app.models.season import Season
-    from app.models.series import Series
     from app.models.settings import Settings
     from app.models.team_season import DBTeamSeason
     from app.models.user import User

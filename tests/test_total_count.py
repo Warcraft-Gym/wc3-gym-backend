@@ -207,10 +207,9 @@ def test_player_series_count_holds_to_the_current_season(
 ) -> None:
     """A series of P1 in another season is out of the season total."""
     from app.core.db import Session
-    from app.models.match import Match
     from app.models.season import Season
-    from app.models.series import Series
     from app.models.settings import Settings
+    from tests.seed import add_match, add_series
 
     with Session() as session:
         session.add(Settings(key="current_gnl_season", value=str(seeded["season_id"])))

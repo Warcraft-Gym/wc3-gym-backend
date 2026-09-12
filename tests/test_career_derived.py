@@ -17,10 +17,8 @@ from httpx2 import Client
 from app.core.db import Session
 from app.models.base import ident
 from app.models.enums import Race
-from app.models.match import Match
 from app.models.player_career_stats import PlayerCareerStats
 from app.models.season import Season
-from app.models.series import Series
 from app.models.team import Team
 from app.models.user import User
 from tests.seed import add_match, add_series

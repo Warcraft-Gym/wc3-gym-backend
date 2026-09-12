@@ -49,6 +49,8 @@ BEFORE_EVENT_RENAME = "75b9f3b280c2"
 EVENT_RENAME = "1e0287eacccf"
 # The revision before the rounds become event_round
 BEFORE_EVENT_ROUND = "8cc6dd6d93eb"
+# The rounds rename itself, which leaves both old views behind until C2
+EVENT_ROUND = "96c0d36de81c"
 
 
 def comparable(
@@ -766,7 +768,7 @@ def test_the_rounds_become_event_round_and_everything_points_at_them(
             )
         )
 
-    upgrade_to(url, "head")
+    upgrade_to(url, EVENT_ROUND)
     with engine.connect() as connection:
         stage = connection.scalar(
             text("SELECT id FROM event_stage WHERE event_id = 17")
@@ -820,6 +822,29 @@ def test_the_rounds_become_event_round_and_everything_points_at_them(
         )
     assert "event_round" not in inspect(engine).get_table_names()
     assert "round_id" not in {c["name"] for c in inspect(engine).get_columns("matches")}
+
+
+def test_the_round_views_go_and_the_keys_tighten(tmp_path: Path) -> None:
+    """C2 takes both old views away, keys an answer by its round, and lets a
+    series sit outside a team tie."""
+    url = fresh_database(tmp_path, "series-round")
+    upgrade_to_head(url)
+    engine = create_engine(url)
+
+    views = inspect(engine).get_view_names()
+    assert "season_rounds" not in views and "user_season_availability" not in views
+    assert inspect(engine).get_pk_constraint("round_availability")[
+        "constrained_columns"
+    ] == ["user_id", "round_id"]
+    nullable = {c["name"]: c["nullable"] for c in inspect(engine).get_columns("series")}
+    assert nullable["match_id"] and not nullable["round_id"]
+    assert not {
+        c["name"]: c["nullable"] for c in inspect(engine).get_columns("matches")
+    }["round_id"]
+
+    downgrade_to(url, EVENT_ROUND)
+    views = inspect(engine).get_view_names()
+    assert "season_rounds" in views and "user_season_availability" in views
 
 
 def test_every_koth_night_becomes_a_round_of_the_koth_event(tmp_path: Path) -> None:
