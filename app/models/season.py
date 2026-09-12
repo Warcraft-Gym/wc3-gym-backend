@@ -1,3 +1,4 @@
+from collections.abc import Iterable
 from datetime import date, datetime
 from typing import TYPE_CHECKING, Annotated, Any, Literal, NamedTuple, Self
 
@@ -123,36 +124,64 @@ class Season(SeasonBase, DBModel, table=True):
 
     def progress(self, session: Session) -> SeasonProgress:
         """The season's phase from its series; a season with no series is open."""
-        from app.models.match import Match
-        from app.models.series import Series
+        return progress_by_seasons(session, [self])[self.id]
 
+    signup_users: list["DBUserSeasonSignup"] = Relationship(
+        back_populates="season", sa_relationship_kwargs={"cascade": "all, delete"}
+    )
+
+
+def progress_by_seasons(
+    session: Session, seasons: Iterable["Season"]
+) -> dict[int | None, SeasonProgress]:
+    """The phase of every one of those seasons, from one grouped aggregate.
+
+    Season.progress calls it for a single season, so a list answer costs one
+    statement instead of one per season.
+    """
+    from app.models.match import Match
+    from app.models.series import Series
+
+    seasons = list(seasons)
+    ids = [season.id for season in seasons if season.id is not None]
+    counts: dict[int | None, tuple[int, int, int]] = {}
+    if ids:
         scored = and_(
             col(Series.player1_score).is_not(None),
             col(Series.player2_score).is_not(None),
         )
         started = or_(scored, col(Series.date_time) <= utcnow())
-        total, n_started, n_scored = session.execute(
+        rows = session.execute(
             select(
+                col(Match.season_id),
                 func.count(),
                 func.coalesce(func.sum(case((started, 1), else_=0)), 0),
                 func.coalesce(func.sum(case((scored, 1), else_=0)), 0),
             )
             .select_from(Series)
             .join(Match, col(Match.id) == col(Series.match_id))
-            .where(col(Match.season_id) == self.id)
-        ).one()
-        unscored = total - n_scored
-        if not n_started:
-            return SeasonProgress("open", unscored)
-        if not unscored:
-            return SeasonProgress("complete", 0)
-        if self.end_date and self.end_date < utcnow().date():
-            return SeasonProgress("overdue", unscored)
-        return SeasonProgress("commenced", unscored)
+            .where(col(Match.season_id).in_(ids))
+            .group_by(col(Match.season_id))
+        ).all()
+        counts = {row[0]: (row[1], row[2], row[3]) for row in rows}
+    return {
+        season.id: _phase(season, *counts.get(season.id, (0, 0, 0)))
+        for season in seasons
+    }
 
-    signup_users: list["DBUserSeasonSignup"] = Relationship(
-        back_populates="season", sa_relationship_kwargs={"cascade": "all, delete"}
-    )
+
+def _phase(
+    season: "Season", total: int, n_started: int, n_scored: int
+) -> SeasonProgress:
+    """The phase those series counts make; a season with no series is open."""
+    unscored = total - n_scored
+    if not n_started:
+        return SeasonProgress("open", unscored)
+    if not unscored:
+        return SeasonProgress("complete", 0)
+    if season.end_date and season.end_date < utcnow().date():
+        return SeasonProgress("overdue", unscored)
+    return SeasonProgress("commenced", unscored)
 
 
 # How many rounds the season is played over: the round rows are the count, so
