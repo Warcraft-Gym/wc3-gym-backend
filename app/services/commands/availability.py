@@ -32,12 +32,12 @@ COMMAND: dict[str, Any] = {
 }
 
 # Button styles: green, red, grey
-ANSWERS = (("yes", "Can play", 3), ("no", "Cannot play", 4), ("clear", "Clear", 2))
+ANSWERS = (("yes", "Check in", 3), ("no", "Can't play", 4), ("clear", "Clear", 2))
 VALUES = {"yes": True, "no": False, "clear": None}
 SAVED = {
-    "yes": "Saved: you can play round {n} of {season}.",
-    "no": "Saved: you cannot play round {n} of {season}.",
-    "clear": "Saved: your answer for round {n} of {season} is cleared.",
+    "yes": "Saved: you are checked in for round {n} of {season}.",
+    "no": "Saved: you can't play round {n} of {season}.",
+    "clear": "Cleared your answer for round {n} of {season}.",
 }
 
 
@@ -80,7 +80,7 @@ def run(payload: dict[str, Any], services: "Services") -> tuple[dict[str, Any], 
         return {"content": f"{season.name} has no round {wanted}."}, PRIVATE
     return {
         "content": f"**{season.name} · Round {round_.playday}**{_window(round_)}"
-        " — can you play?",
+        " — check in",
         "components": [
             {
                 "type": 1,
