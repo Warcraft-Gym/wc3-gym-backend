@@ -19,6 +19,7 @@ from app.services.commands import base
 from tests.discord import (
     APP_ID,
     CHANNEL,
+    TOKEN,
     WEBHOOK,
     autocomplete,
     command,
@@ -265,6 +266,61 @@ def test_unknown_command_edits_the_private_reply(
     assert discord_calls == [
         ("PATCH", f"{WEBHOOK}/messages/@original", {"content": "Unknown command."})
     ]
+
+
+def test_a_raising_handler_tells_the_member(
+    client: Client,
+    public_key: None,
+    discord_calls: list,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Every answer travels through the interaction token, so a raise has to
+    edit the deferred reply or the member watches it spin for 15 minutes."""
+
+    def boom(payload: dict[str, Any], services: interactions.Services) -> None:
+        raise KeyError("options")
+
+    monkeypatch.setitem(interactions.HANDLERS, "upcoming", boom)
+    body, headers = signed(command("upcoming"))
+    resp = client.post("/discord/interactions", content=body, headers=headers)
+    assert resp.status_code == 500
+    assert discord_calls == [
+        (
+            "PATCH",
+            f"{WEBHOOK}/messages/@original",
+            {"content": "Something went wrong. Try again."},
+        )
+    ]
+
+
+def test_a_public_component_answer_does_not_need_a_command_name(
+    client: Client,
+    public_key: None,
+    discord_calls: list,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A component payload carries custom_id, not name, so the card lookup
+    after the public post must not read one."""
+
+    def pressed(
+        payload: dict[str, Any], services: interactions.Services
+    ) -> tuple[dict[str, Any], bool]:
+        return {"content": "done"}, True
+
+    monkeypatch.setitem(interactions.COMPONENTS, "availability", pressed)
+    body, headers = signed(
+        {
+            "type": interactions.COMPONENT,
+            "application_id": APP_ID,
+            "token": TOKEN,
+            "channel_id": "chan-1",
+            "member": {"user": {"id": "1", "username": "p1"}},
+            "data": {"custom_id": "availability:1:3:yes", "component_type": 2},
+        }
+    )
+    resp = client.post("/discord/interactions", content=body, headers=headers)
+    assert resp.json() == {"ok": True}
+    assert discord_calls[0][:2] == ("POST", CHANNEL)
 
 
 def test_autocomplete_lists_the_callers_own_series(
