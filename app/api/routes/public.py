@@ -4,8 +4,8 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, Response
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import JSONResponse
 from pydantic import ValidationError
+from sqlmodel import SQLModel
 from starlette.datastructures import UploadFile
 
 from app.api.deps import (
@@ -38,7 +38,7 @@ from app.models.fantasy_team import (
     PublicFantasyTeamWrite,
 )
 from app.models.player_history import PlayerHistory
-from app.models.series import SeriesPublic, SeriesSort
+from app.models.series import PlayerSeriesWrite, SeriesPublic, SeriesSort
 from app.models.series_game import SeriesGamePublic
 from app.models.series_replay import SeriesReplayPublic
 from app.models.series_veto_step import SeriesVetoPublic, SeriesVetoWrite
@@ -79,6 +79,18 @@ from app.services.series import SeriesService
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["public"])
+
+
+def _validated[T: SQLModel](model: type[T], fields: dict[str, Any]) -> T:
+    """A body the route assembles itself, refused the way FastAPI refuses one."""
+    try:
+        return model(**fields)
+    except ValidationError as invalid:
+        problems = "; ".join(
+            f"{'.'.join(str(part) for part in error['loc'])}: {error['msg']}"
+            for error in invalid.errors()
+        )
+        raise ApiError(422, {"error": problems}) from invalid
 
 
 def _identity(request: Request, credentials: Credentials) -> dict[str, Any]:
@@ -199,14 +211,7 @@ def public_create_user(
         raise BadRequestError("missing user fields")
 
     # The route builds the model itself, so a rejected field is ours to answer
-    try:
-        user_create = UserCreate(**user_payload)
-    except ValidationError as invalid:
-        problems = "; ".join(
-            f"{'.'.join(str(part) for part in error['loc'])}: {error['msg']}"
-            for error in invalid.errors()
-        )
-        raise ApiError(422, {"error": problems}) from invalid
+    user_create = _validated(UserCreate, user_payload)
 
     # Validate BattleTag with W3Champions BEFORE creating/updating user
     if not user_service.validate_battle_tag(user_payload["battleTag"]):
@@ -463,19 +468,30 @@ async def update_player_series(
     user_service: UserServiceDep,
     series_service: SeriesServiceDep,
     credentials: Credentials,
-) -> JSONResponse | dict[str, Any]:
+) -> dict[str, Any]:
     """Update a series that belongs to the authenticated player."""
+    # The caller is named before the body is read, so a torn body is answered
+    # as the bad request it is and never as an anonymous traceback
+    entry = _identity(request, credentials)
+
     # Handle both form data and JSON
     content_type = request.headers.get("content-type") or ""
-    data = {}
+    sent: dict[str, Any] = {}
     if "multipart/form-data" in content_type or "x-www-form-urlencoded" in content_type:
         for key, value in (await request.form()).multi_items():
             if not isinstance(value, UploadFile):
-                data.setdefault(key, value)
+                sent.setdefault(key, value)
     else:
-        data = await request.json() or {}
+        try:
+            body = await request.json()
+        except ValueError as invalid:
+            raise BadRequestError("The body is not valid JSON") from invalid
+        if body is not None and not isinstance(body, dict):
+            raise BadRequestError("The body must be a JSON object")
+        sent = body or {}
 
-    entry = _identity(request, credentials)
+    # Only the fields the caller sent, so an untouched one keeps its value
+    data = _validated(PlayerSeriesWrite, sent).model_dump(exclude_unset=True)
 
     # Only the parsing and the identity check above need the event loop
     return await run_in_threadpool(
