@@ -20,6 +20,7 @@ from app.models.season import Season, tier_count
 from app.models.team_season import DBTeamSeason
 from app.models.user import User
 from app.services import derived, discord_roles
+from app.services.seasons import resolved_tiers
 
 logger = logging.getLogger(__name__)
 
@@ -37,30 +38,42 @@ def _check_grind(
         raise BadRequestError("The grind team is not a team of this season")
 
 
+def _check_roster(
+    session: OrmSession, season_id: int | None, player_ids: list[int], complete: bool
+) -> None:
+    """A roster holds at most one signup from each tier the season cuts, and a
+    complete one holds them all. The tier is the pin, else the band the MMR falls in."""
+    season = session.get(Season, season_id) if season_id is not None else None
+    if season is None:
+        raise NotFoundError(f"Season not found by id: {season_id}")
+    count = tier_count(season.fantasy_tier_cuts)
+    if count == 0:
+        raise BadRequestError("This season has no fantasy tiers yet")
+    signups = session.scalars(
+        select(DBUserSeasonSignup).where(
+            col(DBUserSeasonSignup.season_id) == season_id,
+            col(DBUserSeasonSignup.user_id).in_(player_ids),
+        )
+    ).all()
+    resolved = resolved_tiers(session, season, signups)
+    tiers = [resolved.get(player_id) for player_id in player_ids]
+    wanted = set(range(1, count + 1))
+    picked = set(tiers)
+    if (
+        len(tiers) != len(picked)
+        or not picked <= wanted
+        or (complete and picked != wanted)
+    ):
+        raise BadRequestError(
+            f"A fantasy team drafts one player from each of the {count} tiers"
+        )
+
+
 class FantasyTeamService:
     def check_roster(self, season_id: int, player_ids: list[int]) -> None:
         """A roster holds one signup from each tier the season cuts."""
         with Session.begin() as session:
-            season = session.get(Season, season_id)
-            if season is None:
-                raise NotFoundError(f"Season not found by id: {season_id}")
-            count = tier_count(season.fantasy_tier_cuts)
-            if count == 0:
-                raise BadRequestError("This season has no fantasy tiers yet")
-            tiers = session.scalars(
-                select(col(DBUserSeasonSignup.fantasy_tier)).where(
-                    col(DBUserSeasonSignup.season_id) == season_id,
-                    col(DBUserSeasonSignup.user_id).in_(player_ids),
-                )
-            ).all()
-            if (
-                len(player_ids) != count
-                or len(tiers) != count
-                or set(tiers) != set(range(1, count + 1))
-            ):
-                raise BadRequestError(
-                    f"A fantasy team drafts one player from each of the {count} tiers"
-                )
+            _check_roster(session, season_id, player_ids, complete=True)
 
     def add(self, fantasy_team: FantasyTeamCreate) -> FantasyTeamPublic:
         with Session.begin() as session:
@@ -172,11 +185,27 @@ class FantasyTeamService:
             )
             return result, total
 
-    def add_players(self, team_id: int, player_ids: list[int]) -> FantasyTeamPublic:
+    def add_players(
+        self, team_id: int, player_ids: list[int], *, member: bool = False
+    ) -> FantasyTeamPublic:
+        """Add the players to the team; a member's roster keeps to one player per tier."""
         with Session.begin() as session:
             fteam = session.get(FantasyTeam, team_id)
             if not fteam:
                 raise NotFoundError(f"Fantasy Team not found by id: {team_id}")
+            if member:
+                # The roster the write would leave behind, checked before it runs
+                current = session.scalars(
+                    select(col(DBFantasyTeamPlayer.user_id)).where(
+                        col(DBFantasyTeamPlayer.fantasy_team_id) == team_id
+                    )
+                ).all()
+                _check_roster(
+                    session,
+                    fteam.season_id,
+                    sorted({*current, *player_ids}),
+                    complete=False,
+                )
             for user_id in player_ids:
                 user = session.get(User, user_id)
                 if not user:

@@ -42,18 +42,22 @@ def require_admin_or_owner(
     credentials: Credentials,
     service: FantasyTeamServiceDep,
     users: UserServiceDep,
+    seasons: SeasonServiceDep,
 ) -> bool:
-    """Admit an admin (True) or the member who owns the fantasy team (False)."""
+    """Admit an admin (True) or the member who owns the fantasy team (False).
+
+    The owner writes only while his season is open; the admin routes stay open.
+    """
     claims = require_login(request, credentials)
     if claims.get("role") == "admin" or claims["sub"] == "admin":
         return True
     rows = users.find_by_discord_id(claims["sub"])
-    if (
-        claims.get("role") != "guest"
-        and rows
-        and service.get(team_id).captain_id == rows[0].id
-    ):
-        return False
+    if claims.get("role") != "guest" and rows:
+        team = service.get(team_id)
+        if team.captain_id == rows[0].id:
+            if team.season_id is not None:
+                seasons.refuse_unless_open(team.season_id)
+            return False
     raise ApiError(403, {"error": "Admins or the fantasy team's owner only"})
 
 
@@ -115,15 +119,18 @@ def get_team(team_id: int, service: FantasyTeamServiceDep) -> FantasyTeamPublic:
     return service.get(team_id)
 
 
-@router.post(
-    "/fantasy/teams/{team_id}/players",
-    dependencies=[Depends(require_admin_or_owner)],
-)
+@router.post("/fantasy/teams/{team_id}/players")
 def add_players(
-    team_id: int, data: FantasyTeamPlayerIds, service: FantasyTeamServiceDep
+    team_id: int,
+    data: FantasyTeamPlayerIds,
+    service: FantasyTeamServiceDep,
+    is_admin: Annotated[bool, Depends(require_admin_or_owner)],
 ) -> FantasyTeamPublic:
-    """Add players to a fantasy team for a season using their IDs."""
-    return service.add_players(team_id, data.player_ids)
+    """Add players to a fantasy team for a season using their IDs.
+
+    An owner keeps to one player per tier; an admin fixes a roster as he likes.
+    """
+    return service.add_players(team_id, data.player_ids, member=not is_admin)
 
 
 @router.delete(

@@ -197,6 +197,50 @@ def test_a_member_roster_holds_one_player_per_tier(
     assert {p["id"] for p in resp.json()["drafted_players"]} == {p1, p2, p3}
 
 
+def test_a_roster_of_derived_tiers_drafts(
+    client: Client,
+    seeded: dict[str, Any],
+    auth_headers: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The admin allocates by the cuts alone, so no signup row carries a tier.
+
+    The draft page groups the pick list by the derived tier, and the write reads
+    the same tier, so a season with no pin at all still drafts.
+    """
+    from tests.test_ladder_read import add_match, sign_up
+
+    season = seeded["season_id"]
+    p1, p2, p3 = seeded["player_ids"][:3]
+    sign_up(season, [p1, p2, p3], race=Race.HU)
+    when = utcnow() + timedelta(minutes=5)
+    for user_id, mmr in ((p1, 1400), (p2, 1200), (p3, 1000)):
+        add_match(
+            user_id, f"m{user_id}", when, mmr_before=mmr, mmr_after=mmr, race=Race.HU
+        )
+    resp = client.put(
+        f"/fantasy/tiers?season_id={season}",
+        json={"cuts": [1100, 1300], "tiers": {}},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 204, resp.text
+    rows = get_json(client, f"/seasons/{season}/signups")
+    assert {row["id"]: row["fantasy_tier"] for row in rows} == {p1: 1, p2: 2, p3: 3}
+
+    score(seeded["series_played_id"], None, None)
+    schedule(seeded["series_played_id"], utcnow() + timedelta(days=1))
+    headers = member_session(monkeypatch, "2", "p2")
+    team = {
+        "season_id": season,
+        "drafted_team_id": seeded["team_a_id"],
+        "drafted_race": "HU",
+        "player_ids": [p1, p2, p3],
+    }
+    resp = client.post("/fantasy-team", json=team, headers=headers)
+    assert resp.status_code == 201, resp.text
+    assert {p["id"] for p in resp.json()["drafted_players"]} == {p1, p2, p3}
+
+
 def test_player_management_rejects_bad_input(
     client: Client, seeded: dict[str, Any], auth_headers: dict[str, str]
 ) -> None:
