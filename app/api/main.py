@@ -4,11 +4,13 @@ from app.api.routes import (
     config,
     discord,
     draft_series,
+    events,
     fantasy,
     health,
     import_export,
     jobs,
     koth,
+    leagues,
     login,
     maps,
     matches,
@@ -26,6 +28,8 @@ api_router.include_router(users.router)
 api_router.include_router(teams.router)
 api_router.include_router(matches.router)
 api_router.include_router(seasons.router)
+api_router.include_router(events.router)
+api_router.include_router(leagues.router)
 api_router.include_router(import_export.router)
 api_router.include_router(public.router)
 api_router.include_router(series.router)

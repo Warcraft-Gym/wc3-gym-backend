@@ -9,10 +9,11 @@ from datetime import datetime
 from typing import Annotated
 
 from sqlalchemy import func
-from sqlmodel import Field
+from sqlmodel import Field, SQLModel
 
 from app.models.base import DBModel
 from app.models.enums import EntrantKind
+from app.models.season import EventPublic
 from app.models.types import NumToStr, UTCDateTime, utcnow
 
 
@@ -32,3 +33,18 @@ class League(DBModel, table=True):
         sa_type=UTCDateTime,
         sa_column_kwargs={"server_default": func.now()},
     )
+
+
+class LeaguePublic(SQLModel):
+    """One league as the league pages read it.
+
+    The events fill only on the single read, where the page lists the runs of
+    the league; the list read leaves them empty.
+    """
+
+    id: int
+    name: str
+    short_name: str | None = None
+    page_url: str | None = None
+    entrant_kind: EntrantKind = EntrantKind.solo
+    events: list[EventPublic] = []
