@@ -13,44 +13,6 @@ from sqlalchemy.orm import configure_mappers
 
 import app.models
 
-TABLES = {
-    "admin_grant",
-    "clerk_account",
-    "discord_post",
-    "discord_role_binding",
-    "discord_role_hidden",
-    "draft_series",
-    "fantasy_bets",
-    "fantasy_team_player",
-    "fantasy_teams",
-    "koth_events",
-    "koth_match_participants",
-    "koth_matches",
-    "ladder_achievements",
-    "ladder_sync",
-    "koth_signups",
-    "map_season",
-    "maps",
-    "matches",
-    "player_career_stats",
-    "season_rounds",
-    "seasons",
-    "series",
-    "series_cast",
-    "series_replay",
-    "series_veto_step",
-    "settings",
-    "team_season",
-    "team_season_captain",
-    "teams",
-    "user_season_availability",
-    "user_season_signup",
-    "user_team_season",
-    "users",
-    "w3c_ladder_matches",
-    "w3cstats",
-}
-
 
 def import_all_models() -> None:
     for module in pkgutil.iter_modules(app.models.__path__):

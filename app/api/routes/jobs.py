@@ -35,9 +35,10 @@ def only_the_scheduler(credentials: Credentials) -> None:
 def cast_reminders(credentials: Credentials) -> dict[str, int]:
     """Call the audience to every claimed series about to start, one card each.
 
-    Vercel Hobby runs a cron once a day, so a GitHub Actions schedule in
-    wc3-gym-discord-bot calls this every few minutes. A series already carrying
-    its card is skipped, so a run that repeats posts nothing twice.
+    Vercel Hobby runs a cron once a day, so a Cloudflare Worker in
+    wc3-gym-discord-bot (cron/) calls this every five minutes; its failures
+    show in that Worker's Cron Events. A series already carrying its card is
+    skipped, so a run that repeats posts nothing twice.
     """
     only_the_scheduler(credentials)
     due = casts.starting_soon(utcnow())

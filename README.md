@@ -1,6 +1,6 @@
 # GNL Backend
 
-FastAPI REST API for the GNL (Gym Newbie League) esports platform providing JWT-authenticated endpoints for user management, team operations, match scheduling, series tracking, and fantasy betting.
+FastAPI REST API for the GNL (Gym Newbie League) esports platform: user management, team operations, match scheduling, series tracking and fantasy betting. The public pages read without a login; the writes and a player's own pages are checked per request in `app/api/deps.py`, against a Clerk session or the access token the `ADMIN_TOKEN` login mints for the admin UI and the bot.
 
 ## Prerequisites
 
@@ -51,7 +51,7 @@ One code, two mechanisms, three places you can reach from a laptop. Docker runs 
 | | `just local` | `just azure` | `just vercel` |
 |---|---|---|---|
 | Where | Docker on this machine | the Terraform staging box, over SSH | the Vercel project |
-| Runs | the image, built from your working tree | the published GHCR image | `api/index.py` as a function |
+| Runs | the image, built from your working tree | the GHCR image published outside this repository | `api/index.py` as a function |
 | `deploy` | — build with `up` | pins the box to an image tag | `vercel deploy`, prod or a preview |
 | `logs`, `status` | `docker logs`, `docker ps` | `compose logs`, `compose ps` over SSH | `vercel logs`, `vercel ls` |
 | `alembic` | against `LOCAL_DB_URL` | inside the backend container | against the pooler URL |
@@ -67,7 +67,7 @@ The gym-root workspace owns what spans two repositories: Terraform for the Azure
 
 ## Deploying to Vercel
 
-Vercel serves `api/index.py`, which imports the same application the container runs. Set `DB_URL`, `JWT_SECRET_KEY`, `ADMIN_TOKEN` and `FRONTEND_URL` in the project settings; the deployment reads no `.env` file. `CRON_SECRET` is optional; when set, Vercel Cron sends it as a bearer token to `/jobs/w3c-sync`, and every `/jobs` route answers 503 without it. `/jobs/cast-reminders` takes the same token. Vercel Hobby runs a cron once a day, so a GitHub Actions schedule in `wc3-gym-discord-bot` calls that one every five minutes.
+Vercel serves `api/index.py`, which imports the same application the container runs. Set `DB_URL`, `JWT_SECRET_KEY`, `ADMIN_TOKEN`, `FRONTEND_URL`, `CLERK_SECRET_KEY`, `CLERK_AUTHORIZED_PARTIES`, `DISCORD_GUILD_ID` and the four `CLOUDFLARE_*` values in the project settings, plus the optional rows in the variable table below: `DISCORD_PUBLIC_KEY` is one of them, and `POST /discord/interactions` answers 503 while it is unset. That table is the whole list, and the deployment reads no `.env` file. `CRON_SECRET` is optional; when set, Vercel Cron sends it as a bearer token to `/jobs/w3c-sync`, and every `/jobs` route answers 503 without it. `/jobs/cast-reminders` takes the same token. Vercel Hobby runs a cron once a day, so a Cloudflare Worker in `wc3-gym-discord-bot` (`cron/`, deployed by `deploy-cron.yml`) calls that one every five minutes; its failures show in that Worker's Cron Events.
 
 The production build runs `alembic upgrade head` (`vercel.json`) before the new code is promoted, so a migration that fails stops the deploy. Previews run against the staging Supabase project: the shared `wc3gym_staging` database, or a branch's own copy when the branch adds a migration. How and why is in [docs/PREVIEW-DATABASES.md](docs/PREVIEW-DATABASES.md). The old code keeps serving while the build runs, so every migration must work with the code before it and after it: add columns nullable or with a default, drop a column only after the code that read it has shipped.
 
@@ -162,7 +162,6 @@ What this changes against a MySQL stack of the original app:
 - `DB_URL` uses the `postgresql+psycopg` scheme, port 5432 and the Postgres service name.
 - The backend mounts no volume over `/app`. The image carries the code, so a new image is a new version; a volume there would shadow it.
 - The container runs `alembic upgrade head` before the server, so it creates the schema on an empty database. `depends_on` with `service_healthy` keeps it from starting before Postgres answers.
-- `FRONTEND_URL` is read; without it the browser's CORS requests are refused.
 - `POSTGRES_INITDB_ARGS` picks the ICU collation, which orders text without regard to case as MySQL did. It is read once, on the first start of an empty volume.
 - The data moves by workbook, not by dump: export every season from the old app, `POST /import` each here, newest season first. Then set the `settings` rows and upload the team icons.
 - A backup is one command: `docker compose exec -T gnl-postgres pg_dump -U gnl_user -Fc GYM_BACKEND > gnl.dump`; restore with `pg_restore -U gnl_user -d GYM_BACKEND < gnl.dump` on the same service.
@@ -175,7 +174,7 @@ The import writes no ids of its own. A season matches by name, a player by battl
 
 `tests/data/` holds the real S17 and S18 exports; `just import-xlsx` imports both into a running backend (S18 first, so shared players keep the newer attributes) and the suite round-trips them.
 
-Ten sheets travel. These tables do not: `settings`, `w3cstats`, `player_career_stats`, `user_season_signup`, `koth_events`, `koth_matches`, `koth_match_participants`, `koth_signups`, `draft_series`, and the `icon_url` column of `teams`. Carry those over another way.
+Ten sheets travel, and `app/services/season_import.py` writes one step of the import per sheet: Season, Maps, Teams, Players, Matches, Series, Fantasy Users, Fantasy Teams, Fantasy Team Players and Fantasy Bets. Two carry more than their names: the Discord Role cell of a Teams row binds that team's Discord role, and a Players row also writes the player's signup for the season. No sheet carries the `settings` rows or the `icon_url` of `teams`; carry those over another way.
 
 ## Project Setup
 
@@ -202,9 +201,11 @@ Dependencies live in `pyproject.toml`: runtime packages under `[project] depende
 
 The backend reads its configuration from the environment. `just up` passes development-only values, so nothing here needs setting by hand to run the project locally. Read this table before deploying, and when a container starts but behaves oddly.
 
-`.env` is gitignored; copy `.env.example` to `.env` and fill in what you use. The `just` recipes load it (`set dotenv-load`), and `api/index.py` loads it for a bare `uvicorn api.index:app`. `create_app` and the migrations read the process environment only, so the tests never see a `.env` value. Each value has a default in the code. The deployment secrets are passed in by the stack.
+`.env` is gitignored; copy `.env.example` to `.env` and fill in what you use. The three `just` modules load it (`set dotenv-load`); the root justfile does not, so its own recipes pass `--env-file .env` when they need a value (`just discord-commands`, `just discord-emojis`). A root recipe a module calls still sees the module's values, inherited from the calling recipe. `api/index.py` loads it for a bare `uvicorn api.index:app`. `create_app` and the migrations read the process environment only, so the tests never see a `.env` value. Each value has a default in the code. The deployment secrets are passed in by the stack.
 
 More values live in the `settings` table, not the environment, and are edited on the admin Config page: `w3c_url` (wins over the `W3C_URL` variable when present), `current_w3c_season` (the w3champions season the MMR columns read; when the row is missing the backend takes the newest season from w3champions), `KOTH_NIGHTBOT_TOKEN`, `current_gnl_season` (the season the captain check and the role sync read; when the row is missing they take the newest season), `results_channel_id` (the channel the bot posts a series result card in; when the row is missing no card is posted), and `content_channel_id` (the channel the bot posts a cast claim and its start reminder in; when the row is missing neither card is posted). The Discord roles the app owns are rows of `discord_role_binding`, not settings, and the site admins are rows of `admin_grant`, managed under Config -> Access with `ADMIN_DISCORD_IDS` as the bootstrap. Discord grants no site admin: the guild owner, a role with the ADMINISTRATOR bit and the `admin_role` setting all read as members, and `admin_role` stays a setting because the Discord bot reads it for its own commands. `GET /config/w3c` shows the URL and season the backend resolved.
+
+Two switches are columns on the season, not settings: `signups_open` (off, a signup is a request an admin may grant) and `scheduling_enabled` (off, the event takes no availability answers and a write answers 403 `scheduling_disabled`). A season's phase is derived from its series and never stored. An availability answer is one row per player per round of a season (`user_season_availability`, keyed by `playday`), and the matching `season_rounds` row carries that round's date window and the map of game 1. `user_block` and `user_busy` are the player's own soft hints: they belong to the player rather than to a season, and they never write the per-round answer.
 
 **Key environment variables:**
 
@@ -224,17 +225,25 @@ FRONTEND_URL="http://localhost:5003"
 | `ADMIN_TOKEN` | Secret token for admin API access (used by Discord bot and admin UI) | `this_is_my_token` |
 | `JWT_SECRET_KEY` | Secret key for JWT token signing (generate with `openssl rand -hex 32`) | 64-character hex string |
 | `JWT_ALGORITHM` | JWT signing algorithm | `HS256` or `HS512` |
-| `FRONTEND_URL` | Admin frontend URL for CORS configuration | `http://localhost:5003` |
+| `FRONTEND_URL` | Public site URL, used to build the links in the Discord cards | `http://localhost:5003` |
 | `TOKEN_TIME` | Access token lifetime in minutes | `60` |
 | `W3C_URL` | w3champions API base | `https://website-backend.w3champions.com/api` |
 | `LOG_LEVEL` | Python log level | `INFO` |
 | `CLERK_SECRET_KEY` | Clerk instance secret; verifies the session token and reads the account's Discord token | `sk_test_...` |
-| `CLERK_AUTHORIZED_PARTIES` | Comma-separated origins Clerk accepts the session from | `http://localhost:5173` |
+| `CLERK_AUTHORIZED_PARTIES` | Comma-separated origins Clerk accepts the session from; locally the Vite port `wc3-gym-frontend` serves | `http://localhost:5003` |
 | `DISCORD_GUILD_ID` | The WC3 Gym Discord server; an account outside it logs in as a guest and reaches no player route | `316390574808760322` |
 | `ADMIN_DISCORD_IDS` | Comma-separated Discord ids that administer the site with no grant row and cannot be revoked; the bootstrap for Config -> Access | `220202568490418179` |
 | `DISCORD_BOT_TOKEN` | Optional bot token; when set, the app mirrors the roles of `discord_role_binding` into the guild (admin bindings excepted: those roles are hand-managed) and Config -> Discord roles reports the difference. Unset, every sync is a no-op | `MTIz...` |
 | `DISCORD_PUBLIC_KEY` | The app's public key from the Discord Developer Portal; `POST /discord/interactions` checks Discord's signature with it and answers 503 while it is unset | 64-character hex string |
 | `DISCORD_APPLICATION_ID` | The Discord application id; `just discord-commands` registers the slash commands on the guild with it | `123456789012345678` |
+| `CRON_SECRET` | Bearer token the `/jobs` routes check; unset, every `/jobs` route answers 503 | 64-character hex string |
+| `BLOB_READ_WRITE_TOKEN` | Token of the Vercel Blob store holding the team logos and map thumbnails; the icon upload routes and the `seed` recipes write with it | `vercel_blob_rw_...` |
+| `CLOUDFLARE_ACCOUNT_ID` | The Cloudflare account holding the replay bucket | `a1b2c3...` |
+| `CLOUDFLARE_R2_BUCKET` | The R2 bucket the replays live in; see `.env.example` for which bucket each target uses | `gnl-replays` |
+| `CLOUDFLARE_ACCESS_KEY_ID` | The R2 API token's key id, scoped to that bucket | `a1b2c3...` |
+| `CLOUDFLARE_SECRET_ACCESS_KEY` | The R2 API token's secret | 64-character hex string |
+
+This table is the deploy list: every variable a deployment sets. Vercel injects two more the code reads. `VERCEL_ENV` opens every replay key in the R2 bucket, so one deployment never overwrites another's file (`production/replays/12/game1.w3g`; off Vercel the key starts with `development`). `VERCEL_ENV` also gates the preview database: only a deployment reading `preview` picks a database at all, and it takes the copy named by `VERCEL_GIT_COMMIT_REF` when the build made one, the shared `wc3gym_staging` otherwise. `.env.example` is the local list, the subset a working tree needs, and the four `CLOUDFLARE_*` rows carry their bucket note there.
 
 **Important Notes:**
 - `host.docker.internal` is a special DNS name that resolves to the host machine from within a Docker container
@@ -381,7 +390,7 @@ Both commands need the network that reaches PostgreSQL, and both need `DB_URL` i
 
 `gnl-backend:local` stands in for the image here because this repository builds no other. A deployment substitutes its own image name.
 
-This is where the deployment differs from the official FastAPI template, which runs `alembic upgrade head` from a `prestart` step of its own and leaves the container command as the server alone. That shape is the right destination. Today there is no compose file and no deploy pipeline in this repository — CI runs lint and tests and publishes the image — so the single `docker run` carries both, and the commands above are what splitting them looks like by hand.
+This is where the deployment differs from the official FastAPI template, which runs `alembic upgrade head` from a `prestart` step of its own and leaves the container command as the server alone. That shape is the right destination. Today this repository ships no compose file of its own (the stack above is one to copy) and no deploy pipeline — CI runs lint, typecheck, a runtime-dependency import check and the tests, and nothing here publishes an image — so the single `docker run` carries both, and the commands above are what splitting them looks like by hand. The tag `just azure deploy` pulls comes from the `Azure image` workflow in the fork `tanghyd/wc3-gym-backend`, which builds `ghcr.io/tanghyd/gnl-backend:staging` and `:sha-<8>` on every push to its `main`.
 
 ## Troubleshooting
 

@@ -32,7 +32,7 @@ The database name is `wc3gym_<slug>_<hash>`: the slug is the branch name lower-c
 
 ## When a copy is removed
 
-Exactly one trigger: GitHub reports the branch deleted. The `Vercel staging database drop` workflow drops `wc3gym_<branch>` if it exists. A merge alone deletes nothing, so the repo has delete-branch-on-merge on; the drop is a separate run on the `delete` event and never shows in a commit's checks. There is no schedule; a database is only ever removed because its branch is gone. A branch that is kept after its pull request closes keeps its copy; `just db list vercel staging` shows it and `just db drop vercel staging <database>` removes it.
+Exactly one trigger: GitHub reports the branch deleted. The `Vercel staging database drop` workflow drops `wc3gym_<branch>` if it exists. A merge alone deletes nothing, so the repo has delete-branch-on-merge on; the drop is a separate run on the `delete` event and never shows in a commit's checks. There is no schedule; a database is only ever removed because its branch is gone. A branch that is kept after its pull request closes keeps its copy; `just vercel list` shows it and `just vercel drop <database>` removes it.
 
 ## Every case
 
@@ -45,11 +45,11 @@ Exactly one trigger: GitHub reports the branch deleted. The `Vercel staging data
 - **An old branch while `main` gained a migration.** Build fails with "rebase onto main". Stricter than needed, never a preview that silently errors.
 - **A build fails halfway through a copy.** The copy is partly migrated and has no fingerprint comment. The next push drops it and copies the template again, rather than continuing on a half-migrated database.
 - **A push edits a migration in place.** The revision id is unchanged, so alembic sees the copy at head, but the fingerprint differs: the copy is dropped and rebuilt.
-- **Reseeding from a newer prod dump.** `just db seed vercel staging` rebuilds the template and the shared database and relocks the template. Open branch copies are untouched.
+- **Reseeding from a newer prod dump.** `just vercel seed staging` rebuilds the template and the shared database and relocks the template. Open branch copies are untouched.
 
 ## Why a template rather than seeding each copy from scratch
 
-Postgres refuses to copy a database that has any open connection, and the pooler always holds one on the shared database, so the shared database cannot be the copy source. The locked template is the smallest thing that can be: one extra database that nothing connects to. The alternative, creating an empty database and loading the seed repo in the build, needs a GitHub token in the Vercel build and moves the seed loader into this repo. The template needs neither; its cost is the unlock/relock around a reseed, which `just db seed vercel staging` and the workflow do.
+Postgres refuses to copy a database that has any open connection, and the pooler always holds one on the shared database, so the shared database cannot be the copy source. The locked template is the smallest thing that can be: one extra database that nothing connects to. The alternative, creating an empty database and loading the seed repo in the build, needs a GitHub token in the Vercel build and moves the seed loader into this repo. The template needs neither; its cost is the unlock/relock around a reseed, which `just vercel seed staging` and the workflow do.
 
 ## Why a second project rather than a second database in the production project
 
@@ -64,7 +64,7 @@ A Supabase project is one Postgres instance. Extra databases work through the po
 | Migrate template and shared database | `.github/workflows/vercel-staging-db.yml` → `api/preview_db.py migrate` | Push to `main` |
 | Drop a branch's copy | `.github/workflows/vercel-staging-db-drop.yml` → `api/preview_db.py drop-branch <branch>` | Branch deleted |
 | Single migration head | `tests/test_migrations.py` | Every pull request |
-| Reseed, list, manual drop | `just db seed vercel staging`, `just db list vercel staging`, `just db drop vercel staging <database>` | By hand |
+| Reseed, list, manual drop | `just vercel seed staging`, `just vercel list`, `just vercel drop <database>` | By hand |
 
 ## Configuration
 
