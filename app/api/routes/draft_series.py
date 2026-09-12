@@ -7,6 +7,7 @@ from app.api.deps import (
     DraftSeriesServiceDep,
     MatchServiceDep,
     SeriesServiceDep,
+    claim_seats,
     require_admin,
     require_captain,
 )
@@ -33,7 +34,11 @@ def _own_match(
     if claims.get("role") == "admin" or claims["sub"] == "admin":
         return
     match = matches.get(match_id) if match_id is not None else None
-    if match is None or claims.get("team_id") not in (match.team1_id, match.team2_id):
+    seats = claim_seats(claims)
+    if match is None or not seats & {
+        (match.team1_id, match.season_id),
+        (match.team2_id, match.season_id),
+    }:
         raise ApiError(403, {"error": "Your team does not play this match"})
 
 

@@ -95,7 +95,7 @@ class SoftBlockService:
         *,
         admin: bool,
         user_id: int | None,
-        seat: tuple[int, int] | None,
+        seats: set[tuple[int, int]],
         start: datetime | None,
         end: datetime | None,
     ) -> FreeTimePublic:
@@ -117,7 +117,7 @@ class SoftBlockService:
                 (match.team2_id, match.season_id),
             }
             players = (series.player1_id, series.player2_id)
-            if not (admin or user_id in players or seat in teams):
+            if not (admin or user_id in players or teams & seats):
                 raise ApiError(403, {"error": "not_authorized_for_this_series"})
             if not season.scheduling_enabled:
                 raise ApiError(

@@ -103,11 +103,48 @@ def _resolve_claims(request: Request) -> dict[str, Any]:
         return _view_as(request, claims | {"role": "admin"})
     claims["role"] = discord.role_for(discord_id)
     if claims["role"] == "member":
-        settings = settings_service.get_settings_dict()
-        seat = team_service.captain_seat(discord_id, settings.get("current_gnl_season"))
-        if seat:
-            claims |= {"role": "captain", "team_id": seat[0], "season_id": seat[1]}
+        seats = team_service.captain_seats(discord_id)
+        if seats:
+            claims |= {"role": "captain"} | _seat_claims(seats, _current_season())
     return claims
+
+
+def _seat_claims(seats: list[tuple[int, int]], current: int | None) -> dict[str, Any]:
+    """The seats claim, plus the single team_id/season_id the old guards read.
+
+    The compatibility pair is the seat in the current season if the captain
+    holds one, else the newest seat, as the seats come newest first.
+    """
+    seat = next((pair for pair in seats if pair[1] == current), seats[0])
+    return {
+        "seats": [{"team_id": team, "season_id": season} for team, season in seats],
+        "team_id": seat[0],
+        "season_id": seat[1],
+    }
+
+
+def _current_season() -> int | None:
+    """The `current_gnl_season` setting as a number, or None if it is unset."""
+    value = settings_service.get_settings_dict().get("current_gnl_season")
+    return int(value) if value and value.isdigit() else None
+
+
+def claim_seats(claims: dict[str, Any]) -> set[tuple[int, int]]:
+    """The (team, season) pairs a captain's claims hold; empty for anyone else."""
+    return {(seat["team_id"], seat["season_id"]) for seat in claims.get("seats", [])}
+
+
+def _view_seats(value: str) -> list[tuple[int, int]]:
+    """The pairs of an X-View-Seats header, `team:season,team:season`.
+
+    A pair that is not two numbers is dropped, so a typed header never 500s.
+    """
+    seats = []
+    for pair in value.split(","):
+        team, _, season = pair.partition(":")
+        if team.isdigit() and season.isdigit():
+            seats.append((int(team), int(season)))
+    return seats
 
 
 def _view_as(request: Request, claims: dict[str, Any]) -> dict[str, Any]:
@@ -116,19 +153,23 @@ def _view_as(request: Request, claims: dict[str, Any]) -> dict[str, Any]:
     The rewrite happens where every guard reads the role, so an admin viewing
     as a member meets the same 403s a member would. The real role stays in
     actual_role, which /me answers so the switch stays visible. A viewed
-    captain names its team with X-View-Team; the season is the
-    current_gnl_season setting, as captain_seat reads it.
+    captain names its seats with X-View-Seats, `team:season,team:season`.
+    X-View-Team is the older header: one team in the current_gnl_season.
     """
     role = request.headers.get("x-view-as")
     if role not in ("captain", "member", "guest"):
         return claims
     claims |= {"role": role, "actual_role": "admin"}
+    if role != "captain":
+        return claims
+    season = _current_season()
+    seats = _view_seats(request.headers.get("x-view-seats", ""))
     team = request.headers.get("x-view-team", "")
-    if role == "captain" and team.isdigit():
-        season = settings_service.get_settings_dict().get("current_gnl_season")
+    if not seats and team.isdigit():
         claims["team_id"] = int(team)
-        if season and season.isdigit():
-            claims["season_id"] = int(season)
+        seats = [(int(team), season)] if season else []
+    if seats:
+        claims |= _seat_claims(seats, season)
     return claims
 
 

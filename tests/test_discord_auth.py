@@ -145,6 +145,8 @@ def test_a_member_reads_me(client: Client, monkeypatch: pytest.MonkeyPatch) -> N
         "signed_up": False,
         "season_id": None,
         "team": None,
+        "seats": [],
+        "seasons": [],
     }
 
 

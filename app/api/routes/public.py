@@ -19,6 +19,7 @@ from app.api.deps import (
     SettingsServiceDep,
     SoftBlockServiceDep,
     UserServiceDep,
+    claim_seats,
     discord_token,
     require_login,
     require_member,
@@ -234,7 +235,7 @@ def public_create_user(
 
     # Add to season if specified, on the race the form names
     # A closed or non-open season takes the profile only; an admin may add them
-    season_id = entry.get("season_id") or data.season_id or data.seasonId
+    season_id = data.season_id or data.seasonId or entry.get("season_id")
     closed: str | None = None
     if season_id:
         season = season_service.get(int(season_id))
@@ -277,16 +278,18 @@ def get_player_series(
     offset: Annotated[int, Query(ge=0)] = 0,
     sort: SeriesSort | None = None,
     order: SortOrder = "asc",
+    season_id: int | None = None,
 ) -> dict[str, Any]:
     """Get one page of a player's series for the dashboard view, at most 500.
 
     sort names the field the page is ordered by, and the series id breaks its ties.
+    season_id picks the season; without it the identity's own season answers.
     """
     # not a dependency: that would identify the player before limit is checked
     entry, user = dashboard_player(request, credentials, user_service)
 
     # Get series where user is player1 or player2
-    season_id = entry["season_id"]
+    season_id = season_id or entry["season_id"]
     if season_id:
         query = QueryUtil.parse_query(
             f"player1_id == {user.id} or player2_id == {user.id}"
@@ -318,7 +321,7 @@ def get_player_series(
     return {
         "player": user.to_dict(),
         "series": series_data,
-        "season_id": entry.get("season_id"),
+        "season_id": season_id,
         "discord_id": entry.get("discord_id"),
         "discord_tag": entry.get("discord_tag"),
         "availability": availability_service.for_user(user.id, season_id)
@@ -345,7 +348,7 @@ def set_player_availability(
     """
     entry, user = dashboard_player(request, credentials, user_service)
 
-    season_id = entry["season_id"] or data.season_id
+    season_id = data.season_id or entry["season_id"]
     if not season_id:
         raise BadRequestError("missing season_id")
 
@@ -429,17 +432,12 @@ def get_series_free_time(
     """
     claims = require_member(request, credentials)
     admin = claims.get("role") == "admin" or claims["sub"] == "admin"
-    seat = (
-        (claims["team_id"], claims["season_id"])
-        if claims.get("role") == "captain" and "season_id" in claims
-        else None
-    )
     users = [] if admin else user_service.find_by_discord_id(str(claims["sub"]))
     return service.free_time(
         series_id,
         admin=admin,
         user_id=users[0].id if users else None,
-        seat=seat,
+        seats=claim_seats(claims),
         start=start,
         end=end,
     )

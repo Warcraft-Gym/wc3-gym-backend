@@ -7,6 +7,7 @@ from fastapi.responses import RedirectResponse
 
 from app.api.deps import (
     RequireLogin,
+    SeasonServiceDep,
     TeamServiceDep,
     UserServiceDep,
     discord_token,
@@ -45,8 +46,10 @@ def me(
     claims: RequireLogin,
     user_service: UserServiceDep,
     team_service: TeamServiceDep,
+    season_service: SeasonServiceDep,
 ) -> dict[str, Any]:
-    """The logged-in account, the users row linked to its Discord id, and the season."""
+    """The logged-in account, the users row linked to its Discord id, and every
+    season that is still running, with this account's place in each."""
     # The admin token carries no Discord account, so it reads no name.
     superadmin = "clerk_user_id" not in claims
     account: dict[str, Any] = {}
@@ -71,6 +74,16 @@ def me(
     if not team_id and user and season_id:
         team_id = team_service.player_team(user.id, season_id)
     team = team_service.get(team_id) if team_id else None
+    seats = claims.get("seats", [])
+    captained = {seat["season_id"] for seat in seats}
+    # Every season the account can still act in, newest first; a complete one is done
+    seasons = sorted(
+        (season for season in season_service.get_all() if season.phase != "complete"),
+        key=lambda season: season.id,
+        reverse=True,
+    )
+    signed_up = {season.id for season in (user.signup_seasons if user else [])}
+    rosters = team_service.player_teams(user.id) if user else {}
     return {
         "discord_id": claims["sub"],
         "name": "Super Admin"
@@ -87,4 +100,19 @@ def me(
         ),
         "season_id": season_id,
         "team": {"id": team.id, "name": team.name} if team else None,
+        # The (team, season) pairs this account captains, one per running season
+        "seats": seats,
+        "seasons": [
+            {
+                "id": season.id,
+                "name": season.name,
+                "phase": season.phase,
+                "signed_up": season.id in signed_up,
+                "team": {"id": roster[0], "name": roster[1]}
+                if (roster := rosters.get(season.id))
+                else None,
+                "captain": season.id in captained,
+            }
+            for season in seasons
+        ],
     }
