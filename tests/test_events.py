@@ -68,7 +68,33 @@ def test_the_phase_walks_the_signup_rungs(client: Client) -> None:
     )
     assert phase(client, event) == "checkin"
 
+    # A window with no close stays open
+    set_fields(event, checkin_closes_at=None)
+    assert phase(client, event) == "checkin"
+
     set_fields(event, checkin_closes_at=NOW - timedelta(minutes=1))
+    assert phase(client, event) == "seeded"
+
+
+def test_a_season_with_rounds_still_reads_its_signup_rungs(
+    client: Client, seeded: dict[str, Any]
+) -> None:
+    """The rounds of a GNL season exist from the day it is created, so the
+    signup and check-in rungs come first: only closed signups read seeded."""
+    event = seeded["season_id"]
+    set_fields(event, end_date=(NOW + timedelta(days=7)).date())
+    score(seeded["series_played_id"], None, None)
+    schedule(seeded["series_played_id"], NOW + timedelta(days=1))
+    assert phase(client, event) == "signups_open"
+
+    set_fields(
+        event,
+        checkin_opens_at=NOW - timedelta(hours=1),
+        checkin_closes_at=NOW + timedelta(hours=1),
+    )
+    assert phase(client, event) == "checkin"
+
+    set_fields(event, signups_open=False, checkin_opens_at=None, checkin_closes_at=None)
     assert phase(client, event) == "seeded"
 
 
@@ -86,9 +112,10 @@ def test_the_rounds_seed_the_event_and_the_series_run_it(
     set_fields(event, end_date=(NOW + timedelta(days=7)).date())
     assert phase(client, event) == "running"
 
-    # No series has started, so only the round rows speak
+    # No series has started, and the signups are closed, so it rests at seeded
     score(seeded["series_played_id"], None, None)
     schedule(seeded["series_played_id"], NOW + timedelta(days=1))
+    set_fields(event, signups_open=False)
     assert phase(client, event) == "seeded"
 
     schedule(seeded["series_played_id"], NOW - timedelta(hours=1))
@@ -110,15 +137,22 @@ def test_an_event_finishes_on_the_last_result_or_the_end_date(
     assert phase(client, event) == "finished"
 
 
-def test_the_event_list_carries_every_event_with_its_phase(client: Client) -> None:
+def test_the_event_list_carries_the_published_events_with_their_phase(
+    client: Client,
+) -> None:
+    """A draft is an admin's own until it is published, so it is not listed."""
     published = add_event(name="Open Cup")
-    draft = add_event(name="Hidden Cup", published=False)
+    add_event(name="Hidden Cup", published=False)
+    closed = add_event(name="Late Cup", signups_open=False)
 
     rows = client.get("/events").json()
     assert [(row["id"], row["phase"]) for row in rows] == [
         (published, "signups_open"),
-        (draft, "draft"),
+        (closed, "seeded"),
     ]
+
+    assert [row["id"] for row in client.get("/events?limit=1").json()] == [published]
+    assert [row["id"] for row in client.get("/events?offset=1").json()] == [closed]
 
 
 def test_one_event_reads_its_stages_divisions_and_entrants(
@@ -221,7 +255,10 @@ def test_the_member_home_lists_every_kind_and_marks_what_the_player_joined(
             ]
         )
 
+    add_event(name="Hidden Cup", kind=EventKind.cup, published=False)
+
     rows = EventService().events_for_member(player)
+    # The draft is an admin's own, so the member home does not carry it
     assert [(row.id, row.kind.value, row.joined) for row in rows] == [
         (skipped, "cup", False),
         (entered, "cup", True),

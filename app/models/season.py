@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from datetime import date, datetime
 from typing import TYPE_CHECKING, Annotated, Any, Literal, NamedTuple, Self
 
@@ -86,10 +87,20 @@ class SeasonProgress(NamedTuple):
 
 
 def series_counts(session: Session, event_id: int | None) -> tuple[int, int, int]:
-    """How many series the event holds, how many have started, how many are scored.
+    """How many series the event holds, how many have started, how many are scored."""
+    if event_id is None:
+        return 0, 0, 0
+    return series_counts_by_event(session, [event_id]).get(event_id, (0, 0, 0))
+
+
+def series_counts_by_event(
+    session: Session, event_ids: Sequence[int | None]
+) -> dict[int, tuple[int, int, int]]:
+    """The same three counts per event, in one query, for a page of events.
 
     A series has started once it is scored or its time has passed. The series
     of an event still hang off its matches, so the count joins through them.
+    An event with no series has no row here.
     """
     from app.models.match import Match
     from app.models.series import Series
@@ -99,21 +110,23 @@ def series_counts(session: Session, event_id: int | None) -> tuple[int, int, int
         col(Series.player2_score).is_not(None),
     )
     started = or_(scored, col(Series.date_time) <= utcnow())
-    total, n_started, n_scored = session.execute(
+    rows = session.execute(
         select(
+            col(Match.season_id),
             func.count(),
             func.coalesce(func.sum(case((started, 1), else_=0)), 0),
             func.coalesce(func.sum(case((scored, 1), else_=0)), 0),
         )
         .select_from(Series)
         .join(Match, col(Match.id) == col(Series.match_id))
-        .where(col(Match.season_id) == event_id)
-    ).one()
-    return total, n_started, n_scored
+        .where(col(Match.season_id).in_([i for i in event_ids if i is not None]))
+        .group_by(col(Match.season_id))
+    )
+    return {row[0]: (row[1], row[2], row[3]) for row in rows}
 
 
-# The event phase, derived from published, the check-in window, the rounds and
-# the series (NE-9); nothing stores it. app/services/events.py computes it.
+# The event phase, derived from published, the check-in window and the series
+# (NE-9); nothing stores it. app/services/events.py computes it.
 EventPhase = Literal[
     "draft", "signups_open", "checkin", "seeded", "running", "finished"
 ]
