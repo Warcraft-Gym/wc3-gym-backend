@@ -272,6 +272,7 @@ class EventService:
                     kind=event.kind,
                     id=ident(event),
                     name=event.name,
+                    league_short_name=event.league_short_name,
                     start=event.start_date or _day(event),
                     end=event.end_date,
                     phase=phase_of(session, event, counts.get(event.id, NO_SERIES)),

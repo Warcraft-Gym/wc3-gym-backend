@@ -523,6 +523,7 @@ def fill_trophies(session: Session, users: Iterable[UserPublic | None]) -> None:
                 title=f"{seasons[season_id].name} Champion",
                 season_id=season_id,
                 season_name=seasons[season_id].name,
+                league_short_name=seasons[season_id].league_short_name,
                 team_id=team_id,
                 team_name=teams[team_id].name,
                 team_icon_url=teams[team_id].icon_url,

@@ -9,6 +9,7 @@ follow as off-races.
 from typing import Any
 from urllib.parse import quote
 
+from app.core.event_label import label as event_label
 from app.core.exceptions import NotFoundError
 from app.core.query import QueryUtil
 from app.models.series import SeriesPublic
@@ -159,7 +160,9 @@ def stats(payload: dict[str, Any], services: Services) -> tuple[dict[str, Any], 
         "embeds": [
             {
                 "description": (
-                    f"{_header(user, answer, emojis)}\n{season.name} · {season_span(season)}"
+                    f"{_header(user, answer, emojis)}\n"
+                    f"{event_label(season.name, season.league_short_name)}"
+                    f" · {season_span(season)}"
                 ),
                 "fields": fields,
                 "color": 0x4A4DB8,

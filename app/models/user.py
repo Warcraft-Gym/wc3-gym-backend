@@ -212,6 +212,8 @@ class TrophyPublic(SQLModel):
     season_id: int | None = None
     # The season on its own, because the mark engraves it apart from the title
     season_name: Annotated[str | None, NumToStr] = None
+    # The short name of the season's league; null when the event has no league
+    league_short_name: Annotated[str | None, NumToStr] = None
     team_id: int | None = None
     team_name: Annotated[str | None, NumToStr] = None
     team_icon_url: str | None = None

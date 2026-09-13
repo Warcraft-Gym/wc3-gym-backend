@@ -32,7 +32,7 @@ from app.models.player_history import (
     PlayerHistory,
 )
 from app.models.relationships import DBUserSeasonSignup
-from app.models.season import Season
+from app.models.season import LEAGUE_SHORT_NAME, Season
 from app.models.series import Series
 from app.models.series_veto_step import DBSeriesVetoStep
 from app.models.settings import Settings
@@ -42,8 +42,8 @@ from app.models.user import User
 from app.models.user_team_season import DBUserTeamSeason
 from app.services import derived
 
-# season -> the team the player was on, its name, and the season name
-type Rosters = dict[int, tuple[int, str | None, str]]
+# season -> the team the player was on, its name, the season name and its league
+type Rosters = dict[int, tuple[int, str | None, str, str | None]]
 # (team, season) -> where the team finished and how many teams stood
 type Places = dict[tuple[int, int], tuple[int, int]]
 
@@ -97,7 +97,7 @@ def _meetings(session: OrmSession, user_id: int) -> Sequence[Row[Any]]:
     ).subquery()
 
     return session.execute(
-        select(sides, col(Season.name).label("season_name"))
+        select(sides, col(Season.name).label("season_name"), LEAGUE_SHORT_NAME)
         .join(Season, col(Season.id) == sides.c.season_id)
         .order_by(
             sides.c.season_id.desc(), sides.c.playday.desc(), sides.c.series_id.desc()
@@ -113,14 +113,15 @@ def _rosters(session: OrmSession, user_id: int) -> Rosters:
             col(DBUserTeamSeason.team_id),
             col(Team.name),
             col(Season.name),
+            LEAGUE_SHORT_NAME,
         )
         .join(Team, col(Team.id) == DBUserTeamSeason.team_id)
         .join(Season, col(Season.id) == DBUserTeamSeason.season_id)
         .where(col(DBUserTeamSeason.user_id) == user_id)
     ).all()
     return {
-        season_id: (team_id, team_name, season_name)
-        for season_id, team_id, team_name, season_name in rows
+        season_id: (team_id, team_name, season_name, league)
+        for season_id, team_id, team_name, season_name, league in rows
     }
 
 
@@ -163,8 +164,10 @@ def _events(
     current_id: int | None,
 ) -> list[HistoryEvent]:
     """One row per season the player was rostered in or played a series in."""
-    names = {season_id: name for season_id, (_, _, name) in rosters.items()}
+    names = {season_id: name for season_id, (_, _, name, _) in rosters.items()}
     names |= {row.season_id: row.season_name for row in rows}
+    leagues = {season_id: one for season_id, (_, _, _, one) in rosters.items()}
+    leagues |= {row.season_id: row.league_short_name for row in rows}
 
     tallies: dict[int, list[int]] = {}
     for row in rows:
@@ -179,13 +182,14 @@ def _events(
 
     events = []
     for season_id in sorted(names, reverse=True):
-        team_id, team_name, _ = rosters.get(season_id, (None, None, None))
+        team_id, team_name, _, _ = rosters.get(season_id, (None, None, None, None))
         played, won, lost = tallies.get(season_id, [0, 0, 0])
         place, team_count = places.get((team_id, season_id), (None, None))
         events.append(
             HistoryEvent(
                 season_id=season_id,
                 season_name=names[season_id],
+                league_short_name=leagues.get(season_id),
                 team_id=team_id,
                 team_name=team_name,
                 played=played,
@@ -266,6 +270,7 @@ def _opponents(
                 series_id=row.series_id,
                 season_id=row.season_id,
                 season_name=row.season_name,
+                league_short_name=row.league_short_name,
                 playday=row.playday,
                 my_score=row.own,
                 their_score=row.opp,

@@ -15,6 +15,8 @@ class HistoryMeeting(SQLModel):
     series_id: int
     season_id: int
     season_name: str | None = None
+    # The short name of the season's league; null when the event has no league
+    league_short_name: str | None = None
     playday: int | None = None
     my_score: int
     their_score: int
@@ -47,6 +49,8 @@ class HistoryEvent(SQLModel):
 
     season_id: int
     season_name: str | None = None
+    # The short name of the season's league; null when the event has no league
+    league_short_name: str | None = None
     team_id: int | None = None
     team_name: str | None = None
     played: int

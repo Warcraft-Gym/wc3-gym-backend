@@ -8,6 +8,7 @@ captain grid use, so the three places always agree.
 from datetime import UTC, date, datetime, time
 from typing import TYPE_CHECKING, Any
 
+from app.core.event_label import label as event_label
 from app.core.exceptions import ApiError, BadRequestError
 from app.models.relationships import SeasonRoundPublic
 from app.services import discord_roles
@@ -68,6 +69,7 @@ def run(payload: dict[str, Any], services: "Services") -> tuple[dict[str, Any], 
     if season_id is None:
         return {"content": "No current season."}, PRIVATE
     season = services.seasons.get(season_id)
+    named = event_label(season.name, season.league_short_name)
     if not season.scheduling_enabled:
         return {"content": NO_SCHEDULING}, PRIVATE
     wanted = options_of(payload).get("round")
@@ -77,10 +79,9 @@ def run(payload: dict[str, Any], services: "Services") -> tuple[dict[str, Any], 
         else _current(season.rounds)
     )
     if round_ is None:
-        return {"content": f"{season.name} has no round {wanted}."}, PRIVATE
+        return {"content": f"{named} has no round {wanted}."}, PRIVATE
     return {
-        "content": f"**{season.name} · Round {round_.playday}**{_window(round_)}"
-        " — check in",
+        "content": f"**{named} · Round {round_.playday}**{_window(round_)} — check in",
         "components": [
             {
                 "type": 1,
@@ -117,4 +118,5 @@ def press(payload: dict[str, Any], services: "Services") -> tuple[dict[str, Any]
         return {"content": str(error)}, PRIVATE
     except ApiError as error:
         return {"content": error.body.get("message", str(error))}, PRIVATE
-    return {"content": SAVED[answer].format(n=playday, season=season.name)}, PRIVATE
+    named = event_label(season.name, season.league_short_name)
+    return {"content": SAVED[answer].format(n=playday, season=named)}, PRIVATE

@@ -15,6 +15,7 @@ from typing import Any
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
+from app.core.event_label import label as event_label
 from app.core.exceptions import ApiError, BadRequestError, NotFoundError
 from app.core.query import QueryUtil
 from app.models.season import SeasonPublic
@@ -228,8 +229,9 @@ def fantasy_standings(
     teams, _ = services.fantasy.search(
         QueryUtil.parse_query(f"season_id == {season_id}")
     )
+    named = event_label(season.name, season.league_short_name)
     if not teams:
-        return {"content": f"No fantasy teams in {season.name}."}
+        return {"content": f"No fantasy teams in {named}."}
     teams.sort(key=lambda team: -(team.total_points or 0))
     lines = [
         f"**{n}.** {team.name} · {team.captain.name if team.captain else '?'}"
@@ -239,7 +241,7 @@ def fantasy_standings(
     return {
         "embeds": [
             {
-                "title": f"{season.name} · fantasy leaderboard",
+                "title": f"{named} · fantasy leaderboard",
                 "description": "\n".join([season_span(season), "", *lines]),
                 "color": 0x4A4DB8,
                 **_snapshot("Standings as of", None),
@@ -263,6 +265,7 @@ def leaderboard(
             "content": f"No season named {name}." if name else "No current season."
         }, PUBLIC
     season = services.seasons.get(season_id)
+    named = event_label(season.name, season.league_short_name)
     if kind == "fantasy":
         return fantasy_standings(season_id, season, top, services), PUBLIC
     answer = services.ladder.season_ladder(season_id)
@@ -273,7 +276,7 @@ def leaderboard(
         if player.games
     ]
     if not players:
-        return {"content": f"No ladder games in {season.name} yet."}, PUBLIC
+        return {"content": f"No ladder games in {named} yet."}, PUBLIC
 
     def badge_points(player: LadderPlayer) -> int:
         return player.points - player.ladder_points
@@ -301,7 +304,7 @@ def leaderboard(
     return {
         "embeds": [
             {
-                "title": f"{season.name} · {kind} leaderboard",
+                "title": f"{named} · {kind} leaderboard",
                 "description": "\n".join([season_span(season), "", *lines]),
                 "fields": [{"name": "Teams", "value": standing}],
                 "color": 0x4A4DB8,
