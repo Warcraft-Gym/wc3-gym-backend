@@ -24,6 +24,7 @@ from app.models.season import Season
 from app.models.series import Series
 from app.models.user import User
 from app.services import stage_engine
+from tests.test_events import phase
 
 
 def players(count: int) -> list[int]:
@@ -993,3 +994,33 @@ def test_an_entrant_of_another_division_is_refused(
     response = append(client, auth_headers, event, stage, entrant)
     assert response.status_code == 200, response.text
     assert (response.json()["sequence"], response.json()["division_id"]) == (2, weaker)
+
+
+def test_a_cup_reads_running_on_the_first_result_and_finished_on_the_last(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """A bracket series names a round and no fixture, and the phase counts it
+    through that round: four entrants read running once one of the three
+    series is scored and finished once all three are."""
+    event, (stage,) = cup(4)
+    generate(client, auth_headers, event, stage)
+    # The cup still takes signups, and no series has started
+    assert phase(client, event) == "signups_open"
+
+    rows = stage_series(client, event, stage)["series"]
+    assert len(rows) == 3
+    semis = [row for row in rows if row["player1_id"] is not None]
+    assert len(semis) == 2
+
+    assert score(client, auth_headers, semis[0]["id"], 2, 0).status_code == 200
+    assert phase(client, event) == "running"
+
+    assert score(client, auth_headers, semis[1]["id"], 2, 0).status_code == 200
+    played = {row["id"] for row in semis}
+    final = next(
+        row
+        for row in stage_series(client, event, stage)["series"]
+        if row["id"] not in played
+    )
+    assert score(client, auth_headers, final["id"], 2, 0).status_code == 200
+    assert phase(client, event) == "finished"
