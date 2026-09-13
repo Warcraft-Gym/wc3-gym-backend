@@ -57,7 +57,13 @@ from app.models.fantasy_team import FantasyTeamPublic
 from app.models.match import Match, MatchPublic
 from app.models.player_career_stats import PlayerCareerStatsPublic
 from app.models.relationships import DBUserSeasonSignup
-from app.models.season import ROUND_COUNT, Season, progress_by_seasons
+from app.models.season import (
+    LEAGUE_SHORT_NAME,
+    ROUND_COUNT,
+    Season,
+    progress_by_seasons,
+)
+from app.models.season_info import SeasonInfoPublic
 from app.models.series import Series, SeriesPublic
 from app.models.team import Team, TeamPublic
 from app.models.user import (
@@ -385,16 +391,43 @@ def season_winners(session: Session, season_ids: set[int]) -> dict[int, int]:
     return {season_id: team_id for season_id, (_, _, team_id) in best.items()}
 
 
-def fill_standings(session: Session, teams: Iterable[TeamPublic | None]) -> None:
-    """Fill final_score, points_against and points_available on every
-    seasons_info row of every team."""
-    infos = [
+def _season_infos(
+    teams: Iterable[TeamPublic | None],
+) -> list[tuple[int, SeasonInfoPublic]]:
+    """Every seasons_info row of those teams, paired with the team that holds it."""
+    return [
         (team.id, info)
         for team in teams
         if team is not None
         for info in team.seasons_info
         if info.season_id is not None
     ]
+
+
+def fill_season_labels(session: Session, teams: Iterable[TeamPublic | None]) -> None:
+    """Name the event and its league on every seasons_info row, in one statement.
+
+    A team page labels its season tabs from these, so the count does not grow
+    with the number of teams or of seasons in the answer.
+    """
+    infos = [info for _, info in _season_infos(teams)]
+    if not infos:
+        return
+
+    rows = session.execute(
+        select(col(Season.id), col(Season.name), LEAGUE_SHORT_NAME).where(
+            col(Season.id).in_({info.season_id for info in infos})
+        )
+    ).all()
+    labels = {season_id: (name, short) for season_id, name, short in rows}
+    for info in infos:
+        info.name, info.league_short_name = labels.get(info.season_id, (None, None))
+
+
+def fill_standings(session: Session, teams: Iterable[TeamPublic | None]) -> None:
+    """Fill final_score, points_against and points_available on every
+    seasons_info row of every team."""
+    infos = _season_infos(teams)
     if not infos:
         return
 
