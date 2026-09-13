@@ -18,17 +18,22 @@ from app.models.series import (
     SeriesSort,
     SeriesUpdate,
 )
-from app.services import derived
+from app.services import derived, stage_engine
 
 
-def both_scores(row: Series) -> None:
+def both_scores(row: Series, wins: int | None = None) -> None:
     """A result is both map scores or neither, and the pair either finishes the
-    series or is 0-0, which records a series that was never played."""
+    series or is 0-0, which records a series that was never played.
+
+    `wins` is the maps a win takes; a bracket series reads it off its stage,
+    because it belongs to no season whose map rules would say.
+    """
     if (row.player1_score is None) != (row.player2_score is None):
         raise BadRequestError("A result needs both map scores")
     if row.player1_score is None or row.player2_score is None:
         return
-    wins = wins_needed(row.match.season.map_rules if row.match else None)
+    if wins is None:
+        wins = wins_needed(row.match.season.map_rules if row.match else None)
     if not recordable(row.player1_score, row.player2_score, wins):
         raise BadRequestError(
             f"A series of this season ends at {wins} map wins, or 0-0 when it "
@@ -53,23 +58,28 @@ class SeriesService:
     def add(self, series: SeriesCreate) -> SeriesPublic:
         with Session.begin() as session:
             row = Series.add(session, series.model_dump())
-            both_scores(row)
+            both_scores(row, stage_engine.wins_of(session, row))
             in_season(row)
             derived.clear_kept_off_race(session, row)
             public = SeriesPublic.from_series(row)
             derived.fill_series(session, [public])
             return public
 
-    def update(self, series_id: int, series: SeriesUpdate) -> SeriesPublic:
+    def update(
+        self, series_id: int, series: SeriesUpdate, force: bool = False
+    ) -> SeriesPublic:
+        """Write the named fields. A score written or cleared here also moves
+        the bracket, and `force` allows a reopen that loses a later result."""
         with Session.begin() as session:
-            row = Series.update(
-                session, series_id, **series.model_dump(exclude_unset=True)
-            )
+            row = Series.get_by_id(session, series_id)
             if not row:
                 raise NotFoundError("Series not found")
-            both_scores(row)
+            was_scored = stage_engine.scored(row)
+            Series.update_object(session, row, **series.model_dump(exclude_unset=True))
+            both_scores(row, stage_engine.wins_of(session, row))
             in_season(row)
             derived.clear_kept_off_race(session, row)
+            stage_engine.after_score(session, row, was_scored, force)
             public = SeriesPublic.from_series(row)
             derived.fill_series(session, [public])
             return public

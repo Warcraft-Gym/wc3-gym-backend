@@ -57,6 +57,11 @@ class Series(SeriesBase, DBModel, table=True):
     )
 
     id: int | None = Field(default=None, primary_key=True)
+    # A generated bracket series stands on its own: only a fixture of team
+    # entrants groups series, so SeriesCreate keeps the fixture required.
+    match_id: int | None = Field(
+        default=None, index=True, foreign_key="matches.id", ondelete="CASCADE"
+    )
     # A generated bracket series holds no sides until its feeders are scored.
     # SeriesCreate keeps both required, so every written series names them.
     player1_id: int | None = Field(
@@ -205,6 +210,13 @@ class SeriesCreate(SeriesBase):
     # SeriesService caps a score at the maps a win takes in the season
     player1_score: int | None = Field(default=None, ge=0)
     player2_score: int | None = Field(default=None, ge=0)
+
+
+class ResultKindWrite(SQLModel):
+    """A series that was not played: who takes it, and why the other side lost."""
+
+    result_kind: Literal["walkover", "forfeit"]
+    winner: Literal[1, 2]
 
 
 class SeriesUpdate(SQLModel):
