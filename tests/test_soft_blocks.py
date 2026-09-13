@@ -466,3 +466,18 @@ def test_nothing_writes_the_round_answer(
     assert statements
     assert not [sql for sql in statements if "round_availability" in sql]
     assert AvailabilityService().for_user(p2, seeded["season_id"]) == []
+
+
+def test_a_series_with_no_sides_has_no_free_time(
+    client: Client, seeded: dict[str, Any], member: Callable[..., dict[str, str]]
+) -> None:
+    """A generated bracket series fills its sides when its feeders are scored,
+    so until then there is no second player to share a window with."""
+    series_id = seeded["series_open_id"]
+    with Session.begin() as session:
+        series = session.get(Series, series_id)
+        assert series is not None
+        series.player2_id = None
+
+    resp = client.get(f"/player-series/{series_id}/free-time", headers=member("2"))
+    assert resp.status_code == 400, resp.text

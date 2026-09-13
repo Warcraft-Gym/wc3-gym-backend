@@ -457,3 +457,21 @@ def test_the_series_row_names_the_map_each_side_picked(
     body = client.get("/player-series", headers=side_a).json()
     row = next(s for s in body["series"] if s["id"] == series_id)
     assert (row["player1_pick_map"], row["player2_pick_map"]) == ("LR", "AL")
+
+
+def test_a_series_with_no_sides_has_no_board(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """A generated bracket series fills its sides when its feeders are scored,
+    so until then there are no two sides to veto between."""
+    from app.core.db import Session
+    from app.models.series import Series
+
+    series_id = seeded["series_open_id"]
+    with Session.begin() as session:
+        series = session.get(Series, series_id)
+        assert series is not None
+        series.player2_id = None
+
+    resp = client.get(f"/player-series/{series_id}/veto", headers=auth_headers)
+    assert resp.status_code == 400, resp.text
