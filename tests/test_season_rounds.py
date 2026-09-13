@@ -4,9 +4,12 @@ from pathlib import Path
 from typing import Any
 
 from httpx2 import Client
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, select, text
+from sqlmodel import col
 
 from app.core.db import Session
+from app.models.base import ident
+from app.models.event_stage import EventStage
 from app.models.match import Match
 from app.models.relationships import DBEventRound, round_row
 from app.models.round_availability import DBRoundAvailability
@@ -331,3 +334,71 @@ def test_deleting_a_season_takes_its_rounds_matches_and_series_with_it(
         assert session.get(DBEventRound, round_id) is None
         assert session.get(Match, seeded["match_id"]) is None
         assert session.get(Series, seeded["series_played_id"]) is None
+
+
+def stage_the_rounds(season_id: int, count: int = 1) -> list[int]:
+    """`count` stages for the season, with every round on the first one."""
+    with Session.begin() as session:
+        stages = [
+            EventStage(event_id=season_id, position=position, name=f"Stage {position}")
+            for position in range(1, count + 1)
+        ]
+        session.add_all(stages)
+        session.flush()
+        for row in session.scalars(
+            select(DBEventRound).where(col(DBEventRound.season_id) == season_id)
+        ):
+            row.stage_id = stages[0].id
+        return [ident(stage) for stage in stages]
+
+
+def test_a_stage_write_keeps_the_id_and_the_matches_on_it(
+    client: Client, seeded: dict[str, Any], auth_headers: dict[str, str]
+) -> None:
+    """The stage a round hangs off is updated in place, so a rename leaves the
+    rounds, the fixtures and the series where they are."""
+    season_id = seeded["season_id"]
+    stage_id = stage_the_rounds(season_id)[0]
+
+    resp = client.put(
+        f"/events/{season_id}/stages",
+        json=[{"name": "Regular season", "best_of": 5}],
+        headers=auth_headers,
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert [(s["id"], s["name"], s["best_of"]) for s in resp.json()["stages"]] == [
+        (stage_id, "Regular season", 5)
+    ]
+    with Session() as session:
+        assert session.get(Match, seeded["match_id"]) is not None
+        assert session.get(Series, seeded["series_played_id"]) is not None
+        assert len(client.get(f"/seasons/{season_id}").json()["rounds"]) == 4
+
+
+def test_a_stage_that_holds_rounds_holds_the_list_up(
+    client: Client, seeded: dict[str, Any], auth_headers: dict[str, str]
+) -> None:
+    """A shorter list drops the stages past its end, so a stage with rounds on
+    it is named and nothing is deleted."""
+    season_id = seeded["season_id"]
+    first_id, second_id = stage_the_rounds(season_id, count=2)
+    with Session.begin() as session:
+        session.add(DBEventRound(season_id=season_id, stage_id=second_id, number=5))
+
+    resp = client.put(
+        f"/events/{season_id}/stages",
+        json=[{"name": "Only one"}],
+        headers=auth_headers,
+    )
+
+    assert resp.status_code == 400, resp.text
+    assert resp.json() == {
+        "error": "stage Stage 2 still holds rounds; delete them before the list shortens"
+    }
+    with Session() as session:
+        kept = session.get(EventStage, first_id)
+        assert kept is not None and kept.name == "Stage 1"
+        assert session.get(EventStage, second_id) is not None
+        assert session.get(Match, seeded["match_id"]) is not None
+        assert len(client.get(f"/seasons/{season_id}").json()["rounds"]) == 5
