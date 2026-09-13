@@ -368,6 +368,73 @@ def test_a_reopen_is_refused_while_a_later_series_is_scored(
     assert bracket(stage)[1]["sides"] == (None, seeds[2])
 
 
+def test_a_corrected_winner_re_points_the_series_below(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """One PUT that turns a semifinal around moves the final's side with it."""
+    event, (stage,) = cup(4)
+    generate(client, auth_headers, event, stage)
+    rows = bracket(stage)
+    first, second = rows[0]["sides"]
+    score(client, auth_headers, rows[0]["id"], 2, 0)
+    assert bracket(stage)[2]["sides"] == (first, None)
+    # The admin saved the result backwards and corrects it in place
+    assert score(client, auth_headers, rows[0]["id"], 0, 2).status_code == 200
+    final = bracket(stage)[2]
+    assert final["sides"] == (second, None)
+    assert first not in final["sides"]
+
+
+def test_a_corrected_winner_is_refused_while_the_final_is_scored(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """Turning a semifinal around loses the final, so it takes the same force."""
+    event, (stage,) = cup(4)
+    generate(client, auth_headers, event, stage)
+    rows = bracket(stage)
+    first, second = rows[0]["sides"]
+    score(client, auth_headers, rows[0]["id"], 2, 0)
+    score(client, auth_headers, rows[1]["id"], 2, 0)
+    final_id = bracket(stage)[2]["id"]
+    score(client, auth_headers, final_id, 2, 0)
+    refused = score(client, auth_headers, rows[0]["id"], 0, 2)
+    assert refused.status_code == 400
+    assert "force" in refused.json()["error"]
+    held = bracket(stage)
+    assert held[0]["score"] == (2, 0)
+    assert held[2]["sides"][0] == first
+    assert held[2]["score"] == (2, 0)
+
+    flipped = client.put(
+        f"/series/{rows[0]['id']}?force=true",
+        json={"player1_score": 0, "player2_score": 2},
+        headers=auth_headers,
+    )
+    assert flipped.status_code == 200, flipped.text
+    after = bracket(stage)
+    assert after[0]["score"] == (0, 2)
+    assert after[2]["sides"][0] == second
+    assert after[2]["score"] == (None, None)
+
+
+def test_a_corrected_score_with_the_same_winner_leaves_the_final_alone(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """A 2-0 fixed to 2-1 sends the same player on, so nothing below it moves."""
+    event, (stage,) = cup(4)
+    generate(client, auth_headers, event, stage)
+    rows = bracket(stage)
+    score(client, auth_headers, rows[0]["id"], 2, 0)
+    score(client, auth_headers, rows[1]["id"], 2, 0)
+    before = bracket(stage)[2]
+    score(client, auth_headers, before["id"], 2, 0)
+    # The final carries a result and needs no force, because it does not move
+    assert score(client, auth_headers, rows[0]["id"], 2, 1).status_code == 200
+    final = bracket(stage)[2]
+    assert final["sides"] == before["sides"]
+    assert final["score"] == (2, 0)
+
+
 def test_the_standings_read_the_points_the_stage_pays(
     client: Client, auth_headers: dict[str, str]
 ) -> None:

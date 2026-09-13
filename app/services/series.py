@@ -68,18 +68,20 @@ class SeriesService:
     def update(
         self, series_id: int, series: SeriesUpdate, force: bool = False
     ) -> SeriesPublic:
-        """Write the named fields. A score written or cleared here also moves
-        the bracket, and `force` allows a reopen that loses a later result."""
+        """Write the named fields. A score written, cleared or turned around
+        here also moves the bracket, and `force` allows a change that loses a
+        later result."""
         with Session.begin() as session:
             row = Series.get_by_id(session, series_id)
             if not row:
                 raise NotFoundError("Series not found")
             was_scored = stage_engine.scored(row)
+            was_winner = stage_engine.winner_of(row)
             Series.update_object(session, row, **series.model_dump(exclude_unset=True))
             both_scores(row, stage_engine.wins_of(session, row))
             in_season(row)
             derived.clear_kept_off_race(session, row)
-            stage_engine.after_score(session, row, was_scored, force)
+            stage_engine.after_score(session, row, was_scored, was_winner, force)
             public = SeriesPublic.from_series(row)
             derived.fill_series(session, [public])
             return public

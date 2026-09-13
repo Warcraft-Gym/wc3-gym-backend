@@ -35,6 +35,11 @@ def scored(row: Series) -> bool:
     return row.player1_score is not None or row.player2_score is not None
 
 
+def winner_of(row: Series) -> int | None:
+    """The user the series sends on: nobody while it is unscored or drawn."""
+    return _side(row, takes_loser=False)
+
+
 def wins_of(session: OrmSession, row: Series) -> int:
     """The maps a win takes: a fixture follows its season's map rules, and a
     bracket series the best of its round, else the best of its stage."""
@@ -145,11 +150,27 @@ def on_reopened(session: OrmSession, row: Series, force: bool = False) -> None:
 
 
 def after_score(
-    session: OrmSession, row: Series, was_scored: bool, force: bool = False
+    session: OrmSession,
+    row: Series,
+    was_scored: bool,
+    was_winner: int | None,
+    force: bool = False,
 ) -> None:
     """Follow a score change into the bracket. A series with no feeders and
-    nothing below it, which is every GNL series, changes nothing here."""
+    nothing below it, which is every GNL series, changes nothing here.
+
+    A correction that turns the series around is a reopen and a fresh score in
+    one write: the sides below it move to the new winner and the new loser, and
+    a later result is lost, so it takes the same force as a reopen.
+    """
     now = scored(row)
+    if now and was_scored:
+        if was_winner == winner_of(row):
+            return
+        on_reopened(session, row, force)
+        on_scored(session, row)
+        _auto_advance(session, row)
+        return
     if now == was_scored:
         return
     if now:
