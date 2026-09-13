@@ -30,6 +30,10 @@ class EventStage(DBModel, table=True):
         sa_column_kwargs={"server_default": "round_robin"},
     )
     best_of: int = Field(default=3, sa_column_kwargs={"server_default": "3"})
+    # How many series each entrant plays per round of a round robin stage
+    series_per_entrant_per_round: int = Field(
+        default=1, ge=1, sa_column_kwargs={"server_default": "1"}
+    )
     # One rule per game of a series: veto, loser, host or fixed
     map_rules: Annotated[str | None, MapRules] = Field(default=None, max_length=100)
     scheduling_mode: SchedulingMode = Field(
@@ -78,6 +82,7 @@ class EventStagePublic(SQLModel):
     name: Annotated[str | None, NumToStr] = None
     format: StageFormat
     best_of: int
+    series_per_entrant_per_round: int = 1
     map_rules: Annotated[str | None, MapRules] = None
     scheduling_mode: SchedulingMode
     ranking_rule: str
@@ -99,6 +104,7 @@ class EventStageWrite(SQLModel):
     name: Annotated[str | None, NumToStr] = None
     format: StageFormat = StageFormat.round_robin
     best_of: int = 3
+    series_per_entrant_per_round: int = Field(default=1, ge=1)
     map_rules: Annotated[str | None, MapRules] = None
     scheduling_mode: SchedulingMode = SchedulingMode.agreed
     ranking_rule: str = "points,game_diff,head_to_head"

@@ -25,6 +25,9 @@ class League(DBModel, table=True):
     short_name: Annotated[str | None, NumToStr] = Field(default=None, max_length=20)
     # The rules or landing page of the league, shown as one "Page" link
     page_url: str | None = Field(default=None, max_length=500)
+    # The rules the league plays by, and where its games are streamed
+    rules_url: str | None = Field(default=None, max_length=500)
+    stream_url: str | None = Field(default=None, max_length=500)
     kind: LeagueKind = Field(
         default=LeagueKind.custom, sa_column_kwargs={"server_default": "custom"}
     )
@@ -49,6 +52,8 @@ class LeaguePublic(SQLModel):
     name: Annotated[str, NumToStr]
     short_name: Annotated[str | None, NumToStr] = None
     page_url: str | None = None
+    rules_url: str | None = None
+    stream_url: str | None = None
     kind: LeagueKind = LeagueKind.custom
     entrant_kind: EntrantKind = EntrantKind.solo
     events: list[EventPublic] = []
@@ -60,6 +65,8 @@ class LeagueCreate(SQLModel):
     name: Annotated[str, NumToStr]
     short_name: Annotated[str | None, NumToStr] = None
     page_url: str | None = None
+    rules_url: str | None = None
+    stream_url: str | None = None
     kind: LeagueKind = LeagueKind.custom
     entrant_kind: EntrantKind = EntrantKind.solo
 
@@ -70,5 +77,7 @@ class LeagueUpdate(SQLModel):
     name: Annotated[str | None, NumToStr] = None
     short_name: Annotated[str | None, NumToStr] = None
     page_url: str | None = None
+    rules_url: str | None = None
+    stream_url: str | None = None
     kind: LeagueKind | None = None
     entrant_kind: EntrantKind | None = None
