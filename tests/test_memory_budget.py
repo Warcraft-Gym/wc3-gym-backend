@@ -55,6 +55,9 @@ def crowded(app: FastAPI, seeded: dict[str, Any]) -> dict[str, Any]:
 def _peak() -> tuple[int, int]:
     """The bets the list answers and the peak bytes it cost."""
     service = FantasyBetService()
+    # The mappers and the compiled statement are built once per process; the
+    # budget below is the cost of an answer, not of the first one
+    service.get_all()
     tracemalloc.start()
     bets, total = service.get_all()
     _, peak = tracemalloc.get_traced_memory()
