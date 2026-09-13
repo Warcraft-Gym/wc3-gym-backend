@@ -56,17 +56,20 @@ def set_fields(event_id: int, **fields: Any) -> None:  # noqa: ANN401
         event.sqlmodel_update(fields)
 
 
-def phase(client: Client, event_id: int) -> str:
-    response = client.get(f"/events/{event_id}")
+def phase(client: Client, event_id: int, headers: dict[str, str] | None = None) -> str:
+    """The phase the event reads back; a draft needs the admin headers."""
+    response = client.get(f"/events/{event_id}", headers=headers)
     assert response.status_code == 200, response.text
     return response.json()["phase"]
 
 
-def test_the_phase_walks_the_signup_rungs(client: Client) -> None:
+def test_the_phase_walks_the_signup_rungs(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
     """An unpublished event is a draft; publishing opens signups, closing them
     with the first round's window open reads check-in, and the rest is seeded."""
     event = add_event(published=False)
-    assert phase(client, event) == "draft"
+    assert phase(client, event, auth_headers) == "draft"
 
     set_fields(event, published=True)
     assert phase(client, event) == "signups_open"
@@ -149,7 +152,9 @@ def test_an_event_finishes_on_the_last_result_or_the_end_date(
     assert phase(client, event) == "finished"
 
 
-def test_the_event_list_reads_newest_first_and_filters(client: Client) -> None:
+def test_the_event_list_reads_newest_first_and_filters(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
     with Session.begin() as session:
         league = League(name="Gym Cups")
         session.add(league)
@@ -159,23 +164,80 @@ def test_the_event_list_reads_newest_first_and_filters(client: Client) -> None:
     draft = add_event(name="Hidden Cup", published=False)
     koth = add_event(name="Night 1", kind=EventKind.koth, league_id=league_id)
 
-    rows = client.get("/events").json()
+    rows = client.get("/events", headers=auth_headers).json()
     assert [(row["id"], row["phase"]) for row in rows] == [
         (koth, "signups_open"),
         (draft, "draft"),
         (first, "signups_open"),
     ]
 
-    assert [row["id"] for row in client.get("/events?published=true").json()] == [
-        koth,
-        first,
-    ]
+    assert [
+        row["id"]
+        for row in client.get("/events?published=true", headers=auth_headers).json()
+    ] == [koth, first]
     assert [row["id"] for row in client.get("/events?kind=koth").json()] == [koth]
     assert [
         row["id"] for row in client.get(f"/events?league_id={league_id}").json()
     ] == [koth]
     assert [row["id"] for row in client.get("/events?limit=1").json()] == [koth]
-    assert [row["id"] for row in client.get("/events?offset=2").json()] == [first]
+    assert [
+        row["id"] for row in client.get("/events?offset=2", headers=auth_headers).json()
+    ] == [first]
+
+
+def test_the_event_list_hides_a_draft_from_everyone_but_an_admin(
+    client: Client,
+    auth_headers: dict[str, str],
+    member: Callable[..., dict[str, str]],
+) -> None:
+    """A draft is an admin's own; the filter still asks for one as an admin."""
+    live = add_event(name="Open Cup")
+    draft = add_event(name="Hidden Cup", published=False)
+
+    assert [row["id"] for row in client.get("/events").json()] == [live]
+    assert [row["id"] for row in client.get("/events", headers=member()).json()] == [
+        live
+    ]
+    # The filter holds, and a reader asking for the drafts is answered none
+    assert client.get("/events?published=false", headers=member()).json() == []
+    assert [
+        row["id"]
+        for row in client.get("/events?published=false", headers=auth_headers).json()
+    ] == [draft]
+
+
+def test_a_draft_hides_from_its_league_page_and_from_its_own_read(
+    client: Client,
+    auth_headers: dict[str, str],
+    member: Callable[..., dict[str, str]],
+) -> None:
+    """A draft is out of the league's runs and its id answers not found."""
+    with Session.begin() as session:
+        league = League(name="Fig Cup", short_name="FIG")
+        session.add(league)
+        session.flush()
+        league_id = league.id
+    assert league_id is not None
+    live = add_event(name="Fig Cup 6", league_id=league_id)
+    draft = add_event(name="Hidden Cup", league_id=league_id, published=False)
+
+    def runs(headers: dict[str, str] | None = None) -> list[int]:
+        body = client.get(f"/leagues/{league_id}", headers=headers).json()
+        return [event["id"] for event in body["events"]]
+
+    assert runs() == [live]
+    assert runs(member()) == [live]
+    assert runs(auth_headers) == [draft, live]
+
+    assert client.get(f"/events/{draft}").status_code == 404
+    assert client.get(f"/events/{draft}", headers=member()).status_code == 404
+    assert client.get(f"/events/{draft}", headers=auth_headers).status_code == 200
+
+    # A draft qualifier is out of its parent's children for the same reason
+    set_fields(draft, parent_id=live)
+    assert client.get(f"/events/{live}").json()["children"] == []
+    body = client.get(f"/events/{live}", headers=auth_headers).json()
+    assert [child["id"] for child in body["children"]] == [draft]
 
 
 def test_one_event_reads_its_stages_divisions_and_entrants(
@@ -242,6 +304,8 @@ def test_a_league_lists_its_events_newest_first(client: Client) -> None:
             "name": "Gym KOTH",
             "short_name": "KOTH",
             "page_url": None,
+            "rules_url": None,
+            "stream_url": None,
             "kind": "custom",
             "entrant_kind": "solo",
             "events": [],
@@ -277,7 +341,12 @@ def test_an_admin_writes_a_league_and_a_reader_cannot(
 
     updated = client.put(
         f"/leagues/{league_id}",
-        json={"short_name": "GC", "page_url": "https://cups"},
+        json={
+            "short_name": "GC",
+            "page_url": "https://cups",
+            "rules_url": "https://cups/rules",
+            "stream_url": "https://twitch.tv/cups",
+        },
         headers=auth_headers,
     )
     assert updated.status_code == 200, updated.text
@@ -286,10 +355,37 @@ def test_an_admin_writes_a_league_and_a_reader_cannot(
         "name": "Gym Cups",
         "short_name": "GC",
         "page_url": "https://cups",
+        "rules_url": "https://cups/rules",
+        "stream_url": "https://twitch.tv/cups",
         "kind": "custom",
         "entrant_kind": "solo",
         "events": [],
     }
+
+
+def test_a_new_league_stores_its_rules_page_and_its_stream(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """The two links come in on the create body and read back on the league."""
+    created = client.post(
+        "/leagues",
+        json={
+            "name": "Fountain of Manner League",
+            "short_name": "FOML",
+            "rules_url": "https://foml/rules",
+            "stream_url": "https://twitch.tv/foml",
+        },
+        headers=auth_headers,
+    )
+    assert created.status_code == 201, created.text
+    assert created.json()["rules_url"] == "https://foml/rules"
+    assert created.json()["stream_url"] == "https://twitch.tv/foml"
+
+    body = client.get(f"/leagues/{created.json()['id']}").json()
+    assert (body["rules_url"], body["stream_url"]) == (
+        "https://foml/rules",
+        "https://twitch.tv/foml",
+    )
 
 
 def test_a_new_event_gets_one_stage_from_its_map_rules(
@@ -355,6 +451,38 @@ def test_the_stage_list_is_replaced_in_the_order_of_the_body(
     assert client.put(f"/events/{event_id}/stages", json=[]).status_code == 401
 
 
+def test_an_empty_stage_list_clears_the_stages(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """The default stage is written on create; an empty list later clears them."""
+    created = client.post("/events", json={"name": "Spring Cup"}, headers=auth_headers)
+    assert created.status_code == 201, created.text
+    event_id = created.json()["id"]
+    assert len(created.json()["stages"]) == 1
+
+    cleared = client.put(f"/events/{event_id}/stages", json=[], headers=auth_headers)
+    assert cleared.status_code == 200, cleared.text
+    assert cleared.json()["stages"] == []
+    assert client.get(f"/events/{event_id}").json()["stages"] == []
+
+
+def test_an_event_reads_how_many_series_an_entrant_plays_per_round(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """series_per_round is written on the event and read back on its payload."""
+    created = client.post(
+        "/events",
+        json={"name": "FOML Season 4", "series_per_round": 2},
+        headers=auth_headers,
+    )
+    assert created.status_code == 201, created.text
+    assert created.json()["series_per_round"] == 2
+    event_id = created.json()["id"]
+
+    assert client.get(f"/events/{event_id}").json()["series_per_round"] == 2
+    assert client.get("/events").json()[0]["series_per_round"] == 2
+
+
 def test_an_admin_edits_an_event_and_the_phase_follows(
     client: Client, auth_headers: dict[str, str]
 ) -> None:
@@ -370,7 +498,7 @@ def test_an_admin_edits_an_event_and_the_phase_follows(
     assert updated.status_code == 200, updated.text
     assert updated.json()["name"] == "Spring Cup 2027"
     assert updated.json()["min_games"] == 20
-    assert phase(client, event) == "draft"
+    assert phase(client, event, auth_headers) == "draft"
     assert client.put(f"/events/{event}", json={"name": "No"}).status_code == 401
 
 

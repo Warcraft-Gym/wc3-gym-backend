@@ -280,17 +280,26 @@ def koth_chain(field: int) -> Plan:
     return Plan(["Round 1"], series)
 
 
-def round_robin_plan(field: int) -> Plan:
-    """Every pairing of a round robin, one round per circle-method round."""
+def round_robin_plan(field: int, per_entrant: int = 1) -> Plan:
+    """Every pairing of a round robin, `per_entrant` circle rounds to a round.
+
+    One circle round gives each entrant one series, so `per_entrant` of them
+    make a round where each entrant plays that many different opponents. The
+    last round is short when the circle rounds do not divide evenly, and an
+    odd field drops the pair the bye sits in.
+    """
+    circle = round_robin(range(1, field + 1))
+    step = max(per_entrant, 1)
     rounds: list[str] = []
     series: list[PlannedSeries] = []
-    for number, pairs in enumerate(round_robin(range(1, field + 1)), start=1):
+    for number, start in enumerate(range(0, len(circle), step), start=1):
         index = len(rounds)
         rounds.append(f"Round {number}")
-        for top, bottom in pairs:
-            if top is None or bottom is None:
-                continue
-            series.append(
-                PlannedSeries(len(series), index, Slot(seed=top), Slot(seed=bottom))
-            )
+        for pairs in circle[start : start + step]:
+            for top, bottom in pairs:
+                if top is None or bottom is None:
+                    continue
+                series.append(
+                    PlannedSeries(len(series), index, Slot(seed=top), Slot(seed=bottom))
+                )
     return Plan(rounds, series)

@@ -458,7 +458,7 @@ def _plan(stage: EventStage, size: int) -> brackets.Plan:
                 size, grand_final=stage.grand_final_modifier
             )
         case StageFormat.round_robin:
-            return brackets.round_robin_plan(size)
+            return brackets.round_robin_plan(size, stage.series_per_entrant_per_round)
         case StageFormat.koth:
             return brackets.koth_chain(size)
         case _:

@@ -118,8 +118,13 @@ class EventService:
         published: bool | None = None,
         limit: int | None = None,
         offset: int = 0,
+        claims: dict[str, Any] | None = None,
     ) -> list[EventPublic]:
-        """One page of events, newest first, each with its computed phase."""
+        """One page of events, newest first, each with its computed phase.
+
+        An unpublished event is a draft only an admin reads, so a caller who
+        is not one sees the published rows whatever the filter asks for.
+        """
         statement = select(Season).order_by(col(Season.id).desc())
         if kind is not None:
             statement = statement.where(col(Season.kind) == kind)
@@ -127,14 +132,24 @@ class EventService:
             statement = statement.where(col(Season.league_id) == league_id)
         if published is not None:
             statement = statement.where(col(Season.published).is_(published))
+        if not _is_admin(claims):
+            statement = statement.where(col(Season.published).is_(True))
         with Session.begin() as session:
             events = session.scalars(statement.offset(offset).limit(limit)).all()
             return _publics(session, events)
 
-    def get(self, event_id: int) -> EventPublic:
-        """One event with its stages, its divisions and how many entrants it holds."""
+    def get(self, event_id: int, claims: dict[str, Any] | None = None) -> EventPublic:
+        """One event with its stages, its divisions and how many entrants it holds.
+
+        A draft is an admin's own, so every other caller is answered not found,
+        and the qualifiers under a published event follow the same rule.
+        """
         with Session.begin() as session:
-            return _public(session, _event(session, event_id), full=True)
+            event = _event(session, event_id)
+            admin = _is_admin(claims)
+            if not event.published and not admin:
+                raise NotFoundError(f"Event not found by id: {event_id}")
+            return _public(session, event, full=True, drafts=admin)
 
     def add(self, data: EventCreate) -> EventPublic:
         """Create an event and the stages it plays, or one default stage."""
@@ -166,11 +181,12 @@ class EventService:
         The stage at a position is updated in place, so its id holds and the
         rounds, fixtures and series that name it stay. Positions past the end
         are added, and a stage the shorter list drops is refused if it still
-        holds rounds.
+        holds rounds. An empty list clears them; the default stage is written
+        on create only.
         """
         with Session.begin() as session:
             event = _event(session, event_id)
-            rows = list(stages) or [_default_stage(event)]
+            rows = list(stages)
             current = list(
                 session.scalars(
                     select(EventStage)
@@ -198,17 +214,25 @@ class EventService:
             leagues = session.scalars(select(League).order_by(col(League.id))).all()
             return [LeaguePublic.model_validate(league) for league in leagues]
 
-    def get_league(self, league_id: int) -> LeaguePublic:
-        """One league and the events that are its runs, newest first."""
+    def get_league(
+        self, league_id: int, claims: dict[str, Any] | None = None
+    ) -> LeaguePublic:
+        """One league and the events that are its runs, newest first.
+
+        A draft run reads for an admin only, as the event list does.
+        """
         with Session.begin() as session:
             league = session.get(League, league_id)
             if league is None:
                 raise NotFoundError(f"League not found by id: {league_id}")
-            events = session.scalars(
+            statement = (
                 select(Season)
                 .where(col(Season.league_id) == league_id)
                 .order_by(col(Season.id).desc())
-            ).all()
+            )
+            if not _is_admin(claims):
+                statement = statement.where(col(Season.published).is_(True))
+            events = session.scalars(statement).all()
             public = LeaguePublic.model_validate(league)
             public.events = _nested(_publics(session, events))
             return public
@@ -595,9 +619,11 @@ def _public(
     event: Season,
     full: bool = False,
     counts: tuple[int, int, int] | None = None,
+    drafts: bool = True,
 ) -> EventPublic:
     """One event payload; the stages, the divisions and the entrant count only
-    when it is the subject of the read.
+    when it is the subject of the read. `drafts` false leaves the unpublished
+    qualifiers out for a caller who is not an admin.
     """
     public = EventPublic.model_validate(event)
     public.phase = phase_of(session, event, counts)
@@ -637,13 +663,15 @@ def _public(
         )
     )
     # The qualifiers that feed this event, newest first
+    children = (
+        select(Season)
+        .where(col(Season.parent_id) == event.id)
+        .order_by(col(Season.id).desc())
+    )
+    if not drafts:
+        children = children.where(col(Season.published).is_(True))
     public.children = [
-        EventPublic.model_validate(row)
-        for row in session.scalars(
-            select(Season)
-            .where(col(Season.parent_id) == event.id)
-            .order_by(col(Season.id).desc())
-        )
+        EventPublic.model_validate(row) for row in session.scalars(children)
     ]
     return public
 
