@@ -11,7 +11,7 @@ from sqlalchemy import UniqueConstraint, select
 from sqlalchemy.orm import Session as OrmSession
 from sqlmodel import Field, Relationship, SQLModel, col
 
-from app.models.base import DBModel
+from app.models.base import DBModel, ident
 from app.models.enums import Race
 from app.models.types import IsoDate, LenientDate
 
@@ -118,6 +118,29 @@ class SeasonRoundPublic(SQLModel):
             start_date=row.start_date,
             end_date=row.end_date,
             map_id=row.map_id,
+        )
+
+
+class EventRoundPublic(SQLModel):
+    """One round of a stage, as the run page names its bracket columns."""
+
+    id: int
+    number: int
+    name: str | None = None
+    start_date: Annotated[IsoDate | None, LenientDate] = None
+    end_date: Annotated[IsoDate | None, LenientDate] = None
+    # Overrides the stage's best of; null follows the stage
+    best_of: int | None = None
+
+    @classmethod
+    def from_row(cls, row: DBEventRound) -> Self:
+        return cls(
+            id=ident(row),
+            number=row.number,
+            name=row.name,
+            start_date=row.start_date,
+            end_date=row.end_date,
+            best_of=row.best_of,
         )
 
 

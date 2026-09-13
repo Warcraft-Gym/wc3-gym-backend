@@ -25,6 +25,7 @@ from app.models.event_stage import (
     EventStageWrite,
 )
 from app.models.season import EventCreate, EventPublic, EventUpdate
+from app.models.series import StageSeriesPublic
 from app.services import stage_engine
 
 router = APIRouter(tags=["events"])
@@ -203,6 +204,12 @@ def lock_seeds(
 def generate_stage(event_id: int, stage_id: int) -> dict[str, int]:
     """Create every series of the stage from the seeds, one bracket per division."""
     return stage_engine.generate(event_id, stage_id)
+
+
+@router.get("/events/{event_id}/stages/{stage_id}/series")
+def get_stage_series(event_id: int, stage_id: int) -> StageSeriesPublic:
+    """The rounds of the stage and every series it holds, for the run page."""
+    return stage_engine.series_of(event_id, stage_id)
 
 
 @router.get("/events/{event_id}/stages/{stage_id}/standings")
