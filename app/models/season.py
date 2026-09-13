@@ -9,6 +9,8 @@ from sqlmodel import Field, Relationship, SQLModel, col
 
 from app.models.base import DBModel, ident
 from app.models.enums import EventKind, Race
+from app.models.event_division import EventDivisionPublic
+from app.models.event_stage import EventStagePublic, EventStageWrite
 from app.models.map import MapPublic
 from app.models.relationships import DBSeasonRound, SeasonRoundPublic
 from app.models.types import (
@@ -167,6 +169,51 @@ class Season(SeasonBase, DBModel, table=True):
     )
 
 
+# The counts of an event whose series are not written yet
+NO_SERIES = (0, 0, 0)
+
+
+def series_counts_by_event(
+    session: Session, event_ids: Iterable[int | None]
+) -> dict[int | None, tuple[int, int, int]]:
+    """How many series each event holds, how many started, how many are scored.
+
+    A series has started once it is scored or its time has passed. The series
+    of an event still hang off its matches, so the count joins through them.
+    An event with no series has no row here.
+    """
+    from app.models.match import Match
+    from app.models.series import Series
+
+    ids = [event_id for event_id in event_ids if event_id is not None]
+    if not ids:
+        return {}
+    scored = and_(
+        col(Series.player1_score).is_not(None),
+        col(Series.player2_score).is_not(None),
+    )
+    started = or_(scored, col(Series.date_time) <= utcnow())
+    rows = session.execute(
+        select(
+            col(Match.season_id),
+            func.count(),
+            func.coalesce(func.sum(case((started, 1), else_=0)), 0),
+            func.coalesce(func.sum(case((scored, 1), else_=0)), 0),
+        )
+        .select_from(Series)
+        .join(Match, col(Match.id) == col(Series.match_id))
+        .where(col(Match.season_id).in_(ids))
+        .group_by(col(Match.season_id))
+    ).all()
+    return {row[0]: (row[1], row[2], row[3]) for row in rows}
+
+
+def series_counts(session: Session, event_id: int | None) -> tuple[int, int, int]:
+    """The same three counts for one event; at most one row comes back."""
+    counts = series_counts_by_event(session, [event_id])
+    return next(iter(counts.values()), NO_SERIES)
+
+
 def progress_by_seasons(
     session: Session, seasons: Iterable["Season"]
 ) -> dict[int | None, SeasonProgress]:
@@ -175,33 +222,10 @@ def progress_by_seasons(
     Season.progress calls it for a single season, so a list answer costs one
     statement instead of one per season.
     """
-    from app.models.match import Match
-    from app.models.series import Series
-
     seasons = list(seasons)
-    ids = [season.id for season in seasons if season.id is not None]
-    counts: dict[int | None, tuple[int, int, int]] = {}
-    if ids:
-        scored = and_(
-            col(Series.player1_score).is_not(None),
-            col(Series.player2_score).is_not(None),
-        )
-        started = or_(scored, col(Series.date_time) <= utcnow())
-        rows = session.execute(
-            select(
-                col(Match.season_id),
-                func.count(),
-                func.coalesce(func.sum(case((started, 1), else_=0)), 0),
-                func.coalesce(func.sum(case((scored, 1), else_=0)), 0),
-            )
-            .select_from(Series)
-            .join(Match, col(Match.id) == col(Series.match_id))
-            .where(col(Match.season_id).in_(ids))
-            .group_by(col(Match.season_id))
-        ).all()
-        counts = {row[0]: (row[1], row[2], row[3]) for row in rows}
+    counts = series_counts_by_event(session, [season.id for season in seasons])
     return {
-        season.id: _phase(season, *counts.get(season.id, (0, 0, 0)))
+        season.id: _phase(season, *counts.get(season.id, NO_SERIES))
         for season in seasons
     }
 
@@ -384,6 +408,13 @@ class SeasonPublic(SeasonBase):
         )
 
 
+# The event phase, derived from published, the check-in window and the series;
+# nothing stores it. app/services/events.py computes it.
+EventPhase = Literal[
+    "draft", "signups_open", "checkin", "seeded", "running", "finished"
+]
+
+
 class EventPublic(SQLModel):
     """One event as the events pages read it, GNL season or not.
 
@@ -407,8 +438,86 @@ class EventPublic(SQLModel):
     region: str | None = None
     page_url: str | None = None
     stream_url: str | None = None
-    discord_event_id: Annotated[str | None, NumToStr] = None
     map_rules: Annotated[str | None, MapRules] = None
     min_games: int | None = None
     mmr_max: int | None = None
     entrant_cap: int | None = None
+    checkin_days: int | None = None
+    # Computed by the service on every read; null when the event is nested
+    phase: EventPhase | None = None
+    # The entrants who have not withdrawn; null on a list read
+    entrant_count: int | None = None
+    stages: list[EventStagePublic] = []
+    divisions: list[EventDivisionPublic] = []
+
+
+class EventCreate(SQLModel):
+    """A new event. Its stages come from the body, or one default stage is made."""
+
+    name: Annotated[str, NumToStr]
+    league_id: int | None = None
+    kind: EventKind = EventKind.gnl
+    description: str | None = None
+    published: bool = True
+    signups_open: bool = True
+    scheduling_enabled: bool = True
+    start_date: Annotated[date | None, LenientDate] = None
+    end_date: Annotated[date | None, LenientDate] = None
+    starts_at: Annotated[datetime | None, AwareUTC] = None
+    checkin_enabled: bool = True
+    checkin_days: int | None = Field(default=3, ge=0)
+    region: str | None = None
+    page_url: str | None = None
+    stream_url: str | None = None
+    map_rules: Annotated[str | None, MapRules] = None
+    min_games: int | None = None
+    mmr_max: int | None = None
+    entrant_cap: int | None = None
+    # How many series each entrant plays per round of a round-robin stage
+    series_per_round: int = 1
+    stages: list[EventStageWrite] = []
+
+
+class EventUpdate(SQLModel):
+    """The event fields an admin may change. A field left out keeps its value."""
+
+    name: Annotated[str | None, NumToStr] = None
+    league_id: int | None = None
+    kind: EventKind | None = None
+    description: str | None = None
+    published: bool | None = None
+    signups_open: bool | None = None
+    scheduling_enabled: bool | None = None
+    start_date: Annotated[date | None, LenientDate] = None
+    end_date: Annotated[date | None, LenientDate] = None
+    starts_at: Annotated[datetime | None, AwareUTC] = None
+    checkin_enabled: bool | None = None
+    checkin_days: int | None = Field(default=None, ge=0)
+    region: str | None = None
+    page_url: str | None = None
+    stream_url: str | None = None
+    map_rules: Annotated[str | None, MapRules] = None
+    min_games: int | None = None
+    mmr_max: int | None = None
+    entrant_cap: int | None = None
+    series_per_round: int | None = None
+
+
+class MemberEventRow(SQLModel):
+    """One row of the member home's events list, over every kind of event.
+
+    It replaces the season and KOTH split: the rows are keyed by event id,
+    which no longer collides now that a KOTH night is an event too.
+    """
+
+    kind: EventKind
+    id: int
+    name: Annotated[str | None, NumToStr] = None
+    start: Annotated[IsoDate | None, LenientDate] = None
+    end: Annotated[IsoDate | None, LenientDate] = None
+    phase: EventPhase
+    signups_open: bool
+    # The caller holds an entrant row, or a GNL signup, for this event
+    joined: bool
+    # The event's optional "Page" link; the home builds its own in-app link
+    url: str | None = None
