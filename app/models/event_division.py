@@ -24,6 +24,8 @@ class EventDivision(DBModel, table=True):
     name: Annotated[str | None, NumToStr] = Field(default=None, max_length=50)
     # The MMR the division opens at; null while the bands are unset
     lower_bound: int | None = None
+    # How many entrants the division takes when the cut counts from the top
+    size: int | None = None
 
 
 class EventDivisionPublic(SQLModel):
@@ -33,3 +35,14 @@ class EventDivisionPublic(SQLModel):
     position: int
     name: Annotated[str | None, NumToStr] = None
     lower_bound: int | None = None
+    size: int | None = None
+    # The entrants who have not withdrawn; null on a list read
+    entrant_count: int | None = None
+
+
+class EventDivisionWrite(SQLModel):
+    """One division as an admin writes it; its place in the list is its position."""
+
+    name: Annotated[str | None, NumToStr] = None
+    lower_bound: int | None = None
+    size: int | None = None
