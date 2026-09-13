@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session, column_property
 from sqlmodel import Field, Relationship, SQLModel, col
 
 from app.models.base import DBModel, ident
-from app.models.enums import EventKind, Race
+from app.models.enums import EntrantKind, EventKind, Race, SignupPolicy
 from app.models.event_division import EventDivisionPublic
 from app.models.event_stage import EventStagePublic, EventStageWrite
 from app.models.map import MapPublic
@@ -108,6 +108,18 @@ class Season(SeasonBase, DBModel, table=True):
     league_id: int | None = Field(default=None, index=True, foreign_key="league.id")
     kind: EventKind = Field(
         default=EventKind.gnl, sa_column_kwargs={"server_default": "gnl"}
+    )
+    # The event this one feeds: a qualifier is a child of the event it qualifies for
+    parent_id: int | None = Field(
+        default=None, index=True, foreign_key="event.id", ondelete="SET NULL"
+    )
+    # Who may enter: a member with an account, or any battle tag
+    signup_policy: SignupPolicy = Field(
+        default=SignupPolicy.members, sa_column_kwargs={"server_default": "members"}
+    )
+    # Copied from the league when the event is created; the league may change later
+    entrant_kind: EntrantKind = Field(
+        default=EntrantKind.solo, sa_column_kwargs={"server_default": "solo"}
     )
     # Off: a draft only an admin sees
     published: bool = Field(default=True, sa_column_kwargs={"server_default": true()})
@@ -426,6 +438,10 @@ class EventPublic(SQLModel):
     id: int
     league_id: int | None = None
     kind: EventKind = EventKind.gnl
+    # The event this one feeds; a qualifier reads its parent here
+    parent_id: int | None = None
+    signup_policy: SignupPolicy = SignupPolicy.members
+    entrant_kind: EntrantKind = EntrantKind.solo
     name: Annotated[str | None, NumToStr] = None
     description: str | None = None
     published: bool = True
@@ -449,6 +465,8 @@ class EventPublic(SQLModel):
     entrant_count: int | None = None
     stages: list[EventStagePublic] = []
     divisions: list[EventDivisionPublic] = []
+    # The events this one is the parent of, newest first; empty on a list read
+    children: list["EventPublic"] = []
 
 
 class EventCreate(SQLModel):
@@ -457,6 +475,10 @@ class EventCreate(SQLModel):
     name: Annotated[str, NumToStr]
     league_id: int | None = None
     kind: EventKind = EventKind.gnl
+    parent_id: int | None = None
+    signup_policy: SignupPolicy = SignupPolicy.members
+    # Left out, the service copies the entrant kind of the league
+    entrant_kind: EntrantKind | None = None
     description: str | None = None
     published: bool = True
     signups_open: bool = True
@@ -484,6 +506,9 @@ class EventUpdate(SQLModel):
     name: Annotated[str | None, NumToStr] = None
     league_id: int | None = None
     kind: EventKind | None = None
+    parent_id: int | None = None
+    signup_policy: SignupPolicy | None = None
+    entrant_kind: EntrantKind | None = None
     description: str | None = None
     published: bool | None = None
     signups_open: bool | None = None

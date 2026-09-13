@@ -41,6 +41,10 @@ class Match(MatchBase, DBModel, table=True):
     round_id: int | None = Field(
         default=None, index=True, foreign_key="event_round.id", ondelete="CASCADE"
     )
+    # The division this fixture is played in; null while the event has one table
+    division_id: int | None = Field(
+        default=None, foreign_key="event_division.id", ondelete="SET NULL"
+    )
     team1: "Team" = Relationship(
         sa_relationship_kwargs={"foreign_keys": "[Match.team1_id]"}
     )

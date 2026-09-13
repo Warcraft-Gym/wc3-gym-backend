@@ -9,10 +9,11 @@ from collections.abc import Callable
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
+import pytest
 from httpx2 import Client
 
 from app.core.db import Session
-from app.models.enums import EventKind, Race
+from app.models.enums import EntrantKind, EventKind, Race
 from app.models.event_division import EventDivision
 from app.models.event_entrant import EventEntrant
 from app.models.event_stage import EventStage
@@ -420,3 +421,183 @@ def test_the_member_home_of_a_player_with_no_id_joins_nothing(
 ) -> None:
     rows = EventService().events_for_member(None)
     assert [row.joined for row in rows] == [False]
+
+
+def test_an_event_carries_a_parent_a_policy_and_the_entrant_kind_of_its_league(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """A new event copies the entrant kind of its league, and the body may
+    name a parent and a signup policy of its own."""
+    with Session.begin() as session:
+        league = League(name="Gym Teams", entrant_kind=EntrantKind.team)
+        session.add(league)
+        session.flush()
+        league_id = league.id
+
+    main = client.post(
+        "/events",
+        json={"name": "Team Cup", "kind": "cup", "league_id": league_id},
+        headers=auth_headers,
+    )
+    assert main.status_code == 201, main.text
+    assert main.json()["entrant_kind"] == "team"
+    assert main.json()["signup_policy"] == "members"
+    assert main.json()["parent_id"] is None
+
+    qualifier = client.post(
+        "/events",
+        json={
+            "name": "Team Cup Qualifier",
+            "kind": "cup",
+            "league_id": league_id,
+            "parent_id": main.json()["id"],
+            "signup_policy": "anyone",
+            "entrant_kind": "solo",
+        },
+        headers=auth_headers,
+    )
+    assert qualifier.status_code == 201, qualifier.text
+    assert qualifier.json()["parent_id"] == main.json()["id"]
+    assert qualifier.json()["signup_policy"] == "anyone"
+    # The body names the entrant kind, so the league's is not copied over it
+    assert qualifier.json()["entrant_kind"] == "solo"
+
+    # The parent reads its qualifiers, and the league lists them under it
+    read = client.get(f"/events/{main.json()['id']}").json()
+    assert [child["id"] for child in read["children"]] == [qualifier.json()["id"]]
+    league_body = client.get(f"/leagues/{league_id}").json()
+    assert [event["id"] for event in league_body["events"]] == [main.json()["id"]]
+    assert [child["id"] for child in league_body["events"][0]["children"]] == [
+        qualifier.json()["id"]
+    ]
+
+
+def test_an_event_with_no_league_enters_players(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    created = client.post("/events", json={"name": "Loose Cup"}, headers=auth_headers)
+    assert created.status_code == 201, created.text
+    assert created.json()["entrant_kind"] == "solo"
+
+
+def test_a_stage_reads_its_group_settings_and_its_advance_flag(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """The three group fields are written by the generator, so a new stage
+    reads them empty and off."""
+    created = client.post(
+        "/events",
+        json={"name": "Group Cup", "stages": [{"name": "Groups"}]},
+        headers=auth_headers,
+    )
+    assert created.status_code == 201, created.text
+    stage = created.json()["stages"][0]
+    assert (stage["group_size"], stage["group_advance"], stage["auto_advance"]) == (
+        None,
+        None,
+        False,
+    )
+
+    with Session.begin() as session:
+        row = session.get(EventStage, stage["id"])
+        assert row is not None
+        row.sqlmodel_update({"group_size": 4, "group_advance": 2, "auto_advance": True})
+
+    read = client.get(f"/events/{created.json()['id']}").json()["stages"][0]
+    assert (read["group_size"], read["group_advance"], read["auto_advance"]) == (
+        4,
+        2,
+        True,
+    )
+
+
+def test_a_team_entrant_names_a_team_and_a_player_entrant_a_user(
+    client: Client, seeded: dict[str, Any]
+) -> None:
+    """One of the two columns is filled, never both and never neither."""
+    from sqlalchemy.exc import IntegrityError
+
+    from app.models.team import Team
+
+    event = add_event(name="Team Night")
+    with Session.begin() as session:
+        team = Team(name="Alpha")
+        session.add(team)
+        session.flush()
+        team_id = team.id
+        session.add(EventEntrant(event_id=event, team_id=team_id, race=Race.HU))
+
+    with Session.begin() as session:
+        rows = session.query(EventEntrant).filter_by(event_id=event).all()
+        assert [(row.user_id, row.team_id) for row in rows] == [(None, team_id)]
+
+    for fields in ({"user_id": seeded["player_ids"][0], "team_id": team_id}, {}):
+        # The commit is the check: the row is refused as it is written
+        with pytest.raises(IntegrityError), Session.begin() as session:
+            session.add(EventEntrant(event_id=event, race=Race.HU, **fields))
+
+
+def test_a_bracket_series_holds_its_feeders_and_no_sides_until_they_are_scored(
+    client: Client, seeded: dict[str, Any]
+) -> None:
+    """A generated series names the two it takes its sides from; the sides
+    stay null until those are played."""
+    from app.models.series import Series, SeriesFeedersPublic
+
+    with Session.begin() as session:
+        played = session.query(Series).order_by(Series.id).first()
+        assert played is not None
+        final = Series(
+            match_id=played.match_id,
+            host_player_id=0,
+            sequence=2,
+            side_size=1,
+            pick_rule="drafted",
+            result_kind="walkover",
+            slot1_from_series_id=played.id,
+            slot2_from_series_id=played.id,
+            slot2_takes_loser=True,
+        )
+        session.add(final)
+        session.flush()
+        assert (final.player1_id, final.player2_id) == (None, None)
+        assert SeriesFeedersPublic.from_series(final).to_dict() == {
+            "id": final.id,
+            "result_kind": "walkover",
+            "slot1_from_series_id": played.id,
+            "slot1_takes_loser": False,
+            "slot2_from_series_id": played.id,
+            "slot2_takes_loser": True,
+        }
+        # Every series that already exists is played and carries no feeder
+        assert (played.result_kind, played.sequence, played.side_size) == (
+            "played",
+            None,
+            1,
+        )
+        assert played.slot1_from_series_id is None
+        session.delete(final)
+
+
+def test_a_fixture_and_a_series_read_the_division_they_are_played_in(
+    client: Client, seeded: dict[str, Any]
+) -> None:
+    from app.models.match import Match
+    from app.models.series import Series
+
+    with Session.begin() as session:
+        division = EventDivision(
+            event_id=seeded["season_id"], position=1, name="Beginners"
+        )
+        session.add(division)
+        session.flush()
+        match = session.get(Match, seeded["match_id"])
+        assert match is not None
+        match.division_id = division.id
+        series = session.query(Series).filter_by(match_id=match.id).first()
+        assert series is not None
+        series.division_id = division.id
+        session.flush()
+        assert (match.division_id, series.division_id) == (division.id, division.id)
+        match.division_id = None
+        series.division_id = None

@@ -15,7 +15,7 @@ from sqlmodel import col
 from app.core.db import Session
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.models.base import ident
-from app.models.enums import EventKind, StageFormat
+from app.models.enums import EntrantKind, EventKind, StageFormat
 from app.models.event_division import EventDivision, EventDivisionPublic
 from app.models.event_entrant import EventEntrant
 from app.models.event_stage import EventStage, EventStagePublic, EventStageWrite
@@ -115,6 +115,10 @@ class EventService:
         """Create an event and the stages it plays, or one default stage."""
         with Session.begin() as session:
             fields = data.model_dump(exclude={"stages"})
+            if fields.get("entrant_kind") is None:
+                fields["entrant_kind"] = _league_entrant_kind(
+                    session, fields.get("league_id")
+                )
             event = Season(**fields)
             session.add(event)
             session.flush()
@@ -181,7 +185,7 @@ class EventService:
                 .order_by(col(Season.id).desc())
             ).all()
             public = LeaguePublic.model_validate(league)
-            public.events = _publics(session, events)
+            public.events = _nested(_publics(session, events))
             return public
 
     def add_league(self, data: LeagueCreate) -> LeaguePublic:
@@ -228,6 +232,29 @@ class EventService:
                 )
                 for event in events
             ]
+
+
+def _nested(events: list[EventPublic]) -> list[EventPublic]:
+    """The league's events with each child under its parent, parents in order.
+
+    A qualifier is a child of the event it feeds, so the league page lists the
+    run once and its qualifiers inside it. A child whose parent is not in the
+    list stays where it is.
+    """
+    by_id = {event.id: event for event in events}
+    for event in events:
+        parent = by_id.get(event.parent_id) if event.parent_id else None
+        if parent is not None:
+            parent.children.append(event)
+    return [
+        event for event in events if not event.parent_id or event.parent_id not in by_id
+    ]
+
+
+def _league_entrant_kind(session: OrmSession, league_id: int | None) -> EntrantKind:
+    """The entrant kind a new event copies from its league; solo without one."""
+    league = session.get(League, league_id) if league_id else None
+    return league.entrant_kind if league else EntrantKind.solo
 
 
 def _event(session: OrmSession, event_id: int) -> Season:
@@ -359,4 +386,13 @@ def _public(
             col(EventEntrant.withdrawn_at).is_(None),
         )
     )
+    # The qualifiers that feed this event, newest first
+    public.children = [
+        EventPublic.model_validate(row)
+        for row in session.scalars(
+            select(Season)
+            .where(col(Season.parent_id) == event.id)
+            .order_by(col(Season.id).desc())
+        )
+    ]
     return public

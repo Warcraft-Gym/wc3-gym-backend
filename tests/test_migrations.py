@@ -10,7 +10,16 @@ from pathlib import Path
 import pytest
 from alembic.autogenerate import compare_metadata
 from alembic.migration import MigrationContext
-from sqlalchemy import Column, Index, column, create_engine, inspect, table, text
+from sqlalchemy import (
+    Column,
+    ForeignKeyConstraint,
+    Index,
+    column,
+    create_engine,
+    inspect,
+    table,
+    text,
+)
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import SQLModel
 
@@ -49,6 +58,8 @@ BEFORE_EVENT_RENAME = "f4b7c02e9a15"
 EVENT_RENAME = "1e0287eacccf"
 # The revision before the rounds become event_round
 BEFORE_EVENT_ROUND = "8cc6dd6d93eb"
+# The revision before an event carries a parent and a series its feeders
+BEFORE_EVENT_MODEL = "96c0d36de81c"
 
 
 def comparable(
@@ -60,10 +71,49 @@ def comparable(
     element the model holds, so alembic reports it as changed on every run.
     The natural keys are checked by the writes they refuse instead, in
     tests/test_natural_keys.py.
+
+    SQLite reads no ON DELETE back off a key written on the column, and the
+    event table takes its self reference that way: a table-level key needs a
+    rebuild, which drops the expression index behind the event name and turns
+    the league key into one the 4a downgrade cannot drop its column through.
+    The clause is read off the DDL instead, in the test below this one.
     """
     if isinstance(obj, Index):
         return all(isinstance(part, Column) for part in obj.expressions)
+    if isinstance(obj, ForeignKeyConstraint):
+        return (obj.table.name, tuple(obj.column_keys)) != ("event", ("parent_id",))
     return True
+
+
+def test_the_parent_key_of_an_event_clears_itself_when_the_parent_goes(
+    tmp_path: Path,
+) -> None:
+    """The self reference carries ON DELETE SET NULL, which SQLite enforces
+    and reflects nothing of, so the DDL and a delete are the two checks."""
+    url = fresh_database(tmp_path, "parent")
+    upgrade_to_head(url)
+
+    engine = create_engine(url)
+    with engine.connect() as connection:
+        ddl = connection.scalar(
+            text("SELECT sql FROM sqlite_master WHERE name = 'event'")
+        )
+    assert ddl is not None
+    assert "parent_id INTEGER REFERENCES event (id) ON DELETE SET NULL" in ddl
+
+    with engine.begin() as connection:
+        connection.execute(text("PRAGMA foreign_keys = ON"))
+        connection.execute(
+            text(
+                "INSERT INTO event (id, name, series_per_round) "
+                "VALUES (1, 'Autumn Cup', 1), (2, 'Autumn Qualifier', 1)"
+            )
+        )
+        connection.execute(text("UPDATE event SET parent_id = 1 WHERE id = 2"))
+        connection.execute(text("DELETE FROM event WHERE id = 1"))
+        assert (
+            connection.scalar(text("SELECT parent_id FROM event WHERE id = 2")) is None
+        )
 
 
 def test_a_migrated_database_matches_the_models(tmp_path: Path) -> None:
@@ -820,3 +870,81 @@ def test_the_rounds_become_event_round_and_everything_points_at_them(
         )
     assert "event_round" not in inspect(engine).get_table_names()
     assert "round_id" not in {c["name"] for c in inspect(engine).get_columns("matches")}
+
+
+def test_the_event_model_backfills_the_entrant_kind_and_the_gnl_format(
+    tmp_path: Path,
+) -> None:
+    """An event enters what its league enters, and a GNL stage is its own
+    format: the captains draft its series, which no round robin does."""
+    url = fresh_database(tmp_path, "model")
+    upgrade_to(url, BEFORE_EVENT_MODEL)
+
+    engine = create_engine(url)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO league (id, name, kind, entrant_kind) "
+                "VALUES (10, 'Gym Cups', 'custom', 'solo')"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO event (id, name, series_per_round, league_id, kind) "
+                "VALUES (1, 'Season 18', 2, "
+                "(SELECT id FROM league WHERE name = 'GNL'), 'gnl'), "
+                "(2, 'Autumn Cup', 1, 10, 'cup'), (3, 'Loose Cup', 1, NULL, 'cup')"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO event_stage (event_id, position, format) VALUES "
+                "(1, 1, 'round_robin'), (2, 1, 'round_robin')"
+            )
+        )
+
+    upgrade_to(url, "head")
+
+    with engine.connect() as connection:
+        assert connection.execute(
+            text("SELECT id, entrant_kind, signup_policy, parent_id FROM event")
+        ).all() == [
+            (1, "drafted_teams", "members", None),
+            (2, "solo", "members", None),
+            (3, "solo", "members", None),
+        ]
+        assert connection.execute(
+            text("SELECT event_id, format FROM event_stage ORDER BY event_id")
+        ).all() == [(1, "gnl"), (2, "round_robin")]
+
+
+def test_an_entrant_row_refuses_a_player_and_a_team_together(tmp_path: Path) -> None:
+    """The check names one side per row: both filled or both empty is refused."""
+    url = fresh_database(tmp_path, "entrant")
+    upgrade_to_head(url)
+
+    engine = create_engine(url)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO event (id, name, series_per_round) "
+                "VALUES (1, 'Autumn Cup', 1)"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO event_entrant (event_id, user_id, race) VALUES (1, 7, 'HU')"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO event_entrant (event_id, team_id, race) VALUES (1, 9, 'HU')"
+            )
+        )
+
+    # Both sides filled, and neither side filled, are the two the check refuses
+    for row in ("user_id, team_id, race) VALUES (1, 7, 9", "race) VALUES (1"):
+        with pytest.raises(IntegrityError), engine.begin() as connection:
+            connection.execute(
+                text(f"INSERT INTO event_entrant (event_id, {row}, 'HU')")
+            )
