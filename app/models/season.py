@@ -459,6 +459,8 @@ class EventPublic(SQLModel):
     mmr_max: int | None = None
     entrant_cap: int | None = None
     checkin_days: int | None = None
+    # How many series each entrant plays per round of the event
+    series_per_round: int = 1
     # Computed by the service on every read; null when the event is nested
     phase: EventPhase | None = None
     # The entrants who have not withdrawn; null on a list read

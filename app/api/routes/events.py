@@ -33,15 +33,25 @@ router = APIRouter(tags=["events"])
 @router.get("/events")
 def get_events(
     service: EventServiceDep,
+    claims: OptionalLogin,
     kind: EventKind | None = None,
     league_id: int | None = None,
     published: bool | None = None,
     limit: Annotated[int, Query(ge=1, le=500)] = 500,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[EventPublic]:
-    """Return one page of events, at most 500, each with its computed phase."""
+    """Return one page of events, at most 500, each with its computed phase.
+
+    A draft reads for an admin only; every other caller sees the published
+    events whatever the filter asks for.
+    """
     return service.get_all(
-        kind=kind, league_id=league_id, published=published, limit=limit, offset=offset
+        kind=kind,
+        league_id=league_id,
+        published=published,
+        limit=limit,
+        offset=offset,
+        claims=claims,
     )
 
 

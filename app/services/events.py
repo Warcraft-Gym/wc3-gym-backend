@@ -118,8 +118,13 @@ class EventService:
         published: bool | None = None,
         limit: int | None = None,
         offset: int = 0,
+        claims: dict[str, Any] | None = None,
     ) -> list[EventPublic]:
-        """One page of events, newest first, each with its computed phase."""
+        """One page of events, newest first, each with its computed phase.
+
+        An unpublished event is a draft only an admin reads, so a caller who
+        is not one sees the published rows whatever the filter asks for.
+        """
         statement = select(Season).order_by(col(Season.id).desc())
         if kind is not None:
             statement = statement.where(col(Season.kind) == kind)
@@ -127,6 +132,8 @@ class EventService:
             statement = statement.where(col(Season.league_id) == league_id)
         if published is not None:
             statement = statement.where(col(Season.published).is_(published))
+        if not _is_admin(claims):
+            statement = statement.where(col(Season.published).is_(True))
         with Session.begin() as session:
             events = session.scalars(statement.offset(offset).limit(limit)).all()
             return _publics(session, events)
@@ -166,11 +173,12 @@ class EventService:
         The stage at a position is updated in place, so its id holds and the
         rounds, fixtures and series that name it stay. Positions past the end
         are added, and a stage the shorter list drops is refused if it still
-        holds rounds.
+        holds rounds. An empty list clears them; the default stage is written
+        on create only.
         """
         with Session.begin() as session:
             event = _event(session, event_id)
-            rows = list(stages) or [_default_stage(event)]
+            rows = list(stages)
             current = list(
                 session.scalars(
                     select(EventStage)

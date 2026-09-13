@@ -262,6 +262,55 @@ def test_five_entrants_round_robin_meet_every_pair_once(
     assert all(row["slot1"] == (None, False) for row in rows)
 
 
+def test_eight_entrants_play_two_series_a_round_over_four_rounds(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """Two per entrant per round covers the seven opponents in four rounds.
+
+    Seven circle rounds pair two to a round, so the last round is the short
+    one: three rounds of eight series and one of four, every pair once.
+    """
+    event, (stage,) = cup(8, StageFormat.round_robin, series_per_entrant_per_round=2)
+    assert generate(client, auth_headers, event, stage) == {"series": 28, "rounds": 4}
+    rows = bracket(stage)
+    assert names(rows) == [f"Round {number}" for number in range(1, 5)]
+    per_round = [
+        len([row for row in rows if row["number"] == number])
+        for number in sorted({row["number"] for row in rows})
+    ]
+    assert per_round == [8, 8, 8, 4]
+    # Every entrant plays two different opponents in each full round
+    for number in sorted({row["number"] for row in rows})[:3]:
+        sides = [
+            side for row in rows if row["number"] == number for side in row["sides"]
+        ]
+        assert sorted(sides) == sorted(players_of(event) * 2)
+    pairs = [frozenset(row["sides"]) for row in rows]
+    assert len(set(pairs)) == len(pairs) == 28
+
+
+def test_an_odd_field_sits_one_entrant_out_of_every_round(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """Seven entrants pair six a round, so a bye falls in each circle round."""
+    event, (stage,) = cup(7, StageFormat.round_robin, series_per_entrant_per_round=2)
+    assert generate(client, auth_headers, event, stage) == {"series": 21, "rounds": 4}
+    rows = bracket(stage)
+    field = players_of(event)
+    counts = [
+        sorted(
+            sum(player in row["sides"] for row in rows if row["number"] == number)
+            for player in field
+        )
+        for number in sorted({row["number"] for row in rows})
+    ]
+    # Two circle rounds to a round, each with its own bye; the short last
+    # round is one circle round, so one entrant sits it out whole
+    assert counts == [[1, 1, 2, 2, 2, 2, 2]] * 3 + [[0, 1, 1, 1, 1, 1, 1]]
+    pairs = [frozenset(row["sides"]) for row in rows]
+    assert len(set(pairs)) == len(pairs) == 21
+
+
 def test_a_koth_chain_of_four_runs_in_one_round(
     client: Client, auth_headers: dict[str, str]
 ) -> None:
