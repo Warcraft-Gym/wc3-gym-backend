@@ -374,7 +374,7 @@ class EventService:
             session.execute(
                 update(EventEntrant)
                 .where(col(EventEntrant.event_id) == event_id)
-                .values(division_id=None)
+                .values(division_id=None, manual_placement=False)
             )
             session.execute(
                 delete(EventDivision).where(col(EventDivision.event_id) == event_id)
@@ -610,19 +610,20 @@ def _public(
             .order_by(col(EventStage.position))
         )
     ]
-    counts = dict(
-        session.execute(
+    by_division = {
+        division_id: total
+        for division_id, total in session.execute(
             select(col(EventEntrant.division_id), func.count())
             .where(
                 col(EventEntrant.event_id) == event.id,
                 col(EventEntrant.withdrawn_at).is_(None),
             )
             .group_by(col(EventEntrant.division_id))
-        ).all()
-    )
+        )
+    }
     public.divisions = [
         EventDivisionPublic.model_validate(
-            row, update={"entrant_count": counts.get(row.id, 0)}
+            row, update={"entrant_count": by_division.get(row.id, 0)}
         )
         for row in _divisions(session, ident(event))
     ]

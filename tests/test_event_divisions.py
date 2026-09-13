@@ -32,11 +32,11 @@ def add_player(name: str, ratings: dict[Race, int]) -> int:
         )
         session.add(user)
         session.flush()
+        assert user.id is not None
         session.add_all(
             W3CStats(user_id=user.id, race=race, wc3_season=22, games=100, mmr=mmr)
             for race, mmr in ratings.items()
         )
-        assert user.id is not None
         return user.id
 
 
@@ -155,6 +155,15 @@ def test_an_assign_cuts_by_size_and_leaves_a_hand_placed_entrant(
     )
     assert unknown.status_code == 400
     assert unknown.json() == {"error": "Division not found by id: 404"}
+
+    # New bands drop the old placement, so the assign takes the entrant back
+    fresh = set_divisions(
+        client, event, [{"name": "Top", "size": 2}, {"name": "Rest"}], auth_headers
+    )
+    client.post(f"/events/{event}/divisions/assign", headers=auth_headers)
+    rows = {row["id"]: row for row in client.get(f"/events/{event}/entrants").json()}
+    assert rows[entrants[0]]["division_id"] == fresh[0]["id"]
+    assert rows[entrants[0]]["manual_placement"] is False
 
 
 def test_the_seeds_count_from_one_inside_each_division(
