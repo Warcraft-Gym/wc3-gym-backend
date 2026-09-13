@@ -18,9 +18,10 @@ It also names the race every player registered on for the season of its
 match, one more statement that does not grow with the answer.
 
 A team answer derives its standings the same way, and the two statements it
-adds do not grow with the number of teams in the answer. It also names the
-race every player on a roster registered on for the season of that roster,
-one more statement that does not grow with the answer.
+adds do not grow with the number of teams in the answer. One more statement
+names the event and the league of every season the answer holds, and one more
+the race every player on a roster registered on for the season of that roster.
+Neither grows with the answer.
 
 A user, a team roster or a full series answer also derives the season record of
 every player it carries, which costs two more statements: one groups the series
@@ -417,28 +418,65 @@ def add_teams_to_the_season(season_id: int, count: int) -> None:
         session.commit()
 
 
-def test_the_teams_of_a_season_cost_eight_statements(league: dict[str, Any]) -> None:
+def test_the_teams_of_a_season_cost_nine_statements(league: dict[str, Any]) -> None:
     """Three for the teams and their people, two for the standings, one for the
-    signup race of every player and two for his season record."""
+    name and league of every season, one for the signup race of every player
+    and two for his season record."""
     service = TeamService(UserService())
     with count_statements() as tally:
         teams = service.get_teams_season(league["season_id"])
     assert len(teams) == 2
     assert teams[0].seasons_info[0].final_score is not None
-    assert tally[0] == 8
+    assert teams[0].seasons_info[0].name == "Season 1"
+    assert tally[0] == 9
 
 
 def test_the_standings_count_holds_when_the_teams_grow(
     league: dict[str, Any],
 ) -> None:
-    """Four more teams in the season, the same eight statements."""
+    """Four more teams in the season, the same nine statements."""
     add_teams_to_the_season(league["season_id"], 4)
 
     service = TeamService(UserService())
     with count_statements() as tally:
         teams = service.get_teams_season(league["season_id"])
     assert len(teams) == 6
-    assert tally[0] == 8
+    assert tally[0] == 9
+
+
+def test_the_season_labels_cost_one_statement(league: dict[str, Any]) -> None:
+    """One season or five, the tabs of a team page cost one read.
+
+    The team page names its season tabs from seasons_info, so a per-season read
+    here would be the N+1 the page used to pay with a second call.
+    """
+    from app.models.team_season import DBTeamSeason
+
+    team_id = league["team_a_id"]
+    service = TeamService(UserService())
+    one = service.get(team_id)
+    with Session() as session:
+        with count_statements() as tally:
+            derived.fill_season_labels(session, [one])
+        assert tally[0] == 1
+
+    with Session() as session:
+        for index in range(4):
+            season = Season(name=f"Season {index + 2}", series_per_round=1)
+            session.add(season)
+            session.flush()
+            session.add(DBTeamSeason(team_id=team_id, season_id=ident(season)))
+        session.commit()
+
+    team = service.get(team_id)
+    assert sorted(info.name or "" for info in team.seasons_info) == [
+        f"Season {number}" for number in range(1, 6)
+    ]
+    assert team.seasons_info[0].league_short_name is None
+    with Session() as session:
+        with count_statements() as tally:
+            derived.fill_season_labels(session, [team])
+        assert tally[0] == 1
 
 
 def test_career_options_cover_the_player_graph(league: dict[str, Any]) -> None:
