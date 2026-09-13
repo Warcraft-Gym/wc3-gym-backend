@@ -12,7 +12,7 @@ from sqlmodel import select
 
 from app.core.db import Session
 from app.models.enums import Race
-from app.models.relationships import DBSeasonRound
+from app.models.relationships import round_row
 from app.models.season import Season
 from app.models.series import Series
 from app.models.series_cast import SeriesCast
@@ -96,7 +96,7 @@ def test_veto_rules_name_each_game_and_the_left_over_map(
 
 def test_a_one_day_round_shows_one_date(seeded: dict[str, Any]) -> None:
     with Session.begin() as session:
-        row = session.get(DBSeasonRound, (seeded["season_id"], 1))
+        row = round_row(session, seeded["season_id"], 1)
         assert row
         row.end_date = row.start_date
     noon = int(datetime(2026, 1, 5, 12, tzinfo=UTC).timestamp())

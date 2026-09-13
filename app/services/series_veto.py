@@ -12,7 +12,7 @@ from app.core.db import Session
 from app.core.exceptions import ApiError, BadRequestError, NotFoundError
 from app.models.base import ident
 from app.models.map import Map
-from app.models.relationships import DBSeasonRound
+from app.models.relationships import round_row
 from app.models.season import Season
 from app.models.series import Series
 from app.models.series_veto_step import (
@@ -156,7 +156,7 @@ def _fixed_map_id(session: OrmSession, season: Season, playday: int) -> int | No
     """The map a fixed rule claims for game 1; it never enters the veto."""
     if "fixed" not in (season.map_rules or DEFAULT_RULES).split(","):
         return None
-    row = session.get(DBSeasonRound, (ident(season), playday))
+    row = round_row(session, ident(season), playday)
     return row.map_id if row else None
 
 

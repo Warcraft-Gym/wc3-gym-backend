@@ -25,8 +25,10 @@ class KothEvent(KothEventBase, DBModel, table=True):
     __tablename__ = "koth_events"
 
     id: int | None = Field(default=None, primary_key=True)
-    # The round this night is, filled and given its foreign key in C1
-    round_id: int | None = None
+    # The round this night is, filled in C1. A night outlives its round.
+    round_id: int | None = Field(
+        default=None, index=True, foreign_key="event_round.id", ondelete="SET NULL"
+    )
 
     # Relationships
     signups: list[KothSignup] = Relationship(

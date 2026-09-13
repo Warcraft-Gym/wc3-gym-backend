@@ -27,17 +27,17 @@ from app.models.fantasy_team import FantasyTeam
 from app.models.ladder_achievement import default_rows
 from app.models.match import Match
 from app.models.relationships import (
+    DBEventRound,
     DBMapSeason,
-    DBSeasonRound,
     DBTeamSeasonCaptain,
     DBUserSeasonSignup,
 )
+from app.models.round_availability import DBRoundAvailability
 from app.models.season import Season
 from app.models.series import Series
 from app.models.settings import Settings
 from app.models.team_season import DBTeamSeason
 from app.models.user import User
-from app.models.user_season_availability import DBUserSeasonAvailability
 from app.models.user_team_season import DBUserTeamSeason
 from app.models.w3c_stats import W3CStats
 from app.services import discord
@@ -83,7 +83,7 @@ def build(discord_a: str, discord_b: str) -> str:
         old = session.scalar(select(Season).where(col(Season.name) == NAME))
         if old:
             # The two link tables without a cascade from the season
-            for table in (DBUserSeasonAvailability, DBTeamSeasonCaptain):
+            for table in (DBRoundAvailability, DBTeamSeasonCaptain):
                 session.execute(delete(table).where(col(table.season_id) == old.id))
             # fantasy_team_player has no cascade from fantasy_teams, so the ORM
             # takes the drafted players out before Postgres cascades the teams
@@ -143,9 +143,9 @@ def build(discord_a: str, discord_b: str) -> str:
         ]
         for playday, start in enumerate(starts, start=1):
             session.add(
-                DBSeasonRound(
+                DBEventRound(
                     season_id=sid,
-                    playday=playday,
+                    number=playday,
                     start_date=start,
                     end_date=start + timedelta(weeks=ROUND_WEEKS, days=-1),
                     map_id=pool_maps[(playday - 1) % len(pool_maps)],

@@ -14,7 +14,7 @@ from app.models.enums import Race
 from app.models.fantasy_team import FantasyTeam
 from app.models.ladder_achievement import LadderAchievement
 from app.models.match import Match
-from app.models.relationships import DBFantasyTeamPlayer, DBSeasonRound
+from app.models.relationships import DBEventRound, DBFantasyTeamPlayer
 from app.models.season import Season
 from app.models.series import Series
 from app.models.series_replay import DBSeriesReplay
@@ -92,9 +92,9 @@ def test_build_copies_the_latest_season_and_seats_the_captains(
         assert set(paid) == set(DEFAULT_PAID)
 
         rounds = session.scalars(
-            select(DBSeasonRound)
-            .where(col(DBSeasonRound.season_id) == sid)
-            .order_by(col(DBSeasonRound.playday))
+            select(DBEventRound)
+            .where(col(DBEventRound.season_id) == sid)
+            .order_by(col(DBEventRound.number))
         ).all()
         assert len(rounds) == ROUNDS
         assert rounds[0].start_date == START

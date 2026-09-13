@@ -132,10 +132,10 @@ def test_a_round_1_with_no_dates_shows_the_round_alone(
     admin: None,
 ) -> None:
     from app.core.db import Session
-    from app.models.relationships import DBSeasonRound
+    from app.models.relationships import round_row
 
     with Session() as session:
-        round_one = session.get(DBSeasonRound, (int(seeded["season_id"]), 1))
+        round_one = round_row(session, int(seeded["season_id"]), 1)
         assert round_one
         round_one.start_date = round_one.end_date = None
         session.commit()

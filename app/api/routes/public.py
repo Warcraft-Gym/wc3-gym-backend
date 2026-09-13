@@ -39,6 +39,10 @@ from app.models.fantasy_team import (
     PublicFantasyTeamWrite,
 )
 from app.models.player_history import PlayerHistory
+from app.models.round_availability import (
+    PlayerAvailabilityWrite,
+    RoundAvailabilityPublic,
+)
 from app.models.series import PlayerSeriesWrite, SeriesPublic, SeriesSort
 from app.models.series_game import SeriesGamePublic
 from app.models.series_replay import SeriesReplayPublic
@@ -60,10 +64,6 @@ from app.models.user_block import (
     UserBusyCreate,
     UserBusyPublic,
     UserBusyUpdate,
-)
-from app.models.user_season_availability import (
-    PlayerAvailabilityWrite,
-    UserSeasonAvailabilityPublic,
 )
 from app.services import (
     discord,
@@ -341,7 +341,7 @@ def set_player_availability(
     request: Request,
     credentials: Credentials,
     data: PlayerAvailabilityWrite,
-) -> list[UserSeasonAvailabilityPublic]:
+) -> list[RoundAvailabilityPublic]:
     """Write the identified player's answer for one week of a season.
 
     A null answer clears the week, which puts the player back to available.

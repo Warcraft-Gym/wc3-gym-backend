@@ -25,7 +25,7 @@ from app.models.ladder_achievement import LadderAchievement, default_rows
 from app.models.map import Map
 from app.models.match import Match
 from app.models.player_career_stats import PlayerCareerStats
-from app.models.relationships import DBFantasyTeamPlayer, DBMapSeason, DBSeasonRound
+from app.models.relationships import DBEventRound, DBFantasyTeamPlayer, DBMapSeason
 from app.models.season import Season
 from app.models.series import Series
 from app.models.settings import Settings
@@ -192,9 +192,9 @@ def seed_league(session: Session) -> dict[str, Any]:
     # A real season is created with its achievement set and a round a week apart
     session.add_all(default_rows(season.id))
     session.add_all(
-        DBSeasonRound(
+        DBEventRound(
             season_id=ident(season),
-            playday=playday,
+            number=playday,
             start_date=season.start_date + timedelta(weeks=playday - 1),
             end_date=season.start_date + timedelta(weeks=playday - 1, days=6),
         )

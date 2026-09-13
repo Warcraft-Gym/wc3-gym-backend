@@ -20,7 +20,7 @@ def pool(seeded: dict[str, Any]) -> list[int]:
     from app.core.db import Session
     from app.models.base import ident
     from app.models.map import Map
-    from app.models.relationships import DBMapSeason, DBSeasonRound
+    from app.models.relationships import DBMapSeason, round_row
     from app.models.season import Season
 
     with Session() as session:
@@ -39,7 +39,7 @@ def pool(seeded: dict[str, Any]) -> list[int]:
                 for position, map_id in enumerate(ids[1:], start=1)
             ]
         )
-        round_one = session.get(DBSeasonRound, (season_id, 1))
+        round_one = round_row(session, season_id, 1)
         assert round_one
         round_one.map_id = ids[0]
         session.commit()

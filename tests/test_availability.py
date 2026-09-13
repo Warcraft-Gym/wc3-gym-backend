@@ -12,6 +12,8 @@ import pytest
 from httpx2 import Client
 
 from app.core.db import Session
+from app.models.relationships import round_row
+from app.models.round_availability import DBRoundAvailability
 from app.models.season import Season
 from app.services.availability import AvailabilityService
 from tests.test_discord_auth import SESSION, stub_clerk
@@ -45,6 +47,12 @@ def test_a_player_answers_a_week_and_takes_it_back(
             "set_by_name": "P1",
         }
     ]
+
+    # The answer names the round it is about, the column C2 makes the key
+    with Session() as session:
+        round_2 = round_row(session, seeded["season_id"], 2)
+        row = session.get(DBRoundAvailability, (player_id, seeded["season_id"], 2))
+        assert round_2 and row and row.round_id == round_2.id
 
     rows = write(client, headers, 2, True)
     assert [(row["playday"], row["available"]) for row in rows] == [(2, True)]
