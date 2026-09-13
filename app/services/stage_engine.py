@@ -522,7 +522,12 @@ def _table(
     }
     order = list(entrants)
     results = [
-        (row.player1_id, row.player2_id, row.player1_score, row.player2_score)
+        (
+            row.player1_id,
+            row.player2_id,
+            row.player1_score or 0,
+            row.player2_score or 0,
+        )
         for row in series
         if scored(row) and row.player1_id in entrants and row.player2_id in entrants
     ]

@@ -110,8 +110,8 @@ def bracket(stage: int) -> list[dict[str, Any]]:
             (
                 {
                     "id": ident(row),
-                    "round": rounds[row.round_id][1],
-                    "number": rounds[row.round_id][0],
+                    "round": rounds[round_id][1],
+                    "number": rounds[round_id][0],
                     "sequence": row.sequence,
                     "division_id": row.division_id,
                     "sides": (row.player1_id, row.player2_id),
@@ -121,6 +121,7 @@ def bracket(stage: int) -> list[dict[str, Any]]:
                     "slot2": (row.slot2_from_series_id, row.slot2_takes_loser),
                 }
                 for row in rows
+                if (round_id := row.round_id) is not None
             ),
             key=lambda row: (row["number"], row["sequence"] or 0, row["id"]),
         )
