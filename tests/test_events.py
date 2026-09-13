@@ -741,3 +741,130 @@ def test_a_fixture_and_a_series_read_the_division_they_are_played_in(
         assert (match.division_id, series.division_id) == (division.id, division.id)
         match.division_id = None
         series.division_id = None
+
+
+def my_events(client: Client, headers: dict[str, str]) -> dict[int, dict[str, Any]]:
+    """The caller's own event rows, keyed by event id."""
+    response = client.get("/me/events", headers=headers)
+    assert response.status_code == 200, response.text
+    return {row["id"]: row for row in response.json()}
+
+
+def enter(event_id: int, user_id: int) -> int:
+    """One entrant row for the player, as a signup writes it."""
+    with Session.begin() as session:
+        row = EventEntrant(event_id=event_id, user_id=user_id, race=Race.HU)
+        session.add(row)
+        session.flush()
+        return ident(row)
+
+
+def stamp_checked_in(entrant_id: int) -> None:
+    with Session.begin() as session:
+        row = session.get(EventEntrant, entrant_id)
+        assert row is not None
+        row.checked_in_at = NOW
+
+
+def test_the_member_events_walk_the_action_words(
+    client: Client,
+    seeded: dict[str, Any],
+    member: Callable[..., dict[str, str]],
+) -> None:
+    """One cup read as the member who joins it: closed, sign up, withdraw,
+    check in and checked in; the running season reads view."""
+    headers = member()
+    player = seeded["player_ids"][0]
+    hidden = add_event(name="Hidden Cup", kind=EventKind.cup, published=False)
+    event = add_event(kind=EventKind.cup, signups_open=False, checkin_days=3)
+
+    rows = my_events(client, headers)
+    # A draft is an admin's own, so the member read does not carry it
+    assert hidden not in rows
+    assert rows[event]["action"] == "closed"
+
+    set_fields(event, signups_open=True)
+    assert my_events(client, headers)[event]["action"] == "sign_up"
+
+    entrant = enter(event, player)
+    row = my_events(client, headers)[event]
+    # Nothing to check into yet, so the one action is to take the signup back
+    assert (row["action"], row["entrant_id"], row["checkin_shape"]) == (
+        "withdraw",
+        entrant,
+        "event",
+    )
+
+    add_round(event, TODAY + timedelta(days=1), TODAY + timedelta(days=2))
+    row = my_events(client, headers)[event]
+    assert (row["action"], row["checkin_shape"], row["checkin_open"]) == (
+        "check_in",
+        "round",
+        True,
+    )
+    assert row["next_round"]["number"] == 1
+
+    stamp_checked_in(entrant)
+    row = my_events(client, headers)[event]
+    assert (row["action"], row["checked_in_at"] is not None) == ("checked_in", True)
+
+    # A season with a series under way reads view, whoever the caller is
+    set_fields(seeded["season_id"], end_date=TODAY + timedelta(days=7))
+    running = my_events(client, headers)[seeded["season_id"]]
+    assert (running["phase"], running["action"]) == ("running", "view")
+
+
+def test_the_event_check_in_refuses_when_the_event_checks_in_per_round(
+    client: Client,
+    seeded: dict[str, Any],
+    member: Callable[..., dict[str, str]],
+) -> None:
+    """The event shape stamps the entrant; a dated round takes over from it."""
+    headers = member()
+    entrant = enter(
+        add_event(kind=EventKind.cup, checkin_days=3), seeded["player_ids"][0]
+    )
+    with Session.begin() as session:
+        row = session.get(EventEntrant, entrant)
+        assert row is not None
+        event = row.event_id
+
+    stamped = client.post(
+        f"/events/{event}/entrants/{entrant}/checkin", headers=headers
+    )
+    assert stamped.status_code == 200, stamped.text
+    assert stamped.json()["checked_in_at"] is not None
+
+    add_round(event, TODAY + timedelta(days=1), TODAY + timedelta(days=2))
+    refused = client.post(
+        f"/events/{event}/entrants/{entrant}/checkin", headers=headers
+    )
+    assert refused.status_code == 400
+    assert refused.json() == {
+        "error": "This event checks in per round. Answer the round instead."
+    }
+
+
+def test_a_cup_with_rounds_takes_the_round_check_in(
+    client: Client,
+    seeded: dict[str, Any],
+    member: Callable[..., dict[str, str]],
+    auth_headers: dict[str, str],
+) -> None:
+    """The round shape is one route for every kind: a cup's round-robin rounds
+    answer PUT /player-availability the way a GNL season's do."""
+    from app.models.enums import StageFormat
+    from tests.test_stage_engine import cup, generate
+
+    event, (stage,) = cup(4, StageFormat.round_robin)
+    assert generate(client, auth_headers, event, stage)["rounds"] == 3
+
+    response = client.put(
+        "/player-availability",
+        json={"season_id": event, "playday": 1, "available": False},
+        headers=member(),
+    )
+    assert response.status_code == 200, response.text
+    assert [(row["playday"], row["available"]) for row in response.json()] == [
+        (1, False)
+    ]

@@ -4,7 +4,7 @@ A row is an answer, and no row is no answer, so clearing an answer deletes the
 row. The player and their captain write the same row and the last write wins.
 """
 
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime
 
 from sqlalchemy import ColumnExpressionArgument, select
 from sqlalchemy.orm import Session as OrmSession
@@ -20,6 +20,7 @@ from app.models.round_availability import (
 from app.models.season import Season
 from app.models.user import User
 from app.models.user_team_season import DBUserTeamSeason
+from app.services.events import checkin_window
 
 NO_SCHEDULING = "This event does not use availability."
 
@@ -117,16 +118,17 @@ class AvailabilityService:
 def _checkin_window(season: Season, playday: int) -> None:
     """Refuse a player before the round's check-in opens and after it ends."""
     # An event that takes no check-in, or a blank window, keeps every round open
-    if not season.checkin_enabled or season.checkin_days is None:
+    if not season.checkin_enabled:
         return
     row = next((r for r in season.rounds if r.number == playday), None)
-    if row is None or row.start_date is None:
+    window = checkin_window(season, row) if row else None
+    if window is None:
         return
+    opens, closes = window
     now = today()
-    opens = row.start_date - timedelta(days=season.checkin_days)
     if now < opens:
         raise _closed(f"Check-in for round {playday} opens on {opens.day} {opens:%b}.")
-    if row.end_date and now > row.end_date:
+    if closes and now > closes:
         raise _closed(f"Round {playday} is over.")
 
 

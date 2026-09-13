@@ -8,6 +8,7 @@ from app.api.deps import (
     EventServiceDep,
     OptionalLogin,
     RequireLogin,
+    UserServiceDep,
     require_admin,
 )
 from app.models.enums import EventKind
@@ -24,7 +25,12 @@ from app.models.event_stage import (
     EventStagePublic,
     EventStageWrite,
 )
-from app.models.season import EventCreate, EventPublic, EventUpdate
+from app.models.season import (
+    EventCreate,
+    EventPublic,
+    EventUpdate,
+    MemberEventRow,
+)
 from app.models.series import StageSeriesPublic
 from app.services import stage_engine
 
@@ -54,6 +60,18 @@ def get_events(
         offset=offset,
         claims=claims,
     )
+
+
+@router.get("/me/events")
+def get_my_events(
+    service: EventServiceDep, users: UserServiceDep, claims: RequireLogin
+) -> list[MemberEventRow]:
+    """Return the published events with the caller's own state on each.
+
+    One read for every kind: the entrant, the check-in shape and window, the
+    next round and the one action the page offers.
+    """
+    return service.events_for_member(users.id_by_discord_id(claims["sub"]))
 
 
 @router.get("/events/{event_id}")
