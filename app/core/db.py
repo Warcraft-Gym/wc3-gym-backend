@@ -50,7 +50,8 @@ def init_engine(db_url: str | None = None) -> Engine:
             engine, "connect", lambda conn, _: conn.execute("PRAGMA foreign_keys=ON")
         )
     Session.configure(bind=engine)
-    # the listeners that keep the blob store in step with the rows
-    import app.services.blob  # noqa: F401
+    # the listeners: the blob store follows the rows, and every fixture and
+    # series names the round it is played in
+    from app.services import blob, round_link  # noqa: F401
 
     return engine

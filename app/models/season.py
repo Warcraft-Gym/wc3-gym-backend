@@ -12,7 +12,7 @@ from app.models.enums import EventKind, Race
 from app.models.event_division import EventDivisionPublic
 from app.models.event_stage import EventStagePublic, EventStageWrite
 from app.models.map import MapPublic
-from app.models.relationships import DBSeasonRound, SeasonRoundPublic
+from app.models.relationships import DBEventRound, SeasonRoundPublic
 from app.models.types import (
     AwareUTC,
     EnumValue,
@@ -152,11 +152,11 @@ class Season(SeasonBase, DBModel, table=True):
             "order_by": "DBMapSeason.position",
         },
     )
-    rounds: list["DBSeasonRound"] = Relationship(
+    rounds: list["DBEventRound"] = Relationship(
         back_populates="season",
         sa_relationship_kwargs={
             "cascade": "all, delete",
-            "order_by": "DBSeasonRound.playday",
+            "order_by": "DBEventRound.number",
         },
     )
 
@@ -248,8 +248,8 @@ def _phase(
 # nothing stores it. A scalar subquery, so it survives a noload on a nested season.
 ROUND_COUNT = (
     select(func.count())
-    .select_from(DBSeasonRound)
-    .where(col(DBSeasonRound.season_id) == Season.id)
+    .select_from(DBEventRound)
+    .where(col(DBEventRound.season_id) == Season.id)
     .scalar_subquery()
     .label("round_count")
 )

@@ -17,7 +17,7 @@ from app.models.event_division import EventDivision
 from app.models.event_entrant import EventEntrant
 from app.models.event_stage import EventStage
 from app.models.league import League
-from app.models.relationships import DBSeasonRound
+from app.models.relationships import DBEventRound, round_row
 from app.models.season import Season
 from app.services.events import EventService
 from tests.test_fantasy_locks import schedule, score
@@ -42,7 +42,7 @@ def add_round(event_id: int, start: date, end: date | None = None) -> None:
     """The first round of an event, so it has a check-in window."""
     with Session.begin() as session:
         session.add(
-            DBSeasonRound(season_id=event_id, playday=1, start_date=start, end_date=end)
+            DBEventRound(season_id=event_id, number=1, start_date=start, end_date=end)
         )
 
 
@@ -92,7 +92,7 @@ def test_the_check_in_rung_reads_the_first_round_window(client: Client) -> None:
     # Past the end of the round the window has closed again
     set_fields(event, checkin_days=3)
     with Session.begin() as session:
-        row = session.get(DBSeasonRound, {"season_id": event, "playday": 1})
+        row = round_row(session, event, 1)
         assert row is not None
         row.start_date, row.end_date = (
             TODAY - timedelta(days=5),

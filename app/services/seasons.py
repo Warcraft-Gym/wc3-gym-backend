@@ -13,6 +13,7 @@ from app.core.exceptions import ApiError, BadRequestError, NotFoundError
 from app.core.query import QueryElement, QueryUtil
 from app.models.base import ident
 from app.models.enums import Race
+from app.models.event_stage import EventStage
 from app.models.ladder_achievement import (
     LadderAchievement,
     SeasonAchievementPublic,
@@ -20,12 +21,15 @@ from app.models.ladder_achievement import (
     default_rows,
 )
 from app.models.map import LadderMapRow, Map
+from app.models.match import Match
 from app.models.relationships import (
+    DBEventRound,
     DBMapSeason,
-    DBSeasonRound,
     DBUserSeasonSignup,
     SeasonRoundWrite,
+    round_row,
 )
+from app.models.round_availability import DBRoundAvailability
 from app.models.season import (
     Season,
     SeasonCreate,
@@ -39,7 +43,6 @@ from app.models.season import (
 from app.models.team import Team
 from app.models.team_season import DBTeamSeason
 from app.models.user import User, UserListPublic
-from app.models.user_season_availability import DBUserSeasonAvailability
 from app.services import ladder_maps
 from app.services.ladder import mmr_on
 from app.services.maps import MapService
@@ -86,10 +89,11 @@ def fill_rounds(session: OrmSession, season: Season, wanted: int) -> None:
     after the one before it; a round past the last playday is dropped with the
     availability answers for it; a set date stays. The rows are the round count,
     so nothing stores it."""
-    rounds = {row.playday: row for row in season.rounds}
+    rounds = {row.number: row for row in season.rounds}
+    stage_id = first_stage_id(session, ident(season))
     for playday in range(1, wanted + 1):
-        row = rounds.get(playday) or DBSeasonRound(
-            season_id=ident(season), playday=playday
+        row = rounds.get(playday) or DBEventRound(
+            season_id=ident(season), stage_id=stage_id, number=playday
         )
         # ponytail: weekly rounds, the GNL cadence; a stage cadence when cups need it
         if row.start_date is None and season.start_date:
@@ -97,18 +101,46 @@ def fill_rounds(session: OrmSession, season: Season, wanted: int) -> None:
             row.end_date = row.start_date + timedelta(days=6)
         session.add(row)
     dropped = [playday for playday in rounds if playday > wanted]
-    for playday in dropped:
-        session.delete(rounds[playday])
     if dropped:
+        _refuse_played(session, ident(season), dropped)
+        for playday in dropped:
+            session.delete(rounds[playday])
         # the answers go with the round, so re-extending never revives them
         session.execute(
-            delete(DBUserSeasonAvailability).where(
-                col(DBUserSeasonAvailability.season_id) == ident(season),
-                col(DBUserSeasonAvailability.playday) > wanted,
+            delete(DBRoundAvailability).where(
+                col(DBRoundAvailability.season_id) == ident(season),
+                col(DBRoundAvailability.playday) > wanted,
             )
         )
     session.flush()
     session.expire(season, ["rounds", "round_count"])
+
+
+def first_stage_id(session: OrmSession, season_id: int) -> int | None:
+    """The stage a round of this event hangs off: the first one it plays."""
+    return session.scalar(
+        select(col(EventStage.id))
+        .where(col(EventStage.event_id) == season_id)
+        .order_by(col(EventStage.position))
+    )
+
+
+def _refuse_played(session: OrmSession, season_id: int, dropped: list[int]) -> None:
+    """Refuse to drop a round a match sits on.
+
+    A round now takes its matches and their series with it, so a count that
+    falls past a played round would take the results too.
+    """
+    held = session.scalars(
+        select(col(Match.playday))
+        .where(col(Match.season_id) == season_id, col(Match.playday).in_(dropped))
+        .distinct()
+    ).all()
+    if held:
+        numbers = ", ".join(str(playday) for playday in sorted(held))
+        raise BadRequestError(
+            f"round {numbers} still holds matches; delete them before the count falls"
+        )
 
 
 def resolved_tiers(
@@ -409,9 +441,11 @@ class SeasonService:
                 raise BadRequestError(
                     f"Map not part of the season, map id: {map_id}, season id {season_id}"
                 )
-            row = session.get(
-                DBSeasonRound, (season_id, data.playday)
-            ) or DBSeasonRound(season_id=season_id, playday=data.playday)
+            row = round_row(session, season_id, data.playday) or DBEventRound(
+                season_id=season_id,
+                stage_id=first_stage_id(session, season_id),
+                number=data.playday,
+            )
             row.sqlmodel_update(fields)
             if row.end_date and row.start_date and row.end_date < row.start_date:
                 raise BadRequestError("end_date must not be before start_date")

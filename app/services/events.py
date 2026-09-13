@@ -8,19 +8,19 @@ own phase word. The event phase is computed on every read and never stored.
 from collections.abc import Sequence
 from datetime import date, timedelta
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session as OrmSession
 from sqlmodel import col
 
 from app.core.db import Session
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import BadRequestError, NotFoundError
 from app.models.base import ident
 from app.models.enums import EventKind, StageFormat
 from app.models.event_division import EventDivision, EventDivisionPublic
 from app.models.event_entrant import EventEntrant
 from app.models.event_stage import EventStage, EventStagePublic, EventStageWrite
 from app.models.league import League, LeagueCreate, LeaguePublic, LeagueUpdate
-from app.models.relationships import DBUserSeasonSignup
+from app.models.relationships import DBEventRound, DBUserSeasonSignup
 from app.models.season import (
     NO_SERIES,
     EventCreate,
@@ -132,13 +132,35 @@ class EventService:
     def set_stages(
         self, event_id: int, stages: Sequence[EventStageWrite]
     ) -> EventPublic:
-        """Replace the event's stage list; the order of the body is the order played."""
+        """Write the event's stage list; the order of the body is the order played.
+
+        The stage at a position is updated in place, so its id holds and the
+        rounds, fixtures and series that name it stay. Positions past the end
+        are added, and a stage the shorter list drops is refused if it still
+        holds rounds.
+        """
         with Session.begin() as session:
             event = _event(session, event_id)
-            session.execute(
-                delete(EventStage).where(col(EventStage.event_id) == event_id)
+            rows = list(stages) or [_default_stage(event)]
+            current = list(
+                session.scalars(
+                    select(EventStage)
+                    .where(col(EventStage.event_id) == event_id)
+                    .order_by(col(EventStage.position))
+                )
             )
-            _write_stages(session, event, stages)
+            for row, stage in zip(current, rows, strict=False):
+                row.sqlmodel_update(stage.model_dump())
+            dropped = current[len(rows) :]
+            if dropped:
+                _refuse_rounds(session, dropped)
+                for row in dropped:
+                    session.delete(row)
+            if len(rows) > len(current):
+                _write_stages(
+                    session, event, rows[len(current) :], start=len(current) + 1
+                )
+            session.flush()
             return _public(session, event, full=True)
 
     def get_leagues(self) -> list[LeaguePublic]:
@@ -216,15 +238,46 @@ def _event(session: OrmSession, event_id: int) -> Season:
 
 
 def _write_stages(
-    session: OrmSession, event: Season, stages: Sequence[EventStageWrite]
+    session: OrmSession,
+    event: Season,
+    stages: Sequence[EventStageWrite],
+    start: int = 1,
 ) -> None:
-    """Write the stages in the order the body gives them, or one default stage."""
+    """Write the stages in the order the body gives them, or one default stage.
+
+    `start` is the position of the first one, so a longer list appends.
+    """
     rows = list(stages) or [_default_stage(event)]
     session.add_all(
         EventStage(event_id=ident(event), position=position, **stage.model_dump())
-        for position, stage in enumerate(rows, start=1)
+        for position, stage in enumerate(rows, start=start)
     )
     session.flush()
+
+
+def _refuse_rounds(session: OrmSession, dropped: Sequence[EventStage]) -> None:
+    """Refuse to drop a stage that still holds rounds.
+
+    A round takes its fixtures, series and answers with it, so a list that
+    shortens past a scheduled stage would take the results too.
+    """
+    stages = {ident(stage): stage for stage in dropped}
+    held = sorted(
+        stage_id
+        for stage_id in session.scalars(
+            select(col(DBEventRound.stage_id))
+            .where(col(DBEventRound.stage_id).in_(stages))
+            .distinct()
+        )
+        if stage_id is not None
+    )
+    if held:
+        names = ", ".join(
+            stages[stage_id].name or str(stages[stage_id].position) for stage_id in held
+        )
+        raise BadRequestError(
+            f"stage {names} still holds rounds; delete them before the list shortens"
+        )
 
 
 def _default_stage(event: Season) -> EventStageWrite:

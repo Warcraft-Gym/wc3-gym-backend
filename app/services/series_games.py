@@ -15,7 +15,7 @@ from sqlmodel import col, delete, select
 from app.core import map_order
 from app.core.db import Session
 from app.core.exceptions import BadRequestError, NotFoundError
-from app.models.relationships import DBSeasonRound
+from app.models.relationships import round_row
 from app.models.series import Series
 from app.models.series_game import DBSeriesGame, SeriesGamePublic
 
@@ -92,7 +92,7 @@ def _offers(session: OrmSession, series: Series) -> dict[int, int | None]:
             picks.setdefault(step.side, step.map_id)
     fixed_map_id = None
     if "fixed" in map_order.rules_of(season.map_rules) and series.match:
-        row = session.get(DBSeasonRound, (series.match.season_id, series.match.playday))
+        row = round_row(session, series.match.season_id, series.match.playday)
         fixed_map_id = row.map_id if row else None
     winners = {
         game.game_no: game.winner_side

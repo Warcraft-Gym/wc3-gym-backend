@@ -4,8 +4,20 @@ from pathlib import Path
 from typing import Any
 
 from httpx2 import Client
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, select, text
+from sqlmodel import col
 
+from app.core.db import Session
+from app.models.base import ident
+from app.models.event_stage import EventStage
+from app.models.match import Match
+from app.models.relationships import DBEventRound, round_row
+from app.models.round_availability import DBRoundAvailability
+from app.models.season import Season
+from app.models.series import Series
+from app.services.maps import MapService
+from app.services.seasons import SeasonService
+from app.services.users import UserService
 from tests.migrate import downgrade_to, fresh_database, upgrade_to, upgrade_to_head
 
 # The revision before the week map became the rounds table
@@ -151,8 +163,8 @@ def test_the_migration_dates_every_round_and_keeps_the_week_maps(
     with engine.connect() as connection:
         rows = connection.execute(
             text(
-                "SELECT season_id, playday, start_date, end_date, map_id "
-                "FROM season_rounds ORDER BY season_id, playday"
+                "SELECT season_id, number, start_date, end_date, map_id "
+                "FROM event_round ORDER BY season_id, number"
             )
         ).all()
     assert [tuple(map(str, row)) for row in rows] == [
@@ -204,3 +216,189 @@ def test_the_round_count_follows_the_rows_not_a_stored_number(
         f"/seasons/{body['id']}", json={"name": "Renamed"}, headers=auth_headers
     ).json()
     assert (same["round_count"], len(same["rounds"])) == (2, 2)
+
+
+def test_an_answer_goes_with_the_round_the_count_drops(
+    client: Client, seeded: dict[str, Any], auth_headers: dict[str, str]
+) -> None:
+    """An answer is about one round and cascades with it, so a season that
+    nobody has played can still lose a round."""
+    season_id, player_id = seeded["season_id"], seeded["player_ids"][0]
+    with Session.begin() as session:
+        round_4 = round_row(session, season_id, 4)
+        assert round_4
+        session.add(
+            DBRoundAvailability(
+                user_id=player_id,
+                season_id=season_id,
+                playday=4,
+                round_id=round_4.id,
+                available=False,
+                set_by_user_id=player_id,
+            )
+        )
+
+    resp = client.put(
+        f"/seasons/{season_id}", json={"round_count": 3}, headers=auth_headers
+    )
+
+    assert resp.status_code == 200, resp.text
+    with Session() as session:
+        assert session.get(DBRoundAvailability, (player_id, season_id, 4)) is None
+
+
+def test_a_round_a_match_sits_on_holds_the_count_up(
+    client: Client, seeded: dict[str, Any], auth_headers: dict[str, str]
+) -> None:
+    """A match holds a tie and its series, so the drop is refused and named."""
+    season_id = seeded["season_id"]
+    with Session.begin() as session:
+        session.add(
+            Match(
+                team1_id=seeded["team_a_id"],
+                team2_id=seeded["team_b_id"],
+                season_id=season_id,
+                playday=3,
+            )
+        )
+
+    resp = client.put(
+        f"/seasons/{season_id}", json={"round_count": 2}, headers=auth_headers
+    )
+
+    assert resp.status_code == 400, resp.text
+    assert resp.json() == {
+        "error": "round 3 still holds matches; delete them before the count falls"
+    }
+
+
+def test_a_new_fixture_and_its_series_name_their_round(
+    client: Client, seeded: dict[str, Any], auth_headers: dict[str, str]
+) -> None:
+    """The round is resolved on the session, so a fixture written after the C1
+    backfill carries the same round id a migrated one does. MatchPublic has no
+    round_id, which keeps the GNL payloads unchanged, so the row is read back."""
+    season_id = seeded["season_id"]
+    match = client.post(
+        "/matches",
+        json={
+            "team1_id": seeded["team_a_id"],
+            "team2_id": seeded["team_b_id"],
+            "season_id": season_id,
+            "playday": 2,
+        },
+        headers=auth_headers,
+    )
+    assert match.status_code == 201, match.text
+    series = client.post(
+        "/series",
+        json={
+            "match_id": match.json()["id"],
+            "player1_id": seeded["player_ids"][0],
+            "player2_id": seeded["player_ids"][2],
+            "host_player_id": seeded["player_ids"][0],
+        },
+        headers=auth_headers,
+    )
+    assert series.status_code == 201, series.text
+
+    with Session() as session:
+        round_ = round_row(session, season_id, 2)
+        assert round_ is not None
+        row = session.get(Match, match.json()["id"])
+        assert row is not None
+        assert row.round_id == round_.id
+        played = session.get(Series, series.json()["id"])
+        assert played is not None
+        assert played.round_id == round_.id
+
+
+def test_deleting_a_season_takes_its_rounds_matches_and_series_with_it(
+    seeded: dict[str, Any],
+) -> None:
+    """The rounds go with the season and the ties and series that name a round
+    go with the round, so the delete leaves nothing pointing at a row that is
+    gone."""
+    season_id = seeded["season_id"]
+    with Session() as session:
+        round_ = round_row(session, season_id, 1)
+        assert round_ is not None
+        round_id = round_.id
+
+    SeasonService(user_app_service=UserService(), map_app_service=MapService()).delete(
+        season_id
+    )
+
+    with Session() as session:
+        assert session.get(Season, season_id) is None
+        assert session.get(DBEventRound, round_id) is None
+        assert session.get(Match, seeded["match_id"]) is None
+        assert session.get(Series, seeded["series_played_id"]) is None
+
+
+def stage_the_rounds(season_id: int, count: int = 1) -> list[int]:
+    """`count` stages for the season, with every round on the first one."""
+    with Session.begin() as session:
+        stages = [
+            EventStage(event_id=season_id, position=position, name=f"Stage {position}")
+            for position in range(1, count + 1)
+        ]
+        session.add_all(stages)
+        session.flush()
+        for row in session.scalars(
+            select(DBEventRound).where(col(DBEventRound.season_id) == season_id)
+        ):
+            row.stage_id = stages[0].id
+        return [ident(stage) for stage in stages]
+
+
+def test_a_stage_write_keeps_the_id_and_the_matches_on_it(
+    client: Client, seeded: dict[str, Any], auth_headers: dict[str, str]
+) -> None:
+    """The stage a round hangs off is updated in place, so a rename leaves the
+    rounds, the fixtures and the series where they are."""
+    season_id = seeded["season_id"]
+    stage_id = stage_the_rounds(season_id)[0]
+
+    resp = client.put(
+        f"/events/{season_id}/stages",
+        json=[{"name": "Regular season", "best_of": 5}],
+        headers=auth_headers,
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert [(s["id"], s["name"], s["best_of"]) for s in resp.json()["stages"]] == [
+        (stage_id, "Regular season", 5)
+    ]
+    with Session() as session:
+        assert session.get(Match, seeded["match_id"]) is not None
+        assert session.get(Series, seeded["series_played_id"]) is not None
+        assert len(client.get(f"/seasons/{season_id}").json()["rounds"]) == 4
+
+
+def test_a_stage_that_holds_rounds_holds_the_list_up(
+    client: Client, seeded: dict[str, Any], auth_headers: dict[str, str]
+) -> None:
+    """A shorter list drops the stages past its end, so a stage with rounds on
+    it is named and nothing is deleted."""
+    season_id = seeded["season_id"]
+    first_id, second_id = stage_the_rounds(season_id, count=2)
+    with Session.begin() as session:
+        session.add(DBEventRound(season_id=season_id, stage_id=second_id, number=5))
+
+    resp = client.put(
+        f"/events/{season_id}/stages",
+        json=[{"name": "Only one"}],
+        headers=auth_headers,
+    )
+
+    assert resp.status_code == 400, resp.text
+    assert resp.json() == {
+        "error": "stage Stage 2 still holds rounds; delete them before the list shortens"
+    }
+    with Session() as session:
+        kept = session.get(EventStage, first_id)
+        assert kept is not None and kept.name == "Stage 1"
+        assert session.get(EventStage, second_id) is not None
+        assert session.get(Match, seeded["match_id"]) is not None
+        assert len(client.get(f"/seasons/{season_id}").json()["rounds"]) == 5

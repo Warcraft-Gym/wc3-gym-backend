@@ -47,6 +47,8 @@ BEFORE_SOFT_BLOCKS = "160f8f7bf2d4"
 BEFORE_EVENT_RENAME = "f4b7c02e9a15"
 # The rename itself, which leaves the seasons view behind until the next deploy
 EVENT_RENAME = "1e0287eacccf"
+# The revision before the rounds become event_round
+BEFORE_EVENT_ROUND = "8cc6dd6d93eb"
 
 
 def comparable(
@@ -681,3 +683,140 @@ def test_the_seasons_view_is_dropped_and_comes_back_on_downgrade(
     assert "seasons" not in inspect(engine).get_view_names()
     downgrade_to(url, EVENT_RENAME)
     assert "seasons" in inspect(engine).get_view_names()
+
+
+def seed_rounds(url: str) -> None:
+    """A season with two players and two teams, ready for rounds and matches."""
+    engine = create_engine(url)
+    users = table(
+        "users",
+        *(
+            column(c)
+            for c in ("id", "name", "battleTag", "discordTag", "discordId", "race")
+        ),
+    )
+    with engine.begin() as connection:
+        connection.execute(
+            users.insert(),
+            [
+                {
+                    "id": i,
+                    "name": f"P{i}",
+                    "battleTag": f"P{i}#1",
+                    "discordTag": f"p{i}",
+                    "discordId": str(i),
+                    "race": "HU",
+                }
+                for i in (1, 2)
+            ],
+        )
+        connection.execute(
+            text("INSERT INTO teams (id, name) VALUES (1, 'Alpha'), (2, 'Beta')")
+        )
+        connection.execute(
+            text(
+                "INSERT INTO seasons (id, name, series_per_round) "
+                "VALUES (17, 'Season 17', 2)"
+            )
+        )
+    engine.dispose()
+
+
+def test_the_rounds_become_event_round_and_everything_points_at_them(
+    tmp_path: Path,
+) -> None:
+    """Each round keeps its number and joins the season's stage, a match on a
+    playday with no round row gets one, and the match, the series and the
+    availability answer all name their round. The old names still read through
+    their views, and the downgrade puts season_rounds back."""
+    url = fresh_database(tmp_path, "event-round")
+    upgrade_to(url, BEFORE_EVENT_RENAME)
+    seed_rounds(url)
+    # The rename gives the season its league and its one round-robin stage
+    upgrade_to(url, BEFORE_EVENT_ROUND)
+
+    engine = create_engine(url)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO season_rounds (season_id, playday, start_date, end_date) "
+                "VALUES (17, 1, '2026-01-05', '2026-01-11')"
+            )
+        )
+        # Playday 2 has no round row of its own; the migration writes one
+        connection.execute(
+            text(
+                "INSERT INTO matches (id, team1_id, team2_id, season_id, playday) "
+                "VALUES (1, 1, 2, 17, 1), (2, 1, 2, 17, 2)"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO series (id, match_id, player1_id, player2_id, "
+                "host_player_id) VALUES (1, 2, 1, 2, 1)"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO user_season_availability (user_id, season_id, playday, "
+                "available, set_by_user_id) VALUES (1, 17, 2, 0, 1)"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO koth_events (id, name, event_date, is_active, "
+                "bracket_1_threshold, bracket_2_threshold) "
+                "VALUES (1, 'A night', '2026-02-03 19:00:00', 1, 1450, 1600)"
+            )
+        )
+
+    upgrade_to(url, "head")
+    with engine.connect() as connection:
+        stage = connection.scalar(
+            text("SELECT id FROM event_stage WHERE event_id = 17")
+        )
+        # SQLite hands a date back as text, so the window is read as written
+        assert connection.execute(
+            text("SELECT number, stage_id, start_date FROM event_round ORDER BY number")
+        ).all() == [(1, stage, "2026-01-05"), (2, stage, None)]
+        rounds = {
+            number: round_id
+            for number, round_id in connection.execute(
+                text("SELECT number, id FROM event_round")
+            )
+        }
+        assert connection.execute(
+            text("SELECT id, round_id FROM matches ORDER BY id")
+        ).all() == [(1, rounds[1]), (2, rounds[2])]
+        assert connection.scalar(text("SELECT round_id FROM series")) == rounds[2]
+        assert (
+            connection.scalar(text("SELECT round_id FROM round_availability"))
+            == rounds[2]
+        )
+        # The running deploy still reads both old names through their views
+        assert connection.execute(
+            text("SELECT season_id, playday FROM season_rounds ORDER BY playday")
+        ).all() == [(17, 1), (17, 2)]
+        assert (
+            connection.scalar(text("SELECT playday FROM user_season_availability")) == 2
+        )
+    # A night outlives the round it names, so the key clears the column
+    assert [
+        (key["referred_table"], key["options"].get("ondelete"))
+        for key in inspect(engine).get_foreign_keys("koth_events")
+    ] == [("event_round", "SET NULL")]
+
+    downgrade_to(url, BEFORE_EVENT_ROUND)
+    with engine.connect() as connection:
+        assert connection.execute(
+            text(
+                "SELECT season_id, playday, start_date FROM season_rounds "
+                "ORDER BY playday"
+            )
+        ).all() == [(17, 1, "2026-01-05"), (17, 2, None)]
+        assert (
+            connection.scalar(text("SELECT count(*) FROM user_season_availability"))
+            == 1
+        )
+    assert "event_round" not in inspect(engine).get_table_names()
+    assert "round_id" not in {c["name"] for c in inspect(engine).get_columns("matches")}
