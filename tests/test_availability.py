@@ -402,3 +402,43 @@ def test_a_season_answers_its_check_in_window_and_takes_a_new_one(
     assert resp.status_code == 200, resp.text
     assert resp.json()["checkin_days"] == 5
     assert client.get(f"/seasons/{season_id}").json()["checkin_days"] == 5
+
+
+def test_a_blank_check_in_window_keeps_the_check_in_open(
+    client: Client,
+    seeded: dict[str, Any],
+    auth_headers: dict[str, str],
+    member: Callable[..., dict[str, str]],
+    checkin_day: Callable[[str], None],
+) -> None:
+    """A null window reads back null and takes a player answer on any day."""
+    season_id = seeded["season_id"]
+
+    resp = client.put(
+        f"/seasons/{season_id}", json={"checkin_days": None}, headers=auth_headers
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["checkin_days"] is None
+    listed = {row["id"]: row["checkin_days"] for row in client.get("/seasons").json()}
+    assert listed[season_id] is None
+    checkin_day("2026-01-07")
+    assert [row["playday"] for row in write(client, member(), 2, False)] == [2]
+
+
+def test_a_negative_check_in_window_is_refused(
+    client: Client, seeded: dict[str, Any], auth_headers: dict[str, str]
+) -> None:
+    created = client.post(
+        "/seasons",
+        json={"name": "S2", "series_per_round": 2, "checkin_days": -1},
+        headers=auth_headers,
+    )
+    updated = client.put(
+        f"/seasons/{seeded['season_id']}",
+        json={"checkin_days": -1},
+        headers=auth_headers,
+    )
+
+    assert created.status_code == 422, created.text
+    assert updated.status_code == 422, updated.text

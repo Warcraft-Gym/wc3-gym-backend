@@ -120,6 +120,9 @@ class AvailabilityService:
 
 def _checkin_window(season: Season, playday: int) -> None:
     """Refuse a player before the round's check-in opens and after it ends."""
+    # A blank window keeps the check-in open all season
+    if season.checkin_days is None:
+        return
     row = next((r for r in season.rounds if r.playday == playday), None)
     if row is None or row.start_date is None:
         return
