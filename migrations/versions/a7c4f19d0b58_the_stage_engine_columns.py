@@ -9,7 +9,7 @@ entrants groups series, so `series.match_id` turns nullable. Every series that
 exists names its fixture, so the GNL payloads are unchanged.
 
 Revision ID: a7c4f19d0b58
-Revises: 3d5e9a1c7b62
+Revises: c6d1a4f80b27
 Create Date: 2026-09-13 22:30:00.000000
 
 """
@@ -21,7 +21,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "a7c4f19d0b58"
-down_revision: str | Sequence[str] | None = "3d5e9a1c7b62"
+down_revision: str | Sequence[str] | None = "c6d1a4f80b27"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
