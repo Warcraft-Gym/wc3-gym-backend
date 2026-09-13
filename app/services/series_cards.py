@@ -11,6 +11,7 @@ from sqlalchemy import func, select
 from sqlmodel import col
 
 from app.core.db import Session
+from app.core.event_label import label as event_label
 from app.models.enums import Race
 from app.models.map import Map
 from app.models.relationships import round_row
@@ -102,10 +103,11 @@ def header(series: SeriesPublic) -> list[str]:
     match = series.match
     if match is None or match.season is None or match.season.id is None:
         return []
+    named = event_label(match.season.name, match.season.league_short_name)
     if match.playday is None:
-        return [f"## {md(match.season.name or '?')}"]
+        return [f"## {md(named)}"]
     return [
-        f"## {md(match.season.name or '?')}",
+        f"## {md(named)}",
         round_line(match.season.id, match.playday),
     ]
 

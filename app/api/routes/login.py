@@ -109,6 +109,7 @@ def me(
             {
                 "id": season.id,
                 "name": season.name,
+                "league_short_name": season.league_short_name,
                 "phase": season.phase,
                 "signups_open": season.signups_open,
                 "scheduling_enabled": season.scheduling_enabled,

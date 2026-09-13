@@ -86,6 +86,7 @@
             "fantasy_tiers": null,
             "fantasy_tiers_applied_at": null,
             "id": 1,
+            "league_short_name": null,
             "map_rules": null,
             "maps": [],
             "name": "Season 1",
@@ -196,6 +197,7 @@
       "fantasy_tiers": 0,
       "fantasy_tiers_applied_at": null,
       "id": 1,
+      "league_short_name": null,
       "map_rules": null,
       "maps": [
         {
@@ -254,6 +256,7 @@
     "fantasy_tiers": 0,
     "fantasy_tiers_applied_at": null,
     "id": 1,
+    "league_short_name": null,
     "map_rules": null,
     "maps": [
       {
@@ -323,6 +326,7 @@
           "fantasy_tiers": null,
           "fantasy_tiers_applied_at": null,
           "id": 1,
+          "league_short_name": null,
           "map_rules": null,
           "maps": [],
           "name": "Season 1",
@@ -441,6 +445,7 @@
           "fantasy_tiers": null,
           "fantasy_tiers_applied_at": null,
           "id": 1,
+          "league_short_name": null,
           "map_rules": null,
           "maps": [],
           "name": "Season 1",
@@ -580,6 +585,7 @@
   "GET /users/1/history": {
     "events": [
       {
+        "league_short_name": null,
         "lost": 0,
         "place": 1,
         "played": 1,
@@ -602,6 +608,7 @@
         "meetings": [
           {
             "date_time": "2026-01-07T19:00:00Z",
+            "league_short_name": null,
             "maps": [],
             "my_race": null,
             "my_score": 2,
@@ -635,6 +642,7 @@
         "fantasy_tiers": null,
         "fantasy_tiers_applied_at": null,
         "id": 1,
+        "league_short_name": null,
         "map_rules": null,
         "maps": [],
         "name": "Season 1",

@@ -7,6 +7,7 @@ are plain links and carry no token.
 import os
 from typing import Any
 
+from app.core.event_label import label as event_label
 from app.models.season import SeasonPhase
 from app.services import admins, discord, discord_roles, series_cards
 from app.services.commands.base import (
@@ -46,7 +47,7 @@ def _content(services: Services) -> str:
     season = services.seasons.get(season_id)
     return "\n".join(
         [
-            f"**{md(season.name or '?')}**",
+            f"**{md(event_label(season.name, season.league_short_name))}**",
             series_cards.round_line(season_id, 1),
             f"{SIGNUPS.get(season.phase, CLOSED)} {SIGN_IN}",
         ]
