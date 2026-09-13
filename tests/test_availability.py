@@ -426,6 +426,23 @@ def test_a_blank_check_in_window_keeps_the_check_in_open(
     assert [row["playday"] for row in write(client, member(), 2, False)] == [2]
 
 
+def test_an_event_that_takes_no_check_in_answers_on_any_day(
+    client: Client,
+    seeded: dict[str, Any],
+    member: Callable[..., dict[str, str]],
+    checkin_day: Callable[[str], None],
+) -> None:
+    """checkin_enabled off means the round windows never refuse a player."""
+    with Session.begin() as session:
+        season = session.get(Season, seeded["season_id"])
+        assert season is not None
+        season.checkin_enabled = False
+
+    # A day well before round 4 opens, which the window would refuse
+    checkin_day("2026-01-07")
+    assert [row["playday"] for row in write(client, member(), 4, False)] == [4]
+
+
 def test_a_negative_check_in_window_is_refused(
     client: Client, seeded: dict[str, Any], auth_headers: dict[str, str]
 ) -> None:
