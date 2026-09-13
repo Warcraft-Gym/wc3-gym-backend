@@ -7,7 +7,7 @@ the ranking rule are the stage's, so standings are computed, never stored.
 
 from typing import Annotated
 
-from sqlalchemy import UniqueConstraint
+from sqlalchemy import UniqueConstraint, false
 from sqlmodel import Field, SQLModel
 
 from app.models.base import DBModel
@@ -47,6 +47,14 @@ class EventStage(DBModel, table=True):
     points_game_won: int = Field(default=0, sa_column_kwargs={"server_default": "0"})
     # How many of the standings carry into the next stage; null means all of them
     advance_count: int | None = None
+    # How the stage splits into groups that merge at the next stage; unused until
+    # the group generator is built
+    group_size: int | None = None
+    group_advance: int | None = None
+    # On: finishing the stage carries the advance_count into the next one
+    auto_advance: bool = Field(
+        default=False, sa_column_kwargs={"server_default": false()}
+    )
 
 
 class EventStagePublic(SQLModel):
@@ -64,6 +72,9 @@ class EventStagePublic(SQLModel):
     points_series_drawn: int
     points_game_won: int
     advance_count: int | None = None
+    group_size: int | None = None
+    group_advance: int | None = None
+    auto_advance: bool = False
 
 
 class EventStageWrite(SQLModel):

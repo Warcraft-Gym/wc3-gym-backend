@@ -49,9 +49,11 @@ class RoleScope(enum.Enum):
 
 
 class EntrantKind(enum.Enum):
-    """Who enters a league's events: one player, or a team drafted for it."""
+    """Who enters a league's events: one player, a pre-made team, or a team
+    drafted for it."""
 
     solo = "solo"
+    team = "team"
     drafted_teams = "drafted_teams"
 
 
@@ -74,15 +76,24 @@ class EventKind(enum.Enum):
 
 
 class StageFormat(enum.Enum):
-    """How one stage plays its entrants off. v1 builds round_robin,
+    """How one stage plays its entrants off. v1 builds round_robin, gnl,
     single_elimination and koth; the rest answer format_not_built."""
 
     round_robin = "round_robin"
+    # The admin sets the fixtures of a round and the captains draft the series
+    gnl = "gnl"
     single_elimination = "single_elimination"
     double_elimination = "double_elimination"
     swiss = "swiss"
     koth = "koth"
     ffa = "ffa"
+
+
+class SignupPolicy(enum.Enum):
+    """Who may enter an event: a member with an account, or any battle tag."""
+
+    members = "members"
+    anyone = "anyone"
 
 
 class SchedulingMode(enum.Enum):

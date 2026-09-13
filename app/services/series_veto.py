@@ -229,6 +229,8 @@ def _board(
     session: OrmSession, series: Series, player_id: int | None
 ) -> SeriesVetoPublic:
     """The board as one player row sees it: an admin who plays gets their side and turn."""
+    if series.player1_id is None or series.player2_id is None:
+        raise BadRequestError("The series has no sides to veto with yet")
     season = series.match.season
     order = _order(season)
     steps = _steps(session, ident(series))

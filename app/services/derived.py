@@ -151,7 +151,7 @@ def _signup_races(
 
 
 def signup_on(
-    signup: type[DBUserSeasonSignup], user_id: Mapped[int]
+    signup: type[DBUserSeasonSignup], user_id: Mapped[int | None]
 ) -> ColumnElement[bool]:
     """The join of a season signup: the player AND the season of the series.
     One key alone reads the race off some other season the player signed up for."""
@@ -176,7 +176,8 @@ def clear_kept_off_race(session: Session, row: Series) -> None:
     if season_id is None or not (row.player1_off_race or row.player2_off_race):
         return
     signed = _signup_races(
-        session, {(row.player1_id, season_id), (row.player2_id, season_id)}
+        session,
+        {(side, season_id) for side in (row.player1_id, row.player2_id) if side},
     )
     for user_id, field in (
         (row.player1_id, "player1_off_race"),

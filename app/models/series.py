@@ -2,7 +2,14 @@ from collections.abc import Sequence
 from datetime import datetime
 from typing import Annotated, Any, Literal, Self
 
-from sqlalchemy import ColumnElement, ColumnExpressionArgument, Index, and_, select
+from sqlalchemy import (
+    ColumnElement,
+    ColumnExpressionArgument,
+    Index,
+    and_,
+    false,
+    select,
+)
 from sqlalchemy.orm import Session, joinedload, selectinload
 from sqlalchemy.orm.interfaces import ORMOption
 from sqlmodel import Field, Relationship, SQLModel, col
@@ -50,10 +57,45 @@ class Series(SeriesBase, DBModel, table=True):
     )
 
     id: int | None = Field(default=None, primary_key=True)
+    # A generated bracket series holds no sides until its feeders are scored.
+    # SeriesCreate keeps both required, so every written series names them.
+    player1_id: int | None = Field(
+        default=None, index=True, foreign_key="users.id", ondelete="CASCADE"
+    )
+    player2_id: int | None = Field(
+        default=None, index=True, foreign_key="users.id", ondelete="CASCADE"
+    )
     # The round this series is played in; backfilled in C1, required from C2.
     # It stays off SeriesBase, so the series payloads are unchanged.
     round_id: int | None = Field(
         default=None, index=True, foreign_key="event_round.id", ondelete="CASCADE"
+    )
+    # The columns below stay off SeriesBase too, so the series payloads hold.
+    # Where the series sits in the chain or the fixture it belongs to
+    sequence: int | None = None
+    # How many players a side holds: 1 for a 1v1, 2 for a 2v2
+    side_size: int = Field(default=1, sa_column_kwargs={"server_default": "1"})
+    # How the sides are chosen: drafted by the captains, or any pick
+    pick_rule: str | None = Field(default=None, max_length=10)
+    # played, walkover or forfeit
+    result_kind: str = Field(
+        default="played", max_length=10, sa_column_kwargs={"server_default": "played"}
+    )
+    # The feeder graph: each slot takes the winner, or the loser, of one series
+    slot1_from_series_id: int | None = Field(
+        default=None, foreign_key="series.id", ondelete="SET NULL"
+    )
+    slot1_takes_loser: bool = Field(
+        default=False, sa_column_kwargs={"server_default": false()}
+    )
+    slot2_from_series_id: int | None = Field(
+        default=None, foreign_key="series.id", ondelete="SET NULL"
+    )
+    slot2_takes_loser: bool = Field(
+        default=False, sa_column_kwargs={"server_default": false()}
+    )
+    division_id: int | None = Field(
+        default=None, foreign_key="event_division.id", ondelete="SET NULL"
     )
     match: "Match" = Relationship(
         sa_relationship_kwargs={"foreign_keys": "[Series.match_id]"}
@@ -284,3 +326,29 @@ class SeriesPublic(SeriesBase, PublicModel):
 def has_result(series: Series | SeriesPublic) -> bool:
     """A series with a result is over: nothing is left to stream."""
     return series.player1_score is not None or series.player2_score is not None
+
+
+class SeriesFeedersPublic(PublicModel):
+    """The feeder graph of one series, read apart from SeriesPublic.
+
+    The bracket page reads where each slot comes from and how the series
+    ended. It is its own model, so the series payloads keep their shape.
+    """
+
+    id: int
+    result_kind: str
+    slot1_from_series_id: int | None = None
+    slot1_takes_loser: bool = False
+    slot2_from_series_id: int | None = None
+    slot2_takes_loser: bool = False
+
+    @classmethod
+    def from_series(cls, series: Series) -> Self:
+        return cls(
+            id=ident(series),
+            result_kind=series.result_kind,
+            slot1_from_series_id=series.slot1_from_series_id,
+            slot1_takes_loser=series.slot1_takes_loser,
+            slot2_from_series_id=series.slot2_from_series_id,
+            slot2_takes_loser=series.slot2_takes_loser,
+        )
