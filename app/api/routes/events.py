@@ -27,12 +27,13 @@ from app.models.event_stage import (
 )
 from app.models.season import (
     EventCreate,
+    EventDiscordPost,
     EventPublic,
     EventUpdate,
     MemberEventRow,
 )
 from app.models.series import StageSeriesPublic
-from app.services import stage_engine
+from app.services import discord_posts, stage_engine
 
 router = APIRouter(tags=["events"])
 
@@ -105,6 +106,15 @@ def set_stages(
 ) -> EventPublic:
     """Replace the stage list; the order of the body is the order they play in."""
     return service.set_stages(event_id, stages)
+
+
+@router.post("/events/{event_id}/discord-post", dependencies=[Depends(require_admin)])
+def post_event_card(event_id: int, data: EventDiscordPost) -> dict[str, str]:
+    """Post the event card with its two buttons, or edit the one in the channel.
+
+    A draft has no page to send anyone to and is answered not found.
+    """
+    return {"status": discord_posts.post_event(event_id, data.channel_id)}
 
 
 @router.get("/events/{event_id}/entrants")
