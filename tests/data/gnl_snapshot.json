@@ -585,6 +585,7 @@
   "GET /users/1/history": {
     "events": [
       {
+        "kind": "gnl",
         "league_short_name": null,
         "lost": 0,
         "place": 1,
@@ -608,6 +609,7 @@
         "meetings": [
           {
             "date_time": "2026-01-07T19:00:00Z",
+            "kind": "gnl",
             "league_short_name": null,
             "maps": [],
             "my_race": null,

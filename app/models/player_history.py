@@ -8,6 +8,8 @@ from datetime import datetime
 
 from sqlmodel import SQLModel
 
+from app.models.enums import EventKind
+
 
 class HistoryMeeting(SQLModel):
     """One played series against the opponent."""
@@ -17,6 +19,8 @@ class HistoryMeeting(SQLModel):
     season_name: str | None = None
     # The short name of the season's league; null when the event has no league
     league_short_name: str | None = None
+    # The kind of event the series was played in
+    kind: EventKind = EventKind.gnl
     playday: int | None = None
     my_score: int
     their_score: int
@@ -45,12 +49,14 @@ class HistoryOpponent(SQLModel):
 
 
 class HistoryEvent(SQLModel):
-    """One season the player took part in."""
+    """One event the player took part in, of any kind."""
 
     season_id: int
     season_name: str | None = None
     # The short name of the season's league; null when the event has no league
     league_short_name: str | None = None
+    # What the event is: a GNL season, a cup, a KOTH night
+    kind: EventKind = EventKind.gnl
     team_id: int | None = None
     team_name: str | None = None
     played: int
