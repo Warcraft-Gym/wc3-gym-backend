@@ -12,9 +12,14 @@ from app.api.deps import (
 from app.api.search import SearchQuery
 from app.core.exceptions import NotFoundError
 from app.core.query import QueryUtil
-from app.models.series import SeriesCreate, SeriesPublic, SeriesUpdate
+from app.models.series import (
+    ResultKindWrite,
+    SeriesCreate,
+    SeriesPublic,
+    SeriesUpdate,
+)
 from app.models.series_cast import CastPublic, CastWrite, ClaimWrite, VodWrite
-from app.services import casts
+from app.services import casts, stage_engine
 
 logger = logging.getLogger(__name__)
 
@@ -38,10 +43,23 @@ def add_series(data: SeriesCreate, service: SeriesServiceDep) -> SeriesPublic:
     dependencies=[Depends(require_admin)],
 )
 def update_series(
-    series_id: int, data: SeriesUpdate, service: SeriesServiceDep
+    series_id: int,
+    data: SeriesUpdate,
+    service: SeriesServiceDep,
+    force: bool = False,
 ) -> SeriesPublic:
-    """Update the series data of an existing series"""
-    return service.update(series_id, data)
+    """Update the series data of an existing series.
+
+    Clearing the score reopens the bracket below it; `force` allows the reopen
+    when a later series already carries a result.
+    """
+    return service.update(series_id, data, force)
+
+
+@router.put("/series/{series_id}/result-kind", dependencies=[Depends(require_admin)])
+def set_result_kind(series_id: int, data: ResultKindWrite) -> SeriesPublic:
+    """Score a series no game was played for: a walkover or a forfeit."""
+    return stage_engine.set_result_kind(series_id, data)
 
 
 @router.delete(

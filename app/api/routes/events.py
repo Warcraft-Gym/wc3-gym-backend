@@ -19,8 +19,13 @@ from app.models.event_entrant import (
     EventEntrantPublic,
     SeedWrite,
 )
-from app.models.event_stage import EventStagePublic, EventStageWrite
+from app.models.event_stage import (
+    DivisionStandings,
+    EventStagePublic,
+    EventStageWrite,
+)
 from app.models.season import EventCreate, EventPublic, EventUpdate
+from app.services import stage_engine
 
 router = APIRouter(tags=["events"])
 
@@ -174,3 +179,27 @@ def lock_seeds(
 ) -> EventStagePublic:
     """Lock the seeds of the stage; a later seed write is refused."""
     return service.lock_seeds(event_id, stage_id)
+
+
+@router.post(
+    "/events/{event_id}/stages/{stage_id}/generate",
+    dependencies=[Depends(require_admin)],
+)
+def generate_stage(event_id: int, stage_id: int) -> dict[str, int]:
+    """Create every series of the stage from the seeds, one bracket per division."""
+    return stage_engine.generate(event_id, stage_id)
+
+
+@router.get("/events/{event_id}/stages/{stage_id}/standings")
+def get_standings(event_id: int, stage_id: int) -> list[DivisionStandings]:
+    """The table of every division of the stage, computed on the read."""
+    return stage_engine.standings_of(event_id, stage_id)
+
+
+@router.post(
+    "/events/{event_id}/stages/{stage_id}/advance",
+    dependencies=[Depends(require_admin)],
+)
+def advance_stage(event_id: int, stage_id: int) -> dict[str, int]:
+    """Seed the next stage from the top places of every division's table."""
+    return stage_engine.advance(event_id, stage_id)

@@ -6,7 +6,7 @@ the ranking rule are the stage's, so standings are computed, never stored.
 """
 
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Literal
 
 from sqlalchemy import UniqueConstraint, false
 from sqlmodel import Field, SQLModel
@@ -60,6 +60,14 @@ class EventStage(DBModel, table=True):
     seeds_locked_at: Annotated[datetime | None, AwareUTC] = Field(
         default=None, sa_type=UTCDateTime
     )
+    # On: an elimination bracket adds the series the beaten semi-finalists play
+    third_place: bool = Field(
+        default=False, sa_column_kwargs={"server_default": false()}
+    )
+    # What a double elimination final holds: one series, a reset, or none
+    grand_final_modifier: str = Field(
+        default="one", max_length=10, sa_column_kwargs={"server_default": "one"}
+    )
 
 
 class EventStagePublic(SQLModel):
@@ -81,6 +89,8 @@ class EventStagePublic(SQLModel):
     group_advance: int | None = None
     auto_advance: bool = False
     seeds_locked_at: Annotated[datetime | None, AwareUTC] = None
+    third_place: bool = False
+    grand_final_modifier: str = "one"
 
 
 class EventStageWrite(SQLModel):
@@ -96,3 +106,31 @@ class EventStageWrite(SQLModel):
     points_series_drawn: int = 0
     points_game_won: int = 0
     advance_count: int | None = None
+    auto_advance: bool = False
+    third_place: bool = False
+    grand_final_modifier: Literal["one", "reset", "skip"] = "one"
+
+
+class StandingRow(SQLModel):
+    """One entrant's line of a stage table, computed on every read."""
+
+    position: int
+    entrant_id: int
+    user_id: int | None = None
+    team_id: int | None = None
+    name: Annotated[str | None, NumToStr] = None
+    played: int = 0
+    won: int = 0
+    lost: int = 0
+    games_won: int = 0
+    games_lost: int = 0
+    points: int = 0
+    game_diff: int = 0
+
+
+class DivisionStandings(SQLModel):
+    """The table of one division; a stage with no divisions answers one of these."""
+
+    division_id: int | None = None
+    division_name: Annotated[str | None, NumToStr] = None
+    rows: list[StandingRow] = []
