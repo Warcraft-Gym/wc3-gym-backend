@@ -6,7 +6,7 @@ the ranking rule are the stage's, so standings are computed, never stored.
 """
 
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Literal
 
 from sqlalchemy import UniqueConstraint, false
 from sqlmodel import Field, SQLModel
@@ -106,6 +106,9 @@ class EventStageWrite(SQLModel):
     points_series_drawn: int = 0
     points_game_won: int = 0
     advance_count: int | None = None
+    auto_advance: bool = False
+    third_place: bool = False
+    grand_final_modifier: Literal["one", "reset", "skip"] = "one"
 
 
 class StandingRow(SQLModel):

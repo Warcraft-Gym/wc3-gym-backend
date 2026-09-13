@@ -62,7 +62,7 @@ def generate(event_id: int, stage_id: int) -> dict[str, int]:
             )
         if _series_of(session, stage_id):
             raise BadRequestError("This stage already holds series")
-        fields = _fields(session, event_id)
+        fields = _fields(_entrants(session, event_id))
         for field in fields.values():
             if len(field) < 2:
                 raise BadRequestError("A division needs two entrants to generate")
@@ -258,8 +258,15 @@ def _side(row: Series, takes_loser: bool) -> int | None:
 
 
 def _settle(session: OrmSession, row: Series) -> None:
-    """A series whose other side can never arrive is a walkover for the side it has."""
+    """A series nobody plays is a walkover: a bye, or a reset the final settled."""
     if scored(row):
+        return
+    final = _reset_final(session, row)
+    if final is not None:
+        # A bracket reset is played only when the lower bracket side takes the final
+        if scored(final) and _side(final, takes_loser=False) == final.player1_id:
+            _award(session, row, to_first=True, kind="walkover")
+            on_scored(session, row)
         return
     first, first_known = _resolved(session, row, 1)
     second, second_known = _resolved(session, row, 2)
@@ -267,6 +274,19 @@ def _settle(session: OrmSession, row: Series) -> None:
         return
     _award(session, row, first is not None, "walkover")
     on_scored(session, row)
+
+
+def _reset_final(session: OrmSession, row: Series) -> Series | None:
+    """The grand final a bracket reset hangs off, which is the one series it
+    takes both its sides from: the winner in front, the loser behind."""
+    if (
+        row.slot1_from_series_id is None
+        or row.slot1_from_series_id != row.slot2_from_series_id
+        or row.slot1_takes_loser
+        or not row.slot2_takes_loser
+    ):
+        return None
+    return session.get(Series, row.slot1_from_series_id)
 
 
 def _resolved(session: OrmSession, row: Series, slot: int) -> tuple[int | None, bool]:
@@ -360,13 +380,10 @@ def _next_number(session: OrmSession, event_id: int) -> int:
     return (highest or 0) + 1
 
 
-def _fields(session: OrmSession, event_id: int) -> dict[int | None, list[EventEntrant]]:
-    """The entrants of every division in seed order; one field without divisions.
-
-    A seed is what a locked stage plays over, so once any entrant carries one
-    the field is the seeded entrants alone: `advance` seeds the ones that go
-    through and clears the rest.
-    """
+def _entrants(
+    session: OrmSession, event_id: int
+) -> dict[int | None, list[EventEntrant]]:
+    """Every entrant of every division in seed order; one field without divisions."""
     divisions = session.scalars(
         select(EventDivision)
         .where(col(EventDivision.event_id) == event_id)
@@ -384,17 +401,30 @@ def _fields(session: OrmSession, event_id: int) -> dict[int | None, list[EventEn
             col(EventEntrant.id),
         )
     ).all()
-    field = [entrant for entrant in entrants if entrant.seed is not None] or list(
-        entrants
-    )
     if not divisions:
-        return {None: field}
+        return {None: list(entrants)}
     return {
         ident(division): [
-            entrant for entrant in field if entrant.division_id == division.id
+            entrant for entrant in entrants if entrant.division_id == division.id
         ]
         for division in divisions
     }
+
+
+def _fields(
+    everyone: dict[int | None, list[EventEntrant]],
+) -> dict[int | None, list[EventEntrant]]:
+    """What a generate plays over: the seeded entrants of every division.
+
+    A seed is what a locked stage plays over, so once any entrant carries one
+    the field is the seeded entrants alone: `advance` seeds the ones that go
+    through and clears the rest.
+    """
+    seeded = {
+        division_id: [entrant for entrant in field if entrant.seed is not None]
+        for division_id, field in everyone.items()
+    }
+    return seeded if any(seeded.values()) else everyone
 
 
 def _plan(stage: EventStage, size: int) -> brackets.Plan:
@@ -417,7 +447,12 @@ def _plan(stage: EventStage, size: int) -> brackets.Plan:
 def _tables(
     session: OrmSession, event_id: int, stage: EventStage
 ) -> list[DivisionStandings]:
-    """One table per division, from the series the stage holds."""
+    """One table per division, from the series the stage holds.
+
+    The field of a table is the entrants its own series play over, so the table
+    of a finished stage keeps everyone that played it after `advance` has
+    reseeded the event for the next stage.
+    """
     played: dict[int | None, list[Series]] = {}
     for row in _series_of(session, stage.id):
         played.setdefault(row.division_id, []).append(row)
@@ -427,14 +462,31 @@ def _tables(
             select(EventDivision).where(col(EventDivision.event_id) == event_id)
         )
     }
+    everyone = _entrants(session, event_id)
+    seeds = _fields(everyone)
     return [
         DivisionStandings(
             division_id=division_id,
             division_name=names.get(division_id) if division_id else None,
-            rows=_table(session, stage, field, played.get(division_id, [])),
+            rows=_table(
+                session,
+                stage,
+                _sides_of(field, played.get(division_id, []))
+                or seeds.get(division_id, []),
+                played.get(division_id, []),
+            ),
         )
-        for division_id, field in _fields(session, event_id).items()
+        for division_id, field in everyone.items()
     ]
+
+
+def _sides_of(
+    field: Sequence[EventEntrant], series: Sequence[Series]
+) -> list[EventEntrant]:
+    """The entrants of the division that stand in one of its series, in seed order."""
+    sides = {row.player1_id for row in series} | {row.player2_id for row in series}
+    sides.discard(None)
+    return [entrant for entrant in field if entrant.user_id in sides]
 
 
 def _table(

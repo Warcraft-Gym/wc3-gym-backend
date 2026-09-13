@@ -540,3 +540,106 @@ def test_scoring_a_gnl_series_moves_nothing(
     assert {key: value for key, value in after.items() if key != series_id} == {
         key: value for key, value in before.items() if key != series_id
     }
+
+
+def test_the_table_of_an_advanced_stage_keeps_every_entrant(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """Advance seeds the next stage; the finished one still holds its whole field."""
+    event, (first, _) = cup(
+        4, StageFormat.round_robin, stages=2, advance_count=2, points_series_won=3
+    )
+    generate(client, auth_headers, event, first)
+    seeds = players_of(event)
+    for row in bracket(first):
+        won = row["sides"][0] == seeds[0] or row["sides"][1] != seeds[0]
+        score(client, auth_headers, row["id"], 2 if won else 0, 0 if won else 2)
+    path = f"/events/{event}/stages/{first}/standings"
+    before = client.get(path).json()[0]["rows"]
+    assert len(before) == 4
+    moved = client.post(f"/events/{event}/stages/{first}/advance", headers=auth_headers)
+    assert moved.status_code == 200, moved.text
+    after = client.get(path).json()[0]["rows"]
+    assert [row["user_id"] for row in after] == [row["user_id"] for row in before]
+
+
+def run_double_elimination(
+    client: Client, headers: dict[str, str], upper_takes_final: bool
+) -> list[dict[str, Any]]:
+    """Four entrants down to the grand final, won by the side the caller names."""
+    event, (stage,) = cup(
+        4, StageFormat.double_elimination, grand_final_modifier="reset"
+    )
+    generate(client, headers, event, stage)
+    for name in (
+        "Upper bracket round 1",
+        "Upper bracket final",
+        "Lower bracket round 1",
+        "Lower bracket final",
+    ):
+        for row in bracket(stage):
+            if row["round"] == name:
+                score(client, headers, row["id"], 2, 0)
+    final = next(row for row in bracket(stage) if row["round"] == "Grand final")
+    score(client, headers, final["id"], *((2, 0) if upper_takes_final else (0, 2)))
+    return bracket(stage)
+
+
+def test_a_bracket_reset_is_a_walkover_when_the_upper_side_wins(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """The upper bracket side kept the title in the first final, so nobody plays
+    the second one and the stage is finished."""
+    rows = run_double_elimination(client, auth_headers, upper_takes_final=True)
+    final, reset = rows[-2], rows[-1]
+    assert reset["round"] == "Grand final reset"
+    assert reset["result_kind"] == "walkover"
+    assert reset["score"] == (2, 0)
+    assert reset["sides"] == (final["sides"][0], final["sides"][1])
+
+
+def test_a_bracket_reset_is_played_when_the_lower_side_wins(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """The lower bracket side earned a second final, which is played."""
+    rows = run_double_elimination(client, auth_headers, upper_takes_final=False)
+    final, reset = rows[-2], rows[-1]
+    assert reset["score"] == (None, None)
+    assert reset["sides"] == (final["sides"][1], final["sides"][0])
+
+
+def test_a_skipped_grand_final_ends_on_the_lower_bracket_final(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    event, (stage,) = cup(
+        4, StageFormat.double_elimination, grand_final_modifier="skip"
+    )
+    assert generate(client, auth_headers, event, stage) == {"series": 5, "rounds": 4}
+    assert "Grand final" not in names(bracket(stage))
+
+
+def test_an_admin_writes_the_switches_the_engine_reads(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """Third place, the grand final modifier and auto advance are stage fields."""
+    event, _ = cup(4)
+    body = [
+        {
+            "format": "double_elimination",
+            "third_place": True,
+            "grand_final_modifier": "reset",
+            "auto_advance": True,
+        }
+    ]
+    response = client.put(f"/events/{event}/stages", json=body, headers=auth_headers)
+    assert response.status_code == 200, response.text
+    stage = response.json()["stages"][0]
+    assert stage["third_place"] is True
+    assert stage["grand_final_modifier"] == "reset"
+    assert stage["auto_advance"] is True
+    refused = client.put(
+        f"/events/{event}/stages",
+        json=[{"grand_final_modifier": "both"}],
+        headers=auth_headers,
+    )
+    assert refused.status_code == 422
