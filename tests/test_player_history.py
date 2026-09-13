@@ -142,6 +142,8 @@ def test_events_carry_the_team_and_the_record_of_every_season(
         (2, 1, 1),
         (1, 1, 0),
     ]
+    # A player with GNL history alone reads the one kind
+    assert {event["kind"] for event in events} == {"gnl"}
 
 
 def test_events_carry_the_finish_the_standings_derive(
@@ -285,11 +287,12 @@ def test_a_player_with_no_history_answers_two_empty_lists(
     assert resp.json() == {"events": [], "opponents": []}
 
 
-def test_the_answer_costs_eight_statements_however_long_the_career(
+def test_the_answer_costs_nine_statements_however_long_the_career(
     seeded: dict[str, Any],
 ) -> None:
     """HARD GATE: neither block loops. One season and one opponent cost what
-    two seasons and two opponents cost."""
+    two seasons and two opponents cost. The ninth statement is the entrant
+    read that carries the events outside GNL."""
     from app.services.player_history import history
     from tests.test_query_budget import count_statements
 
@@ -299,7 +302,7 @@ def test_the_answer_costs_eight_statements_however_long_the_career(
     with count_statements() as two_seasons:
         history(seeded["player_ids"][0])
 
-    assert one_season[0] == two_seasons[0] == 8
+    assert one_season[0] == two_seasons[0] == 9
 
 
 def test_an_unknown_player_answers_404(
@@ -398,3 +401,95 @@ def test_an_off_race_series_answers_the_race_the_side_reported(
     assert (meetings[0]["my_race"], meetings[0]["their_race"]) == ("HU", "NE")
     # The opponent race stays the newest meeting's race
     assert client.get(f"/users/{p1}/history").json()["opponents"][0]["race"] == "NE"
+
+
+def test_a_cup_entrant_reads_the_cup_before_a_bracket_exists(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """The entrant row alone puts the event on the page, with an empty record."""
+    from tests.test_stage_engine import cup, players_of
+
+    event, _ = cup(4)
+    entrant = players_of(event)[0]
+
+    events = client.get(f"/users/{entrant}/history").json()["events"]
+
+    assert [(one["season_name"], one["kind"]) for one in events] == [
+        ("Autumn Cup", "cup")
+    ]
+    assert (events[0]["played"], events[0]["won"], events[0]["lost"]) == (0, 0, 0)
+    # A cup entrant stands on no team, so no team finish is invented
+    assert (events[0]["team_id"], events[0]["place"]) == (None, None)
+
+
+def test_a_scored_bracket_series_pays_a_record_and_a_meeting(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """A generated series has no fixture, so the event comes through its round."""
+    from tests.test_stage_engine import bracket, cup, generate, score
+
+    event, (stage,) = cup(4)
+    generate(client, auth_headers, event, stage)
+    semi = bracket(stage)[0]
+    winner, loser = semi["sides"]
+    assert score(client, auth_headers, semi["id"], 2, 0).status_code == 200
+
+    history = client.get(f"/users/{winner}/history").json()
+
+    row = history["events"][0]
+    assert (row["kind"], row["played"], row["won"], row["lost"]) == ("cup", 1, 1, 0)
+    opponent = history["opponents"][0]
+    assert opponent["id"] == loser
+    meeting = opponent["meetings"][0]
+    assert (meeting["kind"], meeting["my_score"], meeting["their_score"]) == (
+        "cup",
+        2,
+        0,
+    )
+    assert meeting["season_name"] == "Autumn Cup"
+    # The other side reads the same meeting turned around
+    mirror = client.get(f"/users/{loser}/history").json()
+    assert mirror["events"][0]["lost"] == 1
+    assert mirror["opponents"][0]["meetings"][0]["their_score"] == 2
+
+
+def test_a_running_cup_reads_as_running(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """No setting pins a cup, so its dates say whether it is on today."""
+    from app.core.db import Session
+    from app.models.season import Season
+    from app.models.types import utcnow
+    from tests.test_stage_engine import cup, players_of
+
+    event, _ = cup(4)
+    entrant = players_of(event)[0]
+    with Session.begin() as session:
+        row = session.get(Season, event)
+        assert row is not None
+        row.start_date = row.end_date = utcnow().date()
+
+    events = client.get(f"/users/{entrant}/history").json()["events"]
+
+    assert events[0]["running"] is True
+
+
+def test_a_withdrawn_entrant_stands_in_the_cup_no_more(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    from sqlmodel import col, select
+
+    from app.core.db import Session
+    from app.models.event_entrant import EventEntrant
+    from app.models.types import utcnow
+    from tests.test_stage_engine import cup, players_of
+
+    event, _ = cup(4)
+    entrant = players_of(event)[0]
+    with Session.begin() as session:
+        row = session.scalars(
+            select(EventEntrant).where(col(EventEntrant.user_id) == entrant)
+        ).one()
+        row.withdrawn_at = utcnow()
+
+    assert client.get(f"/users/{entrant}/history").json()["events"] == []

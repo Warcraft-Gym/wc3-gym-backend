@@ -15,7 +15,6 @@ from sqlmodel import col
 from app.core import brackets
 from app.core.db import Session
 from app.core.exceptions import BadRequestError, NotFoundError
-from app.core.scoring import wins_needed
 from app.models.base import ident
 from app.models.enums import StageFormat
 from app.models.event_division import EventDivision
@@ -31,6 +30,7 @@ from app.models.series import (
 )
 from app.models.user import User
 from app.services import derived
+from app.services.series_rules import series_rules
 
 # The formats whose last round is the final, so every division ends together
 BRACKETS = (StageFormat.single_elimination, StageFormat.double_elimination)
@@ -47,16 +47,8 @@ def winner_of(row: Series) -> int | None:
 
 
 def wins_of(session: OrmSession, row: Series) -> int:
-    """The maps a win takes: a fixture follows its season's map rules, and a
-    bracket series the best of its round, else the best of its stage."""
-    if row.match is not None:
-        return wins_needed(row.match.season.map_rules if row.match.season else None)
-    round_row = session.get(DBEventRound, row.round_id) if row.round_id else None
-    stage = _stage_of(session, row)
-    best_of = (round_row.best_of if round_row else None) or (
-        stage.best_of if stage else None
-    )
-    return best_of // 2 + 1 if best_of else wins_needed(None)
+    """The maps a win takes, from the best-of the series plays under."""
+    return series_rules(session, row).best_of // 2 + 1
 
 
 def generate(event_id: int, stage_id: int) -> dict[str, int]:

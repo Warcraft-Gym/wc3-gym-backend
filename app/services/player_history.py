@@ -1,12 +1,17 @@
 """What one player did in the league, derived at read time.
 
-Eight statements answer the whole page, and none of them grows with the number
-of seasons or opponents: one reads every series the player stood in with its
-season and its opponent, one the teams they were rostered on, one the teams
-each of those seasons held, one the current season setting, a pair reads the
-maps of the played series (the fixed map and the veto picks), and the last
-pair is the score system and the points of every team, borrowed from
-app.services.derived.
+Nine statements answer the whole page, and none of them grows with the number
+of events or opponents: one reads every series the player stood in with its
+event and its opponent, one the teams they were rostered on, one the events
+they entered as an entrant, one the teams each of those events held, one the
+current season setting, a pair reads the maps of the played series (the fixed
+map and the veto picks), and the last pair is the score system and the points
+of every team, borrowed from app.services.derived.
+
+Every kind of event answers here. A GNL series hangs off a fixture, which
+names the season; a bracket series has no fixture and names its round, which
+names the event. The entrant read carries an event the player entered but has
+played no series in yet.
 
 A series with no map score is unplayed: it pays no record and shows in no
 meeting. A won series is one the player took more maps in, as the career
@@ -23,6 +28,8 @@ from sqlmodel import col
 
 from app.core.db import Session
 from app.core.fantasy import race_value
+from app.models.enums import EventKind
+from app.models.event_entrant import EventEntrant
 from app.models.map import Map
 from app.models.match import Match
 from app.models.player_history import (
@@ -31,13 +38,14 @@ from app.models.player_history import (
     HistoryOpponent,
     PlayerHistory,
 )
-from app.models.relationships import DBUserSeasonSignup
+from app.models.relationships import DBEventRound, DBUserSeasonSignup
 from app.models.season import LEAGUE_SHORT_NAME, Season
 from app.models.series import Series
 from app.models.series_veto_step import DBSeriesVetoStep
 from app.models.settings import Settings
 from app.models.team import Team
 from app.models.team_season import DBTeamSeason
+from app.models.types import utcnow
 from app.models.user import User
 from app.models.user_team_season import DBUserTeamSeason
 from app.services import derived
@@ -46,13 +54,16 @@ from app.services import derived
 type Rosters = dict[int, tuple[int, str | None, str, str | None]]
 # (team, season) -> where the team finished and how many teams stood
 type Places = dict[tuple[int, int], tuple[int, int]]
+# event -> the row of the event the player entered as an entrant
+type Entered = dict[int, Row[Any]]
 
 
 def _meetings(session: OrmSession, user_id: int) -> Sequence[Row[Any]]:
     """Every series the player stood in, newest first, in one statement.
 
     A series holds the player on either side, so the two sides union and the
-    other side is the opponent.
+    other side is the opponent. The fixture is left joined: a bracket series
+    has none, and names its event through the round it is played in.
     """
     opponent1, opponent2 = aliased(User), aliased(User)
     signup1, signup2 = aliased(DBUserSeasonSignup), aliased(DBUserSeasonSignup)
@@ -60,8 +71,8 @@ def _meetings(session: OrmSession, user_id: int) -> Sequence[Row[Any]]:
     sides = union_all(
         select(
             col(Series.id).label("series_id"),
-            col(Match.season_id).label("season_id"),
-            col(Match.playday).label("playday"),
+            func.coalesce(Match.season_id, DBEventRound.season_id).label("season_id"),
+            func.coalesce(Match.playday, DBEventRound.number).label("playday"),
             col(Series.date_time).label("date_time"),
             func.coalesce(Series.player1_score, 0).label("own"),
             func.coalesce(Series.player2_score, 0).label("opp"),
@@ -71,15 +82,16 @@ def _meetings(session: OrmSession, user_id: int) -> Sequence[Row[Any]]:
             derived.race_of(col(Series.player1_off_race), mine1).label("my_race"),
             col(opponent1.country).label("country"),
         )
-        .join(Match, col(Match.id) == Series.match_id)
+        .join(Match, col(Match.id) == Series.match_id, isouter=True)
+        .join(DBEventRound, col(DBEventRound.id) == Series.round_id, isouter=True)
         .join(opponent1, col(opponent1.id) == Series.player2_id)
         .join(signup1, derived.signup_on(signup1, col(Series.player2_id)), isouter=True)
         .join(mine1, derived.signup_on(mine1, col(Series.player1_id)), isouter=True)
         .where(col(Series.player1_id) == user_id),
         select(
             col(Series.id),
-            col(Match.season_id),
-            col(Match.playday),
+            func.coalesce(Match.season_id, DBEventRound.season_id),
+            func.coalesce(Match.playday, DBEventRound.number),
             col(Series.date_time),
             func.coalesce(Series.player2_score, 0),
             func.coalesce(Series.player1_score, 0),
@@ -89,7 +101,8 @@ def _meetings(session: OrmSession, user_id: int) -> Sequence[Row[Any]]:
             derived.race_of(col(Series.player2_off_race), mine2).label("my_race"),
             col(opponent2.country),
         )
-        .join(Match, col(Match.id) == Series.match_id)
+        .join(Match, col(Match.id) == Series.match_id, isouter=True)
+        .join(DBEventRound, col(DBEventRound.id) == Series.round_id, isouter=True)
         .join(opponent2, col(opponent2.id) == Series.player1_id)
         .join(signup2, derived.signup_on(signup2, col(Series.player1_id)), isouter=True)
         .join(mine2, derived.signup_on(mine2, col(Series.player2_id)), isouter=True)
@@ -97,7 +110,12 @@ def _meetings(session: OrmSession, user_id: int) -> Sequence[Row[Any]]:
     ).subquery()
 
     return session.execute(
-        select(sides, col(Season.name).label("season_name"), LEAGUE_SHORT_NAME)
+        select(
+            sides,
+            col(Season.name).label("season_name"),
+            LEAGUE_SHORT_NAME,
+            col(Season.kind).label("kind"),
+        )
         .join(Season, col(Season.id) == sides.c.season_id)
         .order_by(
             sides.c.season_id.desc(), sides.c.playday.desc(), sides.c.series_id.desc()
@@ -123,6 +141,40 @@ def _rosters(session: OrmSession, user_id: int) -> Rosters:
         season_id: (team_id, team_name, season_name, league)
         for season_id, team_id, team_name, season_name, league in rows
     }
+
+
+def _entered(session: OrmSession, user_id: int) -> Entered:
+    """Every event the player stands in as an entrant, in one statement.
+
+    A GNL season signs its players up through the signup table, so this read
+    carries the other kinds: a cup the player entered answers here from the
+    moment they signed up, whether or not a bracket exists yet. A withdrawn
+    entrant stands in the event no more.
+    """
+    rows = session.execute(
+        select(
+            col(Season.id).label("season_id"),
+            col(Season.name).label("season_name"),
+            LEAGUE_SHORT_NAME,
+            col(Season.kind).label("kind"),
+            col(Season.start_date).label("start_date"),
+            col(Season.end_date).label("end_date"),
+        )
+        .join(EventEntrant, col(EventEntrant.event_id) == Season.id)
+        .where(
+            col(EventEntrant.user_id) == user_id,
+            col(EventEntrant.withdrawn_at).is_(None),
+        )
+    ).all()
+    return {row.season_id: row for row in rows}
+
+
+def _runs_today(row: Row[Any] | None) -> bool:
+    """An event the player entered is running when today falls in its window."""
+    if row is None or row.start_date is None:
+        return False
+    today = utcnow().date()
+    return row.start_date <= today and (row.end_date is None or today <= row.end_date)
 
 
 def _places(session: OrmSession, season_ids: set[int]) -> Places:
@@ -160,14 +212,23 @@ def _places(session: OrmSession, season_ids: set[int]) -> Places:
 def _events(
     rows: Sequence[Row[Any]],
     rosters: Rosters,
+    entered: Entered,
     places: Places,
     current_id: int | None,
 ) -> list[HistoryEvent]:
-    """One row per season the player was rostered in or played a series in."""
+    """One row per event the player was rostered in, entered, or played in.
+
+    A rostered event is a team league, so its kind is the default; the played
+    series and the entrant rows carry the kind of every other event.
+    """
     names = {season_id: name for season_id, (_, _, name, _) in rosters.items()}
     names |= {row.season_id: row.season_name for row in rows}
+    names |= {row.season_id: row.season_name for row in entered.values()}
     leagues = {season_id: one for season_id, (_, _, _, one) in rosters.items()}
     leagues |= {row.season_id: row.league_short_name for row in rows}
+    leagues |= {row.season_id: row.league_short_name for row in entered.values()}
+    kinds = {row.season_id: row.kind for row in rows}
+    kinds |= {row.season_id: row.kind for row in entered.values()}
 
     tallies: dict[int, list[int]] = {}
     for row in rows:
@@ -190,6 +251,7 @@ def _events(
                 season_id=season_id,
                 season_name=names[season_id],
                 league_short_name=leagues.get(season_id),
+                kind=kinds.get(season_id, EventKind.gnl),
                 team_id=team_id,
                 team_name=team_name,
                 played=played,
@@ -197,7 +259,7 @@ def _events(
                 lost=lost,
                 place=place,
                 team_count=team_count,
-                running=season_id == current_id,
+                running=season_id == current_id or _runs_today(entered.get(season_id)),
             )
         )
     return events
@@ -271,6 +333,7 @@ def _opponents(
                 season_id=row.season_id,
                 season_name=row.season_name,
                 league_short_name=row.league_short_name,
+                kind=row.kind,
                 playday=row.playday,
                 my_score=row.own,
                 their_score=row.opp,
@@ -284,11 +347,12 @@ def _opponents(
 
 
 def history(user_id: int) -> PlayerHistory:
-    """Every season the player took part in, and every opponent they ever met."""
+    """Every event the player took part in, and every opponent they ever met."""
     with Session.begin() as session:
         rows = _meetings(session, user_id)
         rosters = _rosters(session, user_id)
-        season_ids = {row.season_id for row in rows} | set(rosters)
+        entered = _entered(session, user_id)
+        season_ids = {row.season_id for row in rows} | set(rosters) | set(entered)
         played_ids = {row.series_id for row in rows if row.own or row.opp}
         current = Settings.get_by_key(session, "current_gnl_season")
         value = current.value if current else None
@@ -296,6 +360,7 @@ def history(user_id: int) -> PlayerHistory:
             events=_events(
                 rows,
                 rosters,
+                entered,
                 _places(session, season_ids),
                 int(value) if value and value.isdigit() else None,
             ),

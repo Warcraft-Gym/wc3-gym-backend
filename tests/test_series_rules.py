@@ -1,0 +1,192 @@
+"""A series knows its rules and its races with or without a fixture.
+
+A GNL series reads them off the season of its fixture. A bracket series has
+no fixture, so it reads the best-of off its round or its stage, the map rules
+off its stage, and the race of each side off the event entrant row.
+"""
+
+from collections.abc import Callable
+from typing import Any
+
+from httpx2 import Client
+
+from tests.test_stage_engine import cup, generate
+
+ORDER = ["Ban_A", "Ban_B", "Pick_A", "Pick_B"]
+
+
+def bracket_series(stage_id: int) -> dict[str, Any]:
+    """The one series of a two entrant bracket, and the two players in it."""
+    from sqlalchemy import select
+    from sqlmodel import col
+
+    from app.core.db import Session
+    from app.models.base import ident
+    from app.models.relationships import DBEventRound
+    from app.models.series import Series
+    from app.models.user import User
+
+    with Session() as session:
+        row = session.scalars(
+            select(Series)
+            .join(DBEventRound, col(DBEventRound.id) == col(Series.round_id))
+            .where(col(DBEventRound.stage_id) == stage_id)
+        ).one()
+        players = {
+            side: session.get(User, getattr(row, f"player{side}_id")) for side in (1, 2)
+        }
+        return {
+            "id": ident(row),
+            "discord": {
+                side: player.discordId for side, player in players.items() if player
+            },
+        }
+
+
+def event_pool(event_id: int, names: tuple[str, ...]) -> list[int]:
+    """A map pool on the event, in pool order, and the ABBA veto order."""
+    from app.core.db import Session
+    from app.models.base import ident
+    from app.models.map import Map
+    from app.models.relationships import DBMapSeason
+    from app.models.season import Season
+
+    with Session.begin() as session:
+        event = session.get(Season, event_id)
+        assert event
+        event.pick_ban = "|".join(ORDER)
+        maps = [Map(name=short, shortname=short) for short in names]
+        session.add_all(maps)
+        session.flush()
+        ids = [ident(row) for row in maps]
+        session.add_all(
+            [
+                DBMapSeason(map_id=map_id, season_id=event_id, position=position)
+                for position, map_id in enumerate(ids, start=1)
+            ]
+        )
+        return ids
+
+
+def test_a_bracket_series_reports_against_the_best_of_of_its_stage(
+    client: Client,
+    auth_headers: dict[str, str],
+    member: Callable[..., dict[str, str]],
+    replay_uploaded: Callable[..., None],
+) -> None:
+    """The stage plays Bo1, so 1-0 lands and the Bo3 shape 2-0 is refused. A
+    Bo3 stage would read the same as the default and prove nothing."""
+    event, (stage,) = cup(2, best_of=1)
+    generate(client, auth_headers, event, stage)
+    series = bracket_series(stage)
+    side_a = member(series["discord"][1])
+
+    replay_uploaded(series["id"], 1, 2)
+    long = client.put(
+        f"/player-series/{series['id']}",
+        headers=side_a,
+        data={"action": "score_updated", "player1_score": "2", "player2_score": "0"},
+    )
+    assert long.status_code == 400, long.text
+    assert long.json() == {"error": "A series of this season ends at 1 map wins."}
+
+    resp = client.put(
+        f"/player-series/{series['id']}",
+        headers=side_a,
+        data={"action": "score_updated", "player1_score": "1", "player2_score": "0"},
+    )
+    assert resp.status_code == 200, resp.text
+    assert (resp.json()["player1_score"], resp.json()["player2_score"]) == (1, 0)
+
+
+def test_a_round_best_of_overrides_the_one_of_its_stage(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    from sqlalchemy import select
+    from sqlmodel import col
+
+    from app.core.db import Session
+    from app.models.relationships import DBEventRound
+
+    event, (stage,) = cup(2, best_of=1)
+    generate(client, auth_headers, event, stage)
+    with Session.begin() as session:
+        session.scalars(
+            select(DBEventRound).where(col(DBEventRound.stage_id) == stage)
+        ).one().best_of = 3
+
+    resp = client.get(f"/events/{event}/stages/{stage}/series")
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["series"][0]["rules"]["best_of"] == 3
+
+
+def test_the_veto_board_of_a_bracket_series_reads_the_stage_rules(
+    client: Client,
+    auth_headers: dict[str, str],
+    member: Callable[..., dict[str, str]],
+) -> None:
+    """No fixture holds the series, so the board comes from the stage and the
+    event pool, and a step taken by side A lands on it."""
+    event, (stage,) = cup(2, best_of=3, map_rules="veto,loser,loser")
+    generate(client, auth_headers, event, stage)
+    pool = event_pool(event, ("EI", "TS", "LR", "AL", "CH"))
+    series = bracket_series(stage)
+    side_a = member(series["discord"][1])
+
+    board = client.get(f"/player-series/{series['id']}/veto", headers=side_a)
+    assert board.status_code == 200, board.text
+    body = board.json()
+    assert body["order"] == ORDER
+    assert body["map_rules"] == "veto,loser,loser"
+    assert body["pool"] == pool
+    # No fixed rule, so no map is off the board before the veto starts
+    assert body["week_map_id"] is None
+    assert (body["viewer_side"], body["on_turn"]) == ("A", True)
+
+    taken = client.put(
+        f"/player-series/{series['id']}/veto",
+        headers=side_a,
+        json={"action": "step", "map_id": pool[0]},
+    )
+    assert taken.status_code == 200, taken.text
+    assert [
+        (step["side"], step["action"], step["map_id"]) for step in taken.json()["steps"]
+    ] == [("A", "ban", pool[0])]
+
+
+def test_the_stage_series_read_names_the_race_of_both_sides(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """A cup entrant has no season signup, so each race comes off its entrant row."""
+    from sqlalchemy import select
+    from sqlmodel import col
+
+    from app.core.db import Session
+    from app.models.enums import Race
+    from app.models.event_entrant import EventEntrant
+
+    event, (stage,) = cup(2)
+    with Session.begin() as session:
+        rows = session.scalars(
+            select(EventEntrant)
+            .where(col(EventEntrant.event_id) == event)
+            .order_by(col(EventEntrant.seed))
+        ).all()
+        rows[0].race = Race.OC
+        rows[1].race = Race.NE
+    generate(client, auth_headers, event, stage)
+
+    resp = client.get(f"/events/{event}/stages/{stage}/series")
+    assert resp.status_code == 200, resp.text
+    row = resp.json()["series"][0]
+    assert (row["player1_race"], row["player2_race"]) == ("OC", "NE")
+    assert row["rules"] == {"map_rules": "fixed,loser,loser", "best_of": 3}
+
+
+def test_a_gnl_series_still_takes_its_rules_from_its_season(
+    client: Client, seeded: dict[str, Any]
+) -> None:
+    """The fixture names the season, so nothing about the GNL path changes."""
+    resp = client.get(f"/series/{seeded['series_open_id']}")
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["rules"] == {"map_rules": "fixed,loser,loser", "best_of": 3}
