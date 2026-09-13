@@ -104,6 +104,17 @@ class SchedulingMode(enum.Enum):
     immediate = "immediate"
 
 
+class SeedSource(enum.Enum):
+    """What ordered the seeds of a stage. The name is the stored value."""
+
+    mmr = "mmr"
+    random = "random"
+    manual = "manual"
+    previous_stage = "previous_stage"
+    qualifier = "qualifier"
+    invitation = "invitation"
+
+
 class SignupChannel(enum.Enum):
     """Where an entrant signed up."""
 

@@ -5,25 +5,40 @@ rows the season pages read; the season payloads are unchanged and keep their
 own phase word. The event phase is computed on every read and never stored.
 """
 
+import random
 from collections.abc import Sequence
 from datetime import date, timedelta
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session as OrmSession
 from sqlalchemy.orm import noload, selectinload
 from sqlmodel import col
 
 from app.core.db import Session, rel
+from app.core.divisions import cut
 from app.core.exceptions import ApiError, BadRequestError, NotFoundError
 from app.models.base import ident
-from app.models.enums import EntrantKind, EventKind, Race, SignupPolicy, StageFormat
-from app.models.event_division import EventDivision, EventDivisionPublic
+from app.models.enums import (
+    EntrantKind,
+    EventKind,
+    Race,
+    SeedSource,
+    SignupPolicy,
+    StageFormat,
+)
+from app.models.event_division import (
+    EventDivision,
+    EventDivisionPublic,
+    EventDivisionWrite,
+)
 from app.models.event_entrant import (
     EntrantAdd,
+    EntrantPlacement,
     EntrantSignup,
     EventEntrant,
     EventEntrantPublic,
+    SeedWrite,
 )
 from app.models.event_stage import EventStage, EventStagePublic, EventStageWrite
 from app.models.league import League, LeagueCreate, LeaguePublic, LeagueUpdate
@@ -331,6 +346,101 @@ class EventService:
         with Session.begin() as session:
             session.delete(_entrant(session, event_id, entrant_id))
 
+    def place_entrant(
+        self, event_id: int, entrant_id: int, data: EntrantPlacement
+    ) -> EventEntrantPublic:
+        """Move one entrant into a division; the move is placement by hand."""
+        with Session.begin() as session:
+            event = _event(session, event_id)
+            row = _entrant(session, event_id, entrant_id)
+            if data.division_id is not None:
+                division = session.get(EventDivision, data.division_id)
+                if division is None or division.event_id != event_id:
+                    raise BadRequestError(
+                        f"Division not found by id: {data.division_id}"
+                    )
+            row.division_id = data.division_id
+            row.manual_placement = data.manual_placement
+            session.flush()
+            return _entrant_publics(session, event, [row])[0]
+
+    # ============ Divisions and seeds ============
+    def set_divisions(
+        self, event_id: int, divisions: Sequence[EventDivisionWrite]
+    ) -> EventPublic:
+        """Replace the division list; the order of the body is their position."""
+        with Session.begin() as session:
+            event = _event(session, event_id)
+            session.execute(
+                update(EventEntrant)
+                .where(col(EventEntrant.event_id) == event_id)
+                .values(division_id=None, manual_placement=False)
+            )
+            session.execute(
+                delete(EventDivision).where(col(EventDivision.event_id) == event_id)
+            )
+            session.add_all(
+                EventDivision(event_id=event_id, position=position, **row.model_dump())
+                for position, row in enumerate(divisions, start=1)
+            )
+            session.flush()
+            return _public(session, event, full=True)
+
+    def assign_divisions(self, event_id: int) -> EventPublic:
+        """Cut the entrants into the divisions from the MMR of their signup race.
+
+        An entrant an admin placed by hand keeps the division it was given.
+        The answer carries the divisions with the entrants each now holds.
+        """
+        with Session.begin() as session:
+            event = _event(session, event_id)
+            divisions = _divisions(session, event_id)
+            if not divisions:
+                raise BadRequestError("The event has no divisions to assign")
+            rows = [
+                row
+                for row in _live_entrants(session, event_id)
+                if not row.manual_placement
+            ]
+            mmrs = _mmrs(session, rows)
+            bands = cut(
+                [(ident(row), mmrs[ident(row)]) for row in rows],
+                [(division.lower_bound, division.size) for division in divisions],
+            )
+            for row in rows:
+                row.division_id = divisions[bands[ident(row)]].id
+            session.flush()
+            return _public(session, event, full=True)
+
+    def set_seeds(
+        self, event_id: int, stage_id: int, data: SeedWrite
+    ) -> list[EventEntrantPublic]:
+        """Number the entrants 1..n inside each division and stamp the source."""
+        with Session.begin() as session:
+            event = _event(session, event_id)
+            stage = _stage(session, event_id, stage_id)
+            if stage.seeds_locked_at is not None:
+                raise BadRequestError("The seeds of this stage are locked")
+            rows = _live_entrants(session, event_id)
+            mmrs = _mmrs(session, rows)
+            taken: dict[int | None, int] = {}
+            for row in _seed_order(rows, mmrs, data):
+                taken[row.division_id] = taken.get(row.division_id, 0) + 1
+                row.seed = taken[row.division_id]
+                row.seed_source = data.source.value
+                row.mmr_at_seed = mmrs[ident(row)]
+            session.flush()
+            rows.sort(key=lambda row: (row.division_id or 0, row.seed or 0))
+            return _entrant_publics(session, event, rows)
+
+    def lock_seeds(self, event_id: int, stage_id: int) -> EventStagePublic:
+        """Stamp the stage as locked; a later seed write is refused."""
+        with Session.begin() as session:
+            stage = _stage(session, event_id, stage_id)
+            stage.seeds_locked_at = utcnow()
+            session.flush()
+            return EventStagePublic.model_validate(stage)
+
 
 def _nested(events: list[EventPublic]) -> list[EventPublic]:
     """The league's events with each child under its parent, parents in order.
@@ -360,6 +470,38 @@ def _event(session: OrmSession, event_id: int) -> Season:
     if event is None:
         raise NotFoundError(f"Event not found by id: {event_id}")
     return event
+
+
+def _stage(session: OrmSession, event_id: int, stage_id: int) -> EventStage:
+    stage = session.get(EventStage, stage_id)
+    if stage is None or stage.event_id != event_id:
+        raise NotFoundError(f"Stage not found by id: {stage_id}")
+    return stage
+
+
+def _divisions(session: OrmSession, event_id: int) -> list[EventDivision]:
+    """The event's divisions, the strongest first."""
+    return list(
+        session.scalars(
+            select(EventDivision)
+            .where(col(EventDivision.event_id) == event_id)
+            .order_by(col(EventDivision.position))
+        )
+    )
+
+
+def _live_entrants(session: OrmSession, event_id: int) -> list[EventEntrant]:
+    """Every entrant of the event that has not withdrawn, in signup order."""
+    return list(
+        session.scalars(
+            select(EventEntrant)
+            .where(
+                col(EventEntrant.event_id) == event_id,
+                col(EventEntrant.withdrawn_at).is_(None),
+            )
+            .order_by(col(EventEntrant.id))
+        )
+    )
 
 
 def _write_stages(
@@ -468,13 +610,22 @@ def _public(
             .order_by(col(EventStage.position))
         )
     ]
-    public.divisions = [
-        EventDivisionPublic.model_validate(row)
-        for row in session.scalars(
-            select(EventDivision)
-            .where(col(EventDivision.event_id) == event.id)
-            .order_by(col(EventDivision.position))
+    by_division = {
+        division_id: total
+        for division_id, total in session.execute(
+            select(col(EventEntrant.division_id), func.count())
+            .where(
+                col(EventEntrant.event_id) == event.id,
+                col(EventEntrant.withdrawn_at).is_(None),
+            )
+            .group_by(col(EventEntrant.division_id))
         )
+    }
+    public.divisions = [
+        EventDivisionPublic.model_validate(
+            row, update={"entrant_count": by_division.get(row.id, 0)}
+        )
+        for row in _divisions(session, ident(event))
     ]
     public.entrant_count = session.scalar(
         select(func.count())
@@ -576,9 +727,21 @@ def _entrant_publics(
 
     Two reads fill every row: the players with their W3C stats, and the teams.
     """
-    user_ids = {row.user_id for row in rows if row.user_id}
     team_ids = {row.team_id for row in rows if row.team_id}
-    users = {
+    users = _users_for(session, rows)
+    teams = {
+        team.id: team
+        for team in session.scalars(select(Team).where(col(Team.id).in_(team_ids)))
+    }
+    return [_entrant_public(event, row, users, teams) for row in rows]
+
+
+def _users_for(
+    session: OrmSession, rows: Sequence[EventEntrant]
+) -> dict[int | None, User]:
+    """The players behind those entrant rows, with the W3C stats their MMR reads."""
+    user_ids = {row.user_id for row in rows if row.user_id}
+    return {
         user.id: user
         for user in session.scalars(
             select(User)
@@ -590,11 +753,57 @@ def _entrant_publics(
             .where(col(User.id).in_(user_ids))
         ).unique()
     }
-    teams = {
-        team.id: team
-        for team in session.scalars(select(Team).where(col(Team.id).in_(team_ids)))
+
+
+def _mmrs(session: OrmSession, rows: Sequence[EventEntrant]) -> dict[int, int | None]:
+    """Each entrant against the rating of the race it signed up on; a team has none."""
+    users = _users_for(session, rows)
+    return {
+        ident(row): _stats_for(users[row.user_id], row.race)[0]
+        if row.user_id in users
+        else None
+        for row in rows
     }
-    return [_entrant_public(event, row, users, teams) for row in rows]
+
+
+def _by_mmr(
+    rows: Sequence[EventEntrant], mmrs: dict[int, int | None]
+) -> list[EventEntrant]:
+    """The entrants strongest first, the signup order breaking a tie."""
+    return sorted(rows, key=lambda row: (-(mmrs[ident(row)] or 0), ident(row)))
+
+
+def _seed_order(
+    rows: Sequence[EventEntrant], mmrs: dict[int, int | None], data: SeedWrite
+) -> list[EventEntrant]:
+    """The whole entrant list in seed order; the stage numbers it per division.
+
+    The two sources that read standings wait for the stage engine and refuse
+    with `not_built`. An entrant the order list leaves out follows on MMR.
+    """
+    if data.source in (SeedSource.previous_stage, SeedSource.qualifier):
+        raise ApiError(
+            400,
+            {
+                "error": "not_built",
+                "message": f"Seeding from {data.source.value} lands with the engine",
+            },
+        )
+    if data.source is SeedSource.random:
+        shuffled = list(rows)
+        random.shuffle(shuffled)
+        return shuffled
+    if data.source not in (SeedSource.manual, SeedSource.invitation):
+        return _by_mmr(rows, mmrs)
+    named = data.order or []
+    if not named and data.source is SeedSource.manual:
+        raise BadRequestError("Manual seeding takes an order of entrant ids")
+    by_id = {ident(row): row for row in rows}
+    unknown = [entrant_id for entrant_id in named if entrant_id not in by_id]
+    if unknown:
+        raise BadRequestError(f"Not an entrant of this event: {unknown[0]}")
+    rest = [row for row in rows if ident(row) not in set(named)]
+    return [by_id[entrant_id] for entrant_id in named] + _by_mmr(rest, mmrs)
 
 
 def _entrant_public(
@@ -619,7 +828,9 @@ def _entrant_public(
         warnings=_warnings(event, user, mmr, games),
         seed=row.seed,
         seed_source=row.seed_source,
+        mmr_at_seed=row.mmr_at_seed,
         division_id=row.division_id,
+        manual_placement=row.manual_placement,
         checked_in_at=row.checked_in_at,
         withdrawn_at=row.withdrawn_at,
         qualified_from_event_id=row.qualified_from_event_id,

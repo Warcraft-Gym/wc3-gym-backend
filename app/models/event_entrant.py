@@ -12,7 +12,7 @@ from sqlalchemy import CheckConstraint, UniqueConstraint, false, func
 from sqlmodel import Field, SQLModel
 
 from app.models.base import DBModel
-from app.models.enums import Race, SignupChannel
+from app.models.enums import Race, SeedSource, SignupChannel
 from app.models.team_reduced import TeamReduced
 from app.models.types import (
     AwareUTC,
@@ -99,6 +99,20 @@ class EntrantAdd(EntrantSignup):
     user_id: int | None = None
 
 
+class EntrantPlacement(SQLModel):
+    """An admin moving one entrant into a division; the move is placement by hand."""
+
+    division_id: int | None = None
+    manual_placement: bool = True
+
+
+class SeedWrite(SQLModel):
+    """What orders the seeds of one stage; `order` names the entrants by hand."""
+
+    source: SeedSource = SeedSource.mmr
+    order: list[int] | None = None
+
+
 class EventEntrantPublic(SQLModel):
     """One entrant as the entrants page reads it.
 
@@ -118,7 +132,9 @@ class EventEntrantPublic(SQLModel):
     warnings: list[str] = []
     seed: int | None = None
     seed_source: str | None = None
+    mmr_at_seed: int | None = None
     division_id: int | None = None
+    manual_placement: bool = False
     checked_in_at: Annotated[datetime | None, AwareUTC] = None
     withdrawn_at: Annotated[datetime | None, AwareUTC] = None
     qualified_from_event_id: int | None = None

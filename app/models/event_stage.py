@@ -5,6 +5,7 @@ may have a group stage and a bracket stage, in position order. The points and
 the ranking rule are the stage's, so standings are computed, never stored.
 """
 
+from datetime import datetime
 from typing import Annotated
 
 from sqlalchemy import UniqueConstraint, false
@@ -12,7 +13,7 @@ from sqlmodel import Field, SQLModel
 
 from app.models.base import DBModel
 from app.models.enums import SchedulingMode, StageFormat
-from app.models.types import MapRules, NumToStr
+from app.models.types import AwareUTC, MapRules, NumToStr, UTCDateTime
 
 
 class EventStage(DBModel, table=True):
@@ -55,6 +56,10 @@ class EventStage(DBModel, table=True):
     auto_advance: bool = Field(
         default=False, sa_column_kwargs={"server_default": false()}
     )
+    # When an admin locked the seeds; a locked stage refuses a seed write
+    seeds_locked_at: Annotated[datetime | None, AwareUTC] = Field(
+        default=None, sa_type=UTCDateTime
+    )
 
 
 class EventStagePublic(SQLModel):
@@ -75,6 +80,7 @@ class EventStagePublic(SQLModel):
     group_size: int | None = None
     group_advance: int | None = None
     auto_advance: bool = False
+    seeds_locked_at: Annotated[datetime | None, AwareUTC] = None
 
 
 class EventStageWrite(SQLModel):

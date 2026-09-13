@@ -11,12 +11,15 @@ from app.api.deps import (
     require_admin,
 )
 from app.models.enums import EventKind
+from app.models.event_division import EventDivisionWrite
 from app.models.event_entrant import (
     EntrantAdd,
+    EntrantPlacement,
     EntrantSignup,
     EventEntrantPublic,
+    SeedWrite,
 )
-from app.models.event_stage import EventStageWrite
+from app.models.event_stage import EventStagePublic, EventStageWrite
 from app.models.season import EventCreate, EventPublic, EventUpdate
 
 router = APIRouter(tags=["events"])
@@ -119,3 +122,55 @@ def check_in(
 def remove_entrant(event_id: int, entrant_id: int, service: EventServiceDep) -> None:
     """Remove one entrant row."""
     service.remove_entrant(event_id, entrant_id)
+
+
+@router.put(
+    "/events/{event_id}/entrants/{entrant_id}",
+    dependencies=[Depends(require_admin)],
+)
+def place_entrant(
+    event_id: int,
+    entrant_id: int,
+    data: EntrantPlacement,
+    service: EventServiceDep,
+) -> EventEntrantPublic:
+    """Move one entrant into a division and mark it placed by hand."""
+    return service.place_entrant(event_id, entrant_id, data)
+
+
+@router.put("/events/{event_id}/divisions", dependencies=[Depends(require_admin)])
+def set_divisions(
+    event_id: int, divisions: list[EventDivisionWrite], service: EventServiceDep
+) -> EventPublic:
+    """Replace the division list; the order of the body is their position."""
+    return service.set_divisions(event_id, divisions)
+
+
+@router.post(
+    "/events/{event_id}/divisions/assign", dependencies=[Depends(require_admin)]
+)
+def assign_divisions(event_id: int, service: EventServiceDep) -> EventPublic:
+    """Cut the entrants into divisions and answer the count each one holds."""
+    return service.assign_divisions(event_id)
+
+
+@router.put(
+    "/events/{event_id}/stages/{stage_id}/seeds",
+    dependencies=[Depends(require_admin)],
+)
+def set_seeds(
+    event_id: int, stage_id: int, data: SeedWrite, service: EventServiceDep
+) -> list[EventEntrantPublic]:
+    """Seed the entrants 1..n inside each division, in seed order."""
+    return service.set_seeds(event_id, stage_id, data)
+
+
+@router.post(
+    "/events/{event_id}/stages/{stage_id}/seeds/lock",
+    dependencies=[Depends(require_admin)],
+)
+def lock_seeds(
+    event_id: int, stage_id: int, service: EventServiceDep
+) -> EventStagePublic:
+    """Lock the seeds of the stage; a later seed write is refused."""
+    return service.lock_seeds(event_id, stage_id)
