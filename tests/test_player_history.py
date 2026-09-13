@@ -332,3 +332,69 @@ def test_the_history_of_an_unknown_id_is_empty(
 
     assert resp.status_code == 200, resp.text
     assert resp.json() == {"events": [], "opponents": []}
+
+
+def _signup_race(season_id: int, user_id: int, race: object) -> None:
+    """Set the race one player signed one season up on."""
+    from sqlmodel import col, select
+
+    from app.core.db import Session
+    from app.models.relationships import DBUserSeasonSignup
+
+    with Session() as session:
+        signup = session.execute(
+            select(DBUserSeasonSignup).where(
+                col(DBUserSeasonSignup.user_id) == user_id,
+                col(DBUserSeasonSignup.season_id) == season_id,
+            )
+        ).scalar_one()
+        signup.race = race
+        session.commit()
+
+
+def test_a_meeting_carries_the_race_each_side_signed_that_season_up_on(
+    client: Client, two_seasons: dict[str, Any]
+) -> None:
+    """P1 met P3 in both seasons and signed the second one up as undead, so the
+    two meetings answer a different my_race."""
+    from app.models.enums import Race
+
+    p1, _, p3, _ = two_seasons["player_ids"]
+    _signup_race(two_seasons["season2_id"], p1, Race.UD)
+
+    meetings = client.get(f"/users/{p1}/history").json()["opponents"][0]["meetings"]
+
+    assert [one["season_name"] for one in meetings] == ["Season 2", "Season 1"]
+    assert [one["my_race"] for one in meetings] == ["UD", "HU"]
+    assert [one["their_race"] for one in meetings] == ["NE", "NE"]
+    # The same series read from the other side answers the two races swapped
+    mirror = client.get(f"/users/{p3}/history").json()["opponents"]
+    against_p1 = next(one for one in mirror if one["id"] == p1)
+    assert [one["my_race"] for one in against_p1["meetings"]] == ["NE", "NE"]
+    assert [one["their_race"] for one in against_p1["meetings"]] == ["UD", "HU"]
+
+
+def test_an_off_race_series_answers_the_race_the_side_reported(
+    client: Client, two_seasons: dict[str, Any]
+) -> None:
+    """The off race of a series beats the race the side signed the season up on."""
+    from app.core.db import Session
+    from app.models.enums import Race
+    from app.models.series import Series
+
+    p1 = two_seasons["player_ids"][0]
+    with Session() as session:
+        series = session.get(Series, two_seasons["series_played_id"])
+        assert series is not None
+        series.player1_off_race = Race.OC
+        series.player2_off_race = Race.HU
+        session.commit()
+
+    meetings = client.get(f"/users/{p1}/history").json()["opponents"][0]["meetings"]
+
+    assert meetings[1]["season_name"] == "Season 1"
+    assert (meetings[1]["my_race"], meetings[1]["their_race"]) == ("OC", "HU")
+    # The season 2 meeting reports no off race, so both sides keep their signup
+    assert (meetings[0]["my_race"], meetings[0]["their_race"]) == ("HU", "NE")
+    # The opponent race stays the newest meeting's race
+    assert client.get(f"/users/{p1}/history").json()["opponents"][0]["race"] == "NE"

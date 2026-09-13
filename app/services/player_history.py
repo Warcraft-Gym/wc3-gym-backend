@@ -56,6 +56,7 @@ def _meetings(session: OrmSession, user_id: int) -> Sequence[Row[Any]]:
     """
     opponent1, opponent2 = aliased(User), aliased(User)
     signup1, signup2 = aliased(DBUserSeasonSignup), aliased(DBUserSeasonSignup)
+    mine1, mine2 = aliased(DBUserSeasonSignup), aliased(DBUserSeasonSignup)
     sides = union_all(
         select(
             col(Series.id).label("series_id"),
@@ -67,11 +68,13 @@ def _meetings(session: OrmSession, user_id: int) -> Sequence[Row[Any]]:
             col(opponent1.id).label("opponent_id"),
             col(opponent1.name).label("opponent_name"),
             derived.race_of(col(Series.player2_off_race), signup1).label("race"),
+            derived.race_of(col(Series.player1_off_race), mine1).label("my_race"),
             col(opponent1.country).label("country"),
         )
         .join(Match, col(Match.id) == Series.match_id)
         .join(opponent1, col(opponent1.id) == Series.player2_id)
         .join(signup1, derived.signup_on(signup1, col(Series.player2_id)), isouter=True)
+        .join(mine1, derived.signup_on(mine1, col(Series.player1_id)), isouter=True)
         .where(col(Series.player1_id) == user_id),
         select(
             col(Series.id),
@@ -83,11 +86,13 @@ def _meetings(session: OrmSession, user_id: int) -> Sequence[Row[Any]]:
             col(opponent2.id),
             col(opponent2.name),
             derived.race_of(col(Series.player1_off_race), signup2).label("race"),
+            derived.race_of(col(Series.player2_off_race), mine2).label("my_race"),
             col(opponent2.country),
         )
         .join(Match, col(Match.id) == Series.match_id)
         .join(opponent2, col(opponent2.id) == Series.player1_id)
         .join(signup2, derived.signup_on(signup2, col(Series.player1_id)), isouter=True)
+        .join(mine2, derived.signup_on(mine2, col(Series.player2_id)), isouter=True)
         .where(col(Series.player2_id) == user_id),
     ).subquery()
 
@@ -265,6 +270,8 @@ def _opponents(
                 my_score=row.own,
                 their_score=row.opp,
                 date_time=row.date_time,
+                my_race=race_value(row.my_race),
+                their_race=race_value(row.race),
                 maps=maps.get(row.series_id, []),
             )
         )

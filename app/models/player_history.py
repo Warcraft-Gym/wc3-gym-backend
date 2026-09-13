@@ -19,6 +19,9 @@ class HistoryMeeting(SQLModel):
     my_score: int
     their_score: int
     date_time: datetime | None = None
+    # The race each side played in this meeting: the off race, else the signup race.
+    my_race: str | None = None
+    their_race: str | None = None
     # The maps of the series: the match's fixed map, then the veto picks.
     # Who won which map is not stored anywhere, so this is a list of names only.
     maps: list[str] = []
