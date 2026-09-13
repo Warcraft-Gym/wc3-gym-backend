@@ -9,11 +9,20 @@ from datetime import datetime
 from typing import Annotated
 
 from sqlalchemy import CheckConstraint, UniqueConstraint, false, func
-from sqlmodel import Field
+from sqlmodel import Field, SQLModel
 
 from app.models.base import DBModel
 from app.models.enums import Race, SignupChannel
-from app.models.types import AwareUTC, SuggestRace, UTCDateTime, utcnow
+from app.models.team_reduced import TeamReduced
+from app.models.types import (
+    AwareUTC,
+    EnumValue,
+    NumToStr,
+    SuggestRace,
+    UTCDateTime,
+    utcnow,
+)
+from app.models.user import UserPublic
 
 
 class EventEntrant(DBModel, table=True):
@@ -71,3 +80,45 @@ class EventEntrant(DBModel, table=True):
         sa_type=UTCDateTime,
         sa_column_kwargs={"server_default": func.now()},
     )
+
+
+class EntrantSignup(SQLModel):
+    """A player or a team entering an event through the signup routes."""
+
+    race: Annotated[Race, SuggestRace]
+    # An `anyone` event takes a battle tag where a `members` event takes the session
+    battle_tag: Annotated[str | None, NumToStr] = None
+    # A team entrant names its team; the caller captains it, or is an admin
+    team_id: int | None = None
+    channel: SignupChannel = SignupChannel.web
+
+
+class EntrantAdd(EntrantSignup):
+    """The admin form, which may name any player instead of the caller."""
+
+    user_id: int | None = None
+
+
+class EventEntrantPublic(SQLModel):
+    """One entrant as the entrants page reads it.
+
+    The warnings say what an admin should look at; none of them refused the
+    signup. The MMR is the W3C rating of the race the entrant signed up on,
+    stamped with the time the app last read that player from w3champions.
+    """
+
+    id: int
+    event_id: int
+    user: UserPublic | None = None
+    team: TeamReduced | None = None
+    race: Annotated[str | None, EnumValue] = None
+    channel: Annotated[str | None, EnumValue] = None
+    mmr: int | None = None
+    mmr_synced_at: datetime | None = None
+    warnings: list[str] = []
+    seed: int | None = None
+    seed_source: str | None = None
+    division_id: int | None = None
+    checked_in_at: Annotated[datetime | None, AwareUTC] = None
+    withdrawn_at: Annotated[datetime | None, AwareUTC] = None
+    qualified_from_event_id: int | None = None

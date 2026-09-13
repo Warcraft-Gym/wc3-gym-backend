@@ -126,6 +126,15 @@ class UserService:
         with Session.begin() as session:
             User.delete(session, user_id)
 
+    def set_banned(self, user_id: int, banned: bool) -> None:
+        """Stamp or clear the ban. A banned player still signs up; the entrant
+        row of the event warns and an admin decides."""
+        with Session.begin() as session:
+            row = session.get(User, user_id)
+            if row is None:
+                raise NotFoundError(f"User not found by id: {user_id}")
+            row.banned_at = utcnow() if banned else None
+
     def get(self, key: int | str) -> UserPublic:
         """One user by id, or by battle tag when the key is not all digits.
 
