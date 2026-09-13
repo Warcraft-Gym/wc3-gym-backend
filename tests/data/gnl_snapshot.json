@@ -183,7 +183,11 @@
         "player2_pick_map": null,
         "player2_points": 1,
         "player2_race": null,
-        "player2_score": 1
+        "player2_score": 1,
+        "rules": {
+          "best_of": 3,
+          "map_rules": "fixed,loser,loser"
+        }
       }
     ]
   },
@@ -423,7 +427,11 @@
       "player2_pick_map": null,
       "player2_points": 1,
       "player2_race": null,
-      "player2_score": 1
+      "player2_score": 1,
+      "rules": {
+        "best_of": 3,
+        "map_rules": "fixed,loser,loser"
+      }
     },
     {
       "casts": [],
@@ -542,7 +550,11 @@
       "player2_pick_map": null,
       "player2_points": null,
       "player2_race": null,
-      "player2_score": null
+      "player2_score": null,
+      "rules": {
+        "best_of": 3,
+        "map_rules": "fixed,loser,loser"
+      }
     }
   ],
   "GET /users/1": {
@@ -585,6 +597,7 @@
   "GET /users/1/history": {
     "events": [
       {
+        "kind": "gnl",
         "league_short_name": null,
         "lost": 0,
         "place": 1,
@@ -608,6 +621,7 @@
         "meetings": [
           {
             "date_time": "2026-01-07T19:00:00Z",
+            "kind": "gnl",
             "league_short_name": null,
             "maps": [],
             "my_race": null,

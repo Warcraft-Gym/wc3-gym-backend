@@ -220,6 +220,12 @@ class ResultKindWrite(SQLModel):
     winner: Literal[1, 2]
 
 
+class ChallengerAdd(SQLModel):
+    """The entrant a chain stage plays next, at the end of his division."""
+
+    entrant_id: int
+
+
 class SeriesUpdate(SQLModel):
     match_id: int | None = None
     date_time: Annotated[datetime | None, AwareUTC] = None
@@ -256,6 +262,14 @@ def _pick_map(series: Series, side: str) -> str | None:
     return None
 
 
+class SeriesRulesPublic(SQLModel):
+    """The rules one series plays under: one rule per game and the games the
+    best-of holds. app.services.series_rules fills them for any series."""
+
+    map_rules: str
+    best_of: int
+
+
 class SeriesPublic(SeriesBase, PublicModel):
     id: int
     match_id: int | None = None
@@ -280,6 +294,9 @@ class SeriesPublic(SeriesBase, PublicModel):
     # without reading the whole board. Side A is player1.
     player1_pick_map: str | None = None
     player2_pick_map: str | None = None
+    # The map rules and the best-of, from the season of the fixture or from
+    # the stage; app.services.series_rules fills them
+    rules: SeriesRulesPublic | None = None
     casts: list[CastPublic] = []
 
     @classmethod

@@ -7,7 +7,7 @@ own phase word. The event phase is computed on every read and never stored.
 
 import random
 from collections.abc import Sequence
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import delete, func, select, update
@@ -42,13 +42,18 @@ from app.models.event_entrant import (
 )
 from app.models.event_stage import EventStage, EventStagePublic, EventStageWrite
 from app.models.league import League, LeagueCreate, LeaguePublic, LeagueUpdate
-from app.models.relationships import DBEventRound, DBUserSeasonSignup
+from app.models.relationships import (
+    DBEventRound,
+    DBUserSeasonSignup,
+    EventRoundPublic,
+)
 from app.models.season import (
     NO_SERIES,
     EventCreate,
     EventPhase,
     EventPublic,
     EventUpdate,
+    MemberAction,
     MemberEventRow,
     Season,
     series_counts,
@@ -87,23 +92,59 @@ def phase_of(
     return "seeded"
 
 
-def checkin_open(event: Season) -> bool:
-    """Whether the check-in window of the event's first round stands open.
+def next_round(event: Season) -> DBEventRound | None:
+    """The next dated round of the event: the earliest one that is not over.
 
-    The window opens `checkin_days` before the round starts and closes when
-    the round ends; a blank `checkin_days` keeps it open. An event with no
-    rounds has nothing to check into.
+    A round with no dates is no round to check into, and a stage that holds no
+    rounds at all leaves the event checking in to itself.
     """
-    # The relationship orders the rounds by playday, so the first is the earliest
-    first = next(iter(event.rounds), None)
-    if first is None:
-        return False
-    if event.checkin_days is None or first.start_date is None:
-        return True
     now = _today()
-    return first.start_date - timedelta(days=event.checkin_days) <= now and (
-        first.end_date is None or now <= first.end_date
+    dated = sorted(
+        (row for row in event.rounds if row.start_date is not None),
+        key=lambda row: (row.start_date, row.number),
     )
+    return next((row for row in dated if (row.end_date or row.start_date) >= now), None)
+
+
+def checkin_window(
+    event: Season, round_: DBEventRound | None
+) -> tuple[date, date | None] | None:
+    """The days a check-in stands open, from `checkin_days` before it starts.
+
+    A round gives its own window and closes when the round ends; no round
+    gives the event's, which closes on the day the event starts. None is no
+    window to hold anyone to: a blank `checkin_days`, or no start date.
+    """
+    start = round_.start_date if round_ is not None else _start(event)
+    if event.checkin_days is None or start is None:
+        return None
+    return start - timedelta(days=event.checkin_days), (
+        round_.end_date if round_ is not None else start
+    )
+
+
+def checkin_open(event: Season) -> bool:
+    """Whether the event's check-in stands open today, in whichever shape it takes.
+
+    An event whose next round carries dates checks in to that round; every
+    other event checks in to itself, up to the day it starts. An event with
+    nothing to check into is shut, and a window nobody dated never closes.
+    """
+    round_ = next_round(event)
+    undated = any(row.start_date is None for row in event.rounds)
+    if round_ is None and not undated and _start(event) is None:
+        return False
+    window = checkin_window(event, round_)
+    if window is None:
+        return True
+    opens, closes = window
+    now = _today()
+    return opens <= now and (closes is None or now <= closes)
+
+
+def _start(event: Season) -> date | None:
+    """The day the event starts: its start date, or the day its time falls on."""
+    return event.start_date or _day(event)
 
 
 def _today() -> date:
@@ -257,28 +298,26 @@ class EventService:
         """The member home's published events, newest first, every kind in one list.
 
         One function over the event rows replaces the season and KOTH split.
-        `joined` is the caller's own; a caller with no id has joined nothing.
+        The caller's own state rides on each row: the entrant, the check-in
+        shape and window, the next round and the one action the page offers.
+        A caller with no id has joined nothing and reads a signup or a view.
         """
         with Session.begin() as session:
             events = session.scalars(
                 select(Season)
                 .where(col(Season.published).is_(True))
+                .options(selectinload(rel(Season.rounds)))
                 .order_by(col(Season.id).desc())
             ).all()
             joined = _joined_events(session, user_id)
             counts = series_counts_by_event(session, [event.id for event in events])
             return [
-                MemberEventRow(
-                    kind=event.kind,
-                    id=ident(event),
-                    name=event.name,
-                    league_short_name=event.league_short_name,
-                    start=event.start_date or _day(event),
-                    end=event.end_date,
-                    phase=phase_of(session, event, counts.get(event.id, NO_SERIES)),
-                    signups_open=event.signups_open,
-                    joined=event.id in joined,
-                    url=event.page_url,
+                _member_row(
+                    session,
+                    event,
+                    counts.get(event.id, NO_SERIES),
+                    event.id in joined,
+                    joined.get(event.id),
                 )
                 for event in events
             ]
@@ -354,9 +393,17 @@ class EventService:
     def check_in(
         self, event_id: int, entrant_id: int, claims: dict[str, Any] | None
     ) -> EventEntrantPublic:
-        """Stamp an entrant as checked in: the caller's own row, or an admin's call."""
+        """Stamp an entrant as checked in: the caller's own row, or an admin's call.
+
+        This is the event shape of the check-in. An event whose next round
+        carries dates checks in per round, through PUT /player-availability.
+        """
         with Session.begin() as session:
             event = _event(session, event_id)
+            if next_round(event) is not None:
+                raise BadRequestError(
+                    "This event checks in per round. Answer the round instead."
+                )
             row = _entrant(session, event_id, entrant_id)
             if not _is_admin(claims):
                 user = _caller(session, claims)
@@ -587,22 +634,84 @@ def _day(event: Season) -> date | None:
     return event.starts_at.date() if event.starts_at else None
 
 
-def _joined_events(session: OrmSession, user_id: int | None) -> set[int]:
-    """The events the player entered: an entrant row, or a GNL season signup."""
+def _joined_events(
+    session: OrmSession, user_id: int | None
+) -> dict[int, EventEntrant | None]:
+    """The player's entrant row per event he joined; a GNL signup has none.
+
+    A key with no row is a season the player signed up for, which carries no
+    entrant; an event he never entered is no key at all.
+    """
     if user_id is None:
-        return set()
+        return {}
     entered = session.scalars(
-        select(col(EventEntrant.event_id)).where(
+        select(EventEntrant).where(
             col(EventEntrant.user_id) == user_id,
             col(EventEntrant.withdrawn_at).is_(None),
         )
     )
+    joined: dict[int, EventEntrant | None] = {row.event_id: row for row in entered}
     signed = session.scalars(
         select(col(DBUserSeasonSignup.season_id)).where(
             col(DBUserSeasonSignup.user_id) == user_id
         )
     )
-    return set(entered) | set(signed)
+    for season_id in signed:
+        joined.setdefault(season_id, None)
+    return joined
+
+
+def _member_row(
+    session: OrmSession,
+    event: Season,
+    counts: tuple[int, int, int],
+    joined: bool,
+    entrant: EventEntrant | None,
+) -> MemberEventRow:
+    """One member home row: the event, and what the caller may do with it."""
+    checked_in_at = entrant.checked_in_at if entrant else None
+    phase = phase_of(session, event, counts)
+    round_ = next_round(event)
+    is_open = event.checkin_enabled and checkin_open(event)
+    return MemberEventRow(
+        kind=event.kind,
+        id=ident(event),
+        name=event.name,
+        league_short_name=event.league_short_name,
+        start=_start(event),
+        end=event.end_date,
+        phase=phase,
+        signups_open=event.signups_open,
+        joined=joined,
+        url=event.page_url,
+        entrant_id=ident(entrant) if entrant else None,
+        checked_in_at=checked_in_at,
+        checkin_shape=None
+        if not event.checkin_enabled
+        else "round"
+        if round_ is not None
+        else "event",
+        checkin_open=is_open,
+        next_round=EventRoundPublic.from_row(round_) if round_ else None,
+        action=_member_action(phase, event, joined, checked_in_at, is_open),
+    )
+
+
+def _member_action(
+    phase: EventPhase,
+    event: Season,
+    joined: bool,
+    checked_in_at: datetime | None,
+    checkin_open_now: bool,
+) -> MemberAction:
+    """The one action the member home offers, so every page agrees on it."""
+    if phase in ("running", "finished"):
+        return "view"
+    if joined:
+        if checked_in_at is not None:
+            return "checked_in"
+        return "check_in" if checkin_open_now else "withdraw"
+    return "sign_up" if event.signups_open else "closed"
 
 
 def _publics(session: OrmSession, events: Sequence[Season]) -> list[EventPublic]:

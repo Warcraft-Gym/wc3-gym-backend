@@ -1,8 +1,10 @@
 """The map veto of a series, step by step.
 
-The board is derived: the season's pick_ban names the order and the side of
-every step, the season pool names the maps, and a fixed rule takes its map off
-the board because it is already game 1. Only the steps taken are stored.
+The board is derived: the event's pick_ban names the order and the side of
+every step, the event pool names the maps, and a fixed rule takes its map off
+the board because it is already game 1. Only the steps taken are stored. The
+rules come from app.services.series_rules, so a bracket series with no
+fixture opens the same board as a GNL one.
 """
 
 from sqlalchemy.orm import Session as OrmSession
@@ -10,9 +12,9 @@ from sqlmodel import col, select
 
 from app.core.db import Session
 from app.core.exceptions import ApiError, BadRequestError, NotFoundError
+from app.core.map_order import DEFAULT_RULES, rules_of
 from app.models.base import ident
 from app.models.map import Map
-from app.models.relationships import round_row
 from app.models.season import Season
 from app.models.series import Series
 from app.models.series_veto_step import (
@@ -20,6 +22,12 @@ from app.models.series_veto_step import (
     SeriesVetoPublic,
     SeriesVetoStepPublic,
     VetoPlayer,
+)
+from app.services.series_rules import (
+    SeriesRules,
+    series_event,
+    series_round,
+    series_rules,
 )
 
 
@@ -31,7 +39,9 @@ class SeriesVetoService:
             series = session.get(Series, series_id)
             if not series:
                 raise NotFoundError(f"Series not found by id: {series_id}")
-            return len(_steps(session, series_id)) >= len(_order(series.match.season))
+            return len(_steps(session, series_id)) >= len(
+                _order(series_event(session, series))
+            )
 
     def board(
         self, series_id: int, user_id: int | None, player_id: int | None = None
@@ -107,9 +117,11 @@ def _steps(session: OrmSession, series_id: int) -> list[DBSeriesVetoStep]:
     )
 
 
-def _order(season: Season) -> list[str]:
-    """The steps the season plays, for example Ban_A, Ban_B, Pick_A, Pick_B."""
-    return [step for step in (season.pick_ban or "").split("|") if step]
+def _order(event: Season | None) -> list[str]:
+    """The steps the event plays, for example Ban_A, Ban_B, Pick_A, Pick_B."""
+    return [
+        step for step in ((event.pick_ban if event else None) or "").split("|") if step
+    ]
 
 
 def _side(entry: str) -> str:
@@ -117,8 +129,6 @@ def _side(entry: str) -> str:
 
 
 STEPS = ("Ban_A", "Ban_B", "Pick_A", "Pick_B")
-# No rules set is GNL's Bo3, as the frontend assumes
-DEFAULT_RULES = "fixed,loser,loser"
 
 
 def veto_limits(season: Season) -> tuple[int, int]:
@@ -152,11 +162,13 @@ def check_order(season: Season) -> None:
         )
 
 
-def _fixed_map_id(session: OrmSession, season: Season, playday: int) -> int | None:
+def _fixed_map_id(
+    session: OrmSession, series: Series, rules: SeriesRules
+) -> int | None:
     """The map a fixed rule claims for game 1; it never enters the veto."""
-    if "fixed" not in (season.map_rules or DEFAULT_RULES).split(","):
+    if "fixed" not in rules_of(rules.map_rules):
         return None
-    row = round_row(session, ident(season), playday)
+    row = series_round(session, series)
     return row.map_id if row else None
 
 
@@ -169,17 +181,17 @@ def _take_step(
     entered_by: int | None,
 ) -> None:
     """A null side records the step for whichever side the order names next."""
-    season = series.match.season
-    order = _order(season)
+    rules = series_rules(session, series)
+    order = _order(series_event(session, series))
     if len(steps) >= len(order):
         raise BadRequestError("The veto is complete")
     if side is not None and _side(order[len(steps)]) != side:
         raise BadRequestError("It is not your turn")
-    if map_id not in {link.map_id for link in season.maps}:
+    if map_id not in set(rules.map_pool):
         raise BadRequestError(f"Map not part of the season, map id: {map_id}")
     if map_id in {step.map_id for step in steps}:
         raise BadRequestError(f"Map already used, map id: {map_id}")
-    if map_id == _fixed_map_id(session, season, series.match.playday):
+    if map_id == _fixed_map_id(session, series, rules):
         raise BadRequestError(f"Map played as game 1, map id: {map_id}")
     session.add(
         DBSeriesVetoStep(
@@ -194,11 +206,9 @@ def _take_step(
     )
     # The final step takes itself when one entry and one map remain: no choice is left
     taken = {step.map_id for step in steps} | {map_id}
+    fixed = _fixed_map_id(session, series, rules)
     left = [
-        link.map_id
-        for link in season.maps
-        if link.map_id not in taken
-        and link.map_id != _fixed_map_id(session, season, series.match.playday)
+        map_id for map_id in rules.map_pool if map_id not in taken and map_id != fixed
     ]
     if len(order) - len(steps) == 2 and len(left) == 1:
         session.add(
@@ -217,10 +227,10 @@ def _forced_last(
 ) -> bool:
     """Whether the last step took itself: the order is complete and it used up
     the whole board, so one map was left for it."""
-    season = series.match.season
-    order = _order(season)
-    fixed = _fixed_map_id(session, season, series.match.playday)
-    return len(order) >= 2 and len(steps) == len(order) == len(season.maps) - (
+    rules = series_rules(session, series)
+    order = _order(series_event(session, series))
+    fixed = _fixed_map_id(session, series, rules)
+    return len(order) >= 2 and len(steps) == len(order) == len(rules.map_pool) - (
         fixed is not None
     )
 
@@ -231,8 +241,8 @@ def _board(
     """The board as one player row sees it: an admin who plays gets their side and turn."""
     if series.player1_id is None or series.player2_id is None:
         raise BadRequestError("The series has no sides to veto with yet")
-    season = series.match.season
-    order = _order(season)
+    rules = series_rules(session, series)
+    order = _order(series_event(session, series))
     steps = _steps(session, ident(series))
     side = None
     if player_id == series.player1_id:
@@ -249,9 +259,9 @@ def _board(
         viewer_side=side,
         on_turn=side is not None and not complete and _side(order[len(steps)]) == side,
         complete=complete,
-        pool=[link.map_id for link in season.maps],
-        week_map_id=_fixed_map_id(session, season, series.match.playday),
-        map_rules=season.map_rules,
+        pool=rules.map_pool,
+        week_map_id=_fixed_map_id(session, series, rules),
+        map_rules=rules.map_rules,
         player1=VetoPlayer(id=series.player1_id, name=series.player1.name),
         player2=VetoPlayer(id=series.player2_id, name=series.player2.name),
     )

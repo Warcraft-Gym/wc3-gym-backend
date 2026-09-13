@@ -25,7 +25,11 @@ from app.models.enums import EntrantKind, EventKind, Race, SignupPolicy
 from app.models.event_division import EventDivisionPublic
 from app.models.event_stage import EventStagePublic, EventStageWrite
 from app.models.map import MapPublic
-from app.models.relationships import DBEventRound, SeasonRoundPublic
+from app.models.relationships import (
+    DBEventRound,
+    EventRoundPublic,
+    SeasonRoundPublic,
+)
 from app.models.types import (
     AwareUTC,
     EnumValue,
@@ -204,11 +208,14 @@ def series_counts_by_event(
 ) -> dict[int | None, tuple[int, int, int]]:
     """How many series each event holds, how many started, how many are scored.
 
-    A series has started once it is scored or its time has passed. The series
-    of an event still hang off its matches, so the count joins through them.
-    An event with no series has no row here.
+    Every series names its round and every round names its event, so the count
+    joins through the round and takes a generated bracket series, which has no
+    fixture, the same way as a GNL one. A series has started once it is scored
+    or its time has passed; a bracket series carries no time until it is
+    scheduled, so it counts as started only once it is scored. An event with no
+    series has no row here.
     """
-    from app.models.match import Match
+    from app.models.relationships import DBEventRound
     from app.models.series import Series
 
     ids = [event_id for event_id in event_ids if event_id is not None]
@@ -221,15 +228,15 @@ def series_counts_by_event(
     started = or_(scored, col(Series.date_time) <= utcnow())
     rows = session.execute(
         select(
-            col(Match.season_id),
+            col(DBEventRound.season_id),
             func.count(),
             func.coalesce(func.sum(case((started, 1), else_=0)), 0),
             func.coalesce(func.sum(case((scored, 1), else_=0)), 0),
         )
         .select_from(Series)
-        .join(Match, col(Match.id) == col(Series.match_id))
-        .where(col(Match.season_id).in_(ids))
-        .group_by(col(Match.season_id))
+        .join(DBEventRound, col(DBEventRound.id) == col(Series.round_id))
+        .where(col(DBEventRound.season_id).in_(ids))
+        .group_by(col(DBEventRound.season_id))
     ).all()
     return {row[0]: (row[1], row[2], row[3]) for row in rows}
 
@@ -458,6 +465,14 @@ EventPhase = Literal[
     "draft", "signups_open", "checkin", "seeded", "running", "finished"
 ]
 
+# What a member checks into: one round of the event, or the event itself
+CheckinShape = Literal["event", "round"]
+
+# The one action a member's event row offers; app/services/events.py computes it
+MemberAction = Literal[
+    "sign_up", "withdraw", "check_in", "checked_in", "view", "closed"
+]
+
 
 class EventPublic(SQLModel):
     """One event as the events pages read it, GNL season or not.
@@ -584,3 +599,22 @@ class MemberEventRow(SQLModel):
     joined: bool
     # The event's optional "Page" link; the home builds its own in-app link
     url: str | None = None
+    # The caller's own entrant row; null for a GNL signup, which holds no entrant
+    entrant_id: int | None = None
+    # When the caller checked in; null while the check-in is not taken
+    checked_in_at: Annotated[datetime | None, AwareUTC] = None
+    # What the caller checks into: the round when the event's next round carries
+    # dates, else the event; null when the event takes no check-in
+    checkin_shape: CheckinShape | None = None
+    # That shape's check-in window stands open today
+    checkin_open: bool = False
+    # The next round of the event that carries dates; null when none does
+    next_round: EventRoundPublic | None = None
+    # The one action the page offers the caller, from the phase, the signup
+    # window, the caller's entrant or GNL signup and the check-in window:
+    # `sign_up` signups are open and the caller has not entered; `withdraw` the
+    # caller is in and the check-in is not open; `check_in` the window stands
+    # open; `checked_in` the caller checked in already; `view` the event runs or
+    # is finished, so the page reads the bracket or the standings; `closed`
+    # nothing is open to the caller yet.
+    action: MemberAction

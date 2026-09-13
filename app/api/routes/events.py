@@ -8,6 +8,7 @@ from app.api.deps import (
     EventServiceDep,
     OptionalLogin,
     RequireLogin,
+    UserServiceDep,
     require_admin,
 )
 from app.models.enums import EventKind
@@ -24,8 +25,13 @@ from app.models.event_stage import (
     EventStagePublic,
     EventStageWrite,
 )
-from app.models.season import EventCreate, EventPublic, EventUpdate
-from app.models.series import StageSeriesPublic
+from app.models.season import (
+    EventCreate,
+    EventPublic,
+    EventUpdate,
+    MemberEventRow,
+)
+from app.models.series import ChallengerAdd, StageSeriesPublic, StageSeriesRow
 from app.services import stage_engine
 
 router = APIRouter(tags=["events"])
@@ -54,6 +60,18 @@ def get_events(
         offset=offset,
         claims=claims,
     )
+
+
+@router.get("/me/events")
+def get_my_events(
+    service: EventServiceDep, users: UserServiceDep, claims: RequireLogin
+) -> list[MemberEventRow]:
+    """Return the published events with the caller's own state on each.
+
+    One read for every kind: the entrant, the check-in shape and window, the
+    next round and the one action the page offers.
+    """
+    return service.events_for_member(users.id_by_discord_id(claims["sub"]))
 
 
 @router.get("/events/{event_id}")
@@ -210,6 +228,17 @@ def generate_stage(event_id: int, stage_id: int) -> dict[str, int]:
 def get_stage_series(event_id: int, stage_id: int) -> StageSeriesPublic:
     """The rounds of the stage and every series it holds, for the run page."""
     return stage_engine.series_of(event_id, stage_id)
+
+
+@router.post(
+    "/events/{event_id}/stages/{stage_id}/series",
+    dependencies=[Depends(require_admin)],
+)
+def add_stage_series(
+    event_id: int, stage_id: int, data: ChallengerAdd
+) -> StageSeriesRow:
+    """Append one challenger to the end of the chain his division plays."""
+    return stage_engine.add_challenger(event_id, stage_id, data.entrant_id)
 
 
 @router.get("/events/{event_id}/stages/{stage_id}/standings")

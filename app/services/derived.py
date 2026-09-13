@@ -51,6 +51,7 @@ from app.core.scoring import (
 from app.models.base import ident
 from app.models.draft_series import DraftSeriesPublic
 from app.models.enums import Race
+from app.models.event_entrant import EventEntrant
 from app.models.fantasy_bet import FantasyBet, FantasyBetPublic
 from app.models.fantasy_team import FantasyTeamPublic
 from app.models.match import Match, MatchPublic
@@ -72,6 +73,7 @@ from app.models.user import (
     UserPublic,
     UserReduced,
 )
+from app.services import series_rules
 
 type MatchScores = dict[int, tuple[int, int]]
 # score system and maps to win, the two arguments of the scoring rule
@@ -156,6 +158,28 @@ def _signup_races(
     }
 
 
+def _entrant_races(
+    session: Session, pairs: set[tuple[int, int]]
+) -> dict[tuple[int, int], str]:
+    """The race of every (player, event) entrant row, in one statement."""
+    if not pairs:
+        return {}
+    rows = session.execute(
+        select(
+            col(EventEntrant.user_id),
+            col(EventEntrant.event_id),
+            col(EventEntrant.race),
+        ).where(
+            tuple_(col(EventEntrant.user_id), col(EventEntrant.event_id)).in_(pairs)
+        )
+    ).all()
+    return {
+        (user_id, event_id): race.value
+        for user_id, event_id, race in rows
+        if user_id and race
+    }
+
+
 def signup_on(
     signup: type[DBUserSeasonSignup], user_id: Mapped[int | None]
 ) -> ColumnElement[bool]:
@@ -205,11 +229,17 @@ def fill_user_signup_races(
 
 
 def fill_signup_races(
-    session: Session, rows: Iterable[SeriesPublic | DraftSeriesPublic | None]
+    session: Session,
+    rows: Iterable[SeriesPublic | DraftSeriesPublic | None],
+    events: dict[int, int] | None = None,
 ) -> None:
     """Fill the signup race of both players for the season of each row's match,
     then the race each side of a series played. The second one costs no
-    statement: it reads the signup race this call just filled."""
+    statement: it reads the signup race this call just filled.
+
+    A series with no fixture has no season signup, so its two sides take the
+    race off the entrant row of the event `events` names for it.
+    """
     filled = [row for row in rows if row is not None]
     fill_user_signup_races(
         session,
@@ -221,6 +251,16 @@ def fill_signup_races(
             if player
         ],
     )
+    entered = [
+        (player, events[row.id])
+        for row in filled
+        if not row.match and events and row.id in events
+        for player in (row.player1, row.player2)
+        if player
+    ]
+    races = _entrant_races(session, {(player.id, event) for player, event in entered})
+    for player, event_id in entered:
+        player.signup_race = races.get((player.id, event_id))
     for row in filled:
         # A draft has no result and so no off race, only the signup race
         off1 = row.player1_off_race if isinstance(row, SeriesPublic) else None
@@ -251,7 +291,8 @@ def fill_series(session: Session, series_list: Iterable[SeriesPublic | None]) ->
         if series.match:
             _fill_match(series.match, scores)
 
-    fill_signup_races(session, rows)
+    events = series_rules.fill_rules(session, rows)
+    fill_signup_races(session, rows, events)
 
     fill_gnl_stats(
         session,

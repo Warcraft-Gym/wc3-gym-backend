@@ -7,11 +7,13 @@ and the feeder graph read back the way the run page reads them.
 from collections.abc import Callable
 from typing import Any
 
+import pytest
 from httpx2 import Client
 from sqlalchemy import select
 from sqlmodel import col
 
 from app.core.db import Session
+from app.core.exceptions import BadRequestError
 from app.models.base import ident
 from app.models.enums import EventKind, Race, StageFormat
 from app.models.event_division import EventDivision
@@ -21,6 +23,8 @@ from app.models.relationships import DBEventRound
 from app.models.season import Season
 from app.models.series import Series
 from app.models.user import User
+from app.services import stage_engine
+from tests.test_events import phase
 
 
 def players(count: int) -> list[int]:
@@ -866,3 +870,157 @@ def test_a_member_and_a_reader_both_read_a_stage(
     anonymous = stage_series(client, event, stage)
     signed_in = stage_series(client, event, stage, headers=member())
     assert len(anonymous["series"]) == len(signed_in["series"]) == 3
+
+
+def join(event: int, division: int | None, name: str) -> int:
+    """One more entrant of the event, in the division named."""
+    with Session.begin() as session:
+        user = User(
+            name=name,
+            battleTag=f"{name}#1111",
+            discordTag=name.lower(),
+            discordId=f"8{name}",
+            race=Race.HU,
+            mmr=1500,
+        )
+        session.add(user)
+        session.flush()
+        row = EventEntrant(
+            event_id=event, user_id=ident(user), race=Race.HU, division_id=division
+        )
+        session.add(row)
+        session.flush()
+        return ident(row)
+
+
+def divisions_of(event: int) -> list[int]:
+    """The divisions of the event, the strongest first."""
+    with Session.begin() as session:
+        return [
+            ident(row)
+            for row in session.scalars(
+                select(EventDivision)
+                .where(col(EventDivision.event_id) == event)
+                .order_by(col(EventDivision.position))
+            )
+        ]
+
+
+def append(
+    client: Client, headers: dict[str, str], event: int, stage: int, entrant: int
+) -> Any:  # noqa: ANN401
+    return client.post(
+        f"/events/{event}/stages/{stage}/series",
+        json={"entrant_id": entrant},
+        headers=headers,
+    )
+
+
+def test_a_challenger_joins_the_chain_after_two_results(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """The third series is fed by the second, and the king fills its front side."""
+    event, (stage,) = cup(3, StageFormat.koth)
+    generate(client, auth_headers, event, stage)
+    rows = bracket(stage)
+    seeds = players_of(event)
+    assert score(client, auth_headers, rows[0]["id"], 2, 0).status_code == 200
+    assert score(client, auth_headers, rows[1]["id"], 2, 0).status_code == 200
+    entrant = join(event, None, "Challenger")
+    response = append(client, auth_headers, event, stage, entrant)
+    assert response.status_code == 200, response.text
+    added = response.json()
+    assert added["sequence"] == 3
+    assert added["slot1_from_series_id"] == rows[1]["id"]
+    after = bracket(stage)
+    assert len(after) == 3
+    # Seed 1 held the throne through both series, so he stands in the third
+    assert after[2]["sides"] == (seeds[0], added["player2_id"])
+    assert added["player2_id"] not in seeds
+
+
+def test_a_challenger_waits_while_the_chain_is_unscored(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """The new series carries its feeder and an empty front side."""
+    event, (stage,) = cup(2, StageFormat.koth)
+    generate(client, auth_headers, event, stage)
+    opener = bracket(stage)[0]
+    entrant = join(event, None, "Waiting")
+    assert append(client, auth_headers, event, stage, entrant).status_code == 200
+    added = bracket(stage)[1]
+    assert (added["sequence"], added["sides"][0]) == (2, None)
+    assert added["slot1"] == (opener["id"], False)
+
+
+def test_a_single_elimination_stage_takes_no_challenger(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    event, (stage,) = cup(4)
+    generate(client, auth_headers, event, stage)
+    entrant = join(event, None, "Late")
+    response = append(client, auth_headers, event, stage, entrant)
+    assert response.status_code == 400, response.text
+    assert "chain" in response.json()["error"]
+
+
+def test_a_chain_with_no_series_refuses_a_challenger(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """Two entrants open the chain before a third joins it."""
+    event, (stage,) = cup(2, StageFormat.koth)
+    entrant = join(event, None, "First")
+    response = append(client, auth_headers, event, stage, entrant)
+    assert response.status_code == 400, response.text
+    assert "no series yet" in response.json()["error"]
+
+
+def test_an_entrant_of_another_division_is_refused(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """A challenger grows the chain of his own division, never a neighbour's."""
+    event, (stage,) = cup(2, StageFormat.koth, divisions=2)
+    generate(client, auth_headers, event, stage)
+    weaker = divisions_of(event)[1]
+    entrant = join(event, weaker, "Outsider")
+    with Session.begin() as session:
+        stage_row = session.get(EventStage, stage)
+        bands = [session.get(EventDivision, band) for band in divisions_of(event)]
+        entrant_row = session.get(EventEntrant, entrant)
+        assert stage_row is not None and entrant_row is not None
+        with pytest.raises(BadRequestError, match="division"):
+            stage_engine.append_to_chain(session, stage_row, bands[0], entrant_row)
+    # His own division still takes him, at the end of its chain
+    response = append(client, auth_headers, event, stage, entrant)
+    assert response.status_code == 200, response.text
+    assert (response.json()["sequence"], response.json()["division_id"]) == (2, weaker)
+
+
+def test_a_cup_reads_running_on_the_first_result_and_finished_on_the_last(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """A bracket series names a round and no fixture, and the phase counts it
+    through that round: four entrants read running once one of the three
+    series is scored and finished once all three are."""
+    event, (stage,) = cup(4)
+    generate(client, auth_headers, event, stage)
+    # The cup still takes signups, and no series has started
+    assert phase(client, event) == "signups_open"
+
+    rows = stage_series(client, event, stage)["series"]
+    assert len(rows) == 3
+    semis = [row for row in rows if row["player1_id"] is not None]
+    assert len(semis) == 2
+
+    assert score(client, auth_headers, semis[0]["id"], 2, 0).status_code == 200
+    assert phase(client, event) == "running"
+
+    assert score(client, auth_headers, semis[1]["id"], 2, 0).status_code == 200
+    played = {row["id"] for row in semis}
+    final = next(
+        row
+        for row in stage_series(client, event, stage)["series"]
+        if row["id"] not in played
+    )
+    assert score(client, auth_headers, final["id"], 2, 0).status_code == 200
+    assert phase(client, event) == "finished"
