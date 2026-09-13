@@ -65,10 +65,14 @@ def generate(event_id: int, stage_id: int) -> dict[str, int]:
             )
         if _series_of(session, stage_id):
             raise BadRequestError("This stage already holds series")
-        fields = _fields(_entrants(session, event_id))
-        for field in fields.values():
-            if len(field) < 2:
-                raise BadRequestError("A division needs two entrants to generate")
+        # A division nobody entered draws nothing, so the others still generate
+        fields = {
+            division_id: field
+            for division_id, field in _fields(_entrants(session, event_id)).items()
+            if field
+        }
+        if not fields or any(len(field) < 2 for field in fields.values()):
+            raise BadRequestError("A division needs two entrants to generate")
         plans = {
             division: _plan(stage, len(field)) for division, field in fields.items()
         }

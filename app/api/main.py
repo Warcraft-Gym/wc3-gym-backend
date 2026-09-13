@@ -10,6 +10,7 @@ from app.api.routes import (
     import_export,
     jobs,
     koth,
+    koth_nights,
     leagues,
     login,
     maps,
@@ -38,6 +39,7 @@ api_router.include_router(maps.router)
 api_router.include_router(fantasy.router)
 api_router.include_router(config.router)
 api_router.include_router(koth.router)
+api_router.include_router(koth_nights.router)
 api_router.include_router(stats.router)
 api_router.include_router(health.router)
 api_router.include_router(jobs.router)

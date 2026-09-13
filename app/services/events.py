@@ -64,6 +64,9 @@ from app.models.team_reduced import TeamReduced
 from app.models.types import utcnow
 from app.models.user import User, UserPublic
 
+# How many W3C seasons back a rating is still the player's current one
+SEASONS = 3
+
 
 def phase_of(
     session: OrmSession, event: Season, counts: tuple[int, int, int] | None = None
@@ -833,15 +836,19 @@ def _by_battle_tag(session: OrmSession, battle_tag: str, race: Race) -> User:
 def _stats_for(user: User, race: Race) -> tuple[int | None, int]:
     """The player's newest W3C rating on that race, and the games behind it.
 
-    The rating is the one the newest stored W3C season carries; the games are
+    A season the player did not play on that race carries no rating, so the
+    rating is the newest stored season that carries one, three seasons back
+    from the newest season the player has at all and no further. The games are
     every season the app has synced for that race, because a min-games rule
     asks how much the player has played, not how much this season.
     """
     rows = [stat for stat in (user.w3c_stats or []) if stat.race == race]
     if not rows:
         return None, 0
-    newest = max(rows, key=lambda stat: stat.wc3_season)
-    return newest.mmr, sum(stat.games or 0 for stat in rows)
+    newest = max(stat.wc3_season for stat in (user.w3c_stats or []))
+    played = [stat for stat in rows if stat.mmr and stat.wc3_season > newest - SEASONS]
+    rating = max(played, key=lambda stat: stat.wc3_season).mmr if played else None
+    return rating, sum(stat.games or 0 for stat in rows)
 
 
 def _warnings(
