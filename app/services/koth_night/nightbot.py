@@ -19,7 +19,13 @@ from app.models.enums import Race, SignupChannel
 from app.models.event_division import EventDivision
 from app.models.event_entrant import EntrantSignup, EventEntrant
 from app.models.user import User
-from app.services.events import EventService, _by_battle_tag, _stats_for
+from app.services.events import (
+    SEASONS,
+    EventService,
+    _by_battle_tag,
+    _stats_for,
+    _w3c_season,
+)
 from app.services.koth_night import carry
 from app.services.koth_night.night import tonight
 
@@ -46,6 +52,9 @@ def signup(
         event_id = ident(tonight(session))
         user = _by_battle_tag(session, battletag, named or Race.RANDOM)
         chosen = named or _best_race(user)
+        # A player with no current rating has no bracket, so nothing is written
+        if _stats_for(user, chosen, _w3c_season(session))[0] is None:
+            raise BadRequestError(_no_rating(battletag, race))
         row = _entrant(session, event_id, ident(user))
         entered = row is not None
         if row is not None:
@@ -72,7 +81,7 @@ def signup(
             else None
         )
         bracket = division.name if division else "no bracket"
-        mmr = _stats_for(user, chosen)[0]
+        mmr = _stats_for(user, chosen, _w3c_season(session))[0]
     return {
         "success": True,
         "message": f"{twitch} signed up for {bracket} ({mmr} MMR)",
@@ -100,6 +109,16 @@ def _race(race: str | None) -> Race | None:
         raise BadRequestError(
             f"Invalid race '{race}'. Valid options: {RACES}"
         ) from error
+
+
+def _no_rating(battle_tag: str, race: str | None) -> str:
+    """What chat reads when the player carries no rating the night can cut on."""
+    if race:
+        return (
+            f"No W3Champions statistics found for {battle_tag} with race"
+            f" {race} in the last {SEASONS} seasons"
+        )
+    return f"No valid MMR data found for {battle_tag} in the last {SEASONS} seasons"
 
 
 def _best_race(user: User) -> Race:

@@ -155,7 +155,7 @@ def test_a_signup_with_no_night_open_is_refused(
 def test_two_signups_in_one_bracket_draw_the_throne_series(
     client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
 ) -> None:
-    """The chain is drawn once every bracket that holds entrants holds two."""
+    """The chain of a bracket is drawn as soon as that bracket holds two."""
     night = open_night(client, auth_headers)
     enrol("A#1", 1400)
     enrol("B#2", 1300)
@@ -166,6 +166,48 @@ def test_two_signups_in_one_bracket_draw_the_throne_series(
 
     assert len(body["series"]) == 1
     assert [row["number"] for row in body["rounds"]] == [1]
+
+
+def test_a_bracket_draws_alone_and_a_bracket_that_fills_later_still_draws(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """One player alone in a bracket holds no other bracket up.
+
+    Each bracket draws its own chain as it reaches two, into the one round the
+    stage holds, so a bracket that fills after the first draw is not stranded.
+    """
+    night = open_night(client, auth_headers)
+    stage = night["stages"][0]["id"]
+    for tag, mmr in (("Top#1", 1700), ("Low#2", 1400), ("Low#3", 1300)):
+        enrol(tag, mmr)
+        sign_up(client, tag, tag.split("#")[0], "human")
+
+    first = stage_series(client, night["id"], stage)["series"]
+    assert len(first) == 1
+
+    enrol("Top#4", 1650)
+    sign_up(client, "Top#4", "top4", "human")
+
+    body = stage_series(client, night["id"], stage)
+    assert len(body["series"]) == 2
+    assert len({row["division_id"] for row in body["series"]}) == 2
+    assert [row["number"] for row in body["rounds"]] == [1]
+
+
+def test_a_signup_with_no_current_rating_is_refused(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """No rating, no bracket: chat reads the refusal and nothing is written."""
+    night = open_night(client, auth_headers)
+
+    named = sign_up(client, "Ghost#9999", "ghost", "human")
+
+    assert named.status_code == 400, named.text
+    assert "No W3Champions statistics found" in named.json()["error"]
+    plain = sign_up(client, "Ghost#9999", "ghost")
+    assert plain.status_code == 400, plain.text
+    assert "No valid MMR data" in plain.json()["error"]
+    assert entrants(client, night["id"]) == []
 
 
 def test_the_king_of_the_night_before_takes_seed_one(
@@ -198,17 +240,14 @@ def test_closing_a_night_deletes_the_series_nobody_played(
 ) -> None:
     """One scored series stands; the pending end of every chain goes.
 
-    The night then reads finished once the phase counts the series of an
-    event through their round, which the FOML run pins as the gap it has
-    today (tests/test_foml_league.py:374).
+    Every series left then carries a result, so the night reads finished.
     """
     night = open_night(client, auth_headers)
-    # Bracket 3 waits for its pair, so bracket 1 fills to a chain of two
+    # Two brackets, one chain each: the top chain is played, the low one is not
     for tag, mmr in (
         ("C1#1", 1400),
         ("T1#4", 1700),
         ("C2#2", 1300),
-        ("C3#3", 1200),
         ("T2#5", 1650),
     ):
         enrol(tag, mmr)
@@ -216,13 +255,14 @@ def test_closing_a_night_deletes_the_series_nobody_played(
 
     stage = night["stages"][0]["id"]
     rows = stage_series(client, night["id"], stage)["series"]
-    assert len(rows) == 3
-    played = next(row for row in rows if row["player2_id"] is not None)
+    assert len(rows) == 2
+    played = rows[0]
     assert score(client, auth_headers, played["id"], 1, 0).status_code == 200
 
     closed = client.post(f"/koth/nights/{night['id']}/close", headers=auth_headers)
 
     assert closed.status_code == 200, closed.text
     assert closed.json()["signups_open"] is False
+    assert closed.json()["phase"] == "finished"
     left = stage_series(client, night["id"], stage)["series"]
     assert [row["id"] for row in left] == [played["id"]]

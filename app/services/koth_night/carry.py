@@ -22,10 +22,12 @@ from app.services.koth_night.night import divisions_of, last_night, series_of
 
 
 def follow_signup(event_id: int) -> None:
-    """Seed the night after a signup, and open the chains once they are ready.
+    """Seed the night after a signup, and draw each bracket once it holds two.
 
-    The seed lock belongs to the stage, so the brackets are drawn together:
-    every bracket that holds entrants needs two before the stage generates.
+    A bracket draws on its own, so one player alone in another bracket never
+    holds the night up. The seeds stay open while the night takes signups,
+    because a locked stage refuses the seed write a later bracket needs; an
+    admin who locks them by hand takes the night over.
     """
     with Session.begin() as session:
         night = session.get(Season, event_id)
@@ -39,18 +41,21 @@ def follow_signup(event_id: int) -> None:
         stage_id = ident(stage)
         fields = _by_division(session, event_id)
         order = _kings_first(session, night, fields)
-        ready = bool(fields) and all(len(field) >= 2 for field in fields.values())
-    service = EventService()
-    service.set_seeds(
+        drawn = {row.division_id for row in series_of(session, event_id)}
+        ready = [
+            division_id
+            for division_id, field in fields.items()
+            if len(field) >= 2 and division_id not in drawn
+        ]
+    EventService().set_seeds(
         event_id,
         stage_id,
         SeedWrite(
             source=SeedSource.manual if order else SeedSource.mmr, order=order or None
         ),
     )
-    if ready:
-        service.lock_seeds(event_id, stage_id)
-        stage_engine.generate(event_id, stage_id)
+    for division_id in ready:
+        stage_engine.generate(event_id, stage_id, division_id)
 
 
 def kings_of(session: OrmSession, night: Season) -> dict[int, int]:

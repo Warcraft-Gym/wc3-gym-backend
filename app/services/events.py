@@ -59,13 +59,18 @@ from app.models.season import (
     series_counts,
     series_counts_by_event,
 )
+from app.models.settings import Settings
 from app.models.team import Team
 from app.models.team_reduced import TeamReduced
 from app.models.types import utcnow
 from app.models.user import User, UserPublic
+from app.models.w3c_stats import W3CStats
 
 # How many W3C seasons back a rating is still the player's current one
 SEASONS = 3
+
+# The setting that names the W3C season the app is on
+W3C_SEASON_KEY = "current_w3c_season"
 
 
 def phase_of(
@@ -833,20 +838,28 @@ def _by_battle_tag(session: OrmSession, battle_tag: str, race: Race) -> User:
     return user
 
 
-def _stats_for(user: User, race: Race) -> tuple[int | None, int]:
-    """The player's newest W3C rating on that race, and the games behind it.
+def _w3c_season(session: OrmSession) -> int:
+    """The W3C season the app reads ratings against, or the newest one stored."""
+    named = session.scalar(
+        select(col(Settings.value)).where(col(Settings.key) == W3C_SEASON_KEY)
+    )
+    if named:
+        return int(named)
+    return session.scalar(select(func.max(col(W3CStats.wc3_season)))) or 0
+
+
+def _stats_for(user: User, race: Race, season: int) -> tuple[int | None, int]:
+    """The player's current W3C rating on that race, and the games behind it.
 
     A season the player did not play on that race carries no rating, so the
     rating is the newest stored season that carries one, three seasons back
-    from the newest season the player has at all and no further. The games are
-    every season the app has synced for that race, because a min-games rule
-    asks how much the player has played, not how much this season.
+    from the season the app is on and no further: an older rating is not the
+    player's current one. The games are every season the app has synced for
+    that race, because a min-games rule asks how much the player has played,
+    not how much this season.
     """
     rows = [stat for stat in (user.w3c_stats or []) if stat.race == race]
-    if not rows:
-        return None, 0
-    newest = max(stat.wc3_season for stat in (user.w3c_stats or []))
-    played = [stat for stat in rows if stat.mmr and stat.wc3_season > newest - SEASONS]
+    played = [stat for stat in rows if stat.mmr and stat.wc3_season > season - SEASONS]
     rating = max(played, key=lambda stat: stat.wc3_season).mmr if played else None
     return rating, sum(stat.games or 0 for stat in rows)
 
@@ -878,7 +891,8 @@ def _entrant_publics(
         team.id: team
         for team in session.scalars(select(Team).where(col(Team.id).in_(team_ids)))
     }
-    return [_entrant_public(event, row, users, teams) for row in rows]
+    season = _w3c_season(session)
+    return [_entrant_public(event, row, users, teams, season) for row in rows]
 
 
 def _users_for(
@@ -903,8 +917,9 @@ def _users_for(
 def _mmrs(session: OrmSession, rows: Sequence[EventEntrant]) -> dict[int, int | None]:
     """Each entrant against the rating of the race it signed up on; a team has none."""
     users = _users_for(session, rows)
+    season = _w3c_season(session)
     return {
-        ident(row): _stats_for(users[row.user_id], row.race)[0]
+        ident(row): _stats_for(users[row.user_id], row.race, season)[0]
         if row.user_id in users
         else None
         for row in rows
@@ -956,11 +971,12 @@ def _entrant_public(
     row: EventEntrant,
     users: dict[int | None, User],
     teams: dict[int | None, Team],
+    season: int,
 ) -> EventEntrantPublic:
     """One entrant payload: the identity, the rating on the signup race, the warnings."""
     user = users.get(row.user_id)
     team = teams.get(row.team_id)
-    mmr, games = _stats_for(user, row.race) if user else (None, 0)
+    mmr, games = _stats_for(user, row.race, season) if user else (None, 0)
     return EventEntrantPublic(
         id=ident(row),
         event_id=row.event_id,
