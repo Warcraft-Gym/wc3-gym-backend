@@ -42,9 +42,8 @@ def update_player_series(
     original_p1_score = series.player1_score
     original_p2_score = series.player2_score
 
-    # One replay slot per game of the season's best-of, game1..gameN
-    season = series.match.season if series.match else None
-    wins = wins_needed(season.map_rules if season else None)
+    # One replay slot per game of the best-of the series plays, game1..gameN
+    wins = series.rules.best_of // 2 + 1 if series.rules else wins_needed(None)
     action = data.get("action")
 
     reporting = action == "score_updated" or any(
