@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 class DBUserSeasonSignup(DBModel, table=True):
     __tablename__ = "user_season_signup"
     user_id: int = Field(foreign_key="users.id", primary_key=True)
-    season_id: int = Field(index=True, foreign_key="seasons.id", primary_key=True)
+    season_id: int = Field(index=True, foreign_key="event.id", primary_key=True)
     # The race the player registered on for this season
     race: Race
     # The fantasy tier this season cut the player into, null when not allocated
@@ -42,7 +42,7 @@ class DBUserSeasonSignup(DBModel, table=True):
 class DBTeamSeasonCaptain(DBModel, table=True):
     __tablename__ = "team_season_captain"
     team_id: int = Field(foreign_key="teams.id", primary_key=True)
-    season_id: int = Field(index=True, foreign_key="seasons.id", primary_key=True)
+    season_id: int = Field(index=True, foreign_key="event.id", primary_key=True)
     user_id: int = Field(index=True, foreign_key="users.id", primary_key=True)
     team: "Team" = Relationship(back_populates="captain_seasons")
     user: "User" = Relationship()
@@ -51,7 +51,7 @@ class DBTeamSeasonCaptain(DBModel, table=True):
 class DBMapSeason(DBModel, table=True):
     __tablename__ = "map_season"
     map_id: int = Field(foreign_key="maps.id", primary_key=True)
-    season_id: int = Field(index=True, foreign_key="seasons.id", primary_key=True)
+    season_id: int = Field(index=True, foreign_key="event.id", primary_key=True)
     # The place of the map in the pool; the season service appends at the end
     position: int = Field(default=0, sa_column_kwargs={"server_default": "0"})
     season: "Season" = Relationship(back_populates="maps")
@@ -62,7 +62,7 @@ class DBSeasonRound(DBModel, table=True):
     """One scheduled round of a season: its date window and the map of game 1."""
 
     __tablename__ = "season_rounds"
-    season_id: int = Field(foreign_key="seasons.id", primary_key=True)
+    season_id: int = Field(foreign_key="event.id", primary_key=True)
     playday: int = Field(primary_key=True)
     # The window the round is played in; no end date means a one-day round
     start_date: date | None = None
