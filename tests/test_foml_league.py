@@ -371,18 +371,19 @@ def test_the_season_plays_out_to_one_winner_in_each_division(
     )
 
 
-def test_the_phase_of_a_generated_event_never_reads_running_or_finished(
+def test_the_phase_of_a_generated_event_reads_running_then_finished(
     client: Client, auth_headers: dict[str, str], member: Member
 ) -> None:
-    """The phase counts an event's series through its fixtures
-    (series_counts_by_event, app/models/season.py:229-231), and a generated
-    series hangs off a round with no fixture, so a season played out to the
-    last result still rests on the check-in rung.
+    """The phase counts an event's series through their rounds
+    (series_counts_by_event, app/models/season.py:202), so a generated series,
+    which names a round and no fixture, counts like a GNL one: the event reads
+    running on the first result and finished on the last.
     """
-    event, (stage, _) = open_the_season(client, auth_headers, member)
+    event, (first, second) = open_the_season(client, auth_headers, member)
     assert phase(client, event) == "signups_open"
 
-    entrants = cut_and_seed(client, auth_headers, event, stage)
+    entrants = cut_and_seed(client, auth_headers, event, first)
+    seeds = seeds_of(entrants)
     closed = client.put(
         f"/events/{event}", json={"signups_open": False}, headers=auth_headers
     )
@@ -390,13 +391,32 @@ def test_the_phase_of_a_generated_event_never_reads_running_or_finished(
     # No round exists before the stage is generated, so there is nothing to check into
     assert phase(client, event) == "seeded"
 
-    generate(client, auth_headers, event, stage)
+    generate(client, auth_headers, event, first)
+    # The generated rounds carry dates, so the first one's check-in window stands
     assert phase(client, event) == "checkin"
 
-    play(client, auth_headers, event, stage, seeds_of(entrants))
+    one = stage_series(client, event, first)["series"][0]
+    assert score(client, auth_headers, one["id"], 2, 0).status_code == 200
+    assert phase(client, event) == "running"
+
+    play(client, auth_headers, event, first, seeds)
+    moved = client.post(f"/events/{event}/stages/{first}/advance", headers=auth_headers)
+    assert moved.status_code == 200, moved.text
+    generate(client, auth_headers, event, second)
+    assert phase(client, event) == "running"
+
+    top = {
+        row["user"]["id"]: row["seed"]
+        for row in client.get(f"/events/{event}/entrants").json()
+        if row["seed"] is not None
+    }
+    # The semifinals first, then the finals they feed
+    play(client, auth_headers, event, second, top)
+    play(client, auth_headers, event, second, top)
 
     assert all(
         row["player1_score"] is not None
+        for stage in (first, second)
         for row in stage_series(client, event, stage)["series"]
     )
-    assert phase(client, event) == "checkin"
+    assert phase(client, event) == "finished"

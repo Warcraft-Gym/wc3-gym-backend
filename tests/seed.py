@@ -104,6 +104,19 @@ def seed_league(session: Session) -> dict[str, Any]:
     session.add_all([season, team_a, team_b, game_map, *players])
     session.flush()
 
+    # The rounds a week apart, written before the series so each one names its
+    # round through the round_link listener the way a live season does
+    session.add_all(
+        DBEventRound(
+            season_id=ident(season),
+            number=playday,
+            start_date=season.start_date + timedelta(weeks=playday - 1),
+            end_date=season.start_date + timedelta(weeks=playday - 1, days=6),
+        )
+        for playday in range(1, rounds + 1)
+    )
+    session.flush()
+
     session.add_all(
         [
             DBTeamSeason(team_id=ident(team_a), season_id=ident(season)),
@@ -189,17 +202,8 @@ def seed_league(session: Session) -> dict[str, Any]:
         ]
     )
     session.flush()
-    # A real season is created with its achievement set and a round a week apart
+    # A real season is created with its achievement set
     session.add_all(default_rows(season.id))
-    session.add_all(
-        DBEventRound(
-            season_id=ident(season),
-            number=playday,
-            start_date=season.start_date + timedelta(weeks=playday - 1),
-            end_date=season.start_date + timedelta(weeks=playday - 1, days=6),
-        )
-        for playday in range(1, rounds + 1)
-    )
     # The wc3.no rules too, so the legacy tests find their prices
     session.add_all(
         LadderAchievement(season_id=season.id, rule_id=rule_id, points=points)
