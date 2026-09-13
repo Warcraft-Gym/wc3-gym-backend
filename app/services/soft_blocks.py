@@ -124,7 +124,10 @@ class SoftBlockService:
                     403, {"error": "scheduling_disabled", "message": NO_SCHEDULING}
                 )
             start, end = _window(session, match, start, end)
-            spans = [_blocked(session, player, start, end) for player in players]
+            side1, side2 = series.player1_id, series.player2_id
+            if side1 is None or side2 is None:
+                raise BadRequestError("The series has no sides to compare yet")
+            spans = [_blocked(session, side, start, end) for side in (side1, side2)]
         ranges = free_time.free(start, end, *spans)
         seconds = sum((hi - lo).total_seconds() for lo, hi in ranges)
         return FreeTimePublic(

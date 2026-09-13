@@ -11,8 +11,10 @@ from typing import Any
 
 import pytest
 from httpx2 import Client
+from sqlmodel import col
 
 from app.core.db import Session
+from app.models.base import ident
 from app.models.enums import EntrantKind, EventKind, Race
 from app.models.event_division import EventDivision
 from app.models.event_entrant import EventEntrant
@@ -524,17 +526,27 @@ def test_a_team_entrant_names_a_team_and_a_player_entrant_a_user(
         team = Team(name="Alpha")
         session.add(team)
         session.flush()
-        team_id = team.id
+        team_id = ident(team)
         session.add(EventEntrant(event_id=event, team_id=team_id, race=Race.HU))
 
     with Session.begin() as session:
         rows = session.query(EventEntrant).filter_by(event_id=event).all()
         assert [(row.user_id, row.team_id) for row in rows] == [(None, team_id)]
 
-    for fields in ({"user_id": seeded["player_ids"][0], "team_id": team_id}, {}):
+    # Both sides filled, and neither side filled, are the two the check refuses
+    refused = (
+        EventEntrant(
+            event_id=event,
+            user_id=seeded["player_ids"][0],
+            team_id=team_id,
+            race=Race.HU,
+        ),
+        EventEntrant(event_id=event, race=Race.HU),
+    )
+    for row in refused:
         # The commit is the check: the row is refused as it is written
         with pytest.raises(IntegrityError), Session.begin() as session:
-            session.add(EventEntrant(event_id=event, race=Race.HU, **fields))
+            session.add(row)
 
 
 def test_a_bracket_series_holds_its_feeders_and_no_sides_until_they_are_scored(
@@ -545,7 +557,7 @@ def test_a_bracket_series_holds_its_feeders_and_no_sides_until_they_are_scored(
     from app.models.series import Series, SeriesFeedersPublic
 
     with Session.begin() as session:
-        played = session.query(Series).order_by(Series.id).first()
+        played = session.query(Series).order_by(col(Series.id)).first()
         assert played is not None
         final = Series(
             match_id=played.match_id,
