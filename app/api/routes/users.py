@@ -50,6 +50,22 @@ def delete_user(user_id: int, service: UserServiceDep) -> None:
     service.delete(user_id)
 
 
+@router.put(
+    "/users/{user_id}/ban", status_code=204, dependencies=[Depends(require_admin)]
+)
+def ban_user(user_id: int, service: UserServiceDep) -> None:
+    """Ban a player. The entrant rows of every event warn; none of them refuse."""
+    service.set_banned(user_id, True)
+
+
+@router.delete(
+    "/users/{user_id}/ban", status_code=204, dependencies=[Depends(require_admin)]
+)
+def unban_user(user_id: int, service: UserServiceDep) -> None:
+    """Lift the ban."""
+    service.set_banned(user_id, False)
+
+
 @router.get("/users/{user_id}/blocks", dependencies=[Depends(require_admin)])
 def get_user_blocks(user_id: int, service: SoftBlockServiceDep) -> SoftBlocksPublic:
     """One player's repeating blocks and busy days, for an admin."""

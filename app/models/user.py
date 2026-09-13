@@ -78,6 +78,8 @@ class User(UserBase, DBModel, table=True):
     w3c_synced_at: datetime | None = Field(default=None, sa_type=UTCDateTime)
     # When the app last asked w3champions for this player's ladder matches
     ladder_synced_at: datetime | None = Field(default=None, sa_type=UTCDateTime)
+    # An admin banned this player; the entrant row warns and never refuses
+    banned_at: datetime | None = Field(default=None, sa_type=UTCDateTime)
     team_seasons: list["DBUserTeamSeason"] = Relationship(
         back_populates="user", sa_relationship_kwargs={"cascade": "all, delete"}
     )

@@ -7,17 +7,24 @@ own phase word. The event phase is computed on every read and never stored.
 
 from collections.abc import Sequence
 from datetime import date, timedelta
+from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session as OrmSession
+from sqlalchemy.orm import noload, selectinload
 from sqlmodel import col
 
-from app.core.db import Session
-from app.core.exceptions import BadRequestError, NotFoundError
+from app.core.db import Session, rel
+from app.core.exceptions import ApiError, BadRequestError, NotFoundError
 from app.models.base import ident
-from app.models.enums import EntrantKind, EventKind, StageFormat
+from app.models.enums import EntrantKind, EventKind, Race, SignupPolicy, StageFormat
 from app.models.event_division import EventDivision, EventDivisionPublic
-from app.models.event_entrant import EventEntrant
+from app.models.event_entrant import (
+    EntrantAdd,
+    EntrantSignup,
+    EventEntrant,
+    EventEntrantPublic,
+)
 from app.models.event_stage import EventStage, EventStagePublic, EventStageWrite
 from app.models.league import League, LeagueCreate, LeaguePublic, LeagueUpdate
 from app.models.relationships import DBEventRound, DBUserSeasonSignup
@@ -32,7 +39,10 @@ from app.models.season import (
     series_counts,
     series_counts_by_event,
 )
+from app.models.team import Team
+from app.models.team_reduced import TeamReduced
 from app.models.types import utcnow
+from app.models.user import User, UserPublic
 
 
 def phase_of(
@@ -233,6 +243,94 @@ class EventService:
                 for event in events
             ]
 
+    # ============ Entrants ============
+    def get_entrants(self, event_id: int) -> list[EventEntrantPublic]:
+        """Every entrant of the event, seeded ones first, with their warnings."""
+        with Session.begin() as session:
+            event = _event(session, event_id)
+            rows = session.scalars(
+                select(EventEntrant)
+                .where(col(EventEntrant.event_id) == event_id)
+                .order_by(col(EventEntrant.seed).nulls_last(), col(EventEntrant.id))
+            ).all()
+            return _entrant_publics(session, event, rows)
+
+    def add_entrant(
+        self, event_id: int, data: EntrantSignup, claims: dict[str, Any] | None
+    ) -> EventEntrantPublic:
+        """Sign the caller up, or the team the caller captains."""
+        with Session.begin() as session:
+            event = _event(session, event_id)
+            if not event.signups_open:
+                raise BadRequestError("Signups are closed for this event")
+            if data.team_id is not None:
+                if not _is_admin(claims) and data.team_id not in _captains(claims):
+                    raise ApiError(
+                        403, {"error": "Only a captain of the team enters it"}
+                    )
+                row = _enter(session, event, data, team_id=data.team_id)
+            else:
+                row = _enter(
+                    session,
+                    event,
+                    data,
+                    user_id=ident(_signup_user(session, event, data, claims)),
+                )
+            return _entrant_publics(session, event, [row])[0]
+
+    def add_entrant_as_admin(
+        self, event_id: int, data: EntrantAdd
+    ) -> EventEntrantPublic:
+        """Enter any player or team, whether signups stand open or not."""
+        with Session.begin() as session:
+            event = _event(session, event_id)
+            if data.team_id is not None:
+                row = _enter(session, event, data, team_id=data.team_id)
+            else:
+                row = _enter(
+                    session, event, data, user_id=ident(_named_user(session, data))
+                )
+            return _entrant_publics(session, event, [row])[0]
+
+    def withdraw(self, event_id: int, claims: dict[str, Any] | None) -> None:
+        """Stamp the caller's own entrant row as withdrawn; the row stays."""
+        with Session.begin() as session:
+            event = _event(session, event_id)
+            user = _caller(session, claims)
+            row = (
+                None
+                if user is None
+                else session.scalars(
+                    select(EventEntrant).where(
+                        col(EventEntrant.event_id) == event.id,
+                        col(EventEntrant.user_id) == user.id,
+                    )
+                ).first()
+            )
+            if row is None or row.withdrawn_at is not None:
+                raise NotFoundError("No signup to withdraw")
+            row.withdrawn_at = utcnow()
+
+    def check_in(
+        self, event_id: int, entrant_id: int, claims: dict[str, Any] | None
+    ) -> EventEntrantPublic:
+        """Stamp an entrant as checked in: the caller's own row, or an admin's call."""
+        with Session.begin() as session:
+            event = _event(session, event_id)
+            row = _entrant(session, event_id, entrant_id)
+            if not _is_admin(claims):
+                user = _caller(session, claims)
+                if user is None or row.user_id != user.id:
+                    raise ApiError(403, {"error": "Check in your own signup"})
+            row.checked_in_at = utcnow()
+            session.flush()
+            return _entrant_publics(session, event, [row])[0]
+
+    def remove_entrant(self, event_id: int, entrant_id: int) -> None:
+        """Delete one entrant row; an admin removes what a withdrawal would keep."""
+        with Session.begin() as session:
+            session.delete(_entrant(session, event_id, entrant_id))
+
 
 def _nested(events: list[EventPublic]) -> list[EventPublic]:
     """The league's events with each child under its parent, parents in order.
@@ -396,3 +494,233 @@ def _public(
         )
     ]
     return public
+
+
+def _is_admin(claims: dict[str, Any] | None) -> bool:
+    """Whether those claims carry the admin role, or the admin access token."""
+    return bool(claims) and (
+        claims.get("role") == "admin" or claims.get("sub") == "admin"
+    )
+
+
+def _captains(claims: dict[str, Any] | None) -> set[int]:
+    """The teams the caller captains, from the seats the login resolved."""
+    return {seat["team_id"] for seat in (claims or {}).get("seats", [])}
+
+
+def _caller(session: OrmSession, claims: dict[str, Any] | None) -> User | None:
+    """The player row behind the session, found by the Discord id of its login."""
+    discord_id = (claims or {}).get("sub")
+    if not discord_id or discord_id == "admin":
+        return None
+    return session.scalars(
+        select(User).where(col(User.discordId) == discord_id)
+    ).first()
+
+
+def _by_battle_tag(session: OrmSession, battle_tag: str, race: Race) -> User:
+    """The player row with that battle tag, created when the tag is new.
+
+    An `anyone` event takes a battle tag the way the KOTH chat command does,
+    so a player with no account still enters and keeps one row across events.
+    """
+    tag = battle_tag.strip()
+    folded = func.lower(func.trim(col(User.battleTag)))
+    user = session.scalars(select(User).where(folded == tag.lower())).first()
+    if user is not None:
+        return user
+    user = User(
+        name=tag.split("#")[0] or tag,
+        battleTag=tag,
+        discordTag="",
+        discordId="",
+        race=race,
+    )
+    session.add(user)
+    session.flush()
+    return user
+
+
+def _stats_for(user: User, race: Race) -> tuple[int | None, int]:
+    """The player's newest W3C rating on that race, and the games behind it.
+
+    The rating is the one the newest stored W3C season carries; the games are
+    every season the app has synced for that race, because a min-games rule
+    asks how much the player has played, not how much this season.
+    """
+    rows = [stat for stat in (user.w3c_stats or []) if stat.race == race]
+    if not rows:
+        return None, 0
+    newest = max(rows, key=lambda stat: stat.wc3_season)
+    return newest.mmr, sum(stat.games or 0 for stat in rows)
+
+
+def _warnings(
+    event: Season, user: User | None, mmr: int | None, games: int
+) -> list[str]:
+    """What an admin should look at on this entrant; none of it refused the signup."""
+    warnings = []
+    if user is not None and event.min_games is not None and games < event.min_games:
+        warnings.append("under_min_games")
+    if event.mmr_max is not None and mmr is not None and mmr > event.mmr_max:
+        warnings.append("over_mmr_max")
+    if user is not None and user.banned_at is not None:
+        warnings.append("banned")
+    return warnings
+
+
+def _entrant_publics(
+    session: OrmSession, event: Season, rows: Sequence[EventEntrant]
+) -> list[EventEntrantPublic]:
+    """The entrant payloads of one event, with the players and teams behind them.
+
+    Two reads fill every row: the players with their W3C stats, and the teams.
+    """
+    user_ids = {row.user_id for row in rows if row.user_id}
+    team_ids = {row.team_id for row in rows if row.team_id}
+    users = {
+        user.id: user
+        for user in session.scalars(
+            select(User)
+            .options(
+                selectinload(rel(User.w3c_stats)),
+                noload(rel(User.team_seasons)),
+                noload(rel(User.signup_seasons)),
+            )
+            .where(col(User.id).in_(user_ids))
+        ).unique()
+    }
+    teams = {
+        team.id: team
+        for team in session.scalars(select(Team).where(col(Team.id).in_(team_ids)))
+    }
+    return [_entrant_public(event, row, users, teams) for row in rows]
+
+
+def _entrant_public(
+    event: Season,
+    row: EventEntrant,
+    users: dict[int | None, User],
+    teams: dict[int | None, Team],
+) -> EventEntrantPublic:
+    """One entrant payload: the identity, the rating on the signup race, the warnings."""
+    user = users.get(row.user_id)
+    team = teams.get(row.team_id)
+    mmr, games = _stats_for(user, row.race) if user else (None, 0)
+    return EventEntrantPublic(
+        id=ident(row),
+        event_id=row.event_id,
+        user=UserPublic.from_user(user) if user else None,
+        team=TeamReduced.from_team(team) if team else None,
+        race=row.race,
+        channel=row.channel,
+        mmr=mmr,
+        mmr_synced_at=user.w3c_synced_at if user else None,
+        warnings=_warnings(event, user, mmr, games),
+        seed=row.seed,
+        seed_source=row.seed_source,
+        division_id=row.division_id,
+        checked_in_at=row.checked_in_at,
+        withdrawn_at=row.withdrawn_at,
+        qualified_from_event_id=row.qualified_from_event_id,
+    )
+
+
+def _entrant(session: OrmSession, event_id: int, entrant_id: int) -> EventEntrant:
+    row = session.get(EventEntrant, entrant_id)
+    if row is None or row.event_id != event_id:
+        raise NotFoundError(f"Entrant not found by id: {entrant_id}")
+    return row
+
+
+def _signup_user(
+    session: OrmSession,
+    event: Season,
+    data: EntrantSignup,
+    claims: dict[str, Any] | None,
+) -> User:
+    """The player a self signup enters: the battle tag, or the session's own row."""
+    if event.signup_policy is SignupPolicy.anyone and data.battle_tag:
+        return _by_battle_tag(session, data.battle_tag, data.race)
+    if claims is None:
+        raise ApiError(401, {"error": "Missing Authorization Header"})
+    user = _caller(session, claims)
+    if user is None:
+        raise ApiError(
+            403, {"error": "No player profile is linked to this Discord account"}
+        )
+    return user
+
+
+def _named_user(session: OrmSession, data: EntrantAdd) -> User:
+    """The player an admin names: a user id, or a battle tag to find or create."""
+    if data.user_id is not None:
+        user = session.get(User, data.user_id)
+        if user is None:
+            raise NotFoundError(f"User not found by id: {data.user_id}")
+        return user
+    if data.battle_tag:
+        return _by_battle_tag(session, data.battle_tag, data.race)
+    raise BadRequestError("Name a user_id, a battle_tag or a team_id")
+
+
+def _enter(
+    session: OrmSession,
+    event: Season,
+    data: EntrantSignup,
+    user_id: int | None = None,
+    team_id: int | None = None,
+) -> EventEntrant:
+    """Write the entrant row, or reopen the one that withdrew.
+
+    GNL entrants stay on the season signup table this wave, so a GNL event
+    refuses here. A full event refuses too: no waiting list is kept.
+    """
+    if event.kind is EventKind.gnl:
+        raise BadRequestError(
+            f"A GNL season takes its signups at /seasons/{event.id}/signups"
+        )
+    side = (
+        col(EventEntrant.user_id) == user_id
+        if user_id is not None
+        else col(EventEntrant.team_id) == team_id
+    )
+    existing = session.scalars(
+        select(EventEntrant).where(col(EventEntrant.event_id) == event.id, side)
+    ).first()
+    if existing is not None and existing.withdrawn_at is None:
+        raise BadRequestError("This entrant is already signed up")
+    _room_for_one_more(session, event)
+    if existing is not None:
+        # The unique key is one row per entrant, so a return signup reopens it
+        existing.withdrawn_at = None
+        existing.race = data.race
+        existing.channel = data.channel
+        session.flush()
+        return existing
+    row = EventEntrant(
+        event_id=ident(event),
+        user_id=user_id,
+        team_id=team_id,
+        race=data.race,
+        channel=data.channel,
+    )
+    session.add(row)
+    session.flush()
+    return row
+
+
+def _room_for_one_more(session: OrmSession, event: Season) -> None:
+    """Refuse the signup that would pass the entrant cap; nothing waits in line."""
+    if event.entrant_cap is None:
+        return
+    taken = session.scalar(
+        select(func.count())
+        .select_from(EventEntrant)
+        .where(
+            col(EventEntrant.event_id) == event.id,
+            col(EventEntrant.withdrawn_at).is_(None),
+        )
+    )
+    if taken is not None and taken >= event.entrant_cap:
+        raise BadRequestError(f"The event is full at {event.entrant_cap} entrants")

@@ -219,6 +219,17 @@ def require_login(request: Request, credentials: Credentials) -> dict[str, Any]:
     return claims
 
 
+def optional_login(request: Request, credentials: Credentials) -> dict[str, Any] | None:
+    """The caller's claims, or None when the request carries no session at all.
+
+    A route whose rules depend on a row it has not read yet takes this and
+    decides: an event whose signup policy is `anyone` admits a battle tag.
+    """
+    if credentials is None:
+        return None
+    return require_login(request, credentials)
+
+
 def require_member(request: Request, credentials: Credentials) -> dict[str, Any]:
     """Admit an account that is in the guild; a guest reads nothing of its own."""
     claims = require_login(request, credentials)
@@ -246,6 +257,7 @@ def require_captain(request: Request, credentials: Credentials) -> dict[str, Any
 
 
 RequireAdmin = Annotated[str, Depends(require_admin)]
+OptionalLogin = Annotated[dict[str, Any] | None, Depends(optional_login)]
 RequireLogin = Annotated[dict[str, Any], Depends(require_login)]
 RequireMember = Annotated[dict[str, Any], Depends(require_member)]
 RequireCaptain = Annotated[dict[str, Any], Depends(require_captain)]
