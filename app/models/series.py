@@ -19,6 +19,7 @@ from app.core.ordering import SortOrder, ordered
 from app.models.base import DBModel, PublicModel, ident
 from app.models.enums import Race
 from app.models.match import Match, MatchPublic
+from app.models.relationships import EventRoundPublic
 from app.models.series_cast import CastPublic, SeriesCast
 from app.models.series_veto_step import DBSeriesVetoStep
 from app.models.types import AwareUTC, EnumValue, SuggestRace, UTCDateTime
@@ -338,6 +339,45 @@ class SeriesPublic(SeriesBase, PublicModel):
 def has_result(series: Series | SeriesPublic) -> bool:
     """A series with a result is over: nothing is left to stream."""
     return series.player1_score is not None or series.player2_score is not None
+
+
+class StageSeriesRow(SeriesPublic):
+    """One series of a stage: the public series plus the columns a stage is run
+    from. They stay off SeriesPublic, so every other series payload holds."""
+
+    round_id: int | None = None
+    sequence: int | None = None
+    division_id: int | None = None
+    side_size: int = 1
+    pick_rule: str | None = None
+    result_kind: str = "played"
+    slot1_from_series_id: int | None = None
+    slot1_takes_loser: bool = False
+    slot2_from_series_id: int | None = None
+    slot2_takes_loser: bool = False
+
+    @classmethod
+    def from_series_reduced(cls, series: Series) -> Self:
+        row = super().from_series_reduced(series)
+        row.round_id = series.round_id
+        row.sequence = series.sequence
+        row.division_id = series.division_id
+        row.side_size = series.side_size
+        row.pick_rule = series.pick_rule
+        row.result_kind = series.result_kind
+        row.slot1_from_series_id = series.slot1_from_series_id
+        row.slot1_takes_loser = series.slot1_takes_loser
+        row.slot2_from_series_id = series.slot2_from_series_id
+        row.slot2_takes_loser = series.slot2_takes_loser
+        return row
+
+
+class StageSeriesPublic(PublicModel):
+    """The rounds of one stage and every series it holds, as the run page draws
+    them: a round names a bracket column, a series names the box inside it."""
+
+    rounds: list[EventRoundPublic] = []
+    series: list[StageSeriesRow] = []
 
 
 class SeriesFeedersPublic(PublicModel):

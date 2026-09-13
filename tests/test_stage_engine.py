@@ -4,6 +4,7 @@ Every test drives the routes an admin drives, so the rounds, the sequences
 and the feeder graph read back the way the run page reads them.
 """
 
+from collections.abc import Callable
 from typing import Any
 
 from httpx2 import Client
@@ -711,3 +712,108 @@ def test_an_admin_writes_the_switches_the_engine_reads(
         headers=auth_headers,
     )
     assert refused.status_code == 422
+
+
+def stage_series(client: Client, event: int, stage: int, **kwargs: Any) -> Any:  # noqa: ANN401
+    """The rounds and the series of one stage, the way the run page reads them."""
+    response = client.get(f"/events/{event}/stages/{stage}/series", **kwargs)
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def test_the_run_page_reads_the_rounds_and_the_series_of_a_stage(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """Four entrants answer two rounds and three series; only the final is fed."""
+    event, (stage,) = cup(4)
+    generate(client, auth_headers, event, stage)
+    body = stage_series(client, event, stage)
+    assert [(row["number"], row["name"]) for row in body["rounds"]] == [
+        (1, "Semifinals"),
+        (2, "Final"),
+    ]
+    rows = body["series"]
+    assert len(rows) == 3
+    semis, final = rows[:2], rows[2]
+    assert [row["round_id"] for row in semis] == [body["rounds"][0]["id"]] * 2
+    assert final["round_id"] == body["rounds"][1]["id"]
+    assert [row["sequence"] for row in rows] == [1, 2, 1]
+    for row in semis:
+        assert row["slot1_from_series_id"] is None
+        assert row["slot2_from_series_id"] is None
+    assert final["slot1_from_series_id"] == semis[0]["id"]
+    assert final["slot2_from_series_id"] == semis[1]["id"]
+    assert (final["slot1_takes_loser"], final["slot2_takes_loser"]) == (False, False)
+    seeds = players_of(event)
+    assert semis[0]["player1"]["id"] == seeds[0]
+    assert [row["division_id"] for row in rows] == [None, None, None]
+    assert [row["result_kind"] for row in rows] == ["played"] * 3
+    assert [row["side_size"] for row in rows] == [1, 1, 1]
+    assert [row["pick_rule"] for row in rows] == [None, None, None]
+
+
+def test_a_gnl_stage_answers_its_series_with_a_round_and_no_feeders(
+    client: Client, seeded: dict[str, Any]
+) -> None:
+    """A GNL season is drafted, so its series hang off a round and feed nothing."""
+    event = seeded["season_id"]
+    with Session.begin() as session:
+        stage = EventStage(event_id=event, position=1, format=StageFormat.gnl)
+        session.add(stage)
+        session.flush()
+        rounds = session.scalars(
+            select(DBEventRound).where(col(DBEventRound.season_id) == event)
+        ).all()
+        for row in rounds:
+            row.stage_id = ident(stage)
+        first = min(rounds, key=lambda row: row.number)
+        for row in session.scalars(select(Series)):
+            row.round_id = ident(first)
+        stage_id, round_id = ident(stage), ident(first)
+
+    body = stage_series(client, event, stage_id)
+    assert [row["number"] for row in body["rounds"]] == [1, 2, 3, 4]
+    rows = body["series"]
+    assert {row["id"] for row in rows} == {
+        seeded["series_played_id"],
+        seeded["series_open_id"],
+    }
+    for row in rows:
+        assert row["round_id"] == round_id
+        assert row["sequence"] is None
+        assert row["division_id"] is None
+        assert row["slot1_from_series_id"] is None
+        assert row["slot2_from_series_id"] is None
+    played = next(row for row in rows if row["id"] == seeded["series_played_id"])
+    # The derived fields are filled the way every other series read fills them
+    assert (played["player1_score"], played["player2_score"]) == (2, 1)
+    assert played["player1_points"] == 2
+    assert played["match"]["id"] == seeded["match_id"]
+
+
+def test_a_stage_of_another_event_is_not_found(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    event, (stage,) = cup(4)
+    with Session.begin() as session:
+        other = Season(name="Winter Cup", kind=EventKind.cup, series_per_round=1)
+        session.add(other)
+        session.flush()
+        other_id = ident(other)
+    unknown = client.get(f"/events/{event}/stages/{stage + 9999}/series")
+    assert unknown.status_code == 404
+    # A stage of another event is not this event's stage
+    assert client.get(f"/events/{other_id}/stages/{stage}/series").status_code == 404
+
+
+def test_a_member_and_a_reader_both_read_a_stage(
+    client: Client,
+    auth_headers: dict[str, str],
+    member: Callable[..., dict[str, str]],
+) -> None:
+    """The stage read is open, like every other event read."""
+    event, (stage,) = cup(4)
+    generate(client, auth_headers, event, stage)
+    anonymous = stage_series(client, event, stage)
+    signed_in = stage_series(client, event, stage, headers=member())
+    assert len(anonymous["series"]) == len(signed_in["series"]) == 3

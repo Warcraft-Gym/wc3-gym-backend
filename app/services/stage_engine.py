@@ -21,8 +21,14 @@ from app.models.enums import StageFormat
 from app.models.event_division import EventDivision
 from app.models.event_entrant import EventEntrant
 from app.models.event_stage import DivisionStandings, EventStage, StandingRow
-from app.models.relationships import DBEventRound
-from app.models.series import ResultKindWrite, Series, SeriesPublic
+from app.models.relationships import DBEventRound, EventRoundPublic
+from app.models.series import (
+    ResultKindWrite,
+    Series,
+    SeriesPublic,
+    StageSeriesPublic,
+    StageSeriesRow,
+)
 from app.models.user import User
 from app.services import derived
 
@@ -202,6 +208,33 @@ def standings_of(event_id: int, stage_id: int) -> list[DivisionStandings]:
         return _tables(session, event_id, _stage(session, event_id, stage_id))
 
 
+def series_of(event_id: int, stage_id: int) -> StageSeriesPublic:
+    """The rounds of the stage and every series it holds, in drawing order."""
+    with Session.begin() as session:
+        stage = _stage(session, event_id, stage_id)
+        rounds = session.scalars(
+            select(DBEventRound)
+            .where(col(DBEventRound.stage_id) == ident(stage))
+            .order_by(col(DBEventRound.number))
+        ).all()
+        # The series read joins no round: Season.round_count is a correlated
+        # subquery over that table, and a join leaves the subquery no FROM
+        numbers = {ident(row): row.number for row in rounds}
+        held = session.scalars(
+            select(Series)
+            .options(*Series._list_eager_options())
+            .where(col(Series.round_id).in_(numbers))
+        ).all()
+        rows = [
+            StageSeriesRow.from_series_reduced(row)
+            for row in sorted(held, key=lambda row: _drawn(numbers, row))
+        ]
+        derived.fill_series(session, rows)
+        return StageSeriesPublic(
+            rounds=[EventRoundPublic.from_row(row) for row in rounds], series=rows
+        )
+
+
 def advance(event_id: int, stage_id: int) -> dict[str, int]:
     """Seed the next stage from the top places of every division's table."""
     with Session.begin() as session:
@@ -210,6 +243,16 @@ def advance(event_id: int, stage_id: int) -> dict[str, int]:
         if following is None:
             raise BadRequestError("This stage is the last one of the event")
         return {"seeded": _advance(session, event_id, stage)}
+
+
+def _drawn(numbers: dict[int, int], row: Series) -> tuple[int, int, int, int]:
+    """Where a series is drawn: its round, its division, its place, its id."""
+    return (
+        numbers.get(row.round_id or 0, 0),
+        row.division_id or 0,
+        row.sequence or 0,
+        ident(row),
+    )
 
 
 def _row(
