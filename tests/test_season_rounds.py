@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from httpx2 import Client
-from sqlalchemy import create_engine, text, update
+from sqlalchemy import create_engine, text
 
 from app.core.db import Session
 from app.models.match import Match
@@ -269,6 +269,47 @@ def test_a_round_a_match_sits_on_holds_the_count_up(
     }
 
 
+def test_a_new_fixture_and_its_series_name_their_round(
+    client: Client, seeded: dict[str, Any], auth_headers: dict[str, str]
+) -> None:
+    """The round is resolved on the session, so a fixture written after the C1
+    backfill carries the same round id a migrated one does. MatchPublic has no
+    round_id, which keeps the GNL payloads unchanged, so the row is read back."""
+    season_id = seeded["season_id"]
+    match = client.post(
+        "/matches",
+        json={
+            "team1_id": seeded["team_a_id"],
+            "team2_id": seeded["team_b_id"],
+            "season_id": season_id,
+            "playday": 2,
+        },
+        headers=auth_headers,
+    )
+    assert match.status_code == 201, match.text
+    series = client.post(
+        "/series",
+        json={
+            "match_id": match.json()["id"],
+            "player1_id": seeded["player_ids"][0],
+            "player2_id": seeded["player_ids"][2],
+            "host_player_id": seeded["player_ids"][0],
+        },
+        headers=auth_headers,
+    )
+    assert series.status_code == 201, series.text
+
+    with Session() as session:
+        round_ = round_row(session, season_id, 2)
+        assert round_ is not None
+        row = session.get(Match, match.json()["id"])
+        assert row is not None
+        assert row.round_id == round_.id
+        played = session.get(Series, series.json()["id"])
+        assert played is not None
+        assert played.round_id == round_.id
+
+
 def test_deleting_a_season_takes_its_rounds_matches_and_series_with_it(
     seeded: dict[str, Any],
 ) -> None:
@@ -276,12 +317,10 @@ def test_deleting_a_season_takes_its_rounds_matches_and_series_with_it(
     go with the round, so the delete leaves nothing pointing at a row that is
     gone."""
     season_id = seeded["season_id"]
-    with Session.begin() as session:
+    with Session() as session:
         round_ = round_row(session, season_id, 1)
         assert round_ is not None
         round_id = round_.id
-        session.execute(update(Match).values(round_id=round_id))
-        session.execute(update(Series).values(round_id=round_id))
 
     SeasonService(user_app_service=UserService(), map_app_service=MapService()).delete(
         season_id
