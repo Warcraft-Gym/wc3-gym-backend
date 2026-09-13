@@ -56,17 +56,20 @@ def set_fields(event_id: int, **fields: Any) -> None:  # noqa: ANN401
         event.sqlmodel_update(fields)
 
 
-def phase(client: Client, event_id: int) -> str:
-    response = client.get(f"/events/{event_id}")
+def phase(client: Client, event_id: int, headers: dict[str, str] | None = None) -> str:
+    """The phase the event reads back; a draft needs the admin headers."""
+    response = client.get(f"/events/{event_id}", headers=headers)
     assert response.status_code == 200, response.text
     return response.json()["phase"]
 
 
-def test_the_phase_walks_the_signup_rungs(client: Client) -> None:
+def test_the_phase_walks_the_signup_rungs(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
     """An unpublished event is a draft; publishing opens signups, closing them
     with the first round's window open reads check-in, and the rest is seeded."""
     event = add_event(published=False)
-    assert phase(client, event) == "draft"
+    assert phase(client, event, auth_headers) == "draft"
 
     set_fields(event, published=True)
     assert phase(client, event) == "signups_open"
@@ -201,6 +204,40 @@ def test_the_event_list_hides_a_draft_from_everyone_but_an_admin(
         row["id"]
         for row in client.get("/events?published=false", headers=auth_headers).json()
     ] == [draft]
+
+
+def test_a_draft_hides_from_its_league_page_and_from_its_own_read(
+    client: Client,
+    auth_headers: dict[str, str],
+    member: Callable[..., dict[str, str]],
+) -> None:
+    """A draft is out of the league's runs and its id answers not found."""
+    with Session.begin() as session:
+        league = League(name="Fig Cup", short_name="FIG")
+        session.add(league)
+        session.flush()
+        league_id = league.id
+    assert league_id is not None
+    live = add_event(name="Fig Cup 6", league_id=league_id)
+    draft = add_event(name="Hidden Cup", league_id=league_id, published=False)
+
+    def runs(headers: dict[str, str] | None = None) -> list[int]:
+        body = client.get(f"/leagues/{league_id}", headers=headers).json()
+        return [event["id"] for event in body["events"]]
+
+    assert runs() == [live]
+    assert runs(member()) == [live]
+    assert runs(auth_headers) == [draft, live]
+
+    assert client.get(f"/events/{draft}").status_code == 404
+    assert client.get(f"/events/{draft}", headers=member()).status_code == 404
+    assert client.get(f"/events/{draft}", headers=auth_headers).status_code == 200
+
+    # A draft qualifier is out of its parent's children for the same reason
+    set_fields(draft, parent_id=live)
+    assert client.get(f"/events/{live}").json()["children"] == []
+    body = client.get(f"/events/{live}", headers=auth_headers).json()
+    assert [child["id"] for child in body["children"]] == [draft]
 
 
 def test_one_event_reads_its_stages_divisions_and_entrants(
@@ -461,7 +498,7 @@ def test_an_admin_edits_an_event_and_the_phase_follows(
     assert updated.status_code == 200, updated.text
     assert updated.json()["name"] == "Spring Cup 2027"
     assert updated.json()["min_games"] == 20
-    assert phase(client, event) == "draft"
+    assert phase(client, event, auth_headers) == "draft"
     assert client.put(f"/events/{event}", json={"name": "No"}).status_code == 401
 
 

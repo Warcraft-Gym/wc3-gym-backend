@@ -56,9 +56,14 @@ def get_events(
 
 
 @router.get("/events/{event_id}")
-def get_event(event_id: int, service: EventServiceDep) -> EventPublic:
-    """Return one event with its stages, its divisions and its entrant count."""
-    return service.get(event_id)
+def get_event(
+    event_id: int, service: EventServiceDep, claims: OptionalLogin
+) -> EventPublic:
+    """Return one event with its stages, its divisions and its entrant count.
+
+    A draft reads for an admin only; every other caller is answered not found.
+    """
+    return service.get(event_id, claims=claims)
 
 
 @router.post("/events", status_code=201, dependencies=[Depends(require_admin)])

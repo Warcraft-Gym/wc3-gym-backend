@@ -2,7 +2,7 @@
 
 from fastapi import APIRouter, Depends
 
-from app.api.deps import EventServiceDep, require_admin
+from app.api.deps import EventServiceDep, OptionalLogin, require_admin
 from app.models.league import LeagueCreate, LeaguePublic, LeagueUpdate
 
 router = APIRouter(tags=["leagues"])
@@ -15,9 +15,14 @@ def get_leagues(service: EventServiceDep) -> list[LeaguePublic]:
 
 
 @router.get("/leagues/{league_id}")
-def get_league(league_id: int, service: EventServiceDep) -> LeaguePublic:
-    """Return one league and the events that are its runs, newest first."""
-    return service.get_league(league_id)
+def get_league(
+    league_id: int, service: EventServiceDep, claims: OptionalLogin
+) -> LeaguePublic:
+    """Return one league and the events that are its runs, newest first.
+
+    A draft run is in the list for an admin only.
+    """
+    return service.get_league(league_id, claims=claims)
 
 
 @router.post("/leagues", status_code=201, dependencies=[Depends(require_admin)])
