@@ -220,6 +220,12 @@ class ResultKindWrite(SQLModel):
     winner: Literal[1, 2]
 
 
+class ChallengerAdd(SQLModel):
+    """The entrant a chain stage plays next, at the end of his division."""
+
+    entrant_id: int
+
+
 class SeriesUpdate(SQLModel):
     match_id: int | None = None
     date_time: Annotated[datetime | None, AwareUTC] = None
