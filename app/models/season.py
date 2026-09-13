@@ -25,7 +25,11 @@ from app.models.enums import EntrantKind, EventKind, Race, SignupPolicy
 from app.models.event_division import EventDivisionPublic
 from app.models.event_stage import EventStagePublic, EventStageWrite
 from app.models.map import MapPublic
-from app.models.relationships import DBEventRound, SeasonRoundPublic
+from app.models.relationships import (
+    DBEventRound,
+    EventRoundPublic,
+    SeasonRoundPublic,
+)
 from app.models.types import (
     AwareUTC,
     EnumValue,
@@ -458,6 +462,14 @@ EventPhase = Literal[
     "draft", "signups_open", "checkin", "seeded", "running", "finished"
 ]
 
+# What a member checks into: one round of the event, or the event itself
+CheckinShape = Literal["event", "round"]
+
+# The one action a member's event row offers; app/services/events.py computes it
+MemberAction = Literal[
+    "sign_up", "withdraw", "check_in", "checked_in", "view", "closed"
+]
+
 
 class EventPublic(SQLModel):
     """One event as the events pages read it, GNL season or not.
@@ -584,3 +596,22 @@ class MemberEventRow(SQLModel):
     joined: bool
     # The event's optional "Page" link; the home builds its own in-app link
     url: str | None = None
+    # The caller's own entrant row; null for a GNL signup, which holds no entrant
+    entrant_id: int | None = None
+    # When the caller checked in; null while the check-in is not taken
+    checked_in_at: Annotated[datetime | None, AwareUTC] = None
+    # What the caller checks into: the round when the event's next round carries
+    # dates, else the event; null when the event takes no check-in
+    checkin_shape: CheckinShape | None = None
+    # That shape's check-in window stands open today
+    checkin_open: bool = False
+    # The next round of the event that carries dates; null when none does
+    next_round: EventRoundPublic | None = None
+    # The one action the page offers the caller, from the phase, the signup
+    # window, the caller's entrant or GNL signup and the check-in window:
+    # `sign_up` signups are open and the caller has not entered; `withdraw` the
+    # caller is in and the check-in is not open; `check_in` the window stands
+    # open; `checked_in` the caller checked in already; `view` the event runs or
+    # is finished, so the page reads the bracket or the standings; `closed`
+    # nothing is open to the caller yet.
+    action: MemberAction
