@@ -204,11 +204,14 @@ def series_counts_by_event(
 ) -> dict[int | None, tuple[int, int, int]]:
     """How many series each event holds, how many started, how many are scored.
 
-    A series has started once it is scored or its time has passed. The series
-    of an event still hang off its matches, so the count joins through them.
-    An event with no series has no row here.
+    Every series names its round and every round names its event, so the count
+    joins through the round and takes a generated bracket series, which has no
+    fixture, the same way as a GNL one. A series has started once it is scored
+    or its time has passed; a bracket series carries no time until it is
+    scheduled, so it counts as started only once it is scored. An event with no
+    series has no row here.
     """
-    from app.models.match import Match
+    from app.models.relationships import DBEventRound
     from app.models.series import Series
 
     ids = [event_id for event_id in event_ids if event_id is not None]
@@ -221,15 +224,15 @@ def series_counts_by_event(
     started = or_(scored, col(Series.date_time) <= utcnow())
     rows = session.execute(
         select(
-            col(Match.season_id),
+            col(DBEventRound.season_id),
             func.count(),
             func.coalesce(func.sum(case((started, 1), else_=0)), 0),
             func.coalesce(func.sum(case((scored, 1), else_=0)), 0),
         )
         .select_from(Series)
-        .join(Match, col(Match.id) == col(Series.match_id))
-        .where(col(Match.season_id).in_(ids))
-        .group_by(col(Match.season_id))
+        .join(DBEventRound, col(DBEventRound.id) == col(Series.round_id))
+        .where(col(DBEventRound.season_id).in_(ids))
+        .group_by(col(DBEventRound.season_id))
     ).all()
     return {row[0]: (row[1], row[2], row[3]) for row in rows}
 
