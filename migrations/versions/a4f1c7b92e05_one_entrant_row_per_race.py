@@ -7,7 +7,8 @@ event opens it; every other event keeps one row per player.
 
 `event.closed_at` is the stamp an admin sets when a night ends. A chain with
 every series scored waits for it before it reads finished, because the admin
-keeps naming series until he closes the night.
+keeps naming series until he closes the night. A past night whose signups are
+closed is already over, so the migration stamps it with its start time.
 
 Revision ID: a4f1c7b92e05
 Revises: e7d4b1c6a539
@@ -39,6 +40,11 @@ def upgrade() -> None:
         "event", sa.Column("closed_at", sa.DateTime(timezone=True), nullable=True)
     )
     op.execute("UPDATE event SET multi_entry = true WHERE kind = 'koth'")
+    # A past night with its signups closed is over; it closes at its start
+    op.execute(
+        "UPDATE event SET closed_at = starts_at WHERE kind = 'koth' "
+        "AND signups_open = false AND starts_at < CURRENT_TIMESTAMP"
+    )
     with op.batch_alter_table("event_entrant") as batch:
         batch.drop_constraint(op.f("uq_event_entrant_event_id"), type_="unique")
         batch.create_unique_constraint(

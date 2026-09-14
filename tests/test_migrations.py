@@ -72,6 +72,8 @@ BEFORE_SERIES_ENTRANTS = "a3f7c05b2e91"
 KOTH_BACKFILL = "a3f7c05b2e91"
 # The revision before the old KOTH tables and the two views are dropped
 BEFORE_KOTH_DROP = "c9f2b6a41d38"
+# The revision before a KOTH night takes one entrant row per race
+BEFORE_MULTI_ENTRY = "e7d4b1c6a539"
 
 
 def comparable(
@@ -1295,3 +1297,43 @@ def test_the_old_koth_tables_and_the_two_views_are_dropped_and_come_back(
         (key["referred_table"], key["options"].get("ondelete"))
         for key in inspect(engine).get_foreign_keys("koth_events")
     ] == [("event_round", "SET NULL")]
+
+
+def test_a_past_koth_night_with_signups_closed_is_closed_by_the_upgrade(
+    tmp_path: Path,
+) -> None:
+    """A past night with signups closed reads finished; tonight's night and a
+    night still to come keep no stamp."""
+    from sqlmodel import Session, col, select
+
+    from app.models.season import Season
+    from app.services.events import phase_of
+
+    url = fresh_database(tmp_path, "closed-at")
+    upgrade_to(url, BEFORE_MULTI_ENTRY)
+
+    engine = create_engine(url)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO event (id, name, series_per_round, kind, published, "
+                "signups_open, starts_at) VALUES "
+                "(1, 'Past night', 1, 'koth', true, false, '2025-12-24 00:00:00'), "
+                "(2, 'Tonight', 1, 'koth', true, true, '2025-12-27 00:00:00'), "
+                "(3, 'Next night', 1, 'koth', true, false, '2099-01-01 00:00:00')"
+            )
+        )
+
+    upgrade_to(url, "head")
+
+    with Session(engine) as session:
+        stamped = {
+            event.id: event.closed_at is not None
+            for event in session.exec(select(Season).order_by(col(Season.id)))
+        }
+        assert stamped == {1: True, 2: False, 3: False}
+        past = session.get(Season, 1)
+        assert past is not None
+        assert phase_of(session, past, counts=(2, 2, 2), last_stage=False) == (
+            "finished"
+        )
