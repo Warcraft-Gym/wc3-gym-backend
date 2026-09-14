@@ -1026,9 +1026,7 @@ def _enter(
     refuses here. A full event refuses too: no waiting list is kept.
     """
     if event.kind is EventKind.gnl:
-        raise BadRequestError(
-            f"A GNL season takes its signups at /seasons/{event.id}/signups"
-        )
+        raise BadRequestError("A GNL season takes its signups on its season page")
     side = (
         col(EventEntrant.user_id) == user_id
         if user_id is not None

@@ -180,7 +180,7 @@ def test_the_entrant_row_warns_on_games_rating_and_a_ban(
     assert client.put(f"/users/{player}/ban").status_code == 401
 
 
-def test_a_gnl_event_sends_the_signup_to_the_season_route(
+def test_a_gnl_event_sends_the_signup_to_its_season_page(
     client: Client, seeded: dict[str, Any], member: Member
 ) -> None:
     """GNL entrants stay on the season signup table this wave."""
@@ -190,7 +190,7 @@ def test_a_gnl_event_sends_the_signup_to_the_season_route(
 
     assert refused.status_code == 400
     assert refused.json() == {
-        "error": f"A GNL season takes its signups at /seasons/{event}/signups"
+        "error": "A GNL season takes its signups on its season page"
     }
 
 
