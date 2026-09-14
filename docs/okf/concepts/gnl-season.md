@@ -2,7 +2,8 @@
 type: Domain Concept
 title: GNL season
 description: Six drafted teams, five weekly rounds, one fixture per team pairing with captain-drafted series, and a phase that is derived from the series.
-tags: [gnl, season, domain]
+resource: ../../../app/models/season.py
+tags: [events]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T15:15:00Z }
 sources:
   - id: season-model

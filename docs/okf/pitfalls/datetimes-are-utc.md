@@ -2,7 +2,7 @@
 type: Pitfall
 title: Every datetime is aware UTC
 description: A stale log line said the backend stored Eastern time and cost a whole wrong work package; times are UTC, stored aware, and the public site once added five hours.
-tags: [pitfall, datetime]
+tags: [data]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
 sources:
   - id: source

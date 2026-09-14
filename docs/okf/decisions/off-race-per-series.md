@@ -2,7 +2,7 @@
 type: Decision
 title: Off race per series, signup race per season
 description: A player signs up on one race for the season; a series may record a different race played on one side, stored separately from the resolved race.
-tags: [decision, series]
+tags: [series]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
 sources:
   - id: source

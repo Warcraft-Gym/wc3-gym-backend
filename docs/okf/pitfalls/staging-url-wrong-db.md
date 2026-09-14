@@ -2,7 +2,7 @@
 type: Pitfall
 title: The staging URL is not the served database
 description: The staging connection string names the anchor database, which holds no app tables; the preview serves from the shared staging database or a branch copy.
-tags: [pitfall, postgres, staging]
+tags: [data, deploy]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
 sources:
   - id: source

@@ -3,8 +3,9 @@ type: Data Model
 title: w3cstats
 description: One player's 1v1 record on W3Champions for one race in one W3Champions season, as the stats sync last read it.
 resource: ../../../../app/models/w3c_stats.py
-tags: [schema, w3champions]
+tags: [w3champions, data]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T15:15:00Z }
+verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
 sources:
   - id: model
     resource: ../../../../app/models/w3c_stats.py

@@ -2,7 +2,8 @@
 type: Integration
 title: Pictures and replays
 description: Team logos and map thumbnails live in Vercel Blob as public URLs, replays live in a Cloudflare R2 bucket reached through presigned URLs, and both stores follow the rows.
-tags: [blob, r2, storage]
+resource: ../../PICTURES.md
+tags: [storage]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
 sources:
   - id: pictures
