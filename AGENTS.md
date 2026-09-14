@@ -1,0 +1,22 @@
+# Guide for agents and contributors
+
+## The knowledge bundle in `docs/okf/`
+
+`docs/okf/` is public. Read [how the bundle is written](docs/okf/conventions/okf-bundle.md) before you change it. This file is the list of what never goes in, and the check to run before a commit.
+
+### What never goes in
+
+- **A person.** No name, handle, email, nationality, location, machine, in-game name or team name. No role plus action plus date that together point at one individual. Write "the maintainers".
+- **A conversation.** No quote, and no sentence about what people wanted, agreed, settled, considered or rejected. State the rule as it stands. A decision keeps its date and its why, one sentence each.
+- **A value.** No token, password, connection string, hostname, bucket, database, project, guild, channel, role or account id, and no default credential, even a local one. An environment variable name is fine. Its value never.
+- **A posture.** Nothing about which safeguards exist or are missing, which checks are on or off, what is reachable from where, what data an environment holds, or which plan, quota or cost applies. Write the operator instruction instead.
+- **A weakness.** No unfixed defect, bypass or lost data. Open an issue with the detail. The bundle states the rule that holds once it is fixed.
+- **Another organisation.** The vendors the code depends on are fine: Vercel, Supabase, Clerk, Cloudflare, GitHub, Discord, W3Champions. No other site, community, sponsor or person.
+
+### Before you commit
+
+1. Read your own diff once as a stranger on the internet. For each sentence ask: does it name a person, tell a story, hold a value, describe a posture, or expose a weakness? Rewrite it as the current rule.
+2. Run `uv run just test`. The bundle test fails on an id-shaped number, an email, a connection string, a token, a deployment hostname or an IP address. It cannot see meaning. Step 1 is the real check.
+3. A change to a fact the bundle states changes the concept in the same pull request and updates `generated.at`.
+
+The review that merges the pull request repeats step 1.
