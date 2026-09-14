@@ -1,7 +1,7 @@
 ---
 type: Data Model
 title: maps
-description: One map: its name, its short name and the public URL of its picture.
+description: "One map: its name, its short name and the public URL of its picture."
 resource: ../../../../app/models/map.py
 tags: [schema, maps]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T15:15:00Z }

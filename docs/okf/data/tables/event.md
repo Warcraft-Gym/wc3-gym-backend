@@ -1,7 +1,7 @@
 ---
 type: Data Model
 title: event
-description: One run of a league that people sign up for: a GNL season, a KOTH night, a cup or a sign-up list; the class is still named Season.
+description: "One run of a league that people sign up for: a GNL season, a KOTH night, a cup or a sign-up list; the class is still named Season."
 resource: ../../../../app/models/season.py
 tags: [schema, events]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T15:15:00Z }

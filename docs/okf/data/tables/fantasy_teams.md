@@ -1,7 +1,7 @@
 ---
 type: Data Model
 title: fantasy_teams
-description: One Fantasy Captain's team for one season: the real team, the race and the grind pick it drafted; every score derives.
+description: "One Fantasy Captain's team for one season: the real team, the race and the grind pick it drafted; every score derives."
 resource: ../../../../app/models/fantasy_team.py
 tags: [schema, fantasy]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T15:15:00Z }

@@ -2,6 +2,7 @@
 type: Domain Concept
 title: Series reporting
 description: A result is reported game by game with a map and a replay per game, a veto board that is derived from the season rules, an off race per side, and casts that any member may claim.
+resource: ../../../app/services/series_games.py
 tags: [series, veto, replays, casts]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T14:30:00Z }
 sources:

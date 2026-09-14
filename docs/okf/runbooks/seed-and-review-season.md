@@ -2,8 +2,10 @@
 type: Runbook
 title: Seed a database and build a review season
 description: Load the private seed repository into a target, or build a season two accounts can click through on staging.
+resource: ../../../app/core/seed.py
 tags: [runbook, seed, staging]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
+stale_after: 2027-03-14T00:00:00Z
 sources:
   - id: seed
     resource: ../../../app/core/seed.py

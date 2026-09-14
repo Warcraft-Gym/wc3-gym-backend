@@ -2,6 +2,7 @@
 type: Convention
 title: Code style
 description: Python 3.13, uv, ruff with annotations, ty as a ratchet, one-line comments in the present tense, and no scripts folder.
+resource: ../../../pyproject.toml
 tags: [python, style, tooling]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
 sources:

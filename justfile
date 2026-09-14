@@ -112,3 +112,8 @@ okf-graph:
     print(G.generate_visualization(Path("docs/okf"), Path("docs/okf/index.html"), bundle_name="wc3-gym-backend knowledge bundle"))
     EOF
     sed -i 's#<head>#<head>\n  <meta name="robots" content="noindex, nofollow">#' docs/okf/index.html
+
+# Check docs/okf against OKF v0.2 with a third-party validator, the okf crate. Installs it once.
+okf-validate:
+    command -v okf >/dev/null || cargo install okf
+    okf validate docs/okf

@@ -2,6 +2,7 @@
 type: Convention
 title: How this bundle is written
 description: The rules for every file under docs/okf, and the one rule for talking about the other repositories.
+resource: https://github.com/GoogleCloudPlatform/open-knowledge-format/blob/main/SPEC.md
 tags: [okf, documentation]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T15:15:00Z }
 sources:
@@ -35,6 +36,9 @@ Every concept starts with a YAML block. `type` is required. The types this bundl
 The other fields: `title`, `description` (one sentence), `tags`, `generated: { by, at }` (who wrote the current text and when), `verified: [{ by, at }]` (who checked it against the code), `status` (`draft`, `stable` by default, `deprecated`), `stale_after`, and `sources` (what the text was written from).
 
 `generated.by` names the writer: `human:<github handle>` for a person, `<tool>/<model>` for an agent. A concept with no `verified` entry is unverified. When a maintainer reads a concept against the code and finds it true, they add a `verified` entry with their own handle. Nobody adds one for someone else.
+
+
+A value that holds `: ` is written in double quotes, because YAML reads a bare one as a second key. `resource` names the file or the vendor page a concept describes: the model of a table, the module of a route area, the recipe of a runbook, the repository itself. A decision and a pitfall describe an idea and carry none. A runbook carries `stale_after`, six months after it was last read against the code, so a consumer sees when it is due a review; reading it again moves the date. Adding or changing metadata alone does not move `generated.at`; only a change to the text does.
 
 # Sources and links
 
@@ -72,5 +76,5 @@ The bundle is public. Never write a secret, a token, a database URL, an account 
 - A concept that no longer holds gets `status: deprecated` and one line naming what replaced it. It is not deleted, so links keep working.
 - `log.md` gets one line per change, newest first.
 - GitHub Pages serves a graph viewer of this bundle, built from the bundle by the `pages.yml` workflow on every push to `main` with the viewer from the OKF reference repository. Nothing is committed for it: `just okf-graph` writes a local preview to `docs/okf/index.html`, which git ignores.
-- `uv run just test` runs `tests/test_okf.py`. It checks that every concept has a `type`, that `index.md` files carry no frontmatter except the root one, and that every relative link resolves to a file.
+- `uv run just test` runs `tests/test_okf.py`. It checks that every concept has a `type`, a `title`, a `description` and a `tags` list, that no value holds an unquoted `: `, that `index.md` files carry no frontmatter except the root one, that every concept is listed in its directory index with its own description, and that every relative link resolves to a file. `just okf-validate` checks the bundle with a third-party validator as well.
 - Every table has one `Data Model` concept under `data/tables/`, named after the table. Its `# Schema` section lists every column with its meaning, one row per column, the column name backticked in the first cell. `tests/test_okf.py` fails when a column is added, dropped or renamed without the concept, and when a concept names a table that does not exist. A pull request that changes a column changes the concept.

@@ -1,7 +1,7 @@
 ---
 type: Data Model
 title: team_season_captain
-description: One captain seat: a player who captains one team in one season; the seat is what makes an account a captain.
+description: "One captain seat: a player who captains one team in one season; the seat is what makes an account a captain."
 resource: ../../../../app/models/relationships.py
 tags: [schema, teams]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T15:15:00Z }

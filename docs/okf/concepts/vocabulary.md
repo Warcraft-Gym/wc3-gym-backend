@@ -2,6 +2,7 @@
 type: Domain Concept
 title: Vocabulary
 description: One word per thing, from league down to game, and the words this app keeps for old reasons.
+resource: ../../../app/models/enums.py
 tags: [domain, events, words]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
 sources:

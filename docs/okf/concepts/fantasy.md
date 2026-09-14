@@ -2,6 +2,7 @@
 type: Domain Concept
 title: Fantasy league
 description: A member drafts players, one team and one race for a season, places bets on series, and scores six derived parts.
+resource: ../../../app/core/fantasy.py
 tags: [fantasy, domain]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T15:15:00Z }
 sources:

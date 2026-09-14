@@ -2,6 +2,7 @@
 type: API Area
 title: Authentication
 description: A bearer token is either the admin token's JWT or a Clerk session; the claims resolve the Discord id and the role once per request, and five guards build on them.
+resource: ../../../app/api/deps.py
 tags: [auth, clerk, jwt]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
 sources:
