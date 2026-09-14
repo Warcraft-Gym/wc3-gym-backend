@@ -65,8 +65,8 @@ class EventStage(DBModel, table=True):
     points_game_won: int = Field(default=0, sa_column_kwargs={"server_default": "0"})
     # How many of the standings carry into the next stage; null means all of them
     advance_count: int | None = None
-    # How the stage splits into groups that merge at the next stage; unused until
-    # the group generator is built
+    # How the stage splits into groups that merge at the next stage: how many
+    # entrants a group seats, and how many of them the next stage takes
     group_size: int | None = None
     group_advance: int | None = None
     # On: finishing the stage carries the advance_count into the next one
@@ -136,6 +136,7 @@ class EventStageWrite(SQLModel):
     points_series_drawn: int = 0
     points_game_won: int = 0
     advance_count: int | None = None
+    group_size: int | None = Field(default=None, ge=2)
     auto_advance: bool = False
     third_place: bool = False
     grand_final_modifier: Literal["one", "reset", "skip"] = "one"
@@ -159,8 +160,14 @@ class StandingRow(SQLModel):
 
 
 class DivisionStandings(SQLModel):
-    """The table of one division; a stage with no divisions answers one of these."""
+    """The table of one division; a stage with no divisions answers one of these.
+
+    A stage split into groups answers one of these per group, so the table
+    names the group it ranks beside the division it belongs to.
+    """
 
     division_id: int | None = None
     division_name: Annotated[str | None, NumToStr] = None
+    group_no: int | None = None
+    group_name: Annotated[str | None, NumToStr] = None
     rows: list[StandingRow] = []

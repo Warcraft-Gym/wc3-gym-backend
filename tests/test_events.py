@@ -615,8 +615,8 @@ def test_an_event_with_no_league_enters_players(
 def test_a_stage_reads_its_group_settings_and_its_advance_flag(
     client: Client, auth_headers: dict[str, str]
 ) -> None:
-    """The three group fields are written by the generator, so a new stage
-    reads them empty and off."""
+    """A new stage reads the group settings empty and the advance flag off,
+    and the event read echoes what is written on them."""
     created = client.post(
         "/events",
         json={"name": "Group Cup", "stages": [{"name": "Groups"}]},

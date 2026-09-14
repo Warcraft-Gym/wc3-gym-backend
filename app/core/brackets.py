@@ -378,6 +378,21 @@ def koth_chain(field: int) -> Plan:
     return Plan(["Round 1"], series)
 
 
+def snake_groups[T](field: Sequence[T], size: int) -> list[list[T]]:
+    """Deal a seeded field into ceil(n / size) groups, the best seed first.
+
+    The deal turns at the end of every pass, so the group that took the last
+    seed of a pass takes the first of the next one and every group draws the
+    same strength.
+    """
+    count = -(-len(field) // max(size, 1))
+    groups: list[list[T]] = [[] for _ in range(count)]
+    for place, entrant in enumerate(field):
+        row, step = divmod(place, count)
+        groups[step if row % 2 == 0 else count - 1 - step].append(entrant)
+    return groups
+
+
 def round_robin_plan(field: int, per_entrant: int = 1) -> Plan:
     """Every pairing of a round robin, `per_entrant` circle rounds to a round.
 
