@@ -39,9 +39,15 @@ from app.models.series import (
     StageSeriesPublic,
     StageSeriesRow,
 )
+from app.models.series_side import (
+    LobbySidesWrite,
+    PlacesWrite,
+    SeriesSide,
+    SeriesSidePublic,
+)
 from app.models.team import Team
 from app.models.team_reduced import TeamReduced
-from app.models.user import User
+from app.models.user import User, UserPublic
 from app.models.user_team_season import DBUserTeamSeason
 from app.services import derived
 from app.services.series_rules import series_rules, stands_on_side
@@ -256,6 +262,7 @@ def generate_next_round(
         rows = [StageSeriesRow.from_series_reduced(row) for row in made]
         derived.fill_series(session, rows)
         _fill_teams(session, rows)
+        _fill_sides(session, rows)
         return StageSeriesPublic(
             rounds=[EventRoundPublic.from_row(row) for row in drew.values()],
             series=rows,
@@ -325,6 +332,7 @@ def add_challenger(event_id: int, stage_id: int, entrant_id: int) -> StageSeries
         )
         derived.fill_series(session, [public])
         _fill_teams(session, [public])
+        _fill_sides(session, [public])
         return public
 
 
@@ -423,6 +431,59 @@ def set_result_kind(series_id: int, data: ResultKindWrite) -> SeriesPublic:
         return public
 
 
+def set_places(series_id: int, data: PlacesWrite) -> StageSeriesRow:
+    """Write where every side of a lobby finished, and score it as played.
+
+    A lobby plays one game, so its places are its whole result. Once every
+    lobby of a round carries places, the round seats the lobbies of the round
+    after it from the places that went through.
+    """
+    with Session.begin() as session:
+        row = _series(session, series_id)
+        seats = {side.side_no: side for side in _seats(session, series_id)}
+        if not seats:
+            raise BadRequestError("This series seats no lobby, so it takes no places")
+        for entry in data.places:
+            side = seats.get(entry.side_no)
+            if side is None:
+                raise BadRequestError(f"This lobby seats no side {entry.side_no}")
+            side.place = entry.place
+        if any(side.place is None for side in seats.values()):
+            raise BadRequestError("Every side of the lobby needs a place")
+        # A lobby plays one game and its places settle it, so the score only
+        # says it was played; the seats carry who finished where
+        row.player1_score, row.player2_score = 1, 0
+        row.result_kind = "played"
+        session.flush()
+        _fill_lobbies(session, row)
+        _auto_advance(session, row)
+        return _lobby_read(session, row)
+
+
+def set_sides(series_id: int, data: LobbySidesWrite) -> StageSeriesRow:
+    """Seat a lobby again before it is played, so an entrant may move lobbies."""
+    with Session.begin() as session:
+        row = _series(session, series_id)
+        if scored(row):
+            raise BadRequestError("This lobby is played, so its seats are settled")
+        if not _seats(session, series_id):
+            raise BadRequestError("This series seats no lobby, so it takes no sides")
+        if len(set(data.entrant_ids)) != len(data.entrant_ids):
+            raise BadRequestError("An entrant takes one seat of a lobby, not two")
+        if len(data.entrant_ids) < 2:
+            raise BadRequestError("A lobby seats two entrants or more")
+        stage = _stage_of(session, row)
+        entrants = _entrants_by_id(session, data.entrant_ids)
+        for entrant_id in data.entrant_ids:
+            entrant = entrants.get(entrant_id)
+            if entrant is None:
+                raise NotFoundError(f"Entrant not found by id: {entrant_id}")
+            if stage is not None and entrant.event_id != stage.event_id:
+                raise BadRequestError("This entrant does not play in that event")
+        _seat(session, row, [entrants[entrant_id] for entrant_id in data.entrant_ids])
+        return _lobby_read(session, row)
+
+
 def standings_of(event_id: int, stage_id: int) -> list[DivisionStandings]:
     """The table of every division of the stage, from its points and its format."""
     with Session.begin() as session:
@@ -452,6 +513,7 @@ def series_of(event_id: int, stage_id: int) -> StageSeriesPublic:
         ]
         derived.fill_series(session, rows)
         _fill_teams(session, rows)
+        _fill_sides(session, rows)
         return StageSeriesPublic(
             rounds=[EventRoundPublic.from_row(row) for row in rounds], series=rows
         )
@@ -465,6 +527,172 @@ def advance(event_id: int, stage_id: int) -> dict[str, int]:
         if following is None:
             raise BadRequestError("This stage is the last one of the event")
         return {"seeded": _advance(session, event_id, stage)}
+
+
+def _series(session: OrmSession, series_id: int) -> Series:
+    row = session.get(Series, series_id)
+    if row is None:
+        raise NotFoundError(f"Series not found by id: {series_id}")
+    return row
+
+
+def _seats(session: OrmSession, series_id: int) -> list[SeriesSide]:
+    """Every seat of one lobby, in seat order."""
+    return list(
+        session.scalars(
+            select(SeriesSide)
+            .where(col(SeriesSide.series_id) == series_id)
+            .order_by(col(SeriesSide.side_no))
+        )
+    )
+
+
+def _seats_of(
+    session: OrmSession, series_ids: Sequence[int]
+) -> dict[int, list[SeriesSide]]:
+    """Every seat of every lobby named, keyed by the series, in one read."""
+    found: dict[int, list[SeriesSide]] = {}
+    if not series_ids:
+        return found
+    for side in session.scalars(
+        select(SeriesSide)
+        .where(col(SeriesSide.series_id).in_(series_ids))
+        .order_by(col(SeriesSide.series_id), col(SeriesSide.side_no))
+    ):
+        found.setdefault(side.series_id, []).append(side)
+    return found
+
+
+def _seat(session: OrmSession, row: Series, entrants: Sequence[EventEntrant]) -> None:
+    """Write the seats of one lobby from scratch, in the order they are given."""
+    for side in _seats(session, ident(row)):
+        session.delete(side)
+    session.flush()
+    for side_no, entrant in enumerate(entrants, start=1):
+        session.add(
+            SeriesSide(
+                series_id=ident(row),
+                side_no=side_no,
+                user_id=entrant.user_id or 0,
+                entrant_id=ident(entrant),
+            )
+        )
+    session.flush()
+
+
+def _entrants_by_id(
+    session: OrmSession, entrant_ids: Sequence[int]
+) -> dict[int, EventEntrant]:
+    return {
+        ident(entrant): entrant
+        for entrant in session.scalars(
+            select(EventEntrant).where(col(EventEntrant.id).in_(entrant_ids))
+        )
+    }
+
+
+def _lobby_read(session: OrmSession, row: Series) -> StageSeriesRow:
+    """One lobby as its box reads it: the series, its seats and their places."""
+    public = StageSeriesRow.from_series_reduced(row)
+    derived.fill_series(session, [public])
+    _fill_teams(session, [public])
+    _fill_sides(session, [public])
+    return public
+
+
+def _fill_sides(session: OrmSession, rows: Sequence[StageSeriesRow]) -> None:
+    """Name every seat of every lobby in the list, in one read."""
+    wanted = [row.id for row in rows]
+    if not wanted:
+        return
+    found: dict[int, list[SeriesSidePublic]] = {}
+    for side, user in session.execute(
+        select(SeriesSide, User)
+        .outerjoin(User, col(User.id) == col(SeriesSide.user_id))
+        .where(col(SeriesSide.series_id).in_(wanted))
+        .order_by(col(SeriesSide.series_id), col(SeriesSide.side_no))
+    ):
+        found.setdefault(side.series_id, []).append(
+            SeriesSidePublic(
+                side_no=side.side_no,
+                user_id=side.user_id or None,
+                user=UserPublic.from_user_reduced(user) if user else None,
+                entrant_id=side.entrant_id,
+                place=side.place,
+            )
+        )
+    for row in rows:
+        row.sides = found.get(row.id, [])
+
+
+def _fill_lobbies(session: OrmSession, row: Series) -> None:
+    """Seat the next round's lobbies once every lobby of this one has places.
+
+    The places that go through rank on the place first and the lobby second,
+    so every lobby winner sits above every runner-up, and the snake deals them
+    over the lobbies of the round after this one.
+    """
+    stage = _stage_of(session, row)
+    if stage is None or stage.format is not StageFormat.ffa:
+        return
+    rounds = {
+        ident(held): place for place, held in enumerate(_rounds_of(session, stage.id))
+    }
+    place = rounds.get(row.round_id or 0)
+    if place is None:
+        return
+    held = [
+        other
+        for other in _series_of(session, stage.id)
+        if other.division_id == row.division_id
+    ]
+    done = [other for other in held if rounds.get(other.round_id or 0) == place]
+    following = [
+        other for other in held if rounds.get(other.round_id or 0) == place + 1
+    ]
+    if not following or any(not scored(other) for other in done):
+        return
+    seats = _seats_of(session, [ident(other) for other in following])
+    # A round already seated is left alone; only an empty one fills from below
+    if any(side.entrant_id for sides in seats.values() for side in sides):
+        return
+    through = _through(session, stage, done)
+    dealt = brackets.snake(len(through), len(following))
+    for lobby, taking in zip(following, dealt, strict=True):
+        _seat(session, lobby, [through[seed - 1] for seed in taking])
+
+
+def _through(
+    session: OrmSession, stage: EventStage, lobbies: Sequence[Series]
+) -> list[EventEntrant]:
+    """The entrants the lobbies of one round send on, best place first."""
+    top = _lobby_advance(stage, stage.lobby_size or 2)
+    seats = _seats_of(session, [ident(lobby) for lobby in lobbies])
+    taking = sorted(
+        (side.place, order, side.entrant_id)
+        for order, lobby in enumerate(lobbies)
+        for side in seats.get(ident(lobby), [])
+        if side.entrant_id is not None and side.place is not None and side.place <= top
+    )
+    found = _entrants_by_id(session, [entrant_id for _, _, entrant_id in taking])
+    return [found[entrant_id] for _, _, entrant_id in taking if entrant_id in found]
+
+
+def _lobby_advance(stage: EventStage, seats: int) -> int:
+    """How many places of one lobby play on: the stage's `group_advance`, or
+    half its seats. `advance_count` stays what the stage carries to the next."""
+    return stage.group_advance or max(seats // 2, 1)
+
+
+def _pay(stage: EventStage) -> list[int]:
+    """What each place of a lobby pays, best place first.
+
+    A stage that names no scale counts its seats down, so a lobby of four
+    pays 4, 3, 2, 1.
+    """
+    if stage.points_by_place:
+        return [int(word) for word in stage.points_by_place.split(",") if word.strip()]
+    return list(range(stage.lobby_size or 1, 0, -1))
 
 
 def _fill_teams(session: OrmSession, rows: Sequence[StageSeriesRow]) -> None:
@@ -547,6 +775,8 @@ def _row(
     side_size: int = 1,
 ) -> Series:
     """Write one planned series; a padded pair is a walkover for the side it has."""
+    if len(planned.slots) > 2:
+        return _lobby(session, round_row, division_id, field, planned)
     entrant1, user1, feeder1 = _slot(field, rows, planned.slot1)
     entrant2, user2, feeder2 = _slot(field, rows, planned.slot2)
     row = Series(
@@ -568,6 +798,36 @@ def _row(
     if feeder1 is None and feeder2 is None and (entrant1 is None) != (entrant2 is None):
         wins = (round_row.best_of or stage.best_of) // 2 + 1
         _award(session, row, entrant1 is not None, "walkover", wins)
+    return row
+
+
+def _lobby(
+    session: OrmSession,
+    round_row: DBEventRound,
+    division_id: int | None,
+    field: Sequence[EventEntrant],
+    planned: brackets.PlannedSeries,
+) -> Series:
+    """Write one free for all lobby: one series, one `series_side` row a seat.
+
+    The player columns stay null, so nothing that reads a two-sided series
+    reads a lobby by mistake; the seats name who plays it. A seat the plan
+    leaves empty waits for the round before it to send its places through.
+    """
+    row = Series(round_id=ident(round_row), division_id=division_id, host_player_id=0)
+    session.add(row)
+    session.flush()
+    for side_no, slot in enumerate(planned.slots, start=1):
+        entrant, user, _ = _slot(field, [], slot)
+        session.add(
+            SeriesSide(
+                series_id=ident(row),
+                side_no=side_no,
+                user_id=user or 0,
+                entrant_id=entrant,
+            )
+        )
+    session.flush()
     return row
 
 
@@ -858,6 +1118,13 @@ def _plan(stage: EventStage, size: int) -> brackets.Plan:
             return brackets.round_robin_plan(size, stage.series_per_entrant_per_round)
         case StageFormat.koth:
             return brackets.koth_chain(size)
+        case StageFormat.ffa:
+            # One lobby that seats the whole field is a league of N series;
+            # a field that needs several lobbies plays them off round by round
+            seats = stage.lobby_size or size
+            if seats >= size:
+                return brackets.ffa_league_plan(size, stage.swiss_rounds or 1)
+            return brackets.ffa_bracket_plan(size, seats, _lobby_advance(stage, seats))
         case _:
             raise BadRequestError(f"format_not_built: {stage.format.value}")
 
@@ -924,6 +1191,7 @@ def _tables(
     }
     everyone = _entrants(session, event_id)
     seeds = _fields(everyone)
+    seats = _seats_of(session, [ident(row) for rows in played.values() for row in rows])
     return [
         DivisionStandings(
             division_id=division_id,
@@ -931,9 +1199,10 @@ def _tables(
             rows=_table(
                 session,
                 stage,
-                _sides_of(field, played.get(division_id, []))
+                _sides_of(field, played.get(division_id, []), seats)
                 or seeds.get(division_id, []),
                 played.get(division_id, []),
+                seats,
             ),
         )
         for division_id, field in everyone.items()
@@ -941,10 +1210,13 @@ def _tables(
 
 
 def _sides_of(
-    field: Sequence[EventEntrant], series: Sequence[Series]
+    field: Sequence[EventEntrant],
+    series: Sequence[Series],
+    seats: dict[int, list[SeriesSide]],
 ) -> list[EventEntrant]:
     """The entrants of the division that stand in one of its series, in seed order."""
     sides = {row.entrant1_id for row in series} | {row.entrant2_id for row in series}
+    sides |= {side.entrant_id for row in series for side in seats.get(ident(row), [])}
     sides.discard(None)
     return [entrant for entrant in field if ident(entrant) in sides]
 
@@ -954,6 +1226,7 @@ def _table(
     stage: EventStage,
     field: Sequence[EventEntrant],
     series: Sequence[Series],
+    seats: dict[int, list[SeriesSide]] | None = None,
 ) -> list[StandingRow]:
     """One division's places, from the stage's points and the format it plays.
 
@@ -962,6 +1235,8 @@ def _table(
     """
     entrants = {ident(entrant): entrant for entrant in field}
     order = list(entrants)
+    if stage.format is StageFormat.ffa:
+        return _place_table(session, stage, entrants, series, seats or {})
     results = [
         (
             row.entrant1_id,
@@ -1003,6 +1278,51 @@ def _table(
         )
         for place, line in enumerate(table, start=1)
     ]
+
+
+def _place_table(
+    session: OrmSession,
+    stage: EventStage,
+    entrants: dict[int, EventEntrant],
+    series: Sequence[Series],
+    seats: dict[int, list[SeriesSide]],
+) -> list[StandingRow]:
+    """A free for all table: the place points every entrant took, best first."""
+    placings = [
+        (side.entrant_id, side.place)
+        for row in series
+        for side in seats.get(ident(row), [])
+        if side.entrant_id in entrants and side.place is not None
+    ]
+    table = brackets.place_standings(list(entrants), placings, _pay(stage))
+    counted = _counted_places(list(entrants), placings)
+    names = _names(session, list(entrants.values()))
+    return [
+        StandingRow(
+            position=place,
+            entrant_id=line.entrant,
+            user_id=entrants[line.entrant].user_id,
+            team_id=entrants[line.entrant].team_id,
+            name=names.get(line.entrant),
+            points=line.points,
+            **counted[line.entrant],
+        )
+        for place, line in enumerate(table, start=1)
+    ]
+
+
+def _counted_places(
+    order: Sequence[int], placings: Sequence[tuple[int, int]]
+) -> dict[int, dict[str, int]]:
+    """Lobbies played and lobbies won per entrant; a lobby counts no games."""
+    tally = {
+        entrant: {"played": 0, "won": 0, "lost": 0, "games_won": 0, "games_lost": 0}
+        for entrant in order
+    }
+    for entrant, place in placings:
+        tally[entrant]["played"] += 1
+        tally[entrant]["won" if place == 1 else "lost"] += 1
+    return tally
 
 
 def _reached(

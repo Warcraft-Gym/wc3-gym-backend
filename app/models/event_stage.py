@@ -13,7 +13,7 @@ from sqlmodel import Field, SQLModel
 
 from app.models.base import DBModel
 from app.models.enums import SchedulingMode, StageFormat
-from app.models.types import AwareUTC, MapRules, NumToStr, UTCDateTime
+from app.models.types import AwareUTC, MapRules, NumToStr, PlacePoints, UTCDateTime
 
 # The tie breaks a table reads by default, in order. The words a rule takes are
 # points, buchholz (the sum of the opponents' points), game_diff and
@@ -122,8 +122,13 @@ class EventStageWrite(SQLModel):
     best_of: int = 3
     series_per_entrant_per_round: int = Field(default=1, ge=1)
     swiss_rounds: int | None = Field(default=None, ge=1)
-    points_by_place: str | None = Field(default=None, max_length=50)
+    points_by_place: Annotated[str | None, PlacePoints] = Field(
+        default=None, max_length=50
+    )
     lobby_size: int | None = Field(default=None, ge=2)
+    # How many places of one lobby or one group play on; advance_count stays
+    # the count the whole stage carries into the next one
+    group_advance: int | None = Field(default=None, ge=1)
     map_rules: Annotated[str | None, MapRules] = None
     scheduling_mode: SchedulingMode = SchedulingMode.agreed
     ranking_rule: str = RANKING_RULE

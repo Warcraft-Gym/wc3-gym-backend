@@ -130,6 +130,33 @@ def standings[T: Hashable](
     return [Standing(e, points[e], diff[e]) for e in ranked]
 
 
+type Placing[T] = tuple[T, int]  # an entrant and the place he took in one lobby
+
+
+def place_standings[T: Hashable](
+    entrants: Sequence[T],
+    placings: Sequence[Placing[T]],
+    pay: Sequence[int],
+) -> list[Standing[T]]:
+    """Rank a free for all on the points its places pay, best place first.
+
+    `pay` is what each place is worth, best place first, so "4,3,2,1" pays the
+    winner of a lobby four. An entrant adds up every lobby he played and the
+    best place he ever took breaks a tie on points; a place past the end of
+    `pay` pays nothing.
+    """
+    points = dict.fromkeys(entrants, 0)
+    # A place nobody took sits behind every place the scale pays
+    best = dict.fromkeys(entrants, len(pay) + 1)
+    for entrant, place in placings:
+        if entrant not in points:
+            continue
+        points[entrant] += pay[place - 1] if 0 < place <= len(pay) else 0
+        best[entrant] = min(best[entrant], place)
+    ranked = sorted(entrants, key=lambda e: (points[e], -best[e]), reverse=True)
+    return [Standing(e, points[e], 0) for e in ranked]
+
+
 def swiss_pairs[T: Hashable](
     order: Sequence[T], met: Sequence[tuple[T | None, T | None]]
 ) -> list[tuple[T, T | None]] | None:
@@ -177,12 +204,21 @@ class Slot:
 
 @dataclass(frozen=True)
 class PlannedSeries:
-    """One series of a plan: where it sits and where its two sides come from."""
+    """One series of a plan: where it sits and where its sides come from.
+
+    A lobby seats more than two, so `rest` holds every seat past the second
+    and `slots` reads the whole lobby in seat order.
+    """
 
     index: int
     round: int
     slot1: Slot
     slot2: Slot
+    rest: tuple[Slot, ...] = ()
+
+    @property
+    def slots(self) -> tuple[Slot, ...]:
+        return (self.slot1, self.slot2, *self.rest)
 
 
 @dataclass(frozen=True)
@@ -365,3 +401,65 @@ def round_robin_plan(field: int, per_entrant: int = 1) -> Plan:
                     PlannedSeries(len(series), index, Slot(seed=top), Slot(seed=bottom))
                 )
     return Plan(rounds, series)
+
+
+def _lobbies(field: int, lobby_size: int) -> int:
+    """How many lobbies a round of `field` holds; no lobby seats fewer than two."""
+    return max(1, min(-(-field // lobby_size), field // 2))
+
+
+def snake(count: int, lobbies: int) -> list[list[int]]:
+    """Deal `count` seeds over `lobbies`, best seed first, turning at each end.
+
+    Seed 1 opens the first lobby and seed `lobbies` the last, then the deal
+    turns back, so every lobby takes one seed of each band.
+    """
+    dealt: list[list[int]] = [[] for _ in range(lobbies)]
+    for seat in range(count):
+        row, place = divmod(seat, lobbies)
+        dealt[place if row % 2 == 0 else lobbies - 1 - place].append(seat + 1)
+    return dealt
+
+
+def ffa_bracket_plan(field: int, lobby_size: int, advance: int) -> Plan:
+    """Rounds of free for all lobbies; the top `advance` places play on.
+
+    Round 1 deals the seeds over its lobbies in snake order, one game each.
+    Every later round holds the places that went through, over as many
+    lobbies as they fill, and the last round is one lobby. A lobby past round
+    1 opens with empty seats, which the round before it fills once every
+    lobby of that round carries its places.
+    """
+    rounds: list[str] = []
+    series: list[PlannedSeries] = []
+    standing = field
+    while True:
+        lobbies = _lobbies(standing, lobby_size)
+        index = len(rounds)
+        rounds.append("Final" if lobbies == 1 else f"Round {index + 1}")
+        for lobby in snake(standing, lobbies):
+            slots = [Slot(seed=seed) if index == 0 else Slot() for seed in lobby]
+            series.append(
+                PlannedSeries(len(series), index, slots[0], slots[1], tuple(slots[2:]))
+            )
+        through = lobbies * advance
+        # A round that sends its whole field on would draw itself again
+        if lobbies == 1 or through >= standing:
+            return Plan(rounds, series)
+        standing = through
+
+
+def ffa_league_plan(field: int, rounds: int = 1) -> Plan:
+    """One free for all lobby that plays `rounds` series, the whole field in each.
+
+    The lobby plays its series in one round, so the place points of every one
+    of them add up into the same stage table.
+    """
+    slots = [Slot(seed=seed) for seed in range(1, field + 1)]
+    return Plan(
+        ["Round 1"],
+        [
+            PlannedSeries(number, 0, slots[0], slots[1], tuple(slots[2:]))
+            for number in range(max(rounds, 1))
+        ],
+    )

@@ -21,6 +21,7 @@ from app.models.enums import Race
 from app.models.match import Match, MatchPublic
 from app.models.relationships import EventRoundPublic
 from app.models.series_cast import CastPublic, SeriesCast
+from app.models.series_side import SeriesSidePublic
 from app.models.series_veto_step import DBSeriesVetoStep
 from app.models.team_reduced import TeamReduced
 from app.models.types import AwareUTC, EnumValue, SuggestRace, UTCDateTime
@@ -382,6 +383,8 @@ class StageSeriesRow(SeriesPublic):
     side_size: int = 1
     pick_rule: str | None = None
     result_kind: str = "played"
+    # Every seat of a lobby, in seat order; empty for a series with two sides
+    sides: list[SeriesSidePublic] = []
     slot1_from_series_id: int | None = None
     slot1_takes_loser: bool = False
     slot2_from_series_id: int | None = None
