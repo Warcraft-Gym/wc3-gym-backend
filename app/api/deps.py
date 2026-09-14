@@ -26,7 +26,6 @@ from app.services.draft_series import DraftSeriesService
 from app.services.events import EventService
 from app.services.fantasy_bets import FantasyBetService
 from app.services.fantasy_teams import FantasyTeamService
-from app.services.koth import KothService
 from app.services.ladder import LadderService
 from app.services.maps import MapService
 from app.services.matches import MatchService
@@ -277,7 +276,6 @@ series_veto_service = SeriesVetoService()
 draft_series_service = DraftSeriesService()
 fantasy_bet_service = FantasyBetService(settings_app_service=settings_service)
 fantasy_team_service = FantasyTeamService()
-koth_service = KothService(settings_app_service=settings_service)
 ladder_service = LadderService(settings_app_service=settings_service)
 stats_service = PlayerCareerStatsService()
 availability_service = AvailabilityService()
@@ -304,7 +302,6 @@ FantasyBetServiceDep = Annotated[
 FantasyTeamServiceDep = Annotated[
     FantasyTeamService, Depends(lambda: fantasy_team_service)
 ]
-KothServiceDep = Annotated[KothService, Depends(lambda: koth_service)]
 LadderServiceDep = Annotated[LadderService, Depends(lambda: ladder_service)]
 StatsServiceDep = Annotated[PlayerCareerStatsService, Depends(lambda: stats_service)]
 AvailabilityServiceDep = Annotated[

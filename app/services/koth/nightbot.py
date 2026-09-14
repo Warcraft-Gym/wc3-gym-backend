@@ -17,7 +17,7 @@ from app.core.exceptions import ApiError, BadRequestError, NotFoundError
 from app.models.base import ident
 from app.models.enums import Race, SignupChannel
 from app.models.event_division import EventDivision
-from app.models.event_entrant import EntrantSignup, EventEntrant
+from app.models.event_entrant import EntrantAdd, EventEntrant
 from app.models.user import User
 from app.services.events import (
     SEASONS,
@@ -26,8 +26,8 @@ from app.services.events import (
     _stats_for,
     _w3c_season,
 )
-from app.services.koth_night import carry
-from app.services.koth_night.night import tonight
+from app.services.koth import carry
+from app.services.koth.night import tonight
 
 if TYPE_CHECKING:
     from app.services.settings import SettingsService
@@ -46,32 +46,9 @@ def signup(
     _check_token(settings, token)
     if not twitch or not battletag:
         raise BadRequestError("Missing required parameters: token, twitch, battletag")
-    named = _race(race)
-
     with Session.begin() as session:
         event_id = ident(tonight(session))
-        season = _w3c_season(session)
-        user = _by_battle_tag(session, battletag, named or Race.RANDOM)
-        chosen = named or _best_race(user, season)
-        # A player with no current rating has no bracket, so nothing is written
-        if _stats_for(user, chosen, season)[0] is None:
-            raise BadRequestError(_no_rating(battletag, race))
-        row = _entrant(session, event_id, ident(user))
-        entered = row is not None
-        if row is not None:
-            row.race = chosen
-            row.withdrawn_at = None
-
-    if not entered:
-        EventService().add_entrant(
-            event_id,
-            EntrantSignup(
-                race=chosen, battle_tag=battletag, channel=SignupChannel.twitch
-            ),
-            claims=None,
-        )
-    EventService().assign_divisions(event_id)
-    carry.follow_signup(event_id)
+    chosen = enter(event_id, battletag, race)
 
     with Session.begin() as session:
         user = _by_battle_tag(session, battletag, chosen)
@@ -87,6 +64,47 @@ def signup(
         "success": True,
         "message": f"{twitch} signed up for {bracket} ({mmr} MMR)",
     }
+
+
+def enter(
+    event_id: int,
+    battle_tag: str,
+    race: str | None,
+    channel: SignupChannel = SignupChannel.twitch,
+) -> Race:
+    """Enter one battle tag in a night as its one entrant; answer the race he plays.
+
+    A player the night already holds keeps his row: the race and the bracket
+    are replaced, so a night never holds two entrants for one player.
+    """
+    named = _race(race)
+    with Session.begin() as session:
+        season = _w3c_season(session)
+        user = _by_battle_tag(session, battle_tag, named or Race.RANDOM)
+        user_id = ident(user)
+        chosen = named or _best_race(user, season)
+        # A player with no current rating has no bracket, so nothing is written
+        if _stats_for(user, chosen, season)[0] is None:
+            raise BadRequestError(_no_rating(battle_tag, race))
+        row = _entrant(session, event_id, user_id)
+        entered = row is not None
+        if row is not None:
+            row.race = chosen
+            row.withdrawn_at = None
+
+    if not entered:
+        EventService().add_entrant_as_admin(
+            event_id,
+            EntrantAdd(
+                race=chosen,
+                battle_tag=battle_tag,
+                user_id=user_id,
+                channel=channel,
+            ),
+        )
+    EventService().assign_divisions(event_id)
+    carry.follow_signup(event_id)
+    return chosen
 
 
 def _check_token(settings: "SettingsService", token: str | None) -> None:
