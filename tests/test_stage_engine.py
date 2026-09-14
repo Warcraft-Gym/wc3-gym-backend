@@ -1036,6 +1036,7 @@ def team_cup(
     auth: dict[str, str],
     member: Callable[..., dict[str, str]],
     fmt: StageFormat = StageFormat.single_elimination,
+    series_per_round: int = 1,
     **fields: Any,  # noqa: ANN401
 ) -> tuple[int, int, list[int], list[list[str]]]:
     """A 2v2 cup of four pre-made teams.
@@ -1047,7 +1048,10 @@ def team_cup(
     ids = players(8)
     with Session.begin() as session:
         event = Season(
-            name="Team Cup", kind=EventKind.cup, series_per_round=1, published=True
+            name="Team Cup",
+            kind=EventKind.cup,
+            series_per_round=series_per_round,
+            published=True,
         )
         session.add(event)
         session.flush()
@@ -1280,3 +1284,66 @@ def test_a_playoff_seeds_from_the_table_of_the_stage_before(
     assert len([row for row in rows if row["seed"] is None]) == 2
     assert bracket(second) == []
     assert generate(client, auth_headers, event, second) == {"series": 6, "rounds": 2}
+
+
+def test_a_four_team_league_pairs_its_teams_into_fixtures(
+    client: Client,
+    auth_headers: dict[str, str],
+    member: Callable[..., dict[str, str]],
+    replay_uploaded: Callable[..., None],
+) -> None:
+    """Every pair of a round is one fixture holding series_per_round series.
+
+    The captain of a side reports both of them, the fixture score is summed
+    from the series as GNL sums it, and the table ranks by series points.
+    The event names no map rules, as the wizard leaves them, so a fixture
+    series that read them off the event would play the default best of 3.
+    """
+    event, stage, team_ids, rosters = team_cup(
+        client,
+        auth_headers,
+        member,
+        StageFormat.round_robin,
+        series_per_round=2,
+        best_of=5,
+    )
+
+    assert generate(client, auth_headers, event, stage) == {"series": 12, "rounds": 3}
+
+    rows = stage_series(client, event, stage)["series"]
+    # A series in a fixture still plays the best-of its own stage names
+    assert all(row["rules"]["best_of"] == 5 for row in rows)
+    fixtures = [row["match_id"] for row in rows]
+    assert len(set(fixtures)) == 6
+    assert sorted(fixtures.count(one) for one in set(fixtures)) == [2] * 6
+    assert [row["sequence"] for row in rows] == [1, 2] * 6
+    # A team side names its entrant and no user, as it does in a bracket
+    assert all(row["player1_id"] is None and row["player2_id"] is None for row in rows)
+    # Two fixtures a round, each in the round its playday names
+    played = {row["match"]["playday"] for row in rows}
+    assert played == {1, 2, 3}
+    assert all(row["match"]["team1_id"] in team_ids for row in rows)
+    assert all(row["match"]["season_id"] == event for row in rows)
+
+    first = rows[0]["match"]["team1_id"]
+    captain = rosters[team_ids.index(first)][0]
+    for row in rows[:2]:
+        replay_uploaded(row["id"], 1, 2, 3)
+        reported = client.put(
+            f"/player-series/{row['id']}",
+            headers=member(captain),
+            data={
+                "action": "score_updated",
+                "player1_score": "3",
+                "player2_score": "0",
+            },
+        )
+        assert reported.status_code == 200, reported.text
+
+    scored = stage_series(client, event, stage)["series"][0]
+    # A clean win of a Bo5 pays 5, so the fixture score sums its two series
+    assert (scored["match"]["team1_score"], scored["match"]["team2_score"]) == (10, 0)
+    table = client.get(f"/events/{event}/stages/{stage}/standings").json()
+    assert table[0]["rows"][0]["team_id"] == first
+    assert table[0]["rows"][0]["points"] == 2
+    assert table[0]["rows"][0]["won"] == 2

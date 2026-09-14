@@ -190,3 +190,59 @@ def test_a_gnl_series_still_takes_its_rules_from_its_season(
     resp = client.get(f"/series/{seeded['series_open_id']}")
     assert resp.status_code == 200, resp.text
     assert resp.json()["rules"] == {"map_rules": "fixed,loser,loser", "best_of": 3}
+
+
+def test_a_gnl_series_keeps_its_season_rules_under_a_backfilled_stage(
+    client: Client, seeded: dict[str, Any], auth_headers: dict[str, str]
+) -> None:
+    """The events migration gave every season a round robin stage holding a
+    copy of its rules and pointed every round at it. A GNL series names no
+    entrant, so it still prices on its season: a season re-priced on the
+    Season Maps page reaches its series and its fixture score.
+    """
+    from sqlalchemy import select
+    from sqlmodel import col
+
+    from app.core.db import Session
+    from app.models.base import ident
+    from app.models.enums import StageFormat
+    from app.models.event_stage import EventStage
+    from app.models.relationships import DBEventRound
+    from app.models.season import Season
+    from app.models.series import Series
+
+    season_id = seeded["season_id"]
+    with Session.begin() as session:
+        season = session.get(Season, season_id)
+        assert season
+        stage = EventStage(
+            event_id=season_id,
+            position=1,
+            format=StageFormat.round_robin,
+            best_of=3,
+            map_rules=season.map_rules,
+        )
+        session.add(stage)
+        session.flush()
+        for round_ in session.scalars(
+            select(DBEventRound).where(col(DBEventRound.season_id) == season_id)
+        ):
+            round_.stage_id = ident(stage)
+        # A clean win prices 3 on the stale Bo3 and 2 on the season's Bo5
+        played = session.get(Series, seeded["series_played_id"])
+        assert played
+        played.player2_score = 0
+
+    rules = "veto,veto,veto,veto,veto"
+    priced = client.put(
+        f"/seasons/{season_id}", json={"map_rules": rules}, headers=auth_headers
+    )
+    assert priced.status_code == 200, priced.text
+
+    resp = client.get(f"/series/{seeded['series_open_id']}")
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["rules"] == {"map_rules": rules, "best_of": 5}
+
+    fixture = client.get(f"/matches/{seeded['match_id']}")
+    assert fixture.status_code == 200, fixture.text
+    assert (fixture.json()["team1_score"], fixture.json()["team2_score"]) == (2, 0)
