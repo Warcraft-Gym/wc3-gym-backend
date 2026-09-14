@@ -480,20 +480,23 @@ def test_no_stats_in_three_seasons_answers_400_and_writes_no_row(
     assert "S#1234" not in [s["battle_tag"] for s in event["signups"]]
 
 
-def test_a_second_race_replaces_the_first_signup(
+def test_a_second_race_enters_beside_the_first_signup(
     app: FastAPI, client: Client, koth: dict[str, Any]
 ) -> None:
-    """One entrant per player per night: the second race replaces the first."""
+    """One entrant per race: each race sits in the bracket its own rating cuts."""
     rate("P3#3333", Race.HU, 1400)
     rate("P3#3333", Race.NE, 1700)
 
-    first = sign_up(client, "P3#3333", "human").json()
-    second = sign_up(client, "P3#3333", "nightelf").json()
+    first = sign_up(client, "P3#3333", "human")
+    second = sign_up(client, "P3#3333", "nightelf")
 
-    assert (first["race"], first["bracket"]) == ("HU", 1)
-    assert (second["race"], second["bracket"], second["id"]) == ("NE", 3, first["id"])
+    assert first.status_code == 201, first.text
+    assert second.status_code == 201, second.text
     signups = client.get(f"/koth/events/{koth['event_id']}/signups").json()
-    assert [s["battle_tag"] for s in signups].count("P3#3333") == 1
+    mine = sorted(
+        (s["race"], s["bracket"]) for s in signups if s["battle_tag"] == "P3#3333"
+    )
+    assert mine == [("HU", 1), ("NE", 3)]
 
 
 def test_the_profile_signup_reads_the_battle_tag_of_the_logged_in_player(

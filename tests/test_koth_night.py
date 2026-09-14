@@ -15,6 +15,7 @@ from app.models.base import ident
 from app.models.enums import EventKind, Race
 from app.models.user import User
 from app.models.w3c_stats import W3CStats
+from app.services.koth import legacy
 from tests.test_event_entrants import Member
 from tests.test_event_entrants import sign_up as sign_up_to_event
 from tests.test_events import add_event
@@ -116,10 +117,10 @@ def test_a_twitch_signup_lands_in_the_bracket_its_rating_cuts(
     assert [(row["race"], row["mmr"]) for row in rows] == [("HU", 1500)]
 
 
-def test_a_second_signup_replaces_the_race_and_the_bracket(
+def test_a_second_race_enters_beside_the_first(
     client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
 ) -> None:
-    """One entrant per player per night: the second command replaces the first."""
+    """One row per race: each race sits in the bracket its own rating cuts."""
     night = open_night(client, auth_headers)
     user_id = enrol("Two#2000", 1400)
     with Session.begin() as session:
@@ -135,7 +136,93 @@ def test_a_second_signup_replaces_the_race_and_the_bracket(
     assert second.status_code == 200, second.text
     assert second.json()["message"] == "streamer signed up for Bracket 3 (1700 MMR)"
     rows = entrants(client, night["id"])
-    assert [(row["race"], row["mmr"]) for row in rows] == [("NE", 1700)]
+    assert sorted((row["race"], row["mmr"]) for row in rows) == [
+        ("HU", 1400),
+        ("NE", 1700),
+    ]
+    assert len({row["division_id"] for row in rows}) == 2
+
+
+def test_the_same_race_twice_writes_one_row(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """A repeated command reopens the row of that race and adds none."""
+    night = open_night(client, auth_headers)
+    enrol("Same#1000", 1500)
+
+    assert sign_up(client, "Same#1000", "same", "human").status_code == 200
+    second = sign_up(client, "Same#1000", "same", "human")
+
+    assert second.status_code == 200, second.text
+    rows = entrants(client, night["id"])
+    assert [(row["race"], row["mmr"]) for row in rows] == [("HU", 1500)]
+
+
+def test_two_races_in_one_bracket_take_one_seat_in_the_chain(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """Both rows stand and both show; the chain seats the player once.
+
+    The throne series pairs two players, never a player with himself, and the
+    row that took no seat is never appended to the end of the chain either.
+    """
+    night = open_night(client, auth_headers)
+    stage = night["stages"][0]["id"]
+    both = enrol("Both#1", 1500)
+    with Session.begin() as session:
+        session.add(
+            W3CStats(user_id=both, race=Race.NE, wc3_season=20, games=50, mmr=1550)
+        )
+    rival = enrol("Rival#2", 1520)
+    sign_up(client, "Both#1", "both", "human")
+    sign_up(client, "Both#1", "both", "nightelf")
+    sign_up(client, "Rival#2", "rival", "human")
+
+    rows = entrants(client, night["id"])
+    assert sorted(row["race"] for row in rows) == ["HU", "HU", "NE"]
+    assert len({row["division_id"] for row in rows}) == 1
+    series = stage_series(client, night["id"], stage)["series"]
+    assert len(series) == 1
+    assert {series[0]["player1_id"], series[0]["player2_id"]} == {both, rival}
+
+
+def test_a_leave_takes_the_race_it_names_and_every_race_when_it_names_none(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """`!koth leave hu` withdraws that race; `!koth leave` withdraws them all."""
+    night = open_night(client, auth_headers)
+    user_id = enrol("Two#3000", 1400)
+    with Session.begin() as session:
+        session.add(
+            W3CStats(user_id=user_id, race=Race.NE, wc3_season=20, games=50, mmr=1700)
+        )
+    sign_up(client, "Two#3000", "two", "human")
+    sign_up(client, "Two#3000", "two", "nightelf")
+
+    legacy.withdraw("Two#3000", "human")
+
+    left = {row["race"]: row["withdrawn_at"] for row in entrants(client, night["id"])}
+    assert left["HU"] is not None
+    assert left["NE"] is None
+
+    legacy.withdraw("Two#3000")
+
+    rows = entrants(client, night["id"])
+    assert all(row["withdrawn_at"] is not None for row in rows)
+
+
+def test_an_event_that_takes_one_entry_refuses_a_second_race(
+    client: Client, seeded: dict[str, Any], member: Member
+) -> None:
+    """A cup leaves the switch off, so the player keeps his one row."""
+    cup = add_event(kind=EventKind.cup)
+    player = member("1")
+    assert sign_up_to_event(client, cup, player, race="HU").status_code == 201
+
+    second = sign_up_to_event(client, cup, player, race="NE")
+
+    assert second.status_code == 400, second.text
+    assert second.json()["error"] == "This entrant is already signed up"
 
 
 def test_an_unknown_race_answers_400(
@@ -348,3 +435,67 @@ def test_a_signup_that_names_no_race_takes_his_race_inside_the_window(
     assert resp.json()["message"] == "switch signed up for Bracket 2 (1500 MMR)"
     rows = entrants(client, night["id"])
     assert [(row["race"], row["mmr"]) for row in rows] == [("NE", 1500)]
+
+
+def test_a_chain_with_every_series_scored_still_reads_running(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """A night ends when the admin closes it, not when the last result lands."""
+    night = open_night(client, auth_headers)
+    for tag, mmr in (("A#1", 1400), ("B#2", 1300)):
+        enrol(tag, mmr)
+        sign_up(client, tag, tag.split("#")[0], "human")
+    row = stage_series(client, night["id"], night["stages"][0]["id"])["series"][0]
+    assert score(client, auth_headers, row["id"], 1, 0).status_code == 200
+
+    resp = client.get(f"/events/{night['id']}")
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["phase"] == "running"
+    assert resp.json()["closed_at"] is None
+
+
+def test_a_closed_night_reads_finished_and_grows_no_chain(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """The close stamps the night; the stamp is what the phase reads."""
+    night = open_night(client, auth_headers)
+    stage = night["stages"][0]["id"]
+    for tag, mmr in (("A#1", 1400), ("B#2", 1300), ("C#3", 1350)):
+        enrol(tag, mmr)
+        sign_up(client, tag, tag.split("#")[0], "human")
+    late = [row["id"] for row in entrants(client, night["id"])][-1]
+
+    closed = client.post(f"/koth/nights/{night['id']}/close", headers=auth_headers)
+
+    assert closed.status_code == 200, closed.text
+    assert closed.json()["closed_at"] is not None
+    assert closed.json()["phase"] == "finished"
+    resp = client.post(
+        f"/events/{night['id']}/stages/{stage}/series",
+        json={"entrant_id": late},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 400, resp.text
+    assert resp.json()["error"] == "The night is closed"
+
+
+def test_the_chain_refuses_a_player_it_already_names(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """One seat per player in a chain, whichever row asks for the second."""
+    night = open_night(client, auth_headers)
+    stage = night["stages"][0]["id"]
+    for tag, mmr in (("A#1", 1400), ("B#2", 1300)):
+        enrol(tag, mmr)
+        sign_up(client, tag, tag.split("#")[0], "human")
+    playing = entrants(client, night["id"])[0]["id"]
+
+    resp = client.post(
+        f"/events/{night['id']}/stages/{stage}/series",
+        json={"entrant_id": playing},
+        headers=auth_headers,
+    )
+
+    assert resp.status_code == 400, resp.text
+    assert resp.json()["error"] == "This player already plays in that chain"

@@ -3,7 +3,7 @@ type: Domain Concept
 title: Events module
 description: One data model for every kind of event, with GNL and KOTH behaviour in their own modules on top, a stage engine that never branches on kind, and a phase derived on every read.
 tags: [events, architecture, domain]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T15:15:00Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-09-15T09:00:00Z }
 sources:
   - id: events
     resource: ../../../app/services/events.py
@@ -37,7 +37,7 @@ In a single elimination that plays a third-place series, that series decides pla
 
 # Phase
 
-An event's phase is derived on every read and never stored. The rungs, read from the last one back: `draft` while the event is unpublished; `finished` when the last stage by position holds series and every one of them is scored, or when the event has no series and its end has passed (its end date, else the day it starts); `running` once a series has started; `signups_open`; `checkin` while the check-in window of the next dated round is open; `seeded` otherwise. A scored stage with an empty stage after it reads `running`, so a cup whose playoff is still to be drawn is not finished. A list read answers the phase of a page of events from one grouped count, never one query per event.
+An event's phase is derived on every read and never stored. The rungs, read from the last one back: `draft` while the event is unpublished; `finished` when an admin closed the event (`event.closed_at`), when the last stage by position holds series, every one of them is scored and the stage does not plan as a chain, or when the event has no series and its end has passed (its end date, else the day it starts); `running` once a series has started; `signups_open`; `checkin` while the check-in window of the next dated round is open; `seeded` otherwise. A scored stage with an empty stage after it reads `running`, so a cup whose playoff is still to be drawn is not finished. A chain grows while its admin names series, so a scored chain reads `running` until the close stamps the event. A list read answers the phase of a page of events from one grouped count, never one query per event.
 
 # Entrants, seeds, divisions
 

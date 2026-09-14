@@ -296,10 +296,15 @@ def append_to_chain(
 
     The stage qualifies by the shape it plans, never by the kind of its event:
     a format that plans as a chain grows this way and every other one refuses.
-    An event that runs no divisions passes none and grows its one chain.
+    An event that runs no divisions passes none and grows its one chain. A
+    closed event grows no chain, and a player a series of the chain already
+    names takes no second seat in it.
     """
     if not _plans_as_chain(stage):
         raise BadRequestError("This stage plays no chain, so it takes no challenger")
+    event = session.get(Season, stage.event_id)
+    if event is not None and event.closed_at is not None:
+        raise BadRequestError("The night is closed")
     division_id = ident(division) if division else None
     if entrant.event_id != stage.event_id or entrant.division_id != division_id:
         raise BadRequestError("This entrant does not play in that division")
@@ -310,6 +315,9 @@ def append_to_chain(
         raise BadRequestError(
             "The chain holds no series yet; two entrants open it before a third joins"
         )
+    playing = {row.player1_id for row in chain} | {row.player2_id for row in chain}
+    if entrant.user_id is not None and entrant.user_id in playing:
+        raise BadRequestError("This player already plays in that chain")
     last = chain[-1]
     round_row = session.get(DBEventRound, last.round_id)
     if round_row is None:
@@ -1281,13 +1289,31 @@ def _entrants(
         )
     ).all()
     if not divisions:
-        return {None: list(entrants)}
+        return {None: _one_seat_per_player(entrants)}
     return {
-        ident(division): [
-            entrant for entrant in entrants if entrant.division_id == division.id
-        ]
+        ident(division): _one_seat_per_player(
+            [entrant for entrant in entrants if entrant.division_id == division.id]
+        )
         for division in divisions
     }
+
+
+def _one_seat_per_player(field: Sequence[EventEntrant]) -> list[EventEntrant]:
+    """The field with one seat per player, keeping the first row of each.
+
+    An event that takes one entry per race holds a row per race, and the list
+    comes in seed order, so the seat is the race the player seeds highest on.
+    A team row names no player and stays as it is.
+    """
+    seats: list[EventEntrant] = []
+    seated: set[int] = set()
+    for entrant in field:
+        if entrant.user_id is not None:
+            if entrant.user_id in seated:
+                continue
+            seated.add(entrant.user_id)
+        seats.append(entrant)
+    return seats
 
 
 def _fields(

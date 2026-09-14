@@ -3,7 +3,7 @@ type: Domain Concept
 title: KOTH night
 description: A King of the Hill night is one event of the KOTH league with three MMR brackets as divisions, a chain per bracket, and a Twitch chat signup.
 tags: [koth, events, domain]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T14:30:00Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-09-15T09:00:00Z }
 sources:
   - id: night
     resource: ../../../app/services/koth/night.py
@@ -21,7 +21,7 @@ sources:
 
 # Shape
 
-A night is an event of the KOTH league: one stage of format `koth`, best of one, and three divisions that are the brackets, opened at three MMR bounds. The night that takes signups is the newest published KOTH event whose signups stand open. Nothing stores "tonight" or "finished". Closing a night deletes the series nobody played, so every series left carries a result.
+A night is an event of the KOTH league: one stage of format `koth`, best of one, and three divisions that are the brackets, opened at three MMR bounds. The night that takes signups is the newest published KOTH event whose signups stand open. Nothing stores "tonight". A night ends only when an admin closes it: the close deletes the series nobody played and stamps `event.closed_at`, and the stamp is what makes the night read finished. A chain with every series scored and no stamp reads running, and a closed night grows no chain.
 
 Nothing stores a crown either. The king of a bracket is the winner of the last scored series of its chain. Opening a new night carries last night's king first in the seed order; the rest follow on MMR.
 
@@ -33,7 +33,7 @@ Three ways in, all through the shared entrant write under the `anyone` policy:
 - an admin, `POST /events/{id}/entrants/admin`;
 - Twitch chat through Nightbot, `GET /koth/signup`, authenticated with a shared token held in settings, because Nightbot cannot send a body.
 
-A player may enter on more than one race. Each race is its own entrant row with its own MMR and its own bracket; the unique key is (event, user, race). The page lists the player once with the races under him. The chain draw never pairs a player with himself. See [the decision](../decisions/koth-multi-entry.md).
+A player may enter on more than one race. Each race is its own entrant row with its own MMR and its own bracket; the unique key is (event, user, race). The page lists the player once with the races under him. Two rows of one player in one bracket both stay; the chain seats the row with the lower seed and never the second, so the draw never pairs a player with himself. A withdraw that names a race withdraws that row; one that names none withdraws every row of the player. See [the decision](../decisions/koth-multi-entry.md).
 
 # The old payloads
 

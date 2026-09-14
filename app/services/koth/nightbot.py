@@ -2,8 +2,8 @@
 
 Nightbot cannot send a body, so the command is a GET carrying the shared
 token. The signup itself is the shared entrant write under the `anyone`
-policy; only the reply sentence and the one-entrant-per-night rule are KOTH's
-own. A second signup by the same player replaces his race and his bracket.
+policy; only the reply sentence is KOTH's own. A night takes one entry per
+race, so a command naming a second race enters it beside the first.
 """
 
 from typing import TYPE_CHECKING, Any
@@ -18,6 +18,7 @@ from app.models.base import ident
 from app.models.enums import Race, SignupChannel
 from app.models.event_division import EventDivision
 from app.models.event_entrant import EntrantAdd, EventEntrant
+from app.models.season import Season
 from app.models.user import User
 from app.services.events import (
     SEASONS,
@@ -52,7 +53,7 @@ def signup(
 
     with Session.begin() as session:
         user = _by_battle_tag(session, battletag, chosen)
-        row = _entrant(session, event_id, ident(user))
+        row = _entrant(session, event_id, ident(user), chosen)
         division = (
             session.get(EventDivision, row.division_id)
             if row and row.division_id
@@ -72,10 +73,11 @@ def enter(
     race: str | None,
     channel: SignupChannel = SignupChannel.twitch,
 ) -> Race:
-    """Enter one battle tag in a night as its one entrant; answer the race he plays.
+    """Enter one battle tag in a night; answer the race he plays.
 
-    A player the night already holds keeps his row: the race and the bracket
-    are replaced, so a night never holds two entrants for one player.
+    A night that takes one entry per race holds a row per race: the command
+    reopens the row of the race it names, or adds one. Any other event holds
+    one row per player and the command replaces its race and its bracket.
     """
     named = _race(race)
     with Session.begin() as session:
@@ -86,7 +88,9 @@ def enter(
         # A player with no current rating has no bracket, so nothing is written
         if _stats_for(user, chosen, season)[0] is None:
             raise BadRequestError(_no_rating(battle_tag, race))
-        row = _entrant(session, event_id, user_id)
+        night = session.get(Season, event_id)
+        per_race = chosen if night is not None and night.multi_entry else None
+        row = _entrant(session, event_id, user_id, per_race)
         entered = row is not None
         if row is not None:
             row.race = chosen
@@ -157,11 +161,14 @@ def _best_race(user: User, season: int) -> Race:
     return user.race or Race.RANDOM
 
 
-def _entrant(session: OrmSession, event_id: int, user_id: int) -> EventEntrant | None:
-    """The row this player already holds in the night; one per player per night."""
-    return session.scalars(
-        select(EventEntrant).where(
-            col(EventEntrant.event_id) == event_id,
-            col(EventEntrant.user_id) == user_id,
-        )
-    ).first()
+def _entrant(
+    session: OrmSession, event_id: int, user_id: int, race: Race | None = None
+) -> EventEntrant | None:
+    """The row this player holds in the night, or the one he holds on a race."""
+    statement = select(EventEntrant).where(
+        col(EventEntrant.event_id) == event_id,
+        col(EventEntrant.user_id) == user_id,
+    )
+    if race is not None:
+        statement = statement.where(col(EventEntrant.race) == race)
+    return session.scalars(statement).first()

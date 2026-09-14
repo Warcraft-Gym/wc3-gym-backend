@@ -28,7 +28,13 @@ from app.models.user import UserPublic
 class EventEntrant(DBModel, table=True):
     __tablename__ = "event_entrant"
     __table_args__ = (
-        UniqueConstraint("event_id", "user_id"),
+        # An event that takes one entry per race holds a row per race
+        UniqueConstraint(
+            "event_id",
+            "user_id",
+            "race",
+            name="uq_event_entrant_event_id_user_id_race",
+        ),
         UniqueConstraint(
             "event_id", "team_id", name="uq_event_entrant_event_id_team_id"
         ),

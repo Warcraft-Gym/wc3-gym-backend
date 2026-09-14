@@ -88,9 +88,10 @@ def phase_of(
     """The phase of an event, read off what is stored rather than a status column.
 
     The rungs run from the last one back: an unpublished event is a draft, an
-    event whose last stage is played out or whose end has passed is finished,
-    one with a series started is running, then the signup window and the
-    check-in window of the next dated round. Seeded is the resting rung.
+    event an admin closed or whose last stage is played out or whose end has
+    passed is finished, one with a series started is running, then the signup
+    window and the check-in window of the next dated round. Seeded is the
+    resting rung.
 
     Finished takes the last stage: a scored stage with an empty stage after it
     is still running. An event that played nothing is finished once its end
@@ -101,6 +102,8 @@ def phase_of(
     """
     if not event.published:
         return "draft"
+    if event.closed_at is not None:
+        return "finished"
     total, started, scored = (
         counts if counts is not None else series_counts(session, event.id)
     )
@@ -124,32 +127,31 @@ def phase_of(
 def last_stage_drawn(
     session: OrmSession, event_ids: Sequence[int | None]
 ) -> dict[int | None, bool]:
-    """Whether the last stage of each event holds series, in one grouped read.
+    """Whether the last stage of each event is played out, in one grouped read.
 
     An event whose stages are not written reads True: its rounds carry its
     series and it plays no stage after them. A cup whose playoff is still to
-    be drawn reads False, which keeps it running rather than finished.
+    be drawn reads False, which keeps it running rather than finished. A stage
+    that plans as a chain reads False as well: the admin keeps naming series
+    until he closes the event, so the chain is played out when he says so.
     """
     ids = [event_id for event_id in event_ids if event_id is not None]
     if not ids:
         return {}
     rows = session.execute(
-        select(
-            col(EventStage.event_id),
-            col(EventStage.position),
-            func.count(col(Series.id)),
-        )
+        select(EventStage, func.count(col(Series.id)))
         .select_from(EventStage)
         .outerjoin(DBEventRound, col(DBEventRound.stage_id) == col(EventStage.id))
         .outerjoin(Series, col(Series.round_id) == col(DBEventRound.id))
         .where(col(EventStage.event_id).in_(ids))
-        .group_by(col(EventStage.event_id), col(EventStage.position))
+        .group_by(col(EventStage.id))
     ).all()
-    last: dict[int | None, tuple[int, int]] = {}
-    for event_id, position, held in rows:
-        if position >= last.get(event_id, (0, 0))[0]:
-            last[event_id] = (position, held)
-    return {event_id: bool(held) for event_id, (_, held) in last.items()}
+    last: dict[int | None, tuple[int, bool]] = {}
+    for stage, held in rows:
+        played_out = bool(held) and not stage_engine._plans_as_chain(stage)
+        if stage.position >= last.get(stage.event_id, (0, False))[0]:
+            last[stage.event_id] = (stage.position, played_out)
+    return {event_id: played_out for event_id, (_, played_out) in last.items()}
 
 
 def next_round(event: Season) -> DBEventRound | None:
@@ -462,23 +464,29 @@ class EventService:
             return _entrant_publics(session, event, [row])[0]
 
     def withdraw(self, event_id: int, claims: dict[str, Any] | None) -> None:
-        """Stamp the caller's own entrant row as withdrawn; the row stays."""
+        """Stamp the caller's own entrant rows as withdrawn; the rows stay.
+
+        The call names no race, so every active row of the caller goes: an
+        event that takes one entry per race holds one row per race he entered.
+        """
         with Session.begin() as session:
             event = _event(session, event_id)
             user = _caller(session, claims)
-            row = (
-                None
+            rows = (
+                []
                 if user is None
                 else session.scalars(
                     select(EventEntrant).where(
                         col(EventEntrant.event_id) == event.id,
                         col(EventEntrant.user_id) == user.id,
+                        col(EventEntrant.withdrawn_at).is_(None),
                     )
-                ).first()
+                ).all()
             )
-            if row is None or row.withdrawn_at is not None:
+            if not rows:
                 raise NotFoundError("No signup to withdraw")
-            row.withdrawn_at = utcnow()
+            for row in rows:
+                row.withdrawn_at = utcnow()
 
     def check_in(
         self, event_id: int, entrant_id: int, claims: dict[str, Any] | None
@@ -1350,9 +1358,11 @@ def _enter(
         if user_id is not None
         else col(EventEntrant.team_id) == team_id
     )
-    existing = session.scalars(
-        select(EventEntrant).where(col(EventEntrant.event_id) == event.id, side)
-    ).first()
+    statement = select(EventEntrant).where(col(EventEntrant.event_id) == event.id, side)
+    if event.multi_entry and user_id is not None:
+        # One row per race, so the second race of a player is a row of its own
+        statement = statement.where(col(EventEntrant.race) == race)
+    existing = session.scalars(statement).first()
     if existing is not None and existing.withdrawn_at is None:
         raise BadRequestError("This entrant is already signed up")
     _room_for_one_more(session, event)
@@ -1378,11 +1388,21 @@ def _enter(
 
 
 def _room_for_one_more(session: OrmSession, event: Season) -> None:
-    """Refuse the signup that would pass the entrant cap; nothing waits in line."""
+    """Refuse the signup that would pass the entrant cap; nothing waits in line.
+
+    The cap counts entrants, not rows, so the second race of a player on an
+    event that takes one entry per race takes no second seat.
+    """
     if event.entrant_cap is None:
         return
     taken = session.scalar(
-        select(func.count())
+        select(
+            func.count(
+                func.distinct(
+                    func.coalesce(col(EventEntrant.user_id), -col(EventEntrant.team_id))
+                )
+            )
+        )
         .select_from(EventEntrant)
         .where(
             col(EventEntrant.event_id) == event.id,
