@@ -4,6 +4,9 @@ The engine reads the shared rows only and never branches on the kind of an
 event. A GNL stage is drafted by its admin and its captains, so it refuses to
 generate one, and a series with no feeders answers nothing when it is scored
 or reopened: every GNL payload holds.
+
+A round robin over team entrants writes a fixture per pair, which the series
+of that pair hang under, so a team league is read exactly as GNL is read.
 """
 
 from collections.abc import Sequence
@@ -20,7 +23,9 @@ from app.models.enums import StageFormat
 from app.models.event_division import EventDivision
 from app.models.event_entrant import EventEntrant
 from app.models.event_stage import DivisionStandings, EventStage, StandingRow
+from app.models.match import Match
 from app.models.relationships import DBEventRound, EventRoundPublic
+from app.models.season import Season
 from app.models.series import (
     ResultKindWrite,
     Series,
@@ -108,10 +113,15 @@ def generate(
         rounds: dict[int, DBEventRound] = {
             number - first: row for number, row in held.items()
         }
+        per_fixture = _series_per_fixture(session, event_id)
         made: list[Series] = []
         for division, field in fields.items():
             plan = plans[division]
             shift = depth - len(plan.rounds) if stage.format in BRACKETS else 0
+            # A round robin over a field of teams pairs them into fixtures
+            pairs = stage.format is StageFormat.round_robin and all(
+                entrant.team_id for entrant in field
+            )
             rows: list[Series] = []
             counts: dict[int, int] = {}
             for planned in plan.series:
@@ -128,19 +138,30 @@ def generate(
                     session.flush()
                     rounds[place] = round_row
                 counts[place] = counts.get(place, 0) + 1
-                rows.append(
-                    _row(
-                        session,
-                        stage,
-                        round_row,
-                        division,
-                        field,
-                        rows,
-                        planned,
-                        size,
+                teams = _team_pair(field, planned) if pairs else None
+                if teams is None:
+                    rows.append(
+                        _row(
+                            session,
+                            stage,
+                            round_row,
+                            division,
+                            field,
+                            rows,
+                            planned,
+                            size,
+                        )
                     )
-                )
-                rows[-1].sequence = counts[place]
+                    rows[-1].sequence = counts[place]
+                    continue
+                fixture = _fixture(session, event_id, round_row, division, teams)
+                for sequence in range(1, per_fixture + 1):
+                    row = _row(
+                        session, stage, round_row, division, field, rows, planned, size
+                    )
+                    row.match_id = ident(fixture)
+                    row.sequence = sequence
+                    rows.append(row)
             made += rows
         session.flush()
         # A padded pair was written as a walkover; its winner moves on now
@@ -374,14 +395,54 @@ def _fill_teams(session: OrmSession, rows: Sequence[StageSeriesRow]) -> None:
         row.team2 = teams.get(row.entrant2_id or 0)
 
 
-def _drawn(numbers: dict[int, int], row: Series) -> tuple[int, int, int, int]:
-    """Where a series is drawn: its round, its division, its place, its id."""
+def _drawn(numbers: dict[int, int], row: Series) -> tuple[int, int, int, int, int]:
+    """Where a series is drawn: its round, its division, its fixture, its
+    place, its id. A loose series carries no fixture and sorts before one."""
     return (
         numbers.get(row.round_id or 0, 0),
         row.division_id or 0,
+        row.match_id or 0,
         row.sequence or 0,
         ident(row),
     )
+
+
+def _series_per_fixture(session: OrmSession, event_id: int) -> int:
+    """How many series one fixture of the event holds, at least one."""
+    event = session.get(Season, event_id)
+    return max(event.series_per_round if event else 1, 1)
+
+
+def _team_pair(
+    field: Sequence[EventEntrant], planned: brackets.PlannedSeries
+) -> tuple[int, int] | None:
+    """The two teams a planned pair names, or nothing when a side is a player."""
+    if planned.slot1.seed is None or planned.slot2.seed is None:
+        return None
+    first = field[planned.slot1.seed - 1].team_id
+    second = field[planned.slot2.seed - 1].team_id
+    return (first, second) if first and second else None
+
+
+def _fixture(
+    session: OrmSession,
+    event_id: int,
+    round_row: DBEventRound,
+    division_id: int | None,
+    teams: tuple[int, int],
+) -> Match:
+    """Write the fixture two teams play in a round; its series hang under it."""
+    row = Match(
+        season_id=event_id,
+        playday=round_row.number,
+        round_id=ident(round_row),
+        division_id=division_id,
+        team1_id=teams[0],
+        team2_id=teams[1],
+    )
+    session.add(row)
+    session.flush()
+    return row
 
 
 def _row(
