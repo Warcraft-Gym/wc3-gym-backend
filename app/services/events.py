@@ -65,7 +65,9 @@ from app.models.team import Team
 from app.models.team_reduced import TeamReduced
 from app.models.types import utcnow
 from app.models.user import User, UserPublic
+from app.models.user_team_season import DBUserTeamSeason
 from app.models.w3c_stats import W3CStats
+from app.services import stage_engine
 
 # How many W3C seasons back a rating is still the player's current one
 SEASONS = 3
@@ -500,7 +502,11 @@ class EventService:
     def set_seeds(
         self, event_id: int, stage_id: int, data: SeedWrite
     ) -> list[EventEntrantPublic]:
-        """Number the entrants 1..n inside each division and stamp the source."""
+        """Number the entrants 1..n inside each division and stamp the source.
+
+        An entrant the order leaves out loses its seed, which is what seeding
+        from the stage before writes: only the places that came through play.
+        """
         with Session.begin() as session:
             event = _event(session, event_id)
             stage = _stage(session, event_id, stage_id)
@@ -508,12 +514,21 @@ class EventService:
                 raise BadRequestError("The seeds of this stage are locked")
             rows = _live_entrants(session, event_id)
             mmrs = _mmrs(session, rows)
+            order = (
+                _from_previous_stage(session, event_id, stage, rows)
+                if data.source is SeedSource.previous_stage
+                else _seed_order(rows, mmrs, data)
+            )
             taken: dict[int | None, int] = {}
-            for row in _seed_order(rows, mmrs, data):
+            for row in order:
                 taken[row.division_id] = taken.get(row.division_id, 0) + 1
                 row.seed = taken[row.division_id]
                 row.seed_source = data.source.value
                 row.mmr_at_seed = mmrs[ident(row)]
+            seeded = {ident(row) for row in order}
+            for row in rows:
+                if ident(row) not in seeded:
+                    row.seed = None
             session.flush()
             rows.sort(key=lambda row: (row.division_id or 0, row.seed or 0))
             return _entrant_publics(session, event, rows)
@@ -936,7 +951,8 @@ def _entrant_publics(
 ) -> list[EventEntrantPublic]:
     """The entrant payloads of one event, with the players and teams behind them.
 
-    Two reads fill every row: the players with their W3C stats, and the teams.
+    Three reads fill every row: the players with their W3C stats, the teams,
+    and the rosters the rating of a team entrant is the mean of.
     """
     team_ids = {row.team_id for row in rows if row.team_id}
     users = _users_for(session, rows)
@@ -945,7 +961,8 @@ def _entrant_publics(
         for team in session.scalars(select(Team).where(col(Team.id).in_(team_ids)))
     }
     season = _w3c_season(session)
-    return [_entrant_public(event, row, users, teams, season) for row in rows]
+    means = _team_mmrs(session, rows, season)
+    return [_entrant_public(event, row, users, teams, means, season) for row in rows]
 
 
 def _users_for(
@@ -968,14 +985,76 @@ def _users_for(
 
 
 def _mmrs(session: OrmSession, rows: Sequence[EventEntrant]) -> dict[int, int | None]:
-    """Each entrant against the rating of the race it signed up on; a team has none."""
+    """Each entrant against the rating of the race it signed up on.
+
+    A team answers the mean of its roster, so a division cut and a seed order
+    read one number for every entrant, whoever stands behind it.
+    """
     users = _users_for(session, rows)
     season = _w3c_season(session)
+    teams = _team_mmrs(session, rows, season)
+    return {ident(row): _entrant_mmr(row, users, teams, season) for row in rows}
+
+
+def _entrant_mmr(
+    row: EventEntrant,
+    users: dict[int | None, User],
+    teams: dict[int, int | None],
+    season: int,
+) -> int | None:
+    """The rating of one entrant: the team mean, or the player on its signup race."""
+    if row.team_id is not None:
+        return teams.get(row.team_id)
+    if row.user_id not in users:
+        return None
+    return _stats_for(users[row.user_id], row.race, season)[0]
+
+
+def _team_mmrs(
+    session: OrmSession, rows: Sequence[EventEntrant], season: int
+) -> dict[int, int | None]:
+    """Every team entrant against the mean rating of its live roster.
+
+    Two reads answer the whole list, never one per team: the rosters through
+    user_team_season against the event the team entered, and the races those
+    members signed up on. A member is rated the way a solo entrant is, on his
+    signup race or on the race his profile names when he made no signup, and
+    a team no member of which is rated answers None, as an unrated player does.
+    """
+    teams = {row.team_id for row in rows if row.team_id is not None}
+    if not teams:
+        return {}
+    events = {row.event_id for row in rows if row.team_id is not None}
+    members = session.scalars(
+        select(DBUserTeamSeason)
+        .options(
+            selectinload(rel(DBUserTeamSeason.user)).selectinload(rel(User.w3c_stats))
+        )
+        .where(
+            col(DBUserTeamSeason.team_id).in_(teams),
+            col(DBUserTeamSeason.season_id).in_(events),
+        )
+    ).all()
+    races = {
+        user_id: race
+        for user_id, race in session.execute(
+            select(col(DBUserSeasonSignup.user_id), col(DBUserSeasonSignup.race)).where(
+                col(DBUserSeasonSignup.season_id).in_(events),
+                col(DBUserSeasonSignup.user_id).in_(
+                    {member.user_id for member in members}
+                ),
+            )
+        ).all()
+    }
+    rated: dict[int, list[int]] = {team_id: [] for team_id in teams}
+    for member in members:
+        race = races.get(member.user_id) or member.user.race
+        mmr = _stats_for(member.user, race, season)[0]
+        if mmr is not None:
+            rated[member.team_id].append(mmr)
     return {
-        ident(row): _stats_for(users[row.user_id], row.race, season)[0]
-        if row.user_id in users
-        else None
-        for row in rows
+        team_id: round(sum(mmrs) / len(mmrs)) if mmrs else None
+        for team_id, mmrs in rated.items()
     }
 
 
@@ -991,15 +1070,16 @@ def _seed_order(
 ) -> list[EventEntrant]:
     """The whole entrant list in seed order; the stage numbers it per division.
 
-    The two sources that read standings wait for the stage engine and refuse
-    with `not_built`. An entrant the order list leaves out follows on MMR.
+    A qualifier seeds from the entrant list of a parent event, which is not
+    wired yet, so it refuses with `not_built`. An entrant the order list
+    leaves out follows on MMR.
     """
-    if data.source in (SeedSource.previous_stage, SeedSource.qualifier):
+    if data.source is SeedSource.qualifier:
         raise ApiError(
             400,
             {
                 "error": "not_built",
-                "message": f"Seeding from {data.source.value} lands with the engine",
+                "message": "Seeding from a qualifier waits on the parent event",
             },
         )
     if data.source is SeedSource.random:
@@ -1019,17 +1099,44 @@ def _seed_order(
     return [by_id[entrant_id] for entrant_id in named] + _by_mmr(rest, mmrs)
 
 
+def _from_previous_stage(
+    session: OrmSession,
+    event_id: int,
+    stage: EventStage,
+    rows: Sequence[EventEntrant],
+) -> list[EventEntrant]:
+    """The entrants the stage before sends on, in the order `advance` seeds them.
+
+    The order is the standings of that stage, top `advance_count` places per
+    division, so a playoff seeded by hand and one seeded by `advance` read the
+    same. Nothing is generated here.
+    """
+    before = stage_engine.previous_stage(session, event_id, stage)
+    if before is None:
+        raise BadRequestError("This stage is the first one of the event")
+    by_id = {ident(row): row for row in rows}
+    return [
+        by_id[entrant_id]
+        for division in stage_engine.advancing(session, event_id, before)
+        for entrant_id in division
+        if entrant_id in by_id
+    ]
+
+
 def _entrant_public(
     event: Season,
     row: EventEntrant,
     users: dict[int | None, User],
     teams: dict[int | None, Team],
+    means: dict[int, int | None],
     season: int,
 ) -> EventEntrantPublic:
-    """One entrant payload: the identity, the rating on the signup race, the warnings."""
+    """One entrant payload: the identity, the rating it is seeded on, the warnings."""
     user = users.get(row.user_id)
     team = teams.get(row.team_id)
     mmr, games = _stats_for(user, row.race, season) if user else (None, 0)
+    if row.team_id is not None:
+        mmr = means.get(row.team_id)
     return EventEntrantPublic(
         id=ident(row),
         event_id=row.event_id,

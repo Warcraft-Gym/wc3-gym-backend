@@ -481,6 +481,38 @@ def _stage_of(session: OrmSession, row: Series) -> EventStage | None:
     return session.get(EventStage, round_row.stage_id)
 
 
+def previous_stage(
+    session: OrmSession, event_id: int, stage: EventStage
+) -> EventStage | None:
+    """The stage before this one: the table `previous_stage` seeding reads."""
+    return session.scalars(
+        select(EventStage)
+        .where(
+            col(EventStage.event_id) == event_id,
+            col(EventStage.position) < stage.position,
+        )
+        .order_by(col(EventStage.position).desc())
+    ).first()
+
+
+def advancing(session: OrmSession, event_id: int, stage: EventStage) -> list[list[int]]:
+    """The entrant ids every division of the stage sends on, in its table order.
+
+    The top `advance_count` places go through, or the whole table when the
+    stage names no count. Both `advance` and a `previous_stage` seed write
+    read this one order.
+    """
+    return [
+        [
+            line.entrant_id
+            for line in (
+                table.rows[: stage.advance_count] if stage.advance_count else table.rows
+            )
+        ]
+        for table in _tables(session, event_id, stage)
+    ]
+
+
 def _next_stage(
     session: OrmSession, event_id: int, stage: EventStage
 ) -> EventStage | None:
@@ -778,15 +810,14 @@ def _advance(session: OrmSession, event_id: int, stage: EventStage) -> int:
     if not rows or any(not scored(row) for row in rows):
         raise BadRequestError("Every series of the stage needs a result first")
     carried: set[int] = set()
-    for table in _tables(session, event_id, stage):
-        top = table.rows[: stage.advance_count] if stage.advance_count else table.rows
-        for place, line in enumerate(top, start=1):
-            entrant = session.get(EventEntrant, line.entrant_id)
+    for division in advancing(session, event_id, stage):
+        for place, entrant_id in enumerate(division, start=1):
+            entrant = session.get(EventEntrant, entrant_id)
             if entrant is None:
                 continue
             entrant.seed = place
             entrant.seed_source = "previous_stage"
-            carried.add(line.entrant_id)
+            carried.add(entrant_id)
     for entrant in session.scalars(
         select(EventEntrant).where(col(EventEntrant.event_id) == event_id)
     ):
