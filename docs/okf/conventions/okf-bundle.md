@@ -3,7 +3,7 @@ type: Convention
 title: How this bundle is written
 description: The rules for every file under docs/okf, and the one rule for talking about the other repositories.
 tags: [okf, documentation]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T15:15:00Z }
 sources:
   - id: okf-spec
     resource: https://github.com/GoogleCloudPlatform/open-knowledge-format/blob/main/SPEC.md
@@ -73,3 +73,4 @@ The bundle is public. Never write a secret, a token, a database URL, an account 
 - `log.md` gets one line per change, newest first.
 - GitHub Pages serves a graph viewer of this bundle, built from the bundle by the `pages.yml` workflow on every push to `main` with the viewer from the OKF reference repository. Nothing is committed for it: `just okf-graph` writes a local preview to `docs/okf/index.html`, which git ignores.
 - `uv run just test` runs `tests/test_okf.py`. It checks that every concept has a `type`, that `index.md` files carry no frontmatter except the root one, and that every relative link resolves to a file.
+- Every table has one `Data Model` concept under `data/tables/`, named after the table. Its `# Schema` section lists every column with its meaning, one row per column, the column name backticked in the first cell. `tests/test_okf.py` fails when a column is added, dropped or renamed without the concept, and when a concept names a table that does not exist. A pull request that changes a column changes the concept.
