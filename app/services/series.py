@@ -58,7 +58,7 @@ class SeriesService:
     def add(self, series: SeriesCreate) -> SeriesPublic:
         with Session.begin() as session:
             row = Series.add(session, series.model_dump())
-            both_scores(row, stage_engine.wins_of(session, row))
+            both_scores(row, stage_engine.series_wins(session, row))
             in_season(row)
             derived.clear_kept_off_race(session, row)
             public = SeriesPublic.from_series(row)
@@ -78,7 +78,7 @@ class SeriesService:
             was_scored = stage_engine.scored(row)
             was_slot = stage_engine.won_slot(row)
             Series.update_object(session, row, **series.model_dump(exclude_unset=True))
-            both_scores(row, stage_engine.wins_of(session, row))
+            both_scores(row, stage_engine.series_wins(session, row))
             in_season(row)
             derived.clear_kept_off_race(session, row)
             stage_engine.after_score(session, row, was_scored, was_slot, force)

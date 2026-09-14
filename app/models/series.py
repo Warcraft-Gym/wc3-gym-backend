@@ -48,7 +48,7 @@ class SeriesBase(SQLModel):
 
 class Series(SeriesBase, DBModel, table=True):
     __tablename__ = "series"
-    # A pair of players meet once inside a team series
+    # A pair of players meet once inside a fixture
     __table_args__ = (
         Index(
             "uq_series_match_id_player1_id_player2_id",

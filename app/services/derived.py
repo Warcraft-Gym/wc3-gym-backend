@@ -242,7 +242,11 @@ def clear_kept_off_race(session: Session, row: Series) -> None:
         return
     signed = _signup_races(
         session,
-        {(side, season_id) for side in (row.player1_id, row.player2_id) if side},
+        {
+            (side, season_id)
+            for side in (row.player1_id, row.player2_id)
+            if side is not None
+        },
     )
     for user_id, field in (
         (row.player1_id, "player1_off_race"),

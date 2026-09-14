@@ -12,9 +12,12 @@ from httpx2 import Client
 
 from app.core.db import Session
 from app.models.base import ident
-from app.models.enums import Race
+from app.models.enums import EventKind, Race
 from app.models.user import User
 from app.models.w3c_stats import W3CStats
+from tests.test_event_entrants import Member
+from tests.test_event_entrants import sign_up as sign_up_to_event
+from tests.test_events import add_event
 from tests.test_stage_engine import score, stage_series
 
 TOKEN = "test-nightbot-token"
@@ -150,6 +153,35 @@ def test_a_signup_with_no_night_open_is_refused(
     resp = sign_up(client, "Any#1", "streamer", "human")
     assert resp.status_code == 400
     assert resp.json()["error"] == "No KOTH night is open"
+
+
+def test_a_koth_write_refuses_an_id_from_another_kind_of_event(
+    client: Client,
+    auth_headers: dict[str, str],
+    seeded: dict[str, Any],
+    member: Member,
+) -> None:
+    """The old routes take a bare id, so each one checks the kind behind it."""
+    cup = add_event(kind=EventKind.cup)
+    entrant_id = sign_up_to_event(client, cup, member("1")).json()["id"]
+
+    bracket = client.put(
+        f"/koth/signups/{entrant_id}/bracket",
+        json={"bracket": 2},
+        headers=auth_headers,
+    )
+    scored = client.put(
+        f"/koth/matches/{seeded['series_open_id']}/result",
+        json={"winner_team_number": 1},
+        headers=auth_headers,
+    )
+    dropped = client.delete(
+        f"/koth/matches/{seeded['series_open_id']}", headers=auth_headers
+    )
+
+    assert bracket.status_code == 404, bracket.text
+    assert scored.status_code == 404, scored.text
+    assert dropped.status_code == 404, dropped.text
 
 
 def test_two_signups_in_one_bracket_draw_the_throne_series(

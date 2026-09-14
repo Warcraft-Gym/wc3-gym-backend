@@ -76,8 +76,8 @@ class EventKind(enum.Enum):
 
 
 class StageFormat(enum.Enum):
-    """How one stage plays its entrants off. v1 builds round_robin, gnl,
-    single_elimination and koth; the rest answer format_not_built."""
+    """How one stage plays its entrants off. A format the engine does not draw
+    refuses the generate call and names itself."""
 
     round_robin = "round_robin"
     # The admin sets the fixtures of a round and the captains draft the series

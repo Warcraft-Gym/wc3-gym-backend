@@ -24,6 +24,11 @@ from app.services.users import UserService
 
 # A reply is public in the channel, or a private edit of the deferred "thinking" reply
 PUBLIC, PRIVATE = True, False
+# What a press answers a Discord account that no player row names
+LINK_FIRST = (
+    "Your Discord account is not linked to a player yet. "
+    "Sign in on the site once, then press again."
+)
 # The UK nations Discord draws as flags; Northern Ireland has no emoji
 NATION_FLAGS = ("GB-ENG", "GB-SCT", "GB-WLS")
 # The app emoji before a cast link, by the link's host; `just discord-emojis` uploads them

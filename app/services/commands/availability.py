@@ -13,7 +13,13 @@ from app.core.exceptions import ApiError, BadRequestError
 from app.models.relationships import SeasonRoundPublic
 from app.services import discord_roles
 from app.services.availability import NO_SCHEDULING, AvailabilityService
-from app.services.commands.base import PRIVATE, PUBLIC, caller, options_of
+from app.services.commands.base import (
+    LINK_FIRST,
+    PRIVATE,
+    PUBLIC,
+    caller,
+    options_of,
+)
 
 if TYPE_CHECKING:
     from app.services.interactions import Services
@@ -105,10 +111,7 @@ def press(payload: dict[str, Any], services: "Services") -> tuple[dict[str, Any]
     discord_id, _ = caller(payload)
     user_id = services.users.id_by_discord_id(discord_id)
     if user_id is None:
-        return {
-            "content": "Your Discord account is not linked to a player yet. "
-            "Sign in on the site once, then press again."
-        }, PRIVATE
+        return {"content": LINK_FIRST}, PRIVATE
     season = services.seasons.get(int(season_id))
     try:
         AvailabilityService().set(

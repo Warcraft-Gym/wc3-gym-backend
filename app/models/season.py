@@ -54,8 +54,9 @@ if TYPE_CHECKING:
 
 class SeasonBase(SQLModel):
     name: Annotated[str, NumToStr] = Field(max_length=50)
-    # How many series each player plays per round. How many rounds the season
-    # has is not stored: the round rows are the count.
+    # How many series one fixture holds, and a fixture pairs two team
+    # entrants, so it reads only on a team event. How many rounds the season has
+    # is not stored: the round rows are the count.
     series_per_round: int
     pick_ban: Annotated[str | None, NumToStr] = Field(default=None, max_length=100)
     start_date: Annotated[date | None, LenientDate] = None
@@ -278,7 +279,11 @@ def _phase(
 
 
 # How many rounds the season is played over: the round rows are the count, so
-# nothing stores it. A scalar subquery, so it survives a noload on a nested season.
+# nothing stores it. A scalar subquery, so it survives a noload on a nested
+# season, where a relationship count would answer null or load the rows.
+# The price: a query that loads a Season may not also join event_round, because
+# the subquery would lose its own FROM, so a series read that wants its round
+# number reads the rounds first and orders in Python (stage_engine.series_of).
 ROUND_COUNT = (
     select(func.count())
     .select_from(DBEventRound)
@@ -468,7 +473,7 @@ EventPhase = Literal[
 # What a member checks into: one round of the event, or the event itself
 CheckinShape = Literal["event", "round"]
 
-# What the check-in shows a player for one round; app/core/availability.py reads it
+# What the check-in shows a player for one round; app/core/checkin_hint.py reads it
 AvailabilityHint = Literal["answered_yes", "answered_no", "blocked_by_blocks", "open"]
 
 # The one action a member's event row offers; app/services/events.py computes it
@@ -511,10 +516,13 @@ class EventPublic(SQLModel):
     mmr_max: int | None = None
     entrant_cap: int | None = None
     checkin_days: int | None = None
-    # How many series each entrant plays per round of the event
+    # How many series one fixture holds, and a fixture pairs two team
+    # entrants, so it reads only on a team event.
     series_per_round: int = 1
     # Computed by the service on every read; null when the event is nested
     phase: EventPhase | None = None
+    # Whether the check-in stands open today; null on a list read
+    checkin_open: bool | None = None
     # The entrants who have not withdrawn; null on a list read
     entrant_count: int | None = None
     stages: list[EventStagePublic] = []
@@ -524,7 +532,8 @@ class EventPublic(SQLModel):
 
 
 class EventCreate(SQLModel):
-    """A new event. Its stages come from the body, or one default stage is made."""
+    """A new event. Its stages come from the body, or one default stage is made;
+    an explicit empty list writes no stage at all."""
 
     name: Annotated[str, NumToStr]
     league_id: int | None = None
@@ -549,7 +558,8 @@ class EventCreate(SQLModel):
     min_games: int | None = None
     mmr_max: int | None = None
     entrant_cap: int | None = None
-    # How many series each entrant plays per round of a round-robin stage
+    # How many series one fixture holds, and a fixture pairs two team
+    # entrants, so it reads only on a team event.
     series_per_round: int = 1
     stages: list[EventStageWrite] = []
 

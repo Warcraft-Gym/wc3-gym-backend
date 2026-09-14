@@ -329,7 +329,7 @@ def match_result(match_id: int, winner_team_number: int) -> KothMatchPublic:
     with Session.begin() as session:
         row = _series(session, match_id)
         event_id = _event_of(session, row)
-        wins = stage_engine.wins_of(session, row)
+        wins = stage_engine.series_wins(session, row)
     first, second = (wins, 0) if winner_team_number == 1 else (0, wins)
     SeriesService().update(
         match_id,
@@ -355,6 +355,12 @@ def _night(session: OrmSession, event_id: int) -> Season:
     return row
 
 
+def _is_night(session: OrmSession, event_id: int | None) -> bool:
+    """Whether that event id names a KOTH night, so these paths may write it."""
+    row = session.get(Season, event_id) if event_id is not None else None
+    return row is not None and row.kind is EventKind.koth
+
+
 def _nights(session: OrmSession) -> list[Season]:
     return list(
         session.scalars(
@@ -366,15 +372,20 @@ def _nights(session: OrmSession) -> list[Season]:
 
 
 def _entrant(session: OrmSession, signup_id: int) -> EventEntrant:
+    """The signup behind an old id; a signup of another kind of event is none."""
     row = session.get(EventEntrant, signup_id)
-    if row is None:
+    if row is None or not _is_night(session, row.event_id):
         raise NotFoundError(f"Signup not found by Id: {signup_id}")
     return row
 
 
 def _series(session: OrmSession, match_id: int) -> Series:
+    """The series behind an old id; a series of another kind of event is none."""
     row = session.get(Series, match_id)
     if row is None:
+        raise NotFoundError(f"Match not found by Id: {match_id}")
+    round_row = session.get(DBEventRound, row.round_id)
+    if round_row is None or not _is_night(session, round_row.season_id):
         raise NotFoundError(f"Match not found by Id: {match_id}")
     return row
 

@@ -268,7 +268,7 @@ def test_a_round_a_match_sits_on_holds_the_count_up(
 
     assert resp.status_code == 400, resp.text
     assert resp.json() == {
-        "error": "round 3 still holds matches; delete them before the count falls"
+        "error": "Round 3 still holds fixtures; delete them before the count falls"
     }
 
 

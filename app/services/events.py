@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session as OrmSession
 from sqlalchemy.orm import noload, selectinload
 from sqlmodel import col
 
-from app.core.availability import availability_hint
+from app.core.checkin_hint import availability_hints
 from app.core.db import Session, rel
 from app.core.divisions import cut
 from app.core.exceptions import ApiError, BadRequestError, NotFoundError
@@ -62,6 +62,7 @@ from app.models.season import (
     series_counts,
     series_counts_by_event,
 )
+from app.models.series import Series
 from app.models.settings import Settings
 from app.models.team import Team
 from app.models.team_reduced import TeamReduced
@@ -79,22 +80,37 @@ W3C_SEASON_KEY = "current_w3c_season"
 
 
 def phase_of(
-    session: OrmSession, event: Season, counts: tuple[int, int, int] | None = None
+    session: OrmSession,
+    event: Season,
+    counts: tuple[int, int, int] | None = None,
+    last_stage: bool | None = None,
 ) -> EventPhase:
     """The phase of an event, read off what is stored rather than a status column.
 
     The rungs run from the last one back: an unpublished event is a draft, an
-    event whose series are all scored or whose end date has passed is
-    finished, one with a series started is running, then the signup window and
-    the check-in window of the first round. Seeded is the resting rung.
-    Pass `counts` to reuse one grouped series count over a page of events.
+    event whose last stage is played out or whose end has passed is finished,
+    one with a series started is running, then the signup window and the
+    check-in window of the next dated round. Seeded is the resting rung.
+
+    Finished takes the last stage: a scored stage with an empty stage after it
+    is still running. An event that played nothing is finished once its end
+    has passed, which is its end date, else the day it starts on.
+
+    Pass `counts` and `last_stage` to reuse one grouped read over a page of
+    events.
     """
     if not event.published:
         return "draft"
     total, started, scored = (
         counts if counts is not None else series_counts(session, event.id)
     )
-    if (total and total == scored) or (event.end_date and event.end_date < _today()):
+    drawn = (
+        last_stage
+        if last_stage is not None
+        else last_stage_drawn(session, [event.id]).get(event.id, True)
+    )
+    end = event.end_date or (None if total else _start(event))
+    if (total and total == scored and drawn) or (end and end < _today()):
         return "finished"
     if started:
         return "running"
@@ -103,6 +119,37 @@ def phase_of(
     if event.checkin_enabled and checkin_open(event):
         return "checkin"
     return "seeded"
+
+
+def last_stage_drawn(
+    session: OrmSession, event_ids: Sequence[int | None]
+) -> dict[int | None, bool]:
+    """Whether the last stage of each event holds series, in one grouped read.
+
+    An event whose stages are not written reads True: its rounds carry its
+    series and it plays no stage after them. A cup whose playoff is still to
+    be drawn reads False, which keeps it running rather than finished.
+    """
+    ids = [event_id for event_id in event_ids if event_id is not None]
+    if not ids:
+        return {}
+    rows = session.execute(
+        select(
+            col(EventStage.event_id),
+            col(EventStage.position),
+            func.count(col(Series.id)),
+        )
+        .select_from(EventStage)
+        .outerjoin(DBEventRound, col(DBEventRound.stage_id) == col(EventStage.id))
+        .outerjoin(Series, col(Series.round_id) == col(DBEventRound.id))
+        .where(col(EventStage.event_id).in_(ids))
+        .group_by(col(EventStage.event_id), col(EventStage.position))
+    ).all()
+    last: dict[int | None, tuple[int, int]] = {}
+    for event_id, position, held in rows:
+        if position >= last.get(event_id, (0, 0))[0]:
+            last[event_id] = (position, held)
+    return {event_id: bool(held) for event_id, (_, held) in last.items()}
 
 
 def next_round(event: Season) -> DBEventRound | None:
@@ -333,15 +380,29 @@ class EventService:
                 .order_by(col(Season.id).desc())
             ).all()
             joined = _joined_events(session, user_id)
-            counts = series_counts_by_event(session, [event.id for event in events])
+            ids = [event.id for event in events]
+            counts = series_counts_by_event(session, ids)
+            drawn = last_stage_drawn(session, ids)
             rounds = {event.id: next_round(event) for event in events}
-            hints = _round_hints(session, user_id, rounds)
+            # Only an event whose check-in is on and dated shows a hint
+            hints = _round_hints(
+                session,
+                user_id,
+                {
+                    event.id: round_
+                    for event in events
+                    if event.checkin_enabled
+                    and event.id is not None
+                    and (round_ := rounds.get(event.id)) is not None
+                },
+            )
             answered = _round_answers(session, user_id, rounds)
             return [
                 _member_row(
                     session,
                     event,
                     counts.get(event.id, NO_SERIES),
+                    drawn.get(event.id, True),
                     event.id in joined,
                     joined.get(event.id),
                     rounds.get(event.id),
@@ -708,22 +769,19 @@ def _joined_events(
 def _round_hints(
     session: OrmSession,
     user_id: int | None,
-    rounds: dict[int | None, DBEventRound | None],
+    rounds: dict[int, DBEventRound],
 ) -> dict[int, AvailabilityHint]:
-    """The caller's hint for the next round of every event that has one.
+    """The caller's hint for the next round of every event that shows one.
 
     The round shape stores the check-in as a round_availability row, so the
-    member rows read it there and never off the entrant stamp. Only an event
-    that is still running carries a next round, so this reads a few rounds.
+    member rows read it there and never off the entrant stamp. The caller
+    passes only the events that show a hint, and one read of the caller's
+    blocks answers them all.
     """
     user = session.get(User, user_id) if user_id is not None else None
-    if user is None:
+    if user is None or not rounds:
         return {}
-    return {
-        event_id: availability_hint(session, user, round_)
-        for event_id, round_ in rounds.items()
-        if event_id is not None and round_ is not None
-    }
+    return availability_hints(session, user, rounds)
 
 
 def _round_answers(
@@ -784,6 +842,7 @@ def _member_row(
     session: OrmSession,
     event: Season,
     counts: tuple[int, int, int],
+    last_stage: bool,
     joined: bool,
     entrant: EventEntrant | None,
     round_: DBEventRound | None,
@@ -791,7 +850,7 @@ def _member_row(
     answered_at: datetime | None,
 ) -> MemberEventRow:
     """One member home row: the event, and what the caller may do with it."""
-    phase = phase_of(session, event, counts)
+    phase = phase_of(session, event, counts, last_stage)
     is_open = event.checkin_enabled and checkin_open(event)
     shape = (
         None
@@ -849,9 +908,16 @@ def _member_action(
 
 def _publics(session: OrmSession, events: Sequence[Season]) -> list[EventPublic]:
     """A page of event payloads, with one grouped series count behind their phases."""
-    counts = series_counts_by_event(session, [event.id for event in events])
+    ids = [event.id for event in events]
+    counts = series_counts_by_event(session, ids)
+    drawn = last_stage_drawn(session, ids)
     return [
-        _public(session, event, counts=counts.get(event.id, NO_SERIES))
+        _public(
+            session,
+            event,
+            counts=counts.get(event.id, NO_SERIES),
+            last_stage=drawn.get(event.id, True),
+        )
         for event in events
     ]
 
@@ -862,15 +928,17 @@ def _public(
     full: bool = False,
     counts: tuple[int, int, int] | None = None,
     drafts: bool = True,
+    last_stage: bool | None = None,
 ) -> EventPublic:
     """One event payload; the stages, the divisions and the entrant count only
     when it is the subject of the read. `drafts` false leaves the unpublished
     qualifiers out for a caller who is not an admin.
     """
     public = EventPublic.model_validate(event)
-    public.phase = phase_of(session, event, counts)
+    public.phase = phase_of(session, event, counts, last_stage)
     if not full:
         return public
+    public.checkin_open = event.checkin_enabled and checkin_open(event)
     public.stages = [
         EventStagePublic.model_validate(row)
         for row in session.scalars(
@@ -896,14 +964,8 @@ def _public(
         )
         for row in _divisions(session, ident(event))
     ]
-    public.entrant_count = session.scalar(
-        select(func.count())
-        .select_from(EventEntrant)
-        .where(
-            col(EventEntrant.event_id) == event.id,
-            col(EventEntrant.withdrawn_at).is_(None),
-        )
-    )
+    # The entrants of no division ride in the same read, so their bucket counts
+    public.entrant_count = sum(by_division.values())
     # The qualifiers that feed this event, newest first
     children = (
         select(Season)
@@ -927,6 +989,8 @@ def _is_admin(claims: dict[str, Any] | None) -> bool:
 
 def _captains(claims: dict[str, Any] | None) -> set[int]:
     """The teams the caller captains, from the seats the login resolved."""
+    # The team alone, never the season of the seat: a captain enters his team
+    # into any event, and a cup writes no team season row to be seated on
     return {seat["team_id"] for seat in (claims or {}).get("seats", [])}
 
 
@@ -1079,7 +1143,7 @@ def _team_mmrs(
 ) -> dict[int, int | None]:
     """Every team entrant against the mean rating of its live roster.
 
-    Two reads answer the whole list, never one per team: the rosters through
+    The list is read as a whole, never one read per team: the rosters through
     user_team_season against the event the team entered, and the races those
     members signed up on. A member is rated the way a solo entrant is, on his
     signup race or on the race his profile names when he made no signup, and
@@ -1173,7 +1237,8 @@ def _from_previous_stage(
 
     The order is the standings of that stage, top `advance_count` places per
     division, so a playoff seeded by hand and one seeded by `advance` read the
-    same. Nothing is generated here.
+    same, and `advancing` refuses both while that stage still owes a result.
+    Nothing is generated here.
     """
     before = stage_engine.previous_stage(session, event_id, stage)
     if before is None:
@@ -1270,11 +1335,14 @@ def _enter(
 ) -> EventEntrant:
     """Write the entrant row, or reopen the one that withdrew.
 
-    GNL entrants stay on the season signup table this wave, so a GNL event
-    refuses here. A full event refuses too: no waiting list is kept.
+    An event whose teams are drafted takes no direct entrant: its field is
+    drafted from the players who signed up to it. A full event refuses too:
+    no waiting list is kept.
     """
-    if event.kind is EventKind.gnl:
-        raise BadRequestError("A GNL season takes its signups on its season page")
+    if event.entrant_kind is EntrantKind.drafted_teams:
+        raise BadRequestError(
+            "This event drafts its teams, so it takes no direct signup"
+        )
     # A player plays one race; a team fields the races of its roster
     race = data.race if team_id is not None else _signup_race(data)
     side = (
