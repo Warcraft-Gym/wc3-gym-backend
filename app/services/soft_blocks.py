@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session as OrmSession
 from sqlmodel import col
 
 from app.core import free_time
+from app.core.availability import blocked
 from app.core.db import Session
 from app.core.exceptions import ApiError, BadRequestError, NotFoundError
 from app.models.season import Season
@@ -130,7 +131,7 @@ class SoftBlockService:
             side1, side2 = series.player1_id, series.player2_id
             if side1 is None or side2 is None:
                 raise BadRequestError("The series has no sides to compare yet")
-            spans = [_blocked(session, side, start, end) for side in (side1, side2)]
+            spans = [blocked(session, side, start, end) for side in (side1, side2)]
         ranges = free_time.free(start, end, *spans)
         seconds = sum((hi - lo).total_seconds() for lo, hi in ranges)
         return FreeTimePublic(
@@ -229,18 +230,3 @@ def _window(
     if not start < end <= start + MAX_WINDOW:
         raise BadRequestError("end must come after start, by 31 days at most")
     return start, end
-
-
-def _blocked(
-    session: OrmSession, user_id: int, start: datetime, end: datetime
-) -> list[free_time.Interval]:
-    zone = session.scalar(select(col(User.timezone)).where(col(User.id) == user_id))
-    blocks = session.scalars(select(UserBlock).where(col(UserBlock.user_id) == user_id))
-    # A local last day can sit a calendar day behind the UTC window start
-    busy = session.scalars(
-        select(UserBusy).where(
-            col(UserBusy.user_id) == user_id,
-            col(UserBusy.last_day) >= start.date() - timedelta(days=1),
-        )
-    )
-    return free_time.blocked(zone, blocks, busy, start, end)

@@ -20,7 +20,6 @@ from app.models.base import ident
 from app.models.enums import Race
 from app.models.fantasy_bet import FantasyBet
 from app.models.fantasy_team import FantasyTeam
-from app.models.koth_event import KothEvent
 from app.models.ladder_achievement import LadderAchievement, default_rows
 from app.models.map import Map
 from app.models.match import Match
@@ -196,9 +195,6 @@ def seed_league(session: Session) -> dict[str, Any]:
                 key="score_system", value="standard", description="Scoring system"
             ),
             Settings(key="KOTH_NIGHTBOT_TOKEN", value="test-nightbot-token"),
-            KothEvent(
-                name="KOTH 1", event_date=datetime(2026, 1, 10, 20, 0), is_active=True
-            ),
         ]
     )
     session.flush()

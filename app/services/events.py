@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session as OrmSession
 from sqlalchemy.orm import noload, selectinload
 from sqlmodel import col
 
+from app.core.availability import availability_hint
 from app.core.db import Session, rel
 from app.core.divisions import cut
 from app.core.exceptions import ApiError, BadRequestError, NotFoundError
@@ -47,9 +48,9 @@ from app.models.relationships import (
     DBUserSeasonSignup,
     EventRoundPublic,
 )
-from app.models.round_availability import DBRoundAvailability
 from app.models.season import (
     NO_SERIES,
+    AvailabilityHint,
     EventCreate,
     EventPhase,
     EventPublic,
@@ -204,7 +205,12 @@ class EventService:
             return _public(session, event, full=True, drafts=admin)
 
     def add(self, data: EventCreate) -> EventPublic:
-        """Create an event and the stages it plays, or one default stage."""
+        """Create an event and the stages it plays, or one default stage.
+
+        A body that leaves `stages` out plays one default stage. A body that
+        sends an explicit empty list plays no stage at all, which is what a
+        signup-only event is.
+        """
         with Session.begin() as session:
             fields = data.model_dump(exclude={"stages"})
             if fields.get("entrant_kind") is None:
@@ -214,7 +220,12 @@ class EventService:
             event = Season(**fields)
             session.add(event)
             session.flush()
-            _write_stages(session, event, data.stages)
+            stages = (
+                data.stages
+                if "stages" in data.model_fields_set
+                else [_default_stage(event)]
+            )
+            _write_stages(session, event, stages)
             return _public(session, event, full=True)
 
     def update(self, event_id: int, data: EventUpdate) -> EventPublic:
@@ -323,7 +334,7 @@ class EventService:
             joined = _joined_events(session, user_id)
             counts = series_counts_by_event(session, [event.id for event in events])
             rounds = {event.id: next_round(event) for event in events}
-            answered = _round_answers(session, user_id, rounds)
+            hints = _round_hints(session, user_id, rounds)
             return [
                 _member_row(
                     session,
@@ -332,7 +343,7 @@ class EventService:
                     event.id in joined,
                     joined.get(event.id),
                     rounds.get(event.id),
-                    event.id in answered,
+                    hints.get(event.id),
                 )
                 for event in events
             ]
@@ -610,11 +621,13 @@ def _write_stages(
     stages: Sequence[EventStageWrite],
     start: int = 1,
 ) -> None:
-    """Write the stages in the order the body gives them, or one default stage.
+    """Write the stages in the order the body gives them.
 
-    `start` is the position of the first one, so a longer list appends.
+    `start` is the position of the first one, so a longer list appends. An
+    empty list writes nothing; the caller decides whether a default stage
+    stands in for it.
     """
-    rows = list(stages) or [_default_stage(event)]
+    rows = list(stages)
     session.add_all(
         EventStage(event_id=ident(event), position=position, **stage.model_dump())
         for position, stage in enumerate(rows, start=start)
@@ -689,32 +702,25 @@ def _joined_events(
     return joined
 
 
-def _round_answers(
+def _round_hints(
     session: OrmSession,
     user_id: int | None,
     rounds: dict[int | None, DBEventRound | None],
-) -> set[int]:
-    """The events whose next round the caller has answered, in one statement.
+) -> dict[int, AvailabilityHint]:
+    """The caller's hint for the next round of every event that has one.
 
     The round shape stores the check-in as a round_availability row, so the
-    member rows read it there and never off the entrant stamp.
+    member rows read it there and never off the entrant stamp. Only an event
+    that is still running carries a next round, so this reads a few rounds.
     """
-    wanted = {
-        (event_id, round_.number)
+    user = session.get(User, user_id) if user_id is not None else None
+    if user is None:
+        return {}
+    return {
+        event_id: availability_hint(session, user, round_)
         for event_id, round_ in rounds.items()
         if event_id is not None and round_ is not None
     }
-    if user_id is None or not wanted:
-        return set()
-    rows = session.execute(
-        select(
-            col(DBRoundAvailability.season_id), col(DBRoundAvailability.playday)
-        ).where(
-            col(DBRoundAvailability.user_id) == user_id,
-            col(DBRoundAvailability.season_id).in_({key[0] for key in wanted}),
-        )
-    ).all()
-    return {event_id for event_id, playday in rows if (event_id, playday) in wanted}
 
 
 def _answered_at(event: Season, round_: DBEventRound) -> datetime | None:
@@ -735,7 +741,7 @@ def _member_row(
     joined: bool,
     entrant: EventEntrant | None,
     round_: DBEventRound | None,
-    answered: bool,
+    hint: AvailabilityHint | None,
 ) -> MemberEventRow:
     """One member home row: the event, and what the caller may do with it."""
     phase = phase_of(session, event, counts)
@@ -747,6 +753,9 @@ def _member_row(
         if round_ is not None
         else "event"
     )
+    if shape != "round":
+        hint = None
+    answered = hint in ("answered_yes", "answered_no")
     # The round shape takes its check-in through PUT /player-availability
     checked_in_at = (
         (_answered_at(event, round_) if answered else None)
@@ -769,6 +778,7 @@ def _member_row(
         checkin_shape=shape,
         checkin_open=is_open,
         next_round=EventRoundPublic.from_row(round_) if round_ else None,
+        availability_hint=hint,
         action=_member_action(phase, event, joined, checked_in_at, is_open),
     )
 
@@ -1209,9 +1219,7 @@ def _enter(
     refuses here. A full event refuses too: no waiting list is kept.
     """
     if event.kind is EventKind.gnl:
-        raise BadRequestError(
-            f"A GNL season takes its signups at /seasons/{event.id}/signups"
-        )
+        raise BadRequestError("A GNL season takes its signups on its season page")
     side = (
         col(EventEntrant.user_id) == user_id
         if user_id is not None
