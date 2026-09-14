@@ -4,7 +4,7 @@ usage: uv run python -m app.core.seed <dir> <postgresql://url>
 
 Copies every column the target table still has, keeps the ids, then sets every
 sequence. FK checks are off during the copy, so table order does not matter.
-The seeded seasons get the achievement catalogue at catalogue prices.
+The seeded GNL seasons get the achievement catalogue at catalogue prices.
 """
 
 import ast
@@ -74,14 +74,31 @@ def main(seed_dir: str, url: str) -> None:
                 + (f", skipped {dropped}" if dropped else "")
             )
         cur.execute("SET session_replication_role = DEFAULT")
+        # Before the backfills, so their new rows never take an id a CSV row holds
         cur.execute(
-            "UPDATE event SET score_system = 'helpstone'"
-        )  # MySQL kept it in settings, one value for every season
+            "SELECT table_name, column_name FROM information_schema.columns"
+            " WHERE table_schema = 'public' AND column_default LIKE 'nextval%'"
+        )
+        for table, col in cur.fetchall():
+            cur.execute(
+                sql.SQL(
+                    "SELECT setval(pg_get_serial_sequence({}, {}),"
+                    " COALESCE(MAX({}), 0) + 1, false) FROM {}"
+                ).format(
+                    sql.Literal(table),
+                    sql.Literal(col),
+                    sql.Identifier(col),
+                    sql.Identifier(table),
+                )
+            )
+        cur.execute(
+            "UPDATE event SET score_system = 'helpstone' WHERE kind = 'gnl'"
+        )  # MySQL kept it in settings, one value for every GNL season
         # The dump predates the rename, so the copied events carry no league and
         # the CASCADE took their stages: redo the two backfills of 1e0287eacccf
         cur.execute(
-            "UPDATE event SET league_id = (SELECT id FROM league WHERE name = 'GNL')"
-            " WHERE league_id IS NULL"
+            "UPDATE event SET league_id ="
+            " (SELECT id FROM league WHERE short_name = 'GNL') WHERE league_id IS NULL"
         )
         cur.execute(
             "INSERT INTO event_stage (event_id, position, format, best_of, map_rules,"
@@ -108,30 +125,14 @@ def main(seed_dir: str, url: str) -> None:
             "UPDATE series SET round_id ="
             " (SELECT m.round_id FROM matches m WHERE m.id = series.match_id)"
         )
-        # The prices went with the CASCADE. Every season in the dump ran under
-        # wc3.no, so each gets those exact rows; a season made in the app takes
-        # DEFAULT_PAID at creation instead.
+        # The prices went with the CASCADE. Every GNL season in the dump ran
+        # under wc3.no, so each gets those exact rows; a KOTH night has none,
+        # and a season made in the app takes DEFAULT_PAID at creation instead.
         cur.executemany(
             "INSERT INTO ladder_achievements (season_id, rule_id, points)"
-            " SELECT id, %s, %s FROM event",
+            " SELECT id, %s, %s FROM event WHERE kind = 'gnl'",
             list(WC3NO_PAID.items()),
         )
-        cur.execute(
-            "SELECT table_name, column_name FROM information_schema.columns"
-            " WHERE table_schema = 'public' AND column_default LIKE 'nextval%'"
-        )
-        for table, col in cur.fetchall():
-            cur.execute(
-                sql.SQL(
-                    "SELECT setval(pg_get_serial_sequence({}, {}),"
-                    " COALESCE(MAX({}), 0) + 1, false) FROM {}"
-                ).format(
-                    sql.Literal(table),
-                    sql.Literal(col),
-                    sql.Identifier(col),
-                    sql.Identifier(table),
-                )
-            )
         conn.commit()
 
 

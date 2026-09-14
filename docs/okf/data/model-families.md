@@ -3,7 +3,7 @@ type: Data Model
 title: Model families
 description: Every entity is a family of SQLModel classes, one table class and separate Create, Update and Public shapes, with validators in one module and every datetime aware UTC.
 tags: [sqlmodel, models, schema]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T15:15:00Z }
 sources:
   - id: base
     resource: ../../../app/models/base.py
@@ -28,7 +28,7 @@ sources:
 
 An update path takes an `XUpdate` built from the fields it means to change, never an `XPublic` read back. One schema doing create, update and response duty wiped columns silently; see [the pitfall](../pitfalls/one-schema-wipes-columns.md).
 
-Some tables have only a table class and a Public class (`League`, `EventStage`, `EventEntrant`) with `Write` shapes for the admin forms. Join tables are named `DB*` (`DBTeamSeason`, `DBUserTeamSeason`, `DBEventRound`) and carry no Public shape of their own.
+Some tables have a table class and a Public class with `Write` shapes for the admin forms instead of the Base/Create/Update trio (`EventStage`, `EventEntrant`, `EventDivision`). Join tables are named `DB*` (`DBTeamSeason`, `DBUserTeamSeason`, `DBMapSeason`) and carry no Public shape of their own. The class of the `event` table is `Season`, because the GNL payloads keep that word. Every table has one concept under [tables](tables/index.md) that lists its columns.
 
 `DBModel` holds the shared query helpers (`getById`, finders); `PublicModel` also answers a plain dict. `Stored` is a protocol for a mapped row whose id is set, and `ident()` types it.
 

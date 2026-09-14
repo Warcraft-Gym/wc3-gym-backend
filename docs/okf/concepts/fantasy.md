@@ -3,7 +3,7 @@ type: Domain Concept
 title: Fantasy league
 description: A member drafts players, one team and one race for a season, places bets on series, and scores six derived parts.
 tags: [fantasy, domain]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T15:15:00Z }
 sources:
   - id: rule
     resource: ../../../app/core/fantasy.py
@@ -23,7 +23,7 @@ sources:
 
 A fantasy team belongs to one member, the Fantasy Captain, and one season. It drafts players, one real team, one race, and, when the season offers it, a grind pick (a second team paid by achievement rank). The captain places bets: a stake of points on one series and a call. A member creates a team while the season is `open`; creation locks when it commences.
 
-Players are grouped into fantasy tiers by MMR. The season stores the ascending MMR cuts in `fantasy_tier_cuts`; a signup may pin a tier by hand (`fantasy_tier_pinned`).
+Players are grouped into fantasy tiers by MMR. The season stores the ascending MMR cuts in `fantasy_tier_cuts` and the apply date in `fantasy_tiers_applied_at`; an allocation writes each signup's `fantasy_tier`, and a signup with none derives its tier from the MMR on that date. `fantasy_tier_pinned` on the answer is derived, never stored.
 
 # Scoring, all derived at read time
 
