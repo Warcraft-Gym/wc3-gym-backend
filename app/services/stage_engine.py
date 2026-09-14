@@ -1496,8 +1496,6 @@ def _advance(session: OrmSession, event_id: int, stage: EventStage) -> int:
     for entrant in session.scalars(
         select(EventEntrant).where(col(EventEntrant.event_id) == event_id)
     ):
-        # The groups merge here, so nobody carries one into the next stage
-        entrant.group_no = None
         if ident(entrant) not in carried:
             entrant.seed = None
     session.flush()

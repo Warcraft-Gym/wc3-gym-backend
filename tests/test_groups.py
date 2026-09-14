@@ -165,8 +165,8 @@ def test_two_from_every_group_seed_a_bracket_that_holds_them_apart(
     moved = client.post(f"/events/{event}/stages/{stage}/advance", headers=auth_headers)
     assert moved.status_code == 200, moved.text
     assert moved.json() == {"seeded": 8}
-    # The groups merge here, so nobody carries one into the bracket
-    assert groups_of(event) == {}
+    # The stamp stays for the finished stage's tables; a bracket ignores it
+    assert groups_of(event) == groups
     # The four winners lead the draw, then the four runners-up
     assert [seeds[user] for user in carried(event)] == [1, 2, 3, 4, 8, 7, 6, 5]
     assert generate(client, auth_headers, event, playoff) == {"series": 7, "rounds": 3}
@@ -176,6 +176,21 @@ def test_two_from_every_group_seed_a_bracket_that_holds_them_apart(
     for row in quarters:
         first, second = row["sides"]
         assert groups[first] != groups[second]
+
+
+def test_the_finished_group_stage_keeps_its_tables_after_the_advance(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """An advance leaves the stamp, so the played stage still reads per group."""
+    event, stage, playoff = group_cup(client, auth_headers)
+    play_out(client, auth_headers, stage, seeds_of(event))
+    before = standings(client, event, stage)
+    assert [table["group_no"] for table in before] == [1, 2, 3, 4]
+    moved = client.post(f"/events/{event}/stages/{stage}/advance", headers=auth_headers)
+    assert moved.status_code == 200, moved.text
+    assert standings(client, event, stage) == before
+    # The bracket plays its division whole, so its own table holds no group
+    assert [table["group_no"] for table in standings(client, event, playoff)] == [None]
 
 
 def test_a_group_stage_refuses_a_field_it_cannot_split(
