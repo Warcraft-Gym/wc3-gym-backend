@@ -63,45 +63,107 @@ class Points(NamedTuple):
 PER_GAME = Points()
 
 
-type Result[T] = tuple[T, T, int, int]  # entrant a, entrant b, games a won, games b won
+type Result[T] = tuple[T, T | None, int, int]  # a, b or the bye, games a, games b
+
+
+# The tie breaks a table may read, in the order a stage's ranking_rule names
+# them: points, buchholz (the sum of the opponents' points), game_diff, and
+# head_to_head, which runs last of all, inside the group the others leave tied
+RANKING = ("points", "game_diff", "head_to_head")
 
 
 def standings[T: Hashable](
-    entrants: Sequence[T], results: Sequence[Result[T]], pay: Points = PER_GAME
+    entrants: Sequence[T],
+    results: Sequence[Result[T]],
+    pay: Points = PER_GAME,
+    rule: Sequence[str] = RANKING,
 ) -> list[Standing[T]]:
-    """Rank by points, game difference, then head to head; seed order breaks the rest.
+    """Rank by the tie breaks `rule` names, in order; seed order breaks the rest.
 
     `pay` is the stage's point scale; its default pays one point per game won.
-    Head to head counts the games won in series between the tied entrants only.
+    Head to head counts the games won in series between the tied entrants only,
+    so it runs inside the group the other breaks leave tied, last of all, and a
+    rule that leaves the word out leaves that group in the order it came in.
+    A result whose second side is the bye pays the first side and counts its
+    games, and adds nothing to either Buchholz sum because it has no opponent.
     """
     won = dict.fromkeys(entrants, 0)
     lost = dict.fromkeys(entrants, 0)
     paid = dict.fromkeys(entrants, 0)
     for a, b, a_games, b_games in results:
-        won[a] += a_games
-        lost[a] += b_games
-        won[b] += b_games
-        lost[b] += a_games
-        if a_games == b_games:
-            paid[a] += pay.series_drawn
-            paid[b] += pay.series_drawn
-        else:
-            paid[a if a_games > b_games else b] += pay.series_won
+        for own, games, against in ((a, a_games, b_games), (b, b_games, a_games)):
+            if own is None:
+                continue
+            won[own] += games
+            lost[own] += against
+            if games == against:
+                paid[own] += pay.series_drawn
+            elif games > against:
+                paid[own] += pay.series_won
 
-    def score(entrant: T) -> tuple[int, int]:
-        points = paid[entrant] + won[entrant] * pay.game_won
-        return points, won[entrant] - lost[entrant]
+    points = {e: paid[e] + won[e] * pay.game_won for e in entrants}
+    diff = {e: won[e] - lost[e] for e in entrants}
+    buchholz = dict.fromkeys(entrants, 0)
+    for a, b, _, _ in results:
+        if b is None:
+            continue
+        buchholz[a] += points[b]
+        buchholz[b] += points[a]
+    measures = {"points": points, "game_diff": diff, "buchholz": buchholz}
+    read = [measures[word] for word in rule if word in measures] or [points]
 
-    ranked: list[T] = []
-    for _, tied in groupby(sorted(entrants, key=score, reverse=True), key=score):
-        group = list(tied)
-        h2h = dict.fromkeys(group, 0)
-        for a, b, a_games, b_games in results:
-            if a in h2h and b in h2h:
-                h2h[a] += a_games
-                h2h[b] += b_games
-        ranked += sorted(group, key=h2h.__getitem__, reverse=True)
-    return [Standing(e, *score(e)) for e in ranked]
+    def score(entrant: T) -> tuple[int, ...]:
+        return tuple(measure[entrant] for measure in read)
+
+    ranked = sorted(entrants, key=score, reverse=True)
+    if "head_to_head" in rule:
+        broken: list[T] = []
+        for _, tied in groupby(ranked, key=score):
+            group = list(tied)
+            h2h = dict.fromkeys(group, 0)
+            for a, b, a_games, b_games in results:
+                if b is not None and a in h2h and b in h2h:
+                    h2h[a] += a_games
+                    h2h[b] += b_games
+            broken += sorted(group, key=h2h.__getitem__, reverse=True)
+        ranked = broken
+    return [Standing(e, points[e], diff[e]) for e in ranked]
+
+
+def swiss_pairs[T: Hashable](
+    order: Sequence[T], met: Sequence[tuple[T | None, T | None]]
+) -> list[tuple[T, T | None]] | None:
+    """Pair one Swiss round from the table order, the leader first.
+
+    Each entrant takes the best-placed opponent he has not met, so a pair sits
+    inside its score group while one is free there. An odd field plays `None`,
+    the bye, which falls to the lowest entrant that has not had one. It answers
+    None when no pairing of the field is left.
+    """
+    seen = {frozenset(pair) for pair in met}
+    field: list[T | None] = list(order)
+    if len(field) % 2:
+        field.append(None)
+    return _paired(field, seen)
+
+
+# The search backtracks over the whole field, which is flat out at Swiss sizes
+def _paired[T: Hashable](
+    field: Sequence[T | None], seen: set[frozenset[T | None]]
+) -> list[tuple[T, T | None]] | None:
+    """The first pairing of the field, top down, that repeats no pair."""
+    if not field:
+        return []
+    top, rest = field[0], list(field[1:])
+    if top is None:
+        return None
+    for index, other in enumerate(rest):
+        if frozenset((top, other)) in seen:
+            continue
+        tail = _paired(rest[:index] + rest[index + 1 :], seen)
+        if tail is not None:
+            return [(top, other), *tail]
+    return None
 
 
 @dataclass(frozen=True)

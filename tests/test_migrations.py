@@ -58,6 +58,8 @@ BEFORE_EVENT_RENAME = "f4b7c02e9a15"
 EVENT_RENAME = "1e0287eacccf"
 # The revision before the rounds become event_round
 BEFORE_EVENT_ROUND = "8cc6dd6d93eb"
+# The revision before the Swiss, FFA and award rows
+BEFORE_SWISS_ROWS = "b4e1c9a7d206"
 # The revision before an event carries a parent and a series its feeders
 BEFORE_EVENT_MODEL = "96c0d36de81c"
 # The revision before every past KOTH night is an event of the KOTH league
@@ -1189,3 +1191,31 @@ def test_a_series_takes_the_entrants_of_the_event_its_round_belongs_to(
     assert "answered_at" not in {
         row["name"] for row in columns.get_columns("round_availability")
     }
+
+
+def test_the_swiss_ffa_and_award_rows_are_added_and_dropped(tmp_path: Path) -> None:
+    """The one expand migration of the sixth events deploy, both ways."""
+    url = fresh_database(tmp_path, "swiss-rows")
+    upgrade_to_head(url)
+    engine = create_engine(url)
+
+    def named(table_name: str) -> set[str]:
+        return {row["name"] for row in inspect(engine).get_columns(table_name)}
+
+    assert {"swiss_rounds", "points_by_place", "lobby_size"} <= named("event_stage")
+    assert "group_no" in named("event_entrant")
+    assert named("series_side") == {
+        "series_id",
+        "side_no",
+        "user_id",
+        "entrant_id",
+        "place",
+    }
+    assert {"place", "title", "awarded_at"} <= named("event_award")
+
+    downgrade_to(url, BEFORE_SWISS_ROWS)
+
+    tables = set(inspect(engine).get_table_names())
+    assert not {"series_side", "event_award"} & tables
+    assert "swiss_rounds" not in named("event_stage")
+    assert "group_no" not in named("event_entrant")

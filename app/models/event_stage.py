@@ -15,6 +15,13 @@ from app.models.base import DBModel
 from app.models.enums import SchedulingMode, StageFormat
 from app.models.types import AwareUTC, MapRules, NumToStr, UTCDateTime
 
+# The tie breaks a table reads by default, in order. The words a rule takes are
+# points, buchholz (the sum of the opponents' points), game_diff and
+# head_to_head, which runs last of all, inside the group the others leave tied.
+RANKING_RULE = "points,game_diff,head_to_head"
+# What a stage that draws round by round reads where it names no rule of its own
+SWISS_RANKING_RULE = "points,buchholz,game_diff,head_to_head"
+
 
 class EventStage(DBModel, table=True):
     __tablename__ = "event_stage"
@@ -34,16 +41,22 @@ class EventStage(DBModel, table=True):
     series_per_entrant_per_round: int = Field(
         default=1, ge=1, sa_column_kwargs={"server_default": "1"}
     )
+    # How many rounds a Swiss stage draws; null means it draws on without end
+    swiss_rounds: int | None = None
+    # What each place of an FFA lobby pays, best place first, as "4,3,2,1"
+    points_by_place: str | None = Field(default=None, max_length=50)
+    # How many players an FFA lobby seats
+    lobby_size: int | None = None
     # One rule per game of a series: veto, loser, host or fixed
     map_rules: Annotated[str | None, MapRules] = Field(default=None, max_length=100)
     scheduling_mode: SchedulingMode = Field(
         default=SchedulingMode.agreed, sa_column_kwargs={"server_default": "agreed"}
     )
-    # The tie breaks the standings read, in order
+    # The tie breaks the standings read, in order; RANKING_RULE names the words
     ranking_rule: str = Field(
-        default="points,game_diff,head_to_head",
+        default=RANKING_RULE,
         max_length=100,
-        sa_column_kwargs={"server_default": "points,game_diff,head_to_head"},
+        sa_column_kwargs={"server_default": RANKING_RULE},
     )
     points_series_won: int = Field(default=1, sa_column_kwargs={"server_default": "1"})
     points_series_drawn: int = Field(
@@ -83,6 +96,9 @@ class EventStagePublic(SQLModel):
     format: StageFormat
     best_of: int
     series_per_entrant_per_round: int = 1
+    swiss_rounds: int | None = None
+    points_by_place: str | None = None
+    lobby_size: int | None = None
     map_rules: Annotated[str | None, MapRules] = None
     scheduling_mode: SchedulingMode
     ranking_rule: str
@@ -105,9 +121,12 @@ class EventStageWrite(SQLModel):
     format: StageFormat = StageFormat.round_robin
     best_of: int = 3
     series_per_entrant_per_round: int = Field(default=1, ge=1)
+    swiss_rounds: int | None = Field(default=None, ge=1)
+    points_by_place: str | None = Field(default=None, max_length=50)
+    lobby_size: int | None = Field(default=None, ge=2)
     map_rules: Annotated[str | None, MapRules] = None
     scheduling_mode: SchedulingMode = SchedulingMode.agreed
-    ranking_rule: str = "points,game_diff,head_to_head"
+    ranking_rule: str = RANKING_RULE
     points_series_won: int = 1
     points_series_drawn: int = 0
     points_game_won: int = 0

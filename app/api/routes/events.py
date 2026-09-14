@@ -239,6 +239,20 @@ def generate_stage(event_id: int, stage_id: int) -> dict[str, int]:
     return stage_engine.generate(event_id, stage_id)
 
 
+@router.post(
+    "/events/{event_id}/stages/{stage_id}/rounds",
+    dependencies=[Depends(require_admin)],
+)
+def draw_next_round(event_id: int, stage_id: int) -> StageSeriesPublic:
+    """Draw one more round of a stage that pairs a round at a time.
+
+    It answers the round it drew and the series in it. The stage refuses while
+    a series already drawn carries no result, and once it has drawn every
+    round it plays.
+    """
+    return stage_engine.generate_next_round(event_id, stage_id)
+
+
 @router.get("/events/{event_id}/stages/{stage_id}/series")
 def get_stage_series(event_id: int, stage_id: int) -> StageSeriesPublic:
     """The rounds of the stage and every series it holds, for the run page."""
