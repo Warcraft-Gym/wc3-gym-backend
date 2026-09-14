@@ -49,6 +49,11 @@ def winner_of(row: Series) -> int | None:
     return _side(row, takes_loser=False)
 
 
+def won_slot(row: Series) -> int | None:
+    """The side the series sends on, 1 or 2, which a team side carries too."""
+    return _won_slot(row, takes_loser=False)
+
+
 def entrant_of(row: Series, takes_loser: bool = False) -> int | None:
     """The entrant the series sends on, which is what a team side carries."""
     slot = _won_slot(row, takes_loser)
@@ -263,7 +268,7 @@ def after_score(
     session: OrmSession,
     row: Series,
     was_scored: bool,
-    was_winner: int | None,
+    was_slot: int | None,
     force: bool = False,
 ) -> None:
     """Follow a score change into the bracket. A series with no feeders and
@@ -275,7 +280,7 @@ def after_score(
     """
     now = scored(row)
     if now and was_scored:
-        if was_winner == winner_of(row):
+        if was_slot == won_slot(row):
             return
         on_reopened(session, row, force)
         on_scored(session, row)
@@ -484,7 +489,7 @@ def _settle(session: OrmSession, row: Series) -> None:
     final = _reset_final(session, row)
     if final is not None:
         # A bracket reset is played only when the lower bracket side takes the final
-        if scored(final) and _side(final, takes_loser=False) == final.player1_id:
+        if scored(final) and won_slot(final) == 1:
             _award(session, row, to_first=True, kind="walkover")
             on_scored(session, row)
         return

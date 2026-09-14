@@ -1028,7 +1028,11 @@ def test_a_cup_reads_running_on_the_first_result_and_finished_on_the_last(
 
 
 def team_cup(
-    client: Client, auth: dict[str, str], member: Callable[..., dict[str, str]]
+    client: Client,
+    auth: dict[str, str],
+    member: Callable[..., dict[str, str]],
+    fmt: StageFormat = StageFormat.single_elimination,
+    **fields: Any,  # noqa: ANN401
 ) -> tuple[int, int, list[int], list[list[str]]]:
     """A 2v2 cup of four pre-made teams.
 
@@ -1043,11 +1047,7 @@ def team_cup(
         )
         session.add(event)
         session.flush()
-        stage = EventStage(
-            event_id=ident(event),
-            position=1,
-            format=StageFormat.single_elimination,
-        )
+        stage = EventStage(event_id=ident(event), position=1, format=fmt, **fields)
         teams = [Team(name=f"T{number}") for number in range(1, 5)]
         session.add_all([stage, *teams])
         session.flush()
@@ -1126,6 +1126,57 @@ def test_a_roster_member_reports_a_team_series_and_a_stranger_may_not(
     )
     assert stranger.status_code == 403, stranger.text
     assert stranger.json() == {"error": "not_authorized_for_this_series"}
+
+    # The upload the report needs is open to the roster and shut to the stranger
+    path = f"/player-series/{first['id']}/replays/1/upload-url"
+    assert client.post(path, headers=member("90002")).status_code == 200
+    assert client.post(path, headers=member(rosters[2][0])).status_code == 403
+
+
+def test_a_corrected_team_result_moves_the_bracket(
+    client: Client, auth_headers: dict[str, str], member: Callable[..., dict[str, str]]
+) -> None:
+    """A team side names no user, so the turnaround is read off the won slot."""
+    event, stage, _, _ = team_cup(client, auth_headers, member)
+    generate(client, auth_headers, event, stage)
+    semi, _, final = stage_series(client, event, stage)["series"]
+    assert score(client, auth_headers, semi["id"], 2, 0).status_code == 200
+    first = stage_series(client, event, stage)["series"][2]["entrant1_id"]
+
+    assert score(client, auth_headers, semi["id"], 0, 2).status_code == 200
+
+    moved = stage_series(client, event, stage)["series"][2]
+    assert moved["id"] == final["id"]
+    assert moved["entrant1_id"] == semi["entrant2_id"] != first
+
+
+def test_a_team_bracket_reset_is_played_when_the_lower_side_wins(
+    client: Client, auth_headers: dict[str, str], member: Callable[..., dict[str, str]]
+) -> None:
+    """The reset of a team final is settled on the slot, not on a null user."""
+    event, stage, _, _ = team_cup(
+        client,
+        auth_headers,
+        member,
+        StageFormat.double_elimination,
+        grand_final_modifier="reset",
+    )
+    generate(client, auth_headers, event, stage)
+    for name in (
+        "Upper bracket round 1",
+        "Upper bracket final",
+        "Lower bracket round 1",
+        "Lower bracket final",
+    ):
+        for row in bracket(stage):
+            if row["round"] == name:
+                score(client, auth_headers, row["id"], 2, 0)
+    final = next(row for row in bracket(stage) if row["round"] == "Grand final")
+    assert score(client, auth_headers, final["id"], 0, 2).status_code == 200
+
+    reset = bracket(stage)[-1]
+    assert reset["round"] == "Grand final reset"
+    assert reset["score"] == (None, None)
 
 
 def test_the_standings_of_a_team_cup_name_the_teams(

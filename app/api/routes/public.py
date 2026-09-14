@@ -24,6 +24,7 @@ from app.api.deps import (
     require_login,
     require_member,
 )
+from app.core.db import Session
 from app.core.exceptions import ApiError, BadRequestError, NotFoundError
 from app.core.ordering import SortOrder
 from app.core.query import QueryUtil
@@ -43,7 +44,7 @@ from app.models.round_availability import (
     PlayerAvailabilityWrite,
     RoundAvailabilityPublic,
 )
-from app.models.series import PlayerSeriesWrite, SeriesPublic, SeriesSort
+from app.models.series import PlayerSeriesWrite, Series, SeriesPublic, SeriesSort
 from app.models.series_game import SeriesGamePublic
 from app.models.series_replay import SeriesReplayPublic
 from app.models.series_veto_step import SeriesVetoPublic, SeriesVetoWrite
@@ -75,6 +76,7 @@ from app.services import (
     series_games,
 )
 from app.services.series import SeriesService
+from app.services.series_rules import acts_for_side
 
 logger = logging.getLogger(__name__)
 
@@ -496,12 +498,14 @@ async def update_player_series(
 def _own_series(
     series_service: SeriesService, series_id: int, user_id: int | None
 ) -> SeriesPublic:
-    """The series, for one of its two players."""
+    """The series, for whoever acts for one of its two sides."""
     series = series_service.get(series_id)
     if not series:
         raise NotFoundError("series_not_found")
-    if user_id not in (series.player1_id, series.player2_id):
-        raise ApiError(403, {"error": "not_authorized_for_this_series"})
+    with Session.begin() as session:
+        row = session.get(Series, series_id)
+        if row is None or acts_for_side(session, row, user_id) is None:
+            raise ApiError(403, {"error": "not_authorized_for_this_series"})
     return series
 
 
