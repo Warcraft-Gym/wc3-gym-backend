@@ -1,6 +1,5 @@
 """The bot's posts the app keeps true, one discord_post row each."""
 
-import os
 from datetime import timedelta
 from time import sleep
 from typing import Any
@@ -12,13 +11,10 @@ from app.core.db import Session
 from app.core.exceptions import ExternalServiceError
 from app.models.discord_post import DiscordPost
 from app.models.season import Season
-from app.models.series import SeriesPublic
 from app.models.settings import Settings
 from app.models.types import utcnow
-from app.models.user import UserPublic
-from app.services import discord, event_cards, replays, series_cards
+from app.services import discord, event_cards, series_cards
 from app.services.commands import announce, veto
-from app.services.commands.base import md
 from app.services.events import EventService
 from app.services.series import SeriesService
 
@@ -46,32 +42,10 @@ EDIT_INTERVAL = timedelta(seconds=1)
 CLAIM_TRIES = 5
 
 
-def _name(player: UserPublic | None) -> str:
-    return md((player.name if player else None) or "?")
-
-
-def result_card(series: SeriesPublic) -> dict[str, Any]:
-    """The score, one download link per game, the match on the site, and when
-    the card was last written."""
-    match = series.match
-    score = f"{series.player1_score}-{series.player2_score}"
-    round_number = match.playday if match else "?"
-    lines = [
-        f"{_name(series.player1)} {score} {_name(series.player2)} · Round {round_number}"
-    ]
-    # ponytail: the links expire after 7 days; the match page keeps the files
-    lines += [f"Game {row.game_no}: {row.url}" for row in replays.for_series(series.id)]
-    site = (os.getenv("FRONTEND_URL") or "").rstrip("/")
-    if site and match:
-        lines.append(f"{site}/match/{match.id}")
-    lines.append(f"Updated <t:{int(utcnow().timestamp())}:R>")
-    return {"content": "\n".join(lines)}
-
-
 CARDS = {
     "veto": veto.card,
     "announce": announce.card,
-    RESULT: result_card,
+    RESULT: series_cards.result_card,
     CAST: series_cards.claim_card,
     REMINDER: series_cards.reminder_card,
 }
