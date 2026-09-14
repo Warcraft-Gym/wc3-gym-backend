@@ -31,7 +31,7 @@ from app.models.season import (
     EventUpdate,
     MemberEventRow,
 )
-from app.models.series import StageSeriesPublic
+from app.models.series import ChallengerAdd, StageSeriesPublic, StageSeriesRow
 from app.services import stage_engine
 
 router = APIRouter(tags=["events"])
@@ -228,6 +228,17 @@ def generate_stage(event_id: int, stage_id: int) -> dict[str, int]:
 def get_stage_series(event_id: int, stage_id: int) -> StageSeriesPublic:
     """The rounds of the stage and every series it holds, for the run page."""
     return stage_engine.series_of(event_id, stage_id)
+
+
+@router.post(
+    "/events/{event_id}/stages/{stage_id}/series",
+    dependencies=[Depends(require_admin)],
+)
+def add_stage_series(
+    event_id: int, stage_id: int, data: ChallengerAdd
+) -> StageSeriesRow:
+    """Append one challenger to the end of the chain his division plays."""
+    return stage_engine.add_challenger(event_id, stage_id, data.entrant_id)
 
 
 @router.get("/events/{event_id}/stages/{stage_id}/standings")

@@ -5,15 +5,18 @@ from 5 to 11 January 2026. No seeded player has a timezone.
 """
 
 from collections.abc import Callable, Iterator
+from datetime import date
 from typing import Any
 
 import pytest
 from httpx2 import Client
-from sqlalchemy import event
+from sqlalchemy import event, select
+from sqlmodel import col
 
 from app.core.db import Session
 from app.models.base import ident
 from app.models.match import Match
+from app.models.relationships import DBEventRound
 from app.models.season import Season
 from app.models.series import Series
 from app.models.user import User
@@ -481,3 +484,35 @@ def test_a_series_with_no_sides_has_no_free_time(
 
     resp = client.get(f"/player-series/{series_id}/free-time", headers=member("2"))
     assert resp.status_code == 400, resp.text
+
+
+def test_a_bracket_series_takes_its_window_from_its_round(
+    client: Client, seeded: dict[str, Any], auth_headers: dict[str, str]
+) -> None:
+    """A generated bracket series holds no fixture, so its window comes through
+    its own round instead of a fixture's playday."""
+    from tests.test_stage_engine import cup, generate
+
+    event, (stage,) = cup(4)
+    generate(client, auth_headers, event, stage)
+    with Session.begin() as session:
+        first = min(
+            session.scalars(
+                select(DBEventRound).where(col(DBEventRound.stage_id) == stage)
+            ),
+            key=lambda row: row.number,
+        )
+        first.start_date, first.end_date = date(2026, 2, 2), date(2026, 2, 8)
+        series = session.scalars(
+            select(Series).where(col(Series.round_id) == ident(first))
+        ).first()
+        assert series is not None and series.match_id is None
+        series_id = ident(series)
+
+    body = free_time(client, series_id, auth_headers)
+
+    assert (body["start"], body["end"], body["hours"]) == (
+        "2026-02-02T00:00:00Z",
+        "2026-02-09T00:00:00Z",
+        168.0,
+    )
