@@ -17,8 +17,7 @@ from typing import Any, get_args
 
 import pytest
 from httpx2 import Client
-from sqlalchemy import event, select
-from sqlmodel import col
+from sqlalchemy import event
 
 from app.core.db import Session
 from app.models.base import ident
@@ -47,8 +46,6 @@ PAGED_ROUTES = [
     ("GET", "/fantasy/bets"),
     ("POST", "/fantasy/bets/search?query=id > 0"),
     ("GET", "/draft-series/match/{match_id}"),
-    ("GET", "/koth/events/{event_id}/signups"),
-    ("GET", "/koth/events/{event_id}/matches"),
     ("GET", "/player-series"),
 ]
 
@@ -58,7 +55,6 @@ def build(path: str, seeded: dict[str, Any], **params: int) -> str:
     path = path.format(
         season_id=seeded["season_id"],
         match_id=seeded["match_id"],
-        event_id=seeded["koth_event_id"],
     )
     separator = "&" if "?" in path else "?"
     query = "&".join(f"{name}={value}" for name, value in params.items())
@@ -84,13 +80,7 @@ def capture_sql() -> Iterator[list[str]]:
 
 @pytest.fixture
 def league(seeded: dict[str, Any]) -> dict[str, Any]:
-    """The seeded league plus the id of its KOTH event."""
-    from app.models.koth_event import KothEvent
-
-    with Session() as session:
-        seeded["koth_event_id"] = session.scalar(
-            select(col(KothEvent.id)).order_by(col(KothEvent.id))
-        )
+    """The seeded league, under the name the paging tests read it by."""
     return seeded
 
 
@@ -216,13 +206,6 @@ DEFAULT_ORDER = {
     "GET /fantasy/bets": ["fantasy_bets.id"],
     "POST /fantasy/bets/search?query=id > 0": ["fantasy_bets.id"],
     "GET /draft-series/match/{match_id}": ["draft_series.id"],
-    "GET /koth/events/{event_id}/signups": [
-        "koth_signups.bracket, koth_signups.mmr DESC, koth_signups.id"
-    ],
-    "GET /koth/events/{event_id}/matches": [
-        "koth_matches.bracket, koth_matches.id",
-        "anon_1.bracket, anon_1.id",
-    ],
     # The first two order the user lookup the route resolves the session with;
     # the last two order the answers and the rounds of the current season
     "GET /player-series": [

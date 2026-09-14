@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends
 from app.api.deps import SettingsServiceDep, require_admin
 from app.models.koth_night import NightOpen
 from app.models.season import EventPublic
-from app.services.koth_night import night, nightbot
+from app.services.koth import night, nightbot
 
 router = APIRouter(tags=["koth"])
 
