@@ -1,5 +1,5 @@
 """The Discord cards about series: the match card /announce posts, the claim
-card, the reminder and the /upcoming reply. A player reads
+card, the reminder, the result card and the /upcoming reply. A player reads
 {flag} {name} ({race} {mmr}), and the footer says when the W3C MMR was synced."""
 
 import os
@@ -19,7 +19,7 @@ from app.models.relationships import round_row
 from app.models.series import SeriesPublic
 from app.models.types import utcnow
 from app.models.user import User, UserPublic
-from app.services import discord
+from app.services import discord, replays
 from app.services.commands.base import (
     cast_link,
     emoji,
@@ -261,6 +261,43 @@ def reminder_card(series: SeriesPublic) -> dict[str, Any]:
     if series.casts:
         lines += ["", "**Casts**", *cast_lines(series)]
     return {"content": content, "embeds": [_embed(lines, marks)]}
+
+
+def result_lines(series: SeriesPublic, marks: Ratings) -> list[str]:
+    """The score, then one line per game the season allows, each under a
+    spoiler: a reader who has not watched sees neither the winner nor how many
+    games it took. The hidden texts are the same width, so the box says nothing."""
+    score = f"{series.player1_score}-{series.player2_score}"
+    result = f"{_name(series.player1)} {score} {_name(series.player2)}"
+    lines = [*header(series), "", teams(series), players(series, marks)]
+    lines += ["", f"**Result** ||{result}||"]
+    # ponytail: the links expire after 7 days; the match page keeps the files
+    rows = {row.game_no: row for row in replays.for_series(series.id)}
+    played = (series.player1_score or 0) + (series.player2_score or 0)
+    for game_no in range(1, replays.max_games(series.id) + 1):
+        if game_no in rows:
+            text = f"[Download replay](<{rows[game_no].url}>)"
+        else:
+            text = "No replay saved" if game_no <= played else "Game not played"
+        lines.append(f"Game {game_no} · ||{text}||")
+    vods = [
+        f"- {cast_link(cast.vod_url)} · {md(cast.name)}"
+        for cast in series.casts
+        if cast.vod_url
+    ]
+    if vods:
+        lines += ["", "**VODs**", *vods]
+    site = (os.getenv("FRONTEND_URL") or "").rstrip("/")
+    if site and series.match:
+        lines += ["", f"[Match page](<{site}/match/{series.match.id}>)"]
+    return lines
+
+
+def result_card(series: SeriesPublic) -> dict[str, Any]:
+    """The card a score posts in the results channel. An empty content clears
+    the text an older result post carried when it is edited."""
+    marks = ratings([series])
+    return {"content": "", "embeds": [_embed(result_lines(series, marks), marks)]}
 
 
 def _series_block(
