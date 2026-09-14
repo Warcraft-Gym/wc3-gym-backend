@@ -88,3 +88,9 @@ _load-seed dir url:
         blob.delete_icon(url)
     print(f"logos: {len(logos)} uploaded, {len(sys.argv) - 2} replaced")
     PY
+
+# Regenerate docs/okf/index.html, the graph viewer that GitHub Pages serves.
+okf-graph:
+    rm -rf /tmp/okf-spec && git clone -q --depth 1 https://github.com/GoogleCloudPlatform/open-knowledge-format /tmp/okf-spec
+    PYTHONPATH=/tmp/okf-spec/src uv run --no-project --with pyyaml python -c "from pathlib import Path; from reference_agent.viewer import generate_visualization as g; print(g(Path(\"docs/okf\"), Path(\"docs/okf/index.html\"), bundle_name=\"wc3-gym-backend knowledge bundle\"))"
+    sed -i 's#<head>#<head>\n  <meta name="robots" content="noindex, nofollow">#' docs/okf/index.html
