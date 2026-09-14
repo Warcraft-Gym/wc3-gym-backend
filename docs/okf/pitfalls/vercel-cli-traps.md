@@ -1,7 +1,7 @@
 ---
 type: Pitfall
 title: Vercel CLI traps
-description: Three ways a CLI deploy goes wrong: no token, a worktree without the project link, and a commit author outside the team.
+description: "Three ways a CLI deploy goes wrong: no token, a worktree without the project link, and a commit author outside the team."
 tags: [pitfall, vercel]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
 sources:

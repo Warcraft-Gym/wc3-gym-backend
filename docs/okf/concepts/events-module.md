@@ -2,6 +2,7 @@
 type: Domain Concept
 title: Events module
 description: One data model for every kind of event, with GNL and KOTH behaviour in their own modules on top, a stage engine that never branches on kind, and a phase derived on every read.
+resource: ../../../app/services/events.py
 tags: [events, architecture, domain]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-15T09:00:00Z }
 sources:

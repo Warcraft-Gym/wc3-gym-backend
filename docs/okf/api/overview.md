@@ -2,6 +2,7 @@
 type: API Area
 title: API overview
 description: Seventeen route modules under one FastAPI app, one error envelope, paging with a total header, a search language, and OpenAPI at /docs.
+resource: ../../../app/api/main.py
 tags: [api, fastapi, routes]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
 sources:

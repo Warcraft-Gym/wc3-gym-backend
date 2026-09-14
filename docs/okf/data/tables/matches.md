@@ -1,7 +1,7 @@
 ---
 type: Data Model
 title: matches
-description: One fixture: two teams meeting in one round of an event, which the series between their players hang under.
+description: "One fixture: two teams meeting in one round of an event, which the series between their players hang under."
 resource: ../../../../app/models/match.py
 tags: [schema, events]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T15:15:00Z }

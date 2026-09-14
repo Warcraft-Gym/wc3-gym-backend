@@ -1,7 +1,7 @@
 ---
 type: Data Model
 title: teams
-description: One team: its short name, long name and the public URL of its logo.
+description: "One team: its short name, long name and the public URL of its logo."
 resource: ../../../../app/models/team.py
 tags: [schema, teams]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T15:15:00Z }
