@@ -12,6 +12,7 @@ from app.api.deps import (
     require_admin,
 )
 from app.models.enums import EventKind
+from app.models.event_award import EventAwardPublic
 from app.models.event_division import EventDivisionWrite
 from app.models.event_entrant import (
     EntrantAdd,
@@ -33,7 +34,7 @@ from app.models.season import (
     MemberEventRow,
 )
 from app.models.series import ChallengerAdd, StageSeriesPublic, StageSeriesRow
-from app.services import discord_posts, stage_engine
+from app.services import awards, discord_posts, stage_engine
 
 router = APIRouter(tags=["events"])
 
@@ -106,6 +107,16 @@ def set_stages(
 ) -> EventPublic:
     """Replace the stage list; the order of the body is the order they play in."""
     return service.set_stages(event_id, stages)
+
+
+@router.post("/events/{event_id}/finish", dependencies=[Depends(require_admin)])
+def finish_event(event_id: int) -> list[EventAwardPublic]:
+    """Close the event: write the places its last stage's table pays.
+
+    The answer is the award list, best place first per division. Closing an
+    event that is already closed rewrites its places.
+    """
+    return awards.finish(event_id)
 
 
 @router.post("/events/{event_id}/discord-post", dependencies=[Depends(require_admin)])

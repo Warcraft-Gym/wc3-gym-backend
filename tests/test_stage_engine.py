@@ -52,10 +52,14 @@ def cup(
     fmt: StageFormat = StageFormat.single_elimination,
     divisions: int = 0,
     stages: int = 1,
+    ids: list[int] | None = None,
     **fields: Any,  # noqa: ANN401
 ) -> tuple[int, list[int]]:
-    """An event whose first stage plays `count` seeded entrants per division."""
-    ids = players(count * max(divisions, 1))
+    """An event whose first stage plays `count` seeded entrants per division.
+
+    The players are fresh unless the caller names the ones to enter.
+    """
+    ids = ids or players(count * max(divisions, 1))
     with Session.begin() as session:
         event = Season(
             name="Autumn Cup", kind=EventKind.cup, series_per_round=1, published=True
