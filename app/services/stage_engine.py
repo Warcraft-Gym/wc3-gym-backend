@@ -51,11 +51,15 @@ def wins_of(session: OrmSession, row: Series) -> int:
     return series_rules(session, row).best_of // 2 + 1
 
 
-def generate(event_id: int, stage_id: int) -> dict[str, int]:
+def generate(
+    event_id: int, stage_id: int, division_id: int | None = None
+) -> dict[str, int]:
     """Create every series of the stage from the locked seeds, per division.
 
     Each bracket column is one round under the stage, and the divisions share
-    those rounds: a bracket aligns on its final, a table on its first round.
+    those rounds: a bracket aligns on its final, a table on its first round. A
+    named division draws alone into the rounds the stage already holds, so a
+    stage whose divisions fill one at a time opens each as it is ready.
     """
     with Session.begin() as session:
         stage = _stage(session, event_id, stage_id)
@@ -63,9 +67,16 @@ def generate(event_id: int, stage_id: int) -> dict[str, int]:
             raise BadRequestError(
                 "A GNL stage is drafted by its admin and its captains, not generated"
             )
-        if _series_of(session, stage_id):
+        drawn = _series_of(session, stage_id)
+        if division_id is None and drawn:
             raise BadRequestError("This stage already holds series")
+        if any(row.division_id == division_id for row in drawn):
+            raise BadRequestError("This division already holds series")
+        if division_id is not None and stage.format in BRACKETS:
+            raise BadRequestError("A bracket stage draws every division together")
         fields = _fields(_entrants(session, event_id))
+        if division_id is not None:
+            fields = {division_id: fields.get(division_id, [])}
         for field in fields.values():
             if len(field) < 2:
                 raise BadRequestError("A division needs two entrants to generate")
@@ -73,11 +84,14 @@ def generate(event_id: int, stage_id: int) -> dict[str, int]:
             division: _plan(stage, len(field)) for division, field in fields.items()
         }
         depth = max(len(plan.rounds) for plan in plans.values())
-        first = _next_number(session, event_id)
-        rounds: dict[int, DBEventRound] = {}
+        held = {row.number: row for row in _rounds_of(session, stage_id)}
+        first = min(held) if held else _next_number(session, event_id)
+        rounds: dict[int, DBEventRound] = {
+            number - first: row for number, row in held.items()
+        }
         made: list[Series] = []
-        for division_id, field in fields.items():
-            plan = plans[division_id]
+        for division, field in fields.items():
+            plan = plans[division]
             shift = depth - len(plan.rounds) if stage.format in BRACKETS else 0
             rows: list[Series] = []
             counts: dict[int, int] = {}
@@ -96,7 +110,7 @@ def generate(event_id: int, stage_id: int) -> dict[str, int]:
                     rounds[place] = round_row
                 counts[place] = counts.get(place, 0) + 1
                 rows.append(
-                    _row(session, stage, round_row, division_id, field, rows, planned)
+                    _row(session, stage, round_row, division, field, rows, planned)
                 )
                 rows[-1].sequence = counts[place]
             made += rows
@@ -105,7 +119,7 @@ def generate(event_id: int, stage_id: int) -> dict[str, int]:
         for row in made:
             if scored(row):
                 on_scored(session, row)
-        return {"series": len(made), "rounds": len(rounds)}
+        return {"series": len(made), "rounds": len(rounds) - len(held)}
 
 
 def append_to_chain(
@@ -487,6 +501,15 @@ def _series_of(session: OrmSession, stage_id: int | None) -> Sequence[Series]:
         .join(DBEventRound, col(DBEventRound.id) == col(Series.round_id))
         .where(col(DBEventRound.stage_id) == stage_id)
         .order_by(col(DBEventRound.number), col(Series.sequence), col(Series.id))
+    ).all()
+
+
+def _rounds_of(session: OrmSession, stage_id: int | None) -> Sequence[DBEventRound]:
+    """The rounds the stage already holds, in play order."""
+    return session.scalars(
+        select(DBEventRound)
+        .where(col(DBEventRound.stage_id) == stage_id)
+        .order_by(col(DBEventRound.number))
     ).all()
 
 
