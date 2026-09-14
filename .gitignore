@@ -174,3 +174,6 @@ docker-compose*
 
 # Local values and database URLs, copied from .env.example
 .env
+
+# Built by the Pages workflow; just okf-graph writes a local preview
+docs/okf/index.html
