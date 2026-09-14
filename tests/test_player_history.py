@@ -287,12 +287,12 @@ def test_a_player_with_no_history_answers_two_empty_lists(
     assert resp.json() == {"events": [], "opponents": []}
 
 
-def test_the_answer_costs_nine_statements_however_long_the_career(
+def test_the_answer_costs_ten_statements_however_long_the_career(
     seeded: dict[str, Any],
 ) -> None:
     """HARD GATE: neither block loops. One season and one opponent cost what
     two seasons and two opponents cost. The ninth statement is the entrant
-    read that carries the events outside GNL."""
+    read that carries the events outside GNL, the tenth the GNL signup read."""
     from app.services.player_history import history
     from tests.test_query_budget import count_statements
 
@@ -302,7 +302,7 @@ def test_the_answer_costs_nine_statements_however_long_the_career(
     with count_statements() as two_seasons:
         history(seeded["player_ids"][0])
 
-    assert one_season[0] == two_seasons[0] == 9
+    assert one_season[0] == two_seasons[0] == 10
 
 
 def test_an_unknown_player_answers_404(
@@ -493,3 +493,59 @@ def test_a_withdrawn_entrant_stands_in_the_cup_no_more(
         row.withdrawn_at = utcnow()
 
     assert client.get(f"/users/{entrant}/history").json()["events"] == []
+
+
+def test_a_gnl_signup_alone_puts_the_season_on_the_page(
+    client: Client, seeded: dict[str, Any]
+) -> None:
+    """A player signs up, no team drafts him and he plays nothing: the season
+    still reads, with the race he signed up on and an empty record."""
+    from app.core.db import Session
+    from app.models.base import ident
+    from app.models.enums import Race
+    from app.models.relationships import DBUserSeasonSignup
+    from app.models.user import User
+
+    with Session.begin() as session:
+        undrafted = User(
+            name="P9", battleTag="P9#9999", discordTag="p9", discordId="9", race=Race.HU
+        )
+        session.add(undrafted)
+        session.flush()
+        signed_up = ident(undrafted)
+        session.add(
+            DBUserSeasonSignup(
+                user_id=signed_up, season_id=seeded["season_id"], race=Race.UD
+            )
+        )
+
+    events = client.get(f"/users/{signed_up}/history").json()["events"]
+
+    assert [(one["season_name"], one["kind"]) for one in events] == [
+        ("Season 1", "gnl")
+    ]
+    assert events[0]["signup_race"] == "UD"
+    assert (events[0]["played"], events[0]["won"], events[0]["lost"]) == (0, 0, 0)
+    # Nobody drafted him, so no team and no finish is invented
+    assert (events[0]["team_id"], events[0]["place"]) == (None, None)
+
+
+def test_a_rostered_player_reads_his_signup_season_once(
+    client: Client, two_seasons: dict[str, Any]
+) -> None:
+    """P1 signed both seasons up and was rostered in both: two rows, not four,
+    and each keeps its team and its record."""
+    from app.models.enums import Race
+
+    p1 = two_seasons["player_ids"][0]
+    _signup_race(two_seasons["season2_id"], p1, Race.UD)
+
+    events = client.get(f"/users/{p1}/history").json()["events"]
+
+    assert [one["season_name"] for one in events] == ["Season 2", "Season 1"]
+    assert [one["signup_race"] for one in events] == ["UD", "HU"]
+    assert [one["team_name"] for one in events] == ["Alpha", "Alpha"]
+    assert [(one["played"], one["won"], one["lost"]) for one in events] == [
+        (2, 1, 1),
+        (1, 1, 0),
+    ]
