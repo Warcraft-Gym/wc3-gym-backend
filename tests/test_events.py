@@ -21,7 +21,9 @@ from app.models.event_entrant import EventEntrant
 from app.models.event_stage import EventStage
 from app.models.league import League
 from app.models.relationships import DBEventRound, round_row
+from app.models.round_availability import DBRoundAvailability
 from app.models.season import Season
+from app.models.user import User
 from app.services.events import EventService
 from tests.test_fantasy_locks import schedule, score
 
@@ -944,3 +946,124 @@ def test_the_entrant_stamp_is_no_check_in_of_a_dated_round(
         "check_in",
         None,
     )
+
+
+def signup_only(client: Client, headers: dict[str, str], **fields: Any) -> int:  # noqa: ANN401
+    """A coaching session: kind signup, no stage, created through the route."""
+    response = client.post(
+        "/events",
+        json={"name": "Coaching Night", "kind": "signup", "stages": [], **fields},
+        headers=headers,
+    )
+    assert response.status_code == 201, response.text
+    assert response.json()["stages"] == []
+    return int(response.json()["id"])
+
+
+def test_an_explicit_empty_stage_list_writes_no_stage(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """A body that sends an empty stage list plays no stage, where a body that
+    leaves the field out plays one default stage. The stages route still runs."""
+    event = signup_only(client, auth_headers)
+    assert client.get(f"/events/{event}").json()["stages"] == []
+    added = client.put(
+        f"/events/{event}/stages",
+        json=[{"format": "round_robin", "best_of": 3}],
+        headers=auth_headers,
+    )
+    assert added.status_code == 200, added.text
+    assert len(added.json()["stages"]) == 1
+
+    cleared = client.put(f"/events/{event}/stages", json=[], headers=auth_headers)
+    assert cleared.status_code == 200, cleared.text
+    assert cleared.json()["stages"] == []
+
+
+def test_a_coaching_session_takes_eight_signups_and_refuses_the_ninth(
+    client: Client,
+    seeded: dict[str, Any],
+    auth_headers: dict[str, str],
+    member: Callable[..., dict[str, str]],
+) -> None:
+    """An event with no stage still caps its entrants and checks in as itself."""
+    headers = member()
+    event = signup_only(client, auth_headers, entrant_cap=8)
+
+    enter(event, seeded["player_ids"][0])
+    for index in range(2, 9):
+        added = client.post(
+            f"/events/{event}/entrants/admin",
+            json={"race": "HU", "battle_tag": f"Coach{index}#{index}000"},
+            headers=auth_headers,
+        )
+        assert added.status_code == 201, added.text
+
+    full = client.post(
+        f"/events/{event}/entrants/admin",
+        json={"race": "HU", "battle_tag": "Coach9#9000"},
+        headers=auth_headers,
+    )
+    assert full.status_code == 400
+    assert full.json() == {"error": "The event is full at 8 entrants"}
+
+    entrants = client.get(f"/events/{event}/entrants")
+    assert entrants.status_code == 200, entrants.text
+    assert len(entrants.json()) == 8
+
+    # No stage means no round, so the check-in is the event itself
+    row = my_events(client, headers)[event]
+    assert (row["checkin_shape"], row["availability_hint"]) == ("event", None)
+
+
+def block_all_day(user_id: int) -> None:
+    """Two repeating blocks that together cover every local day, and a zone."""
+    from datetime import time
+
+    from app.models.user_block import UserBlock
+
+    with Session.begin() as session:
+        user = session.get(User, user_id)
+        assert user is not None
+        user.timezone = "Europe/Berlin"
+        session.add_all(
+            UserBlock(
+                user_id=user_id,
+                weekdays=127,
+                start_local=start,
+                end_local=end,
+            )
+            for start, end in ((time(), time(12)), (time(12), time()))
+        )
+
+
+def test_the_member_row_hints_that_the_blocks_cover_the_next_round(
+    client: Client,
+    seeded: dict[str, Any],
+    member: Callable[..., dict[str, str]],
+) -> None:
+    """Blocks that cover the whole round window read as a hint, and the
+    player's own answer wins over them: blocks inform, they never constrain."""
+    headers = member()
+    player = seeded["player_ids"][0]
+    event = add_event(kind=EventKind.cup, checkin_days=3)
+    add_round(event, TODAY, TODAY)
+    enter(event, player)
+
+    assert my_events(client, headers)[event]["availability_hint"] == "open"
+
+    block_all_day(player)
+    assert my_events(client, headers)[event]["availability_hint"] == "blocked_by_blocks"
+
+    with Session.begin() as session:
+        session.add(
+            DBRoundAvailability(
+                user_id=player,
+                season_id=event,
+                playday=1,
+                available=False,
+                set_by_user_id=player,
+            )
+        )
+    row = my_events(client, headers)[event]
+    assert (row["availability_hint"], row["action"]) == ("answered_no", "checked_in")
