@@ -24,6 +24,7 @@ from app.models.league import League
 from app.models.relationships import DBEventRound
 from app.models.season import EventCreate, EventPublic, Season
 from app.models.series import Series
+from app.models.types import utcnow
 from app.services import awards, stage_engine
 from app.services.events import EventService
 
@@ -56,6 +57,7 @@ def open_night(data: NightOpen) -> EventPublic:
             published=True,
             starts_at=data.starts_at,
             checkin_enabled=False,
+            multi_entry=True,
             stages=[EventStageWrite(format=StageFormat.koth, best_of=1)],
         )
     )
@@ -72,9 +74,11 @@ def open_night(data: NightOpen) -> EventPublic:
 def close_night(event_id: int) -> EventPublic:
     """Delete the series at the end of every chain nobody played, and close it.
 
-    Every series that is left carries a result, so the night reads finished,
-    and the closed night takes no further signup. The close then pays the
-    night's awards, so the king of every bracket holds its champion place.
+    A chain grows while the admin names series, so nothing but this call ends
+    the night: it stamps `closed_at`, which is what makes the night read
+    finished, and the closed night takes no further signup. The close then
+    pays the night's awards, so the king of every bracket holds its champion
+    place.
     """
     with Session.begin() as session:
         night = session.get(Season, event_id)
@@ -87,6 +91,7 @@ def close_night(event_id: int) -> EventPublic:
             while chain and not stage_engine.scored(chain[-1]):
                 session.delete(chain.pop())
         night.signups_open = False
+        night.closed_at = utcnow()
         session.flush()
         awards.close_event(session, event_id)
     return EventService().get(event_id, claims=ADMIN)

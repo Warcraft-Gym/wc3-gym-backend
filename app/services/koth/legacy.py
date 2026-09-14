@@ -160,10 +160,10 @@ def create_signups(
     event_id: int | None = None,
     channel: SignupChannel = SignupChannel.twitch,
 ) -> list[KothSignupPublic]:
-    """Enter one player in a night; his one entrant is the list the old route gave.
+    """Enter one player in a night; his entrants are the list the old route gave.
 
-    A night holds one entrant per player, so a body naming several races
-    writes the last of them: each name replaces the race before it.
+    A night holds one entrant per race, so a body naming several races writes
+    one row per race.
     """
     with Session.begin() as session:
         event_id = (
@@ -177,11 +177,15 @@ def create_signups(
 
 
 def withdraw(battle_tag: str, race: str | None = None) -> None:
-    """Withdraw the player's entrant from the night that takes signups."""
+    """Withdraw the player from the night that takes signups.
+
+    A command that names a race withdraws that race alone; one that names none
+    withdraws every race the player entered.
+    """
     named = _race(race)
     with Session.begin() as session:
         event_id = ident(night.tonight(session))
-        row = session.scalars(
+        statement = (
             select(EventEntrant)
             .join(User, col(User.id) == col(EventEntrant.user_id))
             .where(
@@ -190,10 +194,14 @@ def withdraw(battle_tag: str, race: str | None = None) -> None:
                 == battle_tag.strip().lower(),
                 col(EventEntrant.withdrawn_at).is_(None),
             )
-        ).first()
-        if row is None or (named is not None and row.race is not named):
+        )
+        if named is not None:
+            statement = statement.where(col(EventEntrant.race) == named)
+        rows = session.scalars(statement).all()
+        if not rows:
             raise NotFoundError("No active signup to withdraw")
-        row.withdrawn_at = utcnow()
+        for row in rows:
+            row.withdrawn_at = utcnow()
 
 
 def set_bracket(signup_id: int, bracket: int) -> KothSignupPublic:

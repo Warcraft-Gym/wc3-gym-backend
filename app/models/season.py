@@ -146,6 +146,14 @@ class Season(SeasonBase, DBModel, table=True):
     checkin_enabled: bool = Field(
         default=True, sa_column_kwargs={"server_default": true()}
     )
+    # On, a player may enter once per race; each row seeds on its own race
+    multi_entry: bool = Field(
+        default=False, sa_column_kwargs={"server_default": false()}
+    )
+    # When an admin closed the event; a closed event reads finished
+    closed_at: Annotated[datetime | None, AwareUTC] = Field(
+        default=None, sa_type=UTCDateTime
+    )
     # The rules or landing page of the event, shown as one "Page" link
     page_url: str | None = Field(default=None, max_length=500)
     stream_url: str | None = Field(default=None, max_length=500)
@@ -508,6 +516,8 @@ class EventPublic(SQLModel):
     end_date: Annotated[IsoDate | None, LenientDate] = None
     starts_at: Annotated[datetime | None, AwareUTC] = None
     checkin_enabled: bool = True
+    multi_entry: bool = False
+    closed_at: Annotated[datetime | None, AwareUTC] = None
     region: str | None = None
     page_url: str | None = None
     stream_url: str | None = None
@@ -550,6 +560,8 @@ class EventCreate(SQLModel):
     end_date: Annotated[date | None, LenientDate] = None
     starts_at: Annotated[datetime | None, AwareUTC] = None
     checkin_enabled: bool = True
+    # On, a player may enter once per race; each row seeds on its own race
+    multi_entry: bool = False
     checkin_days: int | None = Field(default=3, ge=0)
     region: str | None = None
     page_url: str | None = None
@@ -581,6 +593,7 @@ class EventUpdate(SQLModel):
     end_date: Annotated[date | None, LenientDate] = None
     starts_at: Annotated[datetime | None, AwareUTC] = None
     checkin_enabled: bool | None = None
+    multi_entry: bool | None = None
     checkin_days: int | None = Field(default=None, ge=0)
     region: str | None = None
     page_url: str | None = None

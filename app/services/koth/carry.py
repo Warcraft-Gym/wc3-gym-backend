@@ -102,7 +102,11 @@ def _stranded(chain: list[Series], field: list[EventEntrant]) -> list[int]:
 
 
 def _by_division(session: OrmSession, event_id: int) -> dict[int, list[EventEntrant]]:
-    """The entrants of each bracket that holds one, in signup order."""
+    """The entrants of each bracket that holds one, in signup order.
+
+    A player who entered a bracket on two races holds two rows there and takes
+    one seat, so the chain never pairs him with himself.
+    """
     fields: dict[int, list[EventEntrant]] = {}
     rows = session.scalars(
         select(EventEntrant)
@@ -115,7 +119,10 @@ def _by_division(session: OrmSession, event_id: int) -> dict[int, list[EventEntr
     for row in rows:
         if row.division_id is not None:
             fields.setdefault(row.division_id, []).append(row)
-    return fields
+    return {
+        division_id: stage_engine._one_seat_per_player(field)
+        for division_id, field in fields.items()
+    }
 
 
 def _kings_first(
