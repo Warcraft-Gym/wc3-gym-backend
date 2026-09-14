@@ -230,6 +230,14 @@ class ResultKindWrite(SQLModel):
     winner: Literal[1, 2]
 
 
+class TemplateSeries(SQLModel):
+    """One series of a fixture template: how many players a side fields, and
+    how the sides are picked."""
+
+    side_size: int = Field(default=1, ge=1, le=8)
+    pick_rule: Literal["drafted", "any"] = "any"
+
+
 class ChallengerAdd(SQLModel):
     """The entrant a chain stage plays next, at the end of his division."""
 

@@ -33,7 +33,12 @@ from app.models.season import (
     EventUpdate,
     MemberEventRow,
 )
-from app.models.series import ChallengerAdd, StageSeriesPublic, StageSeriesRow
+from app.models.series import (
+    ChallengerAdd,
+    StageSeriesPublic,
+    StageSeriesRow,
+    TemplateSeries,
+)
 from app.services import awards, discord_posts, stage_engine
 
 router = APIRouter(tags=["events"])
@@ -279,6 +284,23 @@ def add_stage_series(
 ) -> StageSeriesRow:
     """Append one challenger to the end of the chain his division plays."""
     return stage_engine.add_challenger(event_id, stage_id, data.entrant_id)
+
+
+@router.post(
+    "/events/{event_id}/stages/{stage_id}/fixtures/{fixture_id}/template",
+    dependencies=[Depends(require_admin)],
+)
+def set_fixture_template(
+    event_id: int, stage_id: int, fixture_id: int, template: list[TemplateSeries]
+) -> list[StageSeriesRow]:
+    """Write the ordered series one fixture holds, the first played first.
+
+    The Clan War template of the Altar of Champions is a drafted 1v1, a
+    drafted 2v2, a 4v4 on any pick, a drafted 1v1 and a 1v1 on any pick. Each
+    row names its side size and its pick rule and holds no side; a fixture
+    that already holds series refuses.
+    """
+    return stage_engine.set_fixture_template(event_id, stage_id, fixture_id, template)
 
 
 @router.get("/events/{event_id}/stages/{stage_id}/standings")
