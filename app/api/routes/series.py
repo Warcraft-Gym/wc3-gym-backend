@@ -17,8 +17,10 @@ from app.models.series import (
     SeriesCreate,
     SeriesPublic,
     SeriesUpdate,
+    StageSeriesRow,
 )
 from app.models.series_cast import CastPublic, CastWrite, ClaimWrite, VodWrite
+from app.models.series_side import LobbySidesWrite, PlacesWrite
 from app.services import casts, stage_engine
 
 logger = logging.getLogger(__name__)
@@ -60,6 +62,22 @@ def update_series(
 def set_result_kind(series_id: int, data: ResultKindWrite) -> SeriesPublic:
     """Score a series no game was played for: a walkover or a forfeit."""
     return stage_engine.set_result_kind(series_id, data)
+
+
+@router.put("/series/{series_id}/places", dependencies=[Depends(require_admin)])
+def set_places(series_id: int, data: PlacesWrite) -> StageSeriesRow:
+    """Enter where every side of a free for all lobby finished.
+
+    A lobby plays one game, so the places settle it, and a round whose every
+    lobby carries places seats the lobbies of the round after it.
+    """
+    return stage_engine.set_places(series_id, data)
+
+
+@router.put("/series/{series_id}/sides", dependencies=[Depends(require_admin)])
+def set_sides(series_id: int, data: LobbySidesWrite) -> StageSeriesRow:
+    """Seat a lobby again before it is played, so an entrant may move lobbies."""
+    return stage_engine.set_sides(series_id, data)
 
 
 @router.delete(

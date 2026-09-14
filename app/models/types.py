@@ -148,6 +148,20 @@ def _map_rules[T](value: T) -> T | None:
     return value
 
 
+def _place_points[T](value: T) -> T | None:
+    """What each place of a free for all lobby pays, best place first."""
+    if value == "" or value is None:
+        return None
+    if isinstance(value, str):
+        for token in value.split(","):
+            if not token.strip().isdigit():
+                raise ValueError(
+                    f"'{token.strip()}' is not a place. Write the points a place "
+                    "pays, best place first, as '4,3,2,1'."
+                )
+    return value
+
+
 def _score_system[T](value: T) -> T:
     """The scale a season scores its series on."""
     if isinstance(value, str) and value not in SYSTEMS:
@@ -229,5 +243,7 @@ TwitchChannel = BeforeValidator(_twitch_channel)
 YouTubeChannel = BeforeValidator(_youtube_channel)
 # Input. The map rules of a season, which take the four rule names and nothing else.
 MapRules = BeforeValidator(_map_rules)
+# Input. What each place of an FFA lobby pays, best place first, as "4,3,2,1".
+PlacePoints = BeforeValidator(_place_points)
 # Input. The score system of a season, which takes the systems the scoring rule knows.
 KnownScoreSystem = BeforeValidator(_score_system)
