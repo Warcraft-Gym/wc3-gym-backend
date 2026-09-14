@@ -13,21 +13,17 @@ from fastapi import APIRouter, Depends, Query
 from app.api.deps import RequireLogin, UserServiceDep, require_admin
 from app.core.exceptions import BadRequestError
 from app.models.enums import SignupChannel
-from app.models.koth_event import (
+from app.models.koth_legacy import (
+    KothBracketUpdate,
     KothEventCreate,
     KothEventPublic,
     KothEventSummary,
     KothEventUpdate,
-)
-from app.models.koth_match import (
     KothMatchCreate,
     KothMatchCreateRequest,
     KothMatchPublic,
     KothMatchResult,
     KothMatchUpdate,
-)
-from app.models.koth_signup import (
-    KothBracketUpdate,
     KothSignupAdminRequest,
     KothSignupMeRequest,
     KothSignupPublic,
