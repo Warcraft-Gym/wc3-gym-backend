@@ -58,6 +58,8 @@ BEFORE_EVENT_RENAME = "f4b7c02e9a15"
 EVENT_RENAME = "1e0287eacccf"
 # The revision before the rounds become event_round
 BEFORE_EVENT_ROUND = "8cc6dd6d93eb"
+# The rename itself, which leaves the two views behind until the contract drop
+EVENT_ROUND = "96c0d36de81c"
 # The revision before the Swiss, FFA and award rows
 BEFORE_SWISS_ROWS = "b4e1c9a7d206"
 # The revision before an event carries a parent and a series its feeders
@@ -66,6 +68,10 @@ BEFORE_EVENT_MODEL = "96c0d36de81c"
 BEFORE_KOTH_BACKFILL = "b3e7d1a5c904"
 # The revision before a series names the entrant on each of its sides
 BEFORE_SERIES_ENTRANTS = "a3f7c05b2e91"
+# The backfill itself, the last revision the four koth_* tables live at
+KOTH_BACKFILL = "a3f7c05b2e91"
+# The revision before the old KOTH tables and the two views are dropped
+BEFORE_KOTH_DROP = "c9f2b6a41d38"
 
 
 def comparable(
@@ -826,7 +832,7 @@ def test_the_rounds_become_event_round_and_everything_points_at_them(
             )
         )
 
-    upgrade_to(url, "head")
+    upgrade_to(url, EVENT_ROUND)
     with engine.connect() as connection:
         stage = connection.scalar(
             text("SELECT id FROM event_stage WHERE event_id = 17")
@@ -1022,7 +1028,7 @@ def test_every_past_koth_night_becomes_an_event_of_the_koth_league(
             )
         )
 
-    upgrade_to(url, "head")
+    upgrade_to(url, KOTH_BACKFILL)
 
     with engine.connect() as connection:
         # The night named after a season that already exists is kept apart
@@ -1219,3 +1225,73 @@ def test_the_swiss_ffa_and_award_rows_are_added_and_dropped(tmp_path: Path) -> N
     assert not {"series_side", "event_award"} & tables
     assert "swiss_rounds" not in named("event_stage")
     assert "group_no" not in named("event_entrant")
+
+
+KOTH_TABLES = (
+    "koth_events",
+    "koth_signups",
+    "koth_matches",
+    "koth_match_participants",
+)
+VIEWS = ("season_rounds", "user_season_availability")
+
+
+def test_the_old_koth_tables_and_the_two_views_are_dropped_and_come_back(
+    tmp_path: Path,
+) -> None:
+    """A night with one signup, one match and one participant is dropped with
+    its tables, and so are the views the renamed tables stood behind. The
+    downgrade builds all six again, empty."""
+    url = fresh_database(tmp_path, "koth-drop")
+    upgrade_to(url, BEFORE_KOTH_DROP)
+
+    engine = create_engine(url)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO koth_events (id, name, event_date, is_active, "
+                "bracket_1_threshold, bracket_2_threshold) "
+                "VALUES (1, 'Gym KOTH', '2026-02-03 19:00:00+00:00', 1, 1450, 1600)"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO koth_signups (id, event_id, twitch_username, battle_tag, "
+                "w3c_name, race, mmr, bracket, is_king, is_active) "
+                "VALUES (1, 1, 'BarrenTV', 'React#21633', 'React', 'UD', 1965, 3, 0, 1)"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO koth_matches (id, event_id, bracket, game_mode, "
+                "num_teams, winner_team_number) VALUES (1, 1, 3, '1v1', 2, 1)"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO koth_match_participants (id, match_id, signup_id, "
+                "team_number) VALUES (1, 1, 1, 1)"
+            )
+        )
+    assert set(VIEWS) <= set(inspect(engine).get_view_names())
+
+    upgrade_to(url, "head")
+
+    inspected = inspect(engine)
+    assert not set(KOTH_TABLES) & set(inspected.get_table_names())
+    assert not set(VIEWS) & set(inspected.get_view_names())
+
+    downgrade_to(url, BEFORE_KOTH_DROP)
+
+    inspected = inspect(engine)
+    assert set(KOTH_TABLES) <= set(inspected.get_table_names())
+    assert set(VIEWS) <= set(inspected.get_view_names())
+    # The tables come back, the rows do not; the CSV copies hold those
+    with engine.connect() as connection:
+        for table_name in KOTH_TABLES:
+            assert connection.scalar(text(f"SELECT count(*) FROM {table_name}")) == 0
+    # A night outlives the round it names, so the key clears the column
+    assert [
+        (key["referred_table"], key["options"].get("ondelete"))
+        for key in inspect(engine).get_foreign_keys("koth_events")
+    ] == [("event_round", "SET NULL")]
