@@ -31,6 +31,7 @@ from sqlmodel import col
 from app.core.db import Session
 from app.core.fantasy import race_value
 from app.models.enums import EventKind
+from app.models.event_award import EventAward
 from app.models.event_entrant import EventEntrant
 from app.models.map import Map
 from app.models.match import Match
@@ -153,7 +154,8 @@ def _entered(session: OrmSession, user_id: int) -> Entered:
     A GNL season signs its players up through the signup table, so this read
     carries the other kinds: a cup the player entered answers here from the
     moment they signed up, whether or not a bracket exists yet. A withdrawn
-    entrant stands in the event no more.
+    entrant stands in the event no more. The award is left joined, so an event
+    that has closed carries the place it paid the player.
     """
     rows = session.execute(
         select(
@@ -163,8 +165,15 @@ def _entered(session: OrmSession, user_id: int) -> Entered:
             col(Season.kind).label("kind"),
             col(Season.start_date).label("start_date"),
             col(Season.end_date).label("end_date"),
+            col(EventAward.place).label("place"),
         )
         .join(EventEntrant, col(EventEntrant.event_id) == Season.id)
+        .join(
+            EventAward,
+            (col(EventAward.event_id) == Season.id)
+            & (col(EventAward.user_id) == user_id),
+            isouter=True,
+        )
         .where(
             col(EventEntrant.user_id) == user_id,
             col(EventEntrant.withdrawn_at).is_(None),
@@ -276,7 +285,10 @@ def _events(
     for season_id in sorted(names, reverse=True):
         team_id, team_name, _, _ = rosters.get(season_id, (None, None, None, None))
         played, won, lost = tallies.get(season_id, [0, 0, 0])
-        place, team_count = places.get((team_id, season_id), (None, None))
+        entry = entered.get(season_id)
+        place, team_count = places.get(
+            (team_id, season_id), (entry.place if entry else None, None)
+        )
         signup = signups.get(season_id)
         events.append(
             HistoryEvent(

@@ -24,7 +24,7 @@ from app.models.league import League
 from app.models.relationships import DBEventRound
 from app.models.season import EventCreate, EventPublic, Season
 from app.models.series import Series
-from app.services import stage_engine
+from app.services import awards, stage_engine
 from app.services.events import EventService
 
 # The MMR each bracket opens at, weakest first, before any night has run
@@ -73,7 +73,8 @@ def close_night(event_id: int) -> EventPublic:
     """Delete the series at the end of every chain nobody played, and close it.
 
     Every series that is left carries a result, so the night reads finished,
-    and the closed night takes no further signup.
+    and the closed night takes no further signup. The close then pays the
+    night's awards, so the king of every bracket holds its champion place.
     """
     with Session.begin() as session:
         night = session.get(Season, event_id)
@@ -86,6 +87,8 @@ def close_night(event_id: int) -> EventPublic:
             while chain and not stage_engine.scored(chain[-1]):
                 session.delete(chain.pop())
         night.signups_open = False
+        session.flush()
+        awards.close_event(session, event_id)
     return EventService().get(event_id, claims=ADMIN)
 
 

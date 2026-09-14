@@ -54,6 +54,7 @@ from app.core.scoring import (
 from app.models.base import ident
 from app.models.draft_series import DraftSeriesPublic
 from app.models.enums import Race
+from app.models.event_award import EventAward
 from app.models.event_entrant import EventEntrant
 from app.models.event_stage import EventStage
 from app.models.fantasy_bet import FantasyBet, FantasyBetPublic
@@ -595,12 +596,66 @@ def _gnl_matchups(
 
 
 def fill_trophies(session: Session, users: Iterable[UserPublic | None]) -> None:
-    """Fill the trophies of every user: the finished seasons his team won.
+    """Fill the trophies of every user: the seasons his team won and the events
+    that awarded him a first place.
 
     A season still running has a leader, not a champion, so only a complete
-    season pays. The phase of every season they played is one statement.
+    season pays. The phase of every season they played is one statement, and
+    the awards of every other event are one more.
     """
     rows = [user for user in users if user is not None]
+    if not rows:
+        return
+    shelves = _season_trophies(session, rows)
+    won_events = {trophy.season_id for shelf in shelves.values() for trophy in shelf}
+    awarded = _award_trophies(session, rows, won_events)
+    for user in rows:
+        user.trophies = sorted(
+            shelves.get(user.id, []) + awarded.get(user.id, []),
+            # newest event first, the way a shelf reads
+            key=lambda trophy: -(trophy.season_id or 0),
+        )
+
+
+def _award_trophies(
+    session: Session, users: list[UserPublic], won_events: set[int | None]
+) -> dict[int, list[TrophyPublic]]:
+    """The first place of every closed event that awarded one of these players.
+
+    An event whose championship the season read already derives pays no second
+    row, so no event engraves the same player twice.
+    """
+    rows = session.execute(
+        select(EventAward, Season, Team)
+        .join(Season, col(Season.id) == EventAward.event_id)
+        .join(Team, col(Team.id) == EventAward.team_id, isouter=True)
+        .where(
+            col(EventAward.user_id).in_({user.id for user in users}),
+            col(EventAward.place) == 1,
+        )
+    ).all()
+    shelves: dict[int, list[TrophyPublic]] = {}
+    for award, event, team in rows:
+        if award.user_id is None or award.event_id in won_events:
+            continue
+        shelves.setdefault(award.user_id, []).append(
+            TrophyPublic(
+                title=f"{event.name} {award.title}",
+                season_id=award.event_id,
+                season_name=event.name,
+                league_short_name=event.league_short_name,
+                team_id=award.team_id,
+                team_name=team.name if team is not None else None,
+                team_icon_url=team.icon_url if team is not None else None,
+            )
+        )
+    return shelves
+
+
+def _season_trophies(
+    session: Session, rows: list[UserPublic]
+) -> dict[int, list[TrophyPublic]]:
+    """The championship of every finished season one of these players won."""
     roster = {
         (stat.team_id, stat.season_id)
         for user in rows
@@ -608,7 +663,7 @@ def fill_trophies(session: Session, users: Iterable[UserPublic | None]) -> None:
         if stat.team_id is not None and stat.season_id is not None
     }
     if not roster:
-        return
+        return {}
 
     seasons = {
         ident(season): season
@@ -629,9 +684,10 @@ def fill_trophies(session: Session, users: Iterable[UserPublic | None]) -> None:
         )
     }
 
+    shelves: dict[int, list[TrophyPublic]] = {}
     for user in rows:
         played = {(stat.team_id, stat.season_id) for stat in user.gnl_stats}
-        user.trophies = [
+        shelves[user.id] = [
             TrophyPublic(
                 title=f"{seasons[season_id].name} Champion",
                 season_id=season_id,
@@ -641,10 +697,10 @@ def fill_trophies(session: Session, users: Iterable[UserPublic | None]) -> None:
                 team_name=teams[team_id].name,
                 team_icon_url=teams[team_id].icon_url,
             )
-            # newest season first, the way a shelf reads
-            for team_id, season_id in sorted(won, key=lambda pair: -pair[1])
+            for team_id, season_id in won
             if (team_id, season_id) in played
         ]
+    return shelves
 
 
 def fill_gnl_stats(session: Session, users: Iterable[UserPublic | None]) -> None:
