@@ -3,7 +3,7 @@ type: Domain Concept
 title: Events module
 description: One data model for every kind of event, with GNL and KOTH behaviour in their own modules on top, a stage engine that never branches on kind, and a phase derived on every read.
 tags: [events, architecture, domain]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T14:30:00Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T15:15:00Z }
 sources:
   - id: events
     resource: ../../../app/services/events.py
@@ -49,7 +49,7 @@ Divisions cut the entrant pool by MMR (`app/core/divisions.py`). Every division 
 
 `signup_policy` is `members` (a member with an account) or `anyone` (any battle tag; KOTH takes signups from Twitch chat this way). A per-event switch allows one entrant row per race, off by default, on for KOTH nights.
 
-An event of a league that drafts its teams (`entrant_kind` is `drafted_teams`) takes no direct signup, and the write refuses it by that shape, never by the event kind. A captain of a team may enter that team into any event of its league.
+An event of a league that drafts its teams (`entrant_kind` is `drafted_teams`) takes no direct signup, and the write refuses it by that shape, never by the event kind. A captain of a team may enter that team into an event; the entrant cap refuses a signup past it and no waiting list is kept.
 
 # Awards
 
@@ -58,3 +58,19 @@ Closing an event freezes the table of its last stage into `event_award`, one row
 # Discord card
 
 Every event has one card the app posts and edits in Discord, with a sign-up, a withdraw and a check-in button. A press writes through the same entrant service the site uses. The check-in button is enabled only while the event's check-in window is open, which the full event read answers as `checkin_open`; a press outside the window answers that the check-in is not open yet, or that it has closed. See [Discord integration](discord-integration.md).
+
+# Managing an event
+
+The admin's path from a new league to a finished event, in order. Every write here needs an admin unless the step says otherwise; the frontend repository owns the pages.
+
+1. **Create the league.** `POST /leagues` with the name, the short name, the `kind` and the `entrant_kind`. `PUT /leagues/{id}` changes it later. The GNL and the KOTH league already exist.
+2. **Create the event.** `POST /events` with the fields and the stage list. A body without `stages` gets one default stage; an explicit empty list gets none, which is a signup-only event. `entrant_kind` left out is copied from the league. `PUT /events/{id}` changes the fields; `PUT /events/{id}/stages` replaces the stage list in play order, updating a stage in place so its rounds and series stay, and refusing to drop a stage that still holds rounds. A KOTH night is opened in one call, `POST /koth/nights`, which writes the event, its `koth` stage and its three brackets.
+3. **Publish.** `PUT /events/{id}` with `published` on. A draft reads for an admin only and its phase is `draft`.
+4. **Open signups.** `PUT /events/{id}` with `signups_open` on; the phase reads `signups_open`. `POST /events/{id}/discord-post` posts the event card with its buttons in a channel, or edits the card already there.
+5. **Entrants.** A member signs up with `POST /events/{id}/entrants`, a captain enters their team the same way, an admin enters anyone with `POST /events/{id}/entrants/admin` whether signups stand open or not, and a Twitch chat command enters a battle tag through `GET /koth/signup`. `DELETE /events/{id}/entrants/me` withdraws and keeps the row; `DELETE /events/{id}/entrants/{entrant_id}` removes it. `POST /events/{id}/entrants/{entrant_id}/checkin` checks an entrant in on an event with no dated round; an event with dated rounds checks in per round through `PUT /player-availability`. `GET /events/{id}/entrants` lists every row with its MMR and its warnings.
+6. **Divisions.** `PUT /events/{id}/divisions` replaces the list, strongest first, and clears every placement. `POST /events/{id}/divisions/assign` cuts the live entrants by the MMR of their signup race, leaving hand-placed ones alone. `PUT /events/{id}/entrants/{entrant_id}` moves one entrant by hand.
+7. **Seeds and the lock.** `PUT /events/{id}/stages/{stage_id}/seeds` numbers the entrants 1..n inside each division from a `source`: `mmr`, `random`, `manual` with an `order`, `invitation`, or `previous_stage`, which reads the standings of the stage before and refuses while a series of it has no result. `POST /events/{id}/stages/{stage_id}/seeds/lock` stamps the stage; a locked stage refuses a seed write.
+8. **Generate.** `POST /events/{id}/stages/{stage_id}/generate` writes every series of the stage from the seeds, one bracket per division, and refuses a `gnl` stage and a stage that already holds series. A stage that draws by round (`swiss`, `koth`) takes `POST /events/{id}/stages/{stage_id}/rounds` once per round. `POST /events/{id}/stages/{stage_id}/series` appends a challenger to a chain. On a team event, `POST /events/{id}/stages/{stage_id}/fixtures/{fixture_id}/template` writes the ordered series one fixture holds, and a captain fills a side's roster with `PUT /series/{id}/sides`. A GNL season is not generated: its fixtures come from the match routes and its series from the captains' drafts.
+9. **Results.** A player on either side, or an admin, reports through `PUT /player-series/{id}`; `PUT /series/{id}/result-kind` records a walkover or a forfeit; `PUT /series/{id}/places` enters the order of an FFA lobby. A score follows the feeder graph into the next series by itself. `GET /events/{id}/stages/{stage_id}/series` and `GET /events/{id}/stages/{stage_id}/standings` read the run and the table; both are open reads.
+10. **Advance.** `POST /events/{id}/stages/{stage_id}/advance` seeds the next stage from the top places of every division's table and refuses on the last stage or while a series has no result. A stage with `auto_advance` does this on its last score.
+11. **Finish and awards.** `POST /events/{id}/finish` writes the `event_award` rows from the table of the last stage, one per placed entrant per division; a second call rewrites them. A KOTH night closes with `POST /koth/nights/{id}/close`, which deletes the series nobody played and then pays the awards. [Phase](#phase) lists when the event reads `finished`.

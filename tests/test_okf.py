@@ -1,12 +1,16 @@
 """The docs/okf bundle conforms to OKF v0.2 and is safe to publish: every
 concept has a type, index files carry no frontmatter (the root one only its
-version), every relative link and source path resolves, and no file holds an
-id, a credential or a hostname."""
+version), every relative link and source path resolves, every table has a
+concept whose Schema lists exactly its columns, and no file holds an id, a
+credential or a hostname."""
 
 import re
 from pathlib import Path
 
 import pytest
+from sqlmodel import SQLModel
+
+import app.models  # noqa: F401  registers every table
 
 BUNDLE = Path(__file__).resolve().parents[1] / "docs" / "okf"
 LINK = re.compile(r"\]\(([^)\s]+)\)")
@@ -72,3 +76,29 @@ def test_no_sensitive_content(path: Path) -> None:
     text = path.read_text()
     hit = SENSITIVE.search(text)
     assert hit is None, f"looks sensitive: {hit.group()!r}"
+
+
+TABLES = BUNDLE / "data" / "tables"
+SCHEMA_ROW = re.compile(r"^\| `(\w+)` \|", re.MULTILINE)
+
+
+@pytest.mark.parametrize("table", sorted(SQLModel.metadata.tables))
+def test_table_concept_lists_every_column(table: str) -> None:
+    path = TABLES / f"{table}.md"
+    assert path.exists(), f"docs/okf/data/tables/{table}.md is missing"
+    _, found, rest = path.read_text().partition("\n# Schema\n")
+    assert found, "a table concept has a # Schema section"
+    listed = set(SCHEMA_ROW.findall(rest.split("\n# ", 1)[0]))
+    columns = set(SQLModel.metadata.tables[table].columns.keys())
+    assert listed == columns, (
+        f"missing {sorted(columns - listed)}, stale {sorted(listed - columns)}"
+    )
+
+
+def test_every_table_concept_names_a_table() -> None:
+    stray = (
+        {p.stem for p in TABLES.glob("*.md")}
+        - {"index"}
+        - set(SQLModel.metadata.tables)
+    )
+    assert not stray, f"no such table: {sorted(stray)}"

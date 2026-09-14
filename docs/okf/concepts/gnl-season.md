@@ -3,7 +3,7 @@ type: Domain Concept
 title: GNL season
 description: Six drafted teams, five weekly rounds, one fixture per team pairing with captain-drafted series, and a phase that is derived from the series.
 tags: [gnl, season, domain]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T14:30:00Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T15:15:00Z }
 sources:
   - id: season-model
     resource: ../../../app/models/season.py
@@ -24,7 +24,7 @@ A GNL season is one event of the GNL league with one stage of format `gnl`. Six 
 
 | Field | Meaning |
 |---|---|
-| `series_per_round` | how many series each player plays per round |
+| `series_per_round` | how many series one fixture holds |
 | `score_system` | `standard` or `helpstone`; the scale series points are paid on. See [derived scores](derived-scores.md). |
 | `map_rules` | one rule per game: `fixed`, `loser`, `host`, `veto`. Null means the GNL default `fixed,loser,loser`. See [series reporting](series-reporting.md). |
 | `pick_ban` | the veto order, side A and side B per step |
@@ -53,7 +53,7 @@ The `settings` row `current_gnl_season` names the season the captain check, the 
 
 # Signups and the draft
 
-A member signs up through `POST /signup` with a race and an MMR. The signup row carries `draft_position` (a hand-set place; null means sort by MMR), `draft_excluded`, `fantasy_tier` and `fantasy_tier_pinned`. A hand correction to the draft order is a position, never an adjusted MMR. See [the decision](../decisions/draft-order-rerank.md).
+A member signs up through `POST /signup` with a race and an MMR. The signup row carries `race`, `draft_position` (a hand-set place; null means sort by MMR), `draft_excluded` and `fantasy_tier`; `fantasy_tier_pinned` on the answer is derived from the tier and the season's apply date, never stored. See [user_season_signup](../data/tables/user_season_signup.md). A hand correction to the draft order is a position, never an adjusted MMR. See [the decision](../decisions/draft-order-rerank.md).
 
 # Import and export
 
