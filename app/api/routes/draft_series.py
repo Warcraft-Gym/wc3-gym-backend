@@ -11,6 +11,7 @@ from app.api.deps import (
     require_admin,
     require_captain,
 )
+from app.core.db import Session
 from app.core.exceptions import ApiError
 from app.models.draft_series import (
     DraftSeriesCreate,
@@ -18,6 +19,7 @@ from app.models.draft_series import (
     DraftSeriesUpdate,
 )
 from app.models.series import SeriesPublic
+from app.services import draft_series
 from app.services.matches import MatchService
 
 logger = logging.getLogger(__name__)
@@ -42,6 +44,16 @@ def _own_match(
         raise ApiError(403, {"error": "Your team does not play this match"})
 
 
+def _no_repeat(match_id: int | None, *players: int | None) -> None:
+    """A drafted series of a fixture names a player its siblings do not.
+
+    A mixed fixture, the Altar of Champions Clan War, plays several drafted
+    series, and a player plays one of them.
+    """
+    with Session.begin() as session:
+        draft_series.refuse_repeat(session, match_id, players)
+
+
 @router.post(
     "/draft-series",
     status_code=201,
@@ -55,6 +67,7 @@ def add_draft_series(
 ) -> DraftSeriesPublic:
     """Create a new draft series for a match the caller's team plays."""
     _own_match(claims, data.match_id, matches)
+    _no_repeat(data.match_id, data.player1_id, data.player2_id)
     return service.add(data)
 
 
@@ -74,6 +87,7 @@ def update_draft_series(
     _own_match(claims, existing.match_id, matches)
     if data.match_id is not None and data.match_id != existing.match_id:
         _own_match(claims, data.match_id, matches)
+    _no_repeat(data.match_id or existing.match_id, data.player1_id, data.player2_id)
     return service.update(draft_series_id, data)
 
 

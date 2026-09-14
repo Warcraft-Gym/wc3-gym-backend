@@ -17,7 +17,7 @@ from sqlmodel import col
 
 from app.core import brackets
 from app.core.db import Session
-from app.core.exceptions import BadRequestError, NotFoundError
+from app.core.exceptions import ApiError, BadRequestError, NotFoundError
 from app.models.base import ident
 from app.models.enums import StageFormat
 from app.models.event_division import EventDivision
@@ -30,7 +30,7 @@ from app.models.event_stage import (
     StandingRow,
 )
 from app.models.match import Match
-from app.models.relationships import DBEventRound, EventRoundPublic
+from app.models.relationships import DBEventRound, EventRoundPublic, round_row
 from app.models.season import Season
 from app.models.series import (
     ResultKindWrite,
@@ -38,19 +38,21 @@ from app.models.series import (
     SeriesPublic,
     StageSeriesPublic,
     StageSeriesRow,
+    TemplateSeries,
 )
 from app.models.series_side import (
     LobbySidesWrite,
     PlacesWrite,
     SeriesSide,
     SeriesSidePublic,
+    SideRoster,
 )
 from app.models.team import Team
 from app.models.team_reduced import TeamReduced
 from app.models.user import User, UserPublic
 from app.models.user_team_season import DBUserTeamSeason
-from app.services import derived
-from app.services.series_rules import series_rules, stands_on_side
+from app.services import derived, draft_series
+from app.services.series_rules import acts_for_side, series_rules, stands_on_side
 
 # The formats whose last round is the final, so every division ends together
 BRACKETS = (StageFormat.single_elimination, StageFormat.double_elimination)
@@ -460,10 +462,22 @@ def set_places(series_id: int, data: PlacesWrite) -> StageSeriesRow:
         return _lobby_read(session, row)
 
 
-def set_sides(series_id: int, data: LobbySidesWrite) -> StageSeriesRow:
-    """Seat a lobby again before it is played, so an entrant may move lobbies."""
+def set_sides(
+    series_id: int,
+    data: LobbySidesWrite,
+    admin: bool,
+    user_id: int | None = None,
+) -> StageSeriesRow:
+    """Seat a lobby again before it is played, or name the roster of a side.
+
+    A body naming `sides` writes the roster each side of a fixture series
+    fields, which a captain of that side writes and an admin writes for
+    either. A body naming `entrant_ids` seats a free for all lobby again.
+    """
     with Session.begin() as session:
         row = _series(session, series_id)
+        if data.sides:
+            return _set_rosters(session, row, data.sides, admin, user_id)
         if scored(row):
             raise BadRequestError("This lobby is played, so its seats are settled")
         if not _seats(session, series_id):
@@ -482,6 +496,56 @@ def set_sides(series_id: int, data: LobbySidesWrite) -> StageSeriesRow:
                 raise BadRequestError("This entrant does not play in that event")
         _seat(session, row, [entrants[entrant_id] for entrant_id in data.entrant_ids])
         return _lobby_read(session, row)
+
+
+def set_fixture_template(
+    event_id: int, stage_id: int, fixture_id: int, template: Sequence[TemplateSeries]
+) -> list[StageSeriesRow]:
+    """Write the ordered series one fixture of a stage holds.
+
+    Each row carries its sequence, its side size and its pick rule, names the
+    two team entrants the fixture pairs and holds no side: the captains name
+    the rosters through PUT /series/{id}/sides, and the draft tool serves the
+    drafted 1v1 rows.
+    """
+    with Session.begin() as session:
+        stage = _stage(session, event_id, stage_id)
+        fixture = session.get(Match, fixture_id)
+        if fixture is None or fixture.season_id != event_id:
+            raise NotFoundError(f"Fixture not found by id: {fixture_id}")
+        if not template:
+            raise BadRequestError("A fixture template names one series or more")
+        if _fixture_series(session, fixture_id):
+            raise BadRequestError("This fixture already holds series")
+        held = (
+            session.get(DBEventRound, fixture.round_id)
+            if fixture.round_id
+            else round_row(session, event_id, fixture.playday)
+        )
+        if held is None or held.stage_id != ident(stage):
+            raise BadRequestError("This fixture plays no round of that stage")
+        first, second = _entrant_sides(session, event_id, fixture)
+        rows = [
+            Series(
+                match_id=fixture_id,
+                round_id=ident(held),
+                division_id=fixture.division_id,
+                host_player_id=0,
+                entrant1_id=first,
+                entrant2_id=second,
+                sequence=sequence,
+                side_size=one.side_size,
+                pick_rule=one.pick_rule,
+            )
+            for sequence, one in enumerate(template, start=1)
+        ]
+        session.add_all(rows)
+        session.flush()
+        public = [StageSeriesRow.from_series_reduced(row) for row in rows]
+        derived.fill_series(session, public)
+        _fill_teams(session, public)
+        _fill_sides(session, public)
+        return public
 
 
 def standings_of(event_id: int, stage_id: int) -> list[DivisionStandings]:
@@ -575,6 +639,102 @@ def _seat(session: OrmSession, row: Series, entrants: Sequence[EventEntrant]) ->
                 side_no=side_no,
                 user_id=entrant.user_id or 0,
                 entrant_id=ident(entrant),
+            )
+        )
+    session.flush()
+
+
+def _fixture_series(session: OrmSession, fixture_id: int) -> Sequence[Series]:
+    """Every series one fixture holds, in the order they are played."""
+    return session.scalars(
+        select(Series)
+        .where(col(Series.match_id) == fixture_id)
+        .order_by(col(Series.sequence), col(Series.id))
+    ).all()
+
+
+def _entrant_sides(
+    session: OrmSession, event_id: int, fixture: Match
+) -> tuple[int, int]:
+    """The two team entrants a fixture pairs, so its series name their sides."""
+    by_team = {
+        entrant.team_id: ident(entrant)
+        for entrant in session.scalars(
+            select(EventEntrant).where(
+                col(EventEntrant.event_id) == event_id,
+                col(EventEntrant.team_id).in_([fixture.team1_id, fixture.team2_id]),
+            )
+        )
+    }
+    if fixture.team1_id not in by_team or fixture.team2_id not in by_team:
+        raise BadRequestError("Both teams of the fixture enter the event first")
+    return by_team[fixture.team1_id], by_team[fixture.team2_id]
+
+
+def _set_rosters(
+    session: OrmSession,
+    row: Series,
+    sides: Sequence[SideRoster],
+    admin: bool,
+    user_id: int | None,
+) -> StageSeriesRow:
+    """Name the players each side of a fixture series fields.
+
+    A side fields `side_size` players of the roster its team holds for the
+    event, and a drafted series takes a player no sibling drafted series of
+    the fixture holds.
+    """
+    if row.match_id is None:
+        raise BadRequestError("This series plays no fixture, so it takes no roster")
+    if scored(row):
+        raise BadRequestError("This series is played, so its sides are settled")
+    acts = None if admin else acts_for_side(session, row, user_id)
+    for side in sides:
+        if not admin and acts != side.side_no:
+            raise ApiError(403, {"error": "not_authorized_for_this_series"})
+        if len(set(side.user_ids)) != row.side_size:
+            raise BadRequestError(
+                f"A side of this series fields {row.side_size} players"
+            )
+        entrant = _side_entrant(session, row, side.side_no)
+        for player in side.user_ids:
+            key = (player, entrant.team_id, entrant.event_id)
+            if session.get(DBUserTeamSeason, key) is None:
+                raise BadRequestError("A side fields the players on its team roster")
+        if row.pick_rule == "drafted":
+            draft_series.refuse_repeat(session, row.match_id, side.user_ids, ident(row))
+        _write_side(session, row, side.side_no, side.user_ids, ident(entrant))
+    return _lobby_read(session, row)
+
+
+def _side_entrant(session: OrmSession, row: Series, side_no: int) -> EventEntrant:
+    """The team entrant standing on one side of a fixture series."""
+    entrant_id = row.entrant1_id if side_no == 1 else row.entrant2_id
+    entrant = session.get(EventEntrant, entrant_id) if entrant_id else None
+    if entrant is None or entrant.team_id is None:
+        raise BadRequestError("This side fields no team, so it takes no roster")
+    return entrant
+
+
+def _write_side(
+    session: OrmSession,
+    row: Series,
+    side_no: int,
+    user_ids: Sequence[int],
+    entrant_id: int,
+) -> None:
+    """Write the roster of one side of a series from scratch."""
+    for side in _seats(session, ident(row)):
+        if side.side_no == side_no:
+            session.delete(side)
+    session.flush()
+    for player in user_ids:
+        session.add(
+            SeriesSide(
+                series_id=ident(row),
+                side_no=side_no,
+                user_id=player,
+                entrant_id=entrant_id,
             )
         )
     session.flush()

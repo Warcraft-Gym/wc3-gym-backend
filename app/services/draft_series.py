@@ -1,20 +1,77 @@
 import logging
+from collections.abc import Iterable
 
 from sqlalchemy import delete, select
+from sqlalchemy.orm import Session as OrmSession
 from sqlmodel import col
 
 from app.core.db import Session
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import BadRequestError, NotFoundError
+from app.models.base import ident
 from app.models.draft_series import (
     DraftSeries,
     DraftSeriesCreate,
     DraftSeriesPublic,
     DraftSeriesUpdate,
 )
-from app.models.series import SeriesCreate
+from app.models.series import Series, SeriesCreate
+from app.models.series_side import SeriesSide
 from app.services import derived
 
 logger = logging.getLogger(__name__)
+
+
+def drafted_players(
+    session: OrmSession, match_id: int, skip_series_id: int | None = None
+) -> set[int]:
+    """Every player the drafted series of one fixture already name.
+
+    A drafted 1v1 names its player in the series columns; a drafted 2v2 names
+    its side in `series_side`, so both are read.
+    """
+    rows = [
+        row
+        for row in session.scalars(
+            select(Series).where(
+                col(Series.match_id) == match_id,
+                col(Series.pick_rule) == "drafted",
+            )
+        )
+        if ident(row) != skip_series_id
+    ]
+    named = {
+        player
+        for row in rows
+        for player in (row.player1_id, row.player2_id)
+        if player is not None
+    }
+    if rows:
+        named |= {
+            side.user_id
+            for side in session.scalars(
+                select(SeriesSide).where(
+                    col(SeriesSide.series_id).in_([ident(row) for row in rows])
+                )
+            )
+            if side.user_id
+        }
+    return named
+
+
+def refuse_repeat(
+    session: OrmSession,
+    match_id: int | None,
+    players: Iterable[int | None],
+    skip_series_id: int | None = None,
+) -> None:
+    """Refuse a drafted pick naming a player a sibling drafted series holds."""
+    if match_id is None:
+        return
+    picked = {player for player in players if player is not None}
+    if picked & drafted_players(session, match_id, skip_series_id):
+        raise BadRequestError(
+            "That player already plays a drafted series of this fixture"
+        )
 
 
 class DraftSeriesService:

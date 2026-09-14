@@ -4,13 +4,14 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query
 
 from app.api.deps import (
+    RequireLogin,
     RequireMember,
     SeriesServiceDep,
     UserServiceDep,
     require_admin,
 )
 from app.api.search import SearchQuery
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import ApiError, NotFoundError
 from app.core.query import QueryUtil
 from app.models.series import (
     ResultKindWrite,
@@ -74,10 +75,24 @@ def set_places(series_id: int, data: PlacesWrite) -> StageSeriesRow:
     return stage_engine.set_places(series_id, data)
 
 
-@router.put("/series/{series_id}/sides", dependencies=[Depends(require_admin)])
-def set_sides(series_id: int, data: LobbySidesWrite) -> StageSeriesRow:
-    """Seat a lobby again before it is played, so an entrant may move lobbies."""
-    return stage_engine.set_sides(series_id, data)
+@router.put("/series/{series_id}/sides")
+def set_sides(
+    series_id: int,
+    data: LobbySidesWrite,
+    claims: RequireLogin,
+    users: UserServiceDep,
+) -> StageSeriesRow:
+    """Seat a lobby again before it is played, or name a fixture side roster.
+
+    A body naming `sides` writes the roster each side of a fixture series
+    fields, which a captain of that team writes for his own side. Seating a
+    lobby again stays an admin act.
+    """
+    admin = claims.get("role") == "admin" or claims["sub"] == "admin"
+    if not admin and not data.sides:
+        raise ApiError(403, {"error": "Admins only"})
+    caller = None if admin else users.id_by_discord_id(str(claims["sub"]))
+    return stage_engine.set_sides(series_id, data, admin=admin, user_id=caller)
 
 
 @router.delete(
