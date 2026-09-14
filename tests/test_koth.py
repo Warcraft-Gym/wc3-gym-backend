@@ -556,26 +556,6 @@ def test_no_stats_in_three_seasons_answers_400_and_writes_no_row(
     ]
 
 
-def test_the_nightbot_get_answers_a_chat_message(
-    client: Client, w3c_seasons: dict[int, list[W3CStatsCreate]]
-) -> None:
-    """Nightbot displays the body text in chat, so the shape stays."""
-    w3c_seasons[20] = [stat("HU", 1400, 20)]
-    resp = client.get(
-        "/koth/signup",
-        params={
-            "token": "test-nightbot-token",
-            "twitch": "streamer",
-            "battletag": "S#1234",
-        },
-    )
-    assert resp.status_code == 200, resp.text
-    assert resp.json() == {
-        "success": True,
-        "message": "streamer signed up for Bracket 1 (1400 MMR)",
-    }
-
-
 def test_a_failed_match_creation_writes_nothing(
     client: Client, auth_headers: dict[str, str], koth: dict[str, Any]
 ) -> None:

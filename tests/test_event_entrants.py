@@ -180,6 +180,70 @@ def test_the_entrant_row_warns_on_games_rating_and_a_ban(
     assert client.put(f"/users/{player}/ban").status_code == 401
 
 
+def test_the_rating_walks_back_to_the_newest_season_the_race_played(
+    client: Client, seeded: dict[str, Any], member: Member
+) -> None:
+    """A season the player sat out carries no rating, so the read walks back.
+
+    Three seasons back and no further: a rating older than that is not the
+    player's current one.
+    """
+    event = add_event(kind=EventKind.cup)
+    player = seeded["player_ids"][0]
+    with Session.begin() as session:
+        session.add_all(
+            [
+                W3CStats(
+                    user_id=player, race=Race.HU, wc3_season=20, games=80, mmr=1700
+                ),
+                W3CStats(
+                    user_id=player, race=Race.NE, wc3_season=22, games=40, mmr=1500
+                ),
+            ]
+        )
+
+    created = sign_up(client, event, member("1"))
+
+    assert created.status_code == 201, created.text
+    assert created.json()["mmr"] == 1700
+
+    with Session.begin() as session:
+        session.add(
+            W3CStats(user_id=player, race=Race.NE, wc3_season=23, games=40, mmr=1500)
+        )
+    # Season 20 now sits four seasons behind the season the app is on
+    assert entrants(client, event)[0]["mmr"] is None
+
+
+def test_a_rating_older_than_the_window_is_not_read_at_all(
+    client: Client, seeded: dict[str, Any], member: Member
+) -> None:
+    """The window hangs on the season the app is on, not on the player's own rows.
+
+    A player who last played eight seasons ago carries no current rating, so
+    the entrant row reads none of it.
+    """
+    event = add_event(kind=EventKind.cup)
+    lapsed, current = seeded["player_ids"][0], seeded["player_ids"][1]
+    with Session.begin() as session:
+        session.add_all(
+            [
+                W3CStats(
+                    user_id=lapsed, race=Race.HU, wc3_season=15, games=80, mmr=1900
+                ),
+                W3CStats(
+                    user_id=current, race=Race.HU, wc3_season=23, games=80, mmr=1500
+                ),
+            ]
+        )
+
+    assert sign_up(client, event, member("1")).status_code == 201
+    assert sign_up(client, event, member("2")).status_code == 201
+
+    rows = {row["user"]["battleTag"]: row["mmr"] for row in entrants(client, event)}
+    assert rows == {"P1#1111": None, "P2#2222": 1500}
+
+
 def test_a_gnl_event_sends_the_signup_to_the_season_route(
     client: Client, seeded: dict[str, Any], member: Member
 ) -> None:
