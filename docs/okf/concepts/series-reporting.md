@@ -3,7 +3,7 @@ type: Domain Concept
 title: Series reporting
 description: A result is reported game by game with a map and a replay per game, a veto board that is derived from the season rules, an off race per side, and casts that any member may claim.
 tags: [series, veto, replays, casts]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T14:30:00Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T16:25:00Z }
 sources:
   - id: games
     resource: ../../../app/services/series_games.py
@@ -27,7 +27,7 @@ sources:
 
 # Who reports
 
-A player on either side of a series, or an admin, writes the result through `PUT /player-series/{id}`; the Discord `/score` command goes through the same write. The two series scores stay the total; `series_game` rows say how the total was reached, one per game with the side that won and the map. A third of GNL series go to a deciding game, so the per-game winner cannot be derived from the score and is stored.
+A player on either side of a series, or an admin, writes the result through `PUT /player-series/{id}`; the Discord `/report-result` command goes through the same write. The two series scores stay the total; `series_game` rows say how the total was reached, one per game with the side that won and the map. A third of GNL series go to a deciding game, so the per-game winner cannot be derived from the score and is stored.
 
 A series that was not played takes `result_kind` `walkover` or `forfeit` with a winner, through `PUT /series/{id}/result-kind`, admin only.
 
