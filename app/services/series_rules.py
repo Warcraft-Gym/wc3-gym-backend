@@ -4,21 +4,27 @@ A series inside a fixture reads them from the season, as GNL always has. A
 series generated into a bracket reads its best-of from its round, its map
 rules from its stage, and its map pool from the event either way. The shape
 of the series decides, never the kind of the event.
+
+The side a caller acts for hangs on the same round or fixture, so it is
+answered here too.
 """
 
 from collections.abc import Iterable
-from typing import NamedTuple
+from typing import Literal, NamedTuple
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session as OrmSession
 from sqlmodel import col
 
 from app.core.map_order import DEFAULT_RULES, rules_of
+from app.models.base import ident
+from app.models.event_entrant import EventEntrant
 from app.models.event_stage import EventStage
 from app.models.match import Match
 from app.models.relationships import DBEventRound, round_row
 from app.models.season import Season
 from app.models.series import Series, SeriesPublic, SeriesRulesPublic
+from app.models.user_team_season import DBUserTeamSeason
 
 # The games a series holds when neither a season nor a stage names them
 DEFAULT_BEST_OF = len(rules_of(None))
@@ -46,6 +52,44 @@ def series_event(session: OrmSession, series: Series) -> Season | None:
         return series.match.season
     round_ = series_round(session, series)
     return session.get(Season, round_.season_id) if round_ else None
+
+
+def stands_on_side(series: Series, side: int) -> int | None:
+    """Who stands on one side: its entrant, else the player a GNL row names."""
+    if side == 1:
+        return series.entrant1_id or series.player1_id
+    return series.entrant2_id or series.player2_id
+
+
+def acts_for_side(
+    session: OrmSession, series: Series, user_id: int | None
+) -> Literal[1, 2] | None:
+    """The side the caller acts for: the player of that side, or a member of
+    the roster the side's team fields for the event.
+
+    The entrant row names the event itself, which is the event of the series'
+    round or fixture, so the roster is read against that id.
+    """
+    if user_id is None:
+        return None
+    if series.player1_id == user_id:
+        return 1
+    if series.player2_id == user_id:
+        return 2
+    sides: dict[int, Literal[1, 2]] = {
+        side_id: side
+        for side_id, side in ((series.entrant1_id, 1), (series.entrant2_id, 2))
+        if side_id is not None
+    }
+    if not sides:
+        return None
+    for entrant in session.scalars(
+        select(EventEntrant).where(col(EventEntrant.id).in_(sides))
+    ):
+        key = (user_id, entrant.team_id, entrant.event_id)
+        if entrant.team_id and session.get(DBUserTeamSeason, key) is not None:
+            return sides[ident(entrant)]
+    return None
 
 
 def series_rules(session: OrmSession, series: Series) -> SeriesRules:

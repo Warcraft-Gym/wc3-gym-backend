@@ -49,7 +49,10 @@ class EventEntrant(DBModel, table=True):
     team_id: int | None = Field(
         default=None, index=True, foreign_key="teams.id", ondelete="CASCADE"
     )
-    race: Annotated[Race, SuggestRace]
+    # A player enters on a race; a team enters on the races of its roster
+    race: Annotated[Race | None, SuggestRace] = None
+    # What the entrant wants to work on, which a signup-only event asks for
+    note: str | None = Field(default=None, max_length=200)
     # Where the stage seeds this entrant; null until the seeds are set
     seed: int | None = None
     # The MMR the seed was cut from, and the source that cut it
@@ -85,7 +88,10 @@ class EventEntrant(DBModel, table=True):
 class EntrantSignup(SQLModel):
     """A player or a team entering an event through the signup routes."""
 
-    race: Annotated[Race, SuggestRace]
+    # A player names the race; a team has none, and the service refuses a
+    # player row without one
+    race: Annotated[Race | None, SuggestRace] = None
+    note: str | None = Field(default=None, max_length=200)
     # An `anyone` event takes a battle tag where a `members` event takes the session
     battle_tag: Annotated[str | None, NumToStr] = None
     # A team entrant names its team; the caller captains it, or is an admin
@@ -126,6 +132,7 @@ class EventEntrantPublic(SQLModel):
     user: UserPublic | None = None
     team: TeamReduced | None = None
     race: Annotated[str | None, EnumValue] = None
+    note: str | None = None
     channel: Annotated[str | None, EnumValue] = None
     mmr: int | None = None
     mmr_synced_at: datetime | None = None

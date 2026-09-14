@@ -8,11 +8,13 @@ C1 renamed the table and added round_id beside the season and the playday;
 the older pair is dropped a deploy later, once every reader keys on the round.
 """
 
-from typing import Self
+from datetime import datetime
+from typing import Annotated, Self
 
 from sqlmodel import Field, SQLModel
 
 from app.models.base import DBModel
+from app.models.types import AwareUTC, UTCDateTime
 
 
 class DBRoundAvailability(DBModel, table=True):
@@ -26,6 +28,10 @@ class DBRoundAvailability(DBModel, table=True):
     )
     available: bool
     set_by_user_id: int = Field(foreign_key="users.id")
+    # When the answer was written; null on a row older than the column
+    answered_at: Annotated[datetime | None, AwareUTC] = Field(
+        default=None, sa_type=UTCDateTime
+    )
 
 
 class RoundAvailabilityPublic(SQLModel):

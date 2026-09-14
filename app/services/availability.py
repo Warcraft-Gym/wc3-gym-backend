@@ -18,6 +18,7 @@ from app.models.round_availability import (
     RoundAvailabilityPublic,
 )
 from app.models.season import Season
+from app.models.types import utcnow
 from app.models.user import User
 from app.models.user_team_season import DBUserTeamSeason
 from app.services.events import checkin_window
@@ -105,6 +106,7 @@ class AvailabilityService:
                         round_id=round_.id if round_ else None,
                         available=available,
                         set_by_user_id=set_by_user_id,
+                        answered_at=utcnow(),
                     )
                 )
             session.flush()

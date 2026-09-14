@@ -2,12 +2,14 @@ import logging
 from datetime import datetime
 from typing import Any
 
+from app.core.db import Session
 from app.core.exceptions import ApiError, BadRequestError, NotFoundError
 from app.core.scoring import decided, wins_needed
 from app.models.enums import Race
-from app.models.series import SeriesUpdate
+from app.models.series import Series, SeriesUpdate
 from app.services import discord_posts, replays, series_games
 from app.services.series import SeriesService
+from app.services.series_rules import acts_for_side
 from app.services.series_veto import SeriesVetoService
 from app.services.users import UserService
 
@@ -33,9 +35,11 @@ def update_player_series(
     if not series:
         raise NotFoundError("series_not_found")
 
-    # Check if user is player1 or player2 in this series
-    if series.player1_id != user.id and series.player2_id != user.id:
-        raise ApiError(403, {"error": "not_authorized_for_this_series"})
+    # The caller plays a side, or is on the roster the side's team fields
+    with Session.begin() as session:
+        row = session.get(Series, series_id)
+        if row is None or acts_for_side(session, row, user.id) is None:
+            raise ApiError(403, {"error": "not_authorized_for_this_series"})
 
     # Track what's being updated for Discord notification
     original_datetime = series.date_time

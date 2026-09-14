@@ -316,3 +316,48 @@ def test_a_member_checks_in_nobody_else_and_withdraws_nothing_twice(
     assert gone.json() == {"error": "No signup to withdraw"}
     unknown = client.post(f"/events/{event}/entrants/404/checkin", headers=auth_headers)
     assert unknown.json() == {"error": "Entrant not found by id: 404"}
+
+
+def test_a_team_enters_on_no_race_and_carries_its_note(
+    client: Client, seeded: dict[str, Any], member: Member
+) -> None:
+    """A team fields the races of its roster, so its row names none of them."""
+    event = add_event(kind=EventKind.cup)
+    with Session.begin() as session:
+        session.add(
+            DBTeamSeasonCaptain(
+                user_id=seeded["player_ids"][0],
+                team_id=seeded["team_a_id"],
+                season_id=seeded["season_id"],
+            )
+        )
+
+    created = client.post(
+        f"/events/{event}/entrants",
+        json={"team_id": seeded["team_a_id"], "note": "Late game macro"},
+        headers=member("1"),
+    )
+
+    assert created.status_code == 201, created.text
+    assert created.json()["race"] is None
+    assert created.json()["note"] == "Late game macro"
+    assert entrants(client, event)[0]["note"] == "Late game macro"
+
+
+def test_a_player_names_the_race_they_sign_up_on(
+    client: Client, seeded: dict[str, Any], member: Member
+) -> None:
+    """One player plays one race, so a player row without one is refused."""
+    event = add_event(kind=EventKind.cup)
+
+    refused = client.post(
+        f"/events/{event}/entrants",
+        json={"note": "Creep routes"},
+        headers=member("1"),
+    )
+
+    assert refused.status_code == 400, refused.text
+    assert refused.json() == {"error": "Name the race you sign up on"}
+    entered = sign_up(client, event, member("1"), note="Creep routes")
+    assert entered.status_code == 201, entered.text
+    assert (entered.json()["race"], entered.json()["note"]) == ("HU", "Creep routes")

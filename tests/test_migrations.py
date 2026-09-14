@@ -62,6 +62,8 @@ BEFORE_EVENT_ROUND = "8cc6dd6d93eb"
 BEFORE_EVENT_MODEL = "96c0d36de81c"
 # The revision before every past KOTH night is an event of the KOTH league
 BEFORE_KOTH_BACKFILL = "b3e7d1a5c904"
+# The revision before a series names the entrant on each of its sides
+BEFORE_SERIES_ENTRANTS = "a3f7c05b2e91"
 
 
 def comparable(
@@ -1135,3 +1137,55 @@ def test_every_past_koth_night_becomes_an_event_of_the_koth_league(
         ).all() == [(1, None), (2, None)]
         assert connection.scalar(text("SELECT count(*) FROM koth_signups")) == 3
         assert connection.scalar(text("SELECT count(*) FROM koth_matches")) == 3
+
+
+def test_a_series_takes_the_entrants_of_the_event_its_round_belongs_to(
+    tmp_path: Path,
+) -> None:
+    """The backfill names each side's entrant through the event of the round.
+
+    A series with no round, which is every GNL row, keeps both sides null, and
+    the downgrade takes the three new columns back off.
+    """
+    url = fresh_database(tmp_path, "sides")
+    upgrade_to(url, BEFORE_SERIES_ENTRANTS)
+
+    engine = create_engine(url)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO event (id, name, series_per_round) "
+                "VALUES (1, 'Autumn Cup', 1)"
+            )
+        )
+        connection.execute(
+            text("INSERT INTO event_round (id, season_id, number) VALUES (5, 1, 1)")
+        )
+        connection.execute(
+            text(
+                "INSERT INTO event_entrant (id, event_id, user_id, race) "
+                "VALUES (11, 1, 7, 'HU'), (12, 1, 8, 'OC')"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO series (id, round_id, player1_id, player2_id, "
+                "host_player_id) VALUES (21, 5, 7, 8, 7), (22, NULL, 7, 8, 7)"
+            )
+        )
+
+    upgrade_to(url, "head")
+
+    with engine.connect() as connection:
+        assert connection.execute(
+            text("SELECT id, entrant1_id, entrant2_id FROM series ORDER BY id")
+        ).all() == [(21, 11, 12), (22, None, None)]
+
+    downgrade_to(url, BEFORE_SERIES_ENTRANTS)
+
+    columns = inspect(engine)
+    assert "entrant1_id" not in {row["name"] for row in columns.get_columns("series")}
+    assert "note" not in {row["name"] for row in columns.get_columns("event_entrant")}
+    assert "answered_at" not in {
+        row["name"] for row in columns.get_columns("round_availability")
+    }

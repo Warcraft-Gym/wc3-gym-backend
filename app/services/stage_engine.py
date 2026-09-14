@@ -28,9 +28,12 @@ from app.models.series import (
     StageSeriesPublic,
     StageSeriesRow,
 )
+from app.models.team import Team
+from app.models.team_reduced import TeamReduced
 from app.models.user import User
+from app.models.user_team_season import DBUserTeamSeason
 from app.services import derived
-from app.services.series_rules import series_rules
+from app.services.series_rules import series_rules, stands_on_side
 
 # The formats whose last round is the final, so every division ends together
 BRACKETS = (StageFormat.single_elimination, StageFormat.double_elimination)
@@ -44,6 +47,19 @@ def scored(row: Series) -> bool:
 def winner_of(row: Series) -> int | None:
     """The user the series sends on: nobody while it is unscored or drawn."""
     return _side(row, takes_loser=False)
+
+
+def won_slot(row: Series) -> int | None:
+    """The side the series sends on, 1 or 2, which a team side carries too."""
+    return _won_slot(row, takes_loser=False)
+
+
+def entrant_of(row: Series, takes_loser: bool = False) -> int | None:
+    """The entrant the series sends on, which is what a team side carries."""
+    slot = _won_slot(row, takes_loser)
+    if slot is None:
+        return None
+    return row.entrant1_id if slot == 1 else row.entrant2_id
 
 
 def wins_of(session: OrmSession, row: Series) -> int:
@@ -80,6 +96,9 @@ def generate(
         for field in fields.values():
             if len(field) < 2:
                 raise BadRequestError("A division needs two entrants to generate")
+        size = _side_size(
+            session, [entrant for field in fields.values() for entrant in field]
+        )
         plans = {
             division: _plan(stage, len(field)) for division, field in fields.items()
         }
@@ -110,7 +129,16 @@ def generate(
                     rounds[place] = round_row
                 counts[place] = counts.get(place, 0) + 1
                 rows.append(
-                    _row(session, stage, round_row, division, field, rows, planned)
+                    _row(
+                        session,
+                        stage,
+                        round_row,
+                        division,
+                        field,
+                        rows,
+                        planned,
+                        size,
+                    )
                 )
                 rows[-1].sequence = counts[place]
             made += rows
@@ -158,6 +186,7 @@ def append_to_chain(
         [entrant],
         [last],
         brackets.PlannedSeries(0, 0, brackets.Slot(feeder=0), brackets.Slot(seed=1)),
+        last.side_size,
     )
     row.sequence = (last.sequence or len(chain)) + 1
     session.flush()
@@ -183,6 +212,7 @@ def add_challenger(event_id: int, stage_id: int, entrant_id: int) -> StageSeries
             append_to_chain(session, stage, division, entrant)
         )
         derived.fill_series(session, [public])
+        _fill_teams(session, [public])
         return public
 
 
@@ -190,16 +220,23 @@ def on_scored(session: OrmSession, row: Series) -> None:
     """Fill every slot that feeds from this series, and follow the chain down."""
     for other in _downstream(session, ident(row)):
         filled = False
-        if other.slot1_from_series_id == row.id and other.player1_id is None:
+        if other.slot1_from_series_id == row.id and _open(other, 1):
+            other.entrant1_id = entrant_of(row, other.slot1_takes_loser)
             other.player1_id = _side(row, other.slot1_takes_loser)
-            filled = other.player1_id is not None
-        if other.slot2_from_series_id == row.id and other.player2_id is None:
+            filled = not _open(other, 1)
+        if other.slot2_from_series_id == row.id and _open(other, 2):
+            other.entrant2_id = entrant_of(row, other.slot2_takes_loser)
             other.player2_id = _side(row, other.slot2_takes_loser)
-            filled = filled or other.player2_id is not None
+            filled = filled or not _open(other, 2)
         if filled and other.host_player_id == 0:
             other.host_player_id = other.player1_id or 0
         session.flush()
         _settle(session, other)
+
+
+def _open(row: Series, slot: int) -> bool:
+    """Whether a slot still waits: neither its entrant nor its player is named."""
+    return stands_on_side(row, slot) is None
 
 
 def on_reopened(session: OrmSession, row: Series, force: bool = False) -> None:
@@ -216,8 +253,10 @@ def on_reopened(session: OrmSession, row: Series, force: bool = False) -> None:
     cleared = {ident(row)} | {ident(other) for other in below}
     for other in below:
         if other.slot1_from_series_id in cleared:
+            other.entrant1_id = None
             other.player1_id = None
         if other.slot2_from_series_id in cleared:
+            other.entrant2_id = None
             other.player2_id = None
         other.player1_score = None
         other.player2_score = None
@@ -229,7 +268,7 @@ def after_score(
     session: OrmSession,
     row: Series,
     was_scored: bool,
-    was_winner: int | None,
+    was_slot: int | None,
     force: bool = False,
 ) -> None:
     """Follow a score change into the bracket. A series with no feeders and
@@ -241,7 +280,7 @@ def after_score(
     """
     now = scored(row)
     if now and was_scored:
-        if was_winner == winner_of(row):
+        if was_slot == won_slot(row):
             return
         on_reopened(session, row, force)
         on_scored(session, row)
@@ -300,6 +339,7 @@ def series_of(event_id: int, stage_id: int) -> StageSeriesPublic:
             for row in sorted(held, key=lambda row: _drawn(numbers, row))
         ]
         derived.fill_series(session, rows)
+        _fill_teams(session, rows)
         return StageSeriesPublic(
             rounds=[EventRoundPublic.from_row(row) for row in rounds], series=rows
         )
@@ -313,6 +353,25 @@ def advance(event_id: int, stage_id: int) -> dict[str, int]:
         if following is None:
             raise BadRequestError("This stage is the last one of the event")
         return {"seeded": _advance(session, event_id, stage)}
+
+
+def _fill_teams(session: OrmSession, rows: Sequence[StageSeriesRow]) -> None:
+    """Name the team behind every team side, so the box prints it."""
+    wanted = {row.entrant1_id for row in rows} | {row.entrant2_id for row in rows}
+    wanted.discard(None)
+    if not wanted:
+        return
+    teams = {
+        ident(entrant): TeamReduced.from_team(team)
+        for entrant, team in session.execute(
+            select(EventEntrant, Team)
+            .join(Team, col(Team.id) == col(EventEntrant.team_id))
+            .where(col(EventEntrant.id).in_(wanted))
+        )
+    }
+    for row in rows:
+        row.team1 = teams.get(row.entrant1_id or 0)
+        row.team2 = teams.get(row.entrant2_id or 0)
 
 
 def _drawn(numbers: dict[int, int], row: Series) -> tuple[int, int, int, int]:
@@ -333,16 +392,20 @@ def _row(
     field: Sequence[EventEntrant],
     rows: Sequence[Series],
     planned: brackets.PlannedSeries,
+    side_size: int = 1,
 ) -> Series:
     """Write one planned series; a padded pair is a walkover for the side it has."""
-    user1, feeder1 = _slot(field, rows, planned.slot1)
-    user2, feeder2 = _slot(field, rows, planned.slot2)
+    entrant1, user1, feeder1 = _slot(field, rows, planned.slot1)
+    entrant2, user2, feeder2 = _slot(field, rows, planned.slot2)
     row = Series(
         round_id=ident(round_row),
         division_id=division_id,
         host_player_id=user1 or 0,
+        entrant1_id=entrant1,
+        entrant2_id=entrant2,
         player1_id=user1,
         player2_id=user2,
+        side_size=side_size,
         slot1_from_series_id=feeder1,
         slot1_takes_loser=planned.slot1.takes_loser,
         slot2_from_series_id=feeder2,
@@ -350,21 +413,41 @@ def _row(
     )
     session.add(row)
     session.flush()
-    if feeder1 is None and feeder2 is None and (user1 is None) != (user2 is None):
+    if feeder1 is None and feeder2 is None and (entrant1 is None) != (entrant2 is None):
         wins = (round_row.best_of or stage.best_of) // 2 + 1
-        _award(session, row, user1 is not None, "walkover", wins)
+        _award(session, row, entrant1 is not None, "walkover", wins)
     return row
 
 
 def _slot(
     field: Sequence[EventEntrant], rows: Sequence[Series], slot: brackets.Slot
-) -> tuple[int | None, int | None]:
-    """The user this slot opens with, and the series it takes its side from."""
+) -> tuple[int | None, int | None, int | None]:
+    """The entrant and the user this slot opens with, and the series it takes
+    its side from. A team entrant names no user: its roster plays the side."""
     if slot.seed is not None:
-        return field[slot.seed - 1].user_id, None
+        entrant = field[slot.seed - 1]
+        return ident(entrant), entrant.user_id, None
     if slot.feeder is not None:
-        return None, ident(rows[slot.feeder])
-    return None, None
+        return None, None, ident(rows[slot.feeder])
+    return None, None, None
+
+
+def _side_size(session: OrmSession, field: Sequence[EventEntrant]) -> int:
+    """How many players a side holds: the roster a team entrant fields for the
+    event, and one where the field is players."""
+    teams = {entrant.team_id for entrant in field if entrant.team_id}
+    if not teams or not field:
+        return 1
+    rosters = session.scalars(
+        select(func.count())
+        .select_from(DBUserTeamSeason)
+        .where(
+            col(DBUserTeamSeason.team_id).in_(teams),
+            col(DBUserTeamSeason.season_id) == field[0].event_id,
+        )
+        .group_by(col(DBUserTeamSeason.team_id))
+    ).all()
+    return max(rosters, default=1)
 
 
 def _award(
@@ -381,14 +464,22 @@ def _award(
     session.flush()
 
 
-def _side(row: Series, takes_loser: bool) -> int | None:
-    """The winner of the series, or its loser; a draw sends neither on."""
+def _won_slot(row: Series, takes_loser: bool) -> int | None:
+    """The slot the series sends on, 1 or 2; a draw sends neither on."""
     if row.player1_score is None or row.player2_score is None:
         return None
     if row.player1_score == row.player2_score:
         return None
     first = row.player1_score > row.player2_score
-    return row.player2_id if first == takes_loser else row.player1_id
+    return 2 if first == takes_loser else 1
+
+
+def _side(row: Series, takes_loser: bool) -> int | None:
+    """The user of the winning side, or of the losing one; a team side has none."""
+    slot = _won_slot(row, takes_loser)
+    if slot is None:
+        return None
+    return row.player1_id if slot == 1 else row.player2_id
 
 
 def _settle(session: OrmSession, row: Series) -> None:
@@ -398,7 +489,7 @@ def _settle(session: OrmSession, row: Series) -> None:
     final = _reset_final(session, row)
     if final is not None:
         # A bracket reset is played only when the lower bracket side takes the final
-        if scored(final) and _side(final, takes_loser=False) == final.player1_id:
+        if scored(final) and won_slot(final) == 1:
             _award(session, row, to_first=True, kind="walkover")
             on_scored(session, row)
         return
@@ -429,7 +520,7 @@ def _resolved(session: OrmSession, row: Series, slot: int) -> tuple[int | None, 
     A scored feeder that sends nobody on, which is the loser of a walkover,
     leaves the slot known and empty.
     """
-    side = row.player1_id if slot == 1 else row.player2_id
+    side = stands_on_side(row, slot)
     if side is not None:
         return side, True
     feeder_id = row.slot1_from_series_id if slot == 1 else row.slot2_from_series_id
@@ -671,9 +762,9 @@ def _sides_of(
     field: Sequence[EventEntrant], series: Sequence[Series]
 ) -> list[EventEntrant]:
     """The entrants of the division that stand in one of its series, in seed order."""
-    sides = {row.player1_id for row in series} | {row.player2_id for row in series}
+    sides = {row.entrant1_id for row in series} | {row.entrant2_id for row in series}
     sides.discard(None)
-    return [entrant for entrant in field if entrant.user_id in sides]
+    return [entrant for entrant in field if ident(entrant) in sides]
 
 
 def _table(
@@ -682,20 +773,22 @@ def _table(
     field: Sequence[EventEntrant],
     series: Sequence[Series],
 ) -> list[StandingRow]:
-    """One division's places, from the stage's points and the format it plays."""
-    entrants = {
-        entrant.user_id: entrant for entrant in field if entrant.user_id is not None
-    }
+    """One division's places, from the stage's points and the format it plays.
+
+    Every line keys on the entrant, so a team side counts as one line and the
+    user behind a solo side rides along.
+    """
+    entrants = {ident(entrant): entrant for entrant in field}
     order = list(entrants)
     results = [
         (
-            row.player1_id,
-            row.player2_id,
+            row.entrant1_id,
+            row.entrant2_id,
             row.player1_score or 0,
             row.player2_score or 0,
         )
         for row in series
-        if scored(row) and row.player1_id in entrants and row.player2_id in entrants
+        if scored(row) and row.entrant1_id in entrants and row.entrant2_id in entrants
     ]
     # The tie breaks run points, game difference then head to head, which is
     # what every stage's ranking_rule holds today
@@ -713,12 +806,12 @@ def _table(
         king = _king(series)
         table = sorted(table, key=lambda line: line.entrant == king, reverse=True)
     counted = _counted(order, results)
-    names = _names(session, order)
+    names = _names(session, field)
     return [
         StandingRow(
             position=place,
-            entrant_id=ident(entrants[line.entrant]),
-            user_id=line.entrant,
+            entrant_id=line.entrant,
+            user_id=entrants[line.entrant].user_id,
             team_id=entrants[line.entrant].team_id,
             name=names.get(line.entrant),
             points=line.points,
@@ -744,10 +837,10 @@ def _reached(
     depth = dict.fromkeys(order, 0)
     won = dict.fromkeys(order, 0)
     for row in series:
-        for side in (row.player1_id, row.player2_id):
+        for side in (row.entrant1_id, row.entrant2_id):
             if side in depth:
                 depth[side] = max(depth[side], numbers.get(row.round_id, 0))
-        winner = _side(row, takes_loser=False)
+        winner = entrant_of(row)
         if winner in won:
             won[winner] += 1
     return {entrant: (depth[entrant], won[entrant]) for entrant in order}
@@ -756,7 +849,7 @@ def _reached(
 def _king(series: Sequence[Series]) -> int | None:
     """The winner of the last series the chain has scored, who holds the throne."""
     done = [row for row in series if scored(row)]
-    return _side(done[-1], takes_loser=False) if done else None
+    return entrant_of(done[-1]) if done else None
 
 
 def _counted(
@@ -782,13 +875,29 @@ def _counted(
     return tally
 
 
-def _names(session: OrmSession, order: Sequence[int]) -> dict[int, str]:
-    """The name of every player in the table, in one read."""
-    if not order:
+def _names(session: OrmSession, field: Sequence[EventEntrant]) -> dict[int, str | None]:
+    """The name of every entrant in the table: the player, or the team."""
+    if not field:
         return {}
-    return {
+    users = {
         ident(user): user.name
-        for user in session.scalars(select(User).where(col(User.id).in_(list(order))))
+        for user in session.scalars(
+            select(User).where(
+                col(User.id).in_({row.user_id for row in field if row.user_id})
+            )
+        )
+    }
+    teams = {
+        ident(team): team.name
+        for team in session.scalars(
+            select(Team).where(
+                col(Team.id).in_({row.team_id for row in field if row.team_id})
+            )
+        )
+    }
+    return {
+        ident(row): teams.get(row.team_id) if row.team_id else users.get(row.user_id)
+        for row in field
     }
 
 

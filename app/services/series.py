@@ -76,12 +76,12 @@ class SeriesService:
             if not row:
                 raise NotFoundError("Series not found")
             was_scored = stage_engine.scored(row)
-            was_winner = stage_engine.winner_of(row)
+            was_slot = stage_engine.won_slot(row)
             Series.update_object(session, row, **series.model_dump(exclude_unset=True))
             both_scores(row, stage_engine.wins_of(session, row))
             in_season(row)
             derived.clear_kept_off_race(session, row)
-            stage_engine.after_score(session, row, was_scored, was_winner, force)
+            stage_engine.after_score(session, row, was_scored, was_slot, force)
             public = SeriesPublic.from_series(row)
             derived.fill_series(session, [public])
             return public
