@@ -44,14 +44,18 @@ def _own_match(
         raise ApiError(403, {"error": "Your team does not play this match"})
 
 
-def _no_repeat(match_id: int | None, *players: int | None) -> None:
+def _no_repeat(
+    match_id: int | None, *players: int | None, draft_series_id: int | None = None
+) -> None:
     """A drafted series of a fixture names a player its siblings do not.
 
     A mixed fixture, the Altar of Champions Clan War, plays several drafted
-    series, and a player plays one of them.
+    series, and a player plays one of them. An edit skips its own row.
     """
     with Session.begin() as session:
-        draft_series.refuse_repeat(session, match_id, players)
+        draft_series.refuse_repeat(
+            session, match_id, players, skip_draft_id=draft_series_id
+        )
 
 
 @router.post(
@@ -87,7 +91,12 @@ def update_draft_series(
     _own_match(claims, existing.match_id, matches)
     if data.match_id is not None and data.match_id != existing.match_id:
         _own_match(claims, data.match_id, matches)
-    _no_repeat(data.match_id or existing.match_id, data.player1_id, data.player2_id)
+    _no_repeat(
+        data.match_id or existing.match_id,
+        data.player1_id,
+        data.player2_id,
+        draft_series_id=draft_series_id,
+    )
     return service.update(draft_series_id, data)
 
 

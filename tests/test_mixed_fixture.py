@@ -248,6 +248,52 @@ def test_a_player_plays_one_drafted_series_of_the_fixture(
     assert any_pick.status_code == 200, any_pick.text
 
 
+def test_the_draft_tool_reads_the_picks_it_wrote_itself(
+    client: Client,
+    auth_headers: dict[str, str],
+    member: Callable[..., dict[str, str]],
+    clan_war: dict[str, Any],
+) -> None:
+    """A drafted pick counts against the next pick and the next roster."""
+    rows = template(client, auth_headers, clan_war).json()
+    first, second = clan_war["rosters"]
+    captain = member(clan_war["captains"][0])
+
+    def draft(player1: int, player2: int) -> Any:  # noqa: ANN401
+        return client.post(
+            "/draft-series",
+            json={
+                "match_id": clan_war["fixture"],
+                "player1_id": player1,
+                "player2_id": player2,
+                "host_player_id": player1,
+            },
+            headers=captain,
+        )
+
+    drafted = draft(first[0], second[0])
+    assert drafted.status_code == 201, drafted.text
+    repeated = draft(first[0], second[1])
+
+    assert repeated.status_code == 400, repeated.text
+    assert repeated.json() == {
+        "error": "That player already plays a drafted series of this fixture"
+    }
+    # The roster write reads the draft tool's picks too
+    paired = roster(client, auth_headers, rows[1]["id"], 1, first[:2])
+    assert paired.status_code == 400, paired.text
+    assert paired.json() == {
+        "error": "That player already plays a drafted series of this fixture"
+    }
+    # A draft series names its own players again, so an edit is not a repeat
+    kept = client.put(
+        f"/draft-series/{drafted.json()['id']}",
+        json={"player1_id": first[0], "player2_id": second[0]},
+        headers=captain,
+    )
+    assert kept.status_code == 200, kept.text
+
+
 def test_the_fixture_score_sums_its_five_series(
     client: Client, auth_headers: dict[str, str], clan_war: dict[str, Any]
 ) -> None:
