@@ -2,9 +2,8 @@
 
 Nightbot, the stream overlay and the bookmarks of the run crew still call
 these paths, so every read maps a night's event, its entrants and its series
-onto the shapes the KOTH service answered before. Nothing here reads or
-writes koth_events, koth_signups, koth_matches or koth_match_participants:
-those four tables only hold history until 4f drops them.
+onto the shapes the KOTH service answered before. The four koth_* tables are
+dropped, so app/models/koth_legacy.py holds those shapes alone.
 
 A signup is an entrant, a match is a series of the chain, a bracket is a
 division and the king is the winner of the last scored series of his chain.
@@ -23,16 +22,18 @@ from app.models.enums import EventKind, Race, SignupChannel
 from app.models.event_division import EventDivision
 from app.models.event_entrant import EntrantPlacement, EventEntrant
 from app.models.event_stage import EventStage
-from app.models.koth_event import (
+from app.models.koth_legacy import (
     KothEventCreate,
     KothEventPublic,
     KothEventSummary,
     KothEventUpdate,
+    KothMatchCreate,
+    KothMatchParticipantPublic,
+    KothMatchPublic,
+    KothMatchUpdate,
+    KothSignupPublic,
 )
-from app.models.koth_match import KothMatchCreate, KothMatchPublic, KothMatchUpdate
-from app.models.koth_match_participant import KothMatchParticipantPublic
 from app.models.koth_night import NightOpen
-from app.models.koth_signup import KothSignupPublic
 from app.models.relationships import DBEventRound
 from app.models.season import EventUpdate, Season
 from app.models.series import Series, SeriesUpdate
