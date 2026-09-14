@@ -210,7 +210,12 @@ def assign_divisions(event_id: int, service: EventServiceDep) -> EventPublic:
 def set_seeds(
     event_id: int, stage_id: int, data: SeedWrite, service: EventServiceDep
 ) -> list[EventEntrantPublic]:
-    """Seed the entrants 1..n inside each division, in seed order."""
+    """Seed the entrants 1..n inside each division, in seed order.
+
+    The sources that seed are mmr, random, manual, invitation and
+    previous_stage, which takes the standings of the stage before and
+    generates nothing. A qualifier answers not_built.
+    """
     return service.set_seeds(event_id, stage_id, data)
 
 
