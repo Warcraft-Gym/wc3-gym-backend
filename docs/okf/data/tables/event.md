@@ -4,7 +4,7 @@ title: event
 description: One run of a league that people sign up for: a GNL season, a KOTH night, a cup or a sign-up list; the class is still named Season.
 resource: ../../../../app/models/season.py
 tags: [schema, events]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T15:15:00Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-09-15T09:00:00Z }
 sources:
   - id: model
     resource: ../../../../app/models/season.py
@@ -46,6 +46,8 @@ The first block is the GNL season columns, on `SeasonBase`, which the season pay
 | `entrant_kind` | VARCHAR | no | `solo`, `team` or `drafted_teams`. Copied from the league when the event is created. A `drafted_teams` event takes no direct signup. |
 | `published` | BOOLEAN | no | Off: a draft only an admin reads, and the phase is `draft`. |
 | `checkin_enabled` | BOOLEAN | no | Off: no check-in is asked and every round stays open. |
+| `multi_entry` | BOOLEAN | no | On, a player may enter once per race and each row seeds on its own race; every KOTH night opens it. |
+| `closed_at` | TIMESTAMP | yes | When an admin closed the event; a closed event reads finished, and a chain grows no further. |
 | `page_url` | VARCHAR | yes | The event's landing or rules page, shown as one "Page" link. |
 | `stream_url` | VARCHAR | yes | Where the event is streamed. Set by the admin form; answered on the event payload; no service reads it. |
 | `discord_event_id` | VARCHAR | yes | The Discord message id of the event card last posted. A repost edits that message. Written by the card post. |

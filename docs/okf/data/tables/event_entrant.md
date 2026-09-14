@@ -4,7 +4,7 @@ title: event_entrant
 description: One player or one pre-made team in one event, with its race, seed, division, check-in and withdrawal stamps; a withdrawn entrant keeps its row.
 resource: ../../../../app/models/event_entrant.py
 tags: [schema, events]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T15:15:00Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-09-15T09:00:00Z }
 sources:
   - id: model
     resource: ../../../../app/models/event_entrant.py
@@ -41,7 +41,7 @@ sources:
 
 # Keys and joins
 
-Primary key `id`. Foreign keys: `event_id` to [event](event.md), cascade; `user_id` to [users](users.md), cascade; `team_id` to [teams](teams.md), cascade; `division_id` to [event_division](event_division.md), set null; `qualified_from_event_id` to [event](event.md), set null. Unique constraints on (`event_id`, `user_id`) and (`event_id`, `team_id`). Check constraint `one_entrant`: exactly one of `user_id` and `team_id` is set.
+Primary key `id`. Foreign keys: `event_id` to [event](event.md), cascade; `user_id` to [users](users.md), cascade; `team_id` to [teams](teams.md), cascade; `division_id` to [event_division](event_division.md), set null; `qualified_from_event_id` to [event](event.md), set null. Unique constraints on (`event_id`, `user_id`, `race`) and (`event_id`, `team_id`); an event with `multi_entry` off keeps one row per player through the entrant write. Check constraint `one_entrant`: exactly one of `user_id` and `team_id` is set.
 
 Pointed at by [series](series.md) (`entrant1_id`, `entrant2_id`), [series_side](series_side.md) and [event_award](event_award.md) through `entrant_id`.
 
