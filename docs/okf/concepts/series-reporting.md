@@ -3,7 +3,7 @@ type: Domain Concept
 title: Series reporting
 description: A result is reported game by game with a map and a replay per game, a veto board that is derived from the season rules, an off race per side, and casts that any member may claim.
 resource: ../../../app/services/series_games.py
-tags: [series, veto, replays, casts]
+tags: [series, storage]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T16:25:00Z }
 sources:
   - id: games
@@ -55,3 +55,25 @@ Replays live in a Cloudflare R2 bucket, one file per game. The browser uploads s
 # Casts
 
 Any member claims a series once (`POST /series/{id}/casts`); the owner or an admin changes the channel or removes it, and sets the VOD. A series with a result is over and takes no claim. The claim posts a card in Discord, and a reminder card goes out shortly before the start through `GET /jobs/cast-reminders`. See [Discord integration](discord-integration.md).
+
+# Examples
+
+A player on side B reports a 2-1 played on an off race, game by game. The scores must match the winners; `map_id` may be left out when the rules name the map.
+
+```http
+PUT /player-series/123
+
+{
+  "action": "score_updated",
+  "player1_score": 2,
+  "player2_score": 1,
+  "player2_off_race": "UD",
+  "games": [
+    { "game_no": 1, "winner_side": "A", "map_id": 4 },
+    { "game_no": 2, "winner_side": "B", "map_id": 9 },
+    { "game_no": 3, "winner_side": "A", "map_id": 4 }
+  ]
+}
+```
+
+The same route with `"action": "scheduled"` and a `date_time` in UTC sets the time and nothing else.

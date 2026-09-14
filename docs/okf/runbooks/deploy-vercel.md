@@ -3,7 +3,7 @@ type: Runbook
 title: Deploy to Vercel
 description: A merge to main deploys production and migrates in the build; staging mirrors main; previews use the staging database; the Hobby plan sets the limits.
 resource: ../../../vercel.json
-tags: [runbook, vercel, deploy]
+tags: [deploy]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
 stale_after: 2027-03-14T00:00:00Z
 sources:

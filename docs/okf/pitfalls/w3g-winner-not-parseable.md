@@ -2,7 +2,7 @@
 type: Pitfall
 title: A replay does not give up the winner
 description: A .w3g yields the map and the battle tags from its first block; the winner is not readable, and a hand-written record walker was rejected.
-tags: [pitfall, replays]
+tags: [storage]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
 sources:
   - id: source

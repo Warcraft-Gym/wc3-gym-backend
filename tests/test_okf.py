@@ -60,6 +60,25 @@ INDEXES = [p for p in files if p.name == "index.md"]
 # YAML reads a bare `a: b` value as a nested key, so a value that holds `: ` is quoted
 UNQUOTED_COLON = re.compile(r"^\s*(?:- )?[\w-]+: (?![\"'\[{|>]).*: ", re.MULTILINE)
 INDEX_ENTRY = re.compile(r"^\* \[[^\]]+\]\(([^)]+)\) - (.+)$", re.MULTILINE)
+# The areas a concept may be tagged with; `type` already says what kind of file it is
+TAGS = {
+    "events",
+    "koth",
+    "series",
+    "fantasy",
+    "scheduling",
+    "teams",
+    "maps",
+    "w3champions",
+    "discord",
+    "auth",
+    "data",
+    "storage",
+    "api",
+    "deploy",
+    "testing",
+    "tooling",
+}
 
 
 def description(path: Path) -> str:
@@ -75,7 +94,10 @@ def description(path: Path) -> str:
 def test_concept_metadata(path: Path) -> None:
     fm = frontmatter(path.read_text()) or ""
     assert re.search(r"^title: \S", fm, re.MULTILINE), "a concept has a title"
-    assert re.search(r"^tags: \[", fm, re.MULTILINE), "tags is a list"
+    tags = re.search(r"^tags: \[(.*)\]$", fm, re.MULTILINE)
+    assert tags, "tags is a list"
+    unknown = {t.strip() for t in tags.group(1).split(",")} - TAGS
+    assert not unknown, f"tags outside the vocabulary: {sorted(unknown)}"
     description(path)
     hit = UNQUOTED_COLON.search(fm)
     assert hit is None, f"quote the value: {hit.group().strip()!r}"

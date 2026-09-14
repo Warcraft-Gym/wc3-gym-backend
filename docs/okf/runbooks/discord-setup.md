@@ -3,7 +3,7 @@ type: Runbook
 title: Set up the Discord side
 description: Register the slash commands, upload the emojis, place the bot role, and point the channel settings rows at the right channels.
 resource: ../../../justfile
-tags: [runbook, discord]
+tags: [discord]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
 stale_after: 2027-03-14T00:00:00Z
 sources:

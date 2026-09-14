@@ -3,8 +3,9 @@ type: Data Model
 title: series_replay
 description: One replay slot per game of a series, holding the object key of the file in the replay bucket and who uploaded it.
 resource: ../../../../app/models/series_replay.py
-tags: [schema, events]
+tags: [events, data]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T15:15:00Z }
+verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
 sources:
   - id: model
     resource: ../../../../app/models/series_replay.py

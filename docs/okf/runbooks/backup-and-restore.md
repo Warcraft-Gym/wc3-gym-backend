@@ -3,7 +3,7 @@ type: Runbook
 title: Back up and restore
 description: There is no scheduled backup and no restore has been run; take a pg_dump by hand before a destructive migration, and know that the workbook export is not a restore.
 resource: ../../../README.md
-tags: [runbook, backup, postgres]
+tags: [data, storage]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
 stale_after: 2027-03-14T00:00:00Z
 sources:

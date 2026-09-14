@@ -3,7 +3,7 @@ type: Integration
 title: Discord integration
 description: Slash commands arrive through a separate adapter and are checked and answered here, cards are posted and edited under a rate limit, and season roles are mirrored to the guild on a button press.
 resource: ../../../app/services/interactions.py
-tags: [discord, integration, bot]
+tags: [discord]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T16:25:00Z }
 sources:
   - id: interactions

@@ -3,8 +3,9 @@ type: Data Model
 title: maps
 description: "One map: its name, its short name and the public URL of its picture."
 resource: ../../../../app/models/map.py
-tags: [schema, maps]
+tags: [maps, data]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T15:15:00Z }
+verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
 sources:
   - id: model
     resource: ../../../../app/models/map.py

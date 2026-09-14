@@ -3,8 +3,8 @@ type: API Area
 title: API overview
 description: Seventeen route modules under one FastAPI app, one error envelope, paging with a total header, a search language, and OpenAPI at /docs.
 resource: ../../../app/api/main.py
-tags: [api, fastapi, routes]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
+tags: [api]
+generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T17:00:00Z }
 sources:
   - id: router
     resource: ../../../app/api/main.py
@@ -61,3 +61,26 @@ List routes take `limit` (1 to 500, default 500) and `offset`. Seven routes carr
 # CORS and caching
 
 CORS allows every origin, because clients send bearer tokens and never cookies. A route that sets `Cache-Control: public` must write `Access-Control-Allow-Origin: *` itself, next to it. See [the pitfall](../pitfalls/edge-cache-cors.md).
+
+# Examples
+
+A paged list, with the total in the header:
+
+```http
+GET /teams?limit=2&offset=0
+
+200 OK
+X-Total-Count: 6
+
+[ { "id": 1, "name": "Team A", ... }, { "id": 2, "name": "Team B", ... } ]
+```
+
+An offset past the end answers `200 []`. Every error carries the envelope and nothing else:
+
+```http
+GET /no-such-path          -> 404 {"error": "Not Found"}
+DELETE /health             -> 405 {"error": "Method Not Allowed"}
+POST /users/search {"query": "name ==="}   -> 400 {"error": "<what the parser refused>"}
+```
+
+A bug answers `500 {"error": "Internal Server Error"}` with the detail in the log, never in the body.
