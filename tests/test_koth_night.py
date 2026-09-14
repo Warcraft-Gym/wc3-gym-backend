@@ -266,3 +266,53 @@ def test_closing_a_night_deletes_the_series_nobody_played(
     assert closed.json()["phase"] == "finished"
     left = stage_series(client, night["id"], stage)["series"]
     assert [row["id"] for row in left] == [played["id"]]
+
+
+def test_a_signup_into_a_drawn_bracket_joins_the_end_of_its_chain(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """A late signup plays: his bracket grows by one series instead of stranding him.
+
+    A bracket draws the moment it holds two, so every signup after that reaches
+    a chain that is already drawn and takes the challenger seat at its end.
+    """
+    night = open_night(client, auth_headers)
+    stage = night["stages"][0]["id"]
+    for tag, mmr in (("A#1", 1400), ("B#2", 1300)):
+        enrol(tag, mmr)
+        sign_up(client, tag, tag.split("#")[0], "human")
+    assert len(stage_series(client, night["id"], stage)["series"]) == 1
+
+    for tag, mmr in (("C#3", 1350), ("D#4", 1250)):
+        enrol(tag, mmr)
+        assert sign_up(client, tag, tag.split("#")[0], "human").status_code == 200
+
+    rows = stage_series(client, night["id"], stage)["series"]
+    assert [row["sequence"] for row in rows] == [1, 2, 3]
+    assert [row["slot1_from_series_id"] for row in rows] == [
+        None,
+        rows[0]["id"],
+        rows[1]["id"],
+    ]
+    assert len({row["division_id"] for row in rows}) == 1
+    tags = {row["user"]["battleTag"] for row in entrants(client, night["id"])}
+    assert tags == {"A#1", "B#2", "C#3", "D#4"}
+
+
+def test_a_signup_that_names_no_race_takes_his_race_inside_the_window(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """A stale rating never pins the race: the pick reads the same window as the check."""
+    night = open_night(client, auth_headers)
+    user_id = enrol("Switch#1", 1500, race=Race.NE)
+    with Session.begin() as session:
+        session.add(
+            W3CStats(user_id=user_id, race=Race.HU, wc3_season=15, games=50, mmr=1900)
+        )
+
+    resp = sign_up(client, "Switch#1", "switch")
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["message"] == "switch signed up for Bracket 2 (1500 MMR)"
+    rows = entrants(client, night["id"])
+    assert [(row["race"], row["mmr"]) for row in rows] == [("NE", 1500)]

@@ -25,9 +25,10 @@ def follow_signup(event_id: int) -> None:
     """Seed the night after a signup, and draw each bracket once it holds two.
 
     A bracket draws on its own, so one player alone in another bracket never
-    holds the night up. The seeds stay open while the night takes signups,
-    because a locked stage refuses the seed write a later bracket needs; an
-    admin who locks them by hand takes the night over.
+    holds the night up. A bracket that already drew takes the late signup as
+    one more challenger at the end of its chain. The seeds stay open while the
+    night takes signups, because a locked stage refuses the seed write a later
+    bracket needs; an admin who locks them by hand takes the night over.
     """
     with Session.begin() as session:
         night = session.get(Season, event_id)
@@ -41,11 +42,19 @@ def follow_signup(event_id: int) -> None:
         stage_id = ident(stage)
         fields = _by_division(session, event_id)
         order = _kings_first(session, night, fields)
-        drawn = {row.division_id for row in series_of(session, event_id)}
+        chains: dict[int | None, list[Series]] = {}
+        for row in series_of(session, event_id):
+            chains.setdefault(row.division_id, []).append(row)
         ready = [
             division_id
             for division_id, field in fields.items()
-            if len(field) >= 2 and division_id not in drawn
+            if len(field) >= 2 and division_id not in chains
+        ]
+        joining = [
+            entrant_id
+            for division_id, chain in chains.items()
+            if division_id is not None
+            for entrant_id in _stranded(chain, fields.get(division_id, []))
         ]
     EventService().set_seeds(
         event_id,
@@ -56,6 +65,8 @@ def follow_signup(event_id: int) -> None:
     )
     for division_id in ready:
         stage_engine.generate(event_id, stage_id, division_id)
+    for entrant_id in joining:
+        stage_engine.add_challenger(event_id, stage_id, entrant_id)
 
 
 def kings_of(session: OrmSession, night: Season) -> dict[int, int]:
@@ -78,6 +89,16 @@ def kings_of(session: OrmSession, night: Season) -> dict[int, int]:
         if winner is not None and division_id in positions:
             kings[positions[division_id]] = winner
     return kings
+
+
+def _stranded(chain: list[Series], field: list[EventEntrant]) -> list[int]:
+    """The entrants of a drawn bracket that no series of its chain names."""
+    playing = {row.player1_id for row in chain} | {row.player2_id for row in chain}
+    return [
+        ident(row)
+        for row in field
+        if row.user_id is not None and row.user_id not in playing
+    ]
 
 
 def _by_division(session: OrmSession, event_id: int) -> dict[int, list[EventEntrant]]:

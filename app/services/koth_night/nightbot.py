@@ -50,10 +50,11 @@ def signup(
 
     with Session.begin() as session:
         event_id = ident(tonight(session))
+        season = _w3c_season(session)
         user = _by_battle_tag(session, battletag, named or Race.RANDOM)
-        chosen = named or _best_race(user)
+        chosen = named or _best_race(user, season)
         # A player with no current rating has no bracket, so nothing is written
-        if _stats_for(user, chosen, _w3c_season(session))[0] is None:
+        if _stats_for(user, chosen, season)[0] is None:
             raise BadRequestError(_no_rating(battletag, race))
         row = _entrant(session, event_id, ident(user))
         entered = row is not None
@@ -121,12 +122,20 @@ def _no_rating(battle_tag: str, race: str | None) -> str:
     return f"No valid MMR data found for {battle_tag} in the last {SEASONS} seasons"
 
 
-def _best_race(user: User) -> Race:
-    """The race a command that names none plays: the player's best stored rating."""
-    rated = [stat for stat in (user.w3c_stats or []) if stat.race and stat.mmr]
-    best = max(rated, key=lambda stat: stat.mmr or 0, default=None)
-    if best is not None and best.race is not None:
-        return best.race
+def _best_race(user: User, season: int) -> Race:
+    """The race a command that names none plays: his best rating in the window.
+
+    The window is the one the signup checks the rating against, so the race
+    picked is one that can pass the check: a stale rating never pins the race.
+    """
+    rated = {
+        stat.race: _stats_for(user, stat.race, season)[0]
+        for stat in (user.w3c_stats or [])
+        if stat.race is not None
+    }
+    playing = {race: mmr for race, mmr in rated.items() if mmr is not None}
+    if playing:
+        return max(playing, key=lambda race: (playing[race], race.value))
     return user.race or Race.RANDOM
 
 
