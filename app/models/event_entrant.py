@@ -65,6 +65,8 @@ class EventEntrant(DBModel, table=True):
     division_id: int | None = Field(
         default=None, foreign_key="event_division.id", ondelete="SET NULL"
     )
+    # The group of a group stage, written by generate and cleared by advance
+    group_no: int | None = None
     # The qualifier this entrant came through; null for a direct signup
     qualified_from_event_id: int | None = Field(
         default=None, foreign_key="event.id", ondelete="SET NULL"
@@ -141,6 +143,7 @@ class EventEntrantPublic(SQLModel):
     seed_source: str | None = None
     mmr_at_seed: int | None = None
     division_id: int | None = None
+    group_no: int | None = None
     manual_placement: bool = False
     checked_in_at: Annotated[datetime | None, AwareUTC] = None
     withdrawn_at: Annotated[datetime | None, AwareUTC] = None
