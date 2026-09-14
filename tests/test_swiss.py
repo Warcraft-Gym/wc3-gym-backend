@@ -74,10 +74,14 @@ def play(
     return drawn
 
 
+def standings(client: Client, event: int, stage: int) -> list[dict[str, Any]]:
+    """One division's table, best place first."""
+    return client.get(f"/events/{event}/stages/{stage}/standings").json()[0]["rows"]
+
+
 def table(client: Client, event: int, stage: int, seeds: dict[int, int]) -> list[int]:
     """The seed numbers of one division's table, best place first."""
-    rows = client.get(f"/events/{event}/stages/{stage}/standings").json()[0]["rows"]
-    return [seeds[row["user_id"]] for row in rows]
+    return [seeds[row["user_id"]] for row in standings(client, event, stage)]
 
 
 def carried(event: int) -> list[int]:
@@ -164,12 +168,7 @@ def test_buchholz_breaks_the_tie_the_points_and_the_games_leave(
     for _ in range(3):
         play(client, auth_headers, event, stage, seeds)
     assert table(client, event, stage, seeds) == SWISS_TABLE
-    rows = {
-        seeds[row["user_id"]]: row
-        for row in client.get(f"/events/{event}/stages/{stage}/standings").json()[0][
-            "rows"
-        ]
-    }
+    rows = {seeds[row["user_id"]]: row for row in standings(client, event, stage)}
     assert (rows[7]["points"], rows[7]["game_diff"]) == (
         rows[3]["points"],
         rows[3]["game_diff"],
@@ -197,10 +196,14 @@ def test_an_odd_field_gives_the_bye_to_the_lowest_entrant_without_one(
     for _ in range(3):
         play(client, auth_headers, event, stage, seeds)
     byes = [row for row in bracket(stage) if row["sides"][1] is None]
-    assert [seeds[row["sides"][0]] for row in byes] == [7, 5, 3]
+    # The bye pays, so the seed that took one climbs out of the last place
+    assert [seeds[row["sides"][0]] for row in byes] == [7, 5, 1]
     # A bye is a walkover the drawing awards, so the round needs no result
     assert [row["result_kind"] for row in byes] == ["walkover"] * 3
     assert [row["score"] for row in byes] == [(2, 0)] * 3
+    # The table pays that walkover, so seed 7 stands on three wins, not two
+    line = {seeds[row["user_id"]]: row for row in standings(client, event, stage)}[7]
+    assert (line["points"], line["won"], line["game_diff"]) == (9, 3, 6)
 
 
 def test_a_stage_ended_after_two_rounds_advances_the_table_as_it_stands(

@@ -63,7 +63,7 @@ class Points(NamedTuple):
 PER_GAME = Points()
 
 
-type Result[T] = tuple[T, T, int, int]  # entrant a, entrant b, games a won, games b won
+type Result[T] = tuple[T, T | None, int, int]  # a, b or the bye, games a, games b
 
 
 # The tie breaks a table may read, in the order a stage's ranking_rule names
@@ -84,25 +84,29 @@ def standings[T: Hashable](
     Head to head counts the games won in series between the tied entrants only,
     so it runs inside the group the other breaks leave tied, last of all, and a
     rule that leaves the word out leaves that group in the order it came in.
+    A result whose second side is the bye pays the first side and counts its
+    games, and adds nothing to either Buchholz sum because it has no opponent.
     """
     won = dict.fromkeys(entrants, 0)
     lost = dict.fromkeys(entrants, 0)
     paid = dict.fromkeys(entrants, 0)
     for a, b, a_games, b_games in results:
-        won[a] += a_games
-        lost[a] += b_games
-        won[b] += b_games
-        lost[b] += a_games
-        if a_games == b_games:
-            paid[a] += pay.series_drawn
-            paid[b] += pay.series_drawn
-        else:
-            paid[a if a_games > b_games else b] += pay.series_won
+        for own, games, against in ((a, a_games, b_games), (b, b_games, a_games)):
+            if own is None:
+                continue
+            won[own] += games
+            lost[own] += against
+            if games == against:
+                paid[own] += pay.series_drawn
+            elif games > against:
+                paid[own] += pay.series_won
 
     points = {e: paid[e] + won[e] * pay.game_won for e in entrants}
     diff = {e: won[e] - lost[e] for e in entrants}
     buchholz = dict.fromkeys(entrants, 0)
     for a, b, _, _ in results:
+        if b is None:
+            continue
         buchholz[a] += points[b]
         buchholz[b] += points[a]
     measures = {"points": points, "game_diff": diff, "buchholz": buchholz}
@@ -118,7 +122,7 @@ def standings[T: Hashable](
             group = list(tied)
             h2h = dict.fromkeys(group, 0)
             for a, b, a_games, b_games in results:
-                if a in h2h and b in h2h:
+                if b is not None and a in h2h and b in h2h:
                     h2h[a] += a_games
                     h2h[b] += b_games
             broken += sorted(group, key=h2h.__getitem__, reverse=True)

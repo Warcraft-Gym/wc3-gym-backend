@@ -813,6 +813,16 @@ def _plans_as_chain(stage: EventStage) -> bool:
     ] == [(None, 2), (0, 3)]
 
 
+def _pays_a_bye(stage: EventStage, row: Series) -> bool:
+    """Whether the table counts this series although it names one entrant only.
+
+    A stage that draws round by round writes the bye as an awarded one-sided
+    series, so it pays its entrant; a planned bracket pads its first round with
+    the same shape and pays nothing for it.
+    """
+    return _draws_by_round(stage) and row.entrant2_id is None
+
+
 def _draws_by_round(stage: EventStage) -> bool:
     """Whether the stage draws one round at a time instead of planning every
     series up front: it pairs the next round from the table as it stands."""
@@ -899,7 +909,9 @@ def _table(
             row.player2_score or 0,
         )
         for row in series
-        if scored(row) and row.entrant1_id in entrants and row.entrant2_id in entrants
+        if scored(row)
+        and row.entrant1_id in entrants
+        and (row.entrant2_id in entrants or _pays_a_bye(stage, row))
     ]
     table = brackets.standings(
         order,
@@ -963,7 +975,7 @@ def _king(series: Sequence[Series]) -> int | None:
 
 
 def _counted(
-    order: Sequence[int], results: Sequence[tuple[int, int, int, int]]
+    order: Sequence[int], results: Sequence[tuple[int, int | None, int, int]]
 ) -> dict[int, dict[str, int]]:
     """Series played, won and lost, and the games either way, per entrant."""
     tally = {
@@ -975,6 +987,8 @@ def _counted(
             (first, second, first_games, second_games),
             (second, first, second_games, first_games),
         ):
+            if own is None:
+                continue
             tally[own]["played"] += 1
             tally[own]["games_won"] += games
             tally[own]["games_lost"] += other_games
