@@ -118,10 +118,11 @@ def generate(
         size = _side_size(
             session, [entrant for field in fields.values() for entrant in field]
         )
-        plans = {
-            division: _plan(stage, len(field)) for division, field in fields.items()
-        }
-        depth = max(len(plan.rounds) for plan in plans.values())
+        draws = _draws(session, stage, list(fields.items()))
+        if any(len(field) < 2 for _, field in draws):
+            raise BadRequestError("A group needs two entrants; the group size is small")
+        plans = [_plan(stage, len(field)) for _, field in draws]
+        depth = max(len(plan.rounds) for plan in plans)
         held = {row.number: row for row in _rounds_of(session, stage_id)}
         first = min(held) if held else _next_number(session, event_id)
         rounds: dict[int, DBEventRound] = {
@@ -129,15 +130,15 @@ def generate(
         }
         per_fixture = _series_per_fixture(session, event_id)
         made: list[Series] = []
-        for division, field in fields.items():
-            plan = plans[division]
+        # The groups of a division write into one run of sequences per round
+        counts: dict[tuple[int | None, int], int] = {}
+        for (division, field), plan in zip(draws, plans, strict=True):
             shift = depth - len(plan.rounds) if stage.format in BRACKETS else 0
             # A round robin over a field of teams pairs them into fixtures
             pairs = stage.format is StageFormat.round_robin and all(
                 entrant.team_id for entrant in field
             )
             rows: list[Series] = []
-            counts: dict[int, int] = {}
             for planned in plan.series:
                 place = planned.round + shift
                 round_row = rounds.get(place)
@@ -151,7 +152,7 @@ def generate(
                     session.add(round_row)
                     session.flush()
                     rounds[place] = round_row
-                counts[place] = counts.get(place, 0) + 1
+                counts[division, place] = counts.get((division, place), 0) + 1
                 teams = _team_pair(field, planned) if pairs else None
                 if teams is None:
                     rows.append(
@@ -166,7 +167,7 @@ def generate(
                             size,
                         )
                     )
-                    rows[-1].sequence = counts[place]
+                    rows[-1].sequence = counts[division, place]
                     continue
                 fixture = _fixture(session, event_id, round_row, division, teams)
                 for sequence in range(1, per_fixture + 1):
@@ -1002,17 +1003,26 @@ def advancing(session: OrmSession, event_id: int, stage: EventStage) -> list[lis
     """The entrant ids every division of the stage sends on, in its table order.
 
     The top `advance_count` places go through, or the whole table when the
-    stage names no count. Both `advance` and a `previous_stage` seed write
-    read this one order.
+    stage names no count. A stage that plays groups takes `group_advance` from
+    each of them and merges the groups of a division by place, so the winners
+    head the list and the draw of the next stage holds them apart. Both
+    `advance` and a `previous_stage` seed write read this one order.
     """
-    return [
-        [
-            line.entrant_id
-            for line in (
-                table.rows[: stage.advance_count] if stage.advance_count else table.rows
+    through: dict[int | None, list[tuple[int, int, int]]] = {}
+    for table in _tables(session, event_id, stage):
+        take = (
+            stage.group_advance or stage.advance_count
+            if table.group_no
+            else stage.advance_count
+        )
+        for place, line in enumerate(
+            table.rows[:take] if take else table.rows, start=1
+        ):
+            through.setdefault(table.division_id, []).append(
+                (place, table.group_no or 0, line.entrant_id)
             )
-        ]
-        for table in _tables(session, event_id, stage)
+    return [
+        [entrant_id for _, _, entrant_id in sorted(lines)] for lines in through.values()
     ]
 
 
@@ -1192,21 +1202,72 @@ def _tables(
     everyone = _entrants(session, event_id)
     seeds = _fields(everyone)
     seats = _seats_of(session, [ident(row) for rows in played.values() for row in rows])
+    tables: list[DivisionStandings] = []
+    for division_id, everybody in everyone.items():
+        rows = played.get(division_id, [])
+        field = _sides_of(everybody, rows, seats) or seeds.get(division_id, [])
+        for group_no, group in _split(stage, field):
+            tables.append(
+                DivisionStandings(
+                    division_id=division_id,
+                    division_name=names.get(division_id) if division_id else None,
+                    group_no=group_no,
+                    group_name=None if group_no is None else _group_name(group_no),
+                    rows=_table(session, stage, group, rows, seats),
+                )
+            )
+    return tables
+
+
+def _draws(
+    session: OrmSession,
+    stage: EventStage,
+    fields: Sequence[tuple[int | None, list[EventEntrant]]],
+) -> list[tuple[int | None, list[EventEntrant]]]:
+    """The fields a generate draws, in order: one per division, or one per group.
+
+    A group is stamped on its entrants, so the tables, the advance and the
+    entrants page read the split off the rows and no series carries a group.
+    """
+    if not _has_groups(stage):
+        return list(fields)
+    draws: list[tuple[int | None, list[EventEntrant]]] = []
+    for division_id, field in fields:
+        for number, group in enumerate(
+            brackets.snake_groups(field, stage.group_size or 2), start=1
+        ):
+            for entrant in group:
+                entrant.group_no = number
+            draws.append((division_id, group))
+    session.flush()
+    return draws
+
+
+def _split(
+    stage: EventStage, field: Sequence[EventEntrant]
+) -> list[tuple[int | None, list[EventEntrant]]]:
+    """One field per group where the stage plays them, or the whole division."""
+    numbers = sorted({entrant.group_no for entrant in field if entrant.group_no})
+    if not _has_groups(stage) or not numbers:
+        return [(None, list(field))]
     return [
-        DivisionStandings(
-            division_id=division_id,
-            division_name=names.get(division_id) if division_id else None,
-            rows=_table(
-                session,
-                stage,
-                _sides_of(field, played.get(division_id, []), seats)
-                or seeds.get(division_id, []),
-                played.get(division_id, []),
-                seats,
-            ),
-        )
-        for division_id, field in everyone.items()
+        (number, [entrant for entrant in field if entrant.group_no == number])
+        for number in numbers
     ]
+
+
+def _has_groups(stage: EventStage) -> bool:
+    """Whether the stage splits each division into groups of its own table.
+
+    The groups merge at the next stage, so they are a table format only: a
+    stage that plans a bracket plays its division whole.
+    """
+    return stage.group_size is not None and stage.format is StageFormat.round_robin
+
+
+def _group_name(number: int) -> str:
+    """What a group is called: Group A is the first one of its division."""
+    return f"Group {chr(ord('A') + number - 1)}" if number <= 26 else f"Group {number}"
 
 
 def _sides_of(
@@ -1435,6 +1496,8 @@ def _advance(session: OrmSession, event_id: int, stage: EventStage) -> int:
     for entrant in session.scalars(
         select(EventEntrant).where(col(EventEntrant.event_id) == event_id)
     ):
+        # The groups merge here, so nobody carries one into the next stage
+        entrant.group_no = None
         if ident(entrant) not in carried:
             entrant.seed = None
     session.flush()
