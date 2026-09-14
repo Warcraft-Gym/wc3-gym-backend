@@ -22,6 +22,7 @@ from app.models.match import Match, MatchPublic
 from app.models.relationships import EventRoundPublic
 from app.models.series_cast import CastPublic, SeriesCast
 from app.models.series_veto_step import DBSeriesVetoStep
+from app.models.team_reduced import TeamReduced
 from app.models.types import AwareUTC, EnumValue, SuggestRace, UTCDateTime
 from app.models.user import User, UserPublic
 
@@ -70,6 +71,14 @@ class Series(SeriesBase, DBModel, table=True):
     )
     player2_id: int | None = Field(
         default=None, index=True, foreign_key="users.id", ondelete="CASCADE"
+    )
+    # The entrant on each side: a solo entrant also fills the player id above,
+    # a team entrant leaves it null and its roster plays the side.
+    entrant1_id: int | None = Field(
+        default=None, index=True, foreign_key="event_entrant.id", ondelete="SET NULL"
+    )
+    entrant2_id: int | None = Field(
+        default=None, index=True, foreign_key="event_entrant.id", ondelete="SET NULL"
     )
     # The round this series is played in; backfilled in C1, required from C2.
     # It stays off SeriesBase, so the series payloads are unchanged.
@@ -365,6 +374,11 @@ class StageSeriesRow(SeriesPublic):
     round_id: int | None = None
     sequence: int | None = None
     division_id: int | None = None
+    entrant1_id: int | None = None
+    entrant2_id: int | None = None
+    # The team behind a side, so the box prints its name; null for a player
+    team1: TeamReduced | None = None
+    team2: TeamReduced | None = None
     side_size: int = 1
     pick_rule: str | None = None
     result_kind: str = "played"
@@ -379,6 +393,8 @@ class StageSeriesRow(SeriesPublic):
         row.round_id = series.round_id
         row.sequence = series.sequence
         row.division_id = series.division_id
+        row.entrant1_id = series.entrant1_id
+        row.entrant2_id = series.entrant2_id
         row.side_size = series.side_size
         row.pick_rule = series.pick_rule
         row.result_kind = series.result_kind

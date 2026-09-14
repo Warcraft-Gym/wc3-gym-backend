@@ -330,7 +330,7 @@ class EventService:
                     event.id in joined,
                     joined.get(event.id),
                     rounds.get(event.id),
-                    event.id in answered,
+                    _answer_time(event, rounds.get(event.id), answered),
                 )
                 for event in events
             ]
@@ -678,8 +678,9 @@ def _round_answers(
     session: OrmSession,
     user_id: int | None,
     rounds: dict[int | None, DBEventRound | None],
-) -> set[int]:
-    """The events whose next round the caller has answered, in one statement.
+) -> dict[int, datetime | None]:
+    """The events whose next round the caller has answered, and when, in one
+    statement.
 
     The round shape stores the check-in as a round_availability row, so the
     member rows read it there and never off the entrant stamp.
@@ -690,24 +691,39 @@ def _round_answers(
         if event_id is not None and round_ is not None
     }
     if user_id is None or not wanted:
-        return set()
+        return {}
     rows = session.execute(
         select(
-            col(DBRoundAvailability.season_id), col(DBRoundAvailability.playday)
+            col(DBRoundAvailability.season_id),
+            col(DBRoundAvailability.playday),
+            col(DBRoundAvailability.answered_at),
         ).where(
             col(DBRoundAvailability.user_id) == user_id,
             col(DBRoundAvailability.season_id).in_({key[0] for key in wanted}),
         )
     ).all()
-    return {event_id for event_id, playday in rows if (event_id, playday) in wanted}
+    return {
+        event_id: answered_at
+        for event_id, playday, answered_at in rows
+        if (event_id, playday) in wanted
+    }
 
 
-def _answered_at(event: Season, round_: DBEventRound) -> datetime | None:
-    """When a round answer stands from.
+def _answer_time(
+    event: Season,
+    round_: DBEventRound | None,
+    answered: dict[int, datetime | None],
+) -> datetime | None:
+    """When the caller's answer for the next round stands from.
 
-    The row carries no time of its own, so the read names the moment the
-    round's check-in opened; a stamp of the answer needs a new column.
+    The row carries its own stamp; a row written before that column falls back
+    to the moment the round's check-in opened.
     """
+    if event.id not in answered or round_ is None:
+        return None
+    stamped = answered[event.id]
+    if stamped is not None:
+        return stamped
     window = checkin_window(event, round_)
     opens = window[0] if window else round_.start_date
     return datetime.combine(opens, time(), tzinfo=UTC) if opens else None
@@ -720,7 +736,7 @@ def _member_row(
     joined: bool,
     entrant: EventEntrant | None,
     round_: DBEventRound | None,
-    answered: bool,
+    answered_at: datetime | None,
 ) -> MemberEventRow:
     """One member home row: the event, and what the caller may do with it."""
     phase = phase_of(session, event, counts)
@@ -734,7 +750,7 @@ def _member_row(
     )
     # The round shape takes its check-in through PUT /player-availability
     checked_in_at = (
-        (_answered_at(event, round_) if answered else None)
+        answered_at
         if shape == "round" and round_ is not None
         else (entrant.checked_in_at if entrant else None)
     )
@@ -868,6 +884,13 @@ def _caller(session: OrmSession, claims: dict[str, Any] | None) -> User | None:
     ).first()
 
 
+def _signup_race(data: EntrantSignup) -> Race:
+    """The race a player row signs up on; one player plays one race."""
+    if data.race is None:
+        raise BadRequestError("Name the race you sign up on")
+    return data.race
+
+
 def _by_battle_tag(session: OrmSession, battle_tag: str, race: Race) -> User:
     """The player row with that battle tag, created when the tag is new.
 
@@ -901,7 +924,7 @@ def _w3c_season(session: OrmSession) -> int:
     return session.scalar(select(func.max(col(W3CStats.wc3_season)))) or 0
 
 
-def _stats_for(user: User, race: Race, season: int) -> tuple[int | None, int]:
+def _stats_for(user: User, race: Race | None, season: int) -> tuple[int | None, int]:
     """The player's current W3C rating on that race, and the games behind it.
 
     A season the player did not play on that race carries no rating, so the
@@ -1036,6 +1059,7 @@ def _entrant_public(
         user=UserPublic.from_user(user) if user else None,
         team=TeamReduced.from_team(team) if team else None,
         race=row.race,
+        note=row.note,
         channel=row.channel,
         mmr=mmr,
         mmr_synced_at=user.w3c_synced_at if user else None,
@@ -1066,7 +1090,7 @@ def _signup_user(
 ) -> User:
     """The player a self signup enters: the battle tag, or the session's own row."""
     if event.signup_policy is SignupPolicy.anyone and data.battle_tag:
-        return _by_battle_tag(session, data.battle_tag, data.race)
+        return _by_battle_tag(session, data.battle_tag, _signup_race(data))
     if claims is None:
         raise ApiError(401, {"error": "Missing Authorization Header"})
     user = _caller(session, claims)
@@ -1085,7 +1109,7 @@ def _named_user(session: OrmSession, data: EntrantAdd) -> User:
             raise NotFoundError(f"User not found by id: {data.user_id}")
         return user
     if data.battle_tag:
-        return _by_battle_tag(session, data.battle_tag, data.race)
+        return _by_battle_tag(session, data.battle_tag, _signup_race(data))
     raise BadRequestError("Name a user_id, a battle_tag or a team_id")
 
 
@@ -1105,6 +1129,8 @@ def _enter(
         raise BadRequestError(
             f"A GNL season takes its signups at /seasons/{event.id}/signups"
         )
+    # A player plays one race; a team fields the races of its roster
+    race = data.race if team_id is not None else _signup_race(data)
     side = (
         col(EventEntrant.user_id) == user_id
         if user_id is not None
@@ -1119,7 +1145,8 @@ def _enter(
     if existing is not None:
         # The unique key is one row per entrant, so a return signup reopens it
         existing.withdrawn_at = None
-        existing.race = data.race
+        existing.race = race
+        existing.note = data.note
         existing.channel = data.channel
         session.flush()
         return existing
@@ -1127,7 +1154,8 @@ def _enter(
         event_id=ident(event),
         user_id=user_id,
         team_id=team_id,
-        race=data.race,
+        race=race,
+        note=data.note,
         channel=data.channel,
     )
     session.add(row)

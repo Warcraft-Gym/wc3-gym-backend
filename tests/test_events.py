@@ -11,7 +11,7 @@ from typing import Any
 
 import pytest
 from httpx2 import Client
-from sqlmodel import col
+from sqlmodel import col, select
 
 from app.core.db import Session
 from app.models.base import ident
@@ -21,6 +21,7 @@ from app.models.event_entrant import EventEntrant
 from app.models.event_stage import EventStage
 from app.models.league import League
 from app.models.relationships import DBEventRound, round_row
+from app.models.round_availability import DBRoundAvailability
 from app.models.season import Season
 from app.services.events import EventService
 from tests.test_fantasy_locks import schedule, score
@@ -766,6 +767,17 @@ def stamp_checked_in(entrant_id: int) -> None:
         row.checked_in_at = NOW
 
 
+def clear_answer_stamp(event_id: int) -> None:
+    """An answer as a row older than the stamp column carries it: no stamp."""
+    with Session.begin() as session:
+        for row in session.scalars(
+            select(DBRoundAvailability).where(
+                col(DBRoundAvailability.season_id) == event_id
+            )
+        ):
+            row.answered_at = None
+
+
 def answer_round(
     client: Client,
     headers: dict[str, str],
@@ -899,7 +911,10 @@ def test_the_round_answer_is_the_check_in_of_a_dated_round(
     checkin_day: Callable[[str], None],
 ) -> None:
     """A cup with a dated round checks in through PUT /player-availability, so
-    the member home reads that answer and dates it from the window's opening."""
+    the member home reads that answer and dates it from the answer's own stamp.
+
+    A row written before the stamp column falls back to the window's opening.
+    """
     headers = member()
     event = add_event(kind=EventKind.cup, checkin_days=3)
     enter(event, seeded["player_ids"][0])
@@ -914,10 +929,12 @@ def test_the_round_answer_is_the_check_in_of_a_dated_round(
 
     answer_round(client, headers, event, 1, checkin_day)
     row = my_events(client, headers)[event]
-    assert (row["action"], row["checked_in_at"]) == (
-        "checked_in",
-        f"{TODAY - timedelta(days=2)}T00:00:00Z",
-    )
+    assert row["action"] == "checked_in"
+    assert row["checked_in_at"].startswith(str(TODAY))
+
+    clear_answer_stamp(event)
+    row = my_events(client, headers)[event]
+    assert row["checked_in_at"] == f"{TODAY - timedelta(days=2)}T00:00:00Z"
 
 
 def test_the_entrant_stamp_is_no_check_in_of_a_dated_round(

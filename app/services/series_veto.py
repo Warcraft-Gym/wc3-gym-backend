@@ -14,6 +14,7 @@ from app.core.db import Session
 from app.core.exceptions import ApiError, BadRequestError, NotFoundError
 from app.core.map_order import DEFAULT_RULES, rules_of
 from app.models.base import ident
+from app.models.event_entrant import EventEntrant
 from app.models.map import Map
 from app.models.season import Season
 from app.models.series import Series
@@ -23,11 +24,14 @@ from app.models.series_veto_step import (
     SeriesVetoStepPublic,
     VetoPlayer,
 )
+from app.models.team import Team
 from app.services.series_rules import (
     SeriesRules,
+    acts_for_side,
     series_event,
     series_round,
     series_rules,
+    stands_on_side,
 )
 
 
@@ -67,7 +71,7 @@ class SeriesVetoService:
         with Session.begin() as session:
             series = _series(session, series_id, user_id)
             steps = _steps(session, series_id)
-            side = "A" if user_id == series.player1_id else "B"
+            side = _letter(acts_for_side(session, series, user_id))
             if action == "undo":
                 # A forced last step goes with the step that forced it: nobody took it
                 undone = (
@@ -75,10 +79,8 @@ class SeriesVetoService:
                 )
                 if not undone:
                     raise BadRequestError("The last step is not yours to take back")
-                if user_id is not None and user_id not in (
-                    undone[0].entered_by,
-                    series.player1_id if undone[0].side == "A" else series.player2_id,
-                ):
+                own = user_id == undone[0].entered_by or side == undone[0].side
+                if user_id is not None and not own:
                     raise BadRequestError("The last step is not yours to take back")
                 for step in undone:
                     session.delete(step)
@@ -102,7 +104,7 @@ def _series(session: OrmSession, series_id: int, user_id: int | None) -> Series:
     series = session.get(Series, series_id)
     if not series:
         raise NotFoundError(f"Series not found by id: {series_id}")
-    if user_id is not None and user_id not in (series.player1_id, series.player2_id):
+    if user_id is not None and acts_for_side(session, series, user_id) is None:
         raise ApiError(403, {"error": "not_authorized_for_this_series"})
     return series
 
@@ -235,20 +237,33 @@ def _forced_last(
     )
 
 
+def _letter(side: int | None) -> str | None:
+    """The side as the board spells it: A for the front side, B for the other."""
+    return None if side is None else ("A" if side == 1 else "B")
+
+
+def _veto_side(session: OrmSession, series: Series, side: int) -> VetoPlayer:
+    """The name the board prints for one side: the player, or the team."""
+    user = series.player1 if side == 1 else series.player2
+    if user is not None:
+        return VetoPlayer(id=ident(user), name=user.name)
+    entrant_id = series.entrant1_id if side == 1 else series.entrant2_id
+    entrant = session.get(EventEntrant, entrant_id) if entrant_id else None
+    team = session.get(Team, entrant.team_id) if entrant and entrant.team_id else None
+    # A team side names the team, which is what the board has to print
+    return VetoPlayer(id=ident(team) if team else 0, name=team.name if team else None)
+
+
 def _board(
     session: OrmSession, series: Series, player_id: int | None
 ) -> SeriesVetoPublic:
     """The board as one player row sees it: an admin who plays gets their side and turn."""
-    if series.player1_id is None or series.player2_id is None:
+    if stands_on_side(series, 1) is None or stands_on_side(series, 2) is None:
         raise BadRequestError("The series has no sides to veto with yet")
     rules = series_rules(session, series)
     order = _order(series_event(session, series))
     steps = _steps(session, ident(series))
-    side = None
-    if player_id == series.player1_id:
-        side = "A"
-    elif player_id == series.player2_id:
-        side = "B"
+    side = _letter(acts_for_side(session, series, player_id))
     complete = len(steps) >= len(order)
     return SeriesVetoPublic(
         steps=[
@@ -262,6 +277,6 @@ def _board(
         pool=rules.map_pool,
         week_map_id=_fixed_map_id(session, series, rules),
         map_rules=rules.map_rules,
-        player1=VetoPlayer(id=series.player1_id, name=series.player1.name),
-        player2=VetoPlayer(id=series.player2_id, name=series.player2.name),
+        player1=_veto_side(session, series, 1),
+        player2=_veto_side(session, series, 2),
     )

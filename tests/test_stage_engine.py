@@ -22,6 +22,7 @@ from app.models.event_stage import EventStage
 from app.models.relationships import DBEventRound
 from app.models.season import Season
 from app.models.series import Series
+from app.models.team import Team
 from app.models.user import User
 from app.services import stage_engine
 from tests.test_events import phase
@@ -1024,3 +1025,141 @@ def test_a_cup_reads_running_on_the_first_result_and_finished_on_the_last(
     )
     assert score(client, auth_headers, final["id"], 2, 0).status_code == 200
     assert phase(client, event) == "finished"
+
+
+def team_cup(
+    client: Client, auth: dict[str, str], member: Callable[..., dict[str, str]]
+) -> tuple[int, int, list[int], list[list[str]]]:
+    """A 2v2 cup of four pre-made teams.
+
+    Eight players, two to a team, each team rostered against the cup and
+    entered by its captain, which is the first player of its roster. The
+    rosters come back as the Discord ids the players sign in with.
+    """
+    ids = players(8)
+    with Session.begin() as session:
+        event = Season(
+            name="Team Cup", kind=EventKind.cup, series_per_round=1, published=True
+        )
+        session.add(event)
+        session.flush()
+        stage = EventStage(
+            event_id=ident(event),
+            position=1,
+            format=StageFormat.single_elimination,
+        )
+        teams = [Team(name=f"T{number}") for number in range(1, 5)]
+        session.add_all([stage, *teams])
+        session.flush()
+        event_id, stage_id = ident(event), ident(stage)
+        team_ids = [ident(team) for team in teams]
+    rosters = [ids[place * 2 : place * 2 + 2] for place in range(4)]
+    for place, (team_id, roster) in enumerate(zip(team_ids, rosters, strict=True)):
+        base = f"/teams/{team_id}/seasons/{event_id}"
+        added = client.post(
+            f"{base}/players", json={"player_ids": roster}, headers=auth
+        )
+        assert added.status_code == 200, added.text
+        seated = client.put(
+            f"{base}/captains", json={"captain_ids": roster[:1]}, headers=auth
+        )
+        assert seated.status_code == 200, seated.text
+        entered = client.post(
+            f"/events/{event_id}/entrants",
+            json={"team_id": team_id},
+            headers=member(f"9{place * 2 + 1:04d}"),
+        )
+        assert entered.status_code == 201, entered.text
+    tags = [[f"9{place * 2 + seat:04d}" for seat in (1, 2)] for place in range(4)]
+    return event_id, stage_id, team_ids, tags
+
+
+def test_a_2v2_cup_of_four_teams_draws_a_bracket_of_entrant_sides(
+    client: Client, auth_headers: dict[str, str], member: Callable[..., dict[str, str]]
+) -> None:
+    """A team side names its entrant and no user, and a side holds the roster."""
+    event, stage, team_ids, _ = team_cup(client, auth_headers, member)
+
+    assert generate(client, auth_headers, event, stage) == {"series": 3, "rounds": 2}
+
+    rows = stage_series(client, event, stage)["series"]
+    assert all(row["player1_id"] is None and row["player2_id"] is None for row in rows)
+    assert all(row["side_size"] == 2 for row in rows)
+    semis = [row for row in rows if row["entrant1_id"] is not None]
+    assert len(semis) == 2
+    # Every team stands in a semifinal, and the box prints its name
+    assert {row["team1"]["name"] for row in semis} | {
+        row["team2"]["name"] for row in semis
+    } == {"T1", "T2", "T3", "T4"}
+    assert {row["team1"]["id"] for row in semis} <= set(team_ids)
+
+
+def test_a_roster_member_reports_a_team_series_and_a_stranger_may_not(
+    client: Client,
+    auth_headers: dict[str, str],
+    member: Callable[..., dict[str, str]],
+    replay_uploaded: Callable[..., None],
+) -> None:
+    """The side is the team, so either of its two players reports for it."""
+    event, stage, _, rosters = team_cup(client, auth_headers, member)
+    generate(client, auth_headers, event, stage)
+    first = next(
+        row
+        for row in stage_series(client, event, stage)["series"]
+        if row["entrant1_id"] is not None
+    )
+    replay_uploaded(first["id"], 1, 2)
+
+    # The second player of the front side is on the roster, not a named player
+    reported = client.put(
+        f"/player-series/{first['id']}",
+        headers=member("90002"),
+        data={"action": "score_updated", "player1_score": "2", "player2_score": "0"},
+    )
+
+    assert reported.status_code == 200, reported.text
+    # A player of a team that plays the other semifinal is refused
+    stranger = client.put(
+        f"/player-series/{first['id']}",
+        headers=member(rosters[2][0]),
+        json={"date_time": "2026-03-01 20:00:00"},
+    )
+    assert stranger.status_code == 403, stranger.text
+    assert stranger.json() == {"error": "not_authorized_for_this_series"}
+
+
+def test_the_standings_of_a_team_cup_name_the_teams(
+    client: Client, auth_headers: dict[str, str], member: Callable[..., dict[str, str]]
+) -> None:
+    """One line per entrant, named by its team, with no user behind it."""
+    event, stage, team_ids, _ = team_cup(client, auth_headers, member)
+    generate(client, auth_headers, event, stage)
+    for row in stage_series(client, event, stage)["series"]:
+        score(client, auth_headers, row["id"], 2, 0)
+
+    table = client.get(f"/events/{event}/stages/{stage}/standings").json()
+
+    rows = table[0]["rows"]
+    assert len(rows) == 4
+    # The winner of the final leads, the side it beat is second
+    assert [row["name"] for row in rows][:2] == ["T1", "T2"]
+    assert {row["name"] for row in rows} == {"T1", "T2", "T3", "T4"}
+    assert all(row["user_id"] is None for row in rows)
+    assert {row["team_id"] for row in rows} == set(team_ids)
+
+
+def test_a_solo_cup_still_writes_the_user_beside_the_entrant(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """A solo entrant fills both ids, so every GNL-shaped reader still reads."""
+    event, (stage,) = cup(4)
+    generate(client, auth_headers, event, stage)
+
+    rows = stage_series(client, event, stage)["series"]
+    semis = [row for row in rows if row["player1_id"] is not None]
+
+    assert len(semis) == 2
+    assert all(row["entrant1_id"] and row["entrant2_id"] for row in semis)
+    assert all(row["team1"] is None and row["side_size"] == 1 for row in rows)
+    table = client.get(f"/events/{event}/stages/{stage}/standings").json()
+    assert all(row["user_id"] is not None for row in table[0]["rows"])
