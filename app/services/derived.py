@@ -7,10 +7,12 @@ Nothing stores player1_points, player2_points, team1_score, team2_score,
 final_score, points_against or points_available.
 
 Two statements answer a whole response: one resolves the scale of every
-match or season in it, and one sums the series on that scale. points_case
-reads the scale (score system and maps to win) and not the season, so seasons
-that share a scale share a statement. A series answer pays one more statement
-for the race every player in it registered on for the season of its match.
+series, match or season in it, and one sums the series on that scale.
+points_case reads the scale (score system and maps to win) and not the season,
+so seasons that share a scale share a statement. A series reads its scale
+through app.services.series_rules, which answers the rules of the same row in
+the same statement. A series answer pays one more statement for the race every
+player in it registered on for the season of its match.
 
 A career answer costs two more statements: one groups the series of every
 player by season, one names the seasons the league has played. Both are
@@ -47,16 +49,18 @@ from app.core.scoring import (
     points_case,
     wins_needed,
     wins_needed_sql,
+    wins_of,
 )
 from app.models.base import ident
 from app.models.draft_series import DraftSeriesPublic
 from app.models.enums import Race
 from app.models.event_entrant import EventEntrant
+from app.models.event_stage import EventStage
 from app.models.fantasy_bet import FantasyBet, FantasyBetPublic
 from app.models.fantasy_team import FantasyTeamPublic
 from app.models.match import Match, MatchPublic
 from app.models.player_career_stats import PlayerCareerStatsPublic
-from app.models.relationships import DBUserSeasonSignup
+from app.models.relationships import DBEventRound, DBUserSeasonSignup
 from app.models.season import (
     LEAGUE_SHORT_NAME,
     ROUND_COUNT,
@@ -90,15 +94,45 @@ def _scale(system: str | None, map_rules: str | None) -> Scale:
 
 
 def _scales_by_match(session: Session, match_ids: set[int]) -> dict[int, Scale]:
-    """The scale of the season of every match, in one statement."""
+    """The scale of every match, in one statement: the score system off its
+    event, and the maps a win takes off the stage its round names when the
+    engine generated its series, else off the map rules of the event.
+
+    Which side of that a fixture falls on is the rule series_rules states: a
+    generated series names an entrant, a GNL series names players only."""
     if not match_ids:
         return {}
+    generated = (
+        select(col(Series.id))
+        .where(
+            col(Series.match_id) == col(Match.id),
+            col(Series.entrant1_id).is_not(None),
+        )
+        .exists()
+    )
     rows = session.execute(
-        select(col(Match.id), col(Season.score_system), col(Season.map_rules))
+        select(
+            col(Match.id),
+            col(Season.score_system),
+            col(Season.map_rules),
+            col(DBEventRound.best_of),
+            col(EventStage.best_of),
+            generated,
+        )
         .join(Season, col(Season.id) == Match.season_id)
+        .outerjoin(DBEventRound, col(DBEventRound.id) == col(Match.round_id))
+        .outerjoin(EventStage, col(EventStage.id) == col(DBEventRound.stage_id))
         .where(col(Match.id).in_(match_ids))
     ).all()
-    return {match_id: _scale(system, rules) for match_id, system, rules in rows}
+    return {
+        match_id: (
+            system or DEFAULT_SYSTEM,
+            wins_of(best)
+            if made and (best := round_best or stage_best)
+            else wins_needed(rules),
+        )
+        for match_id, system, rules, round_best, stage_best, made in rows
+    }
 
 
 def _scores_by_match(session: Session, scales: dict[int, Scale]) -> MatchScores:
@@ -276,22 +310,27 @@ def fill_series(session: Session, series_list: Iterable[SeriesPublic | None]) ->
     if not rows:
         return
 
-    match_ids = {series.match_id for series in rows if series.match_id is not None}
-    scales = _scales_by_match(session, match_ids)
-    scores = _scores_by_match(session, scales)
-
+    resolved = series_rules.fill_rules(session, rows)
+    scales: dict[int, Scale] = {}
+    events: dict[int, int] = {}
     for series in rows:
-        scale = scales.get(series.match_id, DEFAULT_SCALE)
+        event_id, system, wins = resolved.get(series.id) or (None, *DEFAULT_SCALE)
+        if event_id is not None:
+            events[series.id] = event_id
+        if series.match_id is not None:
+            scales[series.match_id] = (system, wins)
         series.player1_points = points(
-            series.player1_score, series.player2_score, *scale
+            series.player1_score, series.player2_score, system, wins
         )
         series.player2_points = points(
-            series.player2_score, series.player1_score, *scale
+            series.player2_score, series.player1_score, system, wins
         )
+
+    scores = _scores_by_match(session, scales)
+    for series in rows:
         if series.match:
             _fill_match(series.match, scores)
 
-    events = series_rules.fill_rules(session, rows)
     fill_signup_races(session, rows, events)
 
     fill_gnl_stats(
