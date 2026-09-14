@@ -22,7 +22,13 @@ from app.models.base import ident
 from app.models.enums import StageFormat
 from app.models.event_division import EventDivision
 from app.models.event_entrant import EventEntrant
-from app.models.event_stage import DivisionStandings, EventStage, StandingRow
+from app.models.event_stage import (
+    RANKING_RULE,
+    SWISS_RANKING_RULE,
+    DivisionStandings,
+    EventStage,
+    StandingRow,
+)
 from app.models.match import Match
 from app.models.relationships import DBEventRound, EventRoundPublic
 from app.models.season import Season
@@ -42,6 +48,8 @@ from app.services.series_rules import series_rules, stands_on_side
 
 # The formats whose last round is the final, so every division ends together
 BRACKETS = (StageFormat.single_elimination, StageFormat.double_elimination)
+# The formats that draw one round at a time, from the table as it stands
+BY_ROUND = (StageFormat.swiss,)
 
 
 def scored(row: Series) -> bool:
@@ -169,6 +177,89 @@ def generate(
             if scored(row):
                 on_scored(session, row)
         return {"series": len(made), "rounds": len(rounds) - len(held)}
+
+
+def generate_next_round(
+    event_id: int, stage_id: int, division_id: int | None = None
+) -> StageSeriesPublic:
+    """Draw one more round of a stage that pairs a round at a time, per division.
+
+    The pairing reads the table as it stands, so every series already drawn
+    needs a result first. Each entrant takes the best-placed opponent he has
+    not met, which keeps a pair inside its score group while one is free
+    there, and an odd field gives the bye to the lowest entrant without one,
+    as a walkover series holding a single side. The first call on an empty
+    stage pairs round 1 from the seeds.
+    """
+    with Session.begin() as session:
+        stage = _stage(session, event_id, stage_id)
+        if not _draws_by_round(stage):
+            raise BadRequestError(
+                "This stage draws every round at once, not one by one"
+            )
+        drawn = _series_of(session, stage_id)
+        held = list(_rounds_of(session, stage_id))
+        fields = _fields(_entrants(session, event_id))
+        if division_id is not None:
+            fields = {division_id: fields.get(division_id, [])}
+        size = _side_size(
+            session, [entrant for field in fields.values() for entrant in field]
+        )
+        made: list[Series] = []
+        drew: dict[int, DBEventRound] = {}
+        for division, field in fields.items():
+            played = [row for row in drawn if row.division_id == division]
+            if len(field) < 2:
+                raise BadRequestError("A division needs two entrants to draw a round")
+            if any(not scored(row) for row in played):
+                raise BadRequestError(
+                    "Every series of the round before needs a result first"
+                )
+            place = len({row.round_id for row in played})
+            if stage.swiss_rounds is not None and place >= stage.swiss_rounds:
+                raise BadRequestError(
+                    f"This stage plays {stage.swiss_rounds} rounds and has drawn them"
+                )
+            order = [line.entrant_id for line in _table(session, stage, field, played)]
+            pairs = brackets.swiss_pairs(
+                order, [(row.entrant1_id, row.entrant2_id) for row in played]
+            )
+            if pairs is None:
+                raise BadRequestError("This division has played every pairing it has")
+            round_row = held[place] if place < len(held) else None
+            if round_row is None:
+                round_row = DBEventRound(
+                    stage_id=stage_id,
+                    season_id=event_id,
+                    number=_next_number(session, event_id),
+                    name=f"Round {place + 1}",
+                )
+                session.add(round_row)
+                session.flush()
+                held.append(round_row)
+            drew[place] = round_row
+            entrants = {ident(entrant): entrant for entrant in field}
+            for sequence, (top, bottom) in enumerate(pairs, start=1):
+                sides = [entrants[top]] + ([] if bottom is None else [entrants[bottom]])
+                planned = brackets.PlannedSeries(
+                    0,
+                    0,
+                    brackets.Slot(seed=1),
+                    brackets.Slot() if bottom is None else brackets.Slot(seed=2),
+                )
+                row = _row(
+                    session, stage, round_row, division, sides, [], planned, size
+                )
+                row.sequence = sequence
+                made.append(row)
+        session.flush()
+        rows = [StageSeriesRow.from_series_reduced(row) for row in made]
+        derived.fill_series(session, rows)
+        _fill_teams(session, rows)
+        return StageSeriesPublic(
+            rounds=[EventRoundPublic.from_row(row) for row in drew.values()],
+            series=rows,
+        )
 
 
 def append_to_chain(
@@ -783,6 +874,36 @@ def _plans_as_chain(stage: EventStage) -> bool:
     ] == [(None, 2), (0, 3)]
 
 
+def _pays_a_bye(stage: EventStage, row: Series) -> bool:
+    """Whether the table counts this series although it names one entrant only.
+
+    A stage that draws round by round writes the bye as an awarded one-sided
+    series, so it pays its entrant; a planned bracket pads its first round with
+    the same shape and pays nothing for it.
+    """
+    return _draws_by_round(stage) and row.entrant2_id is None
+
+
+def _draws_by_round(stage: EventStage) -> bool:
+    """Whether the stage draws one round at a time instead of planning every
+    series up front: it pairs the next round from the table as it stands."""
+    return stage.format in BY_ROUND
+
+
+def _ranking(stage: EventStage) -> list[str]:
+    """The tie breaks the stage's table reads, in the order ranking_rule names.
+
+    The words are points, buchholz, game_diff and head_to_head, and a word the
+    rule leaves out is not read at all. A stage that draws round by round ranks
+    on Buchholz, the sum of the opponents' points, so it reads that order where
+    it names no rule of its own.
+    """
+    rule = stage.ranking_rule
+    if _draws_by_round(stage) and rule == RANKING_RULE:
+        rule = SWISS_RANKING_RULE
+    return [word.strip() for word in rule.split(",") if word.strip()]
+
+
 def _tables(
     session: OrmSession, event_id: int, stage: EventStage
 ) -> list[DivisionStandings]:
@@ -849,16 +970,17 @@ def _table(
             row.player2_score or 0,
         )
         for row in series
-        if scored(row) and row.entrant1_id in entrants and row.entrant2_id in entrants
+        if scored(row)
+        and row.entrant1_id in entrants
+        and (row.entrant2_id in entrants or _pays_a_bye(stage, row))
     ]
-    # The tie breaks run points, game difference then head to head, which is
-    # what every stage's ranking_rule holds today
     table = brackets.standings(
         order,
         results,
         brackets.Points(
             stage.points_series_won, stage.points_series_drawn, stage.points_game_won
         ),
+        _ranking(stage),
     )
     if stage.format in BRACKETS:
         reached = _reached(session, order, series)
@@ -914,7 +1036,7 @@ def _king(series: Sequence[Series]) -> int | None:
 
 
 def _counted(
-    order: Sequence[int], results: Sequence[tuple[int, int, int, int]]
+    order: Sequence[int], results: Sequence[tuple[int, int | None, int, int]]
 ) -> dict[int, dict[str, int]]:
     """Series played, won and lost, and the games either way, per entrant."""
     tally = {
@@ -926,6 +1048,8 @@ def _counted(
             (first, second, first_games, second_games),
             (second, first, second_games, first_games),
         ):
+            if own is None:
+                continue
             tally[own]["played"] += 1
             tally[own]["games_won"] += games
             tally[own]["games_lost"] += other_games
