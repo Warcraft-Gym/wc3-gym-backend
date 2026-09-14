@@ -3,8 +3,9 @@ type: Data Model
 title: event_award
 description: One place of a finished event, frozen from the table of its last stage when an admin closes it; a trophy read lists these rows.
 resource: ../../../../app/models/event_award.py
-tags: [schema, events]
+tags: [events, data]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T15:15:00Z }
+verified: { by: process:test_okf, at: 2026-09-14T16:47:40Z }
 sources:
   - id: model
     resource: ../../../../app/models/event_award.py

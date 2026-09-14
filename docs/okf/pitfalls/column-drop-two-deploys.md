@@ -2,7 +2,7 @@
 type: Pitfall
 title: A column drop needs two deploys
 description: The production build migrates while the previous code still serves, so a dropped column breaks every request of the old code until the promotion.
-tags: [pitfall, migrations]
+tags: [data]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
 sources:
   - id: source

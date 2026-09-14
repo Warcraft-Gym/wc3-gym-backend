@@ -3,7 +3,7 @@ type: Domain Concept
 title: Settings and the current season
 description: A key-value table holds the few runtime values an admin edits, including the two season pointers, and a missing row falls back to the newest season.
 resource: ../../../app/services/settings.py
-tags: [settings, config]
+tags: [api]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
 sources:
   - id: settings

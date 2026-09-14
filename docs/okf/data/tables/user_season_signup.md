@@ -3,8 +3,9 @@ type: Data Model
 title: user_season_signup
 description: "One GNL signup: a player registered for one season on one race, with the draft order and fantasy tier an admin sets."
 resource: ../../../../app/models/relationships.py
-tags: [schema, teams]
+tags: [teams, data]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T15:15:00Z }
+verified: { by: process:test_okf, at: 2026-09-14T16:47:40Z }
 sources:
   - id: model
     resource: ../../../../app/models/relationships.py

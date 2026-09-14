@@ -3,8 +3,9 @@ type: Data Model
 title: draft_series
 description: One series a captain proposed inside a GNL fixture, held apart from the series table until an admin promotes it.
 resource: ../../../../app/models/draft_series.py
-tags: [schema, events]
+tags: [events, data]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T15:15:00Z }
+verified: { by: process:test_okf, at: 2026-09-14T16:47:40Z }
 sources:
   - id: model
     resource: ../../../../app/models/draft_series.py

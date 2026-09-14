@@ -3,8 +3,9 @@ type: Data Model
 title: clerk_account
 description: The Discord account behind one Clerk user, written on the first guarded request of a login so no later request asks Clerk.
 resource: ../../../../app/models/clerk_account.py
-tags: [schema, access]
+tags: [auth, data]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T15:15:00Z }
+verified: { by: process:test_okf, at: 2026-09-14T16:47:40Z }
 sources:
   - id: model
     resource: ../../../../app/models/clerk_account.py

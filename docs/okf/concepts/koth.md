@@ -3,7 +3,7 @@ type: Domain Concept
 title: KOTH night
 description: A King of the Hill night is one event of the KOTH league with three MMR brackets as divisions, a chain per bracket, and a Twitch chat signup.
 resource: ../../../app/services/koth/night.py
-tags: [koth, events, domain]
+tags: [events, koth]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T14:30:00Z }
 sources:
   - id: night

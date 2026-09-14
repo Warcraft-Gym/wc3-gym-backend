@@ -3,8 +3,9 @@ type: Data Model
 title: admin_grant
 description: One Discord account that administers the site, granted on the Config page; the bootstrap ids in ADMIN_DISCORD_IDS need no row.
 resource: ../../../../app/models/admin_grant.py
-tags: [schema, access]
+tags: [auth, data]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T15:15:00Z }
+verified: { by: process:test_okf, at: 2026-09-14T16:47:40Z }
 sources:
   - id: model
     resource: ../../../../app/models/admin_grant.py

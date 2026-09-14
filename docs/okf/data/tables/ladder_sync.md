@@ -3,8 +3,9 @@ type: Data Model
 title: ladder_sync
 description: "The ledger of the match sync: one row per player per W3Champions season saying when it was read, from when, and whether the read reached the end."
 resource: ../../../../app/models/ladder_sync.py
-tags: [schema, w3champions]
+tags: [w3champions, data]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T15:15:00Z }
+verified: { by: process:test_okf, at: 2026-09-14T16:47:40Z }
 sources:
   - id: model
     resource: ../../../../app/models/ladder_sync.py

@@ -3,8 +3,9 @@ type: Data Model
 title: event_entrant
 description: One player or one pre-made team in one event, with its race, seed, division, check-in and withdrawal stamps; a withdrawn entrant keeps its row.
 resource: ../../../../app/models/event_entrant.py
-tags: [schema, events]
+tags: [events, data]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T15:15:00Z }
+verified: { by: process:test_okf, at: 2026-09-14T16:47:40Z }
 sources:
   - id: model
     resource: ../../../../app/models/event_entrant.py

@@ -3,7 +3,7 @@ type: API Area
 title: Consumers of the API
 description: Who calls the backend, which routes each one reads, and which tests pin those shapes.
 resource: ../../../tests/test_public_contract.py
-tags: [api, contract, consumers]
+tags: [api]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
 sources:
   - id: public-contract

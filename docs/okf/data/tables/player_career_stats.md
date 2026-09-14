@@ -3,8 +3,9 @@ type: Data Model
 title: player_career_stats
 description: One player's baseline from the seasons played before the app, imported from a CSV and never edited; the career totals add the app's seasons on every read.
 resource: ../../../../app/models/player_career_stats.py
-tags: [schema, w3champions]
+tags: [w3champions, data]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T15:15:00Z }
+verified: { by: process:test_okf, at: 2026-09-14T16:47:40Z }
 sources:
   - id: model
     resource: ../../../../app/models/player_career_stats.py

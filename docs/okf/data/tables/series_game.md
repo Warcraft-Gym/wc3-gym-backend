@@ -3,8 +3,9 @@ type: Data Model
 title: series_game
 description: One game of a series with the side that won it and the map it was played on, because a 2-1 score alone cannot say which.
 resource: ../../../../app/models/series_game.py
-tags: [schema, events]
+tags: [events, data]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T15:15:00Z }
+verified: { by: process:test_okf, at: 2026-09-14T16:47:40Z }
 sources:
   - id: model
     resource: ../../../../app/models/series_game.py

@@ -2,7 +2,7 @@
 type: Decision
 title: Clerk owns the session
 description: Members sign in through Clerk with Discord as the only social connection; the guild check and the roles stay app code.
-tags: [decision, auth]
+tags: [auth]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
 sources:
   - id: source

@@ -3,7 +3,7 @@ type: Convention
 title: Testing
 description: The suite migrates a temporary SQLite file with Alembic, opens no socket, and holds guard tests that pin contracts, statement counts and memory.
 resource: ../../../tests/conftest.py
-tags: [tests, pytest]
+tags: [testing]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
 sources:
   - id: conftest

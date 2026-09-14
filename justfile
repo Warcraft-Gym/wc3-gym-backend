@@ -117,3 +117,44 @@ okf-graph:
 okf-validate:
     command -v okf >/dev/null || cargo install okf
     okf validate docs/okf
+
+# List the concepts whose source files changed after the concept was written: the review list behind AGENTS.md rule 3.
+okf-drift:
+    #!/usr/bin/env -S uv run --no-project python
+    import re, subprocess, pathlib
+    from datetime import datetime
+    for p in sorted(pathlib.Path("docs/okf").rglob("*.md")):
+        if p.name in ("index.md", "log.md"): continue
+        fm = p.read_text().split("\n---\n", 1)[0]
+        at = re.search(r"generated: \{.*?at: (\S+?) ?\}", fm)
+        if not at: continue
+        written = datetime.fromisoformat(at.group(1).replace("Z", "+00:00"))
+        for src in re.findall(r"^\s+resource: (\.\S+)$", fm, re.M):
+            f = (p.parent / src).resolve()
+            stamp = subprocess.run(["git", "log", "-1", "--format=%cI", "--", f], capture_output=True, text=True).stdout.strip()
+            if stamp and datetime.fromisoformat(stamp) > written:
+                print(f"{p}  <-  {f.relative_to(pathlib.Path.cwd())} changed {stamp[:10]}")
+
+# Stamp the table concepts machine-verified once test_okf proves each Schema against the models; the spec's process tier.
+okf-verify:
+    #!/usr/bin/env -S uv run python
+    import re, subprocess, sys, pathlib
+    from datetime import datetime, timezone
+    if subprocess.run(["uv", "run", "pytest", "tests/test_okf.py", "-q", "-k", "table"]).returncode:
+        sys.exit(1)
+    stamp = "{ by: process:test_okf, at: " + datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ") + " }"
+    for p in sorted(pathlib.Path("docs/okf/data/tables").glob("*.md")):
+        if p.name == "index.md": continue
+        t = p.read_text()
+        if re.search(r"^verified: \{ by: process:test_okf", t, re.M):
+            t = re.sub(r"^verified: \{ by: process:test_okf.*$", "verified: " + stamp, t, count=1, flags=re.M)
+        elif re.search(r"^  - \{ by: process:test_okf", t, re.M):
+            t = re.sub(r"^  - \{ by: process:test_okf.*$", "  - " + stamp, t, count=1, flags=re.M)
+        elif re.search(r"^verified:\n", t, re.M):
+            t = re.sub(r"^verified:\n", "verified:\n  - " + stamp + "\n", t, count=1, flags=re.M)
+        elif re.search(r"^verified: \{", t, re.M):
+            t = re.sub(r"^verified: (\{.*\})$", "verified:\n  - \\1\n  - " + stamp, t, count=1, flags=re.M)
+        else:
+            t = re.sub(r"^(generated: .*)$", "\\1\nverified: " + stamp, t, count=1, flags=re.M)
+        p.write_text(t)
+    print("stamped every table concept")

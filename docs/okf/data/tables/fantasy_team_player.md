@@ -3,8 +3,9 @@ type: Data Model
 title: fantasy_team_player
 description: One player drafted onto one fantasy team.
 resource: ../../../../app/models/relationships.py
-tags: [schema, fantasy]
+tags: [fantasy, data]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T15:15:00Z }
+verified: { by: process:test_okf, at: 2026-09-14T16:47:40Z }
 sources:
   - id: model
     resource: ../../../../app/models/relationships.py

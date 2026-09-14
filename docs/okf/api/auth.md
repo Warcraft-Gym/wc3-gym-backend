@@ -3,8 +3,8 @@ type: API Area
 title: Authentication
 description: A bearer token is either the admin token's JWT or a Clerk session; the claims resolve the Discord id and the role once per request, and five guards build on them.
 resource: ../../../app/api/deps.py
-tags: [auth, clerk, jwt]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
+tags: [auth]
+generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T17:00:00Z }
 sources:
   - id: deps
     resource: ../../../app/api/deps.py
@@ -56,3 +56,33 @@ An admin's `X-View-As` and `X-View-Seats` headers lower the role for one request
 # Clerk in production
 
 Production runs the Clerk production instance in proxy mode: the frontend serves `/__clerk/*` through an edge function, because Clerk cannot own a `vercel.app` subdomain. Previews and local development use the dev instance. Never point a preview at the production backend: its session is signed by the other instance and every `/me` answers 401. The frontend repository owns the proxy; this repository only verifies the token.
+
+# Examples
+
+`GET /me` with a session bearer, answered for a captain during a running season. The `user` object is the player row, cut short here.
+
+```json
+{
+  "discord_id": "42",
+  "name": "Player",
+  "avatar": null,
+  "role": "captain",
+  "actual_role": "captain",
+  "user": { "id": 7, "name": "Player", "race": "HU" },
+  "superadmin": false,
+  "signed_up": true,
+  "season_id": 18,
+  "team": { "id": 3, "name": "Team A" },
+  "seats": [{ "team_id": 3, "season_id": 18 }],
+  "seasons": [
+    {
+      "id": 18, "name": "Season 18", "league_short_name": "GNL", "phase": "commenced",
+      "signups_open": false, "scheduling_enabled": true, "checkin_days": 3,
+      "start_date": "2026-09-01", "end_date": "2026-10-15",
+      "signed_up": true, "team": { "id": 3, "name": "Team A" }, "captain": true
+    }
+  ]
+}
+```
+
+A bearer no Clerk session backs answers `401 {"error": "..."}`; a login whose account links no Discord answers `401 {"error": "No Discord account on this login"}`.

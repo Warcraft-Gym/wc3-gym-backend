@@ -3,8 +3,9 @@ type: Data Model
 title: discord_role_hidden
 description: One guild role an admin marked as none of the app's business, so the binding page hides it and it can never be bound.
 resource: ../../../../app/models/discord_role_binding.py
-tags: [schema, discord]
+tags: [discord, data]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T15:15:00Z }
+verified: { by: process:test_okf, at: 2026-09-14T16:47:40Z }
 sources:
   - id: model
     resource: ../../../../app/models/discord_role_binding.py

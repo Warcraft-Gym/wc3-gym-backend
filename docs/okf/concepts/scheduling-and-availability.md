@@ -3,7 +3,7 @@ type: Domain Concept
 title: Scheduling and availability
 description: A player answers whether they can play a round, keeps soft blocks that inform but never constrain, and the two players of a series see the free time they share.
 resource: ../../../app/services/availability.py
-tags: [scheduling, availability, rounds]
+tags: [events, scheduling]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T14:30:00Z }
 sources:
   - id: availability

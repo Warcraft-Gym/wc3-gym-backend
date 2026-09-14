@@ -3,8 +3,9 @@ type: Data Model
 title: event_division
 description: One MMR band of an event that runs the whole stage list on its own and never merges; a KOTH bracket is a division.
 resource: ../../../../app/models/event_division.py
-tags: [schema, events]
+tags: [events, data]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T15:15:00Z }
+verified: { by: process:test_okf, at: 2026-09-14T16:47:40Z }
 sources:
   - id: model
     resource: ../../../../app/models/event_division.py

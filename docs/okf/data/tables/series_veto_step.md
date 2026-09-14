@@ -3,8 +3,9 @@ type: Data Model
 title: series_veto_step
 description: One taken step of a series' map veto, with the side, the action, the map and who entered it; the order itself comes from the event's pick_ban.
 resource: ../../../../app/models/series_veto_step.py
-tags: [schema, events]
+tags: [events, data]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T15:15:00Z }
+verified: { by: process:test_okf, at: 2026-09-14T16:47:40Z }
 sources:
   - id: model
     resource: ../../../../app/models/series_veto_step.py

@@ -2,7 +2,7 @@
 type: Pitfall
 title: The edge cache stores the CORS header
 description: A publicly cached route filled by a client with no Origin header is stored without the CORS header, and every browser then blocks it.
-tags: [pitfall, vercel, cors]
+tags: [api, deploy]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
 sources:
   - id: source

@@ -2,7 +2,7 @@
 type: Decision
 title: The veto warns, it never blocks
 description: A result may be reported without a veto record, but the form makes that hard with a strong warning; each game stores its winner and its map.
-tags: [decision, series]
+tags: [series]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
 sources:
   - id: source

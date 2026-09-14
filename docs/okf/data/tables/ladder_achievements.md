@@ -3,8 +3,9 @@ type: Data Model
 title: ladder_achievements
 description: One price for one achievement rule in one season, or for a player's lifetime when the season is null; the rule itself is code.
 resource: ../../../../app/models/ladder_achievement.py
-tags: [schema, w3champions]
+tags: [w3champions, data]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T15:15:00Z }
+verified: { by: process:test_okf, at: 2026-09-14T16:47:40Z }
 sources:
   - id: model
     resource: ../../../../app/models/ladder_achievement.py
