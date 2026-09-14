@@ -322,7 +322,7 @@ HANDLERS = {
     "upcoming": upcoming,
     "leaderboard": leaderboard,
     "schedule": schedule,
-    "score": score.run,
+    "report-result": score.run,
     "postlinks": postlinks.run,
     "veto": veto.run,
     "announce": announce.run,

@@ -1,4 +1,4 @@
-"""/score reports a result from Discord: the attachments go to the bucket through the
+"""/report-result reports a result from Discord: the attachments go to the bucket through the
 presigned links, then the same write the dashboard uses applies the same rules."""
 
 from typing import Any
@@ -8,7 +8,7 @@ from httpx2 import Client
 
 from app.services.commands import score
 from tests.conftest import REPLAY_BYTES
-from tests.discord import CHANNEL, WEBHOOK, command, signed
+from tests.discord import WEBHOOK, command, signed
 
 EDIT = f"{WEBHOOK}/messages/@original"
 
@@ -75,7 +75,7 @@ def scoring(
     size: int = 1024,
     data: dict[int, bytes] | None = None,
 ) -> dict[str, Any]:
-    """A /score interaction carrying one attachment per game."""
+    """A /report-result interaction carrying one attachment per game."""
     urls = {
         game_no: f"https://cdn.discord/att-{game_no}.w3g"
         for game_no in range(1, games + 1)
@@ -83,7 +83,7 @@ def scoring(
     for game_no, url in urls.items():
         files[url] = (data or {}).get(game_no, REPLAY_BYTES)
     payload = command(
-        "score",
+        "report-result",
         user=user,
         series=series_id,
         player1_score=p1,
@@ -132,19 +132,16 @@ def test_a_player_reports_the_result_and_its_replays(
         for n in (1, 2, 3)
     ] == [REPLAY_BYTES] * 3
 
-    (post, delete) = discord_calls
-    assert post[:2] == ("POST", CHANNEL)
-    assert post[2]["content"].splitlines() == [
-        "Result by <@2>: P2 2-1 P4 · Round 1",
-        f"Game 1: https://r2.test/development/replays/{series_id}/game1.w3g",
-        f"Game 2: https://r2.test/development/replays/{series_id}/game2.w3g",
-        f"Game 3: https://r2.test/development/replays/{series_id}/game3.w3g",
-    ]
-    assert delete[:2] == ("DELETE", EDIT)
+    # The reply is private: the result card in the results channel is the announcement
+    (reply,) = discord_calls
+    assert reply[:2] == ("PATCH", EDIT)
+    assert reply[2]["content"] == (
+        "Reported: P2 2-1 P4. The result card is in the results channel."
+    )
 
 
 def refused(text: str) -> dict[str, Any]:
-    """The private red card /score answers with."""
+    """The private red card /report-result answers with."""
     return {
         "embeds": [
             {
@@ -173,9 +170,9 @@ def test_an_incomplete_veto_saves_the_result_and_warns(
     series_id = seeded["series_open_id"]
     send(client, scoring(attached, series_id, 2, 0, games=2))
 
-    post = discord_calls[0]
-    assert post[:2] == ("POST", CHANNEL)
-    posted = post[2]["content"]
+    reply = discord_calls[0]
+    assert reply[:2] == ("PATCH", EDIT)
+    posted = reply[2]["content"]
     assert "2-0" in posted
     assert "The map veto of this series is not complete" in posted
     assert f"https://gnl.test/player-series/{series_id}/veto" in posted

@@ -3,7 +3,7 @@ type: Integration
 title: Discord integration
 description: Slash commands arrive through a separate adapter and are checked and answered here, cards are posted and edited under a rate limit, and season roles are mirrored to the guild on a button press.
 tags: [discord, integration, bot]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T16:25:00Z }
 sources:
   - id: interactions
     resource: ../../../app/services/interactions.py
@@ -39,7 +39,7 @@ The adapter holds no bot token and knows no command. The command list lives here
 | `/announce` | the match card of one series, posted in the channel |
 | `/availability` | a card for one round with one button per answer |
 | `/schedule` | set the time of the caller's series |
-| `/score` | report a result with one replay per game, through the same write the dashboard uses |
+| `/report-result` | report a result with one replay per game, through the same write the dashboard uses |
 | `/veto` | point the two players at the veto board and say where it stands |
 | `/postlinks` | the site's links as buttons, posted by an admin |
 

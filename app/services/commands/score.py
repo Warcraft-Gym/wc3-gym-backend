@@ -1,4 +1,4 @@
-"""/score: report a result from Discord, with one replay per game played.
+"""/report-result: report a result from Discord, with one replay per game played.
 
 The attachments Discord holds are moved into the bucket through the same presigned
 links the browser uses, then the result goes through the write the dashboard uses,
@@ -15,7 +15,6 @@ from app.models.user import UserPublic
 from app.services import discord, player_series, replays
 from app.services.commands.base import (
     PRIVATE,
-    PUBLIC,
     Services,
     caller,
     options_of,
@@ -27,7 +26,7 @@ ATTACHMENT = 11
 MAX_BYTES = 10 * 1024 * 1024
 
 COMMAND: dict[str, Any] = {
-    "name": "score",
+    "name": "report-result",
     "description": "Report the result of one of your series, with the replays",
     "options": [
         {
@@ -167,15 +166,10 @@ def run(payload: dict[str, Any], services: Services) -> tuple[dict[str, Any], bo
         # what the write refuses: an unknown series, someone else's, a bad replay
         return _refused(str(error))
 
+    # The write posts the result card; a public reply here would repeat it
     series = services.series.get(series_id)
-    match = series.match
-    round_no = match.playday if match else "?"
-    result_line = (
-        f"Result by <@{discord_id}>: {_name(series.player1)} {p1}-{p2}"
-        f" {_name(series.player2)} · Round {round_no}"
-    )
-    lines = [result_line]
-    lines += [f"Game {row['game_no']}: {row['url']}" for row in result["replays"]]
+    score = f"{_name(series.player1)} {p1}-{p2} {_name(series.player2)}"
+    lines = [f"Reported: {score}. The result card is in the results channel."]
     if not result.get("veto_complete", True):
         lines.append(_veto_warning(series_id))
-    return {"content": "\n".join(lines)}, PUBLIC
+    return {"content": "\n".join(lines)}, PRIVATE
