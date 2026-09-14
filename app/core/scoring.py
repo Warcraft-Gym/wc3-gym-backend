@@ -15,11 +15,16 @@ DEFAULT_SYSTEM = "standard"
 DEFAULT_WINS = 2
 
 
+def wins_of(best_of: int) -> int:
+    """The maps a series takes to win in a best-of: a Bo5 ends at 3."""
+    return best_of // 2 + 1
+
+
 def wins_needed(map_rules: str | None) -> int:
     """The maps a series takes to win: one per rule is one game, Bo3 when unset."""
     if not map_rules:
         return DEFAULT_WINS
-    return len(map_rules.split(",")) // 2 + 1
+    return wins_of(len(map_rules.split(",")))
 
 
 def wins_needed_sql(
