@@ -1,9 +1,16 @@
 """The rules one series plays under, with or without a fixture.
 
-A series reads its best-of from its round, its map rules from its stage, and
-its map pool from the event. A series whose round names no stage reads both
-off the event, as a GNL season always has. The shape of the series decides,
-never the kind of the event.
+A generated series reads its best-of from its round, its map rules from its
+stage, and its map pool from the event. A GNL series reads the best-of and
+the map rules off its season, so a season re-priced on the Season Maps page
+reaches every series it holds.
+
+The shape of the row decides, never the kind of the event: only the stage
+engine names an entrant on a side (stage_engine._row), so a series that names
+one was generated and prices on its stage. A GNL series names two players, a
+fixture and no entrant. A generated series still waiting on its two feeders
+names no entrant either, and holds no fixture, which is what tells the two
+apart.
 
 The side a caller acts for hangs on the same round or fixture, so it is
 answered here too.
@@ -93,13 +100,23 @@ def acts_for_side(
     return None
 
 
+def reads_its_stage(
+    match_id: int | None, entrant1_id: int | None, entrant2_id: int | None
+) -> bool:
+    """Whether a series prices on its round and stage instead of its season."""
+    return match_id is None or entrant1_id is not None or entrant2_id is not None
+
+
 def series_rules(session: OrmSession, series: Series) -> SeriesRules:
     """The map rules, the best-of and the map pool of one series."""
     event = series_event(session, series)
     pool = [link.map_id for link in event.maps] if event else []
     round_ = series_round(session, series)
+    on_stage = reads_its_stage(series.match_id, series.entrant1_id, series.entrant2_id)
     stage = (
-        session.get(EventStage, round_.stage_id) if round_ and round_.stage_id else None
+        session.get(EventStage, round_.stage_id)
+        if on_stage and round_ and round_.stage_id
+        else None
     )
     if stage is None:
         rules = event.map_rules if event else None
@@ -146,8 +163,8 @@ def _resolve(
     session: OrmSession, series_ids: set[int]
 ) -> dict[int, tuple[int | None, str, int, str | None]]:
     """The event, the map rules, the best-of and the score system of every
-    named series, in one statement: through the stage its round names, else
-    through its season."""
+    named series, in one statement: through the stage its round names when the
+    row was generated, else through its season."""
     if not series_ids:
         return {}
     event_id = func.coalesce(col(Match.season_id), col(DBEventRound.season_id))
@@ -155,6 +172,9 @@ def _resolve(
         select(
             col(Series.id),
             col(EventStage.id),
+            col(Series.match_id),
+            col(Series.entrant1_id),
+            col(Series.entrant2_id),
             event_id,
             col(Season.map_rules),
             col(Season.score_system),
@@ -173,6 +193,9 @@ def _resolve(
     for (
         row_id,
         stage_id,
+        match_id,
+        entrant1_id,
+        entrant2_id,
         event,
         season_rules,
         system,
@@ -180,7 +203,7 @@ def _resolve(
         stage_rules,
         stage_best,
     ) in rows:
-        if stage_id is None:
+        if stage_id is None or not reads_its_stage(match_id, entrant1_id, entrant2_id):
             found[row_id] = (
                 event,
                 season_rules or DEFAULT_RULES,

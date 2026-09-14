@@ -95,10 +95,21 @@ def _scale(system: str | None, map_rules: str | None) -> Scale:
 
 def _scales_by_match(session: Session, match_ids: set[int]) -> dict[int, Scale]:
     """The scale of every match, in one statement: the score system off its
-    event, and the maps a win takes off the stage its round names, else off
-    the map rules of the event."""
+    event, and the maps a win takes off the stage its round names when the
+    engine generated its series, else off the map rules of the event.
+
+    Which side of that a fixture falls on is the rule series_rules states: a
+    generated series names an entrant, a GNL series names players only."""
     if not match_ids:
         return {}
+    generated = (
+        select(col(Series.id))
+        .where(
+            col(Series.match_id) == col(Match.id),
+            col(Series.entrant1_id).is_not(None),
+        )
+        .exists()
+    )
     rows = session.execute(
         select(
             col(Match.id),
@@ -106,6 +117,7 @@ def _scales_by_match(session: Session, match_ids: set[int]) -> dict[int, Scale]:
             col(Season.map_rules),
             col(DBEventRound.best_of),
             col(EventStage.best_of),
+            generated,
         )
         .join(Season, col(Season.id) == Match.season_id)
         .outerjoin(DBEventRound, col(DBEventRound.id) == col(Match.round_id))
@@ -115,9 +127,11 @@ def _scales_by_match(session: Session, match_ids: set[int]) -> dict[int, Scale]:
     return {
         match_id: (
             system or DEFAULT_SYSTEM,
-            wins_of(best) if (best := round_best or stage_best) else wins_needed(rules),
+            wins_of(best)
+            if made and (best := round_best or stage_best)
+            else wins_needed(rules),
         )
-        for match_id, system, rules, round_best, stage_best in rows
+        for match_id, system, rules, round_best, stage_best, made in rows
     }
 
 
