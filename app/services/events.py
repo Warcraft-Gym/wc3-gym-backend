@@ -7,7 +7,7 @@ own phase word. The event phase is computed on every read and never stored.
 
 import random
 from collections.abc import Sequence
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 
 from sqlalchemy import delete, func, select, update
@@ -47,6 +47,7 @@ from app.models.relationships import (
     DBUserSeasonSignup,
     EventRoundPublic,
 )
+from app.models.round_availability import DBRoundAvailability
 from app.models.season import (
     NO_SERIES,
     EventCreate,
@@ -311,6 +312,8 @@ class EventService:
             ).all()
             joined = _joined_events(session, user_id)
             counts = series_counts_by_event(session, [event.id for event in events])
+            rounds = {event.id: next_round(event) for event in events}
+            answered = _round_answers(session, user_id, rounds)
             return [
                 _member_row(
                     session,
@@ -318,6 +321,8 @@ class EventService:
                     counts.get(event.id, NO_SERIES),
                     event.id in joined,
                     joined.get(event.id),
+                    rounds.get(event.id),
+                    event.id in answered,
                 )
                 for event in events
             ]
@@ -661,18 +666,70 @@ def _joined_events(
     return joined
 
 
+def _round_answers(
+    session: OrmSession,
+    user_id: int | None,
+    rounds: dict[int | None, DBEventRound | None],
+) -> set[int]:
+    """The events whose next round the caller has answered, in one statement.
+
+    The round shape stores the check-in as a round_availability row, so the
+    member rows read it there and never off the entrant stamp.
+    """
+    wanted = {
+        (event_id, round_.number)
+        for event_id, round_ in rounds.items()
+        if event_id is not None and round_ is not None
+    }
+    if user_id is None or not wanted:
+        return set()
+    rows = session.execute(
+        select(
+            col(DBRoundAvailability.season_id), col(DBRoundAvailability.playday)
+        ).where(
+            col(DBRoundAvailability.user_id) == user_id,
+            col(DBRoundAvailability.season_id).in_({key[0] for key in wanted}),
+        )
+    ).all()
+    return {event_id for event_id, playday in rows if (event_id, playday) in wanted}
+
+
+def _answered_at(event: Season, round_: DBEventRound) -> datetime | None:
+    """When a round answer stands from.
+
+    The row carries no time of its own, so the read names the moment the
+    round's check-in opened; a stamp of the answer needs a new column.
+    """
+    window = checkin_window(event, round_)
+    opens = window[0] if window else round_.start_date
+    return datetime.combine(opens, time(), tzinfo=UTC) if opens else None
+
+
 def _member_row(
     session: OrmSession,
     event: Season,
     counts: tuple[int, int, int],
     joined: bool,
     entrant: EventEntrant | None,
+    round_: DBEventRound | None,
+    answered: bool,
 ) -> MemberEventRow:
     """One member home row: the event, and what the caller may do with it."""
-    checked_in_at = entrant.checked_in_at if entrant else None
     phase = phase_of(session, event, counts)
-    round_ = next_round(event)
     is_open = event.checkin_enabled and checkin_open(event)
+    shape = (
+        None
+        if not event.checkin_enabled
+        else "round"
+        if round_ is not None
+        else "event"
+    )
+    # The round shape takes its check-in through PUT /player-availability
+    checked_in_at = (
+        (_answered_at(event, round_) if answered else None)
+        if shape == "round" and round_ is not None
+        else (entrant.checked_in_at if entrant else None)
+    )
     return MemberEventRow(
         kind=event.kind,
         id=ident(event),
@@ -686,11 +743,7 @@ def _member_row(
         url=event.page_url,
         entrant_id=ident(entrant) if entrant else None,
         checked_in_at=checked_in_at,
-        checkin_shape=None
-        if not event.checkin_enabled
-        else "round"
-        if round_ is not None
-        else "event",
+        checkin_shape=shape,
         checkin_open=is_open,
         next_round=EventRoundPublic.from_row(round_) if round_ else None,
         action=_member_action(phase, event, joined, checked_in_at, is_open),

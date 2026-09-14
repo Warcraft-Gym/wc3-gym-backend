@@ -15,8 +15,6 @@ from sqlmodel import col
 from app.core import free_time
 from app.core.db import Session
 from app.core.exceptions import ApiError, BadRequestError, NotFoundError
-from app.models.match import Match
-from app.models.relationships import round_row
 from app.models.season import Season
 from app.models.series import Series
 from app.models.user import User
@@ -34,6 +32,7 @@ from app.models.user_block import (
     UserBusyUpdate,
 )
 from app.services.availability import NO_SCHEDULING
+from app.services.series_rules import series_event, series_round
 
 # The longest window the free-time read resolves
 MAX_WINDOW = timedelta(days=31)
@@ -108,22 +107,26 @@ class SoftBlockService:
             series = session.get(Series, series_id)
             if series is None:
                 raise NotFoundError("series_not_found")
-            match = series.match
-            season = session.get(Season, match.season_id)
-            if season is None:
+            event = series_event(session, series)
+            if event is None:
                 raise NotFoundError("season_not_found")
-            teams = {
-                (match.team1_id, match.season_id),
-                (match.team2_id, match.season_id),
-            }
+            match = series.match
+            teams = (
+                {
+                    (match.team1_id, match.season_id),
+                    (match.team2_id, match.season_id),
+                }
+                if match is not None
+                else set()
+            )
             players = (series.player1_id, series.player2_id)
             if not (admin or user_id in players or teams & seats):
                 raise ApiError(403, {"error": "not_authorized_for_this_series"})
-            if not season.scheduling_enabled:
+            if not event.scheduling_enabled:
                 raise ApiError(
                     403, {"error": "scheduling_disabled", "message": NO_SCHEDULING}
                 )
-            start, end = _window(session, match, start, end)
+            start, end = _window(session, series, event, start, end)
             side1, side2 = series.player1_id, series.player2_id
             if side1 is None or side2 is None:
                 raise BadRequestError("The series has no sides to compare yet")
@@ -201,15 +204,25 @@ def _midnight(day: date) -> datetime:
 
 
 def _window(
-    session: OrmSession, match: Match, start: datetime | None, end: datetime | None
+    session: OrmSession,
+    series: Series,
+    event: Season,
+    start: datetime | None,
+    end: datetime | None,
 ) -> tuple[datetime, datetime]:
-    """The window asked for, or else the round's dates as whole UTC days."""
+    """The window asked for, else the round's days, else the event's, as whole
+    UTC days. A series generated into a bracket has no fixture, so the round
+    comes through its own round_id."""
     if start is None and end is None:
-        row = round_row(session, match.season_id, match.playday)
-        if row is None or row.start_date is None:
+        row = series_round(session, series)
+        first = row.start_date if row is not None else None
+        last = (row.end_date or first) if row is not None else None
+        if first is None:
+            first, last = event.start_date, event.end_date or event.start_date
+        if first is None:
             raise BadRequestError("The round has no dates; pass start and end")
-        start = _midnight(row.start_date)
-        end = _midnight((row.end_date or row.start_date) + timedelta(days=1))
+        start = _midnight(first)
+        end = _midnight((last or first) + timedelta(days=1))
     if start is None or end is None:
         raise BadRequestError("Pass both start and end, or neither")
     start, end = _utc(start), _utc(end)

@@ -601,7 +601,9 @@ class MemberEventRow(SQLModel):
     url: str | None = None
     # The caller's own entrant row; null for a GNL signup, which holds no entrant
     entrant_id: int | None = None
-    # When the caller checked in; null while the check-in is not taken
+    # When the caller checked in; null while the check-in is not taken. The
+    # event shape reads the entrant stamp, the round shape the caller's round
+    # answer, which carries no time and reports when its window opened
     checked_in_at: Annotated[datetime | None, AwareUTC] = None
     # What the caller checks into: the round when the event's next round carries
     # dates, else the event; null when the event takes no check-in

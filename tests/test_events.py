@@ -766,10 +766,32 @@ def stamp_checked_in(entrant_id: int) -> None:
         row.checked_in_at = NOW
 
 
+def answer_round(
+    client: Client,
+    headers: dict[str, str],
+    event_id: int,
+    playday: int,
+    checkin_day: Callable[[str], None],
+) -> None:
+    """The round shape of the check-in: one round_availability row.
+
+    The suite pins the day the round guard reads, so it moves to the day the
+    round these tests date is open on.
+    """
+    checkin_day(TODAY.isoformat())
+    response = client.put(
+        "/player-availability",
+        json={"season_id": event_id, "playday": playday, "available": True},
+        headers=headers,
+    )
+    assert response.status_code == 200, response.text
+
+
 def test_the_member_events_walk_the_action_words(
     client: Client,
     seeded: dict[str, Any],
     member: Callable[..., dict[str, str]],
+    checkin_day: Callable[[str], None],
 ) -> None:
     """One cup read as the member who joins it: closed, sign up, withdraw,
     check in and checked in; the running season reads view."""
@@ -804,7 +826,7 @@ def test_the_member_events_walk_the_action_words(
     )
     assert row["next_round"]["number"] == 1
 
-    stamp_checked_in(entrant)
+    answer_round(client, headers, event, 1, checkin_day)
     row = my_events(client, headers)[event]
     assert (row["action"], row["checked_in_at"] is not None) == ("checked_in", True)
 
@@ -868,3 +890,57 @@ def test_a_cup_with_rounds_takes_the_round_check_in(
     assert [(row["playday"], row["available"]) for row in response.json()] == [
         (1, False)
     ]
+
+
+def test_the_round_answer_is_the_check_in_of_a_dated_round(
+    client: Client,
+    seeded: dict[str, Any],
+    member: Callable[..., dict[str, str]],
+    checkin_day: Callable[[str], None],
+) -> None:
+    """A cup with a dated round checks in through PUT /player-availability, so
+    the member home reads that answer and dates it from the window's opening."""
+    headers = member()
+    event = add_event(kind=EventKind.cup, checkin_days=3)
+    enter(event, seeded["player_ids"][0])
+    add_round(event, TODAY + timedelta(days=1), TODAY + timedelta(days=2))
+
+    row = my_events(client, headers)[event]
+    assert (row["checkin_shape"], row["action"], row["checked_in_at"]) == (
+        "round",
+        "check_in",
+        None,
+    )
+
+    answer_round(client, headers, event, 1, checkin_day)
+    row = my_events(client, headers)[event]
+    assert (row["action"], row["checked_in_at"]) == (
+        "checked_in",
+        f"{TODAY - timedelta(days=2)}T00:00:00Z",
+    )
+
+
+def test_the_entrant_stamp_is_no_check_in_of_a_dated_round(
+    client: Client,
+    seeded: dict[str, Any],
+    member: Callable[..., dict[str, str]],
+) -> None:
+    """The event route refuses a round-shaped event, and a stamp left on the
+    entrant row from before the round was dated does not read as checked in."""
+    headers = member()
+    event = add_event(kind=EventKind.cup, checkin_days=3)
+    entrant = enter(event, seeded["player_ids"][0])
+    add_round(event, TODAY + timedelta(days=1), TODAY + timedelta(days=2))
+    stamp_checked_in(entrant)
+
+    refused = client.post(
+        f"/events/{event}/entrants/{entrant}/checkin", headers=headers
+    )
+    assert refused.status_code == 400, refused.text
+
+    row = my_events(client, headers)[event]
+    assert (row["checkin_shape"], row["action"], row["checked_in_at"]) == (
+        "round",
+        "check_in",
+        None,
+    )
