@@ -3,7 +3,7 @@ type: Domain Concept
 title: GNL season
 description: Six drafted teams, five weekly rounds, one fixture per team pairing with captain-drafted series, and a phase that is derived from the series.
 tags: [gnl, season, domain]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T14:30:00Z }
 sources:
   - id: season-model
     resource: ../../../app/models/season.py
@@ -41,7 +41,7 @@ The number of rounds is not stored; the round rows are the count.
 
 A season's phase is derived on every read from its series and never stored: `open` while no series has started, `commenced` once one is scored or past its time, `overdue` when the end date passed with a result missing, `complete` when every series has a result. Every gate reads `phase`; nothing adds a date rule beside it. A `complete` season takes no signup. A `commenced` season takes a signup as a request an admin may grant.
 
-The events module answers a second phase word for every event kind (`draft`, `signups_open`, `checkin`, `seeded`, `running`, `finished`) from `app/services/events.py`. A GNL season keeps its own four words on the season payloads.
+The events module answers a second phase word for every event kind (`draft`, `signups_open`, `checkin`, `seeded`, `running`, `finished`) from `app/services/events.py`; [the events module](events-module.md) lists the rungs. A GNL season keeps its own four words on the season payloads.
 
 # Best of
 
