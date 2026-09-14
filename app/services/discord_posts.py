@@ -9,14 +9,17 @@ from sqlalchemy import func, select, update
 from sqlmodel import col
 
 from app.core.db import Session
+from app.core.exceptions import ExternalServiceError
 from app.models.discord_post import DiscordPost
+from app.models.season import Season
 from app.models.series import SeriesPublic
 from app.models.settings import Settings
 from app.models.types import utcnow
 from app.models.user import UserPublic
-from app.services import discord, replays, series_cards
+from app.services import discord, event_cards, replays, series_cards
 from app.services.commands import announce, veto
 from app.services.commands.base import md
+from app.services.events import EventService
 from app.services.series import SeriesService
 
 # The result card the app posts itself, in the channel the old bot's setting names
@@ -25,6 +28,8 @@ RESULT = "result"
 CAST = "cast"
 # The card that calls the audience to the stream, posted shortly before the start
 REMINDER = "reminder"
+# The card about an event, with its Sign up and Check in buttons; _card builds it
+EVENT = "event"
 # The cards about a series that show its time, its veto or its casters. The
 # reminder is not one: it carries a relative time Discord renders itself.
 SERIES_KINDS = ("veto", "announce", CAST)
@@ -176,16 +181,19 @@ def _claim(post: DiscordPost) -> tuple[bool, float]:
     return False, max(wait, 0.05)
 
 
+def _card(post: DiscordPost) -> dict[str, Any]:
+    """The card the post shows, built now so it carries every change so far."""
+    if post.kind == EVENT:
+        return event_cards.event_card(EventService().get(post.subject_id))
+    return CARDS[post.kind](SeriesService().get(post.subject_id))
+
+
 def _flush(post: DiscordPost) -> None:
     for _ in range(CLAIM_TRIES):
         claimed, wait = _claim(post)
         if claimed:
-            # the card is built after the claim, so it carries every change so far
-            series = SeriesService().get(post.subject_id)
             # ponytail: a post deleted in Discord keeps its row and fails one PATCH per write
-            discord.edit_channel_message(
-                post.channel_id, post.message_id, CARDS[post.kind](series)
-            )
+            discord.edit_channel_message(post.channel_id, post.message_id, _card(post))
             return
         if not wait:
             return
@@ -236,3 +244,26 @@ def post_reminder(series_id: int) -> bool:
     if _posts(series_id, (REMINDER,)):
         return False
     return _post_card(REMINDER, series_id)
+
+
+def post_event(event_id: int, channel_id: str) -> str:
+    """Post the event card in the channel, or edit the card already there.
+
+    The card the channel holds is edited through the same refresh a series
+    card takes, which paces itself over the whole channel. "posted" or
+    "edited", so the admin page says which one happened.
+    """
+    if any(post.channel_id == channel_id for post in _posts(event_id, (EVENT,))):
+        refresh_series(event_id, (EVENT,))
+        return "edited"
+    wait_for_channel(channel_id)
+    card = event_cards.event_card(EventService().get(event_id))
+    message_id = discord.post_to_channel(channel_id, card)
+    if not message_id:
+        raise ExternalServiceError("Discord did not take the event card")
+    remember(EVENT, event_id, channel_id, message_id)
+    with Session.begin() as session:
+        event = session.get(Season, event_id)
+        if event is not None:
+            event.discord_event_id = message_id
+    return "posted"

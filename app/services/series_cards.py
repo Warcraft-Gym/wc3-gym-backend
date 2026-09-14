@@ -81,7 +81,7 @@ def players(series: SeriesPublic, marks: Ratings) -> str:
     return f"{one} vs {player(series.player2, series.player2_race, marks)}"
 
 
-def _day(value: date) -> str:
+def day(value: date) -> str:
     # Noon UTC keeps the date the same on every reader's clock
     return f"<t:{int(datetime.combine(value, time(12), UTC).timestamp())}:d>"
 
@@ -92,9 +92,9 @@ def round_line(season_id: int, playday: int) -> str:
         row = round_row(session, season_id, playday)
     if row is None or row.start_date is None:
         return f"Round {playday}"
-    dates = _day(row.start_date)
+    dates = day(row.start_date)
     if row.end_date and row.end_date != row.start_date:
-        dates += f" to {_day(row.end_date)}"
+        dates += f" to {day(row.end_date)}"
     return f"Round {playday}: {dates}"
 
 
