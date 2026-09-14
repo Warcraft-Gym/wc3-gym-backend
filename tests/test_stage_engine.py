@@ -1214,3 +1214,65 @@ def test_a_solo_cup_still_writes_the_user_beside_the_entrant(
     assert all(row["team1"] is None and row["side_size"] == 1 for row in rows)
     table = client.get(f"/events/{event}/stages/{stage}/standings").json()
     assert all(row["user_id"] is not None for row in table[0]["rows"])
+
+
+def test_a_playoff_seeds_from_the_table_of_the_stage_before(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """A seed write with source previous_stage takes the top four per division.
+
+    It reads the same order `advance` writes, it stamps the source on the ones
+    that came through, it drops the seed of the one that did not, and it
+    generates no series of its own.
+    """
+    event, (first, second) = cup(
+        5,
+        StageFormat.round_robin,
+        stages=2,
+        divisions=2,
+        advance_count=4,
+        points_series_won=3,
+    )
+    generate(client, auth_headers, event, first)
+    with Session.begin() as session:
+        rank = {
+            row.user_id: row.seed
+            for row in session.scalars(
+                select(EventEntrant).where(col(EventEntrant.event_id) == event)
+            )
+        }
+    # The stronger seed takes every series, so each table reads in seed order
+    for row in bracket(first):
+        one, two = row["sides"]
+        won = (rank[one] or 0) < (rank[two] or 0)
+        score(client, auth_headers, row["id"], 2 if won else 0, 0 if won else 2)
+    tables = client.get(f"/events/{event}/stages/{first}/standings").json()
+    assert [len(table["rows"]) for table in tables] == [5, 5]
+
+    seeded = client.put(
+        f"/events/{event}/stages/{second}/seeds",
+        json={"source": "previous_stage"},
+        headers=auth_headers,
+    )
+
+    assert seeded.status_code == 200, seeded.text
+    rows = seeded.json()
+    through = {
+        table["division_id"]: [line["entrant_id"] for line in table["rows"][:4]]
+        for table in tables
+    }
+    taken = {
+        table["division_id"]: [
+            row["id"]
+            for row in rows
+            if row["division_id"] == table["division_id"] and row["seed"] is not None
+        ]
+        for table in tables
+    }
+    assert taken == through
+    assert [row["seed"] for row in rows if row["seed"]] == [1, 2, 3, 4, 1, 2, 3, 4]
+    assert {row["seed_source"] for row in rows if row["seed"]} == {"previous_stage"}
+    # The fifth place of each division keeps no seed, so the playoff leaves it out
+    assert len([row for row in rows if row["seed"] is None]) == 2
+    assert bracket(second) == []
+    assert generate(client, auth_headers, event, second) == {"series": 6, "rounds": 2}

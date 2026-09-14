@@ -26,6 +26,7 @@ from app.services import (
     discord,
     discord_posts,
     discord_roles,
+    event_cards,
     player_series,
     series_cards,
 )
@@ -329,7 +330,11 @@ HANDLERS = {
     "availability": availability.run,
 }
 # A button press, keyed by the first part of its custom_id
-COMPONENTS = {"availability": availability.press}
+COMPONENTS = {
+    "availability": availability.press,
+    event_cards.SIGN_UP: event_cards.press,
+    event_cards.CHECK_IN: event_cards.press,
+}
 # The autocomplete finders that are not the series list, keyed by command name
 CHOICES: dict[str, Callable[[dict[str, Any], Services], list[dict[str, Any]]]] = {
     "stats": w3c.player_choices

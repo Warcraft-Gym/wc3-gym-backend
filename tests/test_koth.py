@@ -1,74 +1,102 @@
-"""The King of the Hill flows that write rows.
+"""The old /koth/* paths, answered from the event model.
 
-The signup endpoint reaches w3champions, so these tests insert the
-signups through the session and then drive the match, king and bracket
-endpoints through the API.
+Nightbot, the overlay and the bookmarks of the run crew still call these
+paths, so every test here drives the old route and reads the old payload,
+while the rows behind it are the event, its entrants and the series of its
+chains. The rating a signup cuts on is the W3C stats the app stored, so
+nothing here reaches w3champions.
 """
 
-from datetime import datetime
 from typing import Any
 
 import pytest
 from fastapi import FastAPI
 from httpx2 import Client
 
+from app.core.db import Session
 from app.models.base import ident
-from app.models.w3c_stats import W3CStatsCreate
+from app.models.enums import Race
+from app.models.user import User
+from app.models.w3c_stats import W3CStats
+
+EVENT = {"name": "KOTH 1", "event_date": "2026-01-10T20:00:00Z"}
+SIGNUP = {
+    "client_token": "test-nightbot-token",
+    "twitch_username": "streamer",
+    "battle_tag": "S#1234",
+}
+
+
+def rate(tag: str, race: Race, mmr: int, season: int = 20) -> int:
+    """Give the player behind a battle tag one W3C rating the signup reads."""
+    from sqlalchemy import func, select
+    from sqlmodel import col
+
+    with Session.begin() as session:
+        folded = func.lower(func.trim(col(User.battleTag)))
+        user = session.scalars(
+            select(User).where(folded == tag.strip().lower())
+        ).first()
+        if user is None:
+            user = User(
+                name=tag.split("#")[0],
+                battleTag=tag,
+                discordTag="",
+                discordId="",
+                race=race,
+            )
+            session.add(user)
+            session.flush()
+        session.add(
+            W3CStats(
+                user_id=ident(user), race=race, wc3_season=season, games=50, mmr=mmr
+            )
+        )
+        return ident(user)
+
+
+def sign_up(client: Client, tag: str, race: str | None = None, **body: Any) -> Any:  # noqa: ANN401
+    """The Nightbot JSON signup, the route the chat bot and the bot post to."""
+    return client.post(
+        "/koth/signups",
+        json={**SIGNUP, "battle_tag": tag, **({"race": race} if race else {}), **body},
+    )
 
 
 @pytest.fixture
-def koth(app: FastAPI, seeded: dict[str, Any]) -> dict[str, Any]:
-    """An active event with two signups in bracket 1."""
-    from app.core.db import Session
-    from app.models.enums import Race
-    from app.models.koth_event import KothEvent
-    from app.models.koth_signup import KothSignup
-
-    with Session() as session:
-        event = session.query(KothEvent).filter_by(name="KOTH 1").one()
-        one = KothSignup(
-            event_id=ident(event),
-            twitch_username="player_one",
-            battle_tag="P1#1111",
-            w3c_name="P1",
-            race=Race.HU,
-            mmr=1400,
-            bracket=1,
-        )
-        two = KothSignup(
-            event_id=ident(event),
-            twitch_username="player_two",
-            battle_tag="P2#2222",
-            w3c_name="P2",
-            race=Race.OC,
-            mmr=1420,
-            bracket=1,
-        )
-        session.add_all([one, two])
-        session.commit()
-        return {"event_id": event.id, "signup_ids": [one.id, two.id]}
+def koth(client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]) -> Any:  # noqa: ANN401
+    """A night open for signups with two rated players in bracket 1."""
+    rate("P1#1111", Race.HU, 1400)
+    rate("P2#2222", Race.OC, 1420)
+    event = client.post("/koth/events", headers=auth_headers, json=EVENT)
+    assert event.status_code == 201, event.text
+    ids = []
+    for tag, race in (("P1#1111", "human"), ("P2#2222", "orc")):
+        resp = sign_up(client, tag, race)
+        assert resp.status_code == 201, resp.text
+        ids.append(resp.json()["id"])
+    return {"event_id": event.json()["id"], "signup_ids": ids}
 
 
-@pytest.fixture
-def w3c_mmr(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The signup path with the two w3champions calls answered from memory."""
-    from app.models.enums import Race
-    from app.models.w3c_stats import W3CStatsCreate
-    from app.services.w3c import W3CService
+def throne(client: Client, event_id: int) -> dict[str, Any]:
+    """The one series the two entrants of bracket 1 opened their chain with."""
+    matches = client.get(f"/koth/events/{event_id}/matches").json()
+    assert len(matches) == 1, matches
+    return matches[0]
 
-    monkeypatch.setattr(W3CService, "current_season", lambda self: 20)
-    monkeypatch.setattr(
-        W3CService,
-        "get_player_stats",
-        lambda self, bnet_name, season_override=None: [
-            W3CStatsCreate(wc3_season=season_override or 0, mmr=1400, race=Race.HU)
-        ],
-    )
-    monkeypatch.setattr(
-        W3CService,
-        "send_request",
-        lambda *args, **kwargs: pytest.fail("the signup reached w3champions"),
-    )
+
+def test_two_signups_in_one_bracket_open_the_chain(
+    client: Client, koth: dict[str, Any]
+) -> None:
+    """The night draws the throne series itself, and the old shape reads it."""
+    match = throne(client, koth["event_id"])
+
+    assert (match["bracket"], match["game_mode"], match["num_teams"]) == (1, "1v1", 2)
+    assert match["winner_team_number"] is None
+    assert {p["signup"]["battle_tag"] for p in match["participants"]} == {
+        "P1#1111",
+        "P2#2222",
+    }
 
 
 def test_a_match_takes_its_bracket_from_the_participants(
@@ -101,76 +129,86 @@ def test_a_match_takes_its_bracket_from_the_participants(
 def test_a_result_crowns_the_winner_and_retires_the_loser(
     client: Client, auth_headers: dict[str, str], koth: dict[str, Any]
 ) -> None:
-    from app.core.db import Session
-    from app.models.enums import Race
-    from app.models.koth_signup import KothSignup
-
+    """Scoring the series is the whole crown: the winner holds the throne."""
     one, two = koth["signup_ids"]
-    # a third player holds the crown of the bracket without playing the match
-    with Session.begin() as session:
-        bystander = KothSignup(
-            event_id=koth["event_id"],
-            twitch_username="player_three",
-            battle_tag="P3#3333",
-            w3c_name="P3",
-            race=Race.NE,
-            mmr=1450,
-            bracket=1,
-            is_king=1,
-        )
-        session.add(bystander)
-        session.flush()
-        bystander_id = ident(bystander)
-    match = client.post(
-        "/koth/matches",
-        headers=auth_headers,
-        json={
-            "event_id": koth["event_id"],
-            "game_mode": "1v1",
-            "num_teams": 2,
-            "participants": [
-                {"signup_id": one, "team_number": 1},
-                {"signup_id": two, "team_number": 2},
-            ],
-        },
-    ).json()
+    match = throne(client, koth["event_id"])
+    winner = next(
+        p["team_number"] for p in match["participants"] if p["signup_id"] == one
+    )
 
     resp = client.put(
         f"/koth/matches/{match['id']}/result",
         headers=auth_headers,
-        json={"winner_team_number": 1},
+        json={"winner_team_number": winner},
     )
     assert resp.status_code == 200, resp.text
-    assert resp.json()["winner_team_number"] == 1
+    assert resp.json()["winner_team_number"] == winner
 
     signups = {
         s["id"]: s
         for s in client.get(f"/koth/events/{koth['event_id']}").json()["signups"]
     }
-    assert signups[one]["is_king"] == 1
-    assert signups[one]["is_active"] == 1
-    assert signups[two]["is_king"] == 0
-    assert signups[two]["is_active"] == 0
-    # the king of the bracket who did not play is dethroned and retired too
-    assert signups[bystander_id]["is_king"] == 0
-    assert signups[bystander_id]["is_active"] == 0
+    assert (signups[one]["is_king"], signups[one]["is_active"]) == (1, 1)
+    assert (signups[two]["is_king"], signups[two]["is_active"]) == (0, 0)
 
 
-def test_set_king_retires_the_old_king_and_keeps_its_row(
+def test_set_king_reorders_an_unplayed_chain_and_then_refuses(
     client: Client, auth_headers: dict[str, str], koth: dict[str, Any]
 ) -> None:
+    """An admin names the defender before the first result, never after one."""
     one, two = koth["signup_ids"]
+    match = throne(client, koth["event_id"])
+    seats = {p["signup_id"]: p["team_number"] for p in match["participants"]}
+    waiting = one if seats[one] == 2 else two
 
-    def crown(signup_id: int) -> dict[int, tuple[int, int]]:
-        """Crown one signup; answer each signup's (is_king, is_active) as stored."""
-        resp = client.post(f"/koth/signups/{signup_id}/king", headers=auth_headers)
-        assert resp.status_code == 200, resp.text
-        event = client.get(f"/koth/events/{koth['event_id']}").json()
-        return {s["id"]: (s["is_king"], s["is_active"]) for s in event["signups"]}
+    resp = client.post(f"/koth/signups/{waiting}/king", headers=auth_headers)
+    assert resp.status_code == 200, resp.text
+    moved = throne(client, koth["event_id"])
+    assert {p["signup_id"]: p["team_number"] for p in moved["participants"]}[
+        waiting
+    ] == 1
 
-    crown(one)
-    assert crown(one) == {one: (1, 1), two: (0, 1)}  # crowning the king again
-    assert crown(two) == {one: (0, 0), two: (1, 1)}
+    client.put(
+        f"/koth/matches/{moved['id']}/result",
+        headers=auth_headers,
+        json={"winner_team_number": 1},
+    )
+    refused = client.post(f"/koth/signups/{waiting}/king", headers=auth_headers)
+    assert refused.status_code == 400
+    assert "decides the king by results" in refused.json()["error"]
+
+
+def test_the_crown_is_never_added_or_taken_by_hand(
+    client: Client, auth_headers: dict[str, str], koth: dict[str, Any]
+) -> None:
+    """A bracket holds one king and the night wins him, so both paths answer 400."""
+    one = koth["signup_ids"][0]
+    for method, path in (("POST", "add-king"), ("DELETE", "king")):
+        resp = client.request(
+            method, f"/koth/signups/{one}/{path}", headers=auth_headers
+        )
+        assert resp.status_code == 400, resp.text
+        assert "decides the king by results" in resp.json()["error"]
+
+
+def test_the_kings_read_names_the_winner_of_each_chain(
+    client: Client, auth_headers: dict[str, str], koth: dict[str, Any]
+) -> None:
+    """No result, no king; one result, one king in that bracket."""
+    assert client.get(f"/koth/events/{koth['event_id']}/kings").json() == {}
+
+    match = throne(client, koth["event_id"])
+    client.put(
+        f"/koth/matches/{match['id']}/result",
+        headers=auth_headers,
+        json={"winner_team_number": 2},
+    )
+
+    kings = client.get(f"/koth/events/{koth['event_id']}/kings").json()
+    seated = next(
+        p["signup_id"] for p in match["participants"] if p["team_number"] == 2
+    )
+    assert [s["id"] for s in kings["1"]] == [seated]
 
 
 def test_a_bracket_change_touches_only_the_bracket(
@@ -190,41 +228,6 @@ def test_a_bracket_change_touches_only_the_bracket(
         assert after[field] == before[field]
 
 
-def test_the_king_endpoints_move_the_crown(
-    client: Client, auth_headers: dict[str, str], koth: dict[str, Any]
-) -> None:
-    one, two = koth["signup_ids"]
-
-    assert (
-        client.post(f"/koth/signups/{one}/king", headers=auth_headers).status_code
-        == 200
-    )
-    kings = client.get(f"/koth/events/{koth['event_id']}/kings").json()
-    assert [s["id"] for s in kings["1"]] == [one]
-
-    # set_king clears the other king in the bracket, add-king does not.
-    assert (
-        client.post(f"/koth/signups/{two}/king", headers=auth_headers).status_code
-        == 200
-    )
-    kings = client.get(f"/koth/events/{koth['event_id']}/kings").json()
-    assert [s["id"] for s in kings["1"]] == [two]
-
-    assert (
-        client.post(f"/koth/signups/{one}/add-king", headers=auth_headers).status_code
-        == 200
-    )
-    kings = client.get(f"/koth/events/{koth['event_id']}/kings").json()
-    assert sorted(s["id"] for s in kings["1"]) == sorted([one, two])
-
-    assert (
-        client.delete(f"/koth/signups/{two}/king", headers=auth_headers).status_code
-        == 200
-    )
-    kings = client.get(f"/koth/events/{koth['event_id']}/kings").json()
-    assert [s["id"] for s in kings["1"]] == [one]
-
-
 def test_an_event_update_keeps_the_fields_it_was_not_given(
     client: Client, auth_headers: dict[str, str], koth: dict[str, Any]
 ) -> None:
@@ -242,48 +245,29 @@ def test_an_event_update_keeps_the_fields_it_was_not_given(
     assert after["bracket_1_threshold"] == before["bracket_1_threshold"]
 
 
-def test_the_database_holds_one_active_signup_per_name_and_race(
-    app: FastAPI, koth: dict[str, Any]
+def test_a_threshold_move_recuts_the_next_signup(
+    client: Client, auth_headers: dict[str, str], koth: dict[str, Any]
 ) -> None:
-    """The unique index, not the service, is what two requests at once meet."""
-    from sqlalchemy.exc import IntegrityError
+    """The thresholds ride the brackets, so a move lands the next player higher."""
+    resp = client.put(
+        f"/koth/events/{koth['event_id']}",
+        headers=auth_headers,
+        json={"bracket_1_threshold": 1300},
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["bracket_1_threshold"] == 1300
 
-    from app.core.db import Session
-    from app.models.enums import Race
-    from app.models.koth_signup import KothSignup
-
-    def signup(race: Race) -> KothSignup:
-        return KothSignup(
-            event_id=koth["event_id"],
-            twitch_username="player_one",
-            battle_tag="P1#1111",
-            w3c_name="P1",
-            mmr=1400,
-            bracket=1,
-            race=race,
-        )
-
-    with Session() as session, pytest.raises(IntegrityError):
-        session.add(signup(Race.HU))
-        session.commit()
-
-    # Another race, and the same race once the first signup retires, both fit
-    with Session() as session:
-        session.add(signup(Race.NE))
-        session.commit()
-        session.query(KothSignup).filter_by(race=Race.HU).update({"is_active": 0})
-        session.add(signup(Race.HU))
-        session.commit()
-
-    with Session() as session:
-        assert session.query(KothSignup).count() == 4
+    rate("P3#3333", Race.NE, 1350)
+    assert sign_up(client, "P3#3333", "nightelf").json()["bracket"] == 2
 
 
 def test_one_event_is_active_after_an_activation(
     client: Client, auth_headers: dict[str, str], koth: dict[str, Any]
 ) -> None:
     second = client.post(
-        "/koth/events", headers=auth_headers, json={"name": "KOTH 2"}
+        "/koth/events",
+        headers=auth_headers,
+        json={"name": "KOTH 2", "event_date": "2026-01-17T20:00:00Z"},
     ).json()
 
     def active_ids() -> list[int]:
@@ -302,10 +286,20 @@ def test_one_event_is_active_after_an_activation(
     assert active_ids() == [second["id"]]
 
 
+def test_a_deleted_event_takes_its_chain_with_it(
+    client: Client, auth_headers: dict[str, str], koth: dict[str, Any]
+) -> None:
+    """The night, its brackets, its entrants and its series all go."""
+    resp = client.delete(f"/koth/events/{koth['event_id']}", headers=auth_headers)
+    assert resp.status_code == 204, resp.text
+    assert client.get(f"/koth/events/{koth['event_id']}").status_code == 404
+    assert client.get("/koth/events").json() == []
+
+
 def test_bad_koth_input_answers_400(
     client: Client, auth_headers: dict[str, str], koth: dict[str, Any]
 ) -> None:
-    """The rule checks in the service answer 400, not 500."""
+    """The rule checks in the module answer 400, not 500."""
     one, two = koth["signup_ids"]
 
     resp = client.put(
@@ -330,7 +324,21 @@ def test_bad_koth_input_answers_400(
     assert resp.status_code == 400
     assert "teams" in resp.json()["error"]
 
-    match = client.post(
+    resp = client.put(
+        f"/koth/matches/{throne(client, koth['event_id'])['id']}/result",
+        headers=auth_headers,
+        json={"winner_team_number": 5},
+    )
+    assert resp.status_code == 400
+    assert "Winner team number" in resp.json()["error"]
+
+
+def test_a_failed_match_creation_writes_nothing(
+    client: Client, auth_headers: dict[str, str], koth: dict[str, Any]
+) -> None:
+    """One transaction: an unknown participant leaves no half-made match."""
+    one, _ = koth["signup_ids"]
+    resp = client.post(
         "/koth/matches",
         headers=auth_headers,
         json={
@@ -339,113 +347,35 @@ def test_bad_koth_input_answers_400(
             "num_teams": 2,
             "participants": [
                 {"signup_id": one, "team_number": 1},
-                {"signup_id": two, "team_number": 2},
+                {"signup_id": 99999, "team_number": 2},
             ],
         },
-    ).json()
-    resp = client.put(
-        f"/koth/matches/{match['id']}/result",
-        headers=auth_headers,
-        json={"winner_team_number": 5},
     )
-    assert resp.status_code == 400
-    assert "Winner team number" in resp.json()["error"]
+    assert resp.status_code == 404
+    matches = client.get(f"/koth/events/{koth['event_id']}/matches").json()
+    assert len(matches) == 1
 
 
-def test_an_admin_signup_needs_no_w3c_configuration(
-    client: Client,
-    auth_headers: dict[str, str],
-    koth: dict[str, Any],
-    monkeypatch: pytest.MonkeyPatch,
+def test_a_deleted_match_leaves_the_chain(
+    client: Client, auth_headers: dict[str, str], koth: dict[str, Any]
 ) -> None:
-    """Nothing names the season or the API, so the signup takes the default
-    base URL and the season w3champions reports."""
-    from app.models.enums import Race
-    from app.models.w3c_stats import W3CStatsCreate
-    from app.services.w3c import DEFAULT_BASE_URL, W3CService
-
-    monkeypatch.delenv("W3C_URL", raising=False)
-    asked: dict[str, Any] = {}
-
-    def fake_send_request(
-        self: W3CService, url: str, **kwargs: object
-    ) -> list[dict[str, int]]:
-        asked["seasons_url"] = url
-        return [{"id": 25}, {"id": 24}]
-
-    def fake_stats(
-        self: W3CService, bnet_name: str, season_override: int | None = None
-    ) -> list[W3CStatsCreate]:
-        asked["stats_base"] = self.base_url()
-        asked["season"] = season_override
-        return [W3CStatsCreate(wc3_season=season_override or 0, mmr=1400, race=Race.HU)]
-
-    monkeypatch.setattr(W3CService, "send_request", fake_send_request)
-    monkeypatch.setattr(W3CService, "get_player_stats", fake_stats)
-
-    resp = client.post(
-        "/koth/signups/admin",
-        headers=auth_headers,
-        json={"twitch_username": "player_three", "battle_tag": "P3#3333"},
+    match = throne(client, koth["event_id"])
+    assert (
+        client.delete(f"/koth/matches/{match['id']}", headers=auth_headers).status_code
+        == 204
     )
-
-    assert resp.status_code == 201, resp.text
-    assert asked["seasons_url"] == f"{DEFAULT_BASE_URL}/ladder/seasons"
-    assert asked["stats_base"] == DEFAULT_BASE_URL
-    assert asked["season"] == 25
+    assert client.get(f"/koth/events/{koth['event_id']}/matches").json() == []
 
 
-# ---------- The Nightbot signup flow (w3champions answered from memory) ----------
-
-SIGNUP = {
-    "client_token": "test-nightbot-token",
-    "twitch_username": "streamer",
-    "battle_tag": "S#1234",
-}
-
-
-@pytest.fixture
-def w3c_seasons(
-    monkeypatch: pytest.MonkeyPatch, seeded: dict[str, Any]
-) -> dict[int, list[W3CStatsCreate]]:
-    """get_player_stats answers from a season table; an empty season raises,
-    as the real service does. Fill the table per test."""
-    from app.services.w3c import W3CService
-
-    table: dict[int, list[W3CStatsCreate]] = {}
-
-    def fake(
-        self: W3CService, bnet_name: str, season_override: int | None = None
-    ) -> list[Any]:
-        stats = table.get(season_override or 0)
-        if not stats:
-            raise ValueError(f"No stats for {bnet_name} in season {season_override}")
-        return stats
-
-    monkeypatch.setattr(W3CService, "current_season", lambda self: 20)
-    monkeypatch.setattr(W3CService, "get_player_stats", fake)
-    monkeypatch.setattr(
-        W3CService,
-        "send_request",
-        lambda *args, **kwargs: pytest.fail("the signup reached w3champions"),
-    )
-    return table
-
-
-def stat(race_name: str, mmr: int, season: int) -> W3CStatsCreate:
-    from app.models.enums import Race
-
-    return W3CStatsCreate(wc3_season=season, mmr=mmr, race=Race[race_name])
+# ---------- The signup flow, cut on the ratings the app stored ----------
 
 
 def test_the_signup_post_ignores_the_token(
-    client: Client, koth: dict[str, Any], w3c_two_races: None
+    client: Client, koth: dict[str, Any]
 ) -> None:
     """The POST is open by decision; a wrong token no longer blocks a signup."""
-    resp = client.post(
-        "/koth/signups",
-        json={**SIGNUP, "battle_tag": "S#5678", "client_token": "wrong"},
-    )
+    rate("S#5678", Race.HU, 1400)
+    resp = sign_up(client, "S#5678", "human", client_token="wrong")
     assert resp.status_code == 201, resp.text
 
 
@@ -462,7 +392,6 @@ def test_a_deployment_without_a_nightbot_token_answers_401(
     client: Client, seeded: dict[str, Any]
 ) -> None:
     """A missing setting is an auth failure, not a 404 naming the setting."""
-    from app.core.db import Session
     from app.models.settings import Settings
 
     with Session.begin() as session:
@@ -491,164 +420,92 @@ def test_a_signup_missing_a_field_is_refused(
     assert resp.status_code == 400
 
 
-def test_an_unknown_race_answers_400(
-    client: Client, w3c_seasons: dict[int, list[W3CStatsCreate]]
-) -> None:
-    resp = client.post("/koth/signups", json={**SIGNUP, "race": "gnome"})
+def test_an_unknown_race_answers_400(client: Client, koth: dict[str, Any]) -> None:
+    resp = sign_up(client, "S#1234", "gnome")
     assert resp.status_code == 400
     assert "Valid options" in resp.json()["error"]
 
 
 def test_a_signup_picks_the_highest_mmr_race(
-    client: Client, w3c_seasons: dict[int, list[W3CStatsCreate]]
+    client: Client, koth: dict[str, Any]
 ) -> None:
-    w3c_seasons[20] = [stat("HU", 1500, 20), stat("OC", 1555, 20)]
-    resp = client.post("/koth/signups", json=SIGNUP)
+    rate("S#1234", Race.HU, 1500)
+    rate("S#1234", Race.OC, 1555)
+    resp = sign_up(client, "S#1234")
     assert resp.status_code == 201, resp.text
     signup = resp.json()
     assert (signup["race"], signup["mmr"], signup["bracket"]) == ("OC", 1555, 2)
 
 
 def test_a_requested_race_takes_that_races_mmr(
-    client: Client, w3c_seasons: dict[int, list[W3CStatsCreate]]
+    client: Client, koth: dict[str, Any]
 ) -> None:
-    w3c_seasons[20] = [stat("HU", 1500, 20), stat("OC", 1555, 20)]
-    resp = client.post("/koth/signups", json={**SIGNUP, "race": "human"})
+    rate("S#1234", Race.HU, 1500)
+    rate("S#1234", Race.OC, 1555)
+    resp = sign_up(client, "S#1234", "human")
     assert resp.status_code == 201, resp.text
     signup = resp.json()
     assert (signup["race"], signup["mmr"]) == ("HU", 1500)
 
 
 def test_the_brackets_cut_at_the_event_thresholds(
-    client: Client, w3c_seasons: dict[int, list[W3CStatsCreate]]
+    client: Client, koth: dict[str, Any]
 ) -> None:
     """KOTH 1 cuts at 1450 and 1600: below, between, at-or-above."""
     for name, mmr, bracket in (("low", 1449, 1), ("mid", 1599, 2), ("top", 1600, 3)):
-        w3c_seasons[20] = [stat("UD", mmr, 20)]
-        resp = client.post(
-            "/koth/signups",
-            json={**SIGNUP, "twitch_username": name, "battle_tag": f"{name}#1"},
-        )
+        rate(f"{name}#1", Race.UD, mmr)
+        resp = sign_up(client, f"{name}#1", "undead")
         assert resp.status_code == 201, resp.text
         assert resp.json()["bracket"] == bracket
 
 
 def test_a_quiet_player_falls_back_two_seasons(
-    client: Client, w3c_seasons: dict[int, list[W3CStatsCreate]]
+    client: Client, koth: dict[str, Any]
 ) -> None:
-    """The last 3 seasons count, as every message says."""
-    w3c_seasons[18] = [stat("NE", 1700, 18)]
-    resp = client.post("/koth/signups", json=SIGNUP)
+    """The rating window is three seasons, as every message says."""
+    rate("S#1234", Race.NE, 1700, season=18)
+    resp = sign_up(client, "S#1234")
     assert resp.status_code == 201, resp.text
     assert (resp.json()["race"], resp.json()["mmr"]) == ("NE", 1700)
 
 
 def test_no_stats_in_three_seasons_answers_400_and_writes_no_row(
-    client: Client, w3c_seasons: dict[int, list[W3CStatsCreate]]
+    client: Client, koth: dict[str, Any]
 ) -> None:
-    w3c_seasons[17] = [stat("HU", 1500, 17)]  # one season too old
-    resp = client.post("/koth/signups", json=SIGNUP)
+    rate("S#1234", Race.HU, 1500, season=17)  # one season too old
+    resp = sign_up(client, "S#1234")
     assert resp.status_code == 400
     assert "No valid MMR data" in resp.json()["error"]
     event = client.get("/koth/events/active").json()
-    assert SIGNUP["twitch_username"] not in [
-        s["twitch_username"] for s in event["signups"]
-    ]
+    assert "S#1234" not in [s["battle_tag"] for s in event["signups"]]
 
 
-def test_a_failed_match_creation_writes_nothing(
-    client: Client, auth_headers: dict[str, str], koth: dict[str, Any]
+def test_a_second_race_replaces_the_first_signup(
+    app: FastAPI, client: Client, koth: dict[str, Any]
 ) -> None:
-    """One transaction: an unknown participant leaves no half-made match."""
-    one, _ = koth["signup_ids"]
-    resp = client.post(
-        "/koth/matches",
-        headers=auth_headers,
-        json={
-            "event_id": koth["event_id"],
-            "game_mode": "1v1",
-            "num_teams": 2,
-            "participants": [
-                {"signup_id": one, "team_number": 1},
-                {"signup_id": 99999, "team_number": 2},
-            ],
-        },
-    )
-    assert resp.status_code == 404
-    matches = client.get(f"/koth/events/{koth['event_id']}/matches").json()
-    assert matches == []
+    """One entrant per player per night: the second race replaces the first."""
+    rate("P3#3333", Race.HU, 1400)
+    rate("P3#3333", Race.NE, 1700)
 
+    first = sign_up(client, "P3#3333", "human").json()
+    second = sign_up(client, "P3#3333", "nightelf").json()
 
-@pytest.fixture
-def w3c_two_races(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A player with a bracket-1 Human MMR and a bracket-3 Night Elf MMR."""
-    from app.models.enums import Race
-    from app.services.w3c import W3CService
-
-    monkeypatch.setattr(W3CService, "current_season", lambda self: 20)
-    monkeypatch.setattr(
-        W3CService,
-        "get_player_stats",
-        lambda self, bnet_name, season_override=None: [
-            W3CStatsCreate(wc3_season=season_override or 0, mmr=1400, race=Race.HU),
-            W3CStatsCreate(wc3_season=season_override or 0, mmr=1700, race=Race.NE),
-        ],
-    )
-    monkeypatch.setattr(
-        W3CService,
-        "send_request",
-        lambda *args, **kwargs: pytest.fail("the signup reached w3champions"),
-    )
-
-
-def test_two_races_of_one_player_sign_up_into_their_own_brackets(
-    app: FastAPI, koth: dict[str, Any], w3c_two_races: None
-) -> None:
-    """Each race carries its own MMR, so one player sits in two brackets."""
-    from app.services.koth import KothService
-    from app.services.settings import SettingsService
-
-    service = KothService(SettingsService())
-    signups = service.create_signups("player_three", "P3#3333", ["human", "nightelf"])
-
-    assert [(s.race, s.bracket, s.mmr) for s in signups] == [
-        ("HU", 1, 1400),
-        ("NE", 3, 1700),
-    ]
-    assert {s.battle_tag for s in signups} == {"P3#3333"}
-
-
-def test_one_battle_tag_takes_a_race_once_whatever_the_twitch_name(
-    app: FastAPI, koth: dict[str, Any], w3c_two_races: None
-) -> None:
-    """The battle tag is the player, so a second Twitch name signs up no twin."""
-    from app.services.koth import KothService
-    from app.services.settings import SettingsService
-
-    service = KothService(SettingsService())
-    service.create_signups("player_three", "P3#3333", ["human"])
-
-    with pytest.raises(Exception, match="already has an active signup with race HU"):
-        service.create_signups("another_name", "p3#3333 ", ["human"])
-
-    signups = service.get_signups_by_event(koth["event_id"])
-    assert [s.battle_tag for s in signups].count("P3#3333") == 1
+    assert (first["race"], first["bracket"]) == ("HU", 1)
+    assert (second["race"], second["bracket"], second["id"]) == ("NE", 3, first["id"])
+    signups = client.get(f"/koth/events/{koth['event_id']}/signups").json()
+    assert [s["battle_tag"] for s in signups].count("P3#3333") == 1
 
 
 def test_the_profile_signup_reads_the_battle_tag_of_the_logged_in_player(
-    client: Client,
-    koth: dict[str, Any],
-    w3c_two_races: None,
-    monkeypatch: pytest.MonkeyPatch,
+    client: Client, koth: dict[str, Any], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A logged-in player names races only; the battle tag comes from his row."""
+    """A logged-in player names a race only; the battle tag comes from his row."""
     from sqlalchemy import update
     from sqlmodel import col
 
-    from app.core.db import Session
-    from app.models.user import User
     from tests.test_discord_auth import ACCOUNT, SESSION, stub_clerk
 
+    rate("P4#4444", Race.NE, 1700)
     stub_clerk(monkeypatch)
     with Session.begin() as session:
         session.execute(
@@ -658,29 +515,24 @@ def test_the_profile_signup_reads_the_battle_tag_of_the_logged_in_player(
         )
 
     resp = client.post(
-        "/koth/signups/me", json={"races": ["human", "nightelf"]}, headers=SESSION
+        "/koth/signups/me", json={"races": ["nightelf"]}, headers=SESSION
     )
     assert resp.status_code == 201, resp.text
     assert [(s["battle_tag"], s["race"], s["bracket"]) for s in resp.json()] == [
-        ("P4#4444", "HU", 1),
-        ("P4#4444", "NE", 3),
+        ("P4#4444", "NE", 3)
     ]
 
 
-def test_a_player_withdraws_their_own_signups(
-    client: Client,
-    koth: dict[str, Any],
-    w3c_two_races: None,
-    monkeypatch: pytest.MonkeyPatch,
+def test_a_player_withdraws_their_own_signup(
+    client: Client, koth: dict[str, Any], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Withdraw one race, then the rest; a third call has nothing left."""
+    """Withdraw once; a second call has nothing left to withdraw."""
     from sqlalchemy import update
     from sqlmodel import col
 
-    from app.core.db import Session
-    from app.models.user import User
     from tests.test_discord_auth import ACCOUNT, SESSION, stub_clerk
 
+    rate("P4#4444", Race.NE, 1700)
     stub_clerk(monkeypatch)
     with Session.begin() as session:
         session.execute(
@@ -688,28 +540,25 @@ def test_a_player_withdraws_their_own_signups(
             .where(col(User.battleTag) == "P4#4444")
             .values(discordId=ACCOUNT["id"])
         )
-    resp = client.post(
-        "/koth/signups/me", json={"races": ["human", "nightelf"]}, headers=SESSION
+    assert (
+        client.post(
+            "/koth/signups/me", json={"races": ["nightelf"]}, headers=SESSION
+        ).status_code
+        == 201
     )
-    assert resp.status_code == 201, resp.text
 
-    resp = client.delete("/koth/signups/me?race=human", headers=SESSION)
-    assert resp.status_code == 204, resp.text
+    assert client.delete("/koth/signups/me", headers=SESSION).status_code == 204
     signups = client.get(f"/koth/events/{koth['event_id']}/signups").json()
-    mine = [s["race"] for s in signups if s["battle_tag"] == "P4#4444"]
-    assert mine == ["NE"]
+    mine = [s for s in signups if s["battle_tag"] == "P4#4444"]
+    assert [s["is_active"] for s in mine] == [0]
 
-    resp = client.delete("/koth/signups/me", headers=SESSION)
-    assert resp.status_code == 204, resp.text
-
-    resp = client.delete("/koth/signups/me", headers=SESSION)
-    assert resp.status_code == 404, resp.text
+    assert client.delete("/koth/signups/me", headers=SESSION).status_code == 404
 
 
 def test_a_signup_carries_the_flag_of_its_player_row(
     client: Client, koth: dict[str, Any]
 ) -> None:
-    """P1#1111 is a seeded user from Germany; a signup with no users row has no flag."""
+    """P1#1111 is a seeded user from Germany, P2#2222 one from the US."""
     event = client.get(f"/koth/events/{koth['event_id']}").json()
     by_tag = {s["battle_tag"]: s for s in event["signups"]}
     assert by_tag["P1#1111"]["country"] == "DE"
@@ -721,22 +570,15 @@ def test_a_signup_carries_the_flag_of_its_player_row(
 
 
 def test_the_admin_signup_lands_on_the_event_he_names(
-    client: Client,
-    koth: dict[str, Any],
-    auth_headers: dict[str, str],
-    w3c_two_races: None,
+    client: Client, koth: dict[str, Any], auth_headers: dict[str, str]
 ) -> None:
-    """The admin adds a player to the event on screen, not to the active one."""
-    from app.core.db import Session
-    from app.models.koth_event import KothEvent
-
-    with Session() as session:
-        later = KothEvent(
-            name="KOTH 2", event_date=datetime(2026, 2, 10, 20, 0), is_active=False
-        )
-        session.add(later)
-        session.commit()
-        later_id = ident(later)
+    """The admin adds a player to the event on screen, not to the open one."""
+    later = client.post(
+        "/koth/events",
+        headers=auth_headers,
+        json={"name": "KOTH 2", "event_date": "2026-02-10T20:00:00Z"},
+    ).json()
+    rate("P3#3333", Race.HU, 1400)
 
     resp = client.post(
         "/koth/signups/admin",
@@ -745,11 +587,11 @@ def test_the_admin_signup_lands_on_the_event_he_names(
             "twitch_username": "player_three",
             "battle_tag": "P3#3333",
             "races": ["human"],
-            "event_id": later_id,
+            "event_id": later["id"],
         },
     )
 
     assert resp.status_code == 201, resp.text
-    assert [s["event_id"] for s in resp.json()] == [later_id]
-    active = client.get(f"/koth/events/{koth['event_id']}/signups").json()
-    assert "P3#3333" not in [s["battle_tag"] for s in active]
+    assert [s["event_id"] for s in resp.json()] == [later["id"]]
+    open_night = client.get(f"/koth/events/{koth['event_id']}/signups").json()
+    assert "P3#3333" not in [s["battle_tag"] for s in open_night]

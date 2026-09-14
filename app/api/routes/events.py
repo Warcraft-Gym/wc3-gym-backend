@@ -27,12 +27,13 @@ from app.models.event_stage import (
 )
 from app.models.season import (
     EventCreate,
+    EventDiscordPost,
     EventPublic,
     EventUpdate,
     MemberEventRow,
 )
 from app.models.series import ChallengerAdd, StageSeriesPublic, StageSeriesRow
-from app.services import stage_engine
+from app.services import discord_posts, stage_engine
 
 router = APIRouter(tags=["events"])
 
@@ -105,6 +106,15 @@ def set_stages(
 ) -> EventPublic:
     """Replace the stage list; the order of the body is the order they play in."""
     return service.set_stages(event_id, stages)
+
+
+@router.post("/events/{event_id}/discord-post", dependencies=[Depends(require_admin)])
+def post_event_card(event_id: int, data: EventDiscordPost) -> dict[str, str]:
+    """Post the event card with its two buttons, or edit the one in the channel.
+
+    A draft has no page to send anyone to and is answered not found.
+    """
+    return {"status": discord_posts.post_event(event_id, data.channel_id)}
 
 
 @router.get("/events/{event_id}/entrants")
@@ -200,7 +210,12 @@ def assign_divisions(event_id: int, service: EventServiceDep) -> EventPublic:
 def set_seeds(
     event_id: int, stage_id: int, data: SeedWrite, service: EventServiceDep
 ) -> list[EventEntrantPublic]:
-    """Seed the entrants 1..n inside each division, in seed order."""
+    """Seed the entrants 1..n inside each division, in seed order.
+
+    The sources that seed are mmr, random, manual, invitation and
+    previous_stage, which takes the standings of the stage before and
+    generates nothing. A qualifier answers not_built.
+    """
     return service.set_seeds(event_id, stage_id, data)
 
 

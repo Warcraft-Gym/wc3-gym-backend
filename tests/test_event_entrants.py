@@ -244,7 +244,7 @@ def test_a_rating_older_than_the_window_is_not_read_at_all(
     assert rows == {"P1#1111": None, "P2#2222": 1500}
 
 
-def test_a_gnl_event_sends_the_signup_to_the_season_route(
+def test_a_gnl_event_sends_the_signup_to_its_season_page(
     client: Client, seeded: dict[str, Any], member: Member
 ) -> None:
     """GNL entrants stay on the season signup table this wave."""
@@ -254,7 +254,7 @@ def test_a_gnl_event_sends_the_signup_to_the_season_route(
 
     assert refused.status_code == 400
     assert refused.json() == {
-        "error": f"A GNL season takes its signups at /seasons/{event}/signups"
+        "error": "A GNL season takes its signups on its season page"
     }
 
 

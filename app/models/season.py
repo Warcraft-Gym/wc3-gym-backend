@@ -148,7 +148,7 @@ class Season(SeasonBase, DBModel, table=True):
     # The rules or landing page of the event, shown as one "Page" link
     page_url: str | None = Field(default=None, max_length=500)
     stream_url: str | None = Field(default=None, max_length=500)
-    # The guild scheduled event this one posted, so a repost edits it
+    # The Discord message the event card was last posted as; a repost edits it
     discord_event_id: Annotated[str | None, NumToStr] = Field(
         default=None, max_length=50
     )
@@ -468,6 +468,9 @@ EventPhase = Literal[
 # What a member checks into: one round of the event, or the event itself
 CheckinShape = Literal["event", "round"]
 
+# What the check-in shows a player for one round; app/core/availability.py reads it
+AvailabilityHint = Literal["answered_yes", "answered_no", "blocked_by_blocks", "open"]
+
 # The one action a member's event row offers; app/services/events.py computes it
 MemberAction = Literal[
     "sign_up", "withdraw", "check_in", "checked_in", "view", "closed"
@@ -579,6 +582,12 @@ class EventUpdate(SQLModel):
     series_per_round: int | None = None
 
 
+class EventDiscordPost(SQLModel):
+    """The channel an admin posts the event card in."""
+
+    channel_id: Annotated[str, NumToStr]
+
+
 class MemberEventRow(SQLModel):
     """One row of the member home's events list, over every kind of event.
 
@@ -612,6 +621,8 @@ class MemberEventRow(SQLModel):
     checkin_open: bool = False
     # The next round of the event that carries dates; null when none does
     next_round: EventRoundPublic | None = None
+    # What the next round's check-in shows the caller; null off the round shape
+    availability_hint: AvailabilityHint | None = None
     # The one action the page offers the caller, from the phase, the signup
     # window, the caller's entrant or GNL signup and the check-in window:
     # `sign_up` signups are open and the caller has not entered; `withdraw` the

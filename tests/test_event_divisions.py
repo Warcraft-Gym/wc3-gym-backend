@@ -15,7 +15,9 @@ from app.core.divisions import cut
 from app.models.enums import EventKind, Race
 from app.models.event_entrant import EventEntrant
 from app.models.event_stage import EventStage
+from app.models.team import Team
 from app.models.user import User
+from app.models.user_team_season import DBUserTeamSeason
 from app.models.w3c_stats import W3CStats
 from tests.test_events import add_event
 
@@ -43,6 +45,24 @@ def add_player(name: str, ratings: dict[Race, int]) -> int:
 def enter(event_id: int, user_id: int, race: Race = Race.HU) -> int:
     with Session.begin() as session:
         row = EventEntrant(event_id=event_id, user_id=user_id, race=race)
+        session.add(row)
+        session.flush()
+        assert row.id is not None
+        return row.id
+
+
+def enter_team(event_id: int, name: str, member_ids: list[int]) -> int:
+    """A pre-made team rostered against the event, entered as one entrant."""
+    with Session.begin() as session:
+        team = Team(name=name)
+        session.add(team)
+        session.flush()
+        assert team.id is not None
+        session.add_all(
+            DBUserTeamSeason(user_id=user_id, team_id=team.id, season_id=event_id)
+            for user_id in member_ids
+        )
+        row = EventEntrant(event_id=event_id, team_id=team.id, race=Race.HU)
         session.add(row)
         session.flush()
         assert row.id is not None
@@ -196,7 +216,7 @@ def test_the_seeds_count_from_one_inside_each_division(
 def test_a_manual_order_seeds_and_the_engine_sources_refuse(
     client: Client, auth_headers: dict[str, str]
 ) -> None:
-    """Manual takes the list; the two sources that read standings answer not_built."""
+    """Manual takes the list; a qualifier answers not_built, having no parent."""
     event = add_event(kind=EventKind.cup)
     stage = add_stage(event)
     entrants = [
@@ -226,11 +246,19 @@ def test_a_manual_order_seeds_and_the_engine_sources_refuse(
     assert stranger.json() == {"error": "Not an entrant of this event: 404"}
     later = client.put(
         f"/events/{event}/stages/{stage}/seeds",
-        json={"source": "previous_stage"},
+        json={"source": "qualifier"},
         headers=auth_headers,
     )
     assert later.status_code == 400
     assert later.json()["error"] == "not_built"
+    # previous_stage reads a table, so the first stage of an event has none
+    first = client.put(
+        f"/events/{event}/stages/{stage}/seeds",
+        json={"source": "previous_stage"},
+        headers=auth_headers,
+    )
+    assert first.status_code == 400
+    assert first.json() == {"error": "This stage is the first one of the event"}
     # Random and invitation reseed the same pool and stamp their own source
     for source in ("random", "invitation"):
         rows = client.put(
@@ -298,3 +326,80 @@ def test_an_assign_with_no_divisions_refuses(
 
     assert refused.status_code == 400
     assert refused.json() == {"error": "The event has no divisions to assign"}
+
+
+def test_two_teams_of_different_strength_cut_and_seed_on_their_rosters(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """A team is rated by the mean of its roster, so the stronger one leads.
+
+    The strong team means 2100, the weak one 1500, and a solo entrant beside
+    them still reads its own rating on the race it signed up on.
+    """
+    event = add_event(kind=EventKind.cup)
+    stage = add_stage(event)
+    strong = enter_team(
+        event,
+        "Storm",
+        [
+            add_player("Ace", {Race.HU: 2400}),
+            add_player("Second", {Race.HU: 1800}),
+        ],
+    )
+    weak = enter_team(
+        event,
+        "Breeze",
+        [
+            add_player("Third", {Race.HU: 1600}),
+            add_player("Fourth", {Race.HU: 1400}),
+        ],
+    )
+    solo = enter(event, add_player("Alone", {Race.HU: 2100, Race.OC: 1200}), Race.OC)
+    bands = set_divisions(
+        client, event, [{"name": "Top", "size": 2}, {"name": "Rest"}], auth_headers
+    )
+
+    assigned = client.post(f"/events/{event}/divisions/assign", headers=auth_headers)
+
+    assert assigned.status_code == 200, assigned.text
+    rows = {row["id"]: row for row in client.get(f"/events/{event}/entrants").json()}
+    assert rows[strong]["mmr"] == 2100
+    assert rows[weak]["mmr"] == 1500
+    # The solo entrant signed up on Orc, so it is rated 1200 and never 2100
+    assert rows[solo]["mmr"] == 1200
+    assert rows[strong]["division_id"] == bands[0]["id"]
+    assert rows[weak]["division_id"] == bands[0]["id"]
+    assert rows[solo]["division_id"] == bands[1]["id"]
+
+    seeded = client.put(
+        f"/events/{event}/stages/{stage}/seeds",
+        json={"source": "mmr"},
+        headers=auth_headers,
+    ).json()
+
+    by_id = {row["id"]: row for row in seeded}
+    assert (by_id[strong]["seed"], by_id[weak]["seed"]) == (1, 2)
+    assert by_id[strong]["mmr_at_seed"] == 2100
+    assert by_id[weak]["mmr_at_seed"] == 1500
+    assert by_id[solo]["mmr_at_seed"] == 1200
+    assert by_id[strong]["team"]["name"] == "Storm"
+
+
+def test_a_team_no_member_of_which_is_rated_answers_no_mmr(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """An unrated roster reads like an unrated player: the weakest band."""
+    event = add_event(kind=EventKind.cup)
+    empty = enter_team(event, "Newcomers", [add_player("Fresh", {})])
+    rated = enter_team(event, "Veterans", [add_player("Known", {Race.HU: 1900})])
+    bands = set_divisions(
+        client, event, [{"name": "Top", "size": 1}, {"name": "Rest"}], auth_headers
+    )
+
+    client.post(f"/events/{event}/divisions/assign", headers=auth_headers)
+
+    rows = {row["id"]: row for row in client.get(f"/events/{event}/entrants").json()}
+    assert rows[empty]["mmr"] is None
+    assert rows[rated]["mmr"] == 1900
+    assert rows[empty]["division_id"] == bands[1]["id"]
+    assert rows[rated]["division_id"] == bands[0]["id"]
