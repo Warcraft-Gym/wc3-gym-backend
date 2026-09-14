@@ -1,9 +1,9 @@
 """The rules one series plays under, with or without a fixture.
 
-A series inside a fixture reads them from the season, as GNL always has. A
-series generated into a bracket reads its best-of from its round, its map
-rules from its stage, and its map pool from the event either way. The shape
-of the series decides, never the kind of the event.
+A series reads its best-of from its round, its map rules from its stage, and
+its map pool from the event. A series whose round names no stage reads both
+off the event, as a GNL season always has. The shape of the series decides,
+never the kind of the event.
 
 The side a caller acts for hangs on the same round or fixture, so it is
 answered here too.
@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session as OrmSession
 from sqlmodel import col
 
 from app.core.map_order import DEFAULT_RULES, rules_of
+from app.core.scoring import DEFAULT_SYSTEM, wins_of
 from app.models.base import ident
 from app.models.event_entrant import EventEntrant
 from app.models.event_stage import EventStage
@@ -96,68 +97,67 @@ def series_rules(session: OrmSession, series: Series) -> SeriesRules:
     """The map rules, the best-of and the map pool of one series."""
     event = series_event(session, series)
     pool = [link.map_id for link in event.maps] if event else []
-    if series.match is not None:
-        rules = event.map_rules if event else None
-        return SeriesRules(rules or DEFAULT_RULES, len(rules_of(rules)), pool)
     round_ = series_round(session, series)
     stage = (
         session.get(EventStage, round_.stage_id) if round_ and round_.stage_id else None
     )
-    best_of = (round_.best_of if round_ else None) or (stage.best_of if stage else None)
-    rules = stage.map_rules if stage else None
-    return SeriesRules(rules or DEFAULT_RULES, best_of or DEFAULT_BEST_OF, pool)
+    if stage is None:
+        rules = event.map_rules if event else None
+        return SeriesRules(rules or DEFAULT_RULES, len(rules_of(rules)), pool)
+    best_of = (round_.best_of if round_ else None) or stage.best_of
+    return SeriesRules(
+        stage.map_rules or DEFAULT_RULES, best_of or DEFAULT_BEST_OF, pool
+    )
+
+
+class Resolved(NamedTuple):
+    """What one series is priced and answered against: the event it belongs
+    to, the score system that event pays on, and the maps a win takes."""
+
+    event_id: int | None
+    system: str
+    wins: int
 
 
 def fill_rules(
     session: OrmSession, rows: Iterable[SeriesPublic | None]
-) -> dict[int, int]:
-    """Fill the rules of every series and answer the event of the ones that
-    hold no fixture, which the race fill then keys on.
+) -> dict[int, Resolved]:
+    """Fill the rules of every series and answer the event and the scale of
+    each one, which the points and the race fill then key on.
 
-    A fixture already carries its season, so only the loose series cost a
-    statement, and one statement covers all of them.
+    A fixture cannot answer the rules on its own, because the stage its round
+    names holds them, so one statement resolves every row.
     """
-    loose: list[SeriesPublic] = []
-    for row in rows:
-        if row is None:
-            continue
-        season = row.match.season if row.match else None
-        if season is None:
-            loose.append(row)
-            continue
-        row.rules = SeriesRulesPublic(
-            map_rules=season.map_rules or DEFAULT_RULES,
-            best_of=len(rules_of(season.map_rules)),
-        )
-    if not loose:
+    filled = [row for row in rows if row is not None]
+    if not filled:
         return {}
-    found = _resolve(session, {row.id for row in loose})
-    events: dict[int, int] = {}
-    for row in loose:
-        resolved = found.get(row.id)
-        if resolved is None:
+    resolved = _resolve(session, {row.id for row in filled})
+    found: dict[int, Resolved] = {}
+    for row in filled:
+        if row.id not in resolved:
             continue
-        event_id, map_rules, best_of = resolved
+        event_id, map_rules, best_of, system = resolved[row.id]
         row.rules = SeriesRulesPublic(map_rules=map_rules, best_of=best_of)
-        if event_id is not None:
-            events[row.id] = event_id
-    return events
+        found[row.id] = Resolved(event_id, system or DEFAULT_SYSTEM, wins_of(best_of))
+    return found
 
 
 def _resolve(
     session: OrmSession, series_ids: set[int]
-) -> dict[int, tuple[int | None, str, int]]:
-    """The event, the map rules and the best-of of every named series, in one
-    statement: through its fixture's season, else through its round and stage."""
+) -> dict[int, tuple[int | None, str, int, str | None]]:
+    """The event, the map rules, the best-of and the score system of every
+    named series, in one statement: through the stage its round names, else
+    through its season."""
     if not series_ids:
         return {}
     event_id = func.coalesce(col(Match.season_id), col(DBEventRound.season_id))
     rows = session.execute(
         select(
             col(Series.id),
-            col(Series.match_id),
+            col(EventStage.id),
             event_id,
             col(Season.map_rules),
+            col(Season.score_system),
             col(DBEventRound.best_of),
             col(EventStage.map_rules),
             col(EventStage.best_of),
@@ -169,26 +169,29 @@ def _resolve(
         .outerjoin(Season, col(Season.id) == event_id)
         .where(col(Series.id).in_(series_ids))
     ).all()
-    found: dict[int, tuple[int | None, str, int]] = {}
+    found: dict[int, tuple[int | None, str, int, str | None]] = {}
     for (
         row_id,
-        match_id,
+        stage_id,
         event,
         season_rules,
+        system,
         round_best,
         stage_rules,
         stage_best,
     ) in rows:
-        if match_id is not None:
+        if stage_id is None:
             found[row_id] = (
                 event,
                 season_rules or DEFAULT_RULES,
                 len(rules_of(season_rules)),
+                system,
             )
         else:
             found[row_id] = (
                 event,
                 stage_rules or DEFAULT_RULES,
                 round_best or stage_best or DEFAULT_BEST_OF,
+                system,
             )
     return found

@@ -1033,7 +1033,6 @@ def team_cup(
     member: Callable[..., dict[str, str]],
     fmt: StageFormat = StageFormat.single_elimination,
     series_per_round: int = 1,
-    map_rules: str | None = None,
     **fields: Any,  # noqa: ANN401
 ) -> tuple[int, int, list[int], list[list[str]]]:
     """A 2v2 cup of four pre-made teams.
@@ -1048,7 +1047,6 @@ def team_cup(
             name="Team Cup",
             kind=EventKind.cup,
             series_per_round=series_per_round,
-            map_rules=map_rules,
             published=True,
         )
         session.add(event)
@@ -1294,6 +1292,8 @@ def test_a_four_team_league_pairs_its_teams_into_fixtures(
 
     The captain of a side reports both of them, the fixture score is summed
     from the series as GNL sums it, and the table ranks by series points.
+    The event names no map rules, as the wizard leaves them, so a fixture
+    series that read them off the event would play the default best of 3.
     """
     event, stage, team_ids, rosters = team_cup(
         client,
@@ -1301,12 +1301,14 @@ def test_a_four_team_league_pairs_its_teams_into_fixtures(
         member,
         StageFormat.round_robin,
         series_per_round=2,
-        map_rules="fixed",
+        best_of=5,
     )
 
     assert generate(client, auth_headers, event, stage) == {"series": 12, "rounds": 3}
 
     rows = stage_series(client, event, stage)["series"]
+    # A series in a fixture still plays the best-of its own stage names
+    assert all(row["rules"]["best_of"] == 5 for row in rows)
     fixtures = [row["match_id"] for row in rows]
     assert len(set(fixtures)) == 6
     assert sorted(fixtures.count(one) for one in set(fixtures)) == [2] * 6
@@ -1322,20 +1324,21 @@ def test_a_four_team_league_pairs_its_teams_into_fixtures(
     first = rows[0]["match"]["team1_id"]
     captain = rosters[team_ids.index(first)][0]
     for row in rows[:2]:
-        replay_uploaded(row["id"], 1)
+        replay_uploaded(row["id"], 1, 2, 3)
         reported = client.put(
             f"/player-series/{row['id']}",
             headers=member(captain),
             data={
                 "action": "score_updated",
-                "player1_score": "1",
+                "player1_score": "3",
                 "player2_score": "0",
             },
         )
         assert reported.status_code == 200, reported.text
 
     scored = stage_series(client, event, stage)["series"][0]
-    assert (scored["match"]["team1_score"], scored["match"]["team2_score"]) == (2, 0)
+    # A clean win of a Bo5 pays 5, so the fixture score sums its two series
+    assert (scored["match"]["team1_score"], scored["match"]["team2_score"]) == (10, 0)
     table = client.get(f"/events/{event}/stages/{stage}/standings").json()
     assert table[0]["rows"][0]["team_id"] == first
     assert table[0]["rows"][0]["points"] == 2
