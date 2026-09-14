@@ -23,9 +23,10 @@ logger = logging.getLogger(__name__)
 
 
 def _fill(session: OrmSession, teams: list[TeamPublic]) -> None:
-    """The standings of every team, and the signup race and the season record of
-    every player."""
+    """The standings of every team, the name and league of every season it
+    played, and the signup race and the season record of every player."""
     derived.fill_standings(session, teams)
+    derived.fill_season_labels(session, teams)
     roster = [
         (player, season_id)
         for team in teams
