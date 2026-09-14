@@ -20,7 +20,7 @@ def cut(rated: Sequence[Rated], bands: Sequence[Band]) -> dict[int, int]:
     band takes what is left; otherwise every entrant falls in the first band
     its rating reaches. An unrated entrant sits in the weakest band.
     """
-    if any(size for _, size in bands):
+    if any(size is not None for _, size in bands):
         return _by_size(rated, [size for _, size in bands])
     return _by_bound(rated, [bound for bound, _ in bands])
 

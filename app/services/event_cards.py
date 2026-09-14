@@ -14,8 +14,9 @@ from app.core.exceptions import ApiError, BadRequestError, NotFoundError
 from app.models.enums import Race, SignupChannel, SignupPolicy, StageFormat
 from app.models.event_entrant import EntrantSignup, EventEntrantPublic
 from app.models.season import EventPublic, MemberEventRow
+from app.models.types import utcnow
 from app.services import series_cards
-from app.services.commands.base import PRIVATE, caller, md
+from app.services.commands.base import LINK_FIRST, PRIVATE, caller, md
 from app.services.events import EventService
 
 if TYPE_CHECKING:
@@ -39,10 +40,6 @@ POLICY = {
     SignupPolicy.anyone: "Anyone may sign up; the site takes a battle tag.",
 }
 SHUT = "Signups are closed."
-LINK_FIRST = (
-    "No player profile is linked to this Discord account. "
-    "Sign in on the site once, then press again."
-)
 GONE = "That event is gone."
 PER_ROUND = "This event checks in per round. Use /availability."
 # What a press answers when the caller's one action is not the button's action
@@ -55,11 +52,13 @@ NO_SIGN_UP = {
 }
 NO_CHECK_IN = {
     "sign_up": "Sign up for this event first.",
-    "withdraw": "The check-in is not open yet.",
     "checked_in": "You are already checked in.",
     "view": "This event has started.",
     "closed": "The check-in is not open.",
 }
+# The two sides of the window, for a member who is in and not checked in
+NOT_OPEN_YET = "The check-in is not open yet."
+CHECK_IN_CLOSED = "The check-in has closed."
 
 
 def _when(event: EventPublic) -> str:
@@ -106,8 +105,8 @@ def _links(event: EventPublic) -> list[str]:
 
 
 def _buttons(event: EventPublic) -> dict[str, Any]:
-    """Sign up and Check in. A phase that takes neither shows them greyed out."""
-    over = event.phase in ("draft", "running", "finished")
+    """Sign up and Check in, each greyed out while its own window is shut."""
+    no_actions = event.phase in ("draft", "running", "finished")
     return {
         "type": 1,
         "components": [
@@ -116,14 +115,15 @@ def _buttons(event: EventPublic) -> dict[str, Any]:
                 "style": 3,
                 "label": "Sign up",
                 "custom_id": f"{SIGN_UP}:{event.id}",
-                "disabled": over or not event.signups_open,
+                "disabled": no_actions or not event.signups_open,
             },
             {
                 "type": 2,
                 "style": 1,
                 "label": "Check in",
                 "custom_id": f"{CHECK_IN}:{event.id}",
-                "disabled": over or not event.checkin_enabled,
+                "disabled": no_actions
+                or not (event.checkin_enabled and event.checkin_open),
             },
         ],
     }
@@ -188,6 +188,13 @@ def _sign_up(
     return f"Signed up for {named}: {_line(entrant)}"
 
 
+def _window_text(row: MemberEventRow) -> str:
+    """Which side of the check-in window a press on a shut one landed on."""
+    round_ = row.next_round
+    closes = (round_.end_date or round_.start_date) if round_ else row.start
+    return CHECK_IN_CLOSED if closes and closes < utcnow().date() else NOT_OPEN_YET
+
+
 def press(payload: dict[str, Any], services: "Services") -> tuple[dict[str, Any], bool]:
     """A press on Sign up or Check in, answered privately.
 
@@ -204,6 +211,8 @@ def press(payload: dict[str, Any], services: "Services") -> tuple[dict[str, Any]
         return {"content": GONE}, PRIVATE
     signing = prefix == SIGN_UP
     if row.action != ("sign_up" if signing else "check_in"):
+        if not signing and row.action == "withdraw":
+            return {"content": _window_text(row)}, PRIVATE
         refusals = NO_SIGN_UP if signing else NO_CHECK_IN
         return {"content": refusals[row.action]}, PRIVATE
     try:

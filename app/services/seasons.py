@@ -139,7 +139,7 @@ def _refuse_played(session: OrmSession, season_id: int, dropped: list[int]) -> N
     if held:
         numbers = ", ".join(str(playday) for playday in sorted(held))
         raise BadRequestError(
-            f"round {numbers} still holds matches; delete them before the count falls"
+            f"Round {numbers} still holds fixtures; delete them before the count falls"
         )
 
 

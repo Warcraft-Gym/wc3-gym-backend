@@ -3,7 +3,7 @@ type: Domain Concept
 title: Scheduling and availability
 description: A player answers whether they can play a round, keeps soft blocks that inform but never constrain, and the two players of a series see the free time they share.
 tags: [scheduling, availability, rounds]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T14:30:00Z }
 sources:
   - id: availability
     resource: ../../../app/services/availability.py
@@ -15,7 +15,7 @@ sources:
     resource: ../../../app/core/free_time.py
     title: Blocked and free time as UTC intervals
   - id: checkin
-    resource: ../../../app/core/availability.py
+    resource: ../../../app/core/checkin_hint.py
     title: What the check-in shows one player for one round
 ---
 
@@ -42,4 +42,4 @@ What follows, each learned the hard way:
 
 # Check-in
 
-A season may open a check-in a number of days before each round. `app/core/availability.py` computes what the check-in shows for one player and one round from their answer and their blocks; it writes nothing.
+A season may open a check-in a number of days before each round. `app/core/checkin_hint.py` computes what the check-in shows for one player and one round from their answer and their blocks; it writes nothing.

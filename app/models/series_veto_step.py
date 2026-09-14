@@ -53,8 +53,13 @@ class SeriesVetoStepPublic(SQLModel):
 
 
 class VetoPlayer(SQLModel):
-    id: int
+    """One side of the board: a player, or the team a fixture side fields."""
+
+    # The user of the side, and never a team: a team side carries none
+    id: int | None = None
     name: str | None = None
+    team_id: int | None = None
+    team_name: str | None = None
 
 
 class SeriesVetoPublic(SQLModel):

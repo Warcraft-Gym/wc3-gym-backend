@@ -37,7 +37,7 @@ from app.services.series_rules import (
 
 class SeriesVetoService:
     def is_complete(self, series_id: int) -> bool:
-        """Whether every step of the season's order is taken. A season with no
+        """Whether every step of the event's order is taken. An event with no
         order has nothing to take."""
         with Session() as session:
             series = session.get(Series, series_id)
@@ -243,15 +243,20 @@ def _letter(side: int | None) -> str | None:
 
 
 def _veto_side(session: OrmSession, series: Series, side: int) -> VetoPlayer:
-    """The name the board prints for one side: the player, or the team."""
+    """The name the board prints for one side: the player, or the team.
+
+    `id` is the user of the side or nothing at all, so a client may compare it
+    with its own user id; a team side names the team in its own two fields.
+    """
     user = series.player1 if side == 1 else series.player2
     if user is not None:
         return VetoPlayer(id=ident(user), name=user.name)
     entrant_id = series.entrant1_id if side == 1 else series.entrant2_id
     entrant = session.get(EventEntrant, entrant_id) if entrant_id else None
     team = session.get(Team, entrant.team_id) if entrant and entrant.team_id else None
-    # A team side names the team, which is what the board has to print
-    return VetoPlayer(id=ident(team) if team else 0, name=team.name if team else None)
+    if team is None:
+        return VetoPlayer()
+    return VetoPlayer(name=team.name, team_id=ident(team), team_name=team.name)
 
 
 def _board(

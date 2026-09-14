@@ -4,7 +4,7 @@ from typing import Any
 
 from app.core.db import Session
 from app.core.exceptions import ApiError, BadRequestError, NotFoundError
-from app.core.scoring import decided, wins_needed
+from app.core.scoring import decided, wins_needed, wins_of
 from app.models.enums import Race
 from app.models.series import Series, SeriesUpdate
 from app.services import discord_posts, replays, series_games
@@ -35,8 +35,9 @@ def update_player_series(
     if not series:
         raise NotFoundError("series_not_found")
 
-    # The caller plays a side, or is on the roster the side's team fields
-    with Session.begin() as session:
+    # The caller plays a side, or is on the roster the side's team fields. The
+    # check writes nothing, so it reads in a session and opens no transaction.
+    with Session() as session:
         row = session.get(Series, series_id)
         if row is None or acts_for_side(session, row, user.id) is None:
             raise ApiError(403, {"error": "not_authorized_for_this_series"})
@@ -47,7 +48,7 @@ def update_player_series(
     original_p2_score = series.player2_score
 
     # One replay slot per game of the best-of the series plays, game1..gameN
-    wins = series.rules.best_of // 2 + 1 if series.rules else wins_needed(None)
+    wins = wins_of(series.rules.best_of) if series.rules else wins_needed(None)
     action = data.get("action")
 
     reporting = action == "score_updated" or any(

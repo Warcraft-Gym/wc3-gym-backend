@@ -3,7 +3,7 @@ type: Domain Concept
 title: KOTH night
 description: A King of the Hill night is one event of the KOTH league with three MMR brackets as divisions, a chain per bracket, and a Twitch chat signup.
 tags: [koth, events, domain]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T14:30:00Z }
 sources:
   - id: night
     resource: ../../../app/services/koth/night.py
@@ -37,6 +37,6 @@ A player may enter on more than one race. Each race is its own entrant row with 
 
 # The old payloads
 
-Nightbot, the stream overlay and the run crew's bookmarks still call `/koth/events`, `/koth/events/active`, `/koth/signups`, `/koth/matches` and `/koth/events/{id}/kings`. `app/services/koth/legacy.py` answers those shapes from the event rows: a signup is an entrant, a match is a series of the chain, a bracket is a division, the king is derived. The four old `koth_*` tables are gone; `app/models/koth_legacy.py` holds only the shapes.
+Nightbot, the stream overlay and the run crew's bookmarks still call `/koth/events`, `/koth/events/active`, `/koth/signups`, `/koth/matches` and `/koth/events/{id}/kings`. `app/services/koth/legacy.py` answers those shapes from the event rows: a signup is an entrant, a match is a series of the chain, a bracket is a division, the king is derived. An old route that names an entrant or a series refuses an id that is not a KOTH entrant or series. The four old `koth_*` tables are gone; `app/models/koth_legacy.py` holds only the shapes.
 
 The night routes are `POST /koth/nights` (open, with the start time and the three bounds), `POST /koth/nights/{id}/close`, and the event routes for everything else.

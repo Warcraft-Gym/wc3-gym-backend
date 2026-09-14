@@ -102,7 +102,7 @@ def get_team_availability(
     claims: RequireCaptain,
     service: AvailabilityServiceDep,
 ) -> list[RoundAvailabilityPublic]:
-    """The weeks the players of that team season have answered for."""
+    """The rounds the players of that team season have answered for."""
     _own_team(claims, team_id, season_id)
     return service.for_team(team_id, season_id)
 
@@ -116,7 +116,7 @@ def set_team_availability(
     service: AvailabilityServiceDep,
     user_service: UserServiceDep,
 ) -> list[RoundAvailabilityPublic]:
-    """Answer one week for a player of the team, as their captain."""
+    """Answer one round for a player of the team, as their captain."""
     _own_team(claims, team_id, season_id)
     if not service.on_roster(team_id, season_id, data.user_id):
         raise BadRequestError(f"Player {data.user_id} is not on this team this season")

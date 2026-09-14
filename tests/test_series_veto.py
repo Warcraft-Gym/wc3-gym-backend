@@ -92,8 +92,18 @@ def test_the_two_players_ban_and_pick_until_the_veto_is_complete(
         "pool": pool,
         "week_map_id": pool[0],
         "map_rules": "fixed,loser,loser",
-        "player1": {"id": seeded["player_ids"][1], "name": "P2"},
-        "player2": {"id": seeded["player_ids"][3], "name": "P4"},
+        "player1": {
+            "id": seeded["player_ids"][1],
+            "name": "P2",
+            "team_id": None,
+            "team_name": None,
+        },
+        "player2": {
+            "id": seeded["player_ids"][3],
+            "name": "P4",
+            "team_id": None,
+            "team_name": None,
+        },
     }
 
     body = taken(client, series_id, side_a, pool[1])
@@ -475,3 +485,32 @@ def test_a_series_with_no_sides_has_no_board(
 
     resp = client.get(f"/player-series/{series_id}/veto", headers=auth_headers)
     assert resp.status_code == 400, resp.text
+
+
+def test_a_team_side_names_its_team_and_carries_no_user_id(
+    client: Client,
+    auth_headers: dict[str, str],
+    seeded: dict[str, Any],
+    member: Callable[..., dict[str, str]],
+) -> None:
+    """A fixture side fields a team, so the board names the team in its own two
+    fields and leaves the user id empty for a client to compare against."""
+    from tests.test_stage_engine import generate, stage_series, team_cup
+
+    event, stage, team_ids, tags = team_cup(client, auth_headers, member)
+    generate(client, auth_headers, event, stage)
+    series = next(
+        row
+        for row in stage_series(client, event, stage)["series"]
+        if row["entrant1_id"] is not None
+    )
+
+    board = read(client, series["id"], member(tags[0][0]))
+
+    assert board["player1"] == {
+        "id": None,
+        "name": series["team1"]["name"],
+        "team_id": series["team1"]["id"],
+        "team_name": series["team1"]["name"],
+    }
+    assert board["player1"]["team_id"] in team_ids

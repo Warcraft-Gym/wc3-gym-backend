@@ -3,7 +3,7 @@ type: Domain Concept
 title: Series reporting
 description: A result is reported game by game with a map and a replay per game, a veto board that is derived from the season rules, an off race per side, and casts that any member may claim.
 tags: [series, veto, replays, casts]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T14:30:00Z }
 sources:
   - id: games
     resource: ../../../app/services/series_games.py
@@ -40,6 +40,8 @@ The season's `map_rules` names one rule per game: `fixed` takes the round's map 
 The board is derived: the season's `pick_ban` names the order and the side of every step, the season's pool names the maps, and a `fixed` rule takes its map off the board because it is already game 1. Only the steps taken are stored (`series_veto_step`, with `entered_by`). A veto done elsewhere is entered after the fact on the same board. The board is the one place a veto exists; there is no launcher, no ad-hoc lobby, and the Discord `/veto` command only points at the board.
 
 The veto is not a required input. The report warns, strongly, when a result comes without one; it never blocks. See [the decision](../decisions/veto-warns-never-blocks.md).
+
+Each side of the board answer is a player or a team: `id` and `name` are the user's, null for a team side, which carries `team_id` and `team_name` instead. `viewer_side` names the side the caller acts for, null for an admin, who edits either side.
 
 # Off race
 

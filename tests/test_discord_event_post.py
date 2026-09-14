@@ -114,10 +114,18 @@ def test_the_card_names_the_event_its_format_and_how_to_enter(
         f"[Event page](<{SITE}/events/{cup}>)",
         "[Rules](<https://rules.test/autumn>)",
     ]
+    # The cup starts in seven days, so its three day check-in window is shut
     buttons = card["components"][0]["components"]
     assert [(b["label"], b["custom_id"], b["disabled"]) for b in buttons] == [
         ("Sign up", f"event_signup:{cup}", False),
-        ("Check in", f"event_checkin:{cup}", False),
+        ("Check in", f"event_checkin:{cup}", True),
+    ]
+
+    set_fields(cup, start_date=TODAY + timedelta(days=1))
+    open_card = event_cards.event_card(EventService().get(cup))
+    assert [b["disabled"] for b in open_card["components"][0]["components"]] == [
+        False,
+        False,
     ]
 
 
@@ -228,13 +236,19 @@ def test_a_shut_check_in_window_refuses_the_press(
     public_key: None,
     discord_calls: list[tuple[str, str, Any]],
 ) -> None:
-    """The window opens checkin_days before the start, so nothing is open yet."""
+    """The window opens checkin_days before the start and closes on the day it
+    starts, and the press names the side it landed on."""
     enter(cup, seeded["player_ids"][0])
     set_fields(cup, checkin_days=0)
 
     send(client, press(event_cards.CHECK_IN, cup))
 
-    assert reply(discord_calls) == "The check-in is not open yet."
+    assert reply(discord_calls) == event_cards.NOT_OPEN_YET
+
+    set_fields(cup, start_date=TODAY - timedelta(days=1))
+    send(client, press(event_cards.CHECK_IN, cup))
+
+    assert reply(discord_calls) == event_cards.CHECK_IN_CLOSED
 
 
 def test_an_event_with_dated_rounds_sends_the_press_to_the_round(

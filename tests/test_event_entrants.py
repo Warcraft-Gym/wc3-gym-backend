@@ -1,7 +1,7 @@
 """Signing up to an event, withdrawing, checking in and the eligibility warnings.
 
 A warning never refuses a signup: the entrant row carries it and an admin
-decides. The GNL season keeps its own signup route, so a gnl-kind event
+decides. An event that drafts its teams keeps its own signup route, so it
 refuses here and names it.
 """
 
@@ -11,7 +11,7 @@ from typing import Any
 from httpx2 import Client, Response
 
 from app.core.db import Session
-from app.models.enums import EventKind, Race, SignupPolicy
+from app.models.enums import EntrantKind, EventKind, Race, SignupPolicy
 from app.models.relationships import DBTeamSeasonCaptain
 from app.models.w3c_stats import W3CStats
 from tests.test_events import add_event, set_fields
@@ -244,18 +244,21 @@ def test_a_rating_older_than_the_window_is_not_read_at_all(
     assert rows == {"P1#1111": None, "P2#2222": 1500}
 
 
-def test_a_gnl_event_sends_the_signup_to_its_season_page(
+def test_an_event_that_drafts_its_teams_takes_no_direct_signup(
     client: Client, seeded: dict[str, Any], member: Member
 ) -> None:
-    """GNL entrants stay on the season signup table this wave."""
-    event = add_event(kind=EventKind.gnl)
+    """The entrant kind refuses it, not the kind of the event: a GNL season
+    drafts its teams, so its players sign up on its season page."""
+    event = add_event(kind=EventKind.gnl, entrant_kind=EntrantKind.drafted_teams)
 
     refused = sign_up(client, event, member("1"))
 
     assert refused.status_code == 400
     assert refused.json() == {
-        "error": "A GNL season takes its signups on its season page"
+        "error": "This event drafts its teams, so it takes no direct signup"
     }
+    # A cup of the same kind takes its entrants, because it drafts none
+    assert sign_up(client, add_event(name="Cup"), member("1")).status_code == 201
 
 
 def test_an_admin_enters_and_removes_any_player(

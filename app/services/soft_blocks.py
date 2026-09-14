@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session as OrmSession
 from sqlmodel import col
 
 from app.core import free_time
-from app.core.availability import blocked
+from app.core.checkin_hint import blocked, zone_of
 from app.core.db import Session
 from app.core.exceptions import ApiError, BadRequestError, NotFoundError
 from app.models.season import Season
@@ -131,7 +131,10 @@ class SoftBlockService:
             side1, side2 = series.player1_id, series.player2_id
             if side1 is None or side2 is None:
                 raise BadRequestError("The series has no sides to compare yet")
-            spans = [blocked(session, side, start, end) for side in (side1, side2)]
+            spans = [
+                blocked(session, side, start, end, zone_of(session, side))
+                for side in (side1, side2)
+            ]
         ranges = free_time.free(start, end, *spans)
         seconds = sum((hi - lo).total_seconds() for lo, hi in ranges)
         return FreeTimePublic(

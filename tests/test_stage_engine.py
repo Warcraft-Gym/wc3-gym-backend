@@ -205,6 +205,31 @@ def test_a_third_place_series_closes_the_final_round(
     assert (final[1]["slot1"][1], final[1]["slot2"][1]) == (True, True)
 
 
+def test_the_third_place_series_decides_places_three_and_four(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """The final prints 1 and 2 and the third place series 3 and 4, so the
+    beaten semi-finalist never stands above the runner up, whatever his
+    game difference says."""
+    event, (stage,) = cup(4, third_place=True)
+    generate(client, auth_headers, event, stage)
+    semis = [row for row in bracket(stage) if row["number"] == 1]
+    assert score(client, auth_headers, semis[0]["id"], 2, 0).status_code == 200
+    assert score(client, auth_headers, semis[1]["id"], 2, 1).status_code == 200
+
+    final, third = (row for row in bracket(stage) if row["number"] == 2)
+    assert score(client, auth_headers, final["id"], 2, 0).status_code == 200
+    assert score(client, auth_headers, third["id"], 2, 0).status_code == 200
+
+    rows = client.get(f"/events/{event}/stages/{stage}/standings").json()[0]["rows"]
+    assert [row["user_id"] for row in rows] == [
+        final["sides"][0],
+        final["sides"][1],
+        third["sides"][0],
+        third["sides"][1],
+    ]
+
+
 def test_eight_entrants_double_elimination_end_in_a_grand_final(
     client: Client, auth_headers: dict[str, str]
 ) -> None:
@@ -1031,6 +1056,33 @@ def test_a_cup_reads_running_on_the_first_result_and_finished_on_the_last(
     assert phase(client, event) == "finished"
 
 
+def test_a_cup_whose_playoff_is_undrawn_reads_running_not_finished(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """The last stage decides the finish: a played out first stage with an
+    empty playoff after it keeps the cup running, and dropping that playoff
+    finishes it."""
+    event, (first, second) = cup(4, stages=2)
+    generate(client, auth_headers, event, first)
+    for row in stage_series(client, event, first)["series"]:
+        if row["player1_id"] is not None:
+            assert score(client, auth_headers, row["id"], 2, 0).status_code == 200
+    final = next(
+        row
+        for row in stage_series(client, event, first)["series"]
+        if row["player1_score"] is None
+    )
+    assert score(client, auth_headers, final["id"], 2, 0).status_code == 200
+
+    assert phase(client, event) == "running"
+
+    with Session.begin() as session:
+        stage = session.get(EventStage, second)
+        assert stage is not None
+        session.delete(stage)
+    assert phase(client, event) == "finished"
+
+
 def team_cup(
     client: Client,
     auth: dict[str, str],
@@ -1100,6 +1152,40 @@ def test_a_2v2_cup_of_four_teams_draws_a_bracket_of_entrant_sides(
         row["team2"]["name"] for row in semis
     } == {"T1", "T2", "T3", "T4"}
     assert {row["team1"]["id"] for row in semis} <= set(team_ids)
+
+
+def test_a_series_holds_the_roster_of_its_own_two_sides(
+    client: Client, auth_headers: dict[str, str], member: Callable[..., dict[str, str]]
+) -> None:
+    """One larger roster sizes its own series only, never the whole bracket."""
+    event, stage, team_ids, _ = team_cup(client, auth_headers, member)
+    with Session.begin() as session:
+        third = User(
+            name="E9",
+            battleTag="E9#0009",
+            discordTag="e9",
+            discordId="90009",
+            race=Race.HU,
+        )
+        session.add(third)
+        session.flush()
+        third_id = ident(third)
+    added = client.post(
+        f"/teams/{team_ids[0]}/seasons/{event}/players",
+        json={"player_ids": [third_id]},
+        headers=auth_headers,
+    )
+    assert added.status_code == 200, added.text
+
+    generate(client, auth_headers, event, stage)
+
+    rows = stage_series(client, event, stage)["series"]
+    semis = [row for row in rows if row["entrant1_id"] is not None]
+    with_t1 = [
+        row for row in semis if "T1" in (row["team1"]["name"], row["team2"]["name"])
+    ]
+    assert [row["side_size"] for row in with_t1] == [3]
+    assert [row["side_size"] for row in semis if row not in with_t1] == [2]
 
 
 def test_a_roster_member_reports_a_team_series_and_a_stranger_may_not(
@@ -1284,6 +1370,34 @@ def test_a_playoff_seeds_from_the_table_of_the_stage_before(
     assert len([row for row in rows if row["seed"] is None]) == 2
     assert bracket(second) == []
     assert generate(client, auth_headers, event, second) == {"series": 6, "rounds": 2}
+
+
+def test_a_playoff_refuses_to_seed_while_the_stage_before_owes_a_result(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """An early press would hand the old seed order back stamped previous_stage,
+    so the seed write refuses exactly as advance does."""
+    event, (first, second) = cup(4, StageFormat.round_robin, stages=2, advance_count=2)
+    generate(client, auth_headers, event, first)
+    rows = bracket(first)
+    assert score(client, auth_headers, rows[0]["id"], 2, 0).status_code == 200
+
+    early = client.put(
+        f"/events/{event}/stages/{second}/seeds",
+        json={"source": "previous_stage"},
+        headers=auth_headers,
+    )
+
+    assert early.status_code == 400, early.text
+    assert early.json() == {"error": "Every series of the stage needs a result first"}
+    for row in rows[1:]:
+        assert score(client, auth_headers, row["id"], 2, 0).status_code == 200
+    seeded = client.put(
+        f"/events/{event}/stages/{second}/seeds",
+        json={"source": "previous_stage"},
+        headers=auth_headers,
+    )
+    assert seeded.status_code == 200, seeded.text
 
 
 def test_a_four_team_league_pairs_its_teams_into_fixtures(

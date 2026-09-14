@@ -55,8 +55,10 @@ def result_card(series: SeriesPublic) -> dict[str, Any]:
     the card was last written."""
     match = series.match
     score = f"{series.player1_score}-{series.player2_score}"
-    week = match.playday if match else "?"
-    lines = [f"{_name(series.player1)} {score} {_name(series.player2)} · Round {week}"]
+    round_number = match.playday if match else "?"
+    lines = [
+        f"{_name(series.player1)} {score} {_name(series.player2)} · Round {round_number}"
+    ]
     # ponytail: the links expire after 7 days; the match page keeps the files
     lines += [f"Game {row.game_no}: {row.url}" for row in replays.for_series(series.id)]
     site = (os.getenv("FRONTEND_URL") or "").rstrip("/")
@@ -256,8 +258,9 @@ def post_event(event_id: int, channel_id: str) -> str:
     if any(post.channel_id == channel_id for post in _posts(event_id, (EVENT,))):
         refresh_series(event_id, (EVENT,))
         return "edited"
-    wait_for_channel(channel_id)
+    # The card is built before the pacing wait, so a draft answers 404 at once
     card = event_cards.event_card(EventService().get(event_id))
+    wait_for_channel(channel_id)
     message_id = discord.post_to_channel(channel_id, card)
     if not message_id:
         raise ExternalServiceError("Discord did not take the event card")

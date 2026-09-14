@@ -344,9 +344,9 @@ def set_player_availability(
     credentials: Credentials,
     data: PlayerAvailabilityWrite,
 ) -> list[RoundAvailabilityPublic]:
-    """Write the identified player's answer for one week of a season.
+    """Write the identified player's answer for one round of a season.
 
-    A null answer clears the week, which puts the player back to available.
+    A null answer clears the round, which puts the player back to available.
     """
     entry, user = dashboard_player(request, credentials, user_service)
 

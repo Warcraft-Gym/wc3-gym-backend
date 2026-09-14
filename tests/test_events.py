@@ -154,6 +154,28 @@ def test_an_event_finishes_on_the_last_result_or_the_end_date(
     assert phase(client, event) == "finished"
 
 
+def test_an_event_that_played_nothing_finishes_on_the_day_it_starts(
+    client: Client,
+) -> None:
+    """A night closed with nothing played holds no series, so the day it starts
+    on ends it; a night still to come is taking its check-in."""
+    over = add_event(
+        name="Night 1",
+        kind=EventKind.koth,
+        starts_at=NOW - timedelta(days=1),
+        signups_open=False,
+    )
+    assert phase(client, over) == "finished"
+
+    later = add_event(
+        name="Night 2",
+        kind=EventKind.koth,
+        starts_at=NOW + timedelta(days=1),
+        signups_open=False,
+    )
+    assert phase(client, later) == "checkin"
+
+
 def test_the_event_list_reads_newest_first_and_filters(
     client: Client, auth_headers: dict[str, str]
 ) -> None:

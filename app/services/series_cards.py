@@ -12,6 +12,7 @@ from sqlmodel import col
 
 from app.core.db import Session
 from app.core.event_label import label as event_label
+from app.core.map_order import DEFAULT_RULES
 from app.models.enums import Race
 from app.models.map import Map
 from app.models.relationships import round_row
@@ -29,7 +30,7 @@ from app.services.commands.base import (
 )
 from app.services.commands.veto import board_link, ping
 from app.services.ladder import mmr_on
-from app.services.series_veto import DEFAULT_RULES, SeriesVetoService
+from app.services.series_veto import SeriesVetoService
 
 COLOR = 0x4A4DB8
 # Discord takes 6000 characters over a message's embeds and 4096 in one description
