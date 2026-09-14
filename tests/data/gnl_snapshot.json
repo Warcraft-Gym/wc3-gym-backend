@@ -605,6 +605,7 @@
         "running": true,
         "season_id": 1,
         "season_name": "Season 1",
+        "signup_race": null,
         "team_count": 2,
         "team_id": 1,
         "team_name": "Alpha",

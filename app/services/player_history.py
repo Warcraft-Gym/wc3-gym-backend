@@ -1,17 +1,19 @@
 """What one player did in the league, derived at read time.
 
-Nine statements answer the whole page, and none of them grows with the number
+Ten statements answer the whole page, and none of them grows with the number
 of events or opponents: one reads every series the player stood in with its
 event and its opponent, one the teams they were rostered on, one the events
-they entered as an entrant, one the teams each of those events held, one the
-current season setting, a pair reads the maps of the played series (the fixed
-map and the veto picks), and the last pair is the score system and the points
-of every team, borrowed from app.services.derived.
+they entered as an entrant, one the GNL seasons they signed up for, one the
+teams each of those events held, one the current season setting, a pair reads
+the maps of the played series (the fixed map and the veto picks), and the last
+pair is the score system and the points of every team, borrowed from
+app.services.derived.
 
 Every kind of event answers here. A GNL series hangs off a fixture, which
 names the season; a bracket series has no fixture and names its round, which
 names the event. The entrant read carries an event the player entered but has
-played no series in yet.
+played no series in yet, and the signup read the GNL season they signed up for
+before any draft put them on a team.
 
 A series with no map score is unplayed: it pays no record and shows in no
 meeting. A won series is one the player took more maps in, as the career
@@ -56,6 +58,8 @@ type Rosters = dict[int, tuple[int, str | None, str, str | None]]
 type Places = dict[tuple[int, int], tuple[int, int]]
 # event -> the row of the event the player entered as an entrant
 type Entered = dict[int, Row[Any]]
+# season -> the row of the GNL season the player signed up for
+type SignedUp = dict[int, Row[Any]]
 
 
 def _meetings(session: OrmSession, user_id: int) -> Sequence[Row[Any]]:
@@ -169,6 +173,27 @@ def _entered(session: OrmSession, user_id: int) -> Entered:
     return {row.season_id: row for row in rows}
 
 
+def _signups(session: OrmSession, user_id: int) -> SignedUp:
+    """Every GNL season the player signed up for, in one statement.
+
+    A signup is written the moment the player registers, so the season answers
+    here from that moment: before the draft, and for good when no team ever
+    picked them.
+    """
+    rows = session.execute(
+        select(
+            col(Season.id).label("season_id"),
+            col(Season.name).label("season_name"),
+            LEAGUE_SHORT_NAME,
+            col(Season.kind).label("kind"),
+            col(DBUserSeasonSignup.race).label("race"),
+        )
+        .join(DBUserSeasonSignup, col(DBUserSeasonSignup.season_id) == Season.id)
+        .where(col(DBUserSeasonSignup.user_id) == user_id)
+    ).all()
+    return {row.season_id: row for row in rows}
+
+
 def _runs_today(row: Row[Any] | None) -> bool:
     """An event the player entered is running when today falls in its window."""
     if row is None or row.start_date is None:
@@ -213,22 +238,28 @@ def _events(
     rows: Sequence[Row[Any]],
     rosters: Rosters,
     entered: Entered,
+    signups: SignedUp,
     places: Places,
     current_id: int | None,
 ) -> list[HistoryEvent]:
-    """One row per event the player was rostered in, entered, or played in.
+    """One row per event the player was rostered in, entered, signed up for,
+    or played in.
 
     A rostered event is a team league, so its kind is the default; the played
-    series and the entrant rows carry the kind of every other event.
+    series and the entrant rows carry the kind of every other event. A season
+    the player only signed up for stands here with an empty record.
     """
     names = {season_id: name for season_id, (_, _, name, _) in rosters.items()}
     names |= {row.season_id: row.season_name for row in rows}
     names |= {row.season_id: row.season_name for row in entered.values()}
+    names |= {row.season_id: row.season_name for row in signups.values()}
     leagues = {season_id: one for season_id, (_, _, _, one) in rosters.items()}
     leagues |= {row.season_id: row.league_short_name for row in rows}
     leagues |= {row.season_id: row.league_short_name for row in entered.values()}
+    leagues |= {row.season_id: row.league_short_name for row in signups.values()}
     kinds = {row.season_id: row.kind for row in rows}
     kinds |= {row.season_id: row.kind for row in entered.values()}
+    kinds |= {row.season_id: row.kind for row in signups.values()}
 
     tallies: dict[int, list[int]] = {}
     for row in rows:
@@ -246,6 +277,7 @@ def _events(
         team_id, team_name, _, _ = rosters.get(season_id, (None, None, None, None))
         played, won, lost = tallies.get(season_id, [0, 0, 0])
         place, team_count = places.get((team_id, season_id), (None, None))
+        signup = signups.get(season_id)
         events.append(
             HistoryEvent(
                 season_id=season_id,
@@ -260,6 +292,7 @@ def _events(
                 place=place,
                 team_count=team_count,
                 running=season_id == current_id or _runs_today(entered.get(season_id)),
+                signup_race=race_value(signup.race) if signup else None,
             )
         )
     return events
@@ -352,7 +385,10 @@ def history(user_id: int) -> PlayerHistory:
         rows = _meetings(session, user_id)
         rosters = _rosters(session, user_id)
         entered = _entered(session, user_id)
-        season_ids = {row.season_id for row in rows} | set(rosters) | set(entered)
+        signups = _signups(session, user_id)
+        season_ids = (
+            {row.season_id for row in rows} | set(rosters) | set(entered) | set(signups)
+        )
         played_ids = {row.series_id for row in rows if row.own or row.opp}
         current = Settings.get_by_key(session, "current_gnl_season")
         value = current.value if current else None
@@ -361,6 +397,7 @@ def history(user_id: int) -> PlayerHistory:
                 rows,
                 rosters,
                 entered,
+                signups,
                 _places(session, season_ids),
                 int(value) if value and value.isdigit() else None,
             ),

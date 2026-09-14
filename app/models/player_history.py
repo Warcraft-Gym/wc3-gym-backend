@@ -66,6 +66,8 @@ class HistoryEvent(SQLModel):
     place: int | None = None
     team_count: int | None = None
     running: bool = False
+    # The race the player signed this season up on; null when they never did
+    signup_race: str | None = None
 
 
 class PlayerHistory(SQLModel):
