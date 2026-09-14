@@ -7,7 +7,7 @@ own phase word. The event phase is computed on every read and never stored.
 
 import random
 from collections.abc import Sequence
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 
 from sqlalchemy import delete, func, select, update
@@ -47,6 +47,7 @@ from app.models.relationships import (
     DBUserSeasonSignup,
     EventRoundPublic,
 )
+from app.models.round_availability import DBRoundAvailability
 from app.models.season import (
     NO_SERIES,
     EventCreate,
@@ -59,10 +60,18 @@ from app.models.season import (
     series_counts,
     series_counts_by_event,
 )
+from app.models.settings import Settings
 from app.models.team import Team
 from app.models.team_reduced import TeamReduced
 from app.models.types import utcnow
 from app.models.user import User, UserPublic
+from app.models.w3c_stats import W3CStats
+
+# How many W3C seasons back a rating is still the player's current one
+SEASONS = 3
+
+# The setting that names the W3C season the app is on
+W3C_SEASON_KEY = "current_w3c_season"
 
 
 def phase_of(
@@ -311,6 +320,8 @@ class EventService:
             ).all()
             joined = _joined_events(session, user_id)
             counts = series_counts_by_event(session, [event.id for event in events])
+            rounds = {event.id: next_round(event) for event in events}
+            answered = _round_answers(session, user_id, rounds)
             return [
                 _member_row(
                     session,
@@ -318,6 +329,8 @@ class EventService:
                     counts.get(event.id, NO_SERIES),
                     event.id in joined,
                     joined.get(event.id),
+                    rounds.get(event.id),
+                    event.id in answered,
                 )
                 for event in events
             ]
@@ -661,18 +674,70 @@ def _joined_events(
     return joined
 
 
+def _round_answers(
+    session: OrmSession,
+    user_id: int | None,
+    rounds: dict[int | None, DBEventRound | None],
+) -> set[int]:
+    """The events whose next round the caller has answered, in one statement.
+
+    The round shape stores the check-in as a round_availability row, so the
+    member rows read it there and never off the entrant stamp.
+    """
+    wanted = {
+        (event_id, round_.number)
+        for event_id, round_ in rounds.items()
+        if event_id is not None and round_ is not None
+    }
+    if user_id is None or not wanted:
+        return set()
+    rows = session.execute(
+        select(
+            col(DBRoundAvailability.season_id), col(DBRoundAvailability.playday)
+        ).where(
+            col(DBRoundAvailability.user_id) == user_id,
+            col(DBRoundAvailability.season_id).in_({key[0] for key in wanted}),
+        )
+    ).all()
+    return {event_id for event_id, playday in rows if (event_id, playday) in wanted}
+
+
+def _answered_at(event: Season, round_: DBEventRound) -> datetime | None:
+    """When a round answer stands from.
+
+    The row carries no time of its own, so the read names the moment the
+    round's check-in opened; a stamp of the answer needs a new column.
+    """
+    window = checkin_window(event, round_)
+    opens = window[0] if window else round_.start_date
+    return datetime.combine(opens, time(), tzinfo=UTC) if opens else None
+
+
 def _member_row(
     session: OrmSession,
     event: Season,
     counts: tuple[int, int, int],
     joined: bool,
     entrant: EventEntrant | None,
+    round_: DBEventRound | None,
+    answered: bool,
 ) -> MemberEventRow:
     """One member home row: the event, and what the caller may do with it."""
-    checked_in_at = entrant.checked_in_at if entrant else None
     phase = phase_of(session, event, counts)
-    round_ = next_round(event)
     is_open = event.checkin_enabled and checkin_open(event)
+    shape = (
+        None
+        if not event.checkin_enabled
+        else "round"
+        if round_ is not None
+        else "event"
+    )
+    # The round shape takes its check-in through PUT /player-availability
+    checked_in_at = (
+        (_answered_at(event, round_) if answered else None)
+        if shape == "round" and round_ is not None
+        else (entrant.checked_in_at if entrant else None)
+    )
     return MemberEventRow(
         kind=event.kind,
         id=ident(event),
@@ -686,11 +751,7 @@ def _member_row(
         url=event.page_url,
         entrant_id=ident(entrant) if entrant else None,
         checked_in_at=checked_in_at,
-        checkin_shape=None
-        if not event.checkin_enabled
-        else "round"
-        if round_ is not None
-        else "event",
+        checkin_shape=shape,
         checkin_open=is_open,
         next_round=EventRoundPublic.from_row(round_) if round_ else None,
         action=_member_action(phase, event, joined, checked_in_at, is_open),
@@ -830,18 +891,30 @@ def _by_battle_tag(session: OrmSession, battle_tag: str, race: Race) -> User:
     return user
 
 
-def _stats_for(user: User, race: Race) -> tuple[int | None, int]:
-    """The player's newest W3C rating on that race, and the games behind it.
+def _w3c_season(session: OrmSession) -> int:
+    """The W3C season the app reads ratings against, or the newest one stored."""
+    named = session.scalar(
+        select(col(Settings.value)).where(col(Settings.key) == W3C_SEASON_KEY)
+    )
+    if named:
+        return int(named)
+    return session.scalar(select(func.max(col(W3CStats.wc3_season)))) or 0
 
-    The rating is the one the newest stored W3C season carries; the games are
-    every season the app has synced for that race, because a min-games rule
-    asks how much the player has played, not how much this season.
+
+def _stats_for(user: User, race: Race, season: int) -> tuple[int | None, int]:
+    """The player's current W3C rating on that race, and the games behind it.
+
+    A season the player did not play on that race carries no rating, so the
+    rating is the newest stored season that carries one, three seasons back
+    from the season the app is on and no further: an older rating is not the
+    player's current one. The games are every season the app has synced for
+    that race, because a min-games rule asks how much the player has played,
+    not how much this season.
     """
     rows = [stat for stat in (user.w3c_stats or []) if stat.race == race]
-    if not rows:
-        return None, 0
-    newest = max(rows, key=lambda stat: stat.wc3_season)
-    return newest.mmr, sum(stat.games or 0 for stat in rows)
+    played = [stat for stat in rows if stat.mmr and stat.wc3_season > season - SEASONS]
+    rating = max(played, key=lambda stat: stat.wc3_season).mmr if played else None
+    return rating, sum(stat.games or 0 for stat in rows)
 
 
 def _warnings(
@@ -871,7 +944,8 @@ def _entrant_publics(
         team.id: team
         for team in session.scalars(select(Team).where(col(Team.id).in_(team_ids)))
     }
-    return [_entrant_public(event, row, users, teams) for row in rows]
+    season = _w3c_season(session)
+    return [_entrant_public(event, row, users, teams, season) for row in rows]
 
 
 def _users_for(
@@ -896,8 +970,9 @@ def _users_for(
 def _mmrs(session: OrmSession, rows: Sequence[EventEntrant]) -> dict[int, int | None]:
     """Each entrant against the rating of the race it signed up on; a team has none."""
     users = _users_for(session, rows)
+    season = _w3c_season(session)
     return {
-        ident(row): _stats_for(users[row.user_id], row.race)[0]
+        ident(row): _stats_for(users[row.user_id], row.race, season)[0]
         if row.user_id in users
         else None
         for row in rows
@@ -949,11 +1024,12 @@ def _entrant_public(
     row: EventEntrant,
     users: dict[int | None, User],
     teams: dict[int | None, Team],
+    season: int,
 ) -> EventEntrantPublic:
     """One entrant payload: the identity, the rating on the signup race, the warnings."""
     user = users.get(row.user_id)
     team = teams.get(row.team_id)
-    mmr, games = _stats_for(user, row.race) if user else (None, 0)
+    mmr, games = _stats_for(user, row.race, season) if user else (None, 0)
     return EventEntrantPublic(
         id=ident(row),
         event_id=row.event_id,

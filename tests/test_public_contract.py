@@ -232,9 +232,11 @@ def test_teams_season_carries_the_standings_and_roster_fields(
         assert "final_score" in info
         assert "points_available" in info
         assert "points_against" in info
-        # No shortcode reads a season off the entry; the route sends season_id.
+        # No shortcode reads the event name or its league; the team page does.
         assert set(info) == {
             "season_id",
+            "name",
+            "league_short_name",
             "final_score",
             "points_available",
             "points_against",

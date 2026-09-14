@@ -123,3 +123,22 @@ def test_the_card_header_of_an_event_with_no_league_prints_the_name_alone(
 ) -> None:
     series = SeriesService().get(seeded["series_open_id"])
     assert series_cards.header(series)[0] == "## Season 1"
+
+
+def test_the_team_seasons_name_the_event_and_the_league(
+    client: Client, in_gnl: dict[str, Any]
+) -> None:
+    """A team page labels its season tabs from seasons_info alone."""
+    answer = client.get(f"/teams/{in_gnl['team_a_id']}").json()
+    assert [
+        (row["season_id"], row["name"], row["league_short_name"])
+        for row in answer["seasons_info"]
+    ] == [(in_gnl["season_id"], "Season 1", "GNL")]
+
+
+def test_a_team_season_with_no_league_reads_the_name_alone(
+    client: Client, seeded: dict[str, Any]
+) -> None:
+    answer = client.get(f"/teams/{seeded['team_a_id']}").json()
+    row = answer["seasons_info"][0]
+    assert (row["name"], row["league_short_name"]) == ("Season 1", None)

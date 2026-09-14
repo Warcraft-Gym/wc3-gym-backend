@@ -51,11 +51,15 @@ def wins_of(session: OrmSession, row: Series) -> int:
     return series_rules(session, row).best_of // 2 + 1
 
 
-def generate(event_id: int, stage_id: int) -> dict[str, int]:
+def generate(
+    event_id: int, stage_id: int, division_id: int | None = None
+) -> dict[str, int]:
     """Create every series of the stage from the locked seeds, per division.
 
     Each bracket column is one round under the stage, and the divisions share
-    those rounds: a bracket aligns on its final, a table on its first round.
+    those rounds: a bracket aligns on its final, a table on its first round. A
+    named division draws alone into the rounds the stage already holds, so a
+    stage whose divisions fill one at a time opens each as it is ready.
     """
     with Session.begin() as session:
         stage = _stage(session, event_id, stage_id)
@@ -63,9 +67,16 @@ def generate(event_id: int, stage_id: int) -> dict[str, int]:
             raise BadRequestError(
                 "A GNL stage is drafted by its admin and its captains, not generated"
             )
-        if _series_of(session, stage_id):
+        drawn = _series_of(session, stage_id)
+        if division_id is None and drawn:
             raise BadRequestError("This stage already holds series")
+        if any(row.division_id == division_id for row in drawn):
+            raise BadRequestError("This division already holds series")
+        if division_id is not None and stage.format in BRACKETS:
+            raise BadRequestError("A bracket stage draws every division together")
         fields = _fields(_entrants(session, event_id))
+        if division_id is not None:
+            fields = {division_id: fields.get(division_id, [])}
         for field in fields.values():
             if len(field) < 2:
                 raise BadRequestError("A division needs two entrants to generate")
@@ -73,11 +84,14 @@ def generate(event_id: int, stage_id: int) -> dict[str, int]:
             division: _plan(stage, len(field)) for division, field in fields.items()
         }
         depth = max(len(plan.rounds) for plan in plans.values())
-        first = _next_number(session, event_id)
-        rounds: dict[int, DBEventRound] = {}
+        held = {row.number: row for row in _rounds_of(session, stage_id)}
+        first = min(held) if held else _next_number(session, event_id)
+        rounds: dict[int, DBEventRound] = {
+            number - first: row for number, row in held.items()
+        }
         made: list[Series] = []
-        for division_id, field in fields.items():
-            plan = plans[division_id]
+        for division, field in fields.items():
+            plan = plans[division]
             shift = depth - len(plan.rounds) if stage.format in BRACKETS else 0
             rows: list[Series] = []
             counts: dict[int, int] = {}
@@ -96,7 +110,7 @@ def generate(event_id: int, stage_id: int) -> dict[str, int]:
                     rounds[place] = round_row
                 counts[place] = counts.get(place, 0) + 1
                 rows.append(
-                    _row(session, stage, round_row, division_id, field, rows, planned)
+                    _row(session, stage, round_row, division, field, rows, planned)
                 )
                 rows[-1].sequence = counts[place]
             made += rows
@@ -105,7 +119,71 @@ def generate(event_id: int, stage_id: int) -> dict[str, int]:
         for row in made:
             if scored(row):
                 on_scored(session, row)
-        return {"series": len(made), "rounds": len(rounds)}
+        return {"series": len(made), "rounds": len(rounds) - len(held)}
+
+
+def append_to_chain(
+    session: OrmSession,
+    stage: EventStage,
+    division: EventDivision | None,
+    entrant: EventEntrant,
+) -> Series:
+    """Write one more series at the end of a division's chain.
+
+    The stage qualifies by the shape it plans, never by the kind of its event:
+    a format that plans as a chain grows this way and every other one refuses.
+    An event that runs no divisions passes none and grows its one chain.
+    """
+    if not _plans_as_chain(stage):
+        raise BadRequestError("This stage plays no chain, so it takes no challenger")
+    division_id = ident(division) if division else None
+    if entrant.event_id != stage.event_id or entrant.division_id != division_id:
+        raise BadRequestError("This entrant does not play in that division")
+    chain = [
+        row for row in _series_of(session, stage.id) if row.division_id == division_id
+    ]
+    if not chain:
+        raise BadRequestError(
+            "The chain holds no series yet; two entrants open it before a third joins"
+        )
+    last = chain[-1]
+    round_row = session.get(DBEventRound, last.round_id)
+    if round_row is None:
+        raise BadRequestError("The chain has no round to play in")
+    row = _row(
+        session,
+        stage,
+        round_row,
+        division_id,
+        [entrant],
+        [last],
+        brackets.PlannedSeries(0, 0, brackets.Slot(feeder=0), brackets.Slot(seed=1)),
+    )
+    row.sequence = (last.sequence or len(chain)) + 1
+    session.flush()
+    # A chain the king already leads fills the new front side at once
+    if scored(last):
+        on_scored(session, last)
+    return row
+
+
+def add_challenger(event_id: int, stage_id: int, entrant_id: int) -> StageSeriesRow:
+    """Append one entrant to the end of the chain his division plays."""
+    with Session.begin() as session:
+        stage = _stage(session, event_id, stage_id)
+        entrant = session.get(EventEntrant, entrant_id)
+        if entrant is None or entrant.event_id != event_id:
+            raise NotFoundError(f"Entrant not found by id: {entrant_id}")
+        division = (
+            session.get(EventDivision, entrant.division_id)
+            if entrant.division_id
+            else None
+        )
+        public = StageSeriesRow.from_series_reduced(
+            append_to_chain(session, stage, division, entrant)
+        )
+        derived.fill_series(session, [public])
+        return public
 
 
 def on_scored(session: OrmSession, row: Series) -> None:
@@ -426,6 +504,15 @@ def _series_of(session: OrmSession, stage_id: int | None) -> Sequence[Series]:
     ).all()
 
 
+def _rounds_of(session: OrmSession, stage_id: int | None) -> Sequence[DBEventRound]:
+    """The rounds the stage already holds, in play order."""
+    return session.scalars(
+        select(DBEventRound)
+        .where(col(DBEventRound.stage_id) == stage_id)
+        .order_by(col(DBEventRound.number))
+    ).all()
+
+
 def _next_number(session: OrmSession, event_id: int) -> int:
     """The round number the stage starts at; the rounds of one event are one run."""
     highest = session.scalar(
@@ -498,6 +585,18 @@ def _plan(stage: EventStage, size: int) -> brackets.Plan:
             return brackets.koth_chain(size)
         case _:
             raise BadRequestError(f"format_not_built: {stage.format.value}")
+
+
+def _plans_as_chain(stage: EventStage) -> bool:
+    """Whether the stage plans as a chain: one round where every series after
+    the first takes its front side from the one before it."""
+    try:
+        plan = _plan(stage, 3)
+    except BadRequestError:
+        return False
+    return len(plan.rounds) == 1 and [
+        (planned.slot1.feeder, planned.slot2.seed) for planned in plan.series
+    ] == [(None, 2), (0, 3)]
 
 
 def _tables(

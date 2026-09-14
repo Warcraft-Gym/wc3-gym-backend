@@ -60,6 +60,8 @@ EVENT_RENAME = "1e0287eacccf"
 BEFORE_EVENT_ROUND = "8cc6dd6d93eb"
 # The revision before an event carries a parent and a series its feeders
 BEFORE_EVENT_MODEL = "96c0d36de81c"
+# The revision before every past KOTH night is an event of the KOTH league
+BEFORE_KOTH_BACKFILL = "b3e7d1a5c904"
 
 
 def comparable(
@@ -825,14 +827,21 @@ def test_the_rounds_become_event_round_and_everything_points_at_them(
         stage = connection.scalar(
             text("SELECT id FROM event_stage WHERE event_id = 17")
         )
-        # SQLite hands a date back as text, so the window is read as written
+        # SQLite hands a date back as text, so the window is read as written.
+        # The KOTH night above holds a round of its own, so the season's stage
+        # names the rows this season plays.
         assert connection.execute(
-            text("SELECT number, stage_id, start_date FROM event_round ORDER BY number")
+            text(
+                "SELECT number, stage_id, start_date FROM event_round "
+                "WHERE stage_id = :stage ORDER BY number"
+            ),
+            {"stage": stage},
         ).all() == [(1, stage, "2026-01-05"), (2, stage, None)]
         rounds = {
             number: round_id
             for number, round_id in connection.execute(
-                text("SELECT number, id FROM event_round")
+                text("SELECT number, id FROM event_round WHERE stage_id = :stage"),
+                {"stage": stage},
             )
         }
         assert connection.execute(
@@ -845,7 +854,10 @@ def test_the_rounds_become_event_round_and_everything_points_at_them(
         )
         # The running deploy still reads both old names through their views
         assert connection.execute(
-            text("SELECT season_id, playday FROM season_rounds ORDER BY playday")
+            text(
+                "SELECT season_id, playday FROM season_rounds "
+                "WHERE season_id = 17 ORDER BY playday"
+            )
         ).all() == [(17, 1), (17, 2)]
         assert (
             connection.scalar(text("SELECT playday FROM user_season_availability")) == 2
@@ -948,3 +960,178 @@ def test_an_entrant_row_refuses_a_player_and_a_team_together(tmp_path: Path) -> 
             connection.execute(
                 text(f"INSERT INTO event_entrant (event_id, {row}, 'HU')")
             )
+
+
+def test_every_past_koth_night_becomes_an_event_of_the_koth_league(
+    tmp_path: Path,
+) -> None:
+    """Two nights move onto the model: the second one keeps its three signups
+    as two entrants, its two 1v1 matches as a chain, and drops its FFA."""
+    url = fresh_database(tmp_path, "koth")
+    upgrade_to(url, BEFORE_KOTH_BACKFILL)
+
+    engine = create_engine(url)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO event (id, name, series_per_round) "
+                "VALUES (100, 'Season 18', 2)"
+            )
+        )
+        connection.execute(
+            text(
+                'INSERT INTO users (id, name, "battleTag", "discordTag", '
+                "\"discordId\", race) VALUES (7, 'React', 'React#21633', '', '', 'UD')"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO koth_events (id, name, event_date, is_active, "
+                "bracket_1_threshold, bracket_2_threshold) VALUES "
+                "(1, 'Season 18', '2025-12-24 00:00:00+00:00', 0, 1450, 1600), "
+                "(2, 'Gym KOTH', '2025-12-27 00:00:00+00:00', 1, 1450, 1600)"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO koth_signups (id, event_id, twitch_username, "
+                "battle_tag, w3c_name, race, mmr, bracket, is_king, is_active) VALUES "
+                "(1, 2, 'BarrenTV', 'React#21633', 'React', 'UD', 1965, 3, 0, 1), "
+                "(2, 2, 'NightD3vil08', 'NightDevil#21956', 'NightDevil', 'UD', "
+                "1811, 3, 0, 1), "
+                "(3, 2, 'NightD3vil08', 'nightdevil#21956', 'NightDevil', 'OC', "
+                "1506, 2, 0, 1)"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO koth_matches (id, event_id, bracket, game_mode, "
+                "num_teams, winner_team_number) VALUES (1, 2, 3, '1v1', 2, 1), "
+                "(2, 2, 3, '1v1', 2, 1), (3, 2, 3, 'FFA', 3, 1)"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO koth_match_participants (match_id, signup_id, "
+                "team_number) VALUES (1, 1, 1), (1, 2, 2), (2, 2, 1), (2, 1, 2), "
+                "(3, 1, 1), (3, 2, 2), (3, 3, 3)"
+            )
+        )
+
+    upgrade_to(url, "head")
+
+    with engine.connect() as connection:
+        # The night named after a season that already exists is kept apart
+        events = connection.execute(
+            text(
+                "SELECT e.id, e.name, e.kind, e.signup_policy, e.signups_open, "
+                "l.short_name FROM event e LEFT JOIN league l ON l.id = e.league_id "
+                "WHERE e.kind = 'koth' ORDER BY e.id"
+            )
+        ).all()
+        assert [(row.name, row.signup_policy, row.short_name) for row in events] == [
+            ("Season 18 2", "anyone", "KOTH"),
+            ("Gym KOTH", "anyone", "KOTH"),
+        ]
+        assert [bool(row.signups_open) for row in events] == [False, True]
+        first, second = (row.id for row in events)
+
+        assert connection.execute(
+            text(
+                "SELECT event_id, format, best_of FROM event_stage "
+                "WHERE event_id IN (:a, :b) ORDER BY event_id"
+            ),
+            {"a": first, "b": second},
+        ).all() == [(first, "koth", 1), (second, "koth", 1)]
+
+        # Each night is one round, played on the night's date, and stamped back
+        rounds = connection.execute(
+            text(
+                "SELECT k.id, r.season_id, r.number, r.start_date FROM koth_events k "
+                "JOIN event_round r ON r.id = k.round_id ORDER BY k.id"
+            )
+        ).all()
+        assert [(row.id, row.season_id, row.number) for row in rounds] == [
+            (1, first, 1),
+            (2, second, 1),
+        ]
+        assert [str(row.start_date) for row in rounds] == ["2025-12-24", "2025-12-27"]
+
+        # The brackets read strongest first, and keep the names players know
+        assert connection.execute(
+            text(
+                "SELECT position, name, lower_bound FROM event_division "
+                "WHERE event_id = :event ORDER BY position"
+            ),
+            {"event": second},
+        ).all() == [(1, "Bracket 3", 1600), (2, "Bracket 2", 1450), (3, "Bracket 1", 0)]
+
+        # The double race signup folds into the entrant of its higher MMR
+        entrants = connection.execute(
+            text(
+                'SELECT u."battleTag" AS tag, e.race, e.mmr_at_seed, e.channel, '
+                "d.name AS division FROM event_entrant e "
+                "JOIN users u ON u.id = e.user_id "
+                "JOIN event_division d ON d.id = e.division_id "
+                "WHERE e.event_id = :event ORDER BY u.id"
+            ),
+            {"event": second},
+        ).all()
+        assert [tuple(row) for row in entrants] == [
+            ("React#21633", "UD", 1965, "twitch", "Bracket 3"),
+            ("NightDevil#21956", "UD", 1811, "twitch", "Bracket 3"),
+        ]
+        # The player nobody had a row for is created under his battle tag
+        assert (
+            connection.scalar(
+                text('SELECT name FROM users WHERE "battleTag" = :tag'),
+                {"tag": "NightDevil#21956"},
+            )
+            == "NightDevil#21956"
+        )
+
+        # The FFA plays no pair, so the chain is the two 1v1 matches
+        chain = connection.execute(
+            text(
+                "SELECT s.id, s.sequence, s.slot1_from_series_id AS feeder, "
+                'p1."battleTag" AS player1, p2."battleTag" AS player2, '
+                "s.player1_score, s.player2_score, s.result_kind, g.winner_side "
+                "FROM series s JOIN users p1 ON p1.id = s.player1_id "
+                "JOIN users p2 ON p2.id = s.player2_id "
+                "LEFT JOIN series_game g ON g.series_id = s.id "
+                "ORDER BY s.sequence"
+            )
+        ).all()
+        assert [
+            (
+                row.sequence,
+                row.player1,
+                row.player2,
+                row.player1_score,
+                row.player2_score,
+                row.result_kind,
+                row.winner_side,
+            )
+            for row in chain
+        ] == [
+            (1, "React#21633", "NightDevil#21956", 1, 0, "played", "A"),
+            (2, "React#21633", "NightDevil#21956", 0, 1, "played", "B"),
+        ]
+        # The second series takes the winner of the first through its feeder
+        assert chain[0].feeder is None
+        assert chain[1].feeder == chain[0].id
+
+    downgrade_to(url, BEFORE_KOTH_BACKFILL)
+
+    with engine.connect() as connection:
+        for table in ("event_stage", "event_round", "event_division", "series"):
+            assert connection.scalar(text(f"SELECT count(*) FROM {table}")) == 0
+        assert connection.scalar(text("SELECT count(*) FROM series_game")) == 0
+        assert connection.scalar(text("SELECT count(*) FROM event_entrant")) == 0
+        # The GNL season the nights never touched is still there
+        assert connection.execute(text("SELECT id FROM event")).all() == [(100,)]
+        assert connection.execute(
+            text("SELECT id, round_id FROM koth_events ORDER BY id")
+        ).all() == [(1, None), (2, None)]
+        assert connection.scalar(text("SELECT count(*) FROM koth_signups")) == 3
+        assert connection.scalar(text("SELECT count(*) FROM koth_matches")) == 3

@@ -1,10 +1,10 @@
 import logging
-from typing import Annotated, Any
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
 
 from app.api.deps import KothServiceDep, RequireLogin, UserServiceDep, require_admin
-from app.core.exceptions import ApiError, BadRequestError, NotFoundError
+from app.core.exceptions import BadRequestError
 from app.models.koth_event import (
     KothEventCreate,
     KothEventPublic,
@@ -25,22 +25,10 @@ from app.models.koth_signup import (
     KothSignupPublic,
     KothSignupRequest,
 )
-from app.services.koth import KothService
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["koth"])
-
-
-def _check_nightbot_token(service: KothService, token: str | None) -> None:
-    """401 unless the caller carries the Nightbot token (chat bots, not admins)."""
-    try:
-        expected = service.settings_app_service.get_by_key("KOTH_NIGHTBOT_TOKEN").value
-    except NotFoundError:
-        # a deployment that never generated a token refuses every caller
-        expected = None
-    if not expected or str(token) != str(expected):
-        raise ApiError(401, {"error": "Unauthorized - invalid client token"})
 
 
 # ============ Event Endpoints ============
@@ -127,36 +115,6 @@ def create_signup(data: KothSignupRequest, service: KothServiceDep) -> KothSignu
         races=[data.race] if data.race else None,
     )
     return signups[0]
-
-
-@router.get("/koth/signup")
-def create_signup_nightbot(
-    service: KothServiceDep,
-    token: str | None = None,
-    twitch: str | None = None,
-    battletag: str | None = None,
-    race: str | None = None,
-) -> dict[str, Any]:
-    """Create a signup via URL parameters (Nightbot compatible).
-
-    Create a KOTH signup using query parameters. Compatible with Nightbot
-    and other chat bots that cannot send JSON body. Requires
-    KOTH_NIGHTBOT_TOKEN for authentication.
-    Usage: GET /koth/signup?token=KOTH_TOKEN&twitch=username&battletag=Name%231234
-    """
-    _check_nightbot_token(service, token)
-    if not twitch or not battletag:
-        raise BadRequestError("Missing required parameters: token, twitch, battletag")
-
-    signups = service.create_signups(
-        twitch_username=twitch, battle_tag=battletag, races=[race] if race else None
-    )
-    signup = signups[0]
-    # Nightbot displays the body text in chat, so the shape stays
-    return {
-        "success": True,
-        "message": f"{twitch} signed up for Bracket {signup.bracket} ({signup.mmr} MMR)",
-    }
 
 
 @router.post(
