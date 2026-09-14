@@ -148,7 +148,7 @@ class Season(SeasonBase, DBModel, table=True):
     # The rules or landing page of the event, shown as one "Page" link
     page_url: str | None = Field(default=None, max_length=500)
     stream_url: str | None = Field(default=None, max_length=500)
-    # The guild scheduled event this one posted, so a repost edits it
+    # The Discord message the event card was last posted as; a repost edits it
     discord_event_id: Annotated[str | None, NumToStr] = Field(
         default=None, max_length=50
     )
@@ -580,6 +580,12 @@ class EventUpdate(SQLModel):
     mmr_max: int | None = None
     entrant_cap: int | None = None
     series_per_round: int | None = None
+
+
+class EventDiscordPost(SQLModel):
+    """The channel an admin posts the event card in."""
+
+    channel_id: Annotated[str, NumToStr]
 
 
 class MemberEventRow(SQLModel):

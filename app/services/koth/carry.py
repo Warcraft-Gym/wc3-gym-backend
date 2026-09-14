@@ -18,7 +18,7 @@ from app.models.season import Season
 from app.models.series import Series
 from app.services import stage_engine
 from app.services.events import EventService
-from app.services.koth_night.night import divisions_of, last_night, series_of
+from app.services.koth.night import divisions_of, last_night, series_of
 
 
 def follow_signup(event_id: int) -> None:
