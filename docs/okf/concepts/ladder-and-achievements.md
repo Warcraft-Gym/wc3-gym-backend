@@ -3,7 +3,7 @@ type: Domain Concept
 title: W3C ladder and achievements
 description: Every ranked 1v1 match of a GNL player is stored once, scored per season on their signup race, and 24 badge rules run as one SQL union.
 tags: [ladder, w3champions, achievements]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
+generated: { by: openai/gpt-6, at: 2026-09-15T10:44:28Z }
 sources:
   - id: ladder
     resource: ../../../app/services/ladder.py
@@ -28,14 +28,14 @@ sources:
 
 `ladder_sync` is the ledger: one row per (player, W3Champions season) with `synced_at` and `complete`. A closed season marked complete is never fetched again; the open season is re-read from its stamp. The season and team "last synced" stamps derive as the earliest stamp across the roster and are never stored on the season.
 
-Two sync pipelines exist and must not be confused: **matches** (this table, this ledger, the Sync Ladder button, `POST /seasons/{id}/ladder-sync` in chunks) and **MMR and stats** (`w3cstats`, `users.w3c_synced_at`, the older Sync W3C buttons, `POST /users/{id}/w3c-sync`). Different endpoints, different stamps.
+Two sync pipelines exist and must not be confused: **matches** (this table, this ledger, the Sync Ladder button, `POST /events/{id}/ladder-sync` in chunks) and **MMR and stats** (`w3cstats`, `users.w3c_synced_at`, the older Sync W3C buttons, `POST /users/{id}/w3c-sync`). Different endpoints, different stamps.
 
 # What is derived
 
 - A match pays 3 points for a win and 1 for a loss. A match of `MIN_DURATION_S` or less pays nothing and is not a game. The rule has a Python and a SQL face in `app/core/ladder.py`.
 - A player scores only on the race they signed the season up on; other races are stored and pay nothing; Random counts every race. The filter belongs in the read, never in the fetch.
 - The season window is the GNL `start_date..end_date` on that race. MMR carries across a W3Champions season boundary unchanged, so the read needs no season logic.
-- `GET /seasons/{id}/ladder` and `GET /users/{id}/ladder` answer the totals, per-day bars, MMR spans and badges. The season read is edge-cached; see [the pitfall](../pitfalls/edge-cache-cors.md).
+- `GET /events/{id}/ladder` and `GET /users/{id}/ladder` answer the totals, per-day bars, MMR spans and badges. The event read is edge-cached; see [the pitfall](../pitfalls/edge-cache-cors.md).
 
 # Achievements
 

@@ -12,7 +12,7 @@ from app.core.db import Session, rel
 from app.core.exceptions import ApiError, BadRequestError, NotFoundError
 from app.core.query import QueryElement, QueryUtil
 from app.models.base import ident
-from app.models.enums import Race
+from app.models.enums import EventKind, Race
 from app.models.event_stage import EventStage
 from app.models.ladder_achievement import (
     LadderAchievement,
@@ -291,6 +291,7 @@ class SeasonService:
             statement = (
                 select(Season)
                 .options(*_SEASON_OPTIONS)
+                .where(col(Season.kind) == EventKind.gnl)
                 .order_by(col(Season.id))
                 .offset(offset)
                 .limit(limit)
@@ -327,7 +328,7 @@ class SeasonService:
             statement = (
                 select(Season)
                 .options(*_SEASON_OPTIONS)
-                .where(filter)
+                .where(col(Season.kind) == EventKind.gnl, filter)
                 .order_by(col(Season.id))
                 .offset(offset)
                 .limit(limit)

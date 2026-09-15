@@ -3,7 +3,7 @@ type: API Area
 title: API overview
 description: Seventeen route modules under one FastAPI app, one error envelope, paging with a total header, a search language, and OpenAPI at /docs.
 tags: [api, fastapi, routes]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
+generated: { by: openai/gpt-6, at: 2026-09-15T10:44:28Z }
 sources:
   - id: router
     resource: ../../../app/api/main.py
@@ -26,9 +26,9 @@ sources:
 | `login.py` | `/login`, `/me` | the admin token login and the session answer |
 | `users.py` | `/users` | players, bans, blocks, W3Champions sync, history |
 | `teams.py` | `/teams` | teams, rosters, captains, availability grid, logos |
-| `seasons.py` | `/seasons`, `/achievements` | seasons, maps, rounds, signups, ladder reads, badges |
+| `seasons.py` | `/events/{event_id}`, `/seasons`, `/achievements` | GNL maps, rounds, signups, ladder reads and badges; deprecated season aliases |
 | `leagues.py` | `/leagues` | leagues |
-| `events.py` | `/events`, `/me/events` | events, entrants, divisions, stages, standings |
+| `events.py` | `/events`, `/me/events` | event CRUD and search, entrants, divisions, stages, standings |
 | `matches.py` | `/matches` | fixtures |
 | `series.py` | `/series`, `/casts` | series, result kind, places, sides, casts |
 | `draft_series.py` | `/draft-series` | a captain's proposed series |
@@ -45,6 +45,8 @@ sources:
 
 Swagger UI is at `/docs` and the OpenAPI document at `/openapi.json`. FastAPI includes routers lazily, so enumerate routes from `app.openapi()["paths"]`, not from `app.routes`.
 
+The OpenAPI version is `1.1.0`. This version adds GNL creation and management to the event routes. Every `/seasons` operation is deprecated in OpenAPI and remains available during the consumer migration.
+
 # The error envelope
 
 Every error answers `{"error": "<text>"}` with the status: 404 `NotFoundError`, 400 `BadRequestError`, 502 `ExternalServiceError`, 409 integrity conflicts ("Row already exists" or "Row is still referenced"), 422 validation with the field names in the text, 500 with the fixed text "Internal Server Error" and the detail in the log. The router's own 404 and 405 carry the envelope too. A few public routes add a second key, `message`, with human text beside an `error` code. `tests/test_error_envelope.py` locks it. FastAPI's stock `{"detail": ...}` never reaches a client.
@@ -56,6 +58,8 @@ List routes take `limit` (1 to 500, default 500) and `offset`. Seven routes carr
 # The search language
 
 `POST /<area>/search` takes a `query` such as `season_id == 3 and name ilike smith`, parsed by `app/core/query.py`. Use a service's `find_by_*` method for a value the caller supplies; keep the language for a query a client wrote.
+
+`POST /events/search` returns the same `EventPublic` shape and applies the same draft visibility as `GET /events`.
 
 # CORS and caching
 

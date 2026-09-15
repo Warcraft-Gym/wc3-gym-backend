@@ -35,6 +35,7 @@ router = APIRouter(tags=["seasons"])
     "/seasons",
     status_code=201,
     response_model=SeasonPublic,
+    deprecated=True,
     dependencies=[Depends(require_admin)],
 )
 def add_season(data: SeasonCreate, service: SeasonServiceDep) -> SeasonPublic:
@@ -43,48 +44,66 @@ def add_season(data: SeasonCreate, service: SeasonServiceDep) -> SeasonPublic:
 
 
 @router.put(
-    "/seasons/{season_id}",
+    "/seasons/{event_id}",
     response_model=SeasonPublic,
+    deprecated=True,
     dependencies=[Depends(require_admin)],
 )
 def update_season(
-    season_id: int, data: SeasonUpdate, service: SeasonServiceDep
+    event_id: int, data: SeasonUpdate, service: SeasonServiceDep
 ) -> SeasonPublic:
     """Update the name of an existing season."""
-    return service.update(season_id, data)
+    return service.update(event_id, data)
 
 
 @router.delete(
-    "/seasons/{season_id}", status_code=204, dependencies=[Depends(require_admin)]
+    "/seasons/{event_id}",
+    status_code=204,
+    deprecated=True,
+    dependencies=[Depends(require_admin)],
 )
-def delete_season(season_id: int, service: SeasonServiceDep) -> None:
+def delete_season(event_id: int, service: SeasonServiceDep) -> None:
     """Delete a season by its ID."""
-    service.delete(season_id)
+    service.delete(event_id)
 
 
-@router.get("/seasons/{season_id}")
-def get_season(season_id: int, service: SeasonServiceDep) -> SeasonPublic:
+@router.get("/seasons/{event_id}", deprecated=True)
+def get_season(event_id: int, service: SeasonServiceDep) -> SeasonPublic:
     """Retrieve a season by its ID."""
-    return service.get(season_id)
+    return service.get(event_id)
 
 
-@router.post("/seasons/{season_id}/teams", dependencies=[Depends(require_admin)])
+@router.post(
+    "/events/{event_id}/teams", tags=["events"], dependencies=[Depends(require_admin)]
+)
+@router.post(
+    "/seasons/{event_id}/teams",
+    deprecated=True,
+    dependencies=[Depends(require_admin)],
+)
 def add_teams(
-    season_id: int, data: SeasonTeamIds, service: SeasonServiceDep
+    event_id: int, data: SeasonTeamIds, service: SeasonServiceDep
 ) -> SeasonPublic:
     """Add teams to season by providing a list of team ids."""
-    return service.add_teams(season_id, data.team_ids)
+    return service.add_teams(event_id, data.team_ids)
 
 
-@router.delete("/seasons/{season_id}/teams", dependencies=[Depends(require_admin)])
+@router.delete(
+    "/events/{event_id}/teams", tags=["events"], dependencies=[Depends(require_admin)]
+)
+@router.delete(
+    "/seasons/{event_id}/teams",
+    deprecated=True,
+    dependencies=[Depends(require_admin)],
+)
 def remove_teams(
-    season_id: int, data: SeasonTeamIds, service: SeasonServiceDep
+    event_id: int, data: SeasonTeamIds, service: SeasonServiceDep
 ) -> SeasonPublic:
     """Remove teams from season by providing a list of team ids."""
-    return service.remove_teams(season_id, data.team_ids)
+    return service.remove_teams(event_id, data.team_ids)
 
 
-@router.get("/seasons")
+@router.get("/seasons", deprecated=True)
 def get_all(
     service: SeasonServiceDep,
     limit: Annotated[int, Query(ge=1, le=500)] = 500,
@@ -94,7 +113,7 @@ def get_all(
     return service.get_all(limit=limit, offset=offset)
 
 
-@router.post("/seasons/search")
+@router.post("/seasons/search", deprecated=True)
 def search_seasons(
     service: SeasonServiceDep,
     query: SearchQuery,
@@ -105,113 +124,198 @@ def search_seasons(
     return service.search(query, limit=limit, offset=offset)
 
 
-@router.post("/seasons/{season_id}/maps", dependencies=[Depends(require_admin)])
+@router.post(
+    "/events/{event_id}/maps", tags=["events"], dependencies=[Depends(require_admin)]
+)
+@router.post(
+    "/seasons/{event_id}/maps",
+    deprecated=True,
+    dependencies=[Depends(require_admin)],
+)
 def add_maps(
-    season_id: int, data: SeasonMapIds, service: SeasonServiceDep
+    event_id: int, data: SeasonMapIds, service: SeasonServiceDep
 ) -> SeasonPublic:
     """Add maps to season by providing a list of map ids."""
-    return service.add_maps(season_id, data.map_ids)
+    return service.add_maps(event_id, data.map_ids)
 
 
-@router.delete("/seasons/{season_id}/maps", dependencies=[Depends(require_admin)])
+@router.delete(
+    "/events/{event_id}/maps", tags=["events"], dependencies=[Depends(require_admin)]
+)
+@router.delete(
+    "/seasons/{event_id}/maps",
+    deprecated=True,
+    dependencies=[Depends(require_admin)],
+)
 def remove_maps(
-    season_id: int, data: SeasonMapIds, service: SeasonServiceDep
+    event_id: int, data: SeasonMapIds, service: SeasonServiceDep
 ) -> SeasonPublic:
     """Remove maps from season by providing a list of map ids."""
-    return service.remove_maps(season_id, data.map_ids)
+    return service.remove_maps(event_id, data.map_ids)
 
 
 @router.get(
-    "/seasons/{season_id}/maps/ladder-import", dependencies=[Depends(require_admin)]
+    "/events/{event_id}/maps/ladder-import",
+    tags=["events"],
+    dependencies=[Depends(require_admin)],
+)
+@router.get(
+    "/seasons/{event_id}/maps/ladder-import",
+    deprecated=True,
+    dependencies=[Depends(require_admin)],
 )
 def preview_ladder_import(
-    season_id: int, service: SeasonServiceDep
+    event_id: int, service: SeasonServiceDep
 ) -> list[LadderMapRow]:
     """List every 1v1 ladder map, matched against the maps the app holds."""
-    return service.ladder_import_preview(season_id)
+    return service.ladder_import_preview(event_id)
 
 
 @router.post(
-    "/seasons/{season_id}/maps/ladder-import", dependencies=[Depends(require_admin)]
+    "/events/{event_id}/maps/ladder-import",
+    tags=["events"],
+    dependencies=[Depends(require_admin)],
+)
+@router.post(
+    "/seasons/{event_id}/maps/ladder-import",
+    deprecated=True,
+    dependencies=[Depends(require_admin)],
 )
 def apply_ladder_import(
-    season_id: int, data: LadderMapNames, service: SeasonServiceDep
+    event_id: int, data: LadderMapNames, service: SeasonServiceDep
 ) -> SeasonPublic:
     """Add the named ladder maps to the pool, creating the ones the app misses."""
-    return service.import_ladder_maps(season_id, data.names)
+    return service.import_ladder_maps(event_id, data.names)
 
 
-@router.put("/seasons/{season_id}/maps/order", dependencies=[Depends(require_admin)])
+@router.put(
+    "/events/{event_id}/maps/order",
+    tags=["events"],
+    dependencies=[Depends(require_admin)],
+)
+@router.put(
+    "/seasons/{event_id}/maps/order",
+    deprecated=True,
+    dependencies=[Depends(require_admin)],
+)
 def set_map_order(
-    season_id: int, data: SeasonMapIds, service: SeasonServiceDep
+    event_id: int, data: SeasonMapIds, service: SeasonServiceDep
 ) -> SeasonPublic:
     """Reorder the map pool by listing every map id of it, in the new order."""
-    return service.set_map_order(season_id, data.map_ids)
+    return service.set_map_order(event_id, data.map_ids)
 
 
-@router.put("/seasons/{season_id}/rounds", dependencies=[Depends(require_admin)])
+@router.put(
+    "/events/{event_id}/rounds",
+    tags=["events"],
+    dependencies=[Depends(require_admin)],
+)
+@router.put(
+    "/seasons/{event_id}/rounds",
+    deprecated=True,
+    dependencies=[Depends(require_admin)],
+)
 def set_round(
-    season_id: int, data: SeasonRoundWrite, service: SeasonServiceDep
+    event_id: int, data: SeasonRoundWrite, service: SeasonServiceDep
 ) -> SeasonPublic:
     """Set the dates and the game 1 map of one round. A field left out keeps its value."""
-    return service.set_round(season_id, data)
+    return service.set_round(event_id, data)
 
 
-@router.post("/seasons/{season_id}/signups", dependencies=[Depends(require_admin)])
+@router.post(
+    "/events/{event_id}/signups",
+    tags=["events"],
+    dependencies=[Depends(require_admin)],
+)
+@router.post(
+    "/seasons/{event_id}/signups",
+    deprecated=True,
+    dependencies=[Depends(require_admin)],
+)
 def add_user_signup(
-    season_id: int, data: SeasonSignupWrite, service: SeasonServiceDep
+    event_id: int, data: SeasonSignupWrite, service: SeasonServiceDep
 ) -> SeasonPublic:
     """Add signup users to season by providing a list of user ids.
 
     The "race" names the race they registered on for this season.
     """
-    return service.add_user_signup(season_id, data.user_ids, data.race)
+    return service.add_user_signup(event_id, data.user_ids, data.race)
 
 
-@router.delete("/seasons/{season_id}/signups", dependencies=[Depends(require_admin)])
+@router.delete(
+    "/events/{event_id}/signups",
+    tags=["events"],
+    dependencies=[Depends(require_admin)],
+)
+@router.delete(
+    "/seasons/{event_id}/signups",
+    deprecated=True,
+    dependencies=[Depends(require_admin)],
+)
 def remove_user_signup(
-    season_id: int, data: SeasonSignupRemove, service: SeasonServiceDep
+    event_id: int, data: SeasonSignupRemove, service: SeasonServiceDep
 ) -> SeasonPublic:
     """Remove signup users from season by providing a list of user ids."""
-    return service.remove_user_signup(season_id, data.user_ids)
+    return service.remove_user_signup(event_id, data.user_ids)
 
 
 @router.put(
-    "/seasons/{season_id}/signups/{user_id}", dependencies=[Depends(require_admin)]
+    "/events/{event_id}/signups/{user_id}",
+    tags=["events"],
+    dependencies=[Depends(require_admin)],
+)
+@router.put(
+    "/seasons/{event_id}/signups/{user_id}",
+    deprecated=True,
+    dependencies=[Depends(require_admin)],
 )
 def update_user_signup(
-    season_id: int, user_id: int, data: SeasonSignupUpdate, service: SeasonServiceDep
+    event_id: int, user_id: int, data: SeasonSignupUpdate, service: SeasonServiceDep
 ) -> SeasonPublic:
     """Set the draft position, the pick-list flag or the race of one signup."""
-    return service.update_signup(season_id, user_id, data)
+    return service.update_signup(event_id, user_id, data)
 
 
-@router.get("/seasons/{season_id}/signups")
+@router.get("/events/{event_id}/signups", tags=["events"])
+@router.get("/seasons/{event_id}/signups", deprecated=True)
 def get_season_signups(
-    season_id: int,
+    event_id: int,
     service: SeasonServiceDep,
     limit: Annotated[int, Query(ge=1, le=500)] = 500,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[UserListPublic]:
     """Retrieve one page of the users signed up for a season, at most 500."""
-    return service.get_signed_up_users(season_id, limit=limit, offset=offset)
+    return service.get_signed_up_users(event_id, limit=limit, offset=offset)
 
 
-@router.post("/seasons/{season_id}/w3c-sync", dependencies=[Depends(require_admin)])
+@router.post(
+    "/seasons/{event_id}/w3c-sync",
+    deprecated=True,
+    dependencies=[Depends(require_admin)],
+)
 def sync_w3c_season_signups(
-    season_id: int,
+    event_id: int,
     service: LadderServiceDep,
     offset: Annotated[int, Query(ge=0)] = 0,
     # one chunk = one worker wave
     limit: Annotated[int, Query(ge=1, le=25)] = W3C_SYNC_WORKERS,
 ) -> LadderSyncResult:
     """The ladder sync under the path the stats sync had."""
-    return service.sync_season(season_id, offset=offset, limit=limit)
+    return service.sync_season(event_id, offset=offset, limit=limit)
 
 
-@router.post("/seasons/{season_id}/ladder-sync", dependencies=[Depends(require_admin)])
+@router.post(
+    "/events/{event_id}/ladder-sync",
+    tags=["events"],
+    dependencies=[Depends(require_admin)],
+)
+@router.post(
+    "/seasons/{event_id}/ladder-sync",
+    deprecated=True,
+    dependencies=[Depends(require_admin)],
+)
 def sync_ladder_season_signups(
-    season_id: int,
+    event_id: int,
     service: LadderServiceDep,
     offset: Annotated[int, Query(ge=0)] = 0,
     # one chunk = one worker wave
@@ -222,7 +326,7 @@ def sync_ladder_season_signups(
     The client calls again with next_offset until it answers null. A player
     synced in the last SYNC_MAX_AGE is skipped.
     """
-    return service.sync_season(season_id, offset=offset, limit=limit)
+    return service.sync_season(event_id, offset=offset, limit=limit)
 
 
 @router.get("/achievements")
@@ -231,25 +335,36 @@ def get_achievement_catalogue() -> list[SeasonAchievementPublic]:
     return catalogue()
 
 
-@router.get("/seasons/{season_id}/achievements")
+@router.get("/events/{event_id}/achievements", tags=["events"])
+@router.get("/seasons/{event_id}/achievements", deprecated=True)
 def get_season_achievements(
-    season_id: int, service: SeasonServiceDep
+    event_id: int, service: SeasonServiceDep
 ) -> list[SeasonAchievementPublic]:
     """The rules this season pays, with its prices and numbers."""
-    return service.achievements(season_id)
+    return service.achievements(event_id)
 
 
-@router.put("/seasons/{season_id}/achievements", dependencies=[Depends(require_admin)])
+@router.put(
+    "/events/{event_id}/achievements",
+    tags=["events"],
+    dependencies=[Depends(require_admin)],
+)
+@router.put(
+    "/seasons/{event_id}/achievements",
+    deprecated=True,
+    dependencies=[Depends(require_admin)],
+)
 def set_season_achievements(
-    season_id: int, data: list[SeasonAchievementWrite], service: SeasonServiceDep
+    event_id: int, data: list[SeasonAchievementWrite], service: SeasonServiceDep
 ) -> list[SeasonAchievementPublic]:
     """Replace the season's set with these rows."""
-    return service.set_achievements(season_id, data)
+    return service.set_achievements(event_id, data)
 
 
-@router.get("/seasons/{season_id}/ladder")
+@router.get("/events/{event_id}/ladder", tags=["events"])
+@router.get("/seasons/{event_id}/ladder", deprecated=True)
 def get_season_ladder(
-    season_id: int, service: LadderServiceDep, response: Response
+    event_id: int, service: LadderServiceDep, response: Response
 ) -> SeasonLadder:
     """The ladder of a season: its teams, its players and its hours."""
     # matches change once a day at the cron; the edge serves every viewer one read
@@ -257,12 +372,13 @@ def get_season_ladder(
     # the edge keeps the headers of the request that filled it, and CORSMiddleware
     # writes none when that request has no Origin, so a browser reads a copy it blocks
     response.headers["Access-Control-Allow-Origin"] = "*"
-    return service.season_ladder(season_id)
+    return service.season_ladder(event_id)
 
 
-@router.get("/seasons/{season_id}/ladder/players")
+@router.get("/events/{event_id}/ladder/players", tags=["events"])
+@router.get("/seasons/{event_id}/ladder/players", deprecated=True)
 def get_season_ladder_players(
-    season_id: int, service: LadderServiceDep
+    event_id: int, service: LadderServiceDep
 ) -> list[SeasonPlayer]:
     """Every signup of the season with his ladder record, without the achievements."""
-    return service.season_players(season_id)
+    return service.season_players(event_id)

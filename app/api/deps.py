@@ -26,6 +26,7 @@ from app.services.draft_series import DraftSeriesService
 from app.services.events import EventService
 from app.services.fantasy_bets import FantasyBetService
 from app.services.fantasy_teams import FantasyTeamService
+from app.services.gnl_events import GnlEventService
 from app.services.ladder import LadderService
 from app.services.maps import MapService
 from app.services.matches import MatchService
@@ -271,6 +272,7 @@ season_service = SeasonService(
     user_app_service=user_service, map_app_service=map_service
 )
 event_service = EventService()
+gnl_event_service = GnlEventService()
 series_service = SeriesService()
 series_veto_service = SeriesVetoService()
 draft_series_service = DraftSeriesService()
@@ -289,6 +291,7 @@ MatchServiceDep = Annotated[MatchService, Depends(lambda: match_service)]
 SeasonServiceDep = Annotated[SeasonService, Depends(lambda: season_service)]
 SeriesServiceDep = Annotated[SeriesService, Depends(lambda: series_service)]
 EventServiceDep = Annotated[EventService, Depends(lambda: event_service)]
+GnlEventServiceDep = Annotated[GnlEventService, Depends(lambda: gnl_event_service)]
 SeriesVetoServiceDep = Annotated[
     SeriesVetoService, Depends(lambda: series_veto_service)
 ]

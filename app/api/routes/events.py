@@ -6,11 +6,13 @@ from fastapi import APIRouter, Depends, Query
 
 from app.api.deps import (
     EventServiceDep,
+    GnlEventServiceDep,
     OptionalLogin,
     RequireLogin,
     UserServiceDep,
     require_admin,
 )
+from app.api.search import SearchQuery
 from app.models.enums import EventKind
 from app.models.event_award import EventAwardPublic
 from app.models.event_division import EventDivisionWrite
@@ -69,6 +71,18 @@ def get_events(
     )
 
 
+@router.post("/events/search")
+def search_events(
+    service: EventServiceDep,
+    claims: OptionalLogin,
+    query: SearchQuery,
+    limit: Annotated[int, Query(ge=1, le=500)] = 500,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> list[EventPublic]:
+    """Search event fields with the same visibility and payload as the list."""
+    return service.search(query, limit=limit, offset=offset, claims=claims)
+
+
 @router.get("/me/events")
 def get_my_events(
     service: EventServiceDep, users: UserServiceDep, claims: RequireLogin
@@ -93,8 +107,15 @@ def get_event(
 
 
 @router.post("/events", status_code=201, dependencies=[Depends(require_admin)])
-def add_event(data: EventCreate, service: EventServiceDep) -> EventPublic:
-    """Create an event with the stages the body names, or one default stage."""
+def add_event(
+    data: EventCreate,
+    service: EventServiceDep,
+    gnl: GnlEventServiceDep,
+    claims: RequireLogin,
+) -> EventPublic:
+    """Create an event, applying the creation rules of the league it runs in."""
+    if gnl.owns(data.league_id):
+        return service.get(gnl.add(data), claims=claims)
     return service.add(data)
 
 
@@ -104,6 +125,14 @@ def update_event(
 ) -> EventPublic:
     """Change the event fields the body names."""
     return service.update(event_id, data)
+
+
+@router.delete(
+    "/events/{event_id}", status_code=204, dependencies=[Depends(require_admin)]
+)
+def delete_event(event_id: int, service: EventServiceDep) -> None:
+    """Delete an event and the rows owned by it."""
+    service.delete(event_id)
 
 
 @router.put("/events/{event_id}/stages", dependencies=[Depends(require_admin)])
