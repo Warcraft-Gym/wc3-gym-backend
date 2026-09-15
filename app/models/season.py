@@ -529,6 +529,22 @@ class EventPublic(SQLModel):
     # How many series one fixture holds, and a fixture pairs two team
     # entrants, so it reads only on a team event.
     series_per_round: int = 1
+    # The event table still carries the fields introduced for the GNL. They
+    # read here as event configuration so a client never has to fetch the
+    # legacy season payload for a GNL run.
+    round_count: int | None = None
+    pick_ban: Annotated[str | None, NumToStr] = None
+    discordRole: Annotated[str | None, NumToStr] = None
+    score_system: str | None = None
+    fantasy_grind: bool | None = None
+    fantasy_tiers: int | None = None
+    fantasy_tier_cuts: Annotated[list[int], NoneToList] = []
+    fantasy_tiers_applied_at: Annotated[datetime | None, AwareUTC] = None
+    # The series without a score. Event phase is the canonical status; this
+    # count preserves the useful part of the older season progress payload.
+    unscored_series: int | None = None
+    maps: Annotated[list[MapPublic], NoneToList] = []
+    rounds: Annotated[list[SeasonRoundPublic], NoneToList] = []
     # Computed by the service on every read; null when the event is nested
     phase: EventPhase | None = None
     # Whether the check-in stands open today; null on a list read
@@ -573,6 +589,14 @@ class EventCreate(SQLModel):
     # How many series one fixture holds, and a fixture pairs two team
     # entrants, so it reads only on a team event.
     series_per_round: int = 1
+    # GNL configuration. The same event fields may be read for every kind;
+    # the GNL league is the caller that gives them behaviour.
+    round_count: int | None = Field(default=None, ge=0)
+    map_ids: list[int] = []
+    pick_ban: Annotated[str | None, NumToStr] = None
+    discordRole: Annotated[str | None, NumToStr] = None
+    score_system: Annotated[str, KnownScoreSystem] = "standard"
+    fantasy_grind: bool = False
     stages: list[EventStageWrite] = []
 
 
@@ -603,6 +627,11 @@ class EventUpdate(SQLModel):
     mmr_max: int | None = None
     entrant_cap: int | None = None
     series_per_round: int | None = None
+    round_count: int | None = Field(default=None, ge=0)
+    pick_ban: Annotated[str | None, NumToStr] = None
+    discordRole: Annotated[str | None, NumToStr] = None
+    score_system: Annotated[str | None, KnownScoreSystem] = None
+    fantasy_grind: bool | None = None
 
 
 class EventDiscordPost(SQLModel):

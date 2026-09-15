@@ -3,7 +3,7 @@ type: API Area
 title: Consumers of the API
 description: Who calls the backend, which routes each one reads, and which tests pin those shapes.
 tags: [api, contract, consumers]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
+generated: { by: openai/gpt-6, at: 2026-09-15T10:44:28Z }
 sources:
   - id: public-contract
     resource: ../../../tests/test_public_contract.py
@@ -14,6 +14,9 @@ sources:
   - id: snapshot
     resource: ../../../tests/test_gnl_snapshot.py
     title: The GNL payloads pinned
+  - id: event-season-parity
+    resource: ../../../tests/test_event_season_parity.py
+    title: The event replacement for season routes
 ---
 
 # The consumers
@@ -35,6 +38,7 @@ The WordPress shortcodes today call the older backend on the Azure box, not this
 - `tests/test_public_contract.py`: presence and shape of the fields the PHP reads, route by route.
 - `tests/test_contract.py`: the fields the offline leaderboard reads.
 - `tests/test_gnl_snapshot.py`: the GNL season, dashboard and card payloads byte for byte against `tests/data/gnl_snapshot.json`. Set `UPDATE_GNL_SNAPSHOT=1` to rewrite it, and read the diff: a change to it is a change to a public contract.
+- `tests/test_event_season_parity.py`: GNL creation through `/events`, the GNL fields on `EventPublic`, the event replacements for season subresources and the deprecated markers on `/seasons`.
 - `tests/test_error_envelope.py`: the `error` key every client reads.
 - `tests/test_paging.py`: the paged routes, their default order and sort names.
 
@@ -45,5 +49,6 @@ A change that fails one of these is a cross-repository change. Ship the consumer
 - Every error is `{"error": ...}`.
 - A field is added, never renamed in place. `week_map_id` on the veto board and `playday` on fixtures are examples of names kept for consumers.
 - The GNL season payloads keep `season_id`, `phase` and `playday` although the table is `event`.
+- New consumers use the event routes for GNL. Existing consumers may use the deprecated season routes while they migrate their four-state season phase to the common event phase.
 - List routes page with `limit` and `offset` and answer `X-Total-Count`.
 - Reads are open. Writes need an admin, or the owning member for self-service routes.
