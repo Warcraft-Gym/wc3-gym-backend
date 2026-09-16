@@ -4,7 +4,7 @@ title: Deploy to Vercel
 description: A merge to main deploys production and migrates in the build; staging mirrors main; previews use the staging database; the Hobby plan sets the limits.
 resource: ../../../vercel.json
 tags: [deploy]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-09-16T23:30:00Z }
 stale_after: 2027-03-14T00:00:00Z
 sources:
   - id: vercel-json
@@ -35,7 +35,7 @@ Every push builds a preview against the staging Supabase project. A branch with 
 
 # The recipes
 
-`uv run just vercel deploy [prod|staging]` deploys the working tree; `logs`, `status`, `migrate`, `alembic`, `seed`, `import-maps`, `review-season`, `list` and `drop` are the rest. Run them only from the linked main checkout, never from a worktree: the `.vercel/` link folder is gitignored, and a run elsewhere creates a stray project that builds every push. A CLI deploy from a commit whose author is not a Vercel team member is silently blocked; export the tree with `git archive` first. Never run the Vercel CLI outside the recipes: without the token it starts a device authorization flow.
+`uv run just vercel deploy [prod|staging]` deploys the working tree; `logs`, `status`, `migrate`, `alembic`, `seed`, `export-seed`, `import-maps`, `review-season`, `list` and `drop` are the rest. Run them only from the linked main checkout, never from a worktree: the `.vercel/` link folder is gitignored, and a run elsewhere creates a stray project that builds every push. A CLI deploy from a commit whose author is not a Vercel team member is silently blocked; export the tree with `git archive` first. Never run the Vercel CLI outside the recipes: without the token it starts a device authorization flow.
 
 # The Hobby limits
 

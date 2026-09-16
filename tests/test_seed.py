@@ -6,7 +6,7 @@ csv.writer stringified BLOBs as repr(bytes), and MySQL wrote booleans as
 
 import pytest
 
-from app.core.seed import convert
+from app.core.seed import blank_secrets, convert
 
 
 @pytest.mark.parametrize(
@@ -27,3 +27,19 @@ from app.core.seed import convert
 )
 def test_convert(cell: str, data_type: str, expected: str) -> None:
     assert convert(cell, data_type) == expected
+
+
+def test_the_export_blanks_the_secret_settings_and_nothing_else() -> None:
+    header = ["id", "key", "value", "description"]
+    assert blank_secrets(
+        "settings", header, ["1", "KOTH_NIGHTBOT_TOKEN", "abc", "d"]
+    ) == ["1", "KOTH_NIGHTBOT_TOKEN", "", "d"]
+    assert blank_secrets("settings", header, ["2", "current_season", "18", "d"]) == [
+        "2",
+        "current_season",
+        "18",
+        "d",
+    ]
+    assert blank_secrets(
+        "users", ["id", "key", "value"], ["1", "KOTH_NIGHTBOT_TOKEN", "x"]
+    ) == ["1", "KOTH_NIGHTBOT_TOKEN", "x"]

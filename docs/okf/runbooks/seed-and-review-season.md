@@ -4,7 +4,7 @@ title: Seed a database and build a review season
 description: Load the private seed repository into a target, or build a season two accounts can click through on staging.
 resource: ../../../app/core/seed.py
 tags: [deploy]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-16T19:30:00Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-09-16T23:30:00Z }
 stale_after: 2027-03-14T00:00:00Z
 sources:
   - id: seed
@@ -20,11 +20,11 @@ sources:
 
 # Seed
 
-The seed is a private repository of one CSV per table plus `logos/<team id>.<ext>`, made from a production dump. `uv run just local seed`, `uv run just vercel seed staging` and the azure recipe migrate the target, truncate every table, copy the CSVs with foreign keys off, set every sequence, seed the achievement catalogue, and push the logos through the upload path.
+The seed is a private repository of one CSV per table plus `logos/<team id>.<ext>` and a `manifest.json`. `uv run just vercel export-seed <dir> prod` writes it from production: every base table, rows ordered by primary key, NULL as `\N`, the secret settings blanked, and the manifest carrying the alembic revision of the database it came from. Run it after every schema change the seed must carry, then commit the directory to the seed repository.
 
-**`just vercel seed` defaults to `prod`.** It truncates. Always name the environment: `uv run just vercel seed staging`. See [the pitfall](../pitfalls/seed-defaults-to-prod.md).
+`uv run just local seed`, `uv run just vercel seed <env>` and the azure recipe migrate the target, truncate every table, copy the CSVs with foreign keys off, set every sequence, and push the logos through the upload path. A directory with a manifest loads only when the database sits at the manifest's revision. A directory without one is a snapshot from before the event model, and the load rebuilds its GNL score system, leagues, stages, rounds and catalogue prices.
 
-For staging the recipe rebuilds the locked template first and then the shared database from it, so new previews start from the fresh copy. Open branch copies are untouched.
+`just vercel seed` has no default environment, because it truncates: name `prod` or `staging` every time. For staging the recipe rebuilds the locked template first and then the shared database from it, so new previews start from the fresh copy. Open branch copies are untouched.
 
 # Review season
 
