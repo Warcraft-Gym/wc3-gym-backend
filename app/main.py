@@ -50,7 +50,7 @@ def create_app(db_url: str | None = None) -> FastAPI:
     app = FastAPI(
         title="GNL Backend API",
         description="API for Gym Newbie League Backend Data",
-        version="1.0.0",
+        version="1.1.0",
     )
     app.add_middleware(
         CORSMiddleware,

@@ -244,15 +244,28 @@ def _season(
         stored = session.scalars(
             select(Season).where(func.lower(Season.name) == folded(values.name))
         ).first()
-    from app.services.seasons import fill_rounds
+    from app.services.seasons import fill_rounds, gnl_league
+
+    league = gnl_league(session)
 
     if stored:
+        # A stored event keeps the league it already stands in: a change is
+        # refused while teams are linked to it
+        if stored.league_id is None:
+            stored.league_id = ident(league)
+            stored.entrant_kind = league.entrant_kind
+        elif stored.league_id != ident(league):
+            raise BadRequestError("The workbook names an event of another league")
         stored.sqlmodel_update(values.model_dump(exclude_unset=True))
         fill_rounds(session, stored, values.round_count or 0)
         logger.info(f"Updating season {values.name} with ID: {stored.id}")
         return stored
 
-    season = Season(**values.model_dump())
+    season = Season(
+        **values.model_dump(),
+        league_id=ident(league),
+        entrant_kind=league.entrant_kind,
+    )
     session.add(season)
     session.flush()
     # The round rows are the round count, so the import writes them too
@@ -360,7 +373,8 @@ def _teams(session: OrmSession, sheets: Sheets, season: Season) -> dict[int, int
         folded(team.name): team
         for team in session.scalars(
             select(Team).where(
-                func.lower(Team.name).in_({folded(value.name) for value in values})
+                col(Team.league_id) == season.league_id,
+                func.lower(Team.name).in_({folded(value.name) for value in values}),
             )
         )
     }
@@ -373,7 +387,9 @@ def _teams(session: OrmSession, sheets: Sheets, season: Season) -> dict[int, int
         if team:
             team.sqlmodel_update(value.model_dump(exclude_unset=True))
         else:
-            team = Team(**value.model_dump())
+            if season.league_id is None:
+                raise BadRequestError("The imported event must belong to a league")
+            team = Team(**value.model_dump(), league_id=season.league_id)
             written.append(team)
             stored[folded(value.name)] = team
         old_id = whole_number(row["ID"])

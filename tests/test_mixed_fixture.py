@@ -16,6 +16,7 @@ from app.core.db import Session
 from app.models.base import ident
 from app.models.enums import EventKind, StageFormat
 from app.models.event_stage import EventStage
+from app.models.league import League
 from app.models.relationships import DBEventRound
 from app.models.season import Season
 from app.models.team import Team
@@ -42,8 +43,12 @@ def clan_war(
     """
     ids = players(8)
     with Session.begin() as session:
+        league = League(name="Altar League")
+        session.add(league)
+        session.flush()
         event = Season(
             name="Altar of Champions",
+            league_id=ident(league),
             kind=EventKind.cup,
             series_per_round=1,
             published=True,
@@ -53,7 +58,10 @@ def clan_war(
         stage = EventStage(
             event_id=ident(event), position=1, format=StageFormat.gnl, best_of=3
         )
-        teams = [Team(name="Clan A"), Team(name="Clan B")]
+        teams = [
+            Team(name="Clan A", league_id=ident(league)),
+            Team(name="Clan B", league_id=ident(league)),
+        ]
         session.add_all([stage, *teams])
         session.flush()
         session.add(

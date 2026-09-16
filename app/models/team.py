@@ -41,6 +41,9 @@ class Team(TeamBase, DBModel, table=True):
     __tablename__ = "teams"
 
     id: int | None = Field(default=None, primary_key=True)
+    # A team is a named entrant of one league. Its roster may change between
+    # that league's events, but the team never exists outside the league.
+    league_id: int = Field(index=True, foreign_key="league.id")
     # the public blob the logo is served from
     icon_url: str | None = Field(default=None, max_length=500)
     user_seasons: list["DBUserTeamSeason"] = Relationship(
@@ -118,6 +121,7 @@ class TeamPublic(TeamReduced):
 
         return cls(
             id=ident(team),
+            league_id=team.league_id,
             name=team.name,
             long_name=team.long_name,
             icon_url=team.icon_url,

@@ -4,7 +4,7 @@ title: league
 description: One thing that repeats, such as the GNL or KOTH; each run of it is an event.
 resource: ../../../../app/models/league.py
 tags: [events, data]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T15:15:00Z }
+generated: { by: openai/gpt-6, at: 2026-09-15T21:52:57Z }
 verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
 sources:
   - id: model
@@ -31,7 +31,7 @@ sources:
 
 # Keys and joins
 
-Primary key `id`. Unique constraint on `name`. Pointed at by [event](event.md) `league_id`.
+Primary key `id`. Unique constraint on `name`. Pointed at by [event](event.md) `league_id` and [teams](teams.md) `league_id`.
 
 # Rules
 

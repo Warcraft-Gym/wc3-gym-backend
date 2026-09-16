@@ -19,6 +19,7 @@ from app.core.checkin_hint import availability_hints
 from app.core.db import Session, rel
 from app.core.divisions import cut
 from app.core.exceptions import ApiError, BadRequestError, NotFoundError
+from app.core.query import QueryElement, QueryUtil
 from app.models.base import ident
 from app.models.enums import (
     EntrantKind,
@@ -43,10 +44,13 @@ from app.models.event_entrant import (
 )
 from app.models.event_stage import EventStage, EventStagePublic, EventStageWrite
 from app.models.league import League, LeagueCreate, LeaguePublic, LeagueUpdate
+from app.models.map import MapPublic
 from app.models.relationships import (
     DBEventRound,
+    DBMapSeason,
     DBUserSeasonSignup,
     EventRoundPublic,
+    SeasonRoundPublic,
 )
 from app.models.round_availability import DBRoundAvailability
 from app.models.season import (
@@ -61,11 +65,13 @@ from app.models.season import (
     Season,
     series_counts,
     series_counts_by_event,
+    tier_count,
 )
 from app.models.series import Series
 from app.models.settings import Settings
 from app.models.team import Team
 from app.models.team_reduced import TeamReduced
+from app.models.team_season import DBTeamSeason
 from app.models.types import utcnow
 from app.models.user import User, UserPublic
 from app.models.user_team_season import DBUserTeamSeason
@@ -77,6 +83,16 @@ SEASONS = 3
 
 # The setting that names the W3C season the app is on
 W3C_SEASON_KEY = "current_w3c_season"
+
+# Maps and rounds are event relationships. The legacy season reads loaded
+# them first, but the canonical event payload now carries them too.
+_EVENT_OPTIONS = (
+    noload(rel(Season.user_teams)),
+    noload(rel(Season.teams)),
+    selectinload(rel(Season.maps)).joinedload(rel(DBMapSeason.map)),
+    selectinload(rel(Season.rounds)),
+    noload(rel(Season.signup_users)),
+)
 
 
 def phase_of(
@@ -228,13 +244,38 @@ class EventService:
         An unpublished event is a draft only an admin reads, so a caller who
         is not one sees the published rows whatever the filter asks for.
         """
-        statement = select(Season).order_by(col(Season.id).desc())
+        statement = (
+            select(Season).options(*_EVENT_OPTIONS).order_by(col(Season.id).desc())
+        )
         if kind is not None:
             statement = statement.where(col(Season.kind) == kind)
         if league_id is not None:
             statement = statement.where(col(Season.league_id) == league_id)
         if published is not None:
             statement = statement.where(col(Season.published).is_(published))
+        if not _is_admin(claims):
+            statement = statement.where(col(Season.published).is_(True))
+        with Session.begin() as session:
+            events = session.scalars(statement.offset(offset).limit(limit)).all()
+            return _publics(session, events)
+
+    def search(
+        self,
+        query: QueryElement | None,
+        limit: int | None = None,
+        offset: int = 0,
+        claims: dict[str, Any] | None = None,
+    ) -> list[EventPublic]:
+        """Search event fields and apply the same draft visibility as the list."""
+        filter = QueryUtil.convert_query_to_db_filter(Season, query)
+        if filter is None:
+            return []
+        statement = (
+            select(Season)
+            .options(*_EVENT_OPTIONS)
+            .where(filter)
+            .order_by(col(Season.id).desc())
+        )
         if not _is_admin(claims):
             statement = statement.where(col(Season.published).is_(True))
         with Session.begin() as session:
@@ -248,7 +289,7 @@ class EventService:
         and the qualifiers under a published event follow the same rule.
         """
         with Session.begin() as session:
-            event = _event(session, event_id)
+            event = _event(session, event_id, full=True)
             admin = _is_admin(claims)
             if not event.published and not admin:
                 raise NotFoundError(f"Event not found by id: {event_id}")
@@ -262,7 +303,7 @@ class EventService:
         signup-only event is.
         """
         with Session.begin() as session:
-            fields = data.model_dump(exclude={"stages"})
+            fields = data.model_dump(exclude={"stages", "round_count", "map_ids"})
             if fields.get("entrant_kind") is None:
                 fields["entrant_kind"] = _league_entrant_kind(
                     session, fields.get("league_id")
@@ -281,10 +322,43 @@ class EventService:
     def update(self, event_id: int, data: EventUpdate) -> EventPublic:
         """Change the event fields the body names; the stages have their own route."""
         with Session.begin() as session:
-            event = _event(session, event_id)
-            event.sqlmodel_update(data.model_dump(exclude_unset=True))
+            event = _event(session, event_id, full=True)
+            fields = data.model_dump(exclude_unset=True, exclude={"round_count"})
+            if "league_id" in fields and fields["league_id"] != event.league_id:
+                linked_team = session.scalar(
+                    select(col(DBTeamSeason.team_id))
+                    .where(col(DBTeamSeason.season_id) == event_id)
+                    .limit(1)
+                )
+                entered_team = session.scalar(
+                    select(col(EventEntrant.team_id))
+                    .where(
+                        col(EventEntrant.event_id) == event_id,
+                        col(EventEntrant.team_id).is_not(None),
+                    )
+                    .limit(1)
+                )
+                if linked_team is not None or entered_team is not None:
+                    raise BadRequestError(
+                        "Remove the event's teams before changing its league"
+                    )
+            event.sqlmodel_update(fields)
+            if data.model_fields_set & {"pick_ban", "map_rules"}:
+                from app.services.series_veto import check_order
+
+                check_order(event)
+            if "round_count" in data.model_fields_set:
+                from app.services.seasons import fill_rounds
+
+                fill_rounds(session, event, data.round_count or 0)
             session.flush()
             return _public(session, event, full=True)
+
+    def delete(self, event_id: int) -> None:
+        """Delete an event and let its owned rows follow their foreign keys."""
+        with Session.begin() as session:
+            session.delete(_event(session, event_id))
+            session.flush()
 
     def set_stages(
         self, event_id: int, stages: Sequence[EventStageWrite]
@@ -340,6 +414,7 @@ class EventService:
                 raise NotFoundError(f"League not found by id: {league_id}")
             statement = (
                 select(Season)
+                .options(*_EVENT_OPTIONS)
                 .where(col(Season.league_id) == league_id)
                 .order_by(col(Season.id).desc())
             )
@@ -648,8 +723,8 @@ def _league_entrant_kind(session: OrmSession, league_id: int | None) -> EntrantK
     return league.entrant_kind if league else EntrantKind.solo
 
 
-def _event(session: OrmSession, event_id: int) -> Season:
-    event = session.get(Season, event_id)
+def _event(session: OrmSession, event_id: int, full: bool = False) -> Season:
+    event = session.get(Season, event_id, options=_EVENT_OPTIONS if full else None)
     if event is None:
         raise NotFoundError(f"Event not found by id: {event_id}")
     return event
@@ -942,8 +1017,22 @@ def _public(
     when it is the subject of the read. `drafts` false leaves the unpublished
     qualifiers out for a caller who is not an admin.
     """
-    public = EventPublic.model_validate(event)
-    public.phase = phase_of(session, event, counts, last_stage)
+    # The ORM relationships are link/row models; translate them below into
+    # their public map and round shapes instead of asking Pydantic to coerce
+    # the relationship objects directly.
+    public = EventPublic.model_validate(event, update={"maps": [], "rounds": []})
+    resolved_counts = counts if counts is not None else series_counts(session, event.id)
+    public.phase = phase_of(session, event, resolved_counts, last_stage)
+    public.unscored_series = resolved_counts[0] - resolved_counts[2]
+    public.round_count = event.round_count
+    public.fantasy_tiers = tier_count(event.fantasy_tier_cuts)
+    public.fantasy_tier_cuts = event.fantasy_tier_cuts or []
+    public.maps = [
+        MapPublic.model_validate(link.map)
+        for link in (event.maps or [])
+        if link and link.map
+    ]
+    public.rounds = [SeasonRoundPublic.from_row(row) for row in (event.rounds or [])]
     if not full:
         return public
     public.checkin_open = event.checkin_enabled and checkin_open(event)
@@ -983,7 +1072,8 @@ def _public(
     if not drafts:
         children = children.where(col(Season.published).is_(True))
     public.children = [
-        EventPublic.model_validate(row) for row in session.scalars(children)
+        EventPublic.model_validate(row, update={"maps": [], "rounds": []})
+        for row in session.scalars(children)
     ]
     return public
 
@@ -1351,6 +1441,14 @@ def _enter(
         raise BadRequestError(
             "This event drafts its teams, so it takes no direct signup"
         )
+    if team_id is not None:
+        team = session.get(Team, team_id)
+        if team is None:
+            raise NotFoundError(f"Team not found by id: {team_id}")
+        if event.league_id is None or team.league_id != event.league_id:
+            raise BadRequestError(
+                f"Team {team_id} belongs to league {team.league_id}, not event league {event.league_id}"
+            )
     # A player plays one race; a team fields the races of its roster
     race = data.race if team_id is not None else _signup_race(data)
     side = (

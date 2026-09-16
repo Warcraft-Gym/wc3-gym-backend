@@ -4,7 +4,7 @@ title: API overview
 description: Seventeen route modules under one FastAPI app, one error envelope, paging with a total header, a search language, and OpenAPI at /docs.
 resource: ../../../app/api/main.py
 tags: [api]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T17:00:00Z }
+generated: { by: openai/gpt-6, at: 2026-09-15T21:52:57Z }
 sources:
   - id: router
     resource: ../../../app/api/main.py
@@ -26,16 +26,16 @@ sources:
 |---|---|---|
 | `login.py` | `/login`, `/me` | the admin token login and the session answer |
 | `users.py` | `/users` | players, bans, blocks, W3Champions sync, history |
-| `teams.py` | `/teams` | teams, rosters, captains, availability grid, logos |
-| `seasons.py` | `/seasons`, `/achievements` | seasons, maps, rounds, signups, ladder reads, badges |
+| `teams.py` | `/leagues/{league_id}/teams`, `/events/{event_id}/teams`, `/teams` | league-owned teams, event rosters, captains, availability grid, logos; deprecated unscoped aliases |
+| `seasons.py` | `/events/{event_id}`, `/seasons`, `/achievements` | GNL maps, rounds, signups, ladder reads and badges; deprecated season aliases |
 | `leagues.py` | `/leagues` | leagues |
-| `events.py` | `/events`, `/me/events` | events, entrants, divisions, stages, standings |
+| `events.py` | `/events`, `/me/events` | event CRUD and search, entrants, divisions, stages, standings |
 | `matches.py` | `/matches` | fixtures |
-| `series.py` | `/series`, `/casts` | series, result kind, places, sides, casts |
+| `series.py` | `/series`, `/events/{event_id}/series`, `/casts` | series, event series searches, result kind, places, sides, casts |
 | `draft_series.py` | `/draft-series` | a captain's proposed series |
 | `public.py` | `/signup`, `/player-series`, `/player-availability`, `/player-blocks`, `/player-history`, `/user-info`, `/fantasy-team`, `/fantasy-bet` | a member's own flows |
 | `maps.py` | `/maps` | maps and the ladder import |
-| `fantasy.py` | `/fantasy` | admin fantasy management and the breakdown |
+| `fantasy.py` | `/fantasy`, `/events/{event_id}/fantasy` | admin fantasy management and event-scoped reads, tiers and breakdowns |
 | `koth.py`, `koth_nights.py` | `/koth` | nights and the old KOTH payloads |
 | `config.py` | `/config` | settings, admins, role bindings, role sync |
 | `stats.py` | `/stats/career` | career stats |
@@ -45,6 +45,8 @@ sources:
 | `health.py` | `/health` | liveness |
 
 Swagger UI is at `/docs` and the OpenAPI document at `/openapi.json`. FastAPI includes routers lazily, so enumerate routes from `app.openapi()["paths"]`, not from `app.routes`.
+
+The OpenAPI version is `1.1.0`. This version adds GNL creation and management to the event routes. Every `/seasons` operation is deprecated in OpenAPI and remains available during the consumer migration.
 
 # The error envelope
 
@@ -57,6 +59,8 @@ List routes take `limit` (1 to 500, default 500) and `offset`. Seven routes carr
 # The search language
 
 `POST /<area>/search` takes a `query` such as `season_id == 3 and name ilike smith`, parsed by `app/core/query.py`. Use a service's `find_by_*` method for a value the caller supplies; keep the language for a query a client wrote.
+
+`POST /events/search` returns the same `EventPublic` shape and applies the same draft visibility as `GET /events`.
 
 # CORS and caching
 

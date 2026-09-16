@@ -143,7 +143,12 @@ def test_two_clubs_may_share_a_short_name(seeded: dict[str, Any]) -> None:
     """A club is its Discord role binding, not its short name, so a short name
     a folded club used is free for the next one."""
     with Session() as session:
-        session.add_all([Team(name="PP"), Team(name="PP")])
+        session.add_all(
+            [
+                Team(name="PP", league_id=seeded["league_id"]),
+                Team(name="PP", league_id=seeded["league_id"]),
+            ]
+        )
         session.commit()
 
 

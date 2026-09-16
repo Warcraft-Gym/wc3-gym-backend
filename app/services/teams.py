@@ -1,7 +1,7 @@
 import logging
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import select, true
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as OrmSession
 from sqlalchemy.orm import joinedload, noload, selectinload
@@ -10,6 +10,9 @@ from sqlmodel import col
 from app.core.db import Session, rel
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.core.query import QueryElement, QueryUtil
+from app.models.base import ident
+from app.models.enums import EntrantKind, LeagueKind
+from app.models.league import League
 from app.models.relationships import DBTeamSeasonCaptain
 from app.models.season import Season, progress_by_seasons
 from app.models.team import Team, TeamCreate, TeamPublic, TeamUpdate
@@ -20,6 +23,35 @@ from app.services import blob, derived, discord_roles
 from app.services.users import UserService
 
 logger = logging.getLogger(__name__)
+
+
+def _league(session: OrmSession, league_id: int) -> League:
+    league = session.get(League, league_id)
+    if not league:
+        raise NotFoundError(f"League not found by id: {league_id}")
+    return league
+
+
+def _team(session: OrmSession, team_id: int, league_id: int | None = None) -> Team:
+    team = session.get(Team, team_id)
+    if not team or (league_id is not None and team.league_id != league_id):
+        raise NotFoundError("Team not found")
+    return team
+
+
+def _event_team(
+    session: OrmSession, team_id: int, event_id: int
+) -> tuple[Team, Season]:
+    """A team of the event's league. No link row is required: a cup or a clan
+    war holds its teams as event entrants, and a roster write is often the
+    first link the team gets."""
+    event = session.get(Season, event_id)
+    if not event:
+        raise NotFoundError(f"Event not found by id: {event_id}")
+    team = _team(session, team_id)
+    if team.league_id != event.league_id:
+        raise NotFoundError("Team not found in event")
+    return team, event
 
 
 def _fill(session: OrmSession, teams: list[TeamPublic]) -> None:
@@ -85,19 +117,41 @@ class TeamService:
     def __init__(self, user_app_service: UserService) -> None:
         self.user_app_service = user_app_service
 
-    def add(self, team: TeamCreate) -> TeamPublic:
+    def legacy_gnl_league_id(self) -> int:
+        """The GNL owner used only by the deprecated unscoped team create."""
         with Session.begin() as session:
-            new_team = Team.add(session, team.model_dump())
+            league = session.scalars(
+                select(League).where(col(League.kind) == LeagueKind.gnl)
+            ).first()
+            if league is None:
+                league = League(
+                    name="GNL",
+                    short_name="GNL",
+                    kind=LeagueKind.gnl,
+                    entrant_kind=EntrantKind.drafted_teams,
+                )
+                session.add(league)
+                session.flush()
+            return ident(league)
+
+    def add(self, league_id: int, team: TeamCreate) -> TeamPublic:
+        with Session.begin() as session:
+            _league(session, league_id)
+            new_team = Team.add(session, team.model_dump() | {"league_id": league_id})
             return _public(session, new_team)
 
-    def update(self, team_id: int, team: TeamUpdate) -> TeamPublic:
+    def update(
+        self, team_id: int, team: TeamUpdate, league_id: int | None = None
+    ) -> TeamPublic:
         with Session.begin() as session:
-            row = Team.update(session, team_id, **team.model_dump(exclude_unset=True))
-            if not row:
-                raise NotFoundError("Team not found")
+            row = _team(session, team_id, league_id)
+            row.sqlmodel_update(team.model_dump(exclude_unset=True))
+            session.flush()
             return _public(session, row)
 
-    def update_icon(self, team_id: int, file: bytes) -> None:
+    def update_icon(
+        self, team_id: int, file: bytes, league_id: int | None = None
+    ) -> None:
         """Put the logo in the store, then point the row at it and drop the one it replaced."""
         # at the boundary the bytes arrive at, so it holds whatever the store is or is stubbed to be
         blob.icon_type(file)
@@ -109,7 +163,7 @@ class TeamService:
             # locked: two uploads for one team would otherwise read the same previous URL, and the
             # loser's blob would be left behind with nothing pointing at it
             team = session.get(Team, team_id, with_for_update=True)
-            if not team:
+            if not team or (league_id is not None and team.league_id != league_id):
                 raise NotFoundError("Team not found")
             previous = team.icon_url
             team.icon_url = url
@@ -120,12 +174,7 @@ class TeamService:
         self, team_id: int, season_id: int, player_ids: list[int]
     ) -> TeamPublic:
         with Session.begin() as session:
-            team = session.get(Team, team_id)
-            if not team:
-                raise NotFoundError(f"Team not found by id: {team_id}")
-            season = session.get(Season, season_id)
-            if not season:
-                raise NotFoundError(f"Season not found by id: {season_id}")
+            team, season = _event_team(session, team_id, season_id)
             for user_id in player_ids:
                 user = session.get(User, user_id)
                 if not user:
@@ -148,12 +197,7 @@ class TeamService:
         self, team_id: int, season_id: int, player_ids: list[int]
     ) -> TeamPublic:
         with Session.begin() as session:
-            team = session.get(Team, team_id)
-            if not team:
-                raise NotFoundError(f"Team not found by id: {team_id}")
-            season = session.get(Season, season_id)
-            if not season:
-                raise NotFoundError(f"Season not found by id: {season_id}")
+            team, _ = _event_team(session, team_id, season_id)
             for user_id in player_ids:
                 user = session.get(User, user_id)
                 if not user:
@@ -178,12 +222,7 @@ class TeamService:
     ) -> TeamPublic:
         """Replace the captains a team has in a season. Any number of them."""
         with Session.begin() as session:
-            team = session.get(Team, team_id)
-            if not team:
-                raise NotFoundError(f"Team not found by id: {team_id}")
-            season = session.get(Season, season_id)
-            if not season:
-                raise NotFoundError(f"Season not found by id: {season_id}")
+            team, _ = _event_team(session, team_id, season_id)
 
             for user_id in captain_ids:
                 if not session.get(User, user_id):
@@ -275,11 +314,11 @@ class TeamService:
             ).all()
             return {row[0]: (row[1], row[2]) for row in rows}
 
-    def delete(self, team_id: int) -> None:
+    def delete(self, team_id: int, league_id: int | None = None) -> None:
         with Session.begin() as session:
-            Team.delete(session, team_id)
+            session.delete(_team(session, team_id, league_id))
 
-    def get(self, team_id: int) -> TeamPublic:
+    def get(self, team_id: int, league_id: int | None = None) -> TeamPublic:
         with Session.begin() as session:
             # Eager load related entities, disable nested loading
             team = (
@@ -291,7 +330,12 @@ class TeamService:
                             rel(DBTeamSeasonCaptain.user)
                         ),
                     )
-                    .where(col(Team.id) == team_id)
+                    .where(
+                        col(Team.id) == team_id,
+                        col(Team.league_id) == league_id
+                        if league_id is not None
+                        else true(),
+                    )
                 )
                 .unique()
                 .first()
@@ -305,6 +349,7 @@ class TeamService:
     ) -> TeamPublic:
         """One team with the season's roster, captains and stats."""
         with Session.begin() as session:
+            _event_team(session, team_id, season_id)
             team = (
                 session.scalars(
                     select(Team)
@@ -318,15 +363,22 @@ class TeamService:
                 raise NotFoundError("Team not found")
             return _public(session, team)
 
-    def get_icon_url(self, team_id: int) -> str | None:
+    def ensure_event_team(self, team_id: int, event_id: int) -> None:
+        """Refuse a team that is not entered in this event or its league."""
+        with Session.begin() as session:
+            _event_team(session, team_id, event_id)
+
+    def get_icon_url(self, team_id: int, league_id: int | None = None) -> str | None:
         """Where the logo lives, or None for a team without one."""
         with Session.begin() as session:
-            return session.scalar(
-                select(col(Team.icon_url)).where(col(Team.id) == team_id)
-            )
+            return _team(session, team_id, league_id).icon_url
 
     def search(
-        self, query: QueryElement | None, limit: int | None = None, offset: int = 0
+        self,
+        query: QueryElement | None,
+        limit: int | None = None,
+        offset: int = 0,
+        league_id: int | None = None,
     ) -> list[TeamPublic]:
         filter = QueryUtil.convert_query_to_db_filter(Team, query)
         if filter is None:
@@ -336,7 +388,12 @@ class TeamService:
             statement = (
                 select(Team)
                 .options(*_LIST_OPTIONS)
-                .where(filter)
+                .where(
+                    filter,
+                    col(Team.league_id) == league_id
+                    if league_id is not None
+                    else true(),
+                )
                 .order_by(col(Team.id))
                 .offset(offset)
                 .limit(limit)
@@ -346,12 +403,22 @@ class TeamService:
             _fill(session, result)
             return result
 
-    def get_all(self, limit: int | None = None, offset: int = 0) -> list[TeamPublic]:
+    def get_all(
+        self,
+        limit: int | None = None,
+        offset: int = 0,
+        league_id: int | None = None,
+    ) -> list[TeamPublic]:
         with Session.begin() as session:
             # Offset paging is deterministic only with a fixed order
             statement = (
                 select(Team)
                 .options(*_LIST_OPTIONS)
+                .where(
+                    col(Team.league_id) == league_id
+                    if league_id is not None
+                    else true()
+                )
                 .order_by(col(Team.id))
                 .offset(offset)
                 .limit(limit)
@@ -362,7 +429,10 @@ class TeamService:
             return result
 
     def get_all_basic(
-        self, limit: int | None = None, offset: int = 0
+        self,
+        limit: int | None = None,
+        offset: int = 0,
+        league_id: int | None = None,
     ) -> list[TeamPublic]:
         """Get all teams with basic info only (no users, no seasons)"""
         with Session.begin() as session:
@@ -371,6 +441,11 @@ class TeamService:
             statement = (
                 select(Team)
                 .options(noload("*"))
+                .where(
+                    col(Team.league_id) == league_id
+                    if league_id is not None
+                    else true()
+                )
                 .order_by(col(Team.id))
                 .offset(offset)
                 .limit(limit)

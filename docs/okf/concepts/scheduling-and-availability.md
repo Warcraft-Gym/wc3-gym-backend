@@ -4,7 +4,7 @@ title: Scheduling and availability
 description: A player answers whether they can play a round, keeps soft blocks that inform but never constrain, and the two players of a series see the free time they share.
 resource: ../../../app/services/availability.py
 tags: [events, scheduling]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T14:30:00Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-09-16T00:00:00Z }
 sources:
   - id: availability
     resource: ../../../app/services/availability.py
@@ -22,7 +22,7 @@ sources:
 
 # The unit is the round
 
-The question "can you play?" belongs to a round, never to "every week". A round has a date window. Once a player has a series in a round the question is moot, and the series replaces the question on the dashboard. An answer is one row per player per round (`round_availability`); no row is no answer, and clearing an answer deletes the row. The player and their captain write the same row, and the last write wins. `PUT /player-availability` and `PUT /teams/{id}/seasons/{id}/availability` are the two writers, and the Discord `/availability` card is a third door to the same service.
+The question "can you play?" belongs to a round, never to "every week". A round has a date window. Once a player has a series in a round the question is moot, and the series replaces the question on the dashboard. An answer is one row per player per round (`round_availability`); no row is no answer, and clearing an answer deletes the row. The player and their captain write the same row, and the last write wins. `PUT /player-availability` and `PUT /events/{event_id}/teams/{team_id}/availability` are the two writers, and the Discord `/availability` card is a third door to the same service.
 
 # Ask when someone cannot play
 

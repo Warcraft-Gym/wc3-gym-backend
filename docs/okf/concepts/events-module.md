@@ -4,7 +4,7 @@ title: Events module
 description: One data model for every kind of event, with GNL and KOTH behaviour in their own modules on top, a stage engine that never branches on kind, a phase derived on every read, and the admin's path from a new league to a finished event with awards.
 resource: ../../../app/services/events.py
 tags: [events]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-15T09:00:00Z }
+generated: { by: openai/gpt-6, at: 2026-09-15T22:10:13Z }
 sources:
   - id: events
     resource: ../../../app/services/events.py
@@ -15,6 +15,9 @@ sources:
   - id: rules
     resource: ../../../app/services/series_rules.py
     title: The rules one series plays under
+  - id: gnl-events
+    resource: ../../../app/services/gnl_events.py
+    title: GNL event creation
   - id: snapshot
     resource: ../../../tests/test_gnl_snapshot.py
     title: The GNL payloads pinned byte for byte
@@ -25,6 +28,8 @@ sources:
 Every event kind shares the rows: `league`, `event`, `event_stage`, `event_round`, `event_division`, `event_entrant`, `matches` (fixtures), `series`, `series_side`, `series_game`. A GNL season is the `gnl` kind of event; it runs on the same tables and its payloads did not change when the tables were renamed. `tests/test_gnl_snapshot.py` pins those payloads, so a migration that shifts a GNL field fails before it reaches a page.
 
 The rule that keeps this workable: **the shared engine never branches on kind.** A kind that needs different behaviour gets a kind module (`app/services/koth/`, and the GNL draft and fantasy services) and, where it needs its own columns, a side table. Never write `if kind == "gnl"` inside a shared service. See [the decision](../decisions/unified-event-model.md).
+
+The event API is the canonical HTTP surface for every kind. `EventPublic` includes the GNL map pool, rounds, score configuration, fantasy configuration and unscored-series count. The two fields that exist only on `SeasonPublic`, `user_signup` and `signup_race`, describe the caller in a legacy response; event signup routes carry that state.
 
 # Stages
 
@@ -50,7 +55,7 @@ Divisions cut the entrant pool by MMR (`app/core/divisions.py`). Every division 
 
 `signup_policy` is `members` (a member with an account) or `anyone` (any battle tag; KOTH takes signups from Twitch chat this way). A per-event switch allows one entrant row per race, off by default, on for KOTH nights.
 
-An event of a league that drafts its teams (`entrant_kind` is `drafted_teams`) takes no direct signup, and the write refuses it by that shape, never by the event kind. A captain of a team may enter that team into an event; the entrant cap refuses a signup past it and no waiting list is kept.
+An event of a league that drafts its teams (`entrant_kind` is `drafted_teams`) takes no direct signup, and the write refuses it by that shape, never by the event kind. A captain of a team may enter that team into an event of the same league. A cross-league team is refused. The entrant cap refuses a signup past it and no waiting list is kept.
 
 # Awards
 
@@ -65,7 +70,7 @@ Every event has one card the app posts and edits in Discord, with a sign-up, a w
 The admin's path from a new league to a finished event, in order. Every write here needs an admin unless the step says otherwise; the frontend repository owns the pages.
 
 1. **Create the league.** `POST /leagues` with the name, the short name, the `kind` and the `entrant_kind`. `PUT /leagues/{id}` changes it later. The GNL and the KOTH league already exist.
-2. **Create the event.** `POST /events` with the fields and the stage list. A body without `stages` gets one default stage; an explicit empty list gets none, which is a signup-only event. `entrant_kind` left out is copied from the league. `PUT /events/{id}` changes the fields; `PUT /events/{id}/stages` replaces the stage list in play order, updating a stage in place so its rounds and series stay, and refusing to drop a stage that still holds rounds. A KOTH night is opened in one call, `POST /koth/nights`, which writes the event, its `koth` stage and its three brackets.
+2. **Create the event.** `POST /events` with the league id, fields and optional stage list. A GNL league dispatches to its kind service, which writes one `gnl` stage, the requested rounds, the ordered map pool and the achievement rules in the same transaction. The caller does not also send `kind=gnl`; the league selects those rules and the default already has that value. A generic event body without `stages` gets one default stage; an explicit empty list gets none, which is a signup-only event. `entrant_kind` left out is copied from the league. `PUT /events/{id}` changes the fields; an event that already holds teams must remove them before its league can change. `PUT /events/{id}/stages` replaces the stage list in play order, updating a stage in place so its rounds and series stay, and refusing to drop a stage that still holds rounds. A KOTH night is opened in one call, `POST /koth/nights`, which writes the event, its `koth` stage and its three brackets.
 3. **Publish.** `PUT /events/{id}` with `published` on. A draft reads for an admin only and its phase is `draft`.
 4. **Open signups.** `PUT /events/{id}` with `signups_open` on; the phase reads `signups_open`. `POST /events/{id}/discord-post` posts the event card with its buttons in a channel, or edits the card already there.
 5. **Entrants.** A member signs up with `POST /events/{id}/entrants`, a captain enters their team the same way, an admin enters anyone with `POST /events/{id}/entrants/admin` whether signups stand open or not, and a Twitch chat command enters a battle tag through `GET /koth/signup`. `DELETE /events/{id}/entrants/me` withdraws and keeps the row; `DELETE /events/{id}/entrants/{entrant_id}` removes it. `POST /events/{id}/entrants/{entrant_id}/checkin` checks an entrant in on an event with no dated round; an event with dated rounds checks in per round through `PUT /player-availability`. `GET /events/{id}/entrants` lists every row with its MMR and its warnings.

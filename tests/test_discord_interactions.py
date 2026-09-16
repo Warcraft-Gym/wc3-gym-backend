@@ -93,7 +93,7 @@ def test_upcoming_posts_the_window_publicly(
         int(datetime(2026, 1, d, 12, tzinfo=UTC).timestamp()) for d in (5, 11)
     )
     assert post[2]["embeds"][0]["description"] == (
-        f"## Season 1\nRound 1: <t:{first}:d> to <t:{last}:d>\n\n"
+        f"## SL · Season 1\nRound 1: <t:{first}:d> to <t:{last}:d>\n\n"
         "### Team Alpha (Alpha) vs Team Beta (Beta)\n"
         "🇺🇸 **P2** vs 🇸🇪 **P4**\n"
         f"<t:{stamp}:F> · <t:{stamp}:R>\n"

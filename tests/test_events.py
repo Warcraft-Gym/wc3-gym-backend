@@ -675,7 +675,11 @@ def test_a_team_entrant_names_a_team_and_a_player_entrant_a_user(
 
     event = add_event(name="Team Night")
     with Session.begin() as session:
-        team = Team(name="Alpha")
+        league = League(name="Team League", entrant_kind=EntrantKind.team)
+        session.add(league)
+        session.flush()
+        session.get_one(Season, event).league_id = league.id
+        team = Team(name="Alpha", league_id=ident(league))
         session.add(team)
         session.flush()
         team_id = ident(team)

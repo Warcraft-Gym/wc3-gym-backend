@@ -15,6 +15,8 @@ from app.core.divisions import cut
 from app.models.enums import EventKind, Race
 from app.models.event_entrant import EventEntrant
 from app.models.event_stage import EventStage
+from app.models.league import League
+from app.models.season import Season
 from app.models.team import Team
 from app.models.user import User
 from app.models.user_team_season import DBUserTeamSeason
@@ -54,7 +56,14 @@ def enter(event_id: int, user_id: int, race: Race = Race.HU) -> int:
 def enter_team(event_id: int, name: str, member_ids: list[int]) -> int:
     """A pre-made team rostered against the event, entered as one entrant."""
     with Session.begin() as session:
-        team = Team(name=name)
+        event = session.get_one(Season, event_id)
+        if event.league_id is None:
+            league = League(name=f"League {event_id}")
+            session.add(league)
+            session.flush()
+            event.league_id = league.id
+        assert event.league_id is not None
+        team = Team(name=name, league_id=event.league_id)
         session.add(team)
         session.flush()
         assert team.id is not None

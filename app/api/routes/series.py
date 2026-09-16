@@ -120,46 +120,47 @@ def search_series(
     return service.search(query, limit=limit, offset=offset)
 
 
-@router.post("/series/season/{season_id}/playday/{playday}/search")
-def search_series_by_season_and_playday(
-    season_id: int,
+@router.post("/events/{event_id}/rounds/{playday}/series/search", tags=["events"])
+@router.post("/series/season/{event_id}/playday/{playday}/search", deprecated=True)
+def search_series_by_event_and_playday(
+    event_id: int,
     playday: int,
     service: SeriesServiceDep,
     query: str = "",
     limit: Annotated[int, Query(ge=1, le=500)] = 500,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[SeriesPublic]:
-    """Return series matching the search query for a specific season and a specific playday"""
+    """Return series matching the search query for one event round."""
     parsed_query = QueryUtil.parse_query(query)
     return service.search_for_season_and_playday(
-        season_id, playday, parsed_query, limit=limit, offset=offset
+        event_id, playday, parsed_query, limit=limit, offset=offset
     )
 
 
-@router.get("/series/season/{season_id}")
-def get_series_by_season(
-    season_id: int,
+@router.get("/events/{event_id}/series", tags=["events"])
+@router.get("/series/season/{event_id}", deprecated=True)
+def get_series_by_event(
+    event_id: int,
     service: SeriesServiceDep,
     limit: Annotated[int, Query(ge=1, le=500)] = 500,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[SeriesPublic]:
-    """Return one page of the series of a season, at most 500."""
-    return service.search_for_season(season_id, None, limit=limit, offset=offset)
+    """Return one page of an event's series, at most 500."""
+    return service.search_for_season(event_id, None, limit=limit, offset=offset)
 
 
-@router.post("/series/season/{season_id}/search")
-def search_series_by_season(
-    season_id: int,
+@router.post("/events/{event_id}/series/search", tags=["events"])
+@router.post("/series/season/{event_id}/search", deprecated=True)
+def search_series_by_event(
+    event_id: int,
     service: SeriesServiceDep,
     query: str = "",
     limit: Annotated[int, Query(ge=1, le=500)] = 500,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[SeriesPublic]:
-    """Return series matching the search query for a specific season"""
+    """Return series matching the search query for an event."""
     parsed_query = QueryUtil.parse_query(query)
-    return service.search_for_season(
-        season_id, parsed_query, limit=limit, offset=offset
-    )
+    return service.search_for_season(event_id, parsed_query, limit=limit, offset=offset)
 
 
 def caster(claims: RequireMember, user_service: UserServiceDep) -> tuple[int, bool]:

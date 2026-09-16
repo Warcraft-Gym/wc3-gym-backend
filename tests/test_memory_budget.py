@@ -24,7 +24,8 @@ from tests.seed import add_bets
 
 BETS = 300
 SEASONS = 8
-BUDGET_BYTES = 8 * 1024 * 1024
+# 300 bets peak at 8.2 MB: the season and team rows each carry a league
+BUDGET_BYTES = 9 * 1024 * 1024
 
 
 @pytest.fixture

@@ -15,10 +15,11 @@ from sqlmodel import col
 from app.core.db import Session
 from app.core.exceptions import BadRequestError
 from app.models.base import ident
-from app.models.enums import EventKind, Race, StageFormat
+from app.models.enums import EntrantKind, EventKind, Race, StageFormat
 from app.models.event_division import EventDivision
 from app.models.event_entrant import EventEntrant
 from app.models.event_stage import EventStage
+from app.models.league import League
 from app.models.relationships import DBEventRound
 from app.models.season import Season
 from app.models.series import Series
@@ -1099,8 +1100,12 @@ def team_cup(
     """
     ids = players(8)
     with Session.begin() as session:
+        league = League(name="Team Cup League", entrant_kind=EntrantKind.team)
+        session.add(league)
+        session.flush()
         event = Season(
             name="Team Cup",
+            league_id=ident(league),
             kind=EventKind.cup,
             series_per_round=series_per_round,
             published=True,
@@ -1108,7 +1113,9 @@ def team_cup(
         session.add(event)
         session.flush()
         stage = EventStage(event_id=ident(event), position=1, format=fmt, **fields)
-        teams = [Team(name=f"T{number}") for number in range(1, 5)]
+        teams = [
+            Team(name=f"T{number}", league_id=ident(league)) for number in range(1, 5)
+        ]
         session.add_all([stage, *teams])
         session.flush()
         event_id, stage_id = ident(event), ident(stage)

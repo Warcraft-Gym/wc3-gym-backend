@@ -13,8 +13,9 @@ from app.api.deps import (
     require_login,
 )
 from app.api.search import SearchQuery
-from app.core.exceptions import ApiError
+from app.core.exceptions import ApiError, BadRequestError
 from app.core.ordering import SortOrder
+from app.core.query import QueryUtil
 from app.models.fantasy_bet import (
     FantasyBetCreate,
     FantasyBetPublic,
@@ -61,12 +62,29 @@ def require_admin_or_owner(
     raise ApiError(403, {"error": "Admins or the fantasy team's owner only"})
 
 
-@router.put("/fantasy/tiers", status_code=204, dependencies=[Depends(require_admin)])
+@router.put(
+    "/events/{event_id}/fantasy/tiers",
+    status_code=204,
+    tags=["events"],
+    dependencies=[Depends(require_admin)],
+)
+@router.put(
+    "/fantasy/tiers",
+    status_code=204,
+    deprecated=True,
+    dependencies=[Depends(require_admin)],
+)
 def set_fantasy_tiers(
-    allocation: FantasyTierAllocation, service: UserServiceDep, season_id: int
+    allocation: FantasyTierAllocation,
+    service: UserServiceDep,
+    event_id: int | None = None,
+    season_id: int | None = None,
 ) -> None:
-    """Replace one season's cuts and tier allocation in one transaction, unlisted players lose theirs."""
-    service.set_fantasy_tiers(season_id, allocation.cuts, allocation.tiers)
+    """Replace one event's tier allocation; unlisted players lose theirs."""
+    selected = event_id if event_id is not None else season_id
+    if selected is None:
+        raise BadRequestError("missing event_id")
+    service.set_fantasy_tiers(selected, allocation.cuts, allocation.tiers)
 
 
 # Team endpoints
@@ -154,6 +172,21 @@ def get_all_teams(
     """Retrieve one page of fantasy teams, at most 500, ordered by id."""
     teams, total = service.get_all(limit=limit, offset=offset)
     response.headers["X-Total-Count"] = str(total)
+    return teams
+
+
+@router.get("/events/{event_id}/fantasy/teams", tags=["events"])
+def get_event_fantasy_teams(
+    event_id: int,
+    service: FantasyTeamServiceDep,
+    response: Response,
+    limit: Annotated[int, Query(ge=1, le=500)] = 500,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> list[FantasyTeamPublic]:
+    """Retrieve one page of fantasy teams belonging to an event."""
+    query = QueryUtil.parse_query(f"season_id == {event_id}")
+    teams, total = service.search(query, limit=limit, offset=offset)
+    response.headers["X-Total-Count"] = str(total or 0)
     return teams
 
 
@@ -247,12 +280,18 @@ def search_bets(
 
 
 @router.get(
-    "/fantasy/teams/{team_id}/season/{season_id}/breakdown",
+    "/events/{event_id}/fantasy/teams/{team_id}/breakdown",
+    tags=["events"],
+    response_model=FantasyTeamScoreBreakdown,
+)
+@router.get(
+    "/fantasy/teams/{team_id}/season/{event_id}/breakdown",
+    deprecated=True,
     response_model=FantasyTeamScoreBreakdown,
 )
 def get_fantasy_team_breakdown(
     team_id: int,
-    season_id: int,
+    event_id: int,
     season_service: SeasonServiceDep,
     fantasy_team_service: FantasyTeamServiceDep,
     fantasy_bet_service: FantasyBetServiceDep,
@@ -263,7 +302,7 @@ def get_fantasy_team_breakdown(
     team score was calculated.
     """
     # get raises NotFoundError, which answers 404
-    season = season_service.get(season_id)
+    season = season_service.get(event_id)
     return team_score_breakdown(
         fantasy_team_service, fantasy_bet_service, team_id, season
     )
