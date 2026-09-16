@@ -2,7 +2,8 @@
 type: Domain Concept
 title: Roles and permissions
 description: Four roles decided by the database and the guild, ownership checked per row, reads open and writes admin-only, and an admin view-as switch.
-tags: [auth, roles, permissions]
+resource: ../../../app/api/deps.py
+tags: [auth]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
 sources:
   - id: deps

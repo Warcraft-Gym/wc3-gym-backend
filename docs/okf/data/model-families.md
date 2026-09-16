@@ -2,7 +2,8 @@
 type: Data Model
 title: Model families
 description: Every entity is a family of SQLModel classes, one table class and separate Create, Update and Public shapes, with validators in one module and every datetime aware UTC.
-tags: [sqlmodel, models, schema]
+resource: ../../../app/models/base.py
+tags: [data]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T15:15:00Z }
 sources:
   - id: base

@@ -2,7 +2,8 @@
 type: Convention
 title: Layering
 description: Routes call services, services own their transactions, models hold the schema and the shapes, and pure rules live in app/core.
-tags: [architecture, fastapi, sqlmodel]
+resource: ../../../app/main.py
+tags: [events, data, api]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
 sources:
   - id: main

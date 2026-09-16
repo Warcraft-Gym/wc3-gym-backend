@@ -2,7 +2,7 @@
 type: Pitfall
 title: Quoting a whole relationship annotation breaks every mapper
 description: A SQLModel Relationship annotated as the string "X | None" hands SQLAlchemy an opaque name; X | None works when X is imported, and Optional["X"] is the only quoted form.
-tags: [pitfall, sqlmodel]
+tags: [data]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
 sources:
   - id: source

@@ -2,7 +2,7 @@
 type: Decision
 title: Ask when someone cannot play
 description: Availability is collected as blocks, blank meaning fully open, and a block informs pairings without ever constraining them.
-tags: [decision, scheduling]
+tags: [scheduling]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
 sources:
   - id: source

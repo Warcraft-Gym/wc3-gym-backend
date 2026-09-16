@@ -2,7 +2,7 @@
 type: Decision
 title: Draft order is a rerank, not an MMR
 description: A hand correction to the draft order is a position on the signup row, never an adjusted MMR value.
-tags: [decision, gnl]
+tags: [events]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
 sources:
   - id: source

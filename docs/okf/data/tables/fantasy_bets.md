@@ -3,8 +3,9 @@ type: Data Model
 title: fantasy_bets
 description: One stake of points a member placed on one series and the player they called to win it.
 resource: ../../../../app/models/fantasy_bet.py
-tags: [schema, fantasy]
+tags: [fantasy, data]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T15:15:00Z }
+verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
 sources:
   - id: model
     resource: ../../../../app/models/fantasy_bet.py

@@ -2,7 +2,8 @@
 type: API Area
 title: Consumers of the API
 description: Who calls the backend, which routes each one reads, and which tests pin those shapes.
-tags: [api, contract, consumers]
+resource: ../../../tests/test_public_contract.py
+tags: [api]
 generated: { by: openai/gpt-6, at: 2026-09-15T21:52:57Z }
 sources:
   - id: public-contract

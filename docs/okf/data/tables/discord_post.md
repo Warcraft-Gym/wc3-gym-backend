@@ -3,8 +3,9 @@ type: Data Model
 title: discord_post
 description: One card the app posted in Discord and may edit later, with the two stamps that pace edits to the channel's rate limit.
 resource: ../../../../app/models/discord_post.py
-tags: [schema, discord]
+tags: [discord, data]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T15:15:00Z }
+verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
 sources:
   - id: model
     resource: ../../../../app/models/discord_post.py

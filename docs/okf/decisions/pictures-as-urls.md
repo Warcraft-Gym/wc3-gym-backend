@@ -2,7 +2,7 @@
 type: Decision
 title: Pictures are URLs
 description: Logos and map pictures live in a blob store as public URLs, uploaded from the admin UI; no bytes column exists in the database.
-tags: [decision, storage]
+tags: [storage]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
 sources:
   - id: source
