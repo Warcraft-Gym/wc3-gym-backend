@@ -6,11 +6,12 @@ own phase word. The event phase is computed on every read and never stored.
 """
 
 import random
+from collections import Counter
 from collections.abc import Sequence
 from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, distinct, func, select, update
 from sqlalchemy.orm import Session as OrmSession
 from sqlalchemy.orm import noload, selectinload
 from sqlmodel import col
@@ -45,6 +46,7 @@ from app.models.event_entrant import (
 from app.models.event_stage import EventStage, EventStagePublic, EventStageWrite
 from app.models.league import League, LeagueCreate, LeaguePublic, LeagueUpdate
 from app.models.map import MapPublic
+from app.models.match import Match
 from app.models.relationships import (
     DBEventRound,
     DBMapSeason,
@@ -138,6 +140,11 @@ def phase_of(
     if event.checkin_enabled and checkin_open(event):
         return "checkin"
     return "seeded"
+
+
+def _signups_open(event: Season, phase: EventPhase) -> bool:
+    """The stored flag, shut once the event reads finished."""
+    return event.signups_open and phase != "finished"
 
 
 def last_stage_drawn(
@@ -507,7 +514,7 @@ class EventService:
         """Sign the caller up, or the team the caller captains."""
         with Session.begin() as session:
             event = _event(session, event_id)
-            if not event.signups_open:
+            if not _signups_open(event, phase_of(session, event)):
                 raise BadRequestError("Signups are closed for this event")
             if data.team_id is not None:
                 if not _is_admin(claims) and data.team_id not in _captains(claims):
@@ -538,11 +545,13 @@ class EventService:
                 )
             return _entrant_publics(session, event, [row])[0]
 
-    def withdraw(self, event_id: int, claims: dict[str, Any] | None) -> None:
+    def withdraw(
+        self, event_id: int, claims: dict[str, Any] | None, race: Race | None = None
+    ) -> None:
         """Stamp the caller's own entrant rows as withdrawn; the rows stay.
 
-        The call names no race, so every active row of the caller goes: an
-        event that takes one entry per race holds one row per race he entered.
+        A race names one row of an event that takes one entry per race; no
+        race withdraws every active row of the caller.
         """
         with Session.begin() as session:
             event = _event(session, event_id)
@@ -555,6 +564,7 @@ class EventService:
                         col(EventEntrant.event_id) == event.id,
                         col(EventEntrant.user_id) == user.id,
                         col(EventEntrant.withdrawn_at).is_(None),
+                        *([col(EventEntrant.race) == race] if race else []),
                     )
                 ).all()
             )
@@ -621,6 +631,15 @@ class EventService:
                 .where(col(EventEntrant.event_id) == event_id)
                 .values(division_id=None, manual_placement=False)
             )
+            gone = select(col(EventDivision.id)).where(
+                col(EventDivision.event_id) == event_id
+            )
+            for model in (Series, Match):
+                session.execute(
+                    update(model)
+                    .where(col(model.division_id).in_(gone))
+                    .values(division_id=None)
+                )
             session.execute(
                 delete(EventDivision).where(col(EventDivision.event_id) == event_id)
             )
@@ -642,15 +661,22 @@ class EventService:
             divisions = _divisions(session, event_id)
             if not divisions:
                 raise BadRequestError("The event has no divisions to assign")
-            rows = [
-                row
-                for row in _live_entrants(session, event_id)
-                if not row.manual_placement
-            ]
+            live = _live_entrants(session, event_id)
+            rows = [row for row in live if not row.manual_placement]
+            # A hand-placed entrant takes one of its division's seats
+            placed = Counter(row.division_id for row in live if row.manual_placement)
             mmrs = _mmrs(session, rows)
             bands = cut(
                 [(ident(row), mmrs[ident(row)]) for row in rows],
-                [(division.lower_bound, division.size) for division in divisions],
+                [
+                    (
+                        division.lower_bound,
+                        None
+                        if division.size is None
+                        else max(division.size - placed[division.id], 0),
+                    )
+                    for division in divisions
+                ],
             )
             for row in rows:
                 row.division_id = divisions[bands[ident(row)]].id
@@ -956,10 +982,11 @@ def _member_row(
         id=ident(event),
         name=event.name,
         league_short_name=event.league_short_name,
+        league_name=event.league_name,
         start=_start(event),
         end=event.end_date,
         phase=phase,
-        signups_open=event.signups_open,
+        signups_open=_signups_open(event, phase),
         joined=joined,
         url=event.page_url,
         entrant_id=ident(entrant) if entrant else None,
@@ -1023,6 +1050,7 @@ def _public(
     public = EventPublic.model_validate(event, update={"maps": [], "rounds": []})
     resolved_counts = counts if counts is not None else series_counts(session, event.id)
     public.phase = phase_of(session, event, resolved_counts, last_stage)
+    public.signups_open = _signups_open(event, public.phase)
     public.unscored_series = resolved_counts[0] - resolved_counts[2]
     public.round_count = event.round_count
     public.fantasy_tiers = tier_count(event.fantasy_tier_cuts)
@@ -1044,14 +1072,18 @@ def _public(
             .order_by(col(EventStage.position))
         )
     ]
+    # A count is of players, not rows: an event is solo or team, so the one
+    # id an entrant carries names the player, and a race is not a second one
+    player = func.coalesce(col(EventEntrant.user_id), col(EventEntrant.team_id))
+    live = (
+        col(EventEntrant.event_id) == event.id,
+        col(EventEntrant.withdrawn_at).is_(None),
+    )
     by_division = {
         division_id: total
         for division_id, total in session.execute(
-            select(col(EventEntrant.division_id), func.count())
-            .where(
-                col(EventEntrant.event_id) == event.id,
-                col(EventEntrant.withdrawn_at).is_(None),
-            )
+            select(col(EventEntrant.division_id), func.count(distinct(player)))
+            .where(*live)
             .group_by(col(EventEntrant.division_id))
         )
     }
@@ -1061,8 +1093,9 @@ def _public(
         )
         for row in _divisions(session, ident(event))
     ]
-    # The entrants of no division ride in the same read, so their bucket counts
-    public.entrant_count = sum(by_division.values())
+    public.entrant_count = session.scalar(
+        select(func.count(distinct(player))).where(*live)
+    )
     # The qualifiers that feed this event, newest first
     children = (
         select(Season)

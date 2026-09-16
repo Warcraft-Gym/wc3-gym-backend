@@ -2,6 +2,7 @@
 
 ## 2026-09-16
 
+* **Update**: a finished event reads `signups_open` false and refuses a signup; the withdraw takes a race; entrant counts are of players; a sized division counts its hand placements; replacing the divisions clears them off the series and matches; the payloads carry `league_name`.
 * **Update**: every old `/koth/*` route is deprecated in the OpenAPI document; the live KOTH routes are the night open and close and the Twitch signup.
 
 ## 2026-09-15
