@@ -1,5 +1,9 @@
 # Bundle history
 
+## 2026-09-16
+
+* **Update**: every old `/koth/*` route is deprecated in the OpenAPI document; the live KOTH routes are the night open and close and the Twitch signup.
+
 ## 2026-09-15
 
 * **Update**: teams belong to one league; canonical team identity routes are league-scoped, event roster and series routes are event-scoped, and the season-named forms remain deprecated aliases during migration.
