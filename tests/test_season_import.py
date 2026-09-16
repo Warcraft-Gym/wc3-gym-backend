@@ -320,11 +320,13 @@ def test_an_import_without_the_fantasy_users_sheet_still_writes_the_season(
 # One transaction of bulk statements, not one transaction per row, so the
 # cost of an import does not grow with the rows a sheet holds.
 
-# The workbook below costs 35: one lookup per sheet, the writes it needs, one
+# The workbook below costs 37: one lookup per sheet, the writes it needs, one
 # insert per round, which event_round takes singly now that it has an id, the
 # lookup of the stage those rounds hang off, and one round lookup per flush
 # that writes fixtures or series, whatever the number of rows in it
-IMPORT_STATEMENTS = 35
+# Two of them are the league the imported event stands in: the lookup, and the
+# insert that writes the GNL league when the database has none
+IMPORT_STATEMENTS = 37
 
 
 def _row_counts() -> dict[str, int]:

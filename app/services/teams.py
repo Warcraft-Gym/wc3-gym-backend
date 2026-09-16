@@ -42,16 +42,14 @@ def _team(session: OrmSession, team_id: int, league_id: int | None = None) -> Te
 def _event_team(
     session: OrmSession, team_id: int, event_id: int
 ) -> tuple[Team, Season]:
-    """A team entered in an event of the same league."""
+    """A team of the event's league. No link row is required: a cup or a clan
+    war holds its teams as event entrants, and a roster write is often the
+    first link the team gets."""
     event = session.get(Season, event_id)
     if not event:
         raise NotFoundError(f"Event not found by id: {event_id}")
     team = _team(session, team_id)
-    if (
-        team.league_id != event.league_id
-        or session.get(DBTeamSeason, {"team_id": team_id, "season_id": event_id})
-        is None
-    ):
+    if team.league_id != event.league_id:
         raise NotFoundError("Team not found in event")
     return team, event
 
@@ -386,8 +384,6 @@ class TeamService:
         if filter is None:
             return []
         with Session.begin() as session:
-            if league_id is not None:
-                _league(session, league_id)
             # Offset paging is deterministic only with a fixed order
             statement = (
                 select(Team)
@@ -414,8 +410,6 @@ class TeamService:
         league_id: int | None = None,
     ) -> list[TeamPublic]:
         with Session.begin() as session:
-            if league_id is not None:
-                _league(session, league_id)
             # Offset paging is deterministic only with a fixed order
             statement = (
                 select(Team)
@@ -442,8 +436,6 @@ class TeamService:
     ) -> list[TeamPublic]:
         """Get all teams with basic info only (no users, no seasons)"""
         with Session.begin() as session:
-            if league_id is not None:
-                _league(session, league_id)
             # noload("*") keeps every relationship out
             # Offset paging is deterministic only with a fixed order
             statement = (
@@ -473,8 +465,6 @@ class TeamService:
         captains empty gnl_stats; no consumer reads them on this route.
         """
         with Session.begin() as session:
-            if session.get(Season, season_id) is None:
-                raise NotFoundError(f"Event not found by id: {season_id}")
             # Offset paging is deterministic only with a fixed order
             statement = (
                 select(Team)
@@ -499,8 +489,6 @@ class TeamService:
         The season sits in the loader, so seasons_info holds that season alone.
         """
         with Session.begin() as session:
-            if session.get(Season, season_id) is None:
-                raise NotFoundError(f"Event not found by id: {season_id}")
             info = rel(Team.season_info).and_(col(DBTeamSeason.season_id) == season_id)
             # An EXISTS, not a join: a join multiplies the rows a page counts
             # Offset paging is deterministic only with a fixed order

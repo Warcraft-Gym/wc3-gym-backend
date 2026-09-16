@@ -22,7 +22,9 @@ def test_the_league_team_routes_scope_identity_and_the_event_routes_scope_roster
     assert all(team["league_id"] == league_id for team in league_teams)
 
     event_team = client.get(f"/events/{event_id}/teams/{team_id}").json()
-    assert [player["id"] for player in event_team["player_by_season"][str(event_id)]]
+    assert [
+        player["id"] for player in event_team["player_by_season"][str(event_id)]
+    ] == seeded["player_ids"][:2]
 
 
 def test_a_team_cannot_join_an_event_of_another_league(
@@ -63,9 +65,13 @@ def test_the_unscoped_and_season_named_team_routes_are_deprecated(
         "/teams",
         "/teams/basic",
         "/teams/{team_id}",
+        "/teams/{team_id}/image",
         "/teams/season/{event_id}",
+        "/teams/season/{event_id}/basic",
         "/teams/{team_id}/seasons/{event_id}",
+        "/seasons/{event_id}/teams",
         "/series/season/{event_id}",
+        "/fantasy/tiers",
         "/fantasy/teams/{team_id}/season/{event_id}/breakdown",
     ]
     assert all(

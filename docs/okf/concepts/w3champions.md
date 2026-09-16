@@ -3,7 +3,7 @@ type: Integration
 title: W3Champions
 description: The ranked ladder service the app reads MMR, per-race stats and match history from, with a timeout, a throttle answer, and two separate sync pipelines.
 tags: [w3champions, w3c, integration]
-generated: { by: openai/gpt-6, at: 2026-09-15T10:44:28Z }
+generated: { by: openai/gpt-6, at: 2026-09-16T00:00:00Z }
 sources:
   - id: client
     resource: ../../../app/services/w3c.py
@@ -20,7 +20,7 @@ sources:
 
 | Data | Endpoint family | Stored in | Trigger |
 |---|---|---|---|
-| MMR and wins and losses per race and season | player stats | `w3cstats`, `users.w3c_synced_at`, `users.mmr` | the Sync W3C buttons, `POST /users/{id}/w3c-sync`, `POST /teams/{id}/seasons/{id}/w3c-sync`, the daily job |
+| MMR and wins and losses per race and season | player stats | `w3cstats`, `users.w3c_synced_at`, `users.mmr` | the Sync W3C buttons, `POST /users/{id}/w3c-sync`, `POST /events/{event_id}/teams/{team_id}/ladder-sync`, the daily job |
 | ranked 1v1 matches | match search, 100 per page | `w3c_ladder_matches`, the `ladder_sync` ledger | the Sync Ladder button, `POST /events/{id}/ladder-sync` in chunks, the daily job |
 | the season list | ladder seasons | nothing; read when `current_w3c_season` is unset | on demand |
 | the 1v1 map pool | maps | `maps`, paired with warcraft3.info by name and version | the ladder map import |

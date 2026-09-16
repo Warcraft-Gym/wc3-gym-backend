@@ -249,10 +249,14 @@ def _season(
     league = gnl_league(session)
 
     if stored:
-        stored.sqlmodel_update(
-            values.model_dump(exclude_unset=True)
-            | {"league_id": ident(league), "entrant_kind": league.entrant_kind}
-        )
+        # A stored event keeps the league it already stands in: a change is
+        # refused while teams are linked to it
+        if stored.league_id is None:
+            stored.league_id = ident(league)
+            stored.entrant_kind = league.entrant_kind
+        elif stored.league_id != ident(league):
+            raise BadRequestError("The workbook names an event of another league")
+        stored.sqlmodel_update(values.model_dump(exclude_unset=True))
         fill_rounds(session, stored, values.round_count or 0)
         logger.info(f"Updating season {values.name} with ID: {stored.id}")
         return stored

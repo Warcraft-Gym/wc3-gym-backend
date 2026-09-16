@@ -27,13 +27,22 @@ def upgrade() -> None:
     bind = op.get_bind()
     op.add_column("teams", sa.Column("league_id", sa.Integer(), nullable=True))
 
+    # A team reaches an event through its season link or as an event entrant
+    links = (
+        "SELECT ts.team_id AS team_id, e.league_id AS league_id "
+        "FROM team_season ts JOIN event e ON e.id = ts.season_id "
+        "UNION "
+        "SELECT ee.team_id AS team_id, e.league_id AS league_id "
+        "FROM event_entrant ee JOIN event e ON e.id = ee.event_id "
+        "WHERE ee.team_id IS NOT NULL"
+    )
+
     # A team linked to events of two leagues has no unambiguous owner. Refuse
     # that data rather than silently assigning the first league we happen to read.
     conflicted = bind.execute(
         sa.text(
-            "SELECT ts.team_id FROM team_season ts "
-            "JOIN event e ON e.id = ts.season_id "
-            "GROUP BY ts.team_id HAVING COUNT(DISTINCT e.league_id) > 1"
+            f"SELECT link.team_id FROM ({links}) link "
+            "GROUP BY link.team_id HAVING COUNT(DISTINCT link.league_id) > 1"
         )
     ).first()
     if conflicted:
@@ -43,8 +52,8 @@ def upgrade() -> None:
 
     op.execute(
         "UPDATE teams SET league_id = ("
-        "SELECT MIN(e.league_id) FROM team_season ts "
-        "JOIN event e ON e.id = ts.season_id WHERE ts.team_id = teams.id"
+        f"SELECT MIN(link.league_id) FROM ({links}) link "
+        "WHERE link.team_id = teams.id"
         ")"
     )
     op.execute(

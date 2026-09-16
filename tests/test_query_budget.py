@@ -474,7 +474,7 @@ def test_the_season_labels_cost_one_statement(league: dict[str, Any]) -> None:
     assert sorted(info.name or "" for info in team.seasons_info) == [
         f"Season {number}" for number in range(1, 6)
     ]
-    assert team.seasons_info[0].league_short_name is None
+    assert team.seasons_info[0].league_short_name == "SL"
     with Session() as session:
         with count_statements() as tally:
             derived.fill_season_labels(session, [team])

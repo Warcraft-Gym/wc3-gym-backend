@@ -41,6 +41,7 @@ from app.models.user import User
 from app.models.user_team_season import DBUserTeamSeason
 from app.models.w3c_stats import W3CStats
 from app.services import discord
+from app.services.seasons import gnl_league
 
 NAME = "GNL Review Season"
 START = date(2026, 9, 1)
@@ -115,8 +116,13 @@ def build(discord_a: str, discord_b: str) -> str:
         size = min(max(PER_TEAM, -(-len(testers) // 2)), len(pool) // 2)
         side_a, side_b = pool[0 : 2 * size : 2], pool[1 : 2 * size : 2]
 
+        # The teams copy over from the source season, so the review season stands
+        # in the same league they belong to
+        league = gnl_league(session)
         season = Season(
             name=NAME,
+            league_id=ident(league),
+            entrant_kind=league.entrant_kind,
             series_per_round=size,
             pick_ban=source.pick_ban,
             map_rules="fixed,loser,loser",

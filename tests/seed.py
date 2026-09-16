@@ -51,8 +51,8 @@ def add_season(session: Session, rounds: int, **fields: Any) -> Season:  # noqa:
 def seed_league(session: Session) -> dict[str, Any]:
     rounds = 4
     league = League(
-        name="Grand National League",
-        short_name="GNL",
+        name="Seed League",
+        short_name="SL",
         kind=LeagueKind.gnl,
         entrant_kind=EntrantKind.drafted_teams,
     )

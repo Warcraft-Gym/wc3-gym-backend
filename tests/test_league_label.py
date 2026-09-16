@@ -1,8 +1,8 @@
 """The league beside the event name: the helper, and every payload that carries it.
 
-The seeded season stands in no league, so this file puts it in one named GNL
-and reads the payloads back. A payload of an event with no league reads null,
-which the GNL snapshot pins.
+The seeded season stands in the seeded league, so this file moves it into one
+whose short name is GNL and reads the payloads back. A payload of an event with
+no league reads null, which the GNL snapshot pins.
 """
 
 from typing import Any
@@ -12,9 +12,11 @@ from fastapi.testclient import TestClient as Client
 
 from app.core.db import Session
 from app.core.event_label import label
+from app.models.base import ident
 from app.models.league import League
 from app.models.season import Season
 from app.models.series import Series
+from app.models.team_season import DBTeamSeason
 from app.services import series_cards
 from app.services.events import EventService
 from app.services.series import SeriesService
@@ -121,6 +123,10 @@ def test_the_card_header_prints_the_league_before_the_event(
 def test_the_card_header_of_an_event_with_no_league_prints_the_name_alone(
     seeded: dict[str, Any],
 ) -> None:
+    with Session.begin() as session:
+        season = session.get(Season, seeded["season_id"])
+        assert season is not None
+        season.league_id = None
     series = SeriesService().get(seeded["series_open_id"])
     assert series_cards.header(series)[0] == "## Season 1"
 
@@ -139,6 +145,17 @@ def test_the_team_seasons_name_the_event_and_the_league(
 def test_a_team_season_with_no_league_reads_the_name_alone(
     client: Client, seeded: dict[str, Any]
 ) -> None:
+    """The seeded season stands in a league, so the team plays a second one
+    that stands in none."""
+    with Session.begin() as session:
+        season = Season(name="Season 2", series_per_round=2)
+        session.add(season)
+        session.flush()
+        session.add(
+            DBTeamSeason(team_id=seeded["team_a_id"], season_id=ident(season))
+        )
     answer = client.get(f"/teams/{seeded['team_a_id']}").json()
-    row = answer["seasons_info"][0]
-    assert (row["name"], row["league_short_name"]) == ("Season 1", None)
+    row = next(
+        info for info in answer["seasons_info"] if info["name"] == "Season 2"
+    )
+    assert row["league_short_name"] is None
