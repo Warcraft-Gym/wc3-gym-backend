@@ -12,7 +12,7 @@ from app.core.db import Session, rel
 from app.core.exceptions import ApiError, BadRequestError, NotFoundError
 from app.core.query import QueryElement, QueryUtil
 from app.models.base import ident
-from app.models.enums import EventKind, Race
+from app.models.enums import EntrantKind, EventKind, LeagueKind, Race
 from app.models.event_stage import EventStage
 from app.models.ladder_achievement import (
     LadderAchievement,
@@ -20,6 +20,7 @@ from app.models.ladder_achievement import (
     SeasonAchievementWrite,
     default_rows,
 )
+from app.models.league import League
 from app.models.map import LadderMapRow, Map
 from app.models.match import Match
 from app.models.relationships import (
@@ -180,6 +181,23 @@ def _publics(session: OrmSession, seasons: Sequence[Season]) -> list[SeasonPubli
     return [_public(session, season, progress[season.id]) for season in seasons]
 
 
+def gnl_league(session: OrmSession) -> League:
+    """The league owner of writes through the deprecated GNL-only surfaces."""
+    league = session.scalars(
+        select(League).where(col(League.kind) == LeagueKind.gnl)
+    ).first()
+    if league is None:
+        league = League(
+            name="GNL",
+            short_name="GNL",
+            kind=LeagueKind.gnl,
+            entrant_kind=EntrantKind.drafted_teams,
+        )
+        session.add(league)
+        session.flush()
+    return league
+
+
 class SeasonService:
     def __init__(
         self, user_app_service: UserService, map_app_service: MapService
@@ -189,7 +207,14 @@ class SeasonService:
 
     def add(self, season: SeasonCreate) -> SeasonPublic:
         with Session.begin() as session:
-            new_season = Season.add(session, season.model_dump(exclude={"round_count"}))
+            # The legacy season write creates a GNL event. The canonical event
+            # write names its league explicitly in EventCreate.
+            league = gnl_league(session)
+            fields = season.model_dump(exclude={"round_count"}) | {
+                "league_id": league.id,
+                "entrant_kind": league.entrant_kind,
+            }
+            new_season = Season.add(session, fields)
             # A new season scores like the last one until an admin re-prices it
             session.add_all(default_rows(new_season.id))
             session.flush()
@@ -308,6 +333,10 @@ class SeasonService:
                 team = session.get(Team, team_id)
                 if not team:
                     raise NotFoundError(f"Team not found by id: {team_id}")
+                if season.league_id is None or team.league_id != season.league_id:
+                    raise BadRequestError(
+                        f"Team {team_id} belongs to league {team.league_id}, not event league {season.league_id}"
+                    )
                 try:
                     # The primary key decides: a duplicate link is already there
                     with session.begin_nested():

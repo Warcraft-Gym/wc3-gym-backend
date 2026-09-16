@@ -3,7 +3,7 @@ type: API Area
 title: Consumers of the API
 description: Who calls the backend, which routes each one reads, and which tests pin those shapes.
 tags: [api, contract, consumers]
-generated: { by: openai/gpt-6, at: 2026-09-15T10:44:28Z }
+generated: { by: openai/gpt-6, at: 2026-09-15T21:52:57Z }
 sources:
   - id: public-contract
     resource: ../../../tests/test_public_contract.py
@@ -24,6 +24,7 @@ sources:
 | Consumer | Repository | Reads | Auth |
 |---|---|---|---|
 | the web app | `wc3-gym-frontend` | most routes | Clerk session or the admin token |
+| the GNL website | `wc3-gnl-website` | `GET /leagues`, the latest finished `GET /events?league_id={league_id}`, and that event's `/teams`, `/series` and `/fantasy/teams` | none |
 | the WordPress site | `gym_website_scripts` | eight routes on every page view, no cache: `GET /stats/career`, `GET /config/settings`, `GET /teams/season/{id}`, `GET /teams/{id}/image`, `GET /seasons/{id}`, `POST /matches/search`, `POST /series/season/{id}/playday/{n}/search`, `POST /fantasy/teams/search` | none |
 | the Discord adapter | `wc3-gym-discord-bot` | `POST /discord/interactions` | Discord's signature |
 | the cast-reminder worker | `wc3-gym-discord-bot`, `cron/` | `GET /jobs/cast-reminders` every five minutes | `CRON_SECRET` bearer |
@@ -49,6 +50,6 @@ A change that fails one of these is a cross-repository change. Ship the consumer
 - Every error is `{"error": ...}`.
 - A field is added, never renamed in place. `week_map_id` on the veto board and `playday` on fixtures are examples of names kept for consumers.
 - The GNL season payloads keep `season_id`, `phase` and `playday` although the table is `event`.
-- New consumers use the event routes for GNL. Existing consumers may use the deprecated season routes while they migrate their four-state season phase to the common event phase.
+- New consumers use the league routes for team identity and the event routes for GNL data. Existing consumers may use the deprecated season-named routes while they migrate their four-state season phase to the common event phase.
 - List routes page with `limit` and `offset` and answer `X-Total-Count`.
 - Reads are open. Writes need an admin, or the owning member for self-service routes.

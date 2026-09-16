@@ -37,7 +37,7 @@ def test_the_card_names_the_season_and_round_and_carries_three_buttons(
 
     posted = discord_calls[0]
     assert posted[:2] == ("POST", CHANNEL)
-    assert posted[2]["content"].startswith("**Season 1 · Round 3** · <t:")
+    assert posted[2]["content"].startswith("**SL · Season 1 · Round 3** · <t:")
     assert posted[2]["content"].endswith(" — check in")
     buttons = posted[2]["components"][0]["components"]
     assert [(b["label"], b["style"], b["custom_id"]) for b in buttons] == [
@@ -53,7 +53,7 @@ def test_without_a_round_the_card_is_for_the_current_one(
     """Every seeded round has ended, so the last one stands in."""
     post(client, command("availability", user="1"))
 
-    assert discord_calls[0][2]["content"].startswith("**Season 1 · Round 4**")
+    assert discord_calls[0][2]["content"].startswith("**SL · Season 1 · Round 4**")
 
 
 def test_a_press_writes_the_pressers_own_answer(
@@ -67,7 +67,7 @@ def test_a_press_writes_the_pressers_own_answer(
     post(client, press("1", "availability:1:3:no"))
     assert discord_calls[-1][:2] == ("PATCH", f"{WEBHOOK}/messages/@original")
     assert discord_calls[-1][2] == {
-        "content": "Saved: you can't play round 3 of Season 1."
+        "content": "Saved: you can't play round 3 of SL · Season 1."
     }
 
     rows = AvailabilityService().for_user(seeded["player_ids"][0], seeded["season_id"])
@@ -77,7 +77,7 @@ def test_a_press_writes_the_pressers_own_answer(
 
     post(client, press("1", "availability:1:3:clear"))
     assert discord_calls[-1][2] == {
-        "content": "Cleared your answer for round 3 of Season 1."
+        "content": "Cleared your answer for round 3 of SL · Season 1."
     }
     assert (
         AvailabilityService().for_user(seeded["player_ids"][0], seeded["season_id"])
@@ -99,7 +99,7 @@ def test_a_round_the_season_lacks_is_refused(
     client: Client, seeded: dict[str, Any], public_key: None, discord_calls: list
 ) -> None:
     post(client, command("availability", user="1", round=9))
-    assert discord_calls[-1][2] == {"content": "Season 1 has no round 9."}
+    assert discord_calls[-1][2] == {"content": "SL · Season 1 has no round 9."}
 
     post(client, press("1", "availability:1:9:yes"))
     assert discord_calls[-1][2] == {"content": "playday must be between 1 and 4"}

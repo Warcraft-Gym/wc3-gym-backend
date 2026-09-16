@@ -3,7 +3,7 @@ type: Integration
 title: Pictures and replays
 description: Team logos and map thumbnails live in Vercel Blob as public URLs, replays live in a Cloudflare R2 bucket reached through presigned URLs, and both stores follow the rows.
 tags: [blob, r2, storage]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-09-16T00:00:00Z }
 sources:
   - id: pictures
     resource: ../../PICTURES.md
@@ -18,7 +18,7 @@ sources:
 
 # Pictures
 
-`teams.icon_url` and `maps.image` hold public URLs into the Vercel Blob store connected to the project (`BLOB_READ_WRITE_TOKEN`). A caller that reads the URL off the answer fetches the picture from the store; `GET /teams/{id}/image` still redirects, uncacheable, for the old consumers. `POST /teams/{id}/image` and `POST /maps/{id}/image` upload: magic bytes checked, 2 MB cap, a new random suffix per upload so the year-long cache never serves a stale logo, and the blob it replaced deleted after the commit.
+`teams.icon_url` and `maps.image` hold public URLs into the Vercel Blob store connected to the project (`BLOB_READ_WRITE_TOKEN`). A caller that reads the URL off the answer fetches the picture from the store; `GET /leagues/{league_id}/teams/{team_id}/image` still redirects, uncacheable, for the old consumers. `POST /leagues/{league_id}/teams/{team_id}/image` and `POST /maps/{id}/image` upload: magic bytes checked, 2 MB cap, a new random suffix per upload so the year-long cache never serves a stale logo, and the blob it replaced deleted after the commit.
 
 A map's `image` may also hold the URL warcraft3.info publishes, written by the ladder map import; `blob.ours` tells the two apart, so a replacement deletes only a blob the app wrote. An upload wins over an import.
 

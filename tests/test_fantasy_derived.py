@@ -20,6 +20,7 @@ from app.models.base import ident
 from app.models.enums import Race
 from app.models.fantasy_bet import FantasyBet
 from app.models.fantasy_team import FantasyTeam
+from app.models.league import League
 from app.models.match import Match
 from app.models.relationships import DBFantasyTeamPlayer, DBUserSeasonSignup
 from app.models.season import Season  # noqa: F401  # re-exported by the fixtures below
@@ -103,8 +104,18 @@ def league(client: Client) -> dict[str, Any]:
     """One season of two weeks: two teams, four players, three series of which
     one has no result, two fantasy teams with drafts, and three bets."""
     with Session() as session:
-        season = add_season(session, 2, name="Derived", series_per_round=2)
-        team1, team2 = Team(name="One"), Team(name="Two")
+        owner = League(name="Derived League")
+        session.add(owner)
+        session.flush()
+        season = add_season(
+            session,
+            2,
+            name="Derived",
+            series_per_round=2,
+            league_id=ident(owner),
+        )
+        team1 = Team(name="One", league_id=ident(owner))
+        team2 = Team(name="Two", league_id=ident(owner))
         players = [
             player("D1", Race.HU),
             player("D2", Race.OC),
@@ -353,10 +364,19 @@ def two_seasons(client: Client) -> dict[str, Any]:
     A's captain calls his own series right, B's captain calls his wrong.
     """
     with Session() as session:
-        season_a = add_season(session, 2, name="A", series_per_round=2)
-        season_b = add_season(session, 1, name="B", series_per_round=1)
-        team_a1, team_a2 = Team(name="A1"), Team(name="A2")
-        team_b1, team_b2 = Team(name="B1"), Team(name="B2")
+        owner = League(name="Two Season League")
+        session.add(owner)
+        session.flush()
+        season_a = add_season(
+            session, 2, name="A", series_per_round=2, league_id=ident(owner)
+        )
+        season_b = add_season(
+            session, 1, name="B", series_per_round=1, league_id=ident(owner)
+        )
+        team_a1 = Team(name="A1", league_id=ident(owner))
+        team_a2 = Team(name="A2", league_id=ident(owner))
+        team_b1 = Team(name="B1", league_id=ident(owner))
+        team_b2 = Team(name="B2", league_id=ident(owner))
         pa1, pa2 = player("A one", Race.HU), player("A two", Race.OC)
         pb1, pb2 = player("B one", Race.NE), player("B two", Race.UD)
         session.add_all([team_a1, team_a2, team_b1, team_b2, pa1, pa2, pb1, pb2])

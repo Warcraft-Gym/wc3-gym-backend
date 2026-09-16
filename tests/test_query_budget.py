@@ -410,8 +410,10 @@ def add_teams_to_the_season(season_id: int, count: int) -> None:
     from app.models.team_season import DBTeamSeason
 
     with Session() as session:
+        season = session.get_one(Season, season_id)
+        assert season.league_id is not None
         for index in range(count):
-            team = Team(name=f"Extra {index}")
+            team = Team(name=f"Extra {index}", league_id=season.league_id)
             session.add(team)
             session.flush()
             session.add(DBTeamSeason(team_id=ident(team), season_id=season_id))
@@ -472,7 +474,7 @@ def test_the_season_labels_cost_one_statement(league: dict[str, Any]) -> None:
     assert sorted(info.name or "" for info in team.seasons_info) == [
         f"Season {number}" for number in range(1, 6)
     ]
-    assert team.seasons_info[0].league_short_name is None
+    assert team.seasons_info[0].league_short_name == "SL"
     with Session() as session:
         with count_statements() as tally:
             derived.fill_season_labels(session, [team])

@@ -108,7 +108,7 @@ def test_announce_posts_the_match_card(
         "content": "<@2> vs <@4>",
         "embeds": [
             {
-                "description": "## Season 1\n"
+                "description": "## SL · Season 1\n"
                 f"Round 1: <t:{first}:d> to <t:{last}:d>\n\n"
                 "### Team Alpha (Alpha) vs Team Beta (Beta)\n"
                 f"🇺🇸 **[P2](<{SITE}/player/P2%232222>)** vs "

@@ -383,7 +383,7 @@ def test_a_tier_allocation_names_its_season(
         json={"cuts": CUTS, "tiers": {str(p1): 1}},
         headers=auth_headers,
     )
-    assert resp.status_code == 422
+    assert resp.status_code == 400
 
     client.post(
         f"/seasons/{season}/signups",

@@ -17,10 +17,11 @@ from sqlalchemy.orm import Session
 
 from app.core.achievements import ALL_PAID, DEFAULT_PAID
 from app.models.base import ident
-from app.models.enums import Race
+from app.models.enums import EntrantKind, LeagueKind, Race
 from app.models.fantasy_bet import FantasyBet
 from app.models.fantasy_team import FantasyTeam
 from app.models.ladder_achievement import LadderAchievement, default_rows
+from app.models.league import League
 from app.models.map import Map
 from app.models.match import Match
 from app.models.player_career_stats import PlayerCareerStats
@@ -49,15 +50,25 @@ def add_season(session: Session, rounds: int, **fields: Any) -> Season:  # noqa:
 
 def seed_league(session: Session) -> dict[str, Any]:
     rounds = 4
+    league = League(
+        name="Seed League",
+        short_name="SL",
+        kind=LeagueKind.gnl,
+        entrant_kind=EntrantKind.drafted_teams,
+    )
+    session.add(league)
+    session.flush()
     season = Season(
         name="Season 1",
+        league_id=ident(league),
+        entrant_kind=league.entrant_kind,
         series_per_round=2,
         start_date=date(2026, 1, 5),
         end_date=date(2026, 2, 27),
     )
 
-    team_a = Team(name="Alpha", long_name="Team Alpha")
-    team_b = Team(name="Beta", long_name="Team Beta")
+    team_a = Team(name="Alpha", long_name="Team Alpha", league_id=ident(league))
+    team_b = Team(name="Beta", long_name="Team Beta", league_id=ident(league))
 
     players = [
         User(
@@ -209,6 +220,7 @@ def seed_league(session: Session) -> dict[str, Any]:
     session.flush()
 
     return {
+        "league_id": league.id,
         "season_id": season.id,
         "team_a_id": team_a.id,
         "team_b_id": team_b.id,

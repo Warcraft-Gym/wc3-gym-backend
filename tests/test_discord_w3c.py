@@ -85,7 +85,7 @@ def test_stats_posts_the_gnl_season_as_an_embed(
         " · <:gnl:22> [GNL profile](https://gnl.example/player/P1%231111)"
         " · <:w3champions:33> [w3champions ↗](https://www.w3champions.com/player/P1%231111)"
     )
-    assert season == "Season 1 · 2026-01-05 to 2026-02-27 · ended"
+    assert season == "SL · Season 1 · 2026-01-05 to 2026-02-27 · ended"
     # The seed plays P1 against P3 of Beta on playday 1, 2-1 to P1
     assert embed["fields"][0] == {
         "name": "GNL Series · 1-0",
