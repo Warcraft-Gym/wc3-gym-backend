@@ -2,7 +2,7 @@
 
 ## The knowledge bundle in `docs/okf/`
 
-`docs/okf/` is public. Read [how the bundle is written](docs/okf/conventions/okf-bundle.md) before you change it. This file is the list of what never goes in, and the check to run before a commit.
+`docs/okf/` is public. Read [how the bundle is written](docs/okf/conventions/okf-bundle.md) before you change it. This file is the list of what never goes in, and the check to run before a commit. A pull request that changes a route, a table, a contract or a decision updates the concept in `docs/okf/` that states it, in the same pull request.
 
 ### What never goes in
 

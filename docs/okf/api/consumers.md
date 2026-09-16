@@ -4,7 +4,7 @@ title: Consumers of the API
 description: Who calls the backend, which routes each one reads, and which tests pin those shapes.
 resource: ../../../tests/test_public_contract.py
 tags: [api]
-generated: { by: openai/gpt-6, at: 2026-09-15T21:52:57Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-09-16T17:00:00Z }
 sources:
   - id: public-contract
     resource: ../../../tests/test_public_contract.py
@@ -30,8 +30,8 @@ sources:
 | the Discord adapter | `wc3-gym-discord-bot` | `POST /discord/interactions` | Discord's signature |
 | the cast-reminder worker | `wc3-gym-discord-bot`, `cron/` | `GET /jobs/cast-reminders` every five minutes | `CRON_SECRET` bearer |
 | Vercel cron | this repository's `vercel.json` | `GET /jobs/w3c-sync` once a day | `CRON_SECRET` bearer |
-| Nightbot | no repository | `GET /koth/signup`, the old `/koth/*` reads | the Nightbot token |
-| the stream overlay and bookmarks | none | the old `/koth/*` reads | none |
+| Nightbot | no repository | `GET /koth/signup`, and the deprecated `/koth/*` reads | the Nightbot token |
+| the stream overlay and bookmarks | none | the deprecated `/koth/*` reads | none |
 
 The WordPress shortcodes today call the older backend on the Azure box, not this deployment. When they move, the eight routes above are the contract.
 
