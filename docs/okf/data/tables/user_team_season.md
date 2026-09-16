@@ -4,7 +4,7 @@ title: user_team_season
 description: "One roster row: a player on one team in one season, written by the draft."
 resource: ../../../../app/models/user_team_season.py
 tags: [teams, data]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T15:15:00Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-09-16T19:30:00Z }
 verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
 sources:
   - id: model
@@ -29,4 +29,4 @@ Primary key (`user_id`, `team_id`, `season_id`). Foreign keys: `user_id` to [use
 
 # Rules
 
-A drafted GNL player is a roster row, not an [event_entrant](event_entrant.md). The race the player is scored on is on [user_season_signup](user_season_signup.md). The `team` Discord role reads these rows. See [GNL season](../../concepts/gnl-season.md).
+A drafted GNL player is a roster row, not an [event_entrant](event_entrant.md). A roster write names an event and a team; the team must belong to the event's league, else the write answers 404. The race the player is scored on is on [user_season_signup](user_season_signup.md). The `team` Discord role reads these rows. See [GNL season](../../concepts/gnl-season.md).

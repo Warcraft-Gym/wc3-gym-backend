@@ -4,7 +4,7 @@ title: Seed a database and build a review season
 description: Load the private seed repository into a target, or build a season two accounts can click through on staging.
 resource: ../../../app/core/seed.py
 tags: [deploy]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-09-16T19:30:00Z }
 stale_after: 2027-03-14T00:00:00Z
 sources:
   - id: seed
@@ -28,7 +28,7 @@ For staging the recipe rebuilds the locked template first and then the shared da
 
 # Review season
 
-`uv run just vercel review-season staging <reviewer discord id>` builds a season on staging where the two named accounts captain opposing teams, every account in the guild plays, and the pairings rotate each round. It becomes the current season and both accounts get an admin grant. Rosters, maps and the pick-and-ban order copy from the latest real season; badges come from the catalogue; the map rules are `fixed,loser,loser`. Running it again replaces the season. `season-badges` seeds badges into a season built another way.
+`uv run just vercel review-season staging <reviewer discord id>` builds a season on staging where the two named accounts captain opposing teams, every account in the guild plays, and the pairings rotate each round. It becomes the current season and both accounts get an admin grant. The season is an event of the GNL league, with that league's entrant kind, so its teams stay in the league they belong to. Rosters, maps and the pick-and-ban order copy from the latest real season; badges come from the catalogue; the map rules are `fixed,loser,loser`. Running it again replaces the season. `season-badges` seeds badges into a season built another way.
 
 # Which staging database
 
