@@ -2,7 +2,7 @@
 type: Decision
 title: App-managed roles, manual sync
 description: Access comes from the database, Discord roles are a mirror of season facts, and the mirror updates only when an admin presses a button.
-tags: [decision, roles]
+tags: [auth]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
 sources:
   - id: source

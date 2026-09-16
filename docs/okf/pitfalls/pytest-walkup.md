@@ -2,7 +2,7 @@
 type: Pitfall
 title: pytest walks up to the parent checkout
 description: An empty pytest table in pyproject.toml makes pytest adopt an ancestor directory as its root, which in a nested worktree is the main checkout.
-tags: [pitfall, tests]
+tags: [testing]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
 sources:
   - id: source

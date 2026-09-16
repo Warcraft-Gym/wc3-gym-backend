@@ -1,10 +1,11 @@
 ---
 type: Data Model
 title: user_team_season
-description: One roster row: a player on one team in one season, written by the draft.
+description: "One roster row: a player on one team in one season, written by the draft."
 resource: ../../../../app/models/user_team_season.py
-tags: [schema, teams]
+tags: [teams, data]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T15:15:00Z }
+verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
 sources:
   - id: model
     resource: ../../../../app/models/user_team_season.py

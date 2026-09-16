@@ -2,7 +2,7 @@
 type: Decision
 title: Reads open, writes admin
 description: Every GET serves any session; writes need an admin or the owning member, and the frontend hides the buttons of writes a role cannot make.
-tags: [decision, permissions]
+tags: [auth]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
 sources:
   - id: source

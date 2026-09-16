@@ -2,7 +2,7 @@
 type: Pitfall
 title: A Hobby cron runs once a day
 description: A vercel.json schedule more frequent than daily fails every deployment with no build log, and production silently stays on the previous build.
-tags: [pitfall, vercel, cron]
+tags: [deploy]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
 sources:
   - id: source

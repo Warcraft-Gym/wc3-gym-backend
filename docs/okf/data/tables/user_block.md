@@ -3,8 +3,9 @@ type: Data Model
 title: user_block
 description: One standing weekly block of a player, as local wall-clock times on a set of weekdays; a soft hint that informs scheduling and never constrains it.
 resource: ../../../../app/models/user_block.py
-tags: [schema, access]
+tags: [auth, data]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T15:15:00Z }
+verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
 sources:
   - id: model
     resource: ../../../../app/models/user_block.py

@@ -2,7 +2,7 @@
 type: Decision
 title: The season boundary is manual
 description: The W3Champions season the MMR columns read is a pinned setting, edited by hand a few times a year, never derived automatically.
-tags: [decision, w3champions]
+tags: [w3champions]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
 sources:
   - id: source
