@@ -3,8 +3,9 @@ type: Data Model
 title: team_season
 description: One team fielded in one GNL season; the row exists before the team has a captain or a roster.
 resource: ../../../../app/models/team_season.py
-tags: [schema, teams]
+tags: [teams, data]
 generated: { by: openai/gpt-6, at: 2026-09-15T21:52:57Z }
+verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
 sources:
   - id: model
     resource: ../../../../app/models/team_season.py

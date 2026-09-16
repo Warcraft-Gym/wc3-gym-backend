@@ -2,7 +2,7 @@
 type: Pitfall
 title: One schema per entity wipes columns
 description: A single model serving create, update and response made every field optional, and an update wrote every column, nulling the ones the request left out.
-tags: [pitfall, sqlmodel]
+tags: [data]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
 sources:
   - id: source

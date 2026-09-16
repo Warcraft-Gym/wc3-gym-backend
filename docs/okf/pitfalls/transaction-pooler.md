@@ -2,7 +2,7 @@
 type: Pitfall
 title: The session pooler holds 15 clients
 description: Serverless functions on the session pooler fill its 15 slots with idle connections and every other request answers Database error; use the transaction pooler on port 6543.
-tags: [pitfall, postgres, vercel]
+tags: [data, deploy]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
 sources:
   - id: source

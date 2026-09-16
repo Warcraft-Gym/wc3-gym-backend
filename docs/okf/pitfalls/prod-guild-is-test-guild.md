@@ -2,7 +2,7 @@
 type: Pitfall
 title: The guild setting is a decision, not a bug
 description: A member classified as a guest is a membership question about the configured guild; changing the guild setting is a maintainers' decision, never a bug fix.
-tags: [pitfall, discord]
+tags: [discord]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
 sources:
   - id: source

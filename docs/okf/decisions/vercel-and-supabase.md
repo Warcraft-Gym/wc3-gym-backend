@@ -2,7 +2,7 @@
 type: Decision
 title: Vercel and Supabase
 description: The backend runs as one Vercel function on a Supabase Postgres, and the self-hosted Azure line is frozen.
-tags: [decision, hosting]
+tags: [deploy]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
 sources:
   - id: source

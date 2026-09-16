@@ -1,10 +1,11 @@
 ---
 type: Data Model
 title: series_side
-description: One seat of a series that is not a plain 1v1: a player in an FFA lobby or on a team side, with the place that side finished.
+description: "One seat of a series that is not a plain 1v1: a player in an FFA lobby or on a team side, with the place that side finished."
 resource: ../../../../app/models/series_side.py
-tags: [schema, events]
+tags: [events, data]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T15:15:00Z }
+verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
 sources:
   - id: model
     resource: ../../../../app/models/series_side.py

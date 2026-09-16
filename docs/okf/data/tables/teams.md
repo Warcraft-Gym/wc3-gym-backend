@@ -1,10 +1,11 @@
 ---
 type: Data Model
 title: teams
-description: One league-owned team: its league, short name, long name and the public URL of its logo.
+description: "One league-owned team: its league, short name, long name and the public URL of its logo."
 resource: ../../../../app/models/team.py
-tags: [schema, teams]
+tags: [teams, data]
 generated: { by: openai/gpt-6, at: 2026-09-15T21:52:57Z }
+verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
 sources:
   - id: model
     resource: ../../../../app/models/team.py

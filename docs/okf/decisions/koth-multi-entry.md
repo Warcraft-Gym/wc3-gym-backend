@@ -2,7 +2,7 @@
 type: Decision
 title: One KOTH entrant row per race
 description: A player may enter a KOTH night on more than one race; each race is its own entrant row, listed once on the page, and the draw never pairs a player with himself.
-tags: [decision, koth]
+tags: [koth]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
 sources:
   - id: source

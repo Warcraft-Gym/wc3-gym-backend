@@ -2,7 +2,8 @@
 type: Convention
 title: Git and pull requests
 description: One branch and one pull request per change, squash merged to main, with a migration rule that keeps the previous deploy alive during the build.
-tags: [git, process]
+resource: ../../../vercel.json
+tags: [tooling]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
 sources:
   - id: vercel-json

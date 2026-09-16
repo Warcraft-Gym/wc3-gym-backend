@@ -2,7 +2,7 @@
 type: Decision
 title: One event model, kind modules on top
 description: GNL, KOTH and community events share one data model; a kind that behaves differently gets its own module, and the shared engine never branches on kind.
-tags: [decision, events]
+tags: [events]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
 sources:
   - id: source

@@ -2,7 +2,8 @@
 type: Domain Concept
 title: Derived scores
 description: Series points, fixture scores, standings, career ratings and fantasy scores are computed from the map scores on every read, in a constant number of statements.
-tags: [scoring, architecture, performance]
+resource: ../../../app/services/derived.py
+tags: [events, series, api]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
 sources:
   - id: derived
