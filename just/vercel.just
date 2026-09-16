@@ -52,8 +52,21 @@ alembic env *args:
     url=$(just vercel url {{ env }})
     DB_URL="$url" uv run alembic {{ args }}
 
-# Migrate, then load the private seed repo. For staging: the template, then the shared database from it.
-seed env="prod":
+# Write one CSV per table of the database into a directory, plus manifest.json with its alembic revision:
+# `just vercel export-seed ../data/seed prod`. Run it after every schema change that the seed must carry.
+export-seed dir env:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    url=$(just vercel url {{ env }})
+    # the staging URL names the project; the served database is the shared preview copy
+    if [ "{{ env }}" = staging ]; then
+        url=$(DB_URL="$url" uv run python -c 'import os; from api.preview_db import SHARED, with_database; print(with_database(os.environ["DB_URL"], SHARED))')
+    fi
+    uv run python -m app.core.seed export "{{ dir }}" "$url"
+
+# Migrate, then load the private seed repo. The environment is required: the load truncates every table.
+# For staging: the template, then the shared database from it.
+seed env:
     #!/usr/bin/env bash
     set -euo pipefail
     url=$(just vercel url {{ env }})

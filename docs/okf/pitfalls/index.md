@@ -7,7 +7,6 @@
 * [A Hobby cron runs once a day](hobby-cron-daily.md) - A vercel.json schedule more frequent than daily fails every deployment with no build log, and production silently stays on the previous build.
 * [A replay does not give up the winner](w3g-winner-not-parseable.md) - A .w3g yields the map and the battle tags from its first block; the winner is not readable, and a hand-written record walker was rejected.
 * [Every datetime is aware UTC](datetimes-are-utc.md) - A stale log line said the backend stored Eastern time and cost a whole wrong work package; times are UTC, stored aware, and the public site once added five hours.
-* [just vercel seed defaults to production](seed-defaults-to-prod.md) - The seed recipe truncates every table and reloads a dump, and its environment argument defaults to prod.
 * [One schema per entity wipes columns](one-schema-wipes-columns.md) - A single model serving create, update and response made every field optional, and an update wrote every column, nulling the ones the request left out.
 * [pytest walks up to the parent checkout](pytest-walkup.md) - An empty pytest table in pyproject.toml makes pytest adopt an ancestor directory as its root, which in a nested worktree is the main checkout.
 * [Quoting a whole relationship annotation breaks every mapper](sqlmodel-relationship-quoting.md) - A SQLModel Relationship annotated as the string "X | None" hands SQLAlchemy an opaque name; X | None works when X is imported, and Optional["X"] is the only quoted form.
