@@ -4,7 +4,7 @@ title: event
 description: One run of a league that people sign up for: a GNL season, a KOTH night, a cup or a sign-up list; the class is still named Season.
 resource: ../../../../app/models/season.py
 tags: [schema, events]
-generated: { by: openai/gpt-6, at: 2026-09-15T10:44:28Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-09-16T17:30:00Z }
 sources:
   - id: model
     resource: ../../../../app/models/season.py
@@ -36,7 +36,7 @@ The first block is the fields introduced for GNL, on `SeasonBase`. The second bl
 | `map_rules` | VARCHAR | yes | One rule per game, comma-joined: `fixed`, `loser`, `host`, `veto`. Null means the GNL default `fixed,loser,loser`. |
 | `score_system` | VARCHAR | no | The scale series points are paid on: `standard` or `helpstone`. |
 | `fantasy_grind` | BOOLEAN | no | On: the fantasy game offers the grind pick, a second team paid by achievement rank. |
-| `signups_open` | BOOLEAN | no | Off: a signup is refused, or on a GNL season becomes a request an admin may grant. |
+| `signups_open` | BOOLEAN | no | Off: a signup is refused, or on a GNL season becomes a request an admin may grant. A finished event reads it off and refuses a signup whatever the column holds. |
 | `scheduling_enabled` | BOOLEAN | no | Off: the event takes no availability answers. |
 | `checkin_days` | INTEGER | yes | How many days before a round, or the event, its check-in opens. Null means the window never closes. |
 | `league_id` | INTEGER | yes | The league this is a run of. Null for an event with no league. |
@@ -69,5 +69,5 @@ Pointed at by [event_stage](event_stage.md), [event_round](event_round.md), [eve
 # Rules
 
 - Two derived values ride on the payloads and are never stored: the GNL phase (`open`, `commenced`, `overdue`, `complete`) and the event phase (`draft`, `signups_open`, `checkin`, `seeded`, `running`, `finished`). See [GNL season](../../concepts/gnl-season.md) and [events module](../../concepts/events-module.md).
-- The round count is not stored; the [event_round](event_round.md) rows are the count. `round_count` and `league_short_name` on the payloads are scalar subqueries.
+- The round count is not stored; the [event_round](event_round.md) rows are the count. `round_count`, `league_short_name` and `league_name` on the payloads are scalar subqueries.
 - The GNL columns stay on `SeasonBase`; the event and deprecated season payloads both carry them. `tests/test_gnl_snapshot.py` pins the season payload. See [the decision](../../decisions/unified-event-model.md).
