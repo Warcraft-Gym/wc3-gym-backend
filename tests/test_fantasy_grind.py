@@ -160,7 +160,8 @@ def test_a_write_refuses_a_team_outside_the_season(
     with Session.begin() as session:
         season = session.get_one(Season, open_season["season_id"])
         season.fantasy_grind = True
-        outsider = Team(name="Outsider")
+        assert season.league_id is not None
+        outsider = Team(name="Outsider", league_id=season.league_id)
         session.add(outsider)
         session.flush()
         outsider_id = outsider.id

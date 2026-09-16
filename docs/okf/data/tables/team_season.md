@@ -4,7 +4,7 @@ title: team_season
 description: One team fielded in one GNL season; the row exists before the team has a captain or a roster.
 resource: ../../../../app/models/team_season.py
 tags: [schema, teams]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T15:15:00Z }
+generated: { by: openai/gpt-6, at: 2026-09-15T21:52:57Z }
 sources:
   - id: model
     resource: ../../../../app/models/team_season.py
@@ -27,4 +27,4 @@ Primary key (`team_id`, `season_id`). Foreign keys: `team_id` to [teams](teams.m
 
 # Rules
 
-The captains of the team in that season are [team_season_captain](team_season_captain.md) rows; the roster is [user_team_season](user_team_season.md). A team's Discord role is a [discord_role_binding](discord_role_binding.md), not a column here.
+The team and event have the same `league_id`; a write refuses a cross-league link. The captains of the team in that event are [team_season_captain](team_season_captain.md) rows; the roster is [user_team_season](user_team_season.md). A team's Discord role is a [discord_role_binding](discord_role_binding.md), not a column here.

@@ -163,7 +163,10 @@ def test_a_synchronous_import_writes_the_season(
         ).one()
         assert season.id == body["season_id"]
         assert season.round_count == 4
-        assert len(session.scalars(select(Team)).all()) == 2
+        assert season.league_id is not None
+        teams = session.scalars(select(Team)).all()
+        assert len(teams) == 2
+        assert {team.league_id for team in teams} == {season.league_id}
         assert len(session.scalars(select(User)).all()) == 2
 
 

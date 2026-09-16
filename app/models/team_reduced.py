@@ -18,6 +18,7 @@ if TYPE_CHECKING:
 
 class TeamReduced(SQLModel):
     id: int
+    league_id: int
     # name and long_name also receive numeric cells from the xlsx import.
     name: Annotated[str | None, NumToStr] = None
     long_name: Annotated[str | None, NumToStr] = None
@@ -28,6 +29,7 @@ class TeamReduced(SQLModel):
     def from_team(cls, team: "Team") -> Self:
         return cls(
             id=ident(team),
+            league_id=team.league_id,
             name=team.name,
             long_name=team.long_name,
             icon_url=team.icon_url,

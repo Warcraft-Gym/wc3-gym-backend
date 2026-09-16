@@ -3,7 +3,7 @@ type: Domain Concept
 title: GNL season
 description: Six drafted teams, five weekly rounds, one fixture per team pairing with captain-drafted series, and a phase that is derived from the series.
 tags: [gnl, season, domain]
-generated: { by: openai/gpt-6, at: 2026-09-15T10:44:28Z }
+generated: { by: openai/gpt-6, at: 2026-09-15T22:29:05Z }
 sources:
   - id: season-model
     resource: ../../../app/models/season.py
@@ -29,7 +29,7 @@ The event routes are the canonical API for a GNL season. A client reads `GET /le
 
 `POST /events` creates a GNL season when `league_id` names the GNL league. The body may include `round_count`, `map_ids`, `series_per_round`, `map_rules`, `pick_ban`, `score_system` and `fantasy_grind`. The write creates the event, its single `gnl` stage, its rounds, its ordered map pool and its achievement rules in one transaction. The same event path updates and deletes it.
 
-GNL management uses `/events/{event_id}/teams`, `/maps`, `/rounds`, `/signups`, `/ladder`, `/ladder-sync` and `/achievements`. Every `/seasons` route is a deprecated compatibility alias. A client can complete a GNL workflow without calling one.
+GNL management uses `/events/{event_id}/teams`, `/series`, `/maps`, `/rounds`, `/signups`, `/ladder`, `/ladder-sync`, `/fantasy` and `/achievements`. Team identities are managed under `/leagues/{league_id}/teams`; their rosters, captains, availability and event standings are under `/events/{event_id}/teams`. Every `/seasons` route and every season-named team, series or fantasy route is a deprecated compatibility alias. A client can complete a GNL workflow without calling one.
 
 # Fields on the season that drive behaviour
 
@@ -68,4 +68,4 @@ A member signs up through `POST /signup` with a race and an MMR. The signup row 
 
 # Import and export
 
-`POST /import` reads one season from an exported workbook (ten sheets) and writes it in one transaction; `POST /export` writes it back. The import matches rows by natural keys (season name, battle tag, team name, series by fixture and players), so ids are never sent. `tests/data/` holds two season workbooks for the round-trip test.
+`POST /import` reads one season from an exported workbook (ten sheets) and writes it in one transaction; `POST /export` writes it back. The GNL-only import resolves the GNL league first, then owns every imported team by that league and every roster by the imported event. It matches rows by natural keys (season name, battle tag, team name, series by fixture and players), so ids are never sent. `tests/data/` holds two season workbooks for the round-trip test.

@@ -3,7 +3,7 @@ type: API Area
 title: API overview
 description: Seventeen route modules under one FastAPI app, one error envelope, paging with a total header, a search language, and OpenAPI at /docs.
 tags: [api, fastapi, routes]
-generated: { by: openai/gpt-6, at: 2026-09-15T10:44:28Z }
+generated: { by: openai/gpt-6, at: 2026-09-15T21:52:57Z }
 sources:
   - id: router
     resource: ../../../app/api/main.py
@@ -25,16 +25,16 @@ sources:
 |---|---|---|
 | `login.py` | `/login`, `/me` | the admin token login and the session answer |
 | `users.py` | `/users` | players, bans, blocks, W3Champions sync, history |
-| `teams.py` | `/teams` | teams, rosters, captains, availability grid, logos |
+| `teams.py` | `/leagues/{league_id}/teams`, `/events/{event_id}/teams`, `/teams` | league-owned teams, event rosters, captains, availability grid, logos; deprecated unscoped aliases |
 | `seasons.py` | `/events/{event_id}`, `/seasons`, `/achievements` | GNL maps, rounds, signups, ladder reads and badges; deprecated season aliases |
 | `leagues.py` | `/leagues` | leagues |
 | `events.py` | `/events`, `/me/events` | event CRUD and search, entrants, divisions, stages, standings |
 | `matches.py` | `/matches` | fixtures |
-| `series.py` | `/series`, `/casts` | series, result kind, places, sides, casts |
+| `series.py` | `/series`, `/events/{event_id}/series`, `/casts` | series, event series searches, result kind, places, sides, casts |
 | `draft_series.py` | `/draft-series` | a captain's proposed series |
 | `public.py` | `/signup`, `/player-series`, `/player-availability`, `/player-blocks`, `/player-history`, `/user-info`, `/fantasy-team`, `/fantasy-bet` | a member's own flows |
 | `maps.py` | `/maps` | maps and the ladder import |
-| `fantasy.py` | `/fantasy` | admin fantasy management and the breakdown |
+| `fantasy.py` | `/fantasy`, `/events/{event_id}/fantasy` | admin fantasy management and event-scoped reads, tiers and breakdowns |
 | `koth.py`, `koth_nights.py` | `/koth` | nights and the old KOTH payloads |
 | `config.py` | `/config` | settings, admins, role bindings, role sync |
 | `stats.py` | `/stats/career` | career stats |

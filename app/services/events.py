@@ -71,6 +71,7 @@ from app.models.series import Series
 from app.models.settings import Settings
 from app.models.team import Team
 from app.models.team_reduced import TeamReduced
+from app.models.team_season import DBTeamSeason
 from app.models.types import utcnow
 from app.models.user import User, UserPublic
 from app.models.user_team_season import DBUserTeamSeason
@@ -323,6 +324,24 @@ class EventService:
         with Session.begin() as session:
             event = _event(session, event_id, full=True)
             fields = data.model_dump(exclude_unset=True, exclude={"round_count"})
+            if "league_id" in fields and fields["league_id"] != event.league_id:
+                linked_team = session.scalar(
+                    select(col(DBTeamSeason.team_id))
+                    .where(col(DBTeamSeason.season_id) == event_id)
+                    .limit(1)
+                )
+                entered_team = session.scalar(
+                    select(col(EventEntrant.team_id))
+                    .where(
+                        col(EventEntrant.event_id) == event_id,
+                        col(EventEntrant.team_id).is_not(None),
+                    )
+                    .limit(1)
+                )
+                if linked_team is not None or entered_team is not None:
+                    raise BadRequestError(
+                        "Remove the event's teams before changing its league"
+                    )
             event.sqlmodel_update(fields)
             if data.model_fields_set & {"pick_ban", "map_rules"}:
                 from app.services.series_veto import check_order
@@ -1422,6 +1441,14 @@ def _enter(
         raise BadRequestError(
             "This event drafts its teams, so it takes no direct signup"
         )
+    if team_id is not None:
+        team = session.get(Team, team_id)
+        if team is None:
+            raise NotFoundError(f"Team not found by id: {team_id}")
+        if event.league_id is None or team.league_id != event.league_id:
+            raise BadRequestError(
+                f"Team {team_id} belongs to league {team.league_id}, not event league {event.league_id}"
+            )
     # A player plays one race; a team fields the races of its roster
     race = data.race if team_id is not None else _signup_race(data)
     side = (

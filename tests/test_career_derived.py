@@ -17,6 +17,7 @@ from httpx2 import Client
 from app.core.db import Session
 from app.models.base import ident
 from app.models.enums import Race
+from app.models.league import League
 from app.models.match import Match
 from app.models.player_career_stats import PlayerCareerStats
 from app.models.season import Season
@@ -186,6 +187,9 @@ def league(client: Client) -> dict[str, Any]:
     never played a series. Charlie and Delta hold no row at all.
     """
     with Session() as session:
+        owner = League(name="Career League")
+        session.add(owner)
+        session.flush()
         players = {
             name: User(
                 name=name,
@@ -200,13 +204,17 @@ def league(client: Client) -> dict[str, Any]:
         seasons = [
             Season(
                 name=f"Season {number}",
+                league_id=ident(owner),
                 series_per_round=2,
                 start_date=date(2025 + number, 1, 6),
                 end_date=date(2025 + number, 3, 6),
             )
             for number in (1, 2)
         ]
-        teams = [Team(name="One"), Team(name="Two")]
+        teams = [
+            Team(name="One", league_id=ident(owner)),
+            Team(name="Two", league_id=ident(owner)),
+        ]
         session.add_all([*players.values(), *seasons, *teams])
         session.flush()
 
