@@ -2,7 +2,7 @@
 type: Pitfall
 title: The ladder table is the egress driver
 description: Reading a whole season window of ladder matches on every view grows through a season and multiplies with viewers.
-tags: [pitfall, postgres, egress]
+tags: [data]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
 sources:
   - id: source

@@ -55,6 +55,66 @@ def test_links_resolve(path: Path) -> None:
         assert (path.parent / clean).exists(), f"{target} does not resolve"
 
 
+CONCEPTS = [p for p in files if p.name not in ("index.md", "log.md")]
+INDEXES = [p for p in files if p.name == "index.md"]
+# YAML reads a bare `a: b` value as a nested key, so a value that holds `: ` is quoted
+UNQUOTED_COLON = re.compile(r"^\s*(?:- )?[\w-]+: (?![\"'\[{|>]).*: ", re.MULTILINE)
+INDEX_ENTRY = re.compile(r"^\* \[[^\]]+\]\(([^)]+)\) - (.+)$", re.MULTILINE)
+# The areas a concept may be tagged with; `type` already says what kind of file it is
+TAGS = {
+    "events",
+    "koth",
+    "series",
+    "fantasy",
+    "scheduling",
+    "teams",
+    "maps",
+    "w3champions",
+    "discord",
+    "auth",
+    "data",
+    "storage",
+    "api",
+    "deploy",
+    "testing",
+    "tooling",
+}
+
+
+def description(path: Path) -> str:
+    found = re.search(
+        r"^description: (.+)$", frontmatter(path.read_text()) or "", re.MULTILINE
+    )
+    assert found, f"{path.name} has no description"
+    text = found.group(1).strip()
+    return text[1:-1].replace('\\"', '"') if text.startswith('"') else text
+
+
+@pytest.mark.parametrize("path", CONCEPTS, ids=lambda p: str(p.relative_to(BUNDLE)))
+def test_concept_metadata(path: Path) -> None:
+    fm = frontmatter(path.read_text()) or ""
+    assert re.search(r"^title: \S", fm, re.MULTILINE), "a concept has a title"
+    tags = re.search(r"^tags: \[(.*)\]$", fm, re.MULTILINE)
+    assert tags, "tags is a list"
+    unknown = {t.strip() for t in tags.group(1).split(",")} - TAGS
+    assert not unknown, f"tags outside the vocabulary: {sorted(unknown)}"
+    description(path)
+    hit = UNQUOTED_COLON.search(fm)
+    assert hit is None, f"quote the value: {hit.group().strip()!r}"
+
+
+@pytest.mark.parametrize("path", INDEXES, ids=lambda p: str(p.relative_to(BUNDLE)))
+def test_index_lists_its_directory(path: Path) -> None:
+    listed = dict(INDEX_ENTRY.findall(path.read_text()))
+    for concept in sorted(path.parent.glob("*.md")):
+        if concept.name in ("index.md", "log.md"):
+            continue
+        assert concept.name in listed, f"{concept.name} is not in the index"
+        assert listed[concept.name] == description(concept), (
+            f"the index line for {concept.name} is not its description"
+        )
+
+
 # Content that must never appear in a public bundle: an id-shaped digit run, an
 # email, a connection string, a token, a deployment hostname, an IP address.
 SENSITIVE = re.compile(

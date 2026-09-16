@@ -2,7 +2,8 @@
 type: Domain Concept
 title: W3C ladder and achievements
 description: Every ranked 1v1 match of a GNL player is stored once, scored per season on their signup race, and 24 badge rules run as one SQL union.
-tags: [ladder, w3champions, achievements]
+resource: ../../../app/services/ladder.py
+tags: [w3champions]
 generated: { by: openai/gpt-6, at: 2026-09-15T10:44:28Z }
 sources:
   - id: ladder

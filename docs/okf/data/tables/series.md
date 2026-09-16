@@ -3,8 +3,9 @@ type: Data Model
 title: series
 description: One series between two sides, a best-of with its scores, time, host, off races, result kind and the feeder graph a bracket runs on.
 resource: ../../../../app/models/series.py
-tags: [schema, events]
+tags: [events, data]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T15:15:00Z }
+verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
 sources:
   - id: model
     resource: ../../../../app/models/series.py

@@ -13,7 +13,7 @@ from app.api.deps import (
     require_admin,
 )
 from app.api.search import SearchQuery
-from app.models.enums import EventKind
+from app.models.enums import EventKind, Race
 from app.models.event_award import EventAwardPublic
 from app.models.event_division import EventDivisionWrite
 from app.models.event_entrant import (
@@ -192,9 +192,14 @@ def add_entrant_as_admin(
 
 
 @router.delete("/events/{event_id}/entrants/me", status_code=204)
-def withdraw(event_id: int, claims: RequireLogin, service: EventServiceDep) -> None:
-    """Withdraw the caller's own signup; the row stays and reads withdrawn."""
-    service.withdraw(event_id, claims)
+def withdraw(
+    event_id: int,
+    claims: RequireLogin,
+    service: EventServiceDep,
+    race: Race | None = None,
+) -> None:
+    """Withdraw the caller's own signup, or the one race named; the row stays."""
+    service.withdraw(event_id, claims, race)
 
 
 @router.post("/events/{event_id}/entrants/{entrant_id}/checkin")

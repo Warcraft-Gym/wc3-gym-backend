@@ -2,7 +2,8 @@
 type: Data Model
 title: Migrations
 description: Alembic owns the schema, the production build migrates while the old code serves, a preview gets its own database copy, and one head is allowed at a time.
-tags: [alembic, migrations, postgres]
+resource: ../../../migrations/env.py
+tags: [data]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
 sources:
   - id: env

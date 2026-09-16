@@ -17,6 +17,7 @@ from app.models.event_entrant import EventEntrant
 from app.models.event_stage import EventStage
 from app.models.league import League
 from app.models.season import Season
+from app.models.series import Series
 from app.models.team import Team
 from app.models.user import User
 from app.models.user_team_season import DBUserTeamSeason
@@ -412,3 +413,50 @@ def test_a_team_no_member_of_which_is_rated_answers_no_mmr(
     assert rows[rated]["mmr"] == 1900
     assert rows[empty]["division_id"] == bands[1]["id"]
     assert rows[rated]["division_id"] == bands[0]["id"]
+
+
+def test_a_hand_placed_entrant_takes_a_seat_of_its_division(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """A sized division holds its size, hand placements counted."""
+    event = add_event(kind=EventKind.cup)
+    entrants = [
+        enter(event, add_player(f"P{mmr}", {Race.HU: mmr}))
+        for mmr in (2200, 2000, 1800, 1600)
+    ]
+    bands = set_divisions(
+        client, event, [{"name": "Top", "size": 2}, {"name": "Rest"}], auth_headers
+    )
+    moved = client.put(
+        f"/events/{event}/entrants/{entrants[3]}",
+        json={"division_id": bands[0]["id"]},
+        headers=auth_headers,
+    )
+    assert moved.status_code == 200, moved.text
+
+    again = client.post(f"/events/{event}/divisions/assign", headers=auth_headers)
+
+    counts = {band["name"]: band["entrant_count"] for band in again.json()["divisions"]}
+    assert counts == {"Top": 2, "Rest": 2}
+    rows = {
+        row["id"]: row["division_id"]
+        for row in client.get(f"/events/{event}/entrants").json()
+    }
+    assert rows[entrants[3]] == bands[0]["id"]
+    assert rows[entrants[0]] == bands[0]["id"]
+
+
+def test_replacing_the_divisions_clears_them_off_the_series(
+    client: Client, seeded: dict[str, Any], auth_headers: dict[str, str]
+) -> None:
+    """A series of a division that is gone points at no division."""
+    event = seeded["season_id"]
+    bands = set_divisions(client, event, [{"name": "A"}, {"name": "B"}], auth_headers)
+    with Session.begin() as session:
+        series = session.get_one(Series, seeded["series_open_id"])
+        series.division_id = bands[0]["id"]
+
+    set_divisions(client, event, [{"name": "A"}], auth_headers)
+
+    with Session.begin() as session:
+        assert session.get_one(Series, seeded["series_open_id"]).division_id is None

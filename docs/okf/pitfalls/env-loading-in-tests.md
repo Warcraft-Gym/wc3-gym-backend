@@ -2,7 +2,7 @@
 type: Pitfall
 title: A .env loaded below the entry point reaches the tests
 description: load_dotenv with no path walks up from the file, so a worktree loaded a .env above it and the suite made real Discord calls.
-tags: [pitfall, tests, env]
+tags: [deploy, testing]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
 sources:
   - id: source

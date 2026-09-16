@@ -13,6 +13,7 @@ from httpx2 import Client, Response
 from app.core.db import Session
 from app.models.enums import EntrantKind, EventKind, Race, SignupPolicy
 from app.models.relationships import DBTeamSeasonCaptain
+from app.models.types import utcnow
 from app.models.w3c_stats import W3CStats
 from tests.test_events import add_event, set_fields
 
@@ -364,3 +365,34 @@ def test_a_player_names_the_race_they_sign_up_on(
     entered = sign_up(client, event, member("1"), note="Creep routes")
     assert entered.status_code == 201, entered.text
     assert (entered.json()["race"], entered.json()["note"]) == ("HU", "Creep routes")
+
+
+def test_a_finished_event_shuts_its_signups(
+    client: Client, seeded: dict[str, Any], member: Member
+) -> None:
+    """The stored flag stays true; the read answers false and the write refuses."""
+    event = add_event(kind=EventKind.cup, signups_open=True, closed_at=utcnow())
+
+    assert client.get(f"/events/{event}").json()["signups_open"] is False
+    refused = sign_up(client, event, member("1"))
+    assert refused.status_code == 400
+    assert refused.json() == {"error": "Signups are closed for this event"}
+
+
+def test_a_withdraw_names_one_race_and_the_count_is_of_players(
+    client: Client, seeded: dict[str, Any], member: Member
+) -> None:
+    """Two races of one player are one entrant; a race withdraws its own row."""
+    event = add_event(kind=EventKind.cup, multi_entry=True)
+    headers = member("1")
+    assert sign_up(client, event, headers, race="HU").status_code == 201
+    assert sign_up(client, event, headers, race="OC").status_code == 201
+    assert client.get(f"/events/{event}").json()["entrant_count"] == 1
+
+    gone = client.delete(f"/events/{event}/entrants/me?race=HU", headers=headers)
+
+    assert gone.status_code == 204, gone.text
+    rows = {row["race"]: row["withdrawn_at"] for row in entrants(client, event)}
+    assert rows["HU"] is not None
+    assert rows["OC"] is None
+    assert client.get(f"/events/{event}").json()["entrant_count"] == 1
