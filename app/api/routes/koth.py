@@ -1,8 +1,8 @@
-"""The old KOTH paths, answered from the event model by the KOTH module.
+"""The old KOTH paths, deprecated, answered from the event model.
 
-Every handler here keeps the path, the body and the payload it answered
-before, so Nightbot, the overlay and the bookmarks of the run crew keep
-working while the pages move to the event reads. 4f drops these paths.
+Nightbot, the stream overlay and old bookmarks still call these paths. Every
+handler keeps its path, body and payload; `app.services.koth.legacy` answers
+them from the event rows. The live KOTH routes are in `koth_nights.py`.
 """
 
 import logging
@@ -33,7 +33,7 @@ from app.services.koth import legacy
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(tags=["koth"])
+router = APIRouter(tags=["koth"], deprecated=True)
 
 
 # ============ Event Endpoints ============

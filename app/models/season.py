@@ -117,6 +117,7 @@ class Season(SeasonBase, DBModel, table=True):
         # type checker sees it
         round_count: int
         league_short_name: str | None
+        league_name: str | None
 
     # The import matches a season by name, so two seasons cannot share one
     __table_args__ = (Index("uq_seasons_name", text("lower(trim(name))"), unique=True),)
@@ -305,7 +306,7 @@ Season.round_count = column_property(ROUND_COUNT)
 # names an event also says which league it is part of. A scalar subquery, so a
 # list of events costs one statement, not one read per row. The league table is
 # spelled out here because app.models.league imports this module.
-LEAGUE = table("league", column("id"), column("short_name"))
+LEAGUE = table("league", column("id"), column("short_name"), column("name"))
 LEAGUE_SHORT_NAME = (
     select(LEAGUE.c.short_name)
     .where(LEAGUE.c.id == Season.league_id)
@@ -313,6 +314,13 @@ LEAGUE_SHORT_NAME = (
     .label("league_short_name")
 )
 Season.league_short_name = column_property(LEAGUE_SHORT_NAME)
+LEAGUE_NAME = (
+    select(LEAGUE.c.name)
+    .where(LEAGUE.c.id == Season.league_id)
+    .scalar_subquery()
+    .label("league_name")
+)
+Season.league_name = column_property(LEAGUE_NAME)
 
 
 class SeasonCreate(SeasonBase):
@@ -378,6 +386,8 @@ class SeasonPublic(SeasonBase):
     id: int
     # The short name of the season's league; null when the event has no league
     league_short_name: Annotated[str | None, NumToStr] = None
+    # The full name of that league; null when the event has no league
+    league_name: Annotated[str | None, NumToStr] = None
     # How many rounds the season has, counted from its round rows
     round_count: int | None = None
     # The short form of a season carries only the name, so these read null
@@ -406,6 +416,7 @@ class SeasonPublic(SeasonBase):
             id=ident(season),
             name=season.name,
             league_short_name=season.league_short_name,
+            league_name=season.league_name,
             round_count=season.round_count,
             series_per_round=season.series_per_round,
             pick_ban=season.pick_ban,
@@ -439,6 +450,7 @@ class SeasonPublic(SeasonBase):
             id=ident(season),
             name=season.name,
             league_short_name=season.league_short_name,
+            league_name=season.league_name,
             map_rules=season.map_rules,
             fantasy_grind=season.fantasy_grind,
             signups_open=season.signups_open,
@@ -454,6 +466,7 @@ class SeasonPublic(SeasonBase):
             id=ident(season),
             name=season.name,
             league_short_name=season.league_short_name,
+            league_name=season.league_name,
             round_count=season.round_count,
             series_per_round=season.series_per_round,
             pick_ban=season.pick_ban,
@@ -502,6 +515,8 @@ class EventPublic(SQLModel):
     league_id: int | None = None
     # The short name of the event's league; null when the event has no league
     league_short_name: Annotated[str | None, NumToStr] = None
+    # The full name of that league; null when the event has no league
+    league_name: Annotated[str | None, NumToStr] = None
     kind: EventKind = EventKind.gnl
     # The event this one feeds; a qualifier reads its parent here
     parent_id: int | None = None
@@ -652,6 +667,8 @@ class MemberEventRow(SQLModel):
     name: Annotated[str | None, NumToStr] = None
     # The short name of the event's league; null when the event has no league
     league_short_name: Annotated[str | None, NumToStr] = None
+    # The full name of that league; null when the event has no league
+    league_name: Annotated[str | None, NumToStr] = None
     start: Annotated[IsoDate | None, LenientDate] = None
     end: Annotated[IsoDate | None, LenientDate] = None
     phase: EventPhase

@@ -2,7 +2,7 @@
 type: Decision
 title: GNL plays Bo3 only
 description: Every GNL series is a best of three; the backend keeps general best-of support, and no GNL screen offers a choice.
-tags: [decision, gnl]
+tags: [events]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
 sources:
   - id: source

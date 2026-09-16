@@ -2,7 +2,8 @@
 type: Integration
 title: W3Champions
 description: The ranked ladder service the app reads MMR, per-race stats and match history from, with a timeout, a throttle answer, and two separate sync pipelines.
-tags: [w3champions, w3c, integration]
+resource: ../../../app/services/w3c.py
+tags: [w3champions]
 generated: { by: openai/gpt-6, at: 2026-09-16T00:00:00Z }
 sources:
   - id: client

@@ -2,7 +2,7 @@
 type: Pitfall
 title: A bytes column drives egress
 description: A picture stored as bytes on a row is read by every query that touches the row, invisible to statement counts and response sizes, and it drove database egress.
-tags: [pitfall, postgres, egress]
+tags: [data]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
 sources:
   - id: source

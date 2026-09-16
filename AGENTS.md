@@ -2,7 +2,7 @@
 
 ## The knowledge bundle in `docs/okf/`
 
-`docs/okf/` is public. Read [how the bundle is written](docs/okf/conventions/okf-bundle.md) before you change it. This file is the list of what never goes in, and the check to run before a commit.
+`docs/okf/` is public. Read [how the bundle is written](docs/okf/conventions/okf-bundle.md) before you change it. This file is the list of what never goes in, and the check to run before a commit. A pull request that changes a route, a table, a contract or a decision updates the concept in `docs/okf/` that states it, in the same pull request.
 
 ### What never goes in
 
@@ -20,3 +20,9 @@
 3. A change to a fact the bundle states changes the concept in the same pull request and updates `generated.at`.
 
 The review that merges the pull request repeats step 1.
+
+## Working in this repository
+
+- `uv run just test` runs the suite, `uv run just lint` formats and lints, `uv run just typecheck` runs ty. CI runs all three.
+- The code rules live in the bundle: [layering](docs/okf/conventions/layering.md), [code style](docs/okf/conventions/code-style.md), [testing](docs/okf/conventions/testing.md), [git and pull requests](docs/okf/conventions/git-and-pull-requests.md).
+- `just okf-validate` checks the bundle with a third-party OKF validator. `just okf-drift` lists the concepts to re-read after a code change.

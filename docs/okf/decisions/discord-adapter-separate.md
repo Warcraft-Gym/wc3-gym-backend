@@ -2,7 +2,7 @@
 type: Decision
 title: The Discord adapter is its own small app
 description: Discord interactions land on a one-route Starlette app in a separate repository that verifies and forwards; the backend does the work.
-tags: [decision, discord]
+tags: [discord]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
 sources:
   - id: source

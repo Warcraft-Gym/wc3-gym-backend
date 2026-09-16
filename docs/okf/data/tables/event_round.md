@@ -1,10 +1,11 @@
 ---
 type: Data Model
 title: event_round
-description: One round of a stage: its number, its date window and the fixed map of game 1; a GNL playday is a round.
+description: "One round of a stage: its number, its date window and the fixed map of game 1; a GNL playday is a round."
 resource: ../../../../app/models/relationships.py
-tags: [schema, events]
+tags: [events, data]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T15:15:00Z }
+verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
 sources:
   - id: model
     resource: ../../../../app/models/relationships.py

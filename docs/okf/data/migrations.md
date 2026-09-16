@@ -2,8 +2,9 @@
 type: Data Model
 title: Migrations
 description: Alembic owns the schema, the production build migrates while the old code serves, a preview gets its own database copy, and one head is allowed at a time.
-tags: [alembic, migrations, postgres]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
+resource: ../../../migrations/env.py
+tags: [data]
+generated: { by: claude-code/claude-fable-5-1, at: 2026-09-16T18:00:00Z }
 sources:
   - id: env
     resource: ../../../migrations/env.py
@@ -54,3 +55,7 @@ There is no scheduled backup. Take a `pg_dump` by hand from a machine that holds
 # SQLite
 
 The tests run on SQLite, which needs a batch rebuild for some alterations. Never batch-alter `users` on SQLite: it drops the expression index on the Discord tag.
+
+# Checkpoint
+
+Revision `70274e9b1dbb` is a no-op checkpoint at the end of the development history. Decided 2026-09-16: every persistent database moves to it, then the revisions before it are rewritten into one baseline that keeps this id, so a database at the checkpoint runs no DDL and an empty one builds the schema in one step.

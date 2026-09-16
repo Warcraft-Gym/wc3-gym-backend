@@ -2,7 +2,7 @@
 type: Decision
 title: Discord's edit limit is a core constraint
 description: Every channel post and edit goes through the discord_post rows, which pace edits to Discord's five per five seconds per channel and collapse a burst to its last state.
-tags: [decision, discord]
+tags: [discord]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
 sources:
   - id: source

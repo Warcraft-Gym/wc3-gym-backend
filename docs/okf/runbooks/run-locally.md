@@ -2,8 +2,10 @@
 type: Runbook
 title: Run locally
 description: Install with uv, copy the example environment, start Postgres and the backend with just, run the tests.
-tags: [runbook, local, uv, just]
+resource: ../../../README.md
+tags: [deploy, tooling]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
+stale_after: 2027-03-14T00:00:00Z
 sources:
   - id: readme
     resource: ../../../README.md

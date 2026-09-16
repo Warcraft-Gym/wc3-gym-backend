@@ -3,8 +3,9 @@ type: Data Model
 title: w3c_ladder_matches
 description: One ranked 1v1 W3Champions match of one GNL player, with the selected and the played race on both sides; points and badges derive from it.
 resource: ../../../../app/models/w3c_ladder_match.py
-tags: [schema, w3champions]
+tags: [w3champions, data]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T15:15:00Z }
+verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
 sources:
   - id: model
     resource: ../../../../app/models/w3c_ladder_match.py

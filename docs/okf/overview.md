@@ -2,7 +2,8 @@
 type: Repository
 title: wc3-gym-backend
 description: The FastAPI backend of the Warcraft Gym league app, on Vercel with a Supabase Postgres, serving the web app, the WordPress site, the Discord adapter and Nightbot.
-tags: [repository, fastapi, vercel, postgres]
+resource: https://github.com/Warcraft-Gym/wc3-gym-backend
+tags: [data, api, deploy]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
 sources:
   - id: readme

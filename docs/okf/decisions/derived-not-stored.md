@@ -2,7 +2,7 @@
 type: Decision
 title: Derived, not stored
 description: Every score, standing, rating and fantasy total is computed at read time; no rollup column and no recalculate button exists.
-tags: [decision, scoring]
+tags: [series]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
 sources:
   - id: source

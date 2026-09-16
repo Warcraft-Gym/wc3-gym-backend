@@ -2,7 +2,7 @@
 type: Pitfall
 title: Two Alembic heads after a squash
 description: Two branches that each add a migration on the same parent leave two heads on main after the second squash, breaking CI and the staging migrate job.
-tags: [pitfall, migrations]
+tags: [data]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
 sources:
   - id: source

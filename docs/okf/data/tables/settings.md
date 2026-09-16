@@ -3,8 +3,9 @@ type: Data Model
 title: settings
 description: One key-value row per runtime setting an admin edits, including the two season pointers and the Discord channel ids.
 resource: ../../../../app/models/settings.py
-tags: [schema, access]
+tags: [auth, data]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T15:15:00Z }
+verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
 sources:
   - id: model
     resource: ../../../../app/models/settings.py

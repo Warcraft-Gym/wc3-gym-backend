@@ -3,8 +3,9 @@ type: Data Model
 title: series_cast
 description: One member's claim to cast one series, with the channel it streams on and the VOD pasted after; planned, live and VOD states derive at read time.
 resource: ../../../../app/models/series_cast.py
-tags: [schema, events]
+tags: [events, data]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T15:15:00Z }
+verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
 sources:
   - id: model
     resource: ../../../../app/models/series_cast.py

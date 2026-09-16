@@ -2,7 +2,7 @@
 type: Pitfall
 title: A boundary test that drives the oracle proves nothing
 description: 71 careful boundary cases passed while the production SQL rule was broken, because the test called the Python copy in the test folder.
-tags: [pitfall, tests]
+tags: [testing]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
 sources:
   - id: source
