@@ -3,8 +3,9 @@ type: Data Model
 title: league
 description: One thing that repeats, such as the GNL or KOTH; each run of it is an event.
 resource: ../../../../app/models/league.py
-tags: [schema, events]
+tags: [events, data]
 generated: { by: openai/gpt-6, at: 2026-09-15T21:52:57Z }
+verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
 sources:
   - id: model
     resource: ../../../../app/models/league.py

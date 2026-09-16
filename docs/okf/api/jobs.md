@@ -2,7 +2,8 @@
 type: API Area
 title: Scheduled jobs
 description: Two job routes behind a shared secret, one called daily by Vercel and one every five minutes by a Cloudflare Worker, because the hosting plan allows one cron a day.
-tags: [jobs, cron, vercel]
+resource: ../../../app/api/routes/jobs.py
+tags: [deploy]
 generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
 sources:
   - id: jobs
