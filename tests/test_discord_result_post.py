@@ -65,7 +65,7 @@ def test_a_result_posts_once_and_a_correction_edits_it(
     card = discord_calls[0][2]
     assert card["content"] == ""
     lines = card["embeds"][0]["description"].splitlines()
-    assert lines[0] == "## Season 1"
+    assert lines[0] == "## SL · Season 1"
     assert lines[1].startswith("Round 1")
     assert lines[3] == "### Team Alpha (Alpha) vs Team Beta (Beta)"
     assert lines[4] == (

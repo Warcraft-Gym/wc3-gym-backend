@@ -167,7 +167,9 @@ def set_team_availability(
     _own_team(claims, team_id, event_id)
     teams.ensure_event_team(team_id, event_id)
     if not service.on_roster(team_id, event_id, data.user_id):
-        raise BadRequestError(f"Player {data.user_id} is not on this team in this event")
+        raise BadRequestError(
+            f"Player {data.user_id} is not on this team in this event"
+        )
     caller_id = user_service.id_by_discord_id(str(claims["sub"]))
     if caller_id is None:
         raise NotFoundError("user_not_found")

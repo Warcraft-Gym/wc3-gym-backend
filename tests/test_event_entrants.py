@@ -106,7 +106,7 @@ def test_a_members_event_refuses_a_caller_with_no_session(client: Client) -> Non
 def test_a_captain_enters_the_team_and_another_member_may_not(
     client: Client, seeded: dict[str, Any], member: Member
 ) -> None:
-    event = add_event(kind=EventKind.cup)
+    event = add_event(kind=EventKind.cup, league_id=seeded["league_id"])
     with Session.begin() as session:
         session.add(
             DBTeamSeasonCaptain(
@@ -325,7 +325,7 @@ def test_a_team_enters_on_no_race_and_carries_its_note(
     client: Client, seeded: dict[str, Any], member: Member
 ) -> None:
     """A team fields the races of its roster, so its row names none of them."""
-    event = add_event(kind=EventKind.cup)
+    event = add_event(kind=EventKind.cup, league_id=seeded["league_id"])
     with Session.begin() as session:
         session.add(
             DBTeamSeasonCaptain(

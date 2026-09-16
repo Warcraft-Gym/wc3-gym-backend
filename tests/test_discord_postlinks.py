@@ -106,7 +106,7 @@ def test_an_open_season_card_says_signups_are_open(
     schedule(seeded["series_played_id"], datetime.now(UTC) + timedelta(days=1))
     post(client)
     assert discord_calls[0][2]["content"] == (
-        f"**Season 1**\n{ROUND_1}\nSignups are open. {SIGN_IN}"
+        f"**SL · Season 1**\n{ROUND_1}\nSignups are open. {SIGN_IN}"
     )
 
 
@@ -119,7 +119,7 @@ def test_a_commenced_season_card_says_signups_are_closed(
 ) -> None:
     post(client)
     assert discord_calls[0][2]["content"] == (
-        f"**Season 1**\n{ROUND_1}\n"
+        f"**SL · Season 1**\n{ROUND_1}\n"
         f"Signups are closed. A signup is subject to admin approval. {SIGN_IN}"
     )
 

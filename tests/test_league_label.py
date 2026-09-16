@@ -151,11 +151,7 @@ def test_a_team_season_with_no_league_reads_the_name_alone(
         season = Season(name="Season 2", series_per_round=2)
         session.add(season)
         session.flush()
-        session.add(
-            DBTeamSeason(team_id=seeded["team_a_id"], season_id=ident(season))
-        )
+        session.add(DBTeamSeason(team_id=seeded["team_a_id"], season_id=ident(season)))
     answer = client.get(f"/teams/{seeded['team_a_id']}").json()
-    row = next(
-        info for info in answer["seasons_info"] if info["name"] == "Season 2"
-    )
+    row = next(info for info in answer["seasons_info"] if info["name"] == "Season 2")
     assert row["league_short_name"] is None
