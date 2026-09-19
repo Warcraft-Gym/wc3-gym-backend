@@ -100,6 +100,11 @@ def _identity(request: Request, credentials: Credentials) -> dict[str, Any]:
     claims = require_member(request, credentials)
     if claims["sub"] == "admin":
         raise ApiError(401, {"error": "not_a_discord_member"})
+    return _entry(claims)
+
+
+def _entry(claims: dict[str, Any]) -> dict[str, Any]:
+    """The Discord account behind a set of claims, and the season it acts in."""
     account = discord.identify(discord_token(claims["clerk_user_id"]).token)
     return {
         "discord_id": str(claims["sub"]),
@@ -108,6 +113,18 @@ def _identity(request: Request, credentials: Credentials) -> dict[str, Any]:
         or str(claims["sub"]),
         "season_id": discord_roles.current_season(),
     }
+
+
+def _player_or_admin(
+    request: Request, credentials: Credentials
+) -> tuple[dict[str, Any], bool]:
+    """The identity behind a series write, and whether it is an admin, who
+    acts for either side. The admin access token carries no Discord account."""
+    claims = require_member(request, credentials)
+    admin = claims.get("role") == "admin" or claims["sub"] == "admin"
+    if claims["sub"] == "admin":
+        return {}, admin
+    return _entry(claims), admin
 
 
 def dashboard_player(
@@ -459,10 +476,11 @@ async def update_player_series(
     series_service: SeriesServiceDep,
     credentials: Credentials,
 ) -> dict[str, Any]:
-    """Update a series that belongs to the authenticated player."""
+    """Update a series the caller acts for: a player of a side, a captain of
+    the team that fields it, or an admin, who acts for either side."""
     # The caller is named before the body is read, so a torn body is answered
     # as the bad request it is and never as an anonymous traceback
-    entry = _identity(request, credentials)
+    entry, admin = _player_or_admin(request, credentials)
 
     # Handle both form data and JSON
     content_type = request.headers.get("content-type") or ""
@@ -488,10 +506,11 @@ async def update_player_series(
         player_series.update_player_series,
         series_id,
         data,
-        discord_id=str(entry.get("discord_id")),
+        discord_id=str(entry.get("discord_id", "")),
         discord_tag=entry.get("discord_tag", "Unknown Player"),
         user_service=user_service,
         series_service=series_service,
+        admin=admin,
     )
 
 

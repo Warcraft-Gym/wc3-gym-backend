@@ -12,8 +12,8 @@ fixture and no entrant. A generated series still waiting on its two feeders
 names no entrant either, and holds no fixture, which is what tells the two
 apart.
 
-The side a caller acts for hangs on the same round or fixture, so it is
-answered here too.
+Who may act for a side hangs on the same round or fixture, so acts_for_side
+is answered here too, and every route that writes a series asks it.
 """
 
 from collections.abc import Iterable
@@ -29,7 +29,7 @@ from app.models.base import ident
 from app.models.event_entrant import EventEntrant
 from app.models.event_stage import EventStage
 from app.models.match import Match
-from app.models.relationships import DBEventRound, round_row
+from app.models.relationships import DBEventRound, DBTeamSeasonCaptain, round_row
 from app.models.season import Season
 from app.models.series import Series, SeriesPublic, SeriesRulesPublic
 from app.models.user_team_season import DBUserTeamSeason
@@ -69,14 +69,25 @@ def stands_on_side(series: Series, side: int) -> int | None:
     return series.entrant2_id or series.player2_id
 
 
+class TeamSide(NamedTuple):
+    """One side a team fields: the side, the team, the event the seats and the
+    roster are read against, and whether the side names no player of its own."""
+
+    side: Literal[1, 2]
+    team_id: int
+    event_id: int
+    unnamed: bool
+
+
 def acts_for_side(
     session: OrmSession, series: Series, user_id: int | None
 ) -> Literal[1, 2] | None:
-    """The side the caller acts for: the player of that side, or a member of
-    the roster the side's team fields for the event.
+    """The side the caller acts for: the player that side names, or a captain
+    of the team that fields it. A side that names no player is the team
+    itself, so any member of the roster it fields acts for it.
 
-    The entrant row names the event itself, which is the event of the series'
-    round or fixture, so the roster is read against that id.
+    An admin acts for either side; the routes answer that before they ask
+    here, so a null user is nobody.
     """
     if user_id is None:
         return None
@@ -84,20 +95,48 @@ def acts_for_side(
         return 1
     if series.player2_id == user_id:
         return 2
+    for team in _team_sides(session, series):
+        seat = (team.team_id, team.event_id, user_id)
+        if session.get(DBTeamSeasonCaptain, seat) is not None:
+            return team.side
+        roster = (user_id, team.team_id, team.event_id)
+        if team.unnamed and session.get(DBUserTeamSeason, roster) is not None:
+            return team.side
+    return None
+
+
+def _team_sides(session: OrmSession, series: Series) -> list[TeamSide]:
+    """The team behind each side: the team its entrant names, else the two
+    teams of the fixture it plays.
+
+    The entrant row names the event itself, which is the event of the series'
+    round or fixture, so the seats are read against that id. A fixture side is
+    never the team itself, because the fixture names its players or its sides.
+    """
+    named = {1: series.player1_id, 2: series.player2_id}
     sides: dict[int, Literal[1, 2]] = {
         side_id: side
         for side_id, side in ((series.entrant1_id, 1), (series.entrant2_id, 2))
         if side_id is not None
     }
-    if not sides:
-        return None
-    for entrant in session.scalars(
-        select(EventEntrant).where(col(EventEntrant.id).in_(sides))
-    ):
-        key = (user_id, entrant.team_id, entrant.event_id)
-        if entrant.team_id and session.get(DBUserTeamSeason, key) is not None:
-            return sides[ident(entrant)]
-    return None
+    if sides:
+        found = []
+        for entrant in session.scalars(
+            select(EventEntrant).where(col(EventEntrant.id).in_(sides))
+        ):
+            side = sides[ident(entrant)]
+            if entrant.team_id is not None:
+                found.append(
+                    TeamSide(side, entrant.team_id, entrant.event_id, not named[side])
+                )
+        return found
+    match = series.match
+    if match is None:
+        return []
+    return [
+        TeamSide(1, match.team1_id, match.season_id, False),
+        TeamSide(2, match.team2_id, match.season_id, False),
+    ]
 
 
 def reads_its_stage(
