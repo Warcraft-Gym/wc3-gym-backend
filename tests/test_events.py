@@ -1137,12 +1137,13 @@ def test_an_event_carries_the_check_in_zone_and_the_games_window(
 
     edited = client.put(
         f"/events/{event_id}",
-        json={"early_checkin": False, "round_end_zone": None},
+        json={"early_checkin": False, "round_end_zone": None, "min_games_seasons": 3},
         headers=auth_headers,
     )
     assert edited.status_code == 200, edited.text
     assert edited.json()["early_checkin"] is False
     assert edited.json()["round_end_zone"] is None
+    assert edited.json()["min_games_seasons"] == 3
 
 
 def test_the_event_settings_refuse_an_unknown_zone_and_a_zero_window(

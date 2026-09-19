@@ -55,4 +55,4 @@ Primary key `id`. Foreign key `event_id` to [event](event.md), cascade on delete
 
 A stage split into groups merges at the next stage; a division never merges. The engine never branches on the event kind. See [events module](../../concepts/events-module.md).
 
-`max_mmr_difference` is the only column that belongs to one format. The stage read answers it filled in on a `gnl` stage, so a client never carries the default of its own; every other format answers null.
+`max_mmr_difference` is the only column the write refuses outside its format. The stage read answers it filled in on a `gnl` stage, so a client never carries the default of its own; every other format answers null.
