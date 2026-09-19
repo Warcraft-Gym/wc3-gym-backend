@@ -5,9 +5,10 @@ from typing import Any
 import pytest
 from httpx2 import Client
 
-from tests.test_draft_permissions import draft_body
+from tests.test_draft_permissions import draft_body, room  # noqa: F401
 
 
+@pytest.mark.usefixtures("room")
 @pytest.mark.parametrize("score", [3, -1])
 def test_a_draft_score_outside_a_bo3_is_refused(
     client: Client,
@@ -29,6 +30,7 @@ def test_a_draft_score_outside_a_bo3_is_refused(
     assert resp.status_code == 422, resp.text
 
 
+@pytest.mark.usefixtures("room")
 def test_a_scored_draft_promotes(
     client: Client, seeded: dict[str, Any], auth_headers: dict[str, str]
 ) -> None:

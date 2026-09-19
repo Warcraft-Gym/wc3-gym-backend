@@ -4,7 +4,7 @@ title: GNL season
 description: Six drafted teams, five weekly rounds, one fixture per team pairing with captain-drafted series, and a phase that is derived from the series.
 resource: ../../../app/models/season.py
 tags: [events]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-19T12:00:00Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-09-19T20:00:00Z }
 sources:
   - id: season-model
     resource: ../../../app/models/season.py
@@ -68,6 +68,14 @@ The `settings` row `current_gnl_season` names the season the captain check, the 
 # Signups and the draft
 
 A member signs up through `POST /signup` with a race and an MMR. The signup row carries `race`, `draft_position` (a hand-set place; null means sort by MMR), `draft_excluded` and `fantasy_tier`; `fantasy_tier_pinned` on the answer is derived from the tier and the season's apply date, never stored. See [user_season_signup](../data/tables/user_season_signup.md). A hand correction to the draft order is a position, never an adjusted MMR. See [the decision](../decisions/draft-order-rerank.md).
+
+# The round draft
+
+Inside a fixture the two captains write one shared draft of pairings, held in [draft_series](../data/tables/draft_series.md) until an admin publishes one. Either captain of the fixture creates, edits and deletes any pairing of it; only an admin publishes, and publishing writes the [series](../data/tables/series.md) row and deletes the draft in one transaction. Each pairing answers who wrote it and who last changed it, with the time of the change.
+
+A fixture drafts up to the event's `series_per_round` pairings, counting published series and open drafts together. A pairing that replaces a published series is free of that count: it names an open series of the same fixture and keeps one of its two players, at most one draft replaces a series, and publishing it removes the replaced series with the booked time, the veto steps, the casts and the fantasy rows that hang on it. A read beside the draft names what that removal takes, so the admin's confirm can state it. A replaced series that holds a result or a replay is refused and nothing changes.
+
+Each team keeps an advisory Ready mark in [match_draft_mark](../data/tables/match_draft_mark.md), which any change to a pairing clears; it never blocks publishing. A mark names one of the two teams of the fixture, so a write naming another team is refused, an admin's too. The same row holds when that team last read the pairings, written by its own call so a read never writes. The largest MMR difference the captains pair inside is a working value per fixture in [match_draft_state](../data/tables/match_draft_state.md), and the stage setting stands behind it. A GNL fixture refuses no repeat player: a player appears in more than one pairing of it unless a sibling series is drafted through a template.
 
 # Import and export
 
