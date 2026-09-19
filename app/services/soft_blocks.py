@@ -14,7 +14,8 @@ from sqlalchemy.orm import Session as OrmSession
 from sqlmodel import col
 
 from app.core import free_time
-from app.core.checkin_hint import blocked, round_window, zone_of
+from app.core.checkin_hint import blocked, zone_of
+from app.core.checkin_hint import round_window as round_instants
 from app.core.db import Session
 from app.core.exceptions import ApiError, BadRequestError, NotFoundError
 from app.models.relationships import DBEventRound, round_row
@@ -139,7 +140,7 @@ class SoftBlockService:
         return FreeTimePublic(
             start=start,
             end=end,
-            hours=_hours(ranges),
+            hours=free_hours(ranges),
             ranges=[FreeRange(start=lo, end=hi) for lo, hi in ranges],
         )
 
@@ -177,7 +178,7 @@ class SoftBlockService:
                 )
             start, end = _window(round_, event, None, None)
             ranges = shared_free(session, user_a, user_b, start, end)
-        return PairFreeTimePublic(hours=_hours(ranges))
+        return PairFreeTimePublic(hours=free_hours(ranges))
 
 
 def shared_free(
@@ -203,8 +204,14 @@ def shared_free(
     return free_time.free(start, end, *both)
 
 
-def _hours(ranges: list[free_time.Interval]) -> float:
+def free_hours(ranges: list[free_time.Interval]) -> float:
+    """The hours a set of ranges covers, the one figure a pair read answers."""
     return sum((hi - lo).total_seconds() for lo, hi in ranges) / 3600
+
+
+def round_window(row: DBEventRound | None, event: Season) -> tuple[datetime, datetime]:
+    """The instants one round runs between, else the event's; over 31 days it refuses."""
+    return _window(row, event, None, None)
 
 
 def _pair_seated(
@@ -299,7 +306,7 @@ def _window(
     generated into a bracket has no fixture, so its round comes through its own
     round_id."""
     if start is None and end is None:
-        window = round_window(event, row)
+        window = round_instants(event, row)
         if window is None:
             raise BadRequestError("The round has no dates; pass start and end")
         start, end = window

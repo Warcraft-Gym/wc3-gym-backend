@@ -216,7 +216,7 @@ def _entrant_races(
 
 
 def signup_on(
-    signup: type[DBUserSeasonSignup], user_id: Mapped[int | None]
+    signup: type[DBUserSeasonSignup], user_id: Mapped[int | None] | ColumnElement[int]
 ) -> ColumnElement[bool]:
     """The join of a season signup: the player AND the season of the series.
     One key alone reads the race off some other season the player signed up for."""

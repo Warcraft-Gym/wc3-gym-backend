@@ -1087,6 +1087,58 @@ def _vs_race(
     return races
 
 
+def season_vs_race(
+    session: OrmSession, user_ids: Sequence[int], season: Season
+) -> dict[int, dict[str, list[int]]]:
+    """Every player's record against each opponent race, on the race he signed
+    the season up on and inside the season's window.
+
+    The grouping the season ladder reads, for a whole list of players in one
+    statement: the draft board rates sixteen players at the cost of one.
+    """
+    if not user_ids:
+        return {}
+    return _vs_race(session, _scope(user_ids, _window(season), ident(season)))
+
+
+def recent_form(
+    session: OrmSession, user_ids: Sequence[int], season_id: int, count: int = 10
+) -> dict[int, str]:
+    """Each player's newest counted ladder games on his signup race, newest
+    first, as W and L.
+
+    One statement for the whole list, ranked over the (user_id, start_time)
+    index, and it carries one letter per game rather than the match rows.
+    """
+    if not user_ids:
+        return {}
+    ranked = (
+        select(
+            col(W3CLadderMatch.user_id).label("user_id"),
+            col(W3CLadderMatch.won).label("won"),
+            func.row_number()
+            .over(
+                partition_by=col(W3CLadderMatch.user_id),
+                order_by=(
+                    col(W3CLadderMatch.start_time).desc(),
+                    col(W3CLadderMatch.id).desc(),
+                ),
+            )
+            .label("n"),
+        )
+        .where(*_scope(user_ids, None, season_id))
+        .subquery()
+    )
+    form: dict[int, str] = defaultdict(str)
+    for user_id, won in session.execute(
+        select(ranked.c.user_id, ranked.c.won)
+        .where(ranked.c.n <= count)
+        .order_by(ranked.c.user_id, ranked.c.n)
+    ):
+        form[user_id] += "W" if won else "L"
+    return dict(form)
+
+
 def _by_hour(session: OrmSession, scope: list[ColumnElement[bool]]) -> list[list[int]]:
     """Distinct matches by UTC weekday and hour. Row 0 is Sunday."""
     started = _utc(session, col(W3CLadderMatch.start_time))
