@@ -22,8 +22,7 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 
-# A batch rebuild of `event` loses its self-referencing key on SQLite, so these
-# columns are added and dropped in place.
+# Plain add and drop: a batch rebuild of `event` loses its self-referencing key on SQLite.
 def upgrade() -> None:
     op.add_column(
         "event",

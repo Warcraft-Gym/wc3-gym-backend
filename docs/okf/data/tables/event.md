@@ -47,8 +47,8 @@ The first block is the fields introduced for GNL, on `SeasonBase`. The second bl
 | `entrant_kind` | VARCHAR | no | `solo`, `team` or `drafted_teams`. Copied from the league when the event is created. A `drafted_teams` event takes no direct signup. |
 | `published` | BOOLEAN | no | Off: a draft only an admin reads, and the phase is `draft`. |
 | `checkin_enabled` | BOOLEAN | no | Off: no check-in is asked and every round stays open. |
-| `early_checkin` | BOOLEAN | no | On: a player may answer a round's check-in before its window opens. Not the same switch as `checkin_enabled`, which turns check-in off as a whole. |
-| `round_end_zone` | VARCHAR | yes | An IANA time zone name; a round of this event ends at midnight in it. Null ends a round in UTC. |
+| `early_checkin` | BOOLEAN | no | Whether a player may answer a round's check-in before its window opens. Not the same switch as `checkin_enabled`, which turns check-in off as a whole. Set by the admin form; answered on the event payload; no service reads it. |
+| `round_end_zone` | VARCHAR | yes | An IANA time zone name, the zone a round of this event ends at midnight in. Null names no zone. Set by the admin form; answered on the event payload; no service reads it. |
 | `multi_entry` | BOOLEAN | no | On, a player may enter once per race and each row seeds on its own race; every KOTH night opens it. |
 | `closed_at` | TIMESTAMP | yes | When an admin closed the event; a closed event reads finished, and a chain grows no further. |
 | `page_url` | VARCHAR | yes | The event's landing or rules page, shown as one "Page" link. |
