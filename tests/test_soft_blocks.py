@@ -15,6 +15,7 @@ from sqlmodel import col
 
 from app.core.db import Session
 from app.models.base import ident
+from app.models.enums import Race
 from app.models.match import Match
 from app.models.relationships import DBEventRound
 from app.models.season import Season
@@ -602,6 +603,54 @@ def test_a_captain_does_not_read_a_pair_of_another_event(
     assert resp.json() == {"error": "not_authorized_for_this_pair"}
 
 
+def outsider() -> int:
+    """A player of no team in the seeded event."""
+    with Session.begin() as session:
+        user = User(
+            name="P5", battleTag="P5#5555", discordTag="p5", discordId="5", race=Race.HU
+        )
+        session.add(user)
+        session.flush()
+        return ident(user)
+
+
+def test_a_captain_does_not_read_a_pair_that_holds_an_outsider(
+    client: Client, seeded: dict[str, Any], captain: dict[str, str]
+) -> None:
+    """P2 plays for the captain's own team, and P5 takes no part in the event;
+    pairing the two would otherwise read any user in the app."""
+    p2 = seeded["player_ids"][1]
+
+    resp = pair_free_time(client, seeded, captain, (p2, outsider()))
+
+    assert resp.status_code == 403, resp.text
+    assert resp.json() == {"error": "not_authorized_for_this_pair"}
+
+
+def test_a_captain_reads_a_pair_that_holds_a_player_of_another_team(
+    client: Client, seeded: dict[str, Any], captain: dict[str, str]
+) -> None:
+    """P2 plays for Alpha, which P1 captains, and P3 for Beta; both take part."""
+    p2, p3 = seeded["player_ids"][1], seeded["player_ids"][2]
+
+    resp = pair_free_time(client, seeded, captain, (p2, p3))
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == {"hours": 168.0}
+
+
+def test_an_admin_does_not_read_a_pair_that_holds_an_outsider(
+    client: Client, seeded: dict[str, Any], auth_headers: dict[str, str]
+) -> None:
+    """An admin passes the captain rule; both players still take part."""
+    p3 = seeded["player_ids"][2]
+
+    resp = pair_free_time(client, seeded, auth_headers, (p3, outsider()))
+
+    assert resp.status_code == 403, resp.text
+    assert resp.json() == {"error": "not_authorized_for_this_pair"}
+
+
 def test_a_player_of_the_pair_does_not_read_it(
     client: Client, seeded: dict[str, Any], member: Callable[..., dict[str, str]]
 ) -> None:
@@ -613,9 +662,10 @@ def test_a_player_of_the_pair_does_not_read_it(
     assert resp.status_code == 403, resp.text
 
 
-def test_an_admin_reads_any_pair(
+def test_an_admin_reads_a_pair_of_any_team_in_the_event(
     client: Client, seeded: dict[str, Any], auth_headers: dict[str, str]
 ) -> None:
+    """An admin holds no seat, and P3 and P4 both play for Beta."""
     p3, p4 = seeded["player_ids"][2], seeded["player_ids"][3]
 
     resp = pair_free_time(client, seeded, auth_headers, (p3, p4))

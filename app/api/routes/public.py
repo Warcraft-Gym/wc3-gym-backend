@@ -459,8 +459,9 @@ def get_pair_free_time(
 ) -> PairFreeTimePublic:
     """The hours two players share across a round, before a series pairs them.
 
-    An admin reads any pair; a captain reads a pair that holds one of the
-    players their team fields in that event. It answers a count, never a range.
+    Both players take part in that event; a captain reads a pair that holds one
+    of the players their own team fields, and an admin any such pair. It
+    answers a count, never a range.
     """
     claims = require_captain(request, credentials)
     admin = claims.get("role") == "admin" or claims["sub"] == "admin"

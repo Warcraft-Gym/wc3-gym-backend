@@ -155,9 +155,10 @@ class SoftBlockService:
     ) -> PairFreeTimePublic:
         """The hours two players share across a round, before a series pairs them.
 
-        An admin reads any pair; a captain reads a pair that holds one of the
-        players their team fields in that event. It answers a count only, so
-        neither the blocks nor the ranges reach the caller.
+        Both players hold a seat in that event, and a captain reads a pair that
+        holds one of the players their own team fields; an admin passes the
+        captain rule only. It answers a count only, so neither the blocks nor
+        the ranges reach the caller.
         """
         with Session.begin() as session:
             round_ = round_row(session, event_id, playday)
@@ -166,7 +167,9 @@ class SoftBlockService:
             event = session.get(Season, event_id)
             if event is None:
                 raise NotFoundError("season_not_found")
-            if not (admin or _fields_one(session, event_id, seats, (user_a, user_b))):
+            if not _pair_seated(
+                session, event_id, seats, (user_a, user_b), admin=admin
+            ):
                 raise ApiError(403, {"error": "not_authorized_for_this_pair"})
             if not event.scheduling_enabled:
                 raise ApiError(
@@ -204,26 +207,27 @@ def _hours(ranges: list[free_time.Interval]) -> float:
     return sum((hi - lo).total_seconds() for lo, hi in ranges) / 3600
 
 
-def _fields_one(
+def _pair_seated(
     session: OrmSession,
     event_id: int,
     seats: set[tuple[int, int]],
     users: tuple[int, ...],
+    *,
+    admin: bool,
 ) -> bool:
-    """Whether a captain's seat in this event fields one of those players."""
-    teams = {team for team, season in seats if season == event_id}
-    if not teams:
+    """Whether the caller may read this pair: every player holds a seat in this
+    event, and, unless the caller is an admin, a captain's seat of this event
+    fields one of them. One statement answers both, so the rows load once."""
+    rows = session.scalars(
+        select(DBUserTeamSeason).where(
+            col(DBUserTeamSeason.season_id) == event_id,
+            col(DBUserTeamSeason.user_id).in_(users),
+        )
+    ).all()
+    if {row.user_id for row in rows} != set(users):
         return False
-    return (
-        session.scalars(
-            select(DBUserTeamSeason).where(
-                col(DBUserTeamSeason.season_id) == event_id,
-                col(DBUserTeamSeason.team_id).in_(teams),
-                col(DBUserTeamSeason.user_id).in_(users),
-            )
-        ).first()
-        is not None
-    )
+    teams = {team for team, season in seats if season == event_id}
+    return admin or any(row.team_id in teams for row in rows)
 
 
 def _add[T: (UserBlock, UserBusy)](session: OrmSession, row: T) -> T:
