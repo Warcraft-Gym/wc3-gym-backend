@@ -86,6 +86,79 @@ def test_one_replay_is_replaced_after_the_result(
     assert resp.json() == {"error": "This series had 2 games"}
 
 
+def test_a_replay_moves_to_a_free_game(
+    client: Client,
+    seeded: dict[str, Any],
+    member: Callable[..., dict[str, str]],
+    blob_store: dict[str, bytes],
+    replay_uploaded: Callable[..., None],
+) -> None:
+    """The file changes place, so game 3 keeps its own key and game 2 holds nothing."""
+    series_id = seeded["series_open_id"]
+    headers = member("2")
+    replay_uploaded(series_id, 1)
+    replay_uploaded(series_id, 2, data=REPLAY_BYTES + b"\2")
+    before = report(client, series_id, headers).json()["replays"]
+    assert len(blob_store) == 2
+
+    resp = client.put(f"/player-series/{series_id}/replays/2/move/3", headers=headers)
+    assert resp.status_code == 200, resp.text
+    moved = resp.json()
+    assert [r["game_no"] for r in moved] == [1, 3]
+    assert moved[1]["url"].endswith(f"/replays/{series_id}/game3.w3g")
+    assert blob_store[moved[1]["url"]] == REPLAY_BYTES + b"\2"
+    assert len(blob_store) == 2
+    assert moved[1]["uploaded_at"] == before[1]["uploaded_at"]
+    assert moved[1]["uploaded_by"] == before[1]["uploaded_by"]
+
+
+def test_two_replays_swap(
+    client: Client,
+    seeded: dict[str, Any],
+    member: Callable[..., dict[str, str]],
+    blob_store: dict[str, bytes],
+    replay_uploaded: Callable[..., None],
+) -> None:
+    series_id = seeded["series_open_id"]
+    headers = member("2")
+    replay_uploaded(series_id, 1)
+    replay_uploaded(series_id, 2, data=REPLAY_BYTES + b"\2")
+    assert report(client, series_id, headers).status_code == 200
+
+    resp = client.put(f"/player-series/{series_id}/replays/1/move/2", headers=headers)
+    assert resp.status_code == 200, resp.text
+    swapped = resp.json()
+    assert [r["game_no"] for r in swapped] == [1, 2]
+    assert blob_store[swapped[0]["url"]] == REPLAY_BYTES + b"\2"
+    assert blob_store[swapped[1]["url"]] == REPLAY_BYTES
+    assert len(blob_store) == 2
+
+
+def test_a_move_is_refused(
+    client: Client,
+    seeded: dict[str, Any],
+    member: Callable[..., dict[str, str]],
+    replay_uploaded: Callable[..., None],
+) -> None:
+    """The same game, a game outside the best-of, an empty game, and a stranger."""
+    series_id = seeded["series_open_id"]
+    headers = member("2")
+    replay_uploaded(series_id, 1, 2)
+    assert report(client, series_id, headers).status_code == 200
+
+    path = f"/player-series/{series_id}/replays"
+    for target, error in (
+        ("1/move/1", "Pick a different game"),
+        ("1/move/4", "Game number must be between 1 and 3"),
+        ("3/move/1", "Game 3 has no replay"),
+    ):
+        resp = client.put(f"{path}/{target}", headers=headers)
+        assert resp.status_code == 400, resp.text
+        assert resp.json() == {"error": error}
+    resp = client.put(f"{path}/1/move/3", headers=member("9"))
+    assert resp.status_code in (403, 404), resp.text
+
+
 def test_a_file_that_is_not_a_replay_is_refused(
     client: Client,
     seeded: dict[str, Any],

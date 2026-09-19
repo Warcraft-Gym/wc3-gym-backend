@@ -4,7 +4,7 @@ title: Series reporting
 description: A result is reported game by game with a map and a replay per game, a veto board that is derived from the season rules, an off race per side, and casts that any member may claim.
 resource: ../../../app/services/series_games.py
 tags: [series, storage]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T16:25:00Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-09-19T00:00:00Z }
 sources:
   - id: games
     resource: ../../../app/services/series_games.py
@@ -50,7 +50,7 @@ A player who played another race than their signup race in one series records it
 
 # Replays
 
-Replays live in a Cloudflare R2 bucket, one file per game. The browser uploads straight to the bucket on a presigned URL from `POST /player-series/{id}/replays/{game}/upload-url`, so no file passes through a Vercel function. A slot row is written only once the file is there, starts like a replay and is under the size cap. Keys start with the deployment environment, so two builds never share a file. A deleted series drops its files after the commit. The S18 replays from before the app are not recovered, by decision.
+Replays live in a Cloudflare R2 bucket, one file per game. The browser uploads straight to the bucket on a presigned URL from `POST /player-series/{id}/replays/{game}/upload-url`, so no file passes through a Vercel function. A slot row is written only once the file is there, starts like a replay and is under the size cap. Keys start with the deployment environment, so two builds never share a file. A deleted series drops its files after the commit. A replay put on the wrong game moves to another game of the same series with `PUT /player-series/{id}/replays/{game}/move/{to_game}`, for whoever acts for one of the two sides; when that game already holds a replay the two swap, the uploader and the time follow the file, and the answer is every replay of the series in game order. The S18 replays from before the app are not recovered, by decision.
 
 # Casts
 
