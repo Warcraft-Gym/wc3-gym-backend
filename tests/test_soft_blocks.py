@@ -472,7 +472,12 @@ def test_nothing_writes_the_round_answer(
     assert body["hours"] == 0
     assert statements
     assert not [sql for sql in statements if "round_availability" in sql]
-    assert AvailabilityService().for_user(p2, seeded["season_id"]) == []
+    # Round 1 reads as blocked out, derived on the read: no row names a writer
+    rows = AvailabilityService().for_user(p2, seeded["season_id"])
+    assert [
+        (row.playday, row.available, row.blocked_out, row.set_by_user_id)
+        for row in rows
+    ] == [(1, False, True, None)]
 
 
 def test_a_series_with_no_sides_has_no_free_time(
