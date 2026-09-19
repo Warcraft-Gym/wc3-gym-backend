@@ -121,11 +121,17 @@ def test_two_replays_swap(
     blob_store: dict[str, bytes],
     replay_uploaded: Callable[..., None],
 ) -> None:
+    """The two files change place, and so do the uploader and the time of each."""
     series_id = seeded["series_open_id"]
     headers = member("2")
     replay_uploaded(series_id, 1)
     replay_uploaded(series_id, 2, data=REPLAY_BYTES + b"\2")
-    assert report(client, series_id, headers).status_code == 200
+    reported = report(client, series_id, headers)
+    assert reported.status_code == 200, reported.text
+    # the other player claims game 2, so the two rows carry different uploaders
+    other = client.put(f"/player-series/{series_id}/replays/2", headers=member("4"))
+    assert other.status_code == 200, other.text
+    before = [reported.json()["replays"][0], other.json()]
 
     resp = client.put(f"/player-series/{series_id}/replays/1/move/2", headers=headers)
     assert resp.status_code == 200, resp.text
@@ -134,6 +140,9 @@ def test_two_replays_swap(
     assert blob_store[swapped[0]["url"]] == REPLAY_BYTES + b"\2"
     assert blob_store[swapped[1]["url"]] == REPLAY_BYTES
     assert len(blob_store) == 2
+    assert before[0]["uploaded_by"] != before[1]["uploaded_by"]
+    assert swapped[0]["uploaded_by"] == before[1]["uploaded_by"]
+    assert swapped[1]["uploaded_by"] == before[0]["uploaded_by"]
 
 
 def test_a_failed_swap_puts_both_files_back(
@@ -178,7 +187,7 @@ def test_a_move_is_refused(
     member: Callable[..., dict[str, str]],
     replay_uploaded: Callable[..., None],
 ) -> None:
-    """The same game, a game outside the best-of, an empty game, and a stranger."""
+    """The same game, a game outside the best-of, an empty game, and another player."""
     series_id = seeded["series_open_id"]
     headers = member("2")
     replay_uploaded(series_id, 1, 2)
@@ -193,8 +202,10 @@ def test_a_move_is_refused(
         resp = client.put(f"{path}/{target}", headers=headers)
         assert resp.status_code == 400, resp.text
         assert resp.json() == {"error": error}
-    resp = client.put(f"{path}/1/move/3", headers=member("9"))
-    assert resp.status_code in (403, 404), resp.text
+    # the open series is P2 against P4, so P1 may not move its replays
+    resp = client.put(f"{path}/1/move/3", headers=member("1"))
+    assert resp.status_code == 403, resp.text
+    assert resp.json() == {"error": "not_authorized_for_this_series"}
 
 
 def test_a_file_that_is_not_a_replay_is_refused(
