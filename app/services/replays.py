@@ -6,6 +6,7 @@ never points at nothing. A re-upload lands on the same key, so nothing is delete
 file is dropped from the bucket instead.
 """
 
+import logging
 from collections.abc import Iterable
 
 from sqlmodel import col, select
@@ -18,6 +19,8 @@ from app.models.series import Series
 from app.models.series_replay import DBSeriesReplay, SeriesReplayPublic
 from app.models.types import utcnow
 from app.services import r2
+
+logger = logging.getLogger(__name__)
 
 REPLAY_MAGIC = b"Warcraft III recorded game\x1a\x00"
 # A real replay is a few hundred KB; the Discord path refuses the same size
@@ -89,6 +92,76 @@ def confirm(
             .order_by(col(DBSeriesReplay.game_no))
         )
         return [public(row) for row in rows]
+
+
+def move(series_id: int, from_game: int, to_game: int) -> list[SeriesReplayPublic]:
+    """Move one game's replay to another game of the same series; when that game holds a replay
+    the two swap. The files change place in the bucket, so each game keeps its own key and the
+    next upload to either game overwrites nothing else. The uploader and the time follow the file.
+    """
+    games = max_games(series_id)
+    if from_game == to_game:
+        raise BadRequestError("Pick a different game")
+    for game_no in (from_game, to_game):
+        if not 1 <= game_no <= games:
+            raise BadRequestError(f"Game number must be between 1 and {games}")
+    stale = None
+    with Session.begin() as session:
+        source = session.get(DBSeriesReplay, (series_id, from_game))
+        if source is None:
+            raise BadRequestError(f"Game {from_game} has no replay")
+        target = session.get(DBSeriesReplay, (series_id, to_game))
+        # what each game holds after the move, read before anything is written
+        after = {
+            to_game: (r2.fetch(source.key), source.uploaded_by, source.uploaded_at)
+        }
+        if target is not None:
+            after[from_game] = (
+                r2.fetch(target.key),
+                target.uploaded_by,
+                target.uploaded_at,
+            )
+        else:
+            stale = source.key
+            session.delete(source)
+        # a swap writes over both files, so a failed second store puts the pair back
+        original = (
+            {
+                r2.key(series_id, from_game): after[to_game][0],
+                r2.key(series_id, to_game): after[from_game][0],
+            }
+            if from_game in after
+            else {}
+        )
+        try:
+            for game_no, (data, by, at) in after.items():
+                key = r2.key(series_id, game_no)
+                r2.store(key, data)
+                row = session.get(DBSeriesReplay, (series_id, game_no))
+                if row is None:
+                    row = DBSeriesReplay(series_id=series_id, game_no=game_no, key=key)
+                    session.add(row)
+                row.key, row.uploaded_by, row.uploaded_at = key, by, at
+        except Exception:
+            for key, data in original.items():
+                try:
+                    r2.store(key, data)
+                except Exception:
+                    logger.warning(
+                        "could not restore the replay %s", key, exc_info=True
+                    )
+            raise
+        session.flush()
+        rows = session.scalars(
+            select(DBSeriesReplay)
+            .where(col(DBSeriesReplay.series_id) == series_id)
+            .order_by(col(DBSeriesReplay.game_no))
+        )
+        answer = [public(row) for row in rows]
+    # the file the row no longer points at goes after the commit, as a deleted series does
+    if stale:
+        r2.delete(stale)
+    return answer
 
 
 def for_series(series_id: int) -> list[SeriesReplayPublic]:
