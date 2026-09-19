@@ -629,13 +629,16 @@ def move_replay(
     series_id: int,
     game_no: int,
     to_game: int,
-    player: DashboardPlayer,
     series_service: SeriesServiceDep,
+    user_service: UserServiceDep,
+    request: Request,
+    credentials: Credentials,
 ) -> list[SeriesReplayPublic]:
     """Move this game's replay to another game of the series, for whoever acts for a side. When
     that game holds a replay the two swap. The answer is every replay of the series, in game
     order."""
-    _own_series(series_service, series_id, player[1].id)
+    viewer, _ = _series_viewer(request, credentials, user_service)
+    _own_series(series_service, series_id, viewer)
     return replays.move(series_id, game_no, to_game)
 
 
