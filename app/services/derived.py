@@ -308,6 +308,35 @@ def fill_signup_races(
         row.player2_race = off2 or (row.player2.signup_race if row.player2 else None)
 
 
+def fill_mmrs(session: Session, series_list: Iterable[SeriesPublic | None]) -> None:
+    """Rate both sides of every series on the race the row names, in two reads.
+
+    The reduced player of a list answer carries no W3C stats, so the row holds
+    the rating itself. Call it after `fill_series`, which names the races. The
+    reads are three while the W3Champions season setting is unset, because the
+    rule then asks the stats table for the newest stored season.
+    """
+    # app.services.events imports this module, so its rule comes in on the call
+    from app.services.events import race_ratings
+
+    rows = [series for series in series_list if series is not None]
+    sides = [
+        (player.id, race)
+        for row in rows
+        for player, race in (
+            (row.player1, row.player1_race),
+            (row.player2, row.player2_race),
+        )
+        if player
+    ]
+    rated = race_ratings(session, sides)
+    for row in rows:
+        if row.player1 and row.player1_race:
+            row.player1_mmr = rated.get((row.player1.id, row.player1_race))
+        if row.player2 and row.player2_race:
+            row.player2_mmr = rated.get((row.player2.id, row.player2_race))
+
+
 def fill_series(session: Session, series_list: Iterable[SeriesPublic | None]) -> None:
     """Fill the points of every series, the score of the match it carries, the
     signup race and the season record of its two players."""
