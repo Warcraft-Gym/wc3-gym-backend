@@ -4,7 +4,7 @@ title: API overview
 description: Seventeen route modules under one FastAPI app, one error envelope, paging with a total header, a search language, and OpenAPI at /docs.
 resource: ../../../app/api/main.py
 tags: [api]
-generated: { by: openai/gpt-6, at: 2026-09-15T21:52:57Z }
+generated: { by: openai/gpt-6, at: 2026-09-19T19:00:00Z }
 sources:
   - id: router
     resource: ../../../app/api/main.py
@@ -64,7 +64,7 @@ List routes take `limit` (1 to 500, default 500) and `offset`. Seven routes carr
 
 # CORS and caching
 
-CORS allows every origin, because clients send bearer tokens and never cookies. A route that sets `Cache-Control: public` must write `Access-Control-Allow-Origin: *` itself, next to it. See [the pitfall](../pitfalls/edge-cache-cors.md).
+CORS allows every origin, because clients send bearer tokens and never cookies. A route that sets `Cache-Control: public` must write `Access-Control-Allow-Origin: *` itself, next to it. See [the pitfall](../pitfalls/edge-cache-cors.md). A route whose answer belongs to one caller sets `Cache-Control: private` and `Vary: Authorization` instead, so no shared cache stores a copy and the browser's own copy is keyed on the bearer that names the caller.
 
 # Examples
 

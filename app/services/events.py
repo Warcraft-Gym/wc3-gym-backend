@@ -1287,6 +1287,44 @@ def race_ratings(
     return {key: mmr for key, (_, mmr) in newest.items()}
 
 
+def race_games(
+    session: OrmSession,
+    sides: Iterable[tuple[int | None, str | None]],
+    seasons: int | None,
+) -> dict[tuple[int, str], int]:
+    """The ladder games every (player, race) pair named has on record, keyed
+    by the pair.
+
+    The list form of the games half of `_stats_for`: every synced season on
+    that race, or the newest `seasons` of them where the event names a window.
+    One read, two where the window is named, whatever the number of pairs. A
+    pair with no stored row is left out.
+    """
+    pairs = {(user_id, race) for user_id, race in sides if user_id and race}
+    if not pairs:
+        return {}
+    where = [
+        col(W3CStats.user_id).in_({user_id for user_id, _ in pairs}),
+        col(W3CStats.race).in_({Race.from_text(race) for _, race in pairs}),
+    ]
+    if seasons is not None:
+        where.append(col(W3CStats.wc3_season) > _w3c_season(session) - seasons)
+    rows = session.execute(
+        select(
+            col(W3CStats.user_id),
+            col(W3CStats.race),
+            func.sum(col(W3CStats.games)),
+        )
+        .where(*where)
+        .group_by(col(W3CStats.user_id), col(W3CStats.race))
+    ).all()
+    return {
+        (user_id, race.value): int(games or 0)
+        for user_id, race, games in rows
+        if (user_id, race.value) in pairs
+    }
+
+
 def _mmrs(session: OrmSession, rows: Sequence[EventEntrant]) -> dict[int, int | None]:
     """Each entrant against the rating of the race it signed up on.
 
