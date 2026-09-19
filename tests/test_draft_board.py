@@ -222,6 +222,41 @@ def test_a_pair_carries_hours_and_the_head_to_head_only_when_they_met(
     assert met["hours"] == pytest.approx(7 * 24 - 12)
 
 
+def test_a_round_with_no_dates_answers_the_board_without_hours(
+    client: Client, board_league: dict[str, Any], captain: dict[str, str]
+) -> None:
+    """No round window resolves no shared hours, and the rest of the board is
+    unchanged: the season runs longer than the 31 days the fallback allows."""
+    players = board_league["player_ids"]
+    with Session() as session:
+        round_one = session.scalars(
+            select(DBEventRound).where(
+                col(DBEventRound.season_id) == board_league["season_id"],
+                col(DBEventRound.number) == 1,
+            )
+        ).one()
+        round_one.start_date = None
+        round_one.end_date = None
+        session.add(round_one)
+        session.commit()
+    resp = client.get(
+        f"/matches/{board_league['match_id']}/draft-board", headers=captain
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert [row["hours"] for row in body["pairs"]] == [None] * 4
+
+    pairs = {(row["player1_id"], row["player2_id"]): row for row in body["pairs"]}
+    met = pairs[(players[0], players[2])]
+    assert (met["wins"], met["losses"]) == (1, 0)
+    assert met["last_event"] == "Season 1"
+    by_id = {row["user_id"]: row for row in body["players"]}
+    assert by_id[players[0]]["mmr"] == 1500
+    assert by_id[players[0]]["form"] == "LWLWLWLWLW"
+    assert body["max_mmr_difference"] == 120
+    assert body["published_series"] == 2
+
+
 def test_the_head_to_head_reads_in_pairing_order_whoever_was_stored_first(
     client: Client, board_league: dict[str, Any], captain: dict[str, str]
 ) -> None:
@@ -311,12 +346,16 @@ def test_the_board_is_never_stored_in_a_shared_cache(
         f"/matches/{board_league['match_id']}/draft-board", headers=auth_headers
     )
     assert resp.headers["cache-control"].startswith("private")
+    # the browser's own copy is keyed on the bearer, so one account's board is
+    # never served to the next account signed in on the same browser
+    assert resp.headers["vary"] == "Authorization"
     resp = client.get(
         f"/users/{board_league['player_ids'][0]}/meetings/"
         f"{board_league['player_ids'][2]}",
         headers=auth_headers,
     )
     assert resp.headers["cache-control"].startswith("private")
+    assert resp.headers["vary"] == "Authorization"
 
 
 def test_the_board_costs_a_constant_number_of_statements(

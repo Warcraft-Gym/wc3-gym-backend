@@ -38,8 +38,8 @@ class DraftBoardPair(SQLModel):
 
     player1_id: int
     player2_id: int
-    # The hours both have open across the round window
-    hours: float = 0.0
+    # The hours both have open across the round window; null when it has no dates
+    hours: float | None = None
     # Series each side won over every finished series on the app, in this order
     wins: int | None = None
     losses: int | None = None

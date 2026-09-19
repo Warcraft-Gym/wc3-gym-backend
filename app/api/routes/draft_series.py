@@ -154,8 +154,10 @@ def get_draft_board(
     two. The MMR difference is not sent; the browser subtracts.
     """
     _own_match(claims, match_id, matches)
-    # the answer is this caller's, so no shared cache may store a copy
+    # the answer is this caller's, so no shared cache may store a copy, and the
+    # browser's own copy is keyed on the bearer that names the caller
     response.headers["Cache-Control"] = PRIVATE_CACHE
+    response.headers["Vary"] = "Authorization"
     return draft_board.board(match_id)
 
 

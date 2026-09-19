@@ -145,6 +145,8 @@ def get_pair_meetings(
     Each meeting carries its date, its event, the score in the order of the
     path, the race each side played and the MMR each held going into it.
     """
-    # the answer is one member's detail read, so no shared cache may store it
+    # the answer is one member's detail read, so no shared cache may store it,
+    # and the browser's own copy is keyed on the bearer that names the member
     response.headers["Cache-Control"] = "private, max-age=30"
+    response.headers["Vary"] = "Authorization"
     return draft_board.meetings(user_a, user_b)

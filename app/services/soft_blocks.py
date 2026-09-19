@@ -209,7 +209,7 @@ def free_hours(ranges: list[free_time.Interval]) -> float:
 
 
 def round_window(row: DBEventRound | None, event: Season) -> tuple[datetime, datetime]:
-    """The whole UTC days one round covers, else the event's, capped at 31."""
+    """The whole UTC days one round covers, else the event's; refuses a window over 31 days."""
     return _window(row, event, None, None)
 
 

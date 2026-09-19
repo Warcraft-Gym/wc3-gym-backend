@@ -23,7 +23,7 @@ from sqlmodel import col
 
 from app.core import free_time
 from app.core.db import Session
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import BadRequestError, NotFoundError
 from app.core.fantasy import race_value
 from app.models.base import ident
 from app.models.draft_board import (
@@ -72,10 +72,14 @@ def board(match_id: int) -> DraftBoard:
         vs_race = ladder.season_vs_race(session, user_ids, event)
         form = ladder.recent_form(session, user_ids, event_id)
 
-        window = soft_blocks.round_window(
-            round_row(session, event_id, match.playday), event
-        )
-        spans = _blocked(session, user_ids, window)
+        try:
+            window = soft_blocks.round_window(
+                round_row(session, event_id, match.playday), event
+            )
+        except BadRequestError:
+            # a round with no dates resolves no window, so the board drops hours
+            window = None
+        spans = _blocked(session, user_ids, window) if window is not None else {}
 
         team1 = [row for row in roster if row.team_id == match.team1_id]
         team2 = [row for row in roster if row.team_id == match.team2_id]
@@ -193,18 +197,24 @@ def _games_warning(event: Season, has_stats: bool, games: int) -> str | None:
 def _pair(
     player1_id: int,
     player2_id: int,
-    window: tuple[datetime, datetime],
+    window: tuple[datetime, datetime] | None,
     spans: dict[int, list[free_time.Interval]],
     met: dict[tuple[int, int], Row[Any]],
 ) -> DraftBoardPair:
-    """One pairing: its shared hours, and its score when the two have met."""
-    start, end = window
-    shared = free_time.free(start, end, spans[player1_id], spans[player2_id])
+    """One pairing: its shared hours, and its score when the two have met.
+
+    No window means the round carries no dates, so the pairing answers no hours.
+    """
+    hours = None
+    if window is not None:
+        start, end = window
+        shared = free_time.free(start, end, spans[player1_id], spans[player2_id])
+        hours = soft_blocks.free_hours(shared)
     row = met.get((player1_id, player2_id))
     return DraftBoardPair(
         player1_id=player1_id,
         player2_id=player2_id,
-        hours=soft_blocks.free_hours(shared),
+        hours=hours,
         wins=int(row.wins or 0) if row is not None else None,
         losses=int(row.losses or 0) if row is not None else None,
         last_event=row.event_name if row is not None else None,
