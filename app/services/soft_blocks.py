@@ -188,7 +188,7 @@ def shared_free(
     """The UTC ranges both players have open inside [start, end).
 
     A caller that answers many pairs reads the blocks once per player and
-    passes them in spans, so only the first pair of a player costs statements.
+    passes them in spans, so a player found in spans costs no statement.
     """
     spans = spans or {}
     both = [

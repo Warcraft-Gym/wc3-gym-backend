@@ -21,7 +21,9 @@ from app.models.season import Season
 from app.models.series import Series
 from app.models.user import User
 from app.models.user_block import UserBusy
+from app.models.user_team_season import DBUserTeamSeason
 from app.services.availability import NO_SCHEDULING, AvailabilityService
+from tests.seed import add_season
 from tests.test_discord_auth import SESSION, stub_clerk
 
 WORK = {"label": "Work", "weekdays": 31, "start_local": "09:00", "end_local": "17:00"}
@@ -543,6 +545,7 @@ def test_a_captain_counts_the_hours_a_pair_of_his_round_shares(
 
     assert resp.status_code == 200, resp.text
     assert resp.json() == {"hours": 168.0}
+    assert pair_free_time(client, seeded, captain, (p3, p2)).status_code == 200
 
 
 def test_the_pair_hours_cover_the_round_asked_for(
@@ -569,6 +572,31 @@ def test_a_captain_does_not_read_a_pair_of_two_other_players(
     p3, p4 = seeded["player_ids"][2], seeded["player_ids"][3]
 
     resp = pair_free_time(client, seeded, captain, (p3, p4))
+
+    assert resp.status_code == 403, resp.text
+    assert resp.json() == {"error": "not_authorized_for_this_pair"}
+
+
+def test_a_captain_does_not_read_a_pair_of_another_event(
+    client: Client, seeded: dict[str, Any], captain: dict[str, str]
+) -> None:
+    """P1's seat is Alpha in the seeded event only, and Alpha fields P2 in the
+    other event too; a seat carries no rights outside its own event."""
+    p2, p3 = seeded["player_ids"][1], seeded["player_ids"][2]
+    with Session.begin() as session:
+        other = add_season(session, 1, name="Other Event", series_per_round=2)
+        event_id = ident(other)
+        session.add(
+            DBUserTeamSeason(
+                user_id=p2, team_id=seeded["team_a_id"], season_id=event_id
+            )
+        )
+
+    resp = client.get(
+        f"/events/{event_id}/rounds/1/free-time",
+        params={"player1_id": p2, "player2_id": p3},
+        headers=captain,
+    )
 
     assert resp.status_code == 403, resp.text
     assert resp.json() == {"error": "not_authorized_for_this_pair"}

@@ -45,7 +45,7 @@ What follows, each learned the hard way:
 
 A captain pairing a round needs to know whether two players can meet at all, before any series names them. `GET /events/{event_id}/rounds/{playday}/free-time?player1_id=&player2_id=` answers one number, `hours`: the length of the time both have open across the round window. It carries no interval and no block, so a captain reads how much the pair shares and never when either is busy. An admin reads any pair; a captain reads a pair that holds one of the players their team fields in that event, and anyone else is refused.
 
-Both reads share one helper, which takes two player ids and a window. A caller that answers many pairs at once loads the blocks once per player and passes them in, so a pair beyond the first costs no statement.
+Both reads share one helper, which takes two player ids and a window. A caller that answers many pairs at once loads the blocks once per player and passes them in, so a player found there costs no statement.
 
 # Check-in
 
