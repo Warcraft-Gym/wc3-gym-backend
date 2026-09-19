@@ -2,7 +2,14 @@
 
 ## 2026-09-19
 
+* **Update**: one read answers every figure of a fixture's draft board, and a second read answers the meetings of one pairing; both carry a private cache header.
+* **Update**: a fixture's draft names who wrote and who last changed each pairing, keeps a Ready mark and a seen stamp per team, counts against `series_per_round`, and publishes a pairing that replaces an open series.
+* **Update**: a player checks in early where the event allows it, a round ends at midnight in the zone the event names, one write answers every round that has not ended, and a round nobody answered reads blocked out where the player's blocks cover it.
 * **Update**: one rule says who acts on a series: the player a side names, a captain of the team that fields it, the roster of a side that names no player, and an admin for either side, on the player routes too.
+* **Update**: a captain reads the hours two players share across a round before a series names them.
+* **Update**: a replay moves to another game of its series, swapping with the replay that game holds.
+* **Update**: a stage series row carries the rating of each side on the race it plays, and the team logo rides the ladder, veto board, fantasy breakdown and player history payloads.
+* **Update**: the event settings for early check-in, the round end zone and the seasons the games rule counts over, and the stage setting for the largest MMR difference a captain draft pairs inside.
 
 ## 2026-09-16
 
