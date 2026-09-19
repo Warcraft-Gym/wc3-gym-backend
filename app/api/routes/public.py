@@ -21,6 +21,7 @@ from app.api.deps import (
     UserServiceDep,
     claim_seats,
     discord_token,
+    require_captain,
     require_login,
     require_member,
 )
@@ -58,6 +59,7 @@ from app.models.user import (
 )
 from app.models.user_block import (
     FreeTimePublic,
+    PairFreeTimePublic,
     SoftBlocksPublic,
     UserBlockCreate,
     UserBlockPublic,
@@ -442,6 +444,34 @@ def get_series_free_time(
         seats=claim_seats(claims),
         start=start,
         end=end,
+    )
+
+
+@router.get("/events/{event_id}/rounds/{playday}/free-time", tags=["events"])
+def get_pair_free_time(
+    event_id: int,
+    playday: int,
+    player1_id: int,
+    player2_id: int,
+    request: Request,
+    credentials: Credentials,
+    service: SoftBlockServiceDep,
+) -> PairFreeTimePublic:
+    """The hours two players share across a round, before a series pairs them.
+
+    Both players take part in that event; a captain reads a pair that holds one
+    of the players their own team fields, and an admin any such pair. It
+    answers a count, never a range.
+    """
+    claims = require_captain(request, credentials)
+    admin = claims.get("role") == "admin" or claims["sub"] == "admin"
+    return service.pair_free_time(
+        event_id,
+        playday,
+        player1_id,
+        player2_id,
+        admin=admin,
+        seats=claim_seats(claims),
     )
 
 
