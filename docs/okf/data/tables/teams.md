@@ -30,7 +30,7 @@ sources:
 
 # Keys and joins
 
-Primary key `id`. Foreign key: `league_id` to [league](league.md). Pointed at by [team_season](team_season.md), [team_season_captain](team_season_captain.md), [user_team_season](user_team_season.md), [event_entrant](event_entrant.md), [event_award](event_award.md), [matches](matches.md) (`team1_id`, `team2_id`), [fantasy_teams](fantasy_teams.md) (`drafted_team_id`, `grind_team_id`), [discord_role_binding](discord_role_binding.md).
+Primary key `id`. Foreign key: `league_id` to [league](league.md). Pointed at by [team_season](team_season.md), [team_season_captain](team_season_captain.md), [user_team_season](user_team_season.md), [event_entrant](event_entrant.md), [event_award](event_award.md), [matches](matches.md) (`team1_id`, `team2_id`), [fantasy_teams](fantasy_teams.md) (`drafted_team_id`, `grind_team_id`), [discord_role_binding](discord_role_binding.md), [match_draft_mark](match_draft_mark.md).
 
 # Rules
 

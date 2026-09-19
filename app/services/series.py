@@ -1,6 +1,7 @@
 from datetime import timedelta
 
 from sqlalchemy import func, select
+from sqlalchemy.orm import Session as OrmSession
 from sqlmodel import col
 
 from app.core import fantasy
@@ -54,16 +55,21 @@ def in_season(row: Series) -> None:
         )
 
 
+def add_in(session: OrmSession, series: SeriesCreate) -> SeriesPublic:
+    """Write one series inside a transaction the caller owns and opened."""
+    row = Series.add(session, series.model_dump())
+    both_scores(row, stage_engine.series_wins(session, row))
+    in_season(row)
+    derived.clear_kept_off_race(session, row)
+    public = SeriesPublic.from_series(row)
+    derived.fill_series(session, [public])
+    return public
+
+
 class SeriesService:
     def add(self, series: SeriesCreate) -> SeriesPublic:
         with Session.begin() as session:
-            row = Series.add(session, series.model_dump())
-            both_scores(row, stage_engine.series_wins(session, row))
-            in_season(row)
-            derived.clear_kept_off_race(session, row)
-            public = SeriesPublic.from_series(row)
-            derived.fill_series(session, [public])
-            return public
+            return add_in(session, series)
 
     def update(
         self, series_id: int, series: SeriesUpdate, force: bool = False

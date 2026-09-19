@@ -38,6 +38,7 @@ from app.models import (
     league,
     map,
     match,
+    match_draft,
     player_career_stats,
     relationships,
     round_availability,

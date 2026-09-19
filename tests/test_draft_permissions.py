@@ -31,6 +31,18 @@ def captain(
     return SESSION
 
 
+@pytest.fixture
+def room(client: Client, seeded: dict[str, Any], auth_headers: dict[str, str]) -> None:
+    """The seeded fixture already holds the two series of its round, and a
+    fixture that is full refuses another pairing, so these tests widen it."""
+    resp = client.put(
+        f"/events/{seeded['season_id']}",
+        json={"series_per_round": 6},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200, resp.text
+
+
 def draft_body(seeded: dict[str, Any]) -> dict[str, Any]:
     return {
         "match_id": seeded["match_id"],
@@ -41,7 +53,7 @@ def draft_body(seeded: dict[str, Any]) -> dict[str, Any]:
 
 
 def test_a_captain_drafts_his_own_match(
-    client: Client, seeded: dict[str, Any], captain: dict[str, str]
+    client: Client, seeded: dict[str, Any], captain: dict[str, str], room: None
 ) -> None:
     resp = client.post("/draft-series", json=draft_body(seeded), headers=captain)
     assert resp.status_code == 201, resp.text
@@ -87,7 +99,7 @@ def test_a_captain_of_an_uninvolved_team_is_refused(
 
 
 def test_promote_stays_an_admin_act(
-    client: Client, seeded: dict[str, Any], captain: dict[str, str]
+    client: Client, seeded: dict[str, Any], captain: dict[str, str], room: None
 ) -> None:
     resp = client.post("/draft-series", json=draft_body(seeded), headers=captain)
     assert resp.status_code == 201, resp.text
@@ -102,6 +114,7 @@ def test_a_promoted_draft_is_unplayed(
     seeded: dict[str, Any],
     captain: dict[str, str],
     auth_headers: dict[str, str],
+    room: None,
 ) -> None:
     """A draft carries no score, so the published series counts as unscored."""
     body = {**draft_body(seeded), "player2_id": seeded["player_ids"][3]}
