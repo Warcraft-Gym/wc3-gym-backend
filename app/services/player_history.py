@@ -53,8 +53,8 @@ from app.models.user import User
 from app.models.user_team_season import DBUserTeamSeason
 from app.services import derived
 
-# season -> the team the player was on, its name, the season name and its league
-type Rosters = dict[int, tuple[int, str | None, str, str | None]]
+# season -> the team the player was on, its name and logo, the season name and its league
+type Rosters = dict[int, tuple[int, str | None, str | None, str, str | None]]
 # (team, season) -> where the team finished and how many teams stood
 type Places = dict[tuple[int, int], tuple[int, int]]
 # event -> the row of the event the player entered as an entrant
@@ -135,6 +135,7 @@ def _rosters(session: OrmSession, user_id: int) -> Rosters:
             col(DBUserTeamSeason.season_id),
             col(DBUserTeamSeason.team_id),
             col(Team.name),
+            col(Team.icon_url),
             col(Season.name),
             LEAGUE_SHORT_NAME,
         )
@@ -143,8 +144,8 @@ def _rosters(session: OrmSession, user_id: int) -> Rosters:
         .where(col(DBUserTeamSeason.user_id) == user_id)
     ).all()
     return {
-        season_id: (team_id, team_name, season_name, league)
-        for season_id, team_id, team_name, season_name, league in rows
+        season_id: (team_id, team_name, icon_url, season_name, league)
+        for season_id, team_id, team_name, icon_url, season_name, league in rows
     }
 
 
@@ -258,11 +259,11 @@ def _events(
     series and the entrant rows carry the kind of every other event. A season
     the player only signed up for stands here with an empty record.
     """
-    names = {season_id: name for season_id, (_, _, name, _) in rosters.items()}
+    names = {season_id: name for season_id, (_, _, _, name, _) in rosters.items()}
     names |= {row.season_id: row.season_name for row in rows}
     names |= {row.season_id: row.season_name for row in entered.values()}
     names |= {row.season_id: row.season_name for row in signups.values()}
-    leagues = {season_id: one for season_id, (_, _, _, one) in rosters.items()}
+    leagues = {season_id: one for season_id, (_, _, _, _, one) in rosters.items()}
     leagues |= {row.season_id: row.league_short_name for row in rows}
     leagues |= {row.season_id: row.league_short_name for row in entered.values()}
     leagues |= {row.season_id: row.league_short_name for row in signups.values()}
@@ -283,7 +284,9 @@ def _events(
 
     events = []
     for season_id in sorted(names, reverse=True):
-        team_id, team_name, _, _ = rosters.get(season_id, (None, None, None, None))
+        team_id, team_name, team_icon_url, _, _ = rosters.get(
+            season_id, (None, None, None, None, None)
+        )
         played, won, lost = tallies.get(season_id, [0, 0, 0])
         entry = entered.get(season_id)
         place, team_count = places.get(
@@ -298,6 +301,7 @@ def _events(
                 kind=kinds.get(season_id, EventKind.gnl),
                 team_id=team_id,
                 team_name=team_name,
+                team_icon_url=team_icon_url,
                 played=played,
                 won=won,
                 lost=lost,

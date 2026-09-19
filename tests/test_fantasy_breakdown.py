@@ -57,3 +57,19 @@ def test_a_bet_row_carries_the_two_players_and_the_score(
     assert row["series"] == "P1 vs P3"
     assert row["score"] == "2-1"
     assert row["actual_winner"] == "P1"
+
+
+def test_the_drafted_team_part_names_the_team_logo(
+    client: Client, seeded: dict[str, Any]
+) -> None:
+    """The fantasy team itself carries no logo; the GNL team it drafted does."""
+    from app.core.db import Session
+    from app.models.team import Team
+
+    with Session.begin() as session:
+        Team.update(session, seeded["team_a_id"], icon_url="teams/alpha.png")
+
+    part = breakdown(client, seeded)["team_breakdown"]
+
+    assert part["team_id"] == seeded["team_a_id"]
+    assert part["team_icon_url"] == "teams/alpha.png"

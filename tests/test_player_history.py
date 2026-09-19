@@ -131,13 +131,20 @@ def test_events_carry_the_team_and_the_record_of_every_season(
     client: Client, two_seasons: dict[str, Any], member: Callable[..., dict[str, str]]
 ) -> None:
     """P1 stood in both seasons for Alpha, one series in the first and two in
-    the second."""
+    the second, and every row names the team's logo."""
+    from app.core.db import Session
+    from app.models.team import Team
+
+    with Session.begin() as session:
+        Team.update(session, two_seasons["team_a_id"], icon_url="teams/alpha.png")
+
     resp = client.get("/player-history", headers=member("1"))
 
     assert resp.status_code == 200, resp.text
     events = resp.json()["events"]
     assert [event["season_name"] for event in events] == ["Season 2", "Season 1"]
     assert all(event["team_name"] == "Alpha" for event in events)
+    assert all(event["team_icon_url"] == "teams/alpha.png" for event in events)
     assert [(event["played"], event["won"], event["lost"]) for event in events] == [
         (2, 1, 1),
         (1, 1, 0),

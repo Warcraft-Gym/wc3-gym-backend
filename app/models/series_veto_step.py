@@ -60,6 +60,8 @@ class VetoPlayer(SQLModel):
     name: str | None = None
     team_id: int | None = None
     team_name: str | None = None
+    # Where the team's logo is served from; null until one is uploaded
+    team_icon_url: str | None = None
 
 
 class SeriesVetoPublic(SQLModel):
