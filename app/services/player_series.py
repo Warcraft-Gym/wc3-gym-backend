@@ -23,23 +23,24 @@ def update_player_series(
     discord_tag: str,
     user_service: UserService,
     series_service: SeriesService,
+    admin: bool = False,
 ) -> dict[str, Any]:
-    # Find the user by discord_id
-    users = user_service.find_by_discord_id(discord_id)
-    if not users:
+    # Find the user by discord_id; an admin access token names no player
+    users = user_service.find_by_discord_id(discord_id) if discord_id else []
+    if not users and not admin:
         raise NotFoundError("player_not_found")
-    user = users[0]
+    user_id = users[0].id if users else None
 
     # Get the series and verify ownership
     series = series_service.get(series_id)
     if not series:
         raise NotFoundError("series_not_found")
 
-    # The caller plays a side, or is on the roster the side's team fields. The
+    # The caller acts for a side, or is an admin, who acts for either. The
     # check writes nothing, so it reads in a session and opens no transaction.
     with Session() as session:
         row = session.get(Series, series_id)
-        if row is None or acts_for_side(session, row, user.id) is None:
+        if row is None or not (admin or acts_for_side(session, row, user_id)):
             raise ApiError(403, {"error": "not_authorized_for_this_series"})
 
     # Track what's being updated for Discord notification
@@ -113,7 +114,7 @@ def update_player_series(
 
     # The replays first: a game with no file in the bucket leaves the score unreported
     stored = (
-        replays.confirm(series_id, range(1, p1 + p2 + 1), user.id) if reporting else []
+        replays.confirm(series_id, range(1, p1 + p2 + 1), user_id) if reporting else []
     )
 
     # Only the fields this editor changes, so a concurrent edit stands

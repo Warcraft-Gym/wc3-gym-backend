@@ -28,7 +28,7 @@ sources:
 
 # Who reports
 
-A player on either side of a series, or an admin, writes the result through `PUT /player-series/{id}`; the Discord `/report-result` command goes through the same write. The two series scores stay the total; `series_game` rows say how the total was reached, one per game with the side that won and the map. A third of GNL series go to a deciding game, so the per-game winner cannot be derived from the score and is stored.
+The player a side names, a captain of the team that fields that side, or an admin, who acts for either side, writes the result through `PUT /player-series/{id}`; the Discord `/report-result` command goes through the same write. A side that names no player is the team itself, so any member of the roster that team fields for the event acts for it. One rule answers every write on a series, the time, the veto, the result and the side rosters alike. The two series scores stay the total; `series_game` rows say how the total was reached, one per game with the side that won and the map. A third of GNL series go to a deciding game, so the per-game winner cannot be derived from the score and is stored.
 
 A series that was not played takes `result_kind` `walkover` or `forfeit` with a winner, through `PUT /series/{id}/result-kind`, admin only.
 
@@ -50,7 +50,7 @@ A player who played another race than their signup race in one series records it
 
 # Replays
 
-Replays live in a Cloudflare R2 bucket, one file per game. The browser uploads straight to the bucket on a presigned URL from `POST /player-series/{id}/replays/{game}/upload-url`, so no file passes through a Vercel function. A slot row is written only once the file is there, starts like a replay and is under the size cap. Keys start with the deployment environment, so two builds never share a file. A deleted series drops its files after the commit. A replay put on the wrong game moves to another game of the same series with `PUT /player-series/{id}/replays/{game}/move/{to_game}`, for whoever acts for one of the two sides; when that game already holds a replay the two swap, the uploader and the time follow the file, and the answer is every replay of the series in game order. The S18 replays from before the app are not recovered, by decision.
+Replays live in a Cloudflare R2 bucket, one file per game. The browser uploads straight to the bucket on a presigned URL from `POST /player-series/{id}/replays/{game}/upload-url`, so no file passes through a Vercel function. The same rule answers the replay routes as the result: whoever acts for a side of the series uploads a file, replaces one and moves one. A slot row is written only once the file is there, starts like a replay and is under the size cap. Keys start with the deployment environment, so two builds never share a file. A deleted series drops its files after the commit. A replay put on the wrong game moves to another game of the same series with `PUT /player-series/{id}/replays/{game}/move/{to_game}`; when that game already holds a replay the two swap, the uploader and the time follow the file, and the answer is every replay of the series in game order. The S18 replays from before the app are not recovered, by decision.
 
 # Casts
 

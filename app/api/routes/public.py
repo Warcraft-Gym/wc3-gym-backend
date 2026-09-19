@@ -102,6 +102,11 @@ def _identity(request: Request, credentials: Credentials) -> dict[str, Any]:
     claims = require_member(request, credentials)
     if claims["sub"] == "admin":
         raise ApiError(401, {"error": "not_a_discord_member"})
+    return _entry(claims)
+
+
+def _entry(claims: dict[str, Any]) -> dict[str, Any]:
+    """The Discord account behind a set of claims, and the season it acts in."""
     account = discord.identify(discord_token(claims["clerk_user_id"]).token)
     return {
         "discord_id": str(claims["sub"]),
@@ -110,6 +115,18 @@ def _identity(request: Request, credentials: Credentials) -> dict[str, Any]:
         or str(claims["sub"]),
         "season_id": discord_roles.current_season(),
     }
+
+
+def _player_or_admin(
+    request: Request, credentials: Credentials
+) -> tuple[dict[str, Any], bool]:
+    """The identity behind a series write, and whether it is an admin, who
+    acts for either side. The admin access token carries no Discord account."""
+    claims = require_member(request, credentials)
+    admin = claims.get("role") == "admin" or claims["sub"] == "admin"
+    if claims["sub"] == "admin":
+        return {}, admin
+    return _entry(claims), admin
 
 
 def dashboard_player(
@@ -489,10 +506,11 @@ async def update_player_series(
     series_service: SeriesServiceDep,
     credentials: Credentials,
 ) -> dict[str, Any]:
-    """Update a series that belongs to the authenticated player."""
+    """Update a series the caller acts for: a player of a side, a captain of
+    the team that fields it, or an admin, who acts for either side."""
     # The caller is named before the body is read, so a torn body is answered
     # as the bad request it is and never as an anonymous traceback
-    entry = _identity(request, credentials)
+    entry, admin = _player_or_admin(request, credentials)
 
     # Handle both form data and JSON
     content_type = request.headers.get("content-type") or ""
@@ -518,23 +536,27 @@ async def update_player_series(
         player_series.update_player_series,
         series_id,
         data,
-        discord_id=str(entry.get("discord_id")),
+        discord_id=str(entry.get("discord_id", "")),
         discord_tag=entry.get("discord_tag", "Unknown Player"),
         user_service=user_service,
         series_service=series_service,
+        admin=admin,
     )
 
 
 def _own_series(
     series_service: SeriesService, series_id: int, user_id: int | None
 ) -> SeriesPublic:
-    """The series, for whoever acts for one of its two sides."""
+    """The series, for whoever acts for one of its two sides. A null user is an
+    admin, who acts for either side."""
     series = series_service.get(series_id)
     if not series:
         raise NotFoundError("series_not_found")
     with Session.begin() as session:
         row = session.get(Series, series_id)
-        if row is None or acts_for_side(session, row, user_id) is None:
+        if row is None or (
+            user_id is not None and acts_for_side(session, row, user_id) is None
+        ):
             raise ApiError(403, {"error": "not_authorized_for_this_series"})
     return series
 
@@ -543,11 +565,15 @@ def _own_series(
 def replay_upload_url(
     series_id: int,
     game_no: int,
-    player: DashboardPlayer,
     series_service: SeriesServiceDep,
+    user_service: UserServiceDep,
+    request: Request,
+    credentials: Credentials,
 ) -> dict[str, str]:
-    """Where the browser puts one game's replay, for either player of the series."""
-    _own_series(series_service, series_id, player[1].id)
+    """Where the browser puts one game's replay, for whoever acts for a side of
+    the series."""
+    viewer, _ = _series_viewer(request, credentials, user_service)
+    _own_series(series_service, series_id, viewer)
     return {"url": replays.upload_url(series_id, game_no)}
 
 
@@ -555,18 +581,22 @@ def replay_upload_url(
 def replace_replay(
     series_id: int,
     game_no: int,
-    player: DashboardPlayer,
     series_service: SeriesServiceDep,
+    user_service: UserServiceDep,
+    request: Request,
+    credentials: Credentials,
 ) -> SeriesReplayPublic:
-    """Point one slot at the file just uploaded. The first report confirms every game itself;
-    this replaces one of them afterwards."""
-    series = _own_series(series_service, series_id, player[1].id)
+    """Point one slot at the file just uploaded, for whoever acts for a side of
+    the series. The first report confirms every game itself; this replaces one
+    of them afterwards."""
+    viewer, uploader = _series_viewer(request, credentials, user_service)
+    series = _own_series(series_service, series_id, viewer)
     if series.player1_score is None or series.player2_score is None:
         raise BadRequestError("Report the result first")
     played = series.player1_score + series.player2_score
     if not 1 <= game_no <= played:
         raise BadRequestError(f"This series had {played} games")
-    rows = replays.confirm(series_id, [game_no], player[1].id)
+    rows = replays.confirm(series_id, [game_no], uploader)
     return next(row for row in rows if row.game_no == game_no)
 
 
@@ -578,19 +608,20 @@ def move_replay(
     player: DashboardPlayer,
     series_service: SeriesServiceDep,
 ) -> list[SeriesReplayPublic]:
-    """Move this game's replay to another game of the series, for either player. When that game
-    holds a replay the two swap. The answer is every replay of the series, in game order."""
+    """Move this game's replay to another game of the series, for whoever acts for a side. When
+    that game holds a replay the two swap. The answer is every replay of the series, in game
+    order."""
     _own_series(series_service, series_id, player[1].id)
     return replays.move(series_id, game_no, to_game)
 
 
-def _veto_viewer(
+def _series_viewer(
     request: Request,
     credentials: Credentials,
     user_service: UserServiceDep,
 ) -> tuple[int | None, int | None]:
-    """The player behind the request, or null for an admin, who edits either
-    side; and the player row to record as the enterer, if the account has one."""
+    """The player behind the request, or null for an admin, who acts for either
+    side; and the player row to record as the author, if the account has one."""
     if credentials is not None:
         claims = require_login(request, credentials)
         if claims.get("role") == "admin" or claims.get("sub") == "admin":
@@ -614,8 +645,9 @@ def get_player_series_veto(
     request: Request,
     credentials: Credentials,
 ) -> SeriesVetoPublic:
-    """The map veto board of a series, read by either player or by an admin."""
-    viewer, player = _veto_viewer(request, credentials, user_service)
+    """The map veto board of a series, read by whoever acts for a side of it
+    or by an admin."""
+    viewer, player = _series_viewer(request, credentials, user_service)
     return veto_service.board(series_id, viewer, player)
 
 
@@ -632,7 +664,7 @@ def set_player_series_veto(
     """Take the next step of the veto, or take back your own last one. An admin
     enters the step for whichever side is next and takes back any last step.
     The bot's post of the series, if any, is edited after the answer."""
-    viewer, entered_by = _veto_viewer(request, credentials, user_service)
+    viewer, entered_by = _series_viewer(request, credentials, user_service)
     board = veto_service.take(series_id, viewer, data.action, data.map_id, entered_by)
     background.add_task(discord_posts.refresh_series, series_id)
     return board

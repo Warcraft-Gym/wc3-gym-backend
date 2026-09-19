@@ -101,3 +101,68 @@ def test_an_empty_body_changes_nothing(
 
     assert resp.status_code == 200, resp.text
     assert resp.json()["player1_score"] is None
+
+
+def test_a_captain_of_the_side_sets_the_time(
+    client: Client, seeded: dict[str, Any], member: Callable[..., dict[str, str]]
+) -> None:
+    """P1 plays no side of the open series, and captains the team that fields one."""
+    from app.core.db import Session
+    from app.models.relationships import DBTeamSeasonCaptain
+
+    with Session.begin() as session:
+        session.add(
+            DBTeamSeasonCaptain(
+                team_id=seeded["team_a_id"],
+                season_id=seeded["season_id"],
+                user_id=seeded["player_ids"][0],
+            )
+        )
+
+    resp = client.put(
+        f"/player-series/{seeded['series_open_id']}",
+        headers=member("1"),
+        data={"date_time": "2026-01-09 20:00:00"},
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["date_time"].startswith("2026-01-09T20:00:00")
+
+
+def test_an_admin_writes_the_series_on_the_player_route(
+    client: Client, seeded: dict[str, Any], auth_headers: dict[str, str]
+) -> None:
+    """An admin acts for either side and carries no Discord account of its own."""
+    resp = client.put(
+        f"/player-series/{seeded['series_open_id']}",
+        headers=auth_headers,
+        json={"date_time": "2026-01-09 21:00:00"},
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["date_time"].startswith("2026-01-09T21:00:00")
+
+
+def test_an_admin_uploads_a_replay_and_reports_the_result(
+    client: Client,
+    seeded: dict[str, Any],
+    auth_headers: dict[str, str],
+    replay_uploaded: Callable[..., None],
+) -> None:
+    """The replay routes ask the same rule, so the admin token reaches them too."""
+    series_id = seeded["series_open_id"]
+    link = client.post(
+        f"/player-series/{series_id}/replays/1/upload-url", headers=auth_headers
+    )
+    assert link.status_code == 200, link.text
+
+    replay_uploaded(series_id, 1, 2)
+    resp = client.put(
+        f"/player-series/{series_id}",
+        headers=auth_headers,
+        json={"action": "score_updated", "player1_score": 2, "player2_score": 0},
+    )
+
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert (body["player1_score"], body["player2_score"]) == (2, 0)
