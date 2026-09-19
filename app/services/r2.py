@@ -110,7 +110,7 @@ def peek(key: str) -> tuple[bytes, int] | None:
 
 
 def fetch(key: str) -> bytes:
-    """The whole stored file, for the Discord post."""
+    """The whole stored file, for a move between game slots."""
     resp = requests.get(_signed("GET", key, 60), timeout=30)
     resp.raise_for_status()
     return resp.content

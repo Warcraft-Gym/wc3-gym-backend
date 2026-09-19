@@ -6,6 +6,7 @@ never points at nothing. A re-upload lands on the same key, so nothing is delete
 file is dropped from the bucket instead.
 """
 
+import logging
 from collections.abc import Iterable
 
 from sqlmodel import col, select
@@ -18,6 +19,8 @@ from app.models.series import Series
 from app.models.series_replay import DBSeriesReplay, SeriesReplayPublic
 from app.models.types import utcnow
 from app.services import r2
+
+logger = logging.getLogger(__name__)
 
 REPLAY_MAGIC = b"Warcraft III recorded game\x1a\x00"
 # A real replay is a few hundred KB; the Discord path refuses the same size
@@ -121,14 +124,33 @@ def move(series_id: int, from_game: int, to_game: int) -> list[SeriesReplayPubli
         else:
             stale = source.key
             session.delete(source)
-        for game_no, (data, by, at) in after.items():
-            key = r2.key(series_id, game_no)
-            r2.store(key, data)
-            row = session.get(DBSeriesReplay, (series_id, game_no))
-            if row is None:
-                row = DBSeriesReplay(series_id=series_id, game_no=game_no, key=key)
-                session.add(row)
-            row.key, row.uploaded_by, row.uploaded_at = key, by, at
+        # a swap writes over both files, so a failed second store puts the pair back
+        original = (
+            {
+                r2.key(series_id, from_game): after[to_game][0],
+                r2.key(series_id, to_game): after[from_game][0],
+            }
+            if from_game in after
+            else {}
+        )
+        try:
+            for game_no, (data, by, at) in after.items():
+                key = r2.key(series_id, game_no)
+                r2.store(key, data)
+                row = session.get(DBSeriesReplay, (series_id, game_no))
+                if row is None:
+                    row = DBSeriesReplay(series_id=series_id, game_no=game_no, key=key)
+                    session.add(row)
+                row.key, row.uploaded_by, row.uploaded_at = key, by, at
+        except Exception:
+            for key, data in original.items():
+                try:
+                    r2.store(key, data)
+                except Exception:
+                    logger.warning(
+                        "could not restore the replay %s", key, exc_info=True
+                    )
+            raise
         session.flush()
         rows = session.scalars(
             select(DBSeriesReplay)

@@ -1,9 +1,11 @@
 """A reported result keeps its replays: the browser puts one file per game in the bucket,
 the report confirms them, one row per slot."""
 
+import itertools
 from collections.abc import Callable
 from typing import Any
 
+import pytest
 from httpx2 import Client, Response
 
 from app.services import blob
@@ -132,6 +134,42 @@ def test_two_replays_swap(
     assert blob_store[swapped[0]["url"]] == REPLAY_BYTES + b"\2"
     assert blob_store[swapped[1]["url"]] == REPLAY_BYTES
     assert len(blob_store) == 2
+
+
+def test_a_failed_swap_puts_both_files_back(
+    client: Client,
+    seeded: dict[str, Any],
+    member: Callable[..., dict[str, str]],
+    blob_store: dict[str, bytes],
+    replay_uploaded: Callable[..., None],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The second store of a swap fails, so both files and both rows stay as they were."""
+    from app.services import r2
+
+    series_id = seeded["series_open_id"]
+    headers = member("2")
+    replay_uploaded(series_id, 1)
+    replay_uploaded(series_id, 2, data=REPLAY_BYTES + b"\2")
+    reported = report(client, series_id, headers).json()
+    files = dict(blob_store)
+
+    store, calls = r2.store, itertools.count()
+
+    def flaky(key: str, data: bytes) -> None:
+        # the move's own second store fails; the restore stores that follow go through
+        if next(calls) == 1:
+            raise RuntimeError("the bucket refused the file")
+        store(key, data)
+
+    monkeypatch.setattr(r2, "store", flaky)
+    resp = client.put(f"/player-series/{series_id}/replays/1/move/2", headers=headers)
+    assert resp.status_code == 500, resp.text
+    # two stores of the swap, then the two that put the pair back
+    assert next(calls) == 4
+    assert blob_store == files
+    listed = client.get(f"/matches/{reported['match_id']}/replays")
+    assert listed.json() == reported["replays"]
 
 
 def test_a_move_is_refused(
