@@ -4,7 +4,7 @@ title: Pictures and replays
 description: Team logos and map thumbnails live in Vercel Blob as public URLs, replays live in a Cloudflare R2 bucket reached through presigned URLs, and both stores follow the rows.
 resource: ../../PICTURES.md
 tags: [storage]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-16T00:00:00Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-09-19T00:00:00Z }
 sources:
   - id: pictures
     resource: ../../PICTURES.md
@@ -33,7 +33,7 @@ The SDK is imported inside each call, because it carries its own HTTP stack and 
 
 # Replays
 
-Replays live in one Cloudflare R2 bucket per environment, named by `CLOUDFLARE_R2_BUCKET`, each with its own scoped API token (`CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_R2_BUCKET`, `CLOUDFLARE_ACCESS_KEY_ID`, `CLOUDFLARE_SECRET_ACCESS_KEY`). Every call is a presigned URL signed with the standard library, so the browser uploads straight to the bucket and no file crosses a Vercel function's 4.5 MB request cap. A download link lives as long as R2 allows; an old tab gets a 403 and refreshes. A key starts with `VERCEL_ENV`, so two builds never share a file. A deleted series drops its files after the commit.
+Replays live in one Cloudflare R2 bucket per environment, named by `CLOUDFLARE_R2_BUCKET`, each with its own scoped API token (`CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_R2_BUCKET`, `CLOUDFLARE_ACCESS_KEY_ID`, `CLOUDFLARE_SECRET_ACCESS_KEY`). Every call is a presigned URL signed with the standard library, so the browser uploads straight to the bucket and no file crosses a Vercel function's 4.5 MB request cap. A download link lives as long as R2 allows; an old tab gets a 403 and refreshes. A key starts with `VERCEL_ENV`, so two builds never share a file. A deleted series drops its files after the commit. A replay moves between the games of its series on one call, and the file changes place in the bucket with it, so a game slot always holds the key built from its own series and game number; that move is the only path where a replay passes through a function.
 
 A `.w3g` file gives up the map and both battle tags from its first inflated block. It does not give up the winner; do not build a parser that walks its records to guess one.
 

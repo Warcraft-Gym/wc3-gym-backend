@@ -29,6 +29,7 @@ from app.models.ladder_achievement import LadderAchievement, default_rows
 from app.models.ladder_sync import LadderSync
 from app.models.relationships import DBUserSeasonSignup
 from app.models.season import Season
+from app.models.team import Team
 from app.models.user import User
 from app.models.w3c_ladder_match import W3CLadderMatch
 from tests.test_query_budget import count_statements
@@ -627,6 +628,32 @@ def test_the_players_route_answers_one_row_per_signup(
         assert {key: row[key] for key in same} == {key: drawn[key] for key in same}
         assert row["achievements"] == []
         assert row["points"] == row["ladder_points"]
+
+
+def test_both_ladder_answers_carry_the_team_logo(
+    client: Client, auth_headers: dict[str, str], league: dict[str, Any]
+) -> None:
+    """A team card names its logo, and a player row the team it plays for."""
+    with Session.begin() as session:
+        Team.update(session, league["team_a_id"], icon_url="teams/alpha.png")
+
+    body = ladder_of(client, auth_headers, league["season_id"])
+    rows = client.get(
+        f"/seasons/{league['season_id']}/ladder/players", headers=auth_headers
+    ).json()
+
+    alpha = next(team for team in body["teams"] if team["name"] == "Alpha")
+    assert alpha["icon_url"] == "teams/alpha.png"
+    assert (
+        next(team for team in body["teams"] if team["name"] == "Beta")["icon_url"]
+        is None
+    )
+    first = rows[0]
+    assert (first["team"], first["team_id"], first["team_icon_url"]) == (
+        "Alpha",
+        league["team_a_id"],
+        "teams/alpha.png",
+    )
 
 
 # The achievement set: one instance per season, per rule.

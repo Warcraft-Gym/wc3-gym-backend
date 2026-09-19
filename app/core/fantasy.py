@@ -83,6 +83,8 @@ class Standing(NamedTuple):
 
     team_id: int | None
     team_name: str | None
+    # Where the drafted team's logo is served from; null until one is uploaded
+    team_icon_url: str | None
     final_score: int
     points_against: int
     points_available: int
@@ -428,6 +430,7 @@ def team_scores(
             result["team_breakdown"] = {
                 "team_id": standing.team_id,
                 "team_name": standing.team_name,
+                "team_icon_url": standing.team_icon_url,
                 "final_score": standing.final_score,
                 "points_against": standing.points_against,
                 "points_available": standing.points_available,
