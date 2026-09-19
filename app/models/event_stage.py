@@ -8,6 +8,7 @@ the ranking rule are the stage's, so standings are computed, never stored.
 from datetime import datetime
 from typing import Annotated, Literal
 
+from pydantic import model_validator
 from sqlalchemy import UniqueConstraint, false
 from sqlmodel import Field, SQLModel
 
@@ -21,6 +22,8 @@ from app.models.types import AwareUTC, MapRules, NumToStr, PlacePoints, UTCDateT
 RANKING_RULE = "points,game_diff,head_to_head"
 # What a stage that draws round by round reads where it names no rule of its own
 SWISS_RANKING_RULE = "points,buchholz,game_diff,head_to_head"
+# The largest MMR difference a captain draft pairs inside where the stage names none
+MAX_MMR_DIFFERENCE = 100
 
 
 class EventStage(DBModel, table=True):
@@ -85,6 +88,8 @@ class EventStage(DBModel, table=True):
     grand_final_modifier: str = Field(
         default="one", max_length=10, sa_column_kwargs={"server_default": "one"}
     )
+    # The largest MMR difference a captain draft pairs inside; a gnl stage only
+    max_mmr_difference: int | None = None
 
 
 class EventStagePublic(SQLModel):
@@ -112,6 +117,14 @@ class EventStagePublic(SQLModel):
     seeds_locked_at: Annotated[datetime | None, AwareUTC] = None
     third_place: bool = False
     grand_final_modifier: str = "one"
+    # Null on every format but gnl, where an unset stage reads the default
+    max_mmr_difference: int | None = None
+
+    @model_validator(mode="after")
+    def _default_max_mmr_difference(self) -> "EventStagePublic":
+        if self.format == StageFormat.gnl and self.max_mmr_difference is None:
+            self.max_mmr_difference = MAX_MMR_DIFFERENCE
+        return self
 
 
 class EventStageWrite(SQLModel):
@@ -140,6 +153,14 @@ class EventStageWrite(SQLModel):
     auto_advance: bool = False
     third_place: bool = False
     grand_final_modifier: Literal["one", "reset", "skip"] = "one"
+    # The largest MMR difference a captain draft pairs inside; a gnl stage only
+    max_mmr_difference: int | None = Field(default=None, ge=1)
+
+    @model_validator(mode="after")
+    def _gnl_only_max_mmr_difference(self) -> "EventStageWrite":
+        if self.max_mmr_difference is not None and self.format != StageFormat.gnl:
+            raise ValueError("max_mmr_difference belongs to a gnl stage only")
+        return self
 
 
 class StandingRow(SQLModel):
