@@ -42,7 +42,7 @@ sources:
 
 Primary key `id`. Three unique expression indexes: `lower(trim("battleTag"))`, `lower(trim("discordTag"))` where not blank, `trim("discordId")` where not blank.
 
-Pointed at by [user_team_season](user_team_season.md), [user_season_signup](user_season_signup.md), [team_season_captain](team_season_captain.md), [event_entrant](event_entrant.md), [event_award](event_award.md), [series](series.md), [draft_series](draft_series.md), [series_replay](series_replay.md), [series_veto_step](series_veto_step.md), [series_cast](series_cast.md), [round_availability](round_availability.md), [user_block](user_block.md), [user_busy](user_busy.md), [fantasy_teams](fantasy_teams.md), [fantasy_team_player](fantasy_team_player.md), [fantasy_bets](fantasy_bets.md), [w3cstats](w3cstats.md), [w3c_ladder_matches](w3c_ladder_matches.md), [ladder_sync](ladder_sync.md), [player_career_stats](player_career_stats.md).
+Pointed at by [user_team_season](user_team_season.md), [user_season_signup](user_season_signup.md), [team_season_captain](team_season_captain.md), [event_entrant](event_entrant.md), [event_award](event_award.md), [series](series.md), [draft_series](draft_series.md), [series_replay](series_replay.md), [series_veto_step](series_veto_step.md), [series_cast](series_cast.md), [round_availability](round_availability.md), [match_draft_mark](match_draft_mark.md), [user_block](user_block.md), [user_busy](user_busy.md), [fantasy_teams](fantasy_teams.md), [fantasy_team_player](fantasy_team_player.md), [fantasy_bets](fantasy_bets.md), [w3cstats](w3cstats.md), [w3c_ladder_matches](w3c_ladder_matches.md), [ladder_sync](ladder_sync.md), [player_career_stats](player_career_stats.md).
 
 # Rules
 

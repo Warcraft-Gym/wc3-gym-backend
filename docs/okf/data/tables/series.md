@@ -55,7 +55,7 @@ The first block is on `SeriesBase`, which the series payloads carry. The rest st
 
 Primary key `id`. Foreign keys: `match_id` to [matches](matches.md), cascade; `player1_id` and `player2_id` to [users](users.md), cascade; `entrant1_id` and `entrant2_id` to [event_entrant](event_entrant.md), set null; `round_id` to [event_round](event_round.md), cascade; `slot1_from_series_id` and `slot2_from_series_id` to [series](series.md), set null; `division_id` to [event_division](event_division.md), set null. Unique index on (`match_id`, `player1_id`, `player2_id`).
 
-Pointed at by [series_side](series_side.md), [series_game](series_game.md), [series_replay](series_replay.md), [series_veto_step](series_veto_step.md), [series_cast](series_cast.md) and [fantasy_bets](fantasy_bets.md).
+Pointed at by [series_side](series_side.md), [series_game](series_game.md), [series_replay](series_replay.md), [series_veto_step](series_veto_step.md), [series_cast](series_cast.md), [fantasy_bets](fantasy_bets.md) and [draft_series](draft_series.md) (`replaces_series_id`).
 
 # Rules
 
