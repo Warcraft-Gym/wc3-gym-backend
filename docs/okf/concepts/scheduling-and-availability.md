@@ -1,10 +1,10 @@
 ---
 type: Domain Concept
 title: Scheduling and availability
-description: A player answers whether they can play a round, keeps soft blocks that inform but never constrain, and the two players of a series see the free time they share.
+description: A player answers whether they can play a round, keeps soft blocks that inform but never constrain, and a pair's shared free time is read as intervals for a series and as one count before one exists.
 resource: ../../../app/services/availability.py
 tags: [events, scheduling]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-16T00:00:00Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-09-19T12:00:00Z }
 sources:
   - id: availability
     resource: ../../../app/services/availability.py
@@ -40,6 +40,12 @@ What follows, each learned the hard way:
 # Free time of a series
 
 `GET /player-series/{id}/free-time` answers the intervals both players of a series have open inside its round, from their blocks. Series times are stored in UTC, aware. See [the pitfall](../pitfalls/datetimes-are-utc.md).
+
+# Free time of a pair, before a series exists
+
+A captain pairing a round needs to know whether two players can meet at all, before any series names them. `GET /events/{event_id}/rounds/{playday}/free-time?player1_id=&player2_id=` answers one number, `hours`: the length of the time both have open across the round window. It carries no interval and no block, so a captain reads how much the pair shares and never when either is busy. Both players of the pair take part in that event, on the roster of one of its teams; a captain reads such a pair when one of the two plays for the team they captain there, an admin reads any such pair, and every other pair is refused under one code that names neither side.
+
+Both reads share one helper, which takes two player ids and a window. A caller that answers many pairs at once loads the blocks once per player and passes them in, so a player found there costs no statement.
 
 # Check-in
 

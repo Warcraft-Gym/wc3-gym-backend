@@ -15,12 +15,16 @@ from sqlmodel import col
 
 from app.core.db import Session
 from app.models.base import ident
+from app.models.enums import Race
 from app.models.match import Match
 from app.models.relationships import DBEventRound
 from app.models.season import Season
 from app.models.series import Series
 from app.models.user import User
+from app.models.user_block import UserBusy
+from app.models.user_team_season import DBUserTeamSeason
 from app.services.availability import NO_SCHEDULING, AvailabilityService
+from tests.seed import add_season
 from tests.test_discord_auth import SESSION, stub_clerk
 
 WORK = {"label": "Work", "weekdays": 31, "start_local": "09:00", "end_local": "17:00"}
@@ -516,3 +520,180 @@ def test_a_bracket_series_takes_its_window_from_its_round(
         "2026-02-09T00:00:00Z",
         168.0,
     )
+
+
+def pair_free_time(
+    client: Client,
+    seeded: dict[str, Any],
+    headers: dict[str, str],
+    pair: tuple[int, int],
+    playday: int = 1,
+) -> Any:  # noqa: ANN401  # a JSON body
+    return client.get(
+        f"/events/{seeded['season_id']}/rounds/{playday}/free-time",
+        params={"player1_id": pair[0], "player2_id": pair[1]},
+        headers=headers,
+    )
+
+
+def test_a_captain_counts_the_hours_a_pair_of_his_round_shares(
+    client: Client, seeded: dict[str, Any], captain: dict[str, str]
+) -> None:
+    """P1 captains Alpha, and P2 plays for Alpha; the count carries no range."""
+    p2, p3 = seeded["player_ids"][1], seeded["player_ids"][2]
+
+    resp = pair_free_time(client, seeded, captain, (p2, p3))
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == {"hours": 168.0}
+    assert pair_free_time(client, seeded, captain, (p3, p2)).status_code == 200
+
+
+def test_the_pair_hours_cover_the_round_asked_for(
+    client: Client, seeded: dict[str, Any], captain: dict[str, str]
+) -> None:
+    """Round 1 runs from 5 to 11 January 2026 and round 2 the week after."""
+    p2, p3 = seeded["player_ids"][1], seeded["player_ids"][2]
+    set_zone(p2, "Europe/London")
+    with Session.begin() as session:
+        session.add(
+            UserBusy(user_id=p2, first_day=date(2026, 1, 5), last_day=date(2026, 1, 11))
+        )
+
+    assert pair_free_time(client, seeded, captain, (p2, p3)).json() == {"hours": 0.0}
+    assert pair_free_time(client, seeded, captain, (p2, p3), playday=2).json() == {
+        "hours": 168.0
+    }
+
+
+def test_a_captain_does_not_read_a_pair_of_two_other_players(
+    client: Client, seeded: dict[str, Any], captain: dict[str, str]
+) -> None:
+    """P3 and P4 both play for Beta; P1 captains Alpha."""
+    p3, p4 = seeded["player_ids"][2], seeded["player_ids"][3]
+
+    resp = pair_free_time(client, seeded, captain, (p3, p4))
+
+    assert resp.status_code == 403, resp.text
+    assert resp.json() == {"error": "not_authorized_for_this_pair"}
+
+
+def test_a_captain_does_not_read_a_pair_of_another_event(
+    client: Client, seeded: dict[str, Any], captain: dict[str, str]
+) -> None:
+    """P1's seat is Alpha in the seeded event only, and Alpha fields P2 in the
+    other event too; a seat carries no rights outside its own event."""
+    p2, p3 = seeded["player_ids"][1], seeded["player_ids"][2]
+    with Session.begin() as session:
+        other = add_season(session, 1, name="Other Event", series_per_round=2)
+        event_id = ident(other)
+        session.add(
+            DBUserTeamSeason(
+                user_id=p2, team_id=seeded["team_a_id"], season_id=event_id
+            )
+        )
+
+    resp = client.get(
+        f"/events/{event_id}/rounds/1/free-time",
+        params={"player1_id": p2, "player2_id": p3},
+        headers=captain,
+    )
+
+    assert resp.status_code == 403, resp.text
+    assert resp.json() == {"error": "not_authorized_for_this_pair"}
+
+
+def outsider() -> int:
+    """A player of no team in the seeded event."""
+    with Session.begin() as session:
+        user = User(
+            name="P5", battleTag="P5#5555", discordTag="p5", discordId="5", race=Race.HU
+        )
+        session.add(user)
+        session.flush()
+        return ident(user)
+
+
+def test_a_captain_does_not_read_a_pair_that_holds_an_outsider(
+    client: Client, seeded: dict[str, Any], captain: dict[str, str]
+) -> None:
+    """P2 plays for the captain's own team, and P5 takes no part in the event;
+    pairing the two would otherwise read any user in the app."""
+    p2 = seeded["player_ids"][1]
+
+    resp = pair_free_time(client, seeded, captain, (p2, outsider()))
+
+    assert resp.status_code == 403, resp.text
+    assert resp.json() == {"error": "not_authorized_for_this_pair"}
+
+
+def test_a_captain_reads_a_pair_that_holds_a_player_of_another_team(
+    client: Client, seeded: dict[str, Any], captain: dict[str, str]
+) -> None:
+    """P2 plays for Alpha, which P1 captains, and P3 for Beta; both take part."""
+    p2, p3 = seeded["player_ids"][1], seeded["player_ids"][2]
+
+    resp = pair_free_time(client, seeded, captain, (p2, p3))
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == {"hours": 168.0}
+
+
+def test_an_admin_does_not_read_a_pair_that_holds_an_outsider(
+    client: Client, seeded: dict[str, Any], auth_headers: dict[str, str]
+) -> None:
+    """An admin passes the captain rule; both players still take part."""
+    p3 = seeded["player_ids"][2]
+
+    resp = pair_free_time(client, seeded, auth_headers, (p3, outsider()))
+
+    assert resp.status_code == 403, resp.text
+    assert resp.json() == {"error": "not_authorized_for_this_pair"}
+
+
+def test_a_player_of_the_pair_does_not_read_it(
+    client: Client, seeded: dict[str, Any], member: Callable[..., dict[str, str]]
+) -> None:
+    """The count is a captain's tool; a player captains nothing here."""
+    p2, p3 = seeded["player_ids"][1], seeded["player_ids"][2]
+
+    resp = pair_free_time(client, seeded, member("2"), (p2, p3))
+
+    assert resp.status_code == 403, resp.text
+
+
+def test_an_admin_reads_a_pair_of_any_team_in_the_event(
+    client: Client, seeded: dict[str, Any], auth_headers: dict[str, str]
+) -> None:
+    """An admin holds no seat, and P3 and P4 both play for Beta."""
+    p3, p4 = seeded["player_ids"][2], seeded["player_ids"][3]
+
+    resp = pair_free_time(client, seeded, auth_headers, (p3, p4))
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == {"hours": 168.0}
+
+
+def test_an_event_without_scheduling_refuses_the_pair_hours(
+    client: Client, seeded: dict[str, Any], auth_headers: dict[str, str]
+) -> None:
+    with Session.begin() as session:
+        season = session.get(Season, seeded["season_id"])
+        assert season is not None
+        season.scheduling_enabled = False
+    p2, p3 = seeded["player_ids"][1], seeded["player_ids"][2]
+
+    resp = pair_free_time(client, seeded, auth_headers, (p2, p3))
+
+    assert resp.status_code == 403, resp.text
+    assert resp.json()["error"] == "scheduling_disabled"
+
+
+def test_a_round_that_does_not_exist_is_not_found(
+    client: Client, seeded: dict[str, Any], auth_headers: dict[str, str]
+) -> None:
+    p2, p3 = seeded["player_ids"][1], seeded["player_ids"][2]
+
+    resp = pair_free_time(client, seeded, auth_headers, (p2, p3), playday=99)
+
+    assert resp.status_code == 404, resp.text
