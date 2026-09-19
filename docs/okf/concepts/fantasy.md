@@ -4,7 +4,7 @@ title: Fantasy league
 description: A member drafts players, one team and one race for a season, places bets on series, and scores six derived parts.
 resource: ../../../app/core/fantasy.py
 tags: [fantasy]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T15:15:00Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-09-19T13:36:34Z }
 sources:
   - id: rule
     resource: ../../../app/core/fantasy.py
@@ -41,7 +41,7 @@ Players are grouped into fantasy tiers by MMR. The season stores the ascending M
 
 # Routes
 
-Admin routes under `/fantasy/...` manage teams, bets and tiers. Member routes `POST /fantasy-team`, `POST /fantasy-bet`, `PUT /fantasy-bet/{id}`, `DELETE /fantasy-bet/{id}` are ownership-checked. `GET /fantasy/teams/{id}/season/{id}/breakdown` answers the per-part breakdown. The leaderboard is read by the site and the Discord `/leaderboard` command. Workbooks import fantasy teams and bets in one transaction each.
+Admin routes under `/fantasy/...` manage teams, bets and tiers. Member routes `POST /fantasy-team`, `POST /fantasy-bet`, `PUT /fantasy-bet/{id}`, `DELETE /fantasy-bet/{id}` are ownership-checked. `GET /fantasy/teams/{id}/season/{id}/breakdown` answers the per-part breakdown; its `team_id` and `team_name` are the fantasy team's, which carries no logo, and its `team_breakdown` names the drafted GNL team with `team_id`, `team_name` and `team_icon_url`. The leaderboard is read by the site and the Discord `/leaderboard` command. Workbooks import fantasy teams and bets in one transaction each.
 
 # Words
 

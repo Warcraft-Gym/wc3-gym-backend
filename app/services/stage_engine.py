@@ -279,6 +279,7 @@ def generate_next_round(
         rows = [StageSeriesRow.from_series_reduced(row) for row in made]
         derived.fill_series(session, rows)
         _fill_teams(session, rows)
+        _fill_mmrs(session, rows)
         _fill_sides(session, rows)
         return StageSeriesPublic(
             rounds=[EventRoundPublic.from_row(row) for row in drew.values()],
@@ -357,6 +358,7 @@ def add_challenger(event_id: int, stage_id: int, entrant_id: int) -> StageSeries
         )
         derived.fill_series(session, [public])
         _fill_teams(session, [public])
+        _fill_mmrs(session, [public])
         _fill_sides(session, [public])
         return public
 
@@ -567,6 +569,7 @@ def set_fixture_template(
         public = [StageSeriesRow.from_series_reduced(row) for row in rows]
         derived.fill_series(session, public)
         _fill_teams(session, public)
+        _fill_mmrs(session, public)
         _fill_sides(session, public)
         return public
 
@@ -600,6 +603,7 @@ def series_of(event_id: int, stage_id: int) -> StageSeriesPublic:
         ]
         derived.fill_series(session, rows)
         _fill_teams(session, rows)
+        _fill_mmrs(session, rows)
         _fill_sides(session, rows)
         return StageSeriesPublic(
             rounds=[EventRoundPublic.from_row(row) for row in rounds], series=rows
@@ -779,6 +783,7 @@ def _lobby_read(session: OrmSession, row: Series) -> StageSeriesRow:
     public = StageSeriesRow.from_series_reduced(row)
     derived.fill_series(session, [public])
     _fill_teams(session, [public])
+    _fill_mmrs(session, [public])
     _fill_sides(session, [public])
     return public
 
@@ -876,6 +881,34 @@ def _pay(stage: EventStage) -> list[int]:
     if stage.points_by_place:
         return [int(word) for word in stage.points_by_place.split(",") if word.strip()]
     return list(range(stage.lobby_size or 1, 0, -1))
+
+
+def _fill_mmrs(session: OrmSession, rows: Sequence[StageSeriesRow]) -> None:
+    """Rate both sides of every row on the race the row names, in two reads.
+
+    The reduced player carries no W3C stats, so the stage page reads the
+    rating off the row, and `derived.fill_series` has named the races already.
+    The reads are three while the W3Champions season setting is unset, because
+    the rule then asks the stats table for the newest stored season.
+    """
+    # app.services.events imports this module, so its rule comes in on the call
+    from app.services.events import race_ratings
+
+    sides = [
+        (player.id, race)
+        for row in rows
+        for player, race in (
+            (row.player1, row.player1_race),
+            (row.player2, row.player2_race),
+        )
+        if player
+    ]
+    rated = race_ratings(session, sides)
+    for row in rows:
+        if row.player1 and row.player1_race:
+            row.player1_mmr = rated.get((row.player1.id, row.player1_race))
+        if row.player2 and row.player2_race:
+            row.player2_mmr = rated.get((row.player2.id, row.player2_race))
 
 
 def _fill_teams(session: OrmSession, rows: Sequence[StageSeriesRow]) -> None:
