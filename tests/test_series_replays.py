@@ -181,6 +181,26 @@ def test_a_failed_swap_puts_both_files_back(
     assert listed.json() == reported["replays"]
 
 
+def test_an_admin_on_neither_side_moves_a_replay(
+    client: Client,
+    seeded: dict[str, Any],
+    member: Callable[..., dict[str, str]],
+    replay_uploaded: Callable[..., None],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The open series is P2 against P4, and P3 administers the site."""
+    series_id = seeded["series_open_id"]
+    replay_uploaded(series_id, 1, 2)
+    assert report(client, series_id, member("2")).status_code == 200
+
+    headers = member("3")
+    monkeypatch.setenv("ADMIN_DISCORD_IDS", "3")
+    resp = client.put(f"/player-series/{series_id}/replays/2/move/3", headers=headers)
+
+    assert resp.status_code == 200, resp.text
+    assert [r["game_no"] for r in resp.json()] == [1, 3]
+
+
 def test_a_move_is_refused(
     client: Client,
     seeded: dict[str, Any],
