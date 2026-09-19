@@ -600,7 +600,8 @@ def get_player_series_veto(
     request: Request,
     credentials: Credentials,
 ) -> SeriesVetoPublic:
-    """The map veto board of a series, read by either player or by an admin."""
+    """The map veto board of a series, read by whoever acts for a side of it
+    or by an admin."""
     viewer, player = _series_viewer(request, credentials, user_service)
     return veto_service.board(series_id, viewer, player)
 
