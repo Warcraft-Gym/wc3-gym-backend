@@ -138,7 +138,7 @@ def get_draft_series_by_match(
     return service.get_by_match_id(match_id, limit=limit, offset=offset)
 
 
-@router.get("/matches/{match_id}/draft-board", tags=["events"])
+@router.get("/matches/{match_id}/draft-board")
 def get_draft_board(
     match_id: int,
     matches: MatchServiceDep,

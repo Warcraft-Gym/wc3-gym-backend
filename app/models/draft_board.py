@@ -78,7 +78,6 @@ class PairMeeting(SQLModel):
     # The race each side played: the off race he reported, else his signup race
     player1_race: str | None = None
     player2_race: str | None = None
-    # Each side's MMR at the time: mmr_after of his last ladder game on that
-    # race before the series; null when he has none
+    # mmr_after of his last ladder game on that race before the series, else null
     player1_mmr: int | None = None
     player2_mmr: int | None = None

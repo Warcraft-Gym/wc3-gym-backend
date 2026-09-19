@@ -248,6 +248,7 @@ def test_only_the_named_modules_read_the_off_race_column(
         "api/routes/import_export.py",
         "models/series.py",
         "services/derived.py",
+        "services/draft_board.py",
         "services/player_history.py",
         "services/player_series.py",
         "services/season_import.py",

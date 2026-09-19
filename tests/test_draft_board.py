@@ -24,6 +24,7 @@ from app.models.event_stage import MAX_MMR_DIFFERENCE, EventStage
 from app.models.relationships import DBUserSeasonSignup
 from app.models.season import Season
 from app.models.series import Series
+from app.models.team import Team
 from app.models.user import User
 from app.models.user_block import UserBlock
 from app.models.user_team_season import DBUserTeamSeason
@@ -232,6 +233,44 @@ def test_only_a_captain_of_the_match_or_an_admin_reads_the_board(
     assert client.get(url).status_code == 401
     assert client.get(url, headers=member("2")).status_code == 403
     assert client.get(url, headers=auth_headers).status_code == 200
+
+
+def test_a_captain_of_a_team_that_does_not_play_the_match_is_refused(
+    client: Client,
+    board_league: dict[str, Any],
+    auth_headers: dict[str, str],
+    captain: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The board is a captain's own match, not any match of the event."""
+    url = f"/matches/{board_league['match_id']}/draft-board"
+    assert client.get(url, headers=captain).status_code == 200
+
+    # P2 captains Gamma, which does not play the seeded match
+    stub_clerk(monkeypatch, account={"id": "2", "username": "p2", "avatar": None})
+    with Session() as session:
+        gamma = Team(
+            name="Gamma", long_name="Team Gamma", league_id=board_league["league_id"]
+        )
+        session.add(gamma)
+        session.commit()
+        gamma_id = ident(gamma)
+    resp = client.post(
+        f"/seasons/{board_league['season_id']}/teams",
+        json={"team_ids": [gamma_id]},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200, resp.text
+    resp = client.put(
+        f"/teams/{gamma_id}/seasons/{board_league['season_id']}/captains",
+        json={"captain_ids": [board_league["player_ids"][1]]},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 200, resp.text
+
+    resp = client.get(url, headers=SESSION)
+    assert resp.status_code == 403, resp.text
+    assert resp.json()["error"] == "Your team does not play this match"
 
 
 def test_an_unknown_match_is_not_found(

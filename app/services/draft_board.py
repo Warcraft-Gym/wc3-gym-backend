@@ -16,7 +16,7 @@ from datetime import datetime, timedelta
 from itertools import product
 from typing import Any
 
-from sqlalchemy import Row, and_, case, func, or_, select
+from sqlalchemy import Row, and_, case, func, literal, or_, select
 from sqlalchemy.orm import Session as OrmSession
 from sqlalchemy.orm import aliased
 from sqlmodel import col
@@ -342,9 +342,7 @@ def _meeting_rows(session: OrmSession, user_a: int, user_b: int) -> Sequence[Row
     """
     signup_a, signup_b = aliased(DBUserSeasonSignup), aliased(DBUserSeasonSignup)
     first = col(Series.player1_id) == user_a
-    # the series' own time, else the first day of its round; it orders the list
-    # and dates the ladder read, and it never leaves the statement, because a
-    # date read back through a timestamp type is not a timestamp
+    # the series' own time, else the first day of its round
     instant = func.coalesce(col(Series.date_time), col(DBEventRound.start_date))
     met = (
         select(
@@ -377,8 +375,8 @@ def _meeting_rows(session: OrmSession, user_a: int, user_b: int) -> Sequence[Row
         )
         .join(Match, col(Match.id) == Series.match_id, isouter=True)
         .join(DBEventRound, col(DBEventRound.id) == Series.round_id, isouter=True)
-        .join(signup_a, _signed_up(signup_a, user_a), isouter=True)
-        .join(signup_b, _signed_up(signup_b, user_b), isouter=True)
+        .join(signup_a, derived.signup_on(signup_a, literal(user_a)), isouter=True)
+        .join(signup_b, derived.signup_on(signup_b, literal(user_b)), isouter=True)
         .where(
             or_(
                 and_(first, col(Series.player2_id) == user_b),
@@ -410,14 +408,6 @@ def _meeting_rows(session: OrmSession, user_a: int, user_b: int) -> Sequence[Row
         .order_by(met.c.instant.desc(), met.c.series_id.desc())
         .limit(MEETINGS_LIMIT)
     ).all()
-
-
-def _signed_up(signup: Any, user_id: int) -> Any:  # noqa: ANN401
-    """The signup join of one named player: his row for the series' event."""
-    return and_(
-        col(signup.user_id) == user_id,
-        col(signup.season_id) == col(Match.season_id),
-    )
 
 
 def _mmr_at(user_id: int, race: Any, instant: Any) -> Any:  # noqa: ANN401
