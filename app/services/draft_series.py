@@ -335,9 +335,9 @@ class DraftSeriesService:
             draft = session.get(DraftSeries, draft_series_id)
             if not draft:
                 raise NotFoundError("Draft series not found")
-            if draft.replaces_series_id is not None:
-                _refuse_replace(session, draft.replaces_series_id)
-                Series.delete(session, draft.replaces_series_id)
+            replaced_id = draft.replaces_series_id
+            if replaced_id is not None:
+                _refuse_replace(session, replaced_id)
             create = SeriesCreate(
                 match_id=draft.match_id,
                 date_time=draft.date_time,
@@ -349,8 +349,11 @@ class DraftSeriesService:
                 is_fantasy_match=draft.is_fantasy_match,
             )
             match_id = draft.match_id
+            # The draft goes first: the replaced series cascades it away
             session.delete(draft)
             session.flush()
+            if replaced_id is not None:
+                Series.delete(session, replaced_id)
             public = series_writer.add_in(session, create)
             clear_ready(session, match_id)
             return public

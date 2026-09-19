@@ -58,12 +58,11 @@ def _own_match(
 
 def _own_side(claims: dict[str, Any], match: MatchPublic, team_id: int) -> None:
     """A captain marks his own team's side of the fixture; an admin marks either."""
+    if team_id not in (match.team1_id, match.team2_id):
+        raise ApiError(400, {"error": "That team does not play this match"})
     if _is_admin(claims):
         return
-    if team_id not in (match.team1_id, match.team2_id) or (
-        team_id,
-        match.season_id,
-    ) not in claim_seats(claims):
+    if (team_id, match.season_id) not in claim_seats(claims):
         raise ApiError(403, {"error": "Your team does not play this match"})
 
 
@@ -165,6 +164,8 @@ def update_draft_series(
         ),
         draft_series_id=draft_series_id,
         replaces_series_id=existing.replaces_series_id,
+        # A pairing moved to another fixture counts against that fixture's round
+        creating=data.match_id is not None and data.match_id != existing.match_id,
     )
     return service.update(draft_series_id, data, _caller_id(claims, users))
 
