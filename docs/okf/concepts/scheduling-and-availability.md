@@ -4,7 +4,7 @@ title: Scheduling and availability
 description: A player answers whether they can play a round, keeps soft blocks that inform but never constrain, and a pair's shared free time is read as intervals for a series and as one count before one exists.
 resource: ../../../app/services/availability.py
 tags: [events, scheduling]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-19T18:00:00Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-09-19T20:00:00Z }
 sources:
   - id: availability
     resource: ../../../app/services/availability.py
@@ -51,7 +51,7 @@ Both reads share one helper, which takes two player ids and a window. A caller t
 
 # When a round ends
 
-A round ends at midnight after its last day, in the zone the event names (`round_end_zone`). An event that names no zone ends its rounds at UTC midnight. One helper answers the instants a round runs between, and every reader of a round window takes it: the check-in refusal, the check-in hint and the free-time reads. A player's blocks stand in the player's own zone, the round window in the event's, so a player in another zone still reads against the same round.
+A round ends at midnight after its last day, in the zone the event names (`round_end_zone`). One helper answers the instants a round runs between, and every reader of a round window takes it: the check-in refusal, the check-in hint and the free-time reads. An event that names no zone leaves each reader its own fallback: the check-in refusal and the free-time reads stand at UTC midnights, and the check-in hint and the derived out-on-blocked-times flag read the round in the player's own zone. A player's blocks stand in the player's own zone, the round window in the event's, so a player in another zone still reads against the same round.
 
 # Check-in
 

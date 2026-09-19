@@ -716,3 +716,59 @@ def test_an_event_without_scheduling_refuses_the_bulk_answer(
 
     assert resp.status_code == 403, resp.text
     assert resp.json()["error"] == "scheduling_disabled"
+
+
+def test_an_admin_sits_a_player_out_of_every_round_left(
+    client: Client,
+    seeded: dict[str, Any],
+    member: Callable[..., dict[str, str]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """P3 administers the site, so he reaches a team he captains nothing of."""
+    headers = member("3")
+    monkeypatch.setenv("ADMIN_DISCORD_IDS", "3")
+
+    resp = client.put(
+        f"/events/{seeded['season_id']}/teams/{seeded['team_a_id']}/availability/all",
+        json={"user_id": seeded["player_ids"][1], "available": False},
+        headers=headers,
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert [row["playday"] for row in resp.json()] == [1, 2, 3, 4]
+    assert {row["set_by_user_id"] for row in resp.json()} == {seeded["player_ids"][2]}
+
+
+def test_a_captain_reaches_only_his_own_team_for_the_bulk_answer(
+    client: Client, seeded: dict[str, Any], captain: dict[str, str]
+) -> None:
+    resp = client.put(
+        f"/events/{seeded['season_id']}/teams/{seeded['team_b_id']}/availability/all",
+        json={"user_id": seeded["player_ids"][2], "available": False},
+        headers=captain,
+    )
+
+    assert resp.status_code == 403, resp.text
+    assert resp.json() == {"error": "Not your team"}
+
+
+def test_a_member_cannot_sit_a_player_out_of_every_round(
+    client: Client, seeded: dict[str, Any], member: Callable[..., dict[str, str]]
+) -> None:
+    """P2 captains nothing, so the team route refuses him."""
+    resp = client.put(
+        f"/events/{seeded['season_id']}/teams/{seeded['team_a_id']}/availability/all",
+        json={"user_id": seeded["player_ids"][0], "available": False},
+        headers=member("2"),
+    )
+
+    assert resp.status_code == 403, resp.text
+    assert resp.json() == {"error": "Captains only"}
+
+
+def test_the_bulk_answer_needs_a_session(
+    client: Client, seeded: dict[str, Any]
+) -> None:
+    resp = client.put("/player-availability/all", json={"available": False})
+
+    assert resp.status_code == 401, resp.text
