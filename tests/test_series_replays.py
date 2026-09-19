@@ -1,9 +1,11 @@
 """A reported result keeps its replays: the browser puts one file per game in the bucket,
 the report confirms them, one row per slot."""
 
+import itertools
 from collections.abc import Callable
 from typing import Any
 
+import pytest
 from httpx2 import Client, Response
 
 from app.services import blob
@@ -84,6 +86,126 @@ def test_one_replay_is_replaced_after_the_result(
     resp = client.put(f"/player-series/{series_id}/replays/3", headers=headers)
     assert resp.status_code == 400, resp.text
     assert resp.json() == {"error": "This series had 2 games"}
+
+
+def test_a_replay_moves_to_a_free_game(
+    client: Client,
+    seeded: dict[str, Any],
+    member: Callable[..., dict[str, str]],
+    blob_store: dict[str, bytes],
+    replay_uploaded: Callable[..., None],
+) -> None:
+    """The file changes place, so game 3 keeps its own key and game 2 holds nothing."""
+    series_id = seeded["series_open_id"]
+    headers = member("2")
+    replay_uploaded(series_id, 1)
+    replay_uploaded(series_id, 2, data=REPLAY_BYTES + b"\2")
+    before = report(client, series_id, headers).json()["replays"]
+    assert len(blob_store) == 2
+
+    resp = client.put(f"/player-series/{series_id}/replays/2/move/3", headers=headers)
+    assert resp.status_code == 200, resp.text
+    moved = resp.json()
+    assert [r["game_no"] for r in moved] == [1, 3]
+    assert moved[1]["url"].endswith(f"/replays/{series_id}/game3.w3g")
+    assert blob_store[moved[1]["url"]] == REPLAY_BYTES + b"\2"
+    assert len(blob_store) == 2
+    assert moved[1]["uploaded_at"] == before[1]["uploaded_at"]
+    assert moved[1]["uploaded_by"] == before[1]["uploaded_by"]
+
+
+def test_two_replays_swap(
+    client: Client,
+    seeded: dict[str, Any],
+    member: Callable[..., dict[str, str]],
+    blob_store: dict[str, bytes],
+    replay_uploaded: Callable[..., None],
+) -> None:
+    """The two files change place, and so do the uploader and the time of each."""
+    series_id = seeded["series_open_id"]
+    headers = member("2")
+    replay_uploaded(series_id, 1)
+    replay_uploaded(series_id, 2, data=REPLAY_BYTES + b"\2")
+    reported = report(client, series_id, headers)
+    assert reported.status_code == 200, reported.text
+    # the other player claims game 2, so the two rows carry different uploaders
+    other = client.put(f"/player-series/{series_id}/replays/2", headers=member("4"))
+    assert other.status_code == 200, other.text
+    before = [reported.json()["replays"][0], other.json()]
+
+    resp = client.put(f"/player-series/{series_id}/replays/1/move/2", headers=headers)
+    assert resp.status_code == 200, resp.text
+    swapped = resp.json()
+    assert [r["game_no"] for r in swapped] == [1, 2]
+    assert blob_store[swapped[0]["url"]] == REPLAY_BYTES + b"\2"
+    assert blob_store[swapped[1]["url"]] == REPLAY_BYTES
+    assert len(blob_store) == 2
+    assert before[0]["uploaded_by"] != before[1]["uploaded_by"]
+    assert swapped[0]["uploaded_by"] == before[1]["uploaded_by"]
+    assert swapped[1]["uploaded_by"] == before[0]["uploaded_by"]
+
+
+def test_a_failed_swap_puts_both_files_back(
+    client: Client,
+    seeded: dict[str, Any],
+    member: Callable[..., dict[str, str]],
+    blob_store: dict[str, bytes],
+    replay_uploaded: Callable[..., None],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The second store of a swap fails, so both files and both rows stay as they were."""
+    from app.services import r2
+
+    series_id = seeded["series_open_id"]
+    headers = member("2")
+    replay_uploaded(series_id, 1)
+    replay_uploaded(series_id, 2, data=REPLAY_BYTES + b"\2")
+    reported = report(client, series_id, headers).json()
+    files = dict(blob_store)
+
+    store, calls = r2.store, itertools.count()
+
+    def flaky(key: str, data: bytes) -> None:
+        # the move's own second store fails; the restore stores that follow go through
+        if next(calls) == 1:
+            raise RuntimeError("the bucket refused the file")
+        store(key, data)
+
+    monkeypatch.setattr(r2, "store", flaky)
+    resp = client.put(f"/player-series/{series_id}/replays/1/move/2", headers=headers)
+    assert resp.status_code == 500, resp.text
+    # two stores of the swap, then the two that put the pair back
+    assert next(calls) == 4
+    assert blob_store == files
+    listed = client.get(f"/matches/{reported['match_id']}/replays")
+    assert listed.json() == reported["replays"]
+
+
+def test_a_move_is_refused(
+    client: Client,
+    seeded: dict[str, Any],
+    member: Callable[..., dict[str, str]],
+    replay_uploaded: Callable[..., None],
+) -> None:
+    """The same game, a game outside the best-of, an empty game, and another player."""
+    series_id = seeded["series_open_id"]
+    headers = member("2")
+    replay_uploaded(series_id, 1, 2)
+    assert report(client, series_id, headers).status_code == 200
+
+    path = f"/player-series/{series_id}/replays"
+    for target, error in (
+        ("1/move/1", "Pick a different game"),
+        ("1/move/4", "Game number must be between 1 and 3"),
+        ("3/move/1", "Game 3 has no replay"),
+    ):
+        resp = client.put(f"{path}/{target}", headers=headers)
+        assert resp.status_code == 400, resp.text
+        assert resp.json() == {"error": error}
+    # the open series is P2 against P4, so P1 may not move its replays
+    resp = client.put(f"{path}/1/move/3", headers=member("1"))
+    assert resp.status_code == 403, resp.text
+    assert resp.json() == {"error": "not_authorized_for_this_series"}
 
 
 def test_a_file_that_is_not_a_replay_is_refused(

@@ -108,6 +108,9 @@ class SeasonPlayer(LadderPlayer):
     """One signup of the season with his ladder record, and the tag of his team."""
 
     team: str | None = None
+    team_id: int | None = None
+    # Where the team's logo is served from; null until one is uploaded
+    team_icon_url: str | None = None
 
 
 class LadderTeam(SQLModel):
@@ -117,6 +120,8 @@ class LadderTeam(SQLModel):
     name: str | None = None
     # The name to print where there is room; `name` is the tag the tables use
     long_name: str | None = None
+    # Where the team's logo is served from; null until one is uploaded
+    icon_url: str | None = None
     points: int = 0
     ladder_points: int = 0
     games: int = 0

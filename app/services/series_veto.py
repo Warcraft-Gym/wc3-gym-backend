@@ -256,7 +256,12 @@ def _veto_side(session: OrmSession, series: Series, side: int) -> VetoPlayer:
     team = session.get(Team, entrant.team_id) if entrant and entrant.team_id else None
     if team is None:
         return VetoPlayer()
-    return VetoPlayer(name=team.name, team_id=ident(team), team_name=team.name)
+    return VetoPlayer(
+        name=team.name,
+        team_id=ident(team),
+        team_name=team.name,
+        team_icon_url=team.icon_url,
+    )
 
 
 def _board(

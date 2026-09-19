@@ -88,6 +88,12 @@ def upload_url(key: str) -> str:
     return _signed("PUT", key, UPLOAD_SECONDS)
 
 
+def store(key: str, data: bytes) -> None:
+    """Put these bytes under this key, over whatever was there. Only a move between game slots
+    sends a file from here; every other upload goes straight from the browser to the bucket."""
+    requests.put(upload_url(key), data=data, timeout=30).raise_for_status()
+
+
 def peek(key: str) -> tuple[bytes, int] | None:
     """The first bytes of the stored file and its size, or None when nothing is stored."""
     resp = requests.get(
@@ -104,7 +110,7 @@ def peek(key: str) -> tuple[bytes, int] | None:
 
 
 def fetch(key: str) -> bytes:
-    """The whole stored file, for the Discord post."""
+    """The whole stored file, for a move between game slots."""
     resp = requests.get(_signed("GET", key, 60), timeout=30)
     resp.raise_for_status()
     return resp.content

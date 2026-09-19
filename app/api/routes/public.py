@@ -21,6 +21,7 @@ from app.api.deps import (
     UserServiceDep,
     claim_seats,
     discord_token,
+    require_captain,
     require_login,
     require_member,
 )
@@ -58,6 +59,7 @@ from app.models.user import (
 )
 from app.models.user_block import (
     FreeTimePublic,
+    PairFreeTimePublic,
     SoftBlocksPublic,
     UserBlockCreate,
     UserBlockPublic,
@@ -462,6 +464,34 @@ def get_series_free_time(
     )
 
 
+@router.get("/events/{event_id}/rounds/{playday}/free-time", tags=["events"])
+def get_pair_free_time(
+    event_id: int,
+    playday: int,
+    player1_id: int,
+    player2_id: int,
+    request: Request,
+    credentials: Credentials,
+    service: SoftBlockServiceDep,
+) -> PairFreeTimePublic:
+    """The hours two players share across a round, before a series pairs them.
+
+    Both players take part in that event; a captain reads a pair that holds one
+    of the players their own team fields, and an admin any such pair. It
+    answers a count, never a range.
+    """
+    claims = require_captain(request, credentials)
+    admin = claims.get("role") == "admin" or claims["sub"] == "admin"
+    return service.pair_free_time(
+        event_id,
+        playday,
+        player1_id,
+        player2_id,
+        admin=admin,
+        seats=claim_seats(claims),
+    )
+
+
 @router.get("/player-history")
 def get_player_history(player: DashboardPlayer) -> PlayerHistory:
     """Every GNL season this player took part in, and every opponent they met."""
@@ -568,6 +598,21 @@ def replace_replay(
         raise BadRequestError(f"This series had {played} games")
     rows = replays.confirm(series_id, [game_no], uploader)
     return next(row for row in rows if row.game_no == game_no)
+
+
+@router.put("/player-series/{series_id}/replays/{game_no}/move/{to_game}")
+def move_replay(
+    series_id: int,
+    game_no: int,
+    to_game: int,
+    player: DashboardPlayer,
+    series_service: SeriesServiceDep,
+) -> list[SeriesReplayPublic]:
+    """Move this game's replay to another game of the series, for whoever acts for a side. When
+    that game holds a replay the two swap. The answer is every replay of the series, in game
+    order."""
+    _own_series(series_service, series_id, player[1].id)
+    return replays.move(series_id, game_no, to_game)
 
 
 def _series_viewer(

@@ -7,7 +7,7 @@ own phase word. The event phase is computed on every read and never stored.
 
 import random
 from collections import Counter
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 
@@ -1175,20 +1175,27 @@ def _w3c_season(session: OrmSession) -> int:
     return session.scalar(select(func.max(col(W3CStats.wc3_season)))) or 0
 
 
-def _stats_for(user: User, race: Race | None, season: int) -> tuple[int | None, int]:
+def _stats_for(
+    user: User, race: Race | None, season: int, games_seasons: int | None = None
+) -> tuple[int | None, int]:
     """The player's current W3C rating on that race, and the games behind it.
 
     A season the player did not play on that race carries no rating, so the
     rating is the newest stored season that carries one, three seasons back
     from the season the app is on and no further: an older rating is not the
     player's current one. The games are every season the app has synced for
-    that race, because a min-games rule asks how much the player has played,
-    not how much this season.
+    that race, or the newest `games_seasons` of them where the event names a
+    window, because a min-games rule asks how much the player has played.
     """
     rows = [stat for stat in (user.w3c_stats or []) if stat.race == race]
     played = [stat for stat in rows if stat.mmr and stat.wc3_season > season - SEASONS]
     rating = max(played, key=lambda stat: stat.wc3_season).mmr if played else None
-    return rating, sum(stat.games or 0 for stat in rows)
+    counted = [
+        stat
+        for stat in rows
+        if games_seasons is None or stat.wc3_season > season - games_seasons
+    ]
+    return rating, sum(stat.games or 0 for stat in counted)
 
 
 def _warnings(
@@ -1241,6 +1248,43 @@ def _users_for(
             .where(col(User.id).in_(user_ids))
         ).unique()
     }
+
+
+def race_ratings(
+    session: OrmSession, sides: Iterable[tuple[int | None, str | None]]
+) -> dict[tuple[int, str], int]:
+    """The current rating of every (player, race) pair named, keyed by the pair.
+
+    The list form of the rule `_stats_for` states for one player: the newest
+    stored season that carries a rating on that race, three seasons back from
+    the season the app is on and no further. Two reads whatever the number of
+    pairs, and the statement carries the rated seasons alone, so a list
+    payload rates each row without reading a stat it does not need. A pair
+    with no rating is left out.
+    """
+    pairs = {(user_id, race) for user_id, race in sides if user_id and race}
+    if not pairs:
+        return {}
+    season = _w3c_season(session)
+    rows = session.execute(
+        select(
+            col(W3CStats.user_id),
+            col(W3CStats.race),
+            col(W3CStats.wc3_season),
+            col(W3CStats.mmr),
+        ).where(
+            col(W3CStats.user_id).in_({user_id for user_id, _ in pairs}),
+            col(W3CStats.race).in_({Race.from_text(race) for _, race in pairs}),
+            col(W3CStats.mmr) > 0,
+            col(W3CStats.wc3_season) > season - SEASONS,
+        )
+    ).all()
+    newest: dict[tuple[int, str], tuple[int, int]] = {}
+    for user_id, race, wc3_season, mmr in rows:
+        key = (user_id, race.value)
+        if key in pairs and wc3_season >= newest.get(key, (-1, 0))[0]:
+            newest[key] = (wc3_season, mmr)
+    return {key: mmr for key, (_, mmr) in newest.items()}
 
 
 def _mmrs(session: OrmSession, rows: Sequence[EventEntrant]) -> dict[int, int | None]:
@@ -1394,7 +1438,11 @@ def _entrant_public(
     """One entrant payload: the identity, the rating it is seeded on, the warnings."""
     user = users.get(row.user_id)
     team = teams.get(row.team_id)
-    mmr, games = _stats_for(user, row.race, season) if user else (None, 0)
+    mmr, games = (
+        _stats_for(user, row.race, season, event.min_games_seasons)
+        if user
+        else (None, 0)
+    )
     if row.team_id is not None:
         mmr = means.get(row.team_id)
     return EventEntrantPublic(

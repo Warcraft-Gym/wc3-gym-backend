@@ -1,10 +1,11 @@
-"""A player's own soft blocks, and the free time the two players of a series share.
+"""A player's own soft blocks, and the free time two players share.
 
 The routes pass the signed-in player's id, so a player writes only their own
 rows, and a row of anyone else answers 403. Nothing here writes
 round_availability: a block is a hint, never the round answer.
 """
 
+from collections.abc import Mapping
 from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 
@@ -16,12 +17,14 @@ from app.core import free_time
 from app.core.checkin_hint import blocked, zone_of
 from app.core.db import Session
 from app.core.exceptions import ApiError, BadRequestError, NotFoundError
+from app.models.relationships import DBEventRound, round_row
 from app.models.season import Season
 from app.models.series import Series
 from app.models.user import User
 from app.models.user_block import (
     FreeRange,
     FreeTimePublic,
+    PairFreeTimePublic,
     SoftBlocksPublic,
     UserBlock,
     UserBlockCreate,
@@ -32,6 +35,7 @@ from app.models.user_block import (
     UserBusyPublic,
     UserBusyUpdate,
 )
+from app.models.user_team_season import DBUserTeamSeason
 from app.services.availability import NO_SCHEDULING
 from app.services.series_rules import series_event, series_round
 
@@ -127,22 +131,103 @@ class SoftBlockService:
                 raise ApiError(
                     403, {"error": "scheduling_disabled", "message": NO_SCHEDULING}
                 )
-            start, end = _window(session, series, event, start, end)
+            start, end = _window(series_round(session, series), event, start, end)
             side1, side2 = series.player1_id, series.player2_id
             if side1 is None or side2 is None:
                 raise BadRequestError("The series has no sides to compare yet")
-            spans = [
-                blocked(session, side, start, end, zone_of(session, side))
-                for side in (side1, side2)
-            ]
-        ranges = free_time.free(start, end, *spans)
-        seconds = sum((hi - lo).total_seconds() for lo, hi in ranges)
+            ranges = shared_free(session, side1, side2, start, end)
         return FreeTimePublic(
             start=start,
             end=end,
-            hours=seconds / 3600,
+            hours=_hours(ranges),
             ranges=[FreeRange(start=lo, end=hi) for lo, hi in ranges],
         )
+
+    def pair_free_time(
+        self,
+        event_id: int,
+        playday: int,
+        user_a: int,
+        user_b: int,
+        *,
+        admin: bool,
+        seats: set[tuple[int, int]],
+    ) -> PairFreeTimePublic:
+        """The hours two players share across a round, before a series pairs them.
+
+        Both players hold a seat in that event, and a captain reads a pair that
+        holds one of the players their own team fields; an admin passes the
+        captain rule only. It answers a count only, so neither the blocks nor
+        the ranges reach the caller.
+        """
+        with Session.begin() as session:
+            round_ = round_row(session, event_id, playday)
+            if round_ is None:
+                raise NotFoundError("round_not_found")
+            event = session.get(Season, event_id)
+            if event is None:
+                raise NotFoundError("season_not_found")
+            if not _pair_seated(
+                session, event_id, seats, (user_a, user_b), admin=admin
+            ):
+                raise ApiError(403, {"error": "not_authorized_for_this_pair"})
+            if not event.scheduling_enabled:
+                raise ApiError(
+                    403, {"error": "scheduling_disabled", "message": NO_SCHEDULING}
+                )
+            start, end = _window(round_, event, None, None)
+            ranges = shared_free(session, user_a, user_b, start, end)
+        return PairFreeTimePublic(hours=_hours(ranges))
+
+
+def shared_free(
+    session: OrmSession,
+    user_a: int,
+    user_b: int,
+    start: datetime,
+    end: datetime,
+    spans: Mapping[int, list[free_time.Interval]] | None = None,
+) -> list[free_time.Interval]:
+    """The UTC ranges both players have open inside [start, end).
+
+    A caller that answers many pairs reads the blocks once per player and
+    passes them in spans, so a player found in spans costs no statement.
+    """
+    spans = spans or {}
+    both = [
+        spans[side]
+        if side in spans
+        else blocked(session, side, start, end, zone_of(session, side))
+        for side in (user_a, user_b)
+    ]
+    return free_time.free(start, end, *both)
+
+
+def _hours(ranges: list[free_time.Interval]) -> float:
+    return sum((hi - lo).total_seconds() for lo, hi in ranges) / 3600
+
+
+def _pair_seated(
+    session: OrmSession,
+    event_id: int,
+    seats: set[tuple[int, int]],
+    users: tuple[int, ...],
+    *,
+    admin: bool,
+) -> bool:
+    """Whether the caller may read this pair: every player holds a seat in this
+    event, and, unless the caller is an admin, a captain's seat of this event
+    fields one of them. One statement answers both, so the rows load once."""
+    rows = session.scalars(
+        select(DBUserTeamSeason).where(
+            col(DBUserTeamSeason.season_id) == event_id,
+            col(DBUserTeamSeason.user_id).in_(users),
+        )
+    ).all()
+    if {row.user_id for row in rows} != set(users):
+        return False
+    teams = {team for team, season in seats if season == event_id}
+    return admin or any(row.team_id in teams for row in rows)
 
 
 def _add[T: (UserBlock, UserBusy)](session: OrmSession, row: T) -> T:
@@ -208,17 +293,15 @@ def _midnight(day: date) -> datetime:
 
 
 def _window(
-    session: OrmSession,
-    series: Series,
+    row: DBEventRound | None,
     event: Season,
     start: datetime | None,
     end: datetime | None,
 ) -> tuple[datetime, datetime]:
     """The window asked for, else the round's days, else the event's, as whole
-    UTC days. A series generated into a bracket has no fixture, so the round
-    comes through its own round_id."""
+    UTC days. The caller resolves the round: a series generated into a bracket
+    has no fixture, so its round comes through its own round_id."""
     if start is None and end is None:
-        row = series_round(session, series)
         first = row.start_date if row is not None else None
         last = (row.end_date or first) if row is not None else None
         if first is None:
