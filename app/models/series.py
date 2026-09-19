@@ -315,6 +315,10 @@ class SeriesPublic(SeriesBase, PublicModel):
     # The map rules and the best-of, from the season of the fixture or from
     # the stage; app.services.series_rules fills them
     rules: SeriesRulesPublic | None = None
+    # The W3Champions rating of each side on the race the row names, filled by
+    # app.services.derived.fill_mmrs on the reads whose players carry no stats
+    player1_mmr: int | None = None
+    player2_mmr: int | None = None
     casts: list[CastPublic] = []
 
     @classmethod
@@ -388,9 +392,6 @@ class StageSeriesRow(SeriesPublic):
     # The team behind a side, so the box prints its name; null for a player
     team1: TeamReduced | None = None
     team2: TeamReduced | None = None
-    # The W3Champions rating of each side on the race the row names; null when unrated
-    player1_mmr: int | None = None
-    player2_mmr: int | None = None
     side_size: int = 1
     pick_rule: str | None = None
     result_kind: str = "played"
