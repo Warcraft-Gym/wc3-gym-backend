@@ -18,7 +18,7 @@ import io
 import itertools
 import os
 from collections.abc import Callable, Generator
-from datetime import date
+from datetime import UTC, date, datetime, time
 from types import SimpleNamespace
 from typing import Any
 
@@ -272,11 +272,16 @@ def discord_calls(
 @pytest.fixture(autouse=True)
 def checkin_day(monkeypatch: pytest.MonkeyPatch) -> Callable[[str], None]:
     """The day check-in reads. The seeded rounds run four weeks from 5 Jan 2026,
-    so the default opens round 1 and round 2 and a test names another day."""
+    so the default opens round 1 and round 2 and a test names another day.
+
+    The check-in reads an instant, because a round ends at midnight in the
+    event's zone; the day named is its UTC midnight.
+    """
     from app.services import availability
 
     def on(day: str) -> None:
-        monkeypatch.setattr(availability, "today", lambda: date.fromisoformat(day))
+        moment = datetime.combine(date.fromisoformat(day), time(), tzinfo=UTC)
+        monkeypatch.setattr(availability, "now", lambda: moment)
 
     on("2026-01-09")
     return on

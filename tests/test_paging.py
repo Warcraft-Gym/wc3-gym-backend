@@ -207,12 +207,13 @@ DEFAULT_ORDER = {
     "POST /fantasy/bets/search?query=id > 0": ["fantasy_bets.id"],
     "GET /draft-series/match/{match_id}": ["draft_series.id"],
     # The first two order the user lookup the route resolves the session with;
-    # the last two order the answers and the rounds of the current season
+    # then the answers and the rounds, which the availability derive reads again
     "GET /player-series": [
         "users.id",
         "anon_1.id",
         "series.id",
         "round_availability.user_id, round_availability.playday",
+        "event_round.number",
         "event_round.number",
     ],
 }

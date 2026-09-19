@@ -43,8 +43,8 @@ GNL management uses `/events/{event_id}/teams`, `/series`, `/maps`, `/rounds`, `
 | `signups_open` | off: a signup is a request an admin may grant |
 | `scheduling_enabled` | off: the season takes no availability answers |
 | `checkin_enabled`, `checkin_days` | whether and when the round check-in opens |
-| `early_checkin` | whether a player may answer a round's check-in before its window opens; answered on the event payload, and no service reads it |
-| `round_end_zone` | the IANA zone a round ends at midnight in; null names no zone; answered on the event payload, and no service reads it |
+| `early_checkin` | whether a player may answer a round's check-in before its window opens; on, every round of the event that has not ended takes their answer |
+| `round_end_zone` | the IANA zone a round ends at midnight in; null names no zone, and the check-in refusal and the free-time reads then stand at UTC midnights while the check-in hint and the out-on-blocked-times flag read the round in the player's own zone |
 | `fantasy_grind` | whether the fantasy game offers the grind pick |
 | `fantasy_tier_cuts`, `fantasy_tiers_applied_at` | the MMR cuts between fantasy tiers |
 | `published` | off: a draft only an admin sees |

@@ -4,7 +4,7 @@ title: round_availability
 description: One player's answer to whether they can play one round of an event; no row is no answer, and clearing an answer deletes the row.
 resource: ../../../../app/models/round_availability.py
 tags: [events, data]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T15:15:00Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-09-19T18:00:00Z }
 verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
 sources:
   - id: model
@@ -33,4 +33,4 @@ Primary key (`user_id`, `season_id`, `playday`). Foreign keys: `user_id` and `se
 
 # Rules
 
-The last write wins. A player's own write is refused outside the round's check-in window; a captain's is not. Dropping a round deletes its answers. Soft blocks never write here. See [scheduling and availability](../../concepts/scheduling-and-availability.md).
+The last write wins. A player's own write is refused before the round's check-in opens and after the round ends; a captain's is not, and `early_checkin` on the event opens every round that has not ended to the player. Dropping a round deletes its answers. Soft blocks never write here: a player whose blocks cover a whole round reads as blocked out on the payload, derived on the read. See [scheduling and availability](../../concepts/scheduling-and-availability.md).

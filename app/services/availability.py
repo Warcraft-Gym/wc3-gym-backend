@@ -4,15 +4,18 @@ A row is an answer, and no row is no answer, so clearing an answer deletes the
 row. The player and their captain write the same row and the last write wins.
 """
 
+from collections.abc import Sequence
 from datetime import UTC, date, datetime
 
-from sqlalchemy import ColumnExpressionArgument, select
+from sqlalchemy import ColumnExpressionArgument, delete, select
 from sqlalchemy.orm import Session as OrmSession
 from sqlmodel import col
 
+from app.core.checkin_hint import blocked_rounds, round_window
 from app.core.db import Session
 from app.core.exceptions import ApiError, BadRequestError, NotFoundError
-from app.models.relationships import SeasonRoundPublic, round_row
+from app.models.base import ident
+from app.models.relationships import DBEventRound, SeasonRoundPublic, round_row
 from app.models.round_availability import (
     DBRoundAvailability,
     RoundAvailabilityPublic,
@@ -26,8 +29,13 @@ from app.services.events import checkin_window
 NO_SCHEDULING = "This event does not use availability."
 
 
+def now() -> datetime:
+    """The instant the check-in reads; today is its UTC date."""
+    return datetime.now(UTC)
+
+
 def today() -> date:
-    return datetime.now(UTC).date()
+    return now().date()
 
 
 class AvailabilityService:
@@ -43,23 +51,37 @@ class AvailabilityService:
 
     def for_user(self, user_id: int, season_id: int) -> list[RoundAvailabilityPublic]:
         with Session.begin() as session:
-            return _rows(
+            return _derive(
                 session,
-                col(DBRoundAvailability.user_id) == user_id,
-                col(DBRoundAvailability.season_id) == season_id,
+                session.get(Season, season_id),
+                [user_id],
+                _rows(
+                    session,
+                    col(DBRoundAvailability.user_id) == user_id,
+                    col(DBRoundAvailability.season_id) == season_id,
+                ),
             )
 
     def for_team(self, team_id: int, season_id: int) -> list[RoundAvailabilityPublic]:
         """The answers of the players the team holds that season."""
         with Session.begin() as session:
-            roster = select(col(DBUserTeamSeason.user_id)).where(
-                col(DBUserTeamSeason.team_id) == team_id,
-                col(DBUserTeamSeason.season_id) == season_id,
+            roster = list(
+                session.scalars(
+                    select(col(DBUserTeamSeason.user_id)).where(
+                        col(DBUserTeamSeason.team_id) == team_id,
+                        col(DBUserTeamSeason.season_id) == season_id,
+                    )
+                )
             )
-            return _rows(
+            return _derive(
                 session,
-                col(DBRoundAvailability.season_id) == season_id,
-                col(DBRoundAvailability.user_id).in_(roster),
+                session.get(Season, season_id),
+                roster,
+                _rows(
+                    session,
+                    col(DBRoundAvailability.season_id) == season_id,
+                    col(DBRoundAvailability.user_id).in_(roster),
+                ),
             )
 
     def on_roster(self, team_id: int, season_id: int, user_id: int) -> bool:
@@ -110,11 +132,57 @@ class AvailabilityService:
                     )
                 )
             session.flush()
-            return _rows(
-                session,
-                col(DBRoundAvailability.user_id) == user_id,
-                col(DBRoundAvailability.season_id) == season_id,
+            return _season_rows(session, season, user_id)
+
+    def set_all(
+        self,
+        user_id: int,
+        season_id: int,
+        available: bool | None,
+        set_by_user_id: int,
+    ) -> list[RoundAvailabilityPublic]:
+        """Answer every round of the event that has not ended, or clear them all.
+
+        One delete and one insert write the lot, so the rounds move together.
+        A player writing for themselves meets the same window rule per round as
+        a single answer, which early check-in opens for every round left.
+        """
+        with Session.begin() as session:
+            season = _season(session, season_id)
+            if not season.scheduling_enabled:
+                raise ApiError(
+                    403, {"error": "scheduling_disabled", "message": NO_SCHEDULING}
+                )
+            rounds = [row for row in season.rounds if not _ended(season, row)]
+            if set_by_user_id == user_id:
+                for row in rounds:
+                    _checkin_window(season, row.number)
+            session.execute(
+                delete(DBRoundAvailability).where(
+                    col(DBRoundAvailability.user_id) == user_id,
+                    col(DBRoundAvailability.season_id) == season_id,
+                    col(DBRoundAvailability.playday).in_(
+                        [row.number for row in rounds]
+                    ),
+                )
             )
+            if available is not None:
+                session.add_all(
+                    [
+                        DBRoundAvailability(
+                            user_id=user_id,
+                            season_id=season_id,
+                            playday=row.number,
+                            round_id=row.id,
+                            available=available,
+                            set_by_user_id=set_by_user_id,
+                            answered_at=utcnow(),
+                        )
+                        for row in rounds
+                    ]
+                )
+            session.flush()
+            return _season_rows(session, season, user_id)
 
 
 def _checkin_window(season: Season, playday: int) -> None:
@@ -124,14 +192,25 @@ def _checkin_window(season: Season, playday: int) -> None:
         return
     row = next((r for r in season.rounds if r.number == playday), None)
     window = checkin_window(season, row) if row else None
-    if window is None:
+    if window is None or row is None:
         return
     opens, closes = window
-    now = today()
-    if now < opens:
+    # Early check-in takes an answer for every round of the event that is left
+    if not season.early_checkin and today() < opens:
         raise _closed(f"Check-in for round {playday} opens on {opens.day} {opens:%b}.")
-    if closes and now > closes:
+    if closes and _ended(season, row):
         raise _closed(f"Round {playday} is over.")
+
+
+def _ended(season: Season, row: DBEventRound) -> bool:
+    """Whether the round is over: past midnight after its last day, event zone.
+
+    A round nobody dated never ends, so it stays open to an answer.
+    """
+    if row.start_date is None:
+        return False
+    window = round_window(season, row)
+    return window is not None and now() >= window[1]
 
 
 def _closed(message: str) -> ApiError:
@@ -143,6 +222,45 @@ def _season(session: OrmSession, season_id: int) -> Season:
     if not season:
         raise NotFoundError(f"Season not found by Id: {season_id}")
     return season
+
+
+def _season_rows(
+    session: OrmSession, season: Season, user_id: int
+) -> list[RoundAvailabilityPublic]:
+    """One player's rows for that event: what every availability write answers."""
+    return _derive(
+        session,
+        season,
+        [user_id],
+        _rows(
+            session,
+            col(DBRoundAvailability.user_id) == user_id,
+            col(DBRoundAvailability.season_id) == ident(season),
+        ),
+    )
+
+
+def _derive(
+    session: OrmSession,
+    season: Season | None,
+    user_ids: Sequence[int],
+    rows: list[RoundAvailabilityPublic],
+) -> list[RoundAvailabilityPublic]:
+    """The stored answers, plus a derived row where blocks cover a whole round.
+
+    A stored answer always wins, so a derived row stands only where none does.
+    """
+    if season is None or not user_ids:
+        return rows
+    answered = {(row.user_id, row.playday) for row in rows}
+    derived = [
+        RoundAvailabilityPublic.derived(user_id, playday)
+        for user_id, playday in blocked_rounds(session, season, user_ids, season.rounds)
+        if (user_id, playday) not in answered
+    ]
+    if not derived:
+        return rows
+    return sorted(rows + derived, key=lambda row: (row.user_id, row.playday))
 
 
 def _rows(

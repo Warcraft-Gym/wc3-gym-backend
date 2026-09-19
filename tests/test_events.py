@@ -1111,6 +1111,42 @@ def test_the_member_row_hints_that_the_blocks_cover_the_next_round(
     assert (row["availability_hint"], row["action"]) == ("answered_no", "checked_in")
 
 
+def busy_days(user_id: int, zone: str, *days: date) -> None:
+    """Give the player a zone and block whole local days of it."""
+    from app.models.user_block import UserBusy
+
+    with Session.begin() as session:
+        user = session.get(User, user_id)
+        assert user is not None
+        user.timezone = zone
+        session.add_all(
+            UserBusy(user_id=user_id, first_day=day, last_day=day) for day in days
+        )
+
+
+def test_the_hint_reads_the_round_in_the_events_zone(
+    client: Client,
+    seeded: dict[str, Any],
+    member: Callable[..., dict[str, str]],
+) -> None:
+    """The round window stands in Auckland and the blocks in New York, so the
+    player's own day leaves the first hours of the round open and the day
+    before it closes them."""
+    headers = member()
+    player = seeded["player_ids"][0]
+    event = add_event(
+        kind=EventKind.cup, checkin_days=3, round_end_zone="Pacific/Auckland"
+    )
+    add_round(event, TODAY, TODAY)
+    enter(event, player)
+    busy_days(player, "America/New_York", TODAY)
+
+    assert my_events(client, headers)[event]["availability_hint"] == "open"
+
+    busy_days(player, "America/New_York", TODAY - timedelta(days=1))
+    assert my_events(client, headers)[event]["availability_hint"] == "blocked_by_blocks"
+
+
 def test_an_event_carries_the_check_in_zone_and_the_games_window(
     client: Client, auth_headers: dict[str, str]
 ) -> None:
