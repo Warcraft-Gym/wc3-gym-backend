@@ -15,7 +15,7 @@ sources:
     title: SeriesService writes a GNL series
   - id: player-series
     resource: ../../../../app/services/player_series.py
-    title: A player reports their own series
+    title: A player's own series
   - id: engine
     resource: ../../../../app/services/stage_engine.py
     title: The engine writes a generated series and follows its feeders

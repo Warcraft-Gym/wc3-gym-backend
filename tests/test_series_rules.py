@@ -246,3 +246,55 @@ def test_a_gnl_series_keeps_its_season_rules_under_a_backfilled_stage(
     fixture = client.get(f"/matches/{seeded['match_id']}")
     assert fixture.status_code == 200, fixture.text
     assert (fixture.json()["team1_score"], fixture.json()["team2_score"]) == (2, 0)
+
+
+def test_who_acts_for_a_side_of_a_series(seeded: dict[str, Any]) -> None:
+    """One rule answers every route: the player a side names and the captains
+    of the team that fields it act for it, a plain roster member does not, and
+    a side that names no player is the team itself, so its roster acts."""
+    from app.core.db import Session
+    from app.models.base import ident
+    from app.models.event_entrant import EventEntrant
+    from app.models.relationships import DBTeamSeasonCaptain
+    from app.models.series import Series
+    from app.services.series_rules import acts_for_side
+
+    season_id = seeded["season_id"]
+    mate, named1, spare, named2 = seeded["player_ids"]
+    with Session.begin() as session:
+        sides = [
+            EventEntrant(event_id=season_id, team_id=seeded[f"team_{key}_id"])
+            for key in ("a", "b")
+        ]
+        session.add_all(sides)
+        session.flush()
+        series = session.get(Series, seeded["series_open_id"])
+        assert series
+        series.entrant1_id, series.entrant2_id = (ident(side) for side in sides)
+        session.flush()
+
+        assert acts_for_side(session, series, named1) == 1
+        assert acts_for_side(session, series, named2) == 2
+        # Each side names its player, so the rest of the roster stands outside
+        assert acts_for_side(session, series, mate) is None
+        assert acts_for_side(session, series, spare) is None
+
+        session.add_all(
+            [
+                DBTeamSeasonCaptain(
+                    team_id=seeded["team_a_id"], season_id=season_id, user_id=mate
+                ),
+                DBTeamSeasonCaptain(
+                    team_id=seeded["team_b_id"], season_id=season_id, user_id=spare
+                ),
+            ]
+        )
+        session.flush()
+        # A captain acts for the side its own team fields, never the other one
+        assert acts_for_side(session, series, mate) == 1
+        assert acts_for_side(session, series, spare) == 2
+
+        # The team stands on side 2 itself once no player is named for it
+        series.player2_id = None
+        session.flush()
+        assert acts_for_side(session, series, named2) == 2

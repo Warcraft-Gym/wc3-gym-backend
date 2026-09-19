@@ -4,7 +4,7 @@ title: Roles and permissions
 description: Four roles decided by the database and the guild, ownership checked per row, reads open and writes admin-only, and an admin view-as switch.
 resource: ../../../app/api/deps.py
 tags: [auth]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-09-19T00:00:00Z }
 sources:
   - id: deps
     resource: ../../../app/api/deps.py
@@ -30,7 +30,7 @@ Discord grants nothing: the guild owner, a role with the administrator bit and t
 
 # Roles and ownership are two gates
 
-A role is coarse and global. Ownership is checked per row: my profile, my availability, my soft blocks, my series (a player on one side), my fantasy team (the Fantasy Captain), my team's seat this season (a captain). Captain and Fantasy Captain are not roles you borrow; a route checks the seat or the owning row. Name a dependency for what it checks (ownership), not for who usually passes it.
+A role is coarse and global. Ownership is checked per row: my profile, my availability, my soft blocks, a series I act for (the player a side names, a captain of the team that fields that side, or the roster of a side that names no player; an admin acts for either side), my fantasy team (the Fantasy Captain), my team's seat this season (a captain). Captain and Fantasy Captain are not roles you borrow; a route checks the seat or the owning row. Name a dependency for what it checks (ownership), not for who usually passes it.
 
 Before writing a permission, write the user story ("As a member who owns a fantasy team, I place bets for my own team") and derive the check from it.
 
