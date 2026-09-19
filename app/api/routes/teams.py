@@ -17,6 +17,7 @@ from app.api.search import SearchQuery
 from app.core.exceptions import ApiError, BadRequestError, NotFoundError
 from app.models.round_availability import (
     RoundAvailabilityPublic,
+    TeamAvailabilityAllWrite,
     TeamAvailabilityWrite,
 )
 from app.models.team import (
@@ -179,6 +180,34 @@ def set_team_availability(
         data.playday,
         data.available,
         set_by_user_id=caller_id,
+    )
+
+
+@router.put("/events/{event_id}/teams/{team_id}/availability/all", tags=["events"])
+def set_team_availability_all(
+    event_id: int,
+    team_id: int,
+    data: TeamAvailabilityAllWrite,
+    claims: RequireCaptain,
+    service: AvailabilityServiceDep,
+    teams: TeamServiceDep,
+    user_service: UserServiceDep,
+) -> list[RoundAvailabilityPublic]:
+    """Sit a player of the event team out of every round that has not ended.
+
+    A null answer clears those rounds again.
+    """
+    _own_team(claims, team_id, event_id)
+    teams.ensure_event_team(team_id, event_id)
+    if not service.on_roster(team_id, event_id, data.user_id):
+        raise BadRequestError(
+            f"Player {data.user_id} is not on this team in this event"
+        )
+    caller_id = user_service.id_by_discord_id(str(claims["sub"]))
+    if caller_id is None:
+        raise NotFoundError("user_not_found")
+    return service.set_all(
+        data.user_id, event_id, data.available, set_by_user_id=caller_id
     )
 
 

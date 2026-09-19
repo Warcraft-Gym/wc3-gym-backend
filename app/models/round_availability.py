@@ -38,8 +38,11 @@ class RoundAvailabilityPublic(SQLModel):
     user_id: int
     playday: int
     available: bool
-    set_by_user_id: int
+    # Null on a derived row: no player and no captain wrote it
+    set_by_user_id: int | None = None
     set_by_name: str | None = None
+    # No answer stands and the player's blocks cover the whole round window
+    blocked_out: bool = False
 
     @classmethod
     def from_row(cls, row: DBRoundAvailability, set_by_name: str | None) -> Self:
@@ -50,6 +53,11 @@ class RoundAvailabilityPublic(SQLModel):
             set_by_user_id=row.set_by_user_id,
             set_by_name=set_by_name,
         )
+
+    @classmethod
+    def derived(cls, user_id: int, playday: int) -> Self:
+        """A round nobody answered that the player's blocks cover."""
+        return cls(user_id=user_id, playday=playday, available=False, blocked_out=True)
 
 
 class AvailabilityWrite(SQLModel):
@@ -65,3 +73,17 @@ class PlayerAvailabilityWrite(AvailabilityWrite):
 
 class TeamAvailabilityWrite(AvailabilityWrite):
     user_id: int
+
+
+class PlayerAvailabilityAllWrite(SQLModel):
+    """Every round of the event that has not ended. A null clears those rows."""
+
+    season_id: int | None = None
+    available: bool | None = None
+
+
+class TeamAvailabilityAllWrite(SQLModel):
+    """The same, for one player of the captain's team."""
+
+    user_id: int
+    available: bool | None = None

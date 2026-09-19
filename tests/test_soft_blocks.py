@@ -257,6 +257,24 @@ def test_blank_means_open(
     }
 
 
+def test_the_event_zone_moves_the_round_window(
+    client: Client, seeded: dict[str, Any], member: Callable[..., dict[str, str]]
+) -> None:
+    """The free-time read takes the round window of the event's zone: midnight
+    in Auckland on 5 January is 11:00 UTC the day before."""
+    with Session.begin() as session:
+        event = session.get(Season, seeded["season_id"])
+        assert event is not None
+        event.round_end_zone = "Pacific/Auckland"
+
+    body = free_time(client, seeded["series_open_id"], member("2"))
+
+    assert (body["start"], body["end"]) == (
+        "2026-01-04T11:00:00Z",
+        "2026-01-11T11:00:00Z",
+    )
+
+
 def test_a_player_with_blocks_but_no_timezone_counts_as_free(
     client: Client, seeded: dict[str, Any], member: Callable[..., dict[str, str]]
 ) -> None:
@@ -472,7 +490,12 @@ def test_nothing_writes_the_round_answer(
     assert body["hours"] == 0
     assert statements
     assert not [sql for sql in statements if "round_availability" in sql]
-    assert AvailabilityService().for_user(p2, seeded["season_id"]) == []
+    # Round 1 reads as blocked out, derived on the read: no row names a writer
+    rows = AvailabilityService().for_user(p2, seeded["season_id"])
+    assert [
+        (row.playday, row.available, row.blocked_out, row.set_by_user_id)
+        for row in rows
+    ] == [(1, False, True, None)]
 
 
 def test_a_series_with_no_sides_has_no_free_time(

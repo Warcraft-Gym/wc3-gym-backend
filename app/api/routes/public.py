@@ -42,6 +42,7 @@ from app.models.fantasy_team import (
 )
 from app.models.player_history import PlayerHistory
 from app.models.round_availability import (
+    PlayerAvailabilityAllWrite,
     PlayerAvailabilityWrite,
     RoundAvailabilityPublic,
 )
@@ -375,6 +376,29 @@ def set_player_availability(
 
     return availability_service.set(
         user.id, int(season_id), data.playday, data.available, set_by_user_id=user.id
+    )
+
+
+@router.put("/player-availability/all")
+def set_player_availability_all(
+    availability_service: AvailabilityServiceDep,
+    user_service: UserServiceDep,
+    request: Request,
+    credentials: Credentials,
+    data: PlayerAvailabilityAllWrite,
+) -> list[RoundAvailabilityPublic]:
+    """Sit out every round of the season that has not ended, or take it back.
+
+    A null answer clears those rounds, which puts the player back to available.
+    """
+    entry, user = dashboard_player(request, credentials, user_service)
+
+    season_id = data.season_id or entry["season_id"]
+    if not season_id:
+        raise BadRequestError("missing season_id")
+
+    return availability_service.set_all(
+        user.id, int(season_id), data.available, set_by_user_id=user.id
     )
 
 

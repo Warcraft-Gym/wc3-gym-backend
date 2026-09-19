@@ -6,6 +6,7 @@ writer. The seeded season runs four weeks.
 """
 
 from collections.abc import Callable
+from datetime import date
 from typing import Any
 
 import pytest
@@ -15,6 +16,8 @@ from app.core.db import Session
 from app.models.relationships import round_row
 from app.models.round_availability import DBRoundAvailability
 from app.models.season import Season
+from app.models.user import User
+from app.models.user_block import UserBusy
 from app.services.availability import AvailabilityService
 from tests.test_discord_auth import SESSION, stub_clerk
 
@@ -45,6 +48,7 @@ def test_a_player_answers_a_week_and_takes_it_back(
             "available": False,
             "set_by_user_id": player_id,
             "set_by_name": "P1",
+            "blocked_out": False,
         }
     ]
 
@@ -191,6 +195,7 @@ def test_a_captain_answers_for_a_player_of_his_team(
             "available": False,
             "set_by_user_id": seeded["player_ids"][0],
             "set_by_name": "P1",
+            "blocked_out": False,
         }
     ]
 
@@ -250,6 +255,7 @@ def test_the_player_writes_over_his_captains_answer(
             "available": True,
             "set_by_user_id": mate,
             "set_by_name": "P2",
+            "blocked_out": False,
         }
     ]
 
@@ -467,3 +473,302 @@ def test_a_negative_check_in_window_is_refused(
 
     assert created.status_code == 422, created.text
     assert updated.status_code == 422, updated.text
+
+
+def set_event(season_id: int, **fields: object) -> None:
+    """Change the event settings this unit reads."""
+    with Session.begin() as session:
+        season = session.get(Season, season_id)
+        assert season is not None
+        for name, value in fields.items():
+            setattr(season, name, value)
+
+
+def busy(user_id: int, zone: str, first: str, last: str) -> None:
+    """Give the player a zone and block whole days of it."""
+    with Session.begin() as session:
+        user = session.get(User, user_id)
+        assert user is not None
+        user.timezone = zone
+        session.add(
+            UserBusy(
+                user_id=user_id,
+                first_day=date.fromisoformat(first),
+                last_day=date.fromisoformat(last),
+            )
+        )
+
+
+def test_early_check_in_takes_an_answer_before_the_window_opens(
+    client: Client, seeded: dict[str, Any], member: Callable[..., dict[str, str]]
+) -> None:
+    """Round 4 opens on 23 Jan, and the clock stands on 9 Jan."""
+    headers = member()
+
+    assert refuse(client, headers, 4, False) == "Check-in for round 4 opens on 23 Jan."
+
+    set_event(seeded["season_id"], early_checkin=True)
+    assert [row["playday"] for row in write(client, headers, 4, False)] == [4]
+
+
+def test_early_check_in_still_refuses_a_round_that_is_over(
+    client: Client,
+    seeded: dict[str, Any],
+    member: Callable[..., dict[str, str]],
+    checkin_day: Callable[[str], None],
+) -> None:
+    set_event(seeded["season_id"], early_checkin=True)
+    checkin_day("2026-01-19")
+
+    assert refuse(client, member(), 2, False) == "Round 2 is over."
+
+
+def test_the_event_zone_says_when_a_round_ends(
+    client: Client,
+    seeded: dict[str, Any],
+    member: Callable[..., dict[str, str]],
+    checkin_day: Callable[[str], None],
+) -> None:
+    """Round 2 ends on 18 Jan, so at UTC midnight on 19 Jan it is over there and
+    five hours from over in New York."""
+    checkin_day("2026-01-19")
+    set_event(seeded["season_id"], round_end_zone="America/New_York")
+
+    assert [row["playday"] for row in write(client, member(), 2, False)] == [2]
+
+
+def test_blocks_over_a_whole_round_read_as_blocked_out(
+    client: Client, seeded: dict[str, Any], member: Callable[..., dict[str, str]]
+) -> None:
+    """Round 1 runs 5 to 11 January; the answer is derived, never stored."""
+    player_id = seeded["player_ids"][0]
+    busy(player_id, "Europe/London", "2026-01-05", "2026-01-11")
+
+    rows = client.get("/player-series", headers=member()).json()["availability"]
+    assert rows == [
+        {
+            "user_id": player_id,
+            "playday": 1,
+            "available": False,
+            "set_by_user_id": None,
+            "set_by_name": None,
+            "blocked_out": True,
+        }
+    ]
+    with Session() as session:
+        assert (
+            session.get(DBRoundAvailability, (player_id, seeded["season_id"], 1))
+            is None
+        )
+
+
+def test_a_stored_answer_wins_over_the_derived_flag(
+    client: Client, seeded: dict[str, Any], member: Callable[..., dict[str, str]]
+) -> None:
+    headers = member()
+    busy(seeded["player_ids"][0], "Europe/London", "2026-01-05", "2026-01-11")
+
+    rows = write(client, headers, 1, True)
+
+    assert [(row["playday"], row["available"], row["blocked_out"]) for row in rows] == [
+        (1, True, False)
+    ]
+
+
+def test_the_round_window_is_the_events_zone_and_the_blocks_are_the_players(
+    client: Client, seeded: dict[str, Any], member: Callable[..., dict[str, str]]
+) -> None:
+    """Round 1 starts thirteen hours earlier in Auckland than in New York, so a
+    player's own days must reach back a day to cover it."""
+    player_id = seeded["player_ids"][0]
+    set_event(seeded["season_id"], round_end_zone="Pacific/Auckland")
+    busy(player_id, "America/New_York", "2026-01-05", "2026-01-11")
+
+    rows = client.get("/player-series", headers=member()).json()["availability"]
+    assert rows == []
+
+    busy(player_id, "America/New_York", "2026-01-04", "2026-01-04")
+    rows = client.get("/player-series", headers=member()).json()["availability"]
+    assert [(row["playday"], row["blocked_out"]) for row in rows] == [(1, True)]
+
+
+def test_the_team_grid_carries_the_derived_rows(
+    client: Client, seeded: dict[str, Any], captain: dict[str, str]
+) -> None:
+    team_id, season_id = seeded["team_a_id"], seeded["season_id"]
+    mate = seeded["player_ids"][1]
+    busy(mate, "Europe/London", "2026-01-05", "2026-01-18")
+
+    rows = client.get(
+        f"/teams/{team_id}/seasons/{season_id}/availability", headers=captain
+    ).json()
+
+    assert [(row["user_id"], row["playday"], row["blocked_out"]) for row in rows] == [
+        (mate, 1, True),
+        (mate, 2, True),
+    ]
+
+
+def sit_out_all(client: Client, headers: dict[str, str], available: bool | None) -> Any:  # noqa: ANN401  # a JSON body
+    resp = client.put(
+        "/player-availability/all", json={"available": available}, headers=headers
+    )
+    assert resp.status_code == 200, resp.text
+    return resp.json()
+
+
+def test_a_player_sits_out_every_round_left_and_takes_it_back(
+    client: Client, seeded: dict[str, Any], member: Callable[..., dict[str, str]]
+) -> None:
+    """Early check-in is what opens the rounds past the current window."""
+    set_event(seeded["season_id"], early_checkin=True)
+    headers = member()
+
+    rows = sit_out_all(client, headers, False)
+
+    assert [(row["playday"], row["available"]) for row in rows] == [
+        (1, False),
+        (2, False),
+        (3, False),
+        (4, False),
+    ]
+    assert {row["set_by_user_id"] for row in rows} == {seeded["player_ids"][0]}
+    assert sit_out_all(client, headers, None) == []
+
+
+def test_sitting_out_every_round_leaves_the_rounds_that_ended(
+    client: Client,
+    seeded: dict[str, Any],
+    member: Callable[..., dict[str, str]],
+    checkin_day: Callable[[str], None],
+) -> None:
+    """Rounds 1 and 2 are over on 19 January."""
+    set_event(seeded["season_id"], early_checkin=True)
+    checkin_day("2026-01-19")
+
+    rows = sit_out_all(client, member(), False)
+
+    assert [row["playday"] for row in rows] == [3, 4]
+
+
+def test_a_player_without_early_check_in_cannot_sit_out_every_round(
+    client: Client, seeded: dict[str, Any], member: Callable[..., dict[str, str]]
+) -> None:
+    """Round 3 opens on 16 January and the clock stands on the 9th."""
+    resp = client.put(
+        "/player-availability/all", json={"available": False}, headers=member()
+    )
+
+    assert resp.status_code == 403, resp.text
+    assert resp.json() == {
+        "error": "checkin_closed",
+        "message": "Check-in for round 3 opens on 16 Jan.",
+    }
+    assert (
+        AvailabilityService().for_user(seeded["player_ids"][0], seeded["season_id"])
+        == []
+    )
+
+
+def test_a_captain_sits_a_player_out_of_every_round_left(
+    client: Client,
+    seeded: dict[str, Any],
+    captain: dict[str, str],
+    checkin_day: Callable[[str], None],
+) -> None:
+    """The window holds the player only, so the captain needs no early check-in."""
+    team_id, season_id = seeded["team_a_id"], seeded["season_id"]
+    mate = seeded["player_ids"][1]
+    checkin_day("2026-01-07")
+
+    resp = client.put(
+        f"/events/{season_id}/teams/{team_id}/availability/all",
+        json={"user_id": mate, "available": False},
+        headers=captain,
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert [row["playday"] for row in resp.json()] == [1, 2, 3, 4]
+    assert {row["set_by_name"] for row in resp.json()} == {"P1"}
+
+
+def test_a_captain_cannot_sit_out_a_player_of_another_team(
+    client: Client, seeded: dict[str, Any], captain: dict[str, str]
+) -> None:
+    resp = client.put(
+        f"/events/{seeded['season_id']}/teams/{seeded['team_a_id']}/availability/all",
+        json={"user_id": seeded["player_ids"][2], "available": False},
+        headers=captain,
+    )
+
+    assert resp.status_code == 400, resp.text
+    assert "not on this team" in resp.json()["error"]
+
+
+def test_an_event_without_scheduling_refuses_the_bulk_answer(
+    client: Client, seeded: dict[str, Any], member: Callable[..., dict[str, str]]
+) -> None:
+    turn_off_scheduling(seeded["season_id"])
+
+    resp = client.put(
+        "/player-availability/all", json={"available": False}, headers=member()
+    )
+
+    assert resp.status_code == 403, resp.text
+    assert resp.json()["error"] == "scheduling_disabled"
+
+
+def test_an_admin_sits_a_player_out_of_every_round_left(
+    client: Client,
+    seeded: dict[str, Any],
+    member: Callable[..., dict[str, str]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """P3 administers the site, so he reaches a team he captains nothing of."""
+    headers = member("3")
+    monkeypatch.setenv("ADMIN_DISCORD_IDS", "3")
+
+    resp = client.put(
+        f"/events/{seeded['season_id']}/teams/{seeded['team_a_id']}/availability/all",
+        json={"user_id": seeded["player_ids"][1], "available": False},
+        headers=headers,
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert [row["playday"] for row in resp.json()] == [1, 2, 3, 4]
+    assert {row["set_by_user_id"] for row in resp.json()} == {seeded["player_ids"][2]}
+
+
+def test_a_captain_reaches_only_his_own_team_for_the_bulk_answer(
+    client: Client, seeded: dict[str, Any], captain: dict[str, str]
+) -> None:
+    resp = client.put(
+        f"/events/{seeded['season_id']}/teams/{seeded['team_b_id']}/availability/all",
+        json={"user_id": seeded["player_ids"][2], "available": False},
+        headers=captain,
+    )
+
+    assert resp.status_code == 403, resp.text
+    assert resp.json() == {"error": "Not your team"}
+
+
+def test_a_member_cannot_sit_a_player_out_of_every_round(
+    client: Client, seeded: dict[str, Any], member: Callable[..., dict[str, str]]
+) -> None:
+    """P2 captains nothing, so the team route refuses him."""
+    resp = client.put(
+        f"/events/{seeded['season_id']}/teams/{seeded['team_a_id']}/availability/all",
+        json={"user_id": seeded["player_ids"][0], "available": False},
+        headers=member("2"),
+    )
+
+    assert resp.status_code == 403, resp.text
+    assert resp.json() == {"error": "Captains only"}
+
+
+def test_the_bulk_answer_needs_a_session(
+    client: Client, seeded: dict[str, Any]
+) -> None:
+    resp = client.put("/player-availability/all", json={"available": False})
+
+    assert resp.status_code == 401, resp.text

@@ -6,7 +6,7 @@ round_availability: a block is a hint, never the round answer.
 """
 
 from collections.abc import Mapping
-from datetime import UTC, date, datetime, time, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import select
@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session as OrmSession
 from sqlmodel import col
 
 from app.core import free_time
-from app.core.checkin_hint import blocked, zone_of
+from app.core.checkin_hint import blocked, round_window, zone_of
 from app.core.db import Session
 from app.core.exceptions import ApiError, BadRequestError, NotFoundError
 from app.models.relationships import DBEventRound, round_row
@@ -288,28 +288,21 @@ def _utc(value: datetime) -> datetime:
     return value.astimezone(UTC) if value.tzinfo else value.replace(tzinfo=UTC)
 
 
-def _midnight(day: date) -> datetime:
-    return datetime.combine(day, time(), tzinfo=UTC)
-
-
 def _window(
     row: DBEventRound | None,
     event: Season,
     start: datetime | None,
     end: datetime | None,
 ) -> tuple[datetime, datetime]:
-    """The window asked for, else the round's days, else the event's, as whole
-    UTC days. The caller resolves the round: a series generated into a bracket
-    has no fixture, so its round comes through its own round_id."""
+    """The window asked for, else the round's days, else the event's, midnight
+    to midnight in the event's zone. The caller resolves the round: a series
+    generated into a bracket has no fixture, so its round comes through its own
+    round_id."""
     if start is None and end is None:
-        first = row.start_date if row is not None else None
-        last = (row.end_date or first) if row is not None else None
-        if first is None:
-            first, last = event.start_date, event.end_date or event.start_date
-        if first is None:
+        window = round_window(event, row)
+        if window is None:
             raise BadRequestError("The round has no dates; pass start and end")
-        start = _midnight(first)
-        end = _midnight((last or first) + timedelta(days=1))
+        start, end = window
     if start is None or end is None:
         raise BadRequestError("Pass both start and end, or neither")
     start, end = _utc(start), _utc(end)
