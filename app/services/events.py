@@ -1268,7 +1268,7 @@ def race_ratings(
         ).where(
             col(W3CStats.user_id).in_({user_id for user_id, _ in pairs}),
             col(W3CStats.race).in_({Race.from_text(race) for _, race in pairs}),
-            col(W3CStats.mmr).is_not(None),
+            col(W3CStats.mmr) > 0,
             col(W3CStats.wc3_season) > season - SEASONS,
         )
     ).all()

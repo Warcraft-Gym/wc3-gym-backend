@@ -1493,6 +1493,49 @@ def test_a_stage_series_rates_both_sides_on_the_race_it_names(
     assert row["player1"]["w3c_stats"] == []
 
 
+def test_a_stage_row_reads_the_newest_rated_season_of_the_race(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """The list rates a side by the rule the entrant list states for one player.
+
+    The newest stored season that carries a rating wins, and a season that
+    carries none, null or zero, is walked back over.
+    """
+    ids = players(2)
+    with Session.begin() as session:
+        session.add_all(
+            [
+                W3CStats(user_id=ids[0], race=Race.HU, wc3_season=19, mmr=1600),
+                W3CStats(user_id=ids[0], race=Race.HU, wc3_season=20, mmr=1700),
+                W3CStats(user_id=ids[1], race=Race.HU, wc3_season=19, mmr=1400),
+                W3CStats(user_id=ids[1], race=Race.HU, wc3_season=20, mmr=0),
+                W3CStats(user_id=ids[1], race=Race.HU, wc3_season=21, mmr=None),
+            ]
+        )
+    event, (stage,) = cup(2, ids=ids)
+    generate(client, auth_headers, event, stage)
+    row = stage_series(client, event, stage)["series"][0]
+    assert (row["player1_mmr"], row["player2_mmr"]) == (1700, 1400)
+
+
+def test_a_stage_row_reads_no_rating_older_than_the_window(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """The window hangs on the season the app is on, three seasons back."""
+    ids = players(2)
+    with Session.begin() as session:
+        session.add_all(
+            [
+                W3CStats(user_id=ids[0], race=Race.HU, wc3_season=15, mmr=1900),
+                W3CStats(user_id=ids[1], race=Race.HU, wc3_season=23, mmr=1500),
+            ]
+        )
+    event, (stage,) = cup(2, ids=ids)
+    generate(client, auth_headers, event, stage)
+    row = stage_series(client, event, stage)["series"][0]
+    assert (row["player1_mmr"], row["player2_mmr"]) == (None, 1500)
+
+
 def test_a_side_with_no_stats_on_its_race_is_rated_null(
     client: Client, auth_headers: dict[str, str]
 ) -> None:

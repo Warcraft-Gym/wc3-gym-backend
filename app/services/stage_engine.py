@@ -887,7 +887,9 @@ def _fill_mmrs(session: OrmSession, rows: Sequence[StageSeriesRow]) -> None:
     """Rate both sides of every row on the race the row names, in two reads.
 
     The reduced player carries no W3C stats, so the stage page reads the
-    rating off the row. `derived.fill_series` has named the races already.
+    rating off the row, and `derived.fill_series` has named the races already.
+    The reads are three while the W3Champions season setting is unset, because
+    the rule then asks the stats table for the newest stored season.
     """
     # app.services.events imports this module, so its rule comes in on the call
     from app.services.events import race_ratings

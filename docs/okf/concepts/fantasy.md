@@ -4,7 +4,7 @@ title: Fantasy league
 description: A member drafts players, one team and one race for a season, places bets on series, and scores six derived parts.
 resource: ../../../app/core/fantasy.py
 tags: [fantasy]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-19T00:00:00Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-09-19T13:36:34Z }
 sources:
   - id: rule
     resource: ../../../app/core/fantasy.py
