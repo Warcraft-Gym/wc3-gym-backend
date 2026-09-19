@@ -69,7 +69,7 @@ class PairMeeting(SQLModel):
     """One finished series the two players played, whatever the event."""
 
     series_id: int
-    # When it was played; the round's first day when the series carries no time
+    # When it was played; null when the series carries no time
     date_time: datetime | None = None
     # "{league short name} - {event name}", the event name alone without a league
     event_label: str | None = None

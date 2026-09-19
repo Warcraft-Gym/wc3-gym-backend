@@ -9,7 +9,7 @@ size of the two rosters.
 
 import json
 from collections.abc import Callable
-from datetime import UTC, datetime, time, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 
 import pytest
@@ -21,7 +21,7 @@ from app.core.db import Session
 from app.models.base import ident
 from app.models.enums import Race, StageFormat
 from app.models.event_stage import MAX_MMR_DIFFERENCE, EventStage
-from app.models.relationships import DBUserSeasonSignup
+from app.models.relationships import DBEventRound, DBUserSeasonSignup
 from app.models.season import Season
 from app.models.series import Series
 from app.models.team import Team
@@ -222,6 +222,26 @@ def test_a_pair_carries_hours_and_the_head_to_head_only_when_they_met(
     assert met["hours"] == pytest.approx(7 * 24 - 12)
 
 
+def test_the_head_to_head_reads_in_pairing_order_whoever_was_stored_first(
+    client: Client, board_league: dict[str, Any], captain: dict[str, str]
+) -> None:
+    """The same 2-1 win of P1 over P3, stored with P3 as player1."""
+    players = board_league["player_ids"]
+    with Session() as session:
+        series = session.get(Series, board_league["series_played_id"])
+        assert series is not None
+        series.player1_id, series.player2_id = players[2], players[0]
+        series.player1_score, series.player2_score = 1, 2
+        session.add(series)
+        session.commit()
+    body = client.get(
+        f"/matches/{board_league['match_id']}/draft-board", headers=captain
+    ).json()
+    pairs = {(row["player1_id"], row["player2_id"]): row for row in body["pairs"]}
+    met = pairs[(players[0], players[2])]
+    assert (met["wins"], met["losses"]) == (1, 0)
+
+
 def test_only_a_captain_of_the_match_or_an_admin_reads_the_board(
     client: Client,
     board_league: dict[str, Any],
@@ -327,8 +347,7 @@ def test_the_meetings_read_answers_the_series_time_mmr(
         resp = client.get(
             f"/users/{players[0]}/meetings/{players[2]}", headers=auth_headers
         )
-    # the meetings and both series-time ratings are one statement; the rest is
-    # the guard resolving the caller
+    # one statement for the meetings and both ratings, the rest is the guard
     assert tally[0] <= 3, tally[0]
     assert resp.status_code == 200, resp.text
     rows = resp.json()
@@ -337,8 +356,7 @@ def test_the_meetings_read_answers_the_series_time_mmr(
     assert one["event_label"] == "SL - Season 1"
     assert (one["player1_score"], one["player2_score"]) == (2, 1)
     assert one["player1_race"] == "HU"
-    # the seeded series starts 2026-01-07 19:00; P1's last ladder game before
-    # it closed at 1511, and P3 has no ladder row at all
+    # P1's last ladder game before the 2026-01-07 19:00 series closed at 1511
     assert one["player1_mmr"] == 1511
     assert one["player2_mmr"] is None
 
@@ -349,7 +367,7 @@ def test_the_meetings_read_answers_the_series_time_mmr(
     assert (flipped[0]["player1_score"], flipped[0]["player2_score"]) == (1, 2)
 
 
-def test_a_meeting_with_no_time_is_dated_by_its_round(
+def test_a_meeting_with_no_time_is_rated_against_its_round(
     client: Client, board_league: dict[str, Any], auth_headers: dict[str, str]
 ) -> None:
     """A series the admins never timed still rates: the round's first day is
@@ -360,20 +378,33 @@ def test_a_meeting_with_no_time_is_dated_by_its_round(
         assert series is not None
         series.date_time = None
         session.add(series)
+        # round 1 opens the day after the twelve ladder rows of 2026-01-06
+        round_one = session.scalars(
+            select(DBEventRound).where(
+                col(DBEventRound.season_id) == board_league["season_id"],
+                col(DBEventRound.number) == 1,
+            )
+        ).one()
+        round_one.start_date = date(2026, 1, 7)
+        session.add(round_one)
         session.commit()
     rows = client.get(
         f"/users/{players[0]}/meetings/{players[2]}", headers=auth_headers
     ).json()
-    # round 1 opens 2026-01-05, before every ladder row, so there is no rating
+    # the row carries no date, and the round's first day rates it at 1511
     assert rows[0]["date_time"] is None
-    assert rows[0]["player1_mmr"] is None
+    assert rows[0]["player1_mmr"] == 1511
 
 
 def test_the_meetings_read_needs_a_signed_in_member(
-    client: Client, board_league: dict[str, Any]
+    client: Client,
+    board_league: dict[str, Any],
+    member: Callable[..., dict[str, str]],
 ) -> None:
     players = board_league["player_ids"]
-    assert client.get(f"/users/{players[0]}/meetings/{players[2]}").status_code == 401
+    url = f"/users/{players[0]}/meetings/{players[2]}"
+    assert client.get(url).status_code == 401
+    assert client.get(url, headers=member("2")).status_code == 200
 
 
 def test_a_pair_that_never_met_reads_empty(

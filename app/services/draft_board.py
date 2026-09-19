@@ -337,8 +337,8 @@ def _meeting_rows(session: OrmSession, user_a: int, user_b: int) -> Sequence[Row
 
     One statement. The two ratings are ranked reads of the ladder rows that
     close before the series, so neither the ladder rows nor an extra round
-    trip per meeting reach the caller. A series with no time is dated by the
-    first day of its round.
+    trip per meeting reach the caller. A series with no time reads the ladder
+    against the first day of its round, and sorts last where it has neither.
     """
     signup_a, signup_b = aliased(DBUserSeasonSignup), aliased(DBUserSeasonSignup)
     first = col(Series.player1_id) == user_a
@@ -405,7 +405,7 @@ def _meeting_rows(session: OrmSession, user_a: int, user_b: int) -> Sequence[Row
             _mmr_at(user_b, met.c.race_b, met.c.instant).label("mmr_b"),
         )
         .join(Season, col(Season.id) == met.c.event_id, isouter=True)
-        .order_by(met.c.instant.desc(), met.c.series_id.desc())
+        .order_by(met.c.instant.desc().nulls_last(), met.c.series_id.desc())
         .limit(MEETINGS_LIMIT)
     ).all()
 

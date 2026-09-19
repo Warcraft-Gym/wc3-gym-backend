@@ -4,7 +4,7 @@ title: GNL season
 description: Six drafted teams, five weekly rounds, one fixture per team pairing with captain-drafted series, and a phase that is derived from the series.
 resource: ../../../app/models/season.py
 tags: [events]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-19T15:30:00Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-09-19T17:00:00Z }
 sources:
   - id: season-model
     resource: ../../../app/models/season.py
@@ -80,7 +80,7 @@ Per player of both rosters it carries the race he registered the event on, his W
 
 Per pairing of one player of each team it carries only what a client cannot work out: the hours both have open across the round, and, for two who have met, the score in the order of the pairing and the event they last met in. The MMR difference is not sent; the client subtracts the two ratings. The board also carries the captain-draft stage's largest MMR difference, the event's `series_per_round`, and how many series the fixture has published and how many drafts stand open on it.
 
-`GET /users/{user_a}/meetings/{user_b}` is the detail read behind one pairing, for a signed-in member: every finished series the two played, newest first, at most twenty, each with its date, its league and event, the score in the order of the path, the race each side played and the MMR each held going into it. That MMR is derived on read: `mmr_after` of the last rated ladder game on the race played, before the series began. A series with no time is dated by the first day of its round, and a side with no such game reads null. No column holds it. See [w3c_ladder_matches](../data/tables/w3c_ladder_matches.md).
+`GET /users/{user_a}/meetings/{user_b}` is the detail read behind one pairing, for a signed-in member: every finished series the two played, newest first, at most twenty, each with its date, its league and event, the score in the order of the path, the race each side played and the MMR each held going into it. The date is the series time and is null where the series carries none. That MMR is derived on read: `mmr_after` of the last rated ladder game on the race played, before the series began; a series with no time reads the ladder against the first day of its round, and a side with no such game reads null. No column holds it. See [w3c_ladder_matches](../data/tables/w3c_ladder_matches.md).
 
 Both reads answer one caller, so both set `Cache-Control: private` and no shared cache holds a copy. See [the API overview](../api/overview.md).
 
