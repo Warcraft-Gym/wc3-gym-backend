@@ -1,7 +1,7 @@
 import logging
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 
 from app.api.deps import (
     DraftSeriesServiceDep,
@@ -13,14 +13,18 @@ from app.api.deps import (
 )
 from app.core.db import Session
 from app.core.exceptions import ApiError
+from app.models.draft_board import DraftBoard
 from app.models.draft_series import (
     DraftSeriesCreate,
     DraftSeriesPublic,
     DraftSeriesUpdate,
 )
 from app.models.series import SeriesPublic
-from app.services import draft_series
+from app.services import draft_board, draft_series
 from app.services.matches import MatchService
+
+# The board answers one caller's match, so no shared cache may hold it
+PRIVATE_CACHE = "private, max-age=30"
 
 logger = logging.getLogger(__name__)
 
@@ -132,6 +136,27 @@ def get_draft_series_by_match(
 ) -> list[DraftSeriesPublic]:
     """Return one page of the draft series of a match, at most 500."""
     return service.get_by_match_id(match_id, limit=limit, offset=offset)
+
+
+@router.get("/matches/{match_id}/draft-board", tags=["events"])
+def get_draft_board(
+    match_id: int,
+    matches: MatchServiceDep,
+    claims: RequireCaptain,
+    response: Response,
+) -> DraftBoard:
+    """Every figure the draft board of one match draws, in one read.
+
+    A captain of either team of the match reads it, and an admin reads any.
+    It answers figures, never rows: per player the signup race, the rating on
+    it, the games rule, the record against each race and the recent form; per
+    pairing the shared hours of the round and the head-to-head score of the
+    two. The MMR difference is not sent; the browser subtracts.
+    """
+    _own_match(claims, match_id, matches)
+    # the answer is this caller's, so no shared cache may store a copy
+    response.headers["Cache-Control"] = PRIVATE_CACHE
+    return draft_board.board(match_id)
 
 
 @router.delete(

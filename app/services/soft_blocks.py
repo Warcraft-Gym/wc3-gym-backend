@@ -139,7 +139,7 @@ class SoftBlockService:
         return FreeTimePublic(
             start=start,
             end=end,
-            hours=_hours(ranges),
+            hours=free_hours(ranges),
             ranges=[FreeRange(start=lo, end=hi) for lo, hi in ranges],
         )
 
@@ -177,7 +177,7 @@ class SoftBlockService:
                 )
             start, end = _window(round_, event, None, None)
             ranges = shared_free(session, user_a, user_b, start, end)
-        return PairFreeTimePublic(hours=_hours(ranges))
+        return PairFreeTimePublic(hours=free_hours(ranges))
 
 
 def shared_free(
@@ -203,8 +203,14 @@ def shared_free(
     return free_time.free(start, end, *both)
 
 
-def _hours(ranges: list[free_time.Interval]) -> float:
+def free_hours(ranges: list[free_time.Interval]) -> float:
+    """The hours a set of ranges covers, the one figure a pair read answers."""
     return sum((hi - lo).total_seconds() for lo, hi in ranges) / 3600
+
+
+def round_window(row: DBEventRound | None, event: Season) -> tuple[datetime, datetime]:
+    """The whole UTC days one round covers, else the event's, capped at 31."""
+    return _window(row, event, None, None)
 
 
 def _pair_seated(

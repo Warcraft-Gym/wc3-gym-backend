@@ -5,16 +5,18 @@ from fastapi import APIRouter, Depends, Query, Response
 
 from app.api.deps import (
     LadderServiceDep,
+    RequireMember,
     SoftBlockServiceDep,
     UserServiceDep,
     require_admin,
 )
 from app.api.search import SearchQuery
+from app.models.draft_board import PairMeeting
 from app.models.player_history import PlayerHistory
 from app.models.user import UserCreate, UserListPublic, UserPublic, UserUpdate
 from app.models.user_block import SoftBlocksPublic
 from app.models.w3c_ladder_match import LadderPlayer
-from app.services import player_history
+from app.services import draft_board, player_history
 
 logger = logging.getLogger(__name__)
 
@@ -129,3 +131,20 @@ def get_user_ladder(
 def get_user_history(user_id: int) -> PlayerHistory:
     """Every GNL season this player took part in, and every opponent they met."""
     return player_history.history(user_id)
+
+
+@router.get("/users/{user_a}/meetings/{user_b}")
+def get_pair_meetings(
+    user_a: int,
+    user_b: int,
+    response: Response,
+    claims: RequireMember,
+) -> list[PairMeeting]:
+    """Every finished series the two players played, newest first, at most 20.
+
+    Each meeting carries its date, its event, the score in the order of the
+    path, the race each side played and the MMR each held going into it.
+    """
+    # the answer is one member's detail read, so no shared cache may store it
+    response.headers["Cache-Control"] = "private, max-age=30"
+    return draft_board.meetings(user_a, user_b)
