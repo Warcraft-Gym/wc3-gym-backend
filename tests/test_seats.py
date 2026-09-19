@@ -138,7 +138,10 @@ def test_the_availability_guard_reads_the_pair_not_the_team(
 
 
 def test_the_draft_guard_reads_the_pair_not_the_team(
-    client: Client, seeded: dict[str, Any], p1: dict[str, str]
+    client: Client,
+    seeded: dict[str, Any],
+    p1: dict[str, str],
+    auth_headers: dict[str, str],
 ) -> None:
     """P1 captains Alpha in the later season only, so the seeded match is not his."""
     later = _add_season("Season next", complete=False, seeded=seeded)
@@ -154,6 +157,13 @@ def test_the_draft_guard_reads_the_pair_not_the_team(
     assert refused.status_code == 403, refused.text
 
     _captain(seeded["team_a_id"], seeded["season_id"], seeded["player_ids"][0])
+    # The seeded fixture already holds the two series of its round
+    widened = client.put(
+        f"/events/{seeded['season_id']}",
+        json={"series_per_round": 6},
+        headers=auth_headers,
+    )
+    assert widened.status_code == 200, widened.text
     allowed = client.post("/draft-series", json=body, headers=p1)
     assert allowed.status_code == 201, allowed.text
 
