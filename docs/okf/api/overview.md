@@ -4,7 +4,7 @@ title: API overview
 description: Seventeen route modules under one FastAPI app, one error envelope, paging with a total header, a search language, and OpenAPI at /docs.
 resource: ../../../app/api/main.py
 tags: [api]
-generated: { by: openai/gpt-6, at: 2026-09-19T19:00:00Z }
+generated: { by: openai/gpt-6, at: 2026-09-19T22:00:00Z }
 sources:
   - id: router
     resource: ../../../app/api/main.py
@@ -25,15 +25,15 @@ sources:
 | Module | Prefix | Area |
 |---|---|---|
 | `login.py` | `/login`, `/me` | the admin token login and the session answer |
-| `users.py` | `/users` | players, bans, blocks, W3Champions sync, history |
+| `users.py` | `/users` | players, bans, blocks, W3Champions sync, history, the meetings of two players |
 | `teams.py` | `/leagues/{league_id}/teams`, `/events/{event_id}/teams`, `/teams` | league-owned teams, event rosters, captains, availability grid, logos; deprecated unscoped aliases |
 | `seasons.py` | `/events/{event_id}`, `/seasons`, `/achievements` | GNL maps, rounds, signups, ladder reads and badges; deprecated season aliases |
 | `leagues.py` | `/leagues` | leagues |
 | `events.py` | `/events`, `/me/events` | event CRUD and search, entrants, divisions, stages, standings |
 | `matches.py` | `/matches` | fixtures |
 | `series.py` | `/series`, `/events/{event_id}/series`, `/casts` | series, event series searches, result kind, places, sides, casts |
-| `draft_series.py` | `/draft-series` | a captain's proposed series, and the Ready, seen and MMR state of one fixture's draft |
-| `public.py` | `/signup`, `/player-series`, `/player-availability`, `/player-blocks`, `/player-history`, `/user-info`, `/fantasy-team`, `/fantasy-bet` | a member's own flows |
+| `draft_series.py` | `/draft-series`, `/matches/{match_id}/draft-board` | a captain's proposed series, the Ready, seen and MMR state of one fixture's draft, and every figure its draft board draws |
+| `public.py` | `/signup`, `/player-series`, `/player-availability`, `/player-blocks`, `/player-history`, `/user-info`, `/fantasy-team`, `/fantasy-bet`, `/events/{event_id}/rounds` | a member's own flows, and a captain's read of the hours a pair shares in a round |
 | `maps.py` | `/maps` | maps and the ladder import |
 | `fantasy.py` | `/fantasy`, `/events/{event_id}/fantasy` | admin fantasy management and event-scoped reads, tiers and breakdowns |
 | `koth.py`, `koth_nights.py` | `/koth` | nights and the old KOTH payloads |
@@ -54,7 +54,7 @@ Every error answers `{"error": "<text>"}` with the status: 404 `NotFoundError`, 
 
 # Paging and sorting
 
-List routes take `limit` (1 to 500, default 500) and `offset`. Seven routes carry the total row count in `X-Total-Count`, which CORS exposes. Three routes take `sort` and `order`; a name outside their table answers 422. Without `sort` a route keeps its default order, pinned per route by `tests/test_paging.py`. List answers are reduced: every key stays and nested collections answer `[]`; the single-row routes keep the full graph.
+List routes take `limit` (1 to 500, default 500) and `offset`. Seven routes carry the total row count in `X-Total-Count`, which CORS exposes. Three routes take `sort` and `order`; a name outside their table answers 422. Without `sort` a route keeps its default order, pinned per route by `tests/test_paging.py`. List answers are reduced: every key stays and nested collections answer `[]`; the single-row routes keep the full graph. A row of a series list (the season, round, global and player series reads, and the stage series read) carries no W3Champions stats, so it names the rating of each side on the race it plays in `player1_mmr` and `player2_mmr`: the newest stored W3Champions season that carries a rating above 0 on that race, three seasons back and no further, null otherwise; on every other series payload the two keys read null. A whole list is rated in two statements, three while the W3Champions season setting is unset, and none per row.
 
 # The search language
 

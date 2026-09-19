@@ -17,6 +17,10 @@ answer, one for the sum of the series on that system. Both are constant.
 It also names the race every player registered on for the season of its
 match, one more statement that does not grow with the answer.
 
+A reduced series list rates both sides on the race each row names, which
+costs two more statements, three while the W3Champions season setting is
+unset. Neither part grows with the number of rows in the answer.
+
 A team answer derives its standings the same way, and the two statements it
 adds do not grow with the number of teams in the answer. One more statement
 names the event and the league of every season the answer holds, and one more
@@ -147,9 +151,14 @@ def test_get_series_costs_fourteen_statements(league: dict[str, Any]) -> None:
     assert tally[0] == 14
 
 
-def test_search_for_season_costs_six_statements(league: dict[str, Any]) -> None:
+def test_search_for_season_costs_nine_statements(league: dict[str, Any]) -> None:
     """The season list is reduced: one statement for the casts, one for the veto
-    steps, none per player and none per series."""
+    steps, none per player and none per series.
+
+    The reduced player carries no stats, so the list rates both sides of every
+    row itself: three statements while the W3Champions season setting is unset,
+    two once it names a season, and none per row.
+    """
     service = SeriesService()
     query = QueryUtil.parse_query("player1_id > 0")
     with count_statements() as tally:
@@ -158,7 +167,7 @@ def test_search_for_season_costs_six_statements(league: dict[str, Any]) -> None:
     assert series_list[0].player1 is not None
     assert series_list[0].player1.name
     assert series_list[0].player1.w3c_stats == []
-    assert tally[0] == 6
+    assert tally[0] == 9
 
 
 def test_the_season_record_costs_two_statements(league: dict[str, Any]) -> None:

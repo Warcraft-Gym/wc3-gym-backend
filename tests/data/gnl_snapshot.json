@@ -151,6 +151,7 @@
           "youtube_url": null
         },
         "player1_id": 1,
+        "player1_mmr": null,
         "player1_off_race": null,
         "player1_pick_map": null,
         "player1_points": 2,
@@ -182,6 +183,7 @@
           "youtube_url": null
         },
         "player2_id": 3,
+        "player2_mmr": null,
         "player2_off_race": null,
         "player2_pick_map": null,
         "player2_points": 1,
@@ -400,6 +402,7 @@
         "youtube_url": null
       },
       "player1_id": 1,
+      "player1_mmr": null,
       "player1_off_race": null,
       "player1_pick_map": null,
       "player1_points": 2,
@@ -431,6 +434,7 @@
         "youtube_url": null
       },
       "player2_id": 3,
+      "player2_mmr": null,
       "player2_off_race": null,
       "player2_pick_map": null,
       "player2_points": 1,
@@ -526,6 +530,7 @@
         "youtube_url": null
       },
       "player1_id": 2,
+      "player1_mmr": null,
       "player1_off_race": null,
       "player1_pick_map": null,
       "player1_points": null,
@@ -557,6 +562,7 @@
         "youtube_url": null
       },
       "player2_id": 4,
+      "player2_mmr": null,
       "player2_off_race": null,
       "player2_pick_map": null,
       "player2_points": null,
