@@ -50,7 +50,7 @@ A player who played another race than their signup race in one series records it
 
 # Replays
 
-Replays live in a Cloudflare R2 bucket, one file per game. The browser uploads straight to the bucket on a presigned URL from `POST /player-series/{id}/replays/{game}/upload-url`, so no file passes through a Vercel function. A slot row is written only once the file is there, starts like a replay and is under the size cap. Keys start with the deployment environment, so two builds never share a file. A deleted series drops its files after the commit. The S18 replays from before the app are not recovered, by decision.
+Replays live in a Cloudflare R2 bucket, one file per game. The browser uploads straight to the bucket on a presigned URL from `POST /player-series/{id}/replays/{game}/upload-url`, so no file passes through a Vercel function. The same rule answers the replay routes as the result: whoever acts for a side of the series uploads a file and replaces one. A slot row is written only once the file is there, starts like a replay and is under the size cap. Keys start with the deployment environment, so two builds never share a file. A deleted series drops its files after the commit. The S18 replays from before the app are not recovered, by decision.
 
 # Casts
 

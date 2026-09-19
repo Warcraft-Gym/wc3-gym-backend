@@ -141,3 +141,28 @@ def test_an_admin_writes_the_series_on_the_player_route(
 
     assert resp.status_code == 200, resp.text
     assert resp.json()["date_time"].startswith("2026-01-09T21:00:00")
+
+
+def test_an_admin_uploads_a_replay_and_reports_the_result(
+    client: Client,
+    seeded: dict[str, Any],
+    auth_headers: dict[str, str],
+    replay_uploaded: Callable[..., None],
+) -> None:
+    """The replay routes ask the same rule, so the admin token reaches them too."""
+    series_id = seeded["series_open_id"]
+    link = client.post(
+        f"/player-series/{series_id}/replays/1/upload-url", headers=auth_headers
+    )
+    assert link.status_code == 200, link.text
+
+    replay_uploaded(series_id, 1, 2)
+    resp = client.put(
+        f"/player-series/{series_id}",
+        headers=auth_headers,
+        json={"action": "score_updated", "player1_score": 2, "player2_score": 0},
+    )
+
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert (body["player1_score"], body["player2_score"]) == (2, 0)

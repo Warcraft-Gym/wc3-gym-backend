@@ -100,7 +100,7 @@ class SeriesVetoService:
 
 
 def _series(session: OrmSession, series_id: int, user_id: int | None) -> Series:
-    """The series, if the viewer plays it. A null user is an admin."""
+    """The series, for whoever acts for a side of it. A null user is an admin."""
     series = session.get(Series, series_id)
     if not series:
         raise NotFoundError(f"Series not found by id: {series_id}")

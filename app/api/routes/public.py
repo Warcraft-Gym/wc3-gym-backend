@@ -517,13 +517,16 @@ async def update_player_series(
 def _own_series(
     series_service: SeriesService, series_id: int, user_id: int | None
 ) -> SeriesPublic:
-    """The series, for whoever acts for one of its two sides."""
+    """The series, for whoever acts for one of its two sides. A null user is an
+    admin, who acts for either side."""
     series = series_service.get(series_id)
     if not series:
         raise NotFoundError("series_not_found")
     with Session.begin() as session:
         row = session.get(Series, series_id)
-        if row is None or acts_for_side(session, row, user_id) is None:
+        if row is None or (
+            user_id is not None and acts_for_side(session, row, user_id) is None
+        ):
             raise ApiError(403, {"error": "not_authorized_for_this_series"})
     return series
 
@@ -532,11 +535,15 @@ def _own_series(
 def replay_upload_url(
     series_id: int,
     game_no: int,
-    player: DashboardPlayer,
     series_service: SeriesServiceDep,
+    user_service: UserServiceDep,
+    request: Request,
+    credentials: Credentials,
 ) -> dict[str, str]:
-    """Where the browser puts one game's replay, for either player of the series."""
-    _own_series(series_service, series_id, player[1].id)
+    """Where the browser puts one game's replay, for whoever acts for a side of
+    the series."""
+    viewer, _ = _series_viewer(request, credentials, user_service)
+    _own_series(series_service, series_id, viewer)
     return {"url": replays.upload_url(series_id, game_no)}
 
 
@@ -544,28 +551,32 @@ def replay_upload_url(
 def replace_replay(
     series_id: int,
     game_no: int,
-    player: DashboardPlayer,
     series_service: SeriesServiceDep,
+    user_service: UserServiceDep,
+    request: Request,
+    credentials: Credentials,
 ) -> SeriesReplayPublic:
-    """Point one slot at the file just uploaded. The first report confirms every game itself;
-    this replaces one of them afterwards."""
-    series = _own_series(series_service, series_id, player[1].id)
+    """Point one slot at the file just uploaded, for whoever acts for a side of
+    the series. The first report confirms every game itself; this replaces one
+    of them afterwards."""
+    viewer, uploader = _series_viewer(request, credentials, user_service)
+    series = _own_series(series_service, series_id, viewer)
     if series.player1_score is None or series.player2_score is None:
         raise BadRequestError("Report the result first")
     played = series.player1_score + series.player2_score
     if not 1 <= game_no <= played:
         raise BadRequestError(f"This series had {played} games")
-    rows = replays.confirm(series_id, [game_no], player[1].id)
+    rows = replays.confirm(series_id, [game_no], uploader)
     return next(row for row in rows if row.game_no == game_no)
 
 
-def _veto_viewer(
+def _series_viewer(
     request: Request,
     credentials: Credentials,
     user_service: UserServiceDep,
 ) -> tuple[int | None, int | None]:
-    """The player behind the request, or null for an admin, who edits either
-    side; and the player row to record as the enterer, if the account has one."""
+    """The player behind the request, or null for an admin, who acts for either
+    side; and the player row to record as the author, if the account has one."""
     if credentials is not None:
         claims = require_login(request, credentials)
         if claims.get("role") == "admin" or claims.get("sub") == "admin":
@@ -590,7 +601,7 @@ def get_player_series_veto(
     credentials: Credentials,
 ) -> SeriesVetoPublic:
     """The map veto board of a series, read by either player or by an admin."""
-    viewer, player = _veto_viewer(request, credentials, user_service)
+    viewer, player = _series_viewer(request, credentials, user_service)
     return veto_service.board(series_id, viewer, player)
 
 
@@ -607,7 +618,7 @@ def set_player_series_veto(
     """Take the next step of the veto, or take back your own last one. An admin
     enters the step for whichever side is next and takes back any last step.
     The bot's post of the series, if any, is edited after the answer."""
-    viewer, entered_by = _veto_viewer(request, credentials, user_service)
+    viewer, entered_by = _series_viewer(request, credentials, user_service)
     board = veto_service.take(series_id, viewer, data.action, data.map_id, entered_by)
     background.add_task(discord_posts.refresh_series, series_id)
     return board
