@@ -249,8 +249,7 @@ def test_publishing_a_replacement_swaps_the_series_in_one_action(
     )
     assert denied.status_code == 403, denied.text
 
-    # The draft row goes before the series that cascades it away: a delete of
-    # the series first leaves the draft delete matching no row, which warns
+    # A series delete first cascades the draft away and the draft delete warns
     with warnings.catch_warnings():
         warnings.filterwarnings("error", message="DELETE statement", category=SAWarning)
         published = client.post(
@@ -370,6 +369,12 @@ def test_a_ready_mark_belongs_to_the_own_team_and_clears_on_a_change(
     )
     assert admin.status_code == 200, admin.text
     assert all(row["ready_at"] is not None for row in admin.json()["teams"])
+    # An admin token holds no player row, so its mark stands on ready_at alone
+    marked_by_admin = next(
+        row for row in admin.json()["teams"] if row["team_id"] == draft["team_b"]
+    )
+    assert marked_by_admin["ready_by_user_id"] is None
+    assert marked_by_admin["ready_at"] is not None
 
     state = f"/draft-series/match/{draft['match_id']}/state"
 
@@ -508,12 +513,16 @@ def test_the_working_mmr_difference_stands_in_front_of_the_stage(
     assert plain.status_code == 403, plain.text
 
 
-def test_a_plain_member_reads_no_draft_state(
-    client: Client, draft: dict[str, Any]
+def test_any_captain_reads_the_draft_state_and_a_plain_member_does_not(
+    client: Client, draft: dict[str, Any], gamma: dict[str, Any]
 ) -> None:
-    state = client.get(
-        f"/draft-series/match/{draft['match_id']}/state", headers=draft["plain"]
-    )
+    """The read is open to every captain; only a seated team carries a stamp."""
+    path = f"/draft-series/match/{draft['match_id']}/state"
+    state = client.get(path, headers=draft["plain"])
 
     assert state.status_code == 403, state.text
     assert state.json() == {"error": "Captains only"}
+
+    outsider = client.get(path, headers=gamma["headers"])
+    assert outsider.status_code == 200, outsider.text
+    assert outsider.json()["seen_at"] is None

@@ -210,8 +210,10 @@ def _exists(
 
 
 def _refuse_replace(session: OrmSession, series_id: int) -> None:
-    """The delete path takes the booked time, the veto and the fantasy rows with
-    the series; a result or a replay is never thrown away."""
+    """The delete path drops the booked time, the veto and the fantasy rows.
+
+    A series that holds a result or a replay is never thrown away.
+    """
     row = session.get(Series, series_id)
     if row is None:
         raise NotFoundError("Series not found")
