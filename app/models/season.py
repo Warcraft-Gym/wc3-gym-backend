@@ -35,6 +35,7 @@ from app.models.types import (
     EnumValue,
     IsoDate,
     KnownScoreSystem,
+    KnownTimeZone,
     LenientDate,
     MapRules,
     NoneToList,
@@ -167,8 +168,18 @@ class Season(SeasonBase, DBModel, table=True):
     starts_at: Annotated[datetime | None, AwareUTC] = Field(
         default=None, sa_type=UTCDateTime
     )
+    # On: a player may answer a round's check-in before its window opens
+    early_checkin: bool = Field(
+        default=False, sa_column_kwargs={"server_default": false()}
+    )
+    # IANA name; a round of this event ends at midnight in this zone
+    round_end_zone: Annotated[str | None, KnownTimeZone] = Field(
+        default=None, max_length=64
+    )
     # Eligibility bounds. They warn on the entrant row and never refuse a signup.
     min_games: int | None = None
+    # How many of the newest W3C seasons min_games counts over; null counts them all
+    min_games_seasons: int | None = None
     mmr_max: int | None = None
     entrant_cap: int | None = None
     # Where the event is played, as the entrants read it
@@ -538,9 +549,15 @@ class EventPublic(SQLModel):
     stream_url: str | None = None
     map_rules: Annotated[str | None, MapRules] = None
     min_games: int | None = None
+    # How many of the newest W3C seasons min_games counts over; null counts them all
+    min_games_seasons: int | None = None
     mmr_max: int | None = None
     entrant_cap: int | None = None
     checkin_days: int | None = None
+    # On: a player may answer a round's check-in before its window opens
+    early_checkin: bool = False
+    # IANA name; a round of this event ends at midnight in this zone
+    round_end_zone: str | None = None
     # How many series one fixture holds, and a fixture pairs two team
     # entrants, so it reads only on a team event.
     series_per_round: int = 1
@@ -594,11 +611,19 @@ class EventCreate(SQLModel):
     # On, a player may enter once per race; each row seeds on its own race
     multi_entry: bool = False
     checkin_days: int | None = Field(default=3, ge=0)
+    # On: a player may answer a round's check-in before its window opens
+    early_checkin: bool = False
+    # IANA name; a round of this event ends at midnight in this zone
+    round_end_zone: Annotated[str | None, KnownTimeZone] = Field(
+        default=None, max_length=64
+    )
     region: str | None = None
     page_url: str | None = None
     stream_url: str | None = None
     map_rules: Annotated[str | None, MapRules] = None
     min_games: int | None = None
+    # How many of the newest W3C seasons min_games counts over; null counts them all
+    min_games_seasons: int | None = Field(default=None, ge=1)
     mmr_max: int | None = None
     entrant_cap: int | None = None
     # How many series one fixture holds, and a fixture pairs two team
@@ -634,11 +659,16 @@ class EventUpdate(SQLModel):
     checkin_enabled: bool | None = None
     multi_entry: bool | None = None
     checkin_days: int | None = Field(default=None, ge=0)
+    early_checkin: bool | None = None
+    round_end_zone: Annotated[str | None, KnownTimeZone] = Field(
+        default=None, max_length=64
+    )
     region: str | None = None
     page_url: str | None = None
     stream_url: str | None = None
     map_rules: Annotated[str | None, MapRules] = None
     min_games: int | None = None
+    min_games_seasons: int | None = Field(default=None, ge=1)
     mmr_max: int | None = None
     entrant_cap: int | None = None
     series_per_round: int | None = None

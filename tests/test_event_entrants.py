@@ -396,3 +396,25 @@ def test_a_withdraw_names_one_race_and_the_count_is_of_players(
     assert rows["HU"] is not None
     assert rows["OC"] is None
     assert client.get(f"/events/{event}").json()["entrant_count"] == 1
+
+
+def test_the_games_warning_counts_only_the_seasons_the_window_names(
+    client: Client, seeded: dict[str, Any], member: Member
+) -> None:
+    """min_games alone counts every synced season; min_games_seasons windows it
+    to the newest M W3C seasons, so the same player falls under the rule."""
+    player = seeded["player_ids"][0]
+    with Session.begin() as session:
+        session.add_all(
+            W3CStats(user_id=player, race=Race.HU, wc3_season=wc3, games=10, mmr=1500)
+            for wc3 in (20, 21, 22)
+        )
+    event = add_event(kind=EventKind.cup, min_games=25)
+    assert sign_up(client, event, member("1")).status_code == 201
+    assert entrants(client, event)[0]["warnings"] == []
+
+    set_fields(event, min_games_seasons=2)
+    assert entrants(client, event)[0]["warnings"] == ["under_min_games"]
+
+    set_fields(event, min_games_seasons=3)
+    assert entrants(client, event)[0]["warnings"] == []

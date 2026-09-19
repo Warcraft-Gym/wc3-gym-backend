@@ -4,7 +4,7 @@ title: event_stage
 description: One format played over the entrants of an event, with the points, the tie breaks and the advance rule; standings are computed from it, never stored.
 resource: ../../../../app/models/event_stage.py
 tags: [events, data]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T15:15:00Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-09-19T12:00:00Z }
 verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
 sources:
   - id: model
@@ -45,6 +45,7 @@ sources:
 | `seeds_locked_at` | TIMESTAMP | yes | When an admin locked the seeds. A locked stage refuses a seed write. Null means unlocked. |
 | `third_place` | BOOLEAN | no | On: a single elimination adds the series the beaten semi-finalists play. |
 | `grand_final_modifier` | VARCHAR | no | What a double elimination final holds: `one` series, a `reset`, or `skip`. |
+| `max_mmr_difference` | INTEGER | yes | The largest MMR difference a captain draft pairs inside, 1 or more. A `gnl` stage only; the write refuses it on any other format. Null on a `gnl` stage reads as 100, which is never written into the row. |
 
 # Keys and joins
 
@@ -53,3 +54,5 @@ Primary key `id`. Foreign key `event_id` to [event](event.md), cascade on delete
 # Rules
 
 A stage split into groups merges at the next stage; a division never merges. The engine never branches on the event kind. See [events module](../../concepts/events-module.md).
+
+`max_mmr_difference` is the only column that belongs to one format. The stage read answers it filled in on a `gnl` stage, so a client never carries the default of its own; every other format answers null.

@@ -4,7 +4,7 @@ title: GNL season
 description: Six drafted teams, five weekly rounds, one fixture per team pairing with captain-drafted series, and a phase that is derived from the series.
 resource: ../../../app/models/season.py
 tags: [events]
-generated: { by: openai/gpt-6, at: 2026-09-15T22:29:05Z }
+generated: { by: openai/gpt-6, at: 2026-09-19T12:00:00Z }
 sources:
   - id: season-model
     resource: ../../../app/models/season.py
@@ -42,7 +42,8 @@ GNL management uses `/events/{event_id}/teams`, `/series`, `/maps`, `/rounds`, `
 | `pick_ban` | the veto order, side A and side B per step |
 | `signups_open` | off: a signup is a request an admin may grant |
 | `scheduling_enabled` | off: the season takes no availability answers |
-| `checkin_enabled`, `checkin_days` | whether and when the round check-in opens |
+| `checkin_enabled`, `checkin_days`, `early_checkin` | whether and when the round check-in opens, and whether a player may answer before it does |
+| `round_end_zone` | the IANA zone a round ends at midnight in; null ends it in UTC |
 | `fantasy_grind` | whether the fantasy game offers the grind pick |
 | `fantasy_tier_cuts`, `fantasy_tiers_applied_at` | the MMR cuts between fantasy tiers |
 | `published` | off: a draft only an admin sees |

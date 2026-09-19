@@ -1109,3 +1109,92 @@ def test_the_member_row_hints_that_the_blocks_cover_the_next_round(
         )
     row = my_events(client, headers)[event]
     assert (row["availability_hint"], row["action"]) == ("answered_no", "checked_in")
+
+
+def test_an_event_carries_the_check_in_zone_and_the_games_window(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """The four settings are written on create, read back, and edited."""
+    created = client.post(
+        "/events",
+        json={
+            "name": "Zone Cup",
+            "early_checkin": True,
+            "round_end_zone": "America/New_York",
+            "min_games": 20,
+            "min_games_seasons": 2,
+        },
+        headers=auth_headers,
+    )
+    assert created.status_code == 201, created.text
+    event_id = created.json()["id"]
+    read = client.get(f"/events/{event_id}").json()
+    assert (read["early_checkin"], read["round_end_zone"]) == (
+        True,
+        "America/New_York",
+    )
+    assert (read["min_games"], read["min_games_seasons"]) == (20, 2)
+
+    edited = client.put(
+        f"/events/{event_id}",
+        json={"early_checkin": False, "round_end_zone": None},
+        headers=auth_headers,
+    )
+    assert edited.status_code == 200, edited.text
+    assert edited.json()["early_checkin"] is False
+    assert edited.json()["round_end_zone"] is None
+
+
+def test_the_event_settings_refuse_an_unknown_zone_and_a_zero_window(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    event = add_event(name="Bad Settings Cup")
+    bad_zone = client.put(
+        f"/events/{event}",
+        json={"round_end_zone": "Mars/Olympus"},
+        headers=auth_headers,
+    )
+    assert bad_zone.status_code == 422, bad_zone.text
+    bad_window = client.put(
+        f"/events/{event}", json={"min_games_seasons": 0}, headers=auth_headers
+    )
+    assert bad_window.status_code == 422, bad_window.text
+
+
+def test_a_captain_draft_stage_reads_the_default_largest_mmr_difference(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """A gnl stage reads 100 where it stores nothing; no other format takes it."""
+    created = client.post(
+        "/events",
+        json={"name": "Draft Cup", "stages": [{"name": "Draft", "format": "gnl"}]},
+        headers=auth_headers,
+    )
+    assert created.status_code == 201, created.text
+    event_id = created.json()["id"]
+    assert created.json()["stages"][0]["max_mmr_difference"] == 100
+    with Session.begin() as session:
+        row = session.get(EventStage, created.json()["stages"][0]["id"])
+        assert row is not None
+        assert row.max_mmr_difference is None
+
+    set_150 = client.put(
+        f"/events/{event_id}/stages",
+        json=[{"name": "Draft", "format": "gnl", "max_mmr_difference": 150}],
+        headers=auth_headers,
+    )
+    assert set_150.status_code == 200, set_150.text
+    assert set_150.json()["stages"][0]["max_mmr_difference"] == 150
+
+    other = client.put(
+        f"/events/{event_id}/stages",
+        json=[{"format": "round_robin", "max_mmr_difference": 150}],
+        headers=auth_headers,
+    )
+    assert other.status_code == 422, other.text
+    plain = client.put(
+        f"/events/{event_id}/stages",
+        json=[{"format": "round_robin"}],
+        headers=auth_headers,
+    )
+    assert plain.json()["stages"][0]["max_mmr_difference"] is None
