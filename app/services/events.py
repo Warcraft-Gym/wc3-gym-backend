@@ -7,7 +7,7 @@ own phase word. The event phase is computed on every read and never stored.
 
 import random
 from collections import Counter
-from collections.abc import Collection, Iterable, Sequence
+from collections.abc import Iterable, Sequence
 from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 
@@ -1228,13 +1228,7 @@ def _users_for(
     session: OrmSession, rows: Sequence[EventEntrant]
 ) -> dict[int | None, User]:
     """The players behind those entrant rows, with the W3C stats their MMR reads."""
-    return _users_by_id(session, {row.user_id for row in rows if row.user_id})
-
-
-def _users_by_id(
-    session: OrmSession, user_ids: Collection[int | None]
-) -> dict[int | None, User]:
-    """Those players with the W3C stats their MMR reads, in one read."""
+    user_ids = {row.user_id for row in rows if row.user_id}
     return {
         user.id: user
         for user in session.scalars(
@@ -1254,21 +1248,36 @@ def race_ratings(
 ) -> dict[tuple[int, str], int]:
     """The current rating of every (player, race) pair named, keyed by the pair.
 
-    Two reads whatever the number of pairs, so a list payload rates each row
-    without a statement per row. A pair with no rating is left out.
+    The list form of the rule `_stats_for` states for one player: the newest
+    stored season that carries a rating on that race, three seasons back from
+    the season the app is on and no further. Two reads whatever the number of
+    pairs, and the statement carries the rated seasons alone, so a list
+    payload rates each row without reading a stat it does not need. A pair
+    with no rating is left out.
     """
     pairs = {(user_id, race) for user_id, race in sides if user_id and race}
     if not pairs:
         return {}
-    users = _users_by_id(session, {user_id for user_id, _ in pairs})
     season = _w3c_season(session)
-    rated = {}
-    for user_id, race in pairs:
-        user = users.get(user_id)
-        mmr = _stats_for(user, Race.from_text(race), season)[0] if user else None
-        if mmr is not None:
-            rated[(user_id, race)] = mmr
-    return rated
+    rows = session.execute(
+        select(
+            col(W3CStats.user_id),
+            col(W3CStats.race),
+            col(W3CStats.wc3_season),
+            col(W3CStats.mmr),
+        ).where(
+            col(W3CStats.user_id).in_({user_id for user_id, _ in pairs}),
+            col(W3CStats.race).in_({Race.from_text(race) for _, race in pairs}),
+            col(W3CStats.mmr).is_not(None),
+            col(W3CStats.wc3_season) > season - SEASONS,
+        )
+    ).all()
+    newest: dict[tuple[int, str], tuple[int, int]] = {}
+    for user_id, race, wc3_season, mmr in rows:
+        key = (user_id, race.value)
+        if key in pairs and wc3_season >= newest.get(key, (-1, 0))[0]:
+            newest[key] = (wc3_season, mmr)
+    return {key: mmr for key, (_, mmr) in newest.items()}
 
 
 def _mmrs(session: OrmSession, rows: Sequence[EventEntrant]) -> dict[int, int | None]:
