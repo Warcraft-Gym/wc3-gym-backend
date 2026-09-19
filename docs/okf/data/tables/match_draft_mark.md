@@ -4,7 +4,7 @@ title: match_draft_mark
 description: One team's advisory Ready mark on the draft of one fixture, plus the moment that team last read the pairings.
 resource: ../../../../app/models/match_draft.py
 tags: [events, data]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-19T19:30:00Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-09-19T20:00:00Z }
 sources:
   - id: model
     resource: ../../../../app/models/match_draft.py
@@ -30,4 +30,4 @@ Primary key (`match_id`, `team_id`). Foreign keys: `match_id` to [matches](match
 
 # Rules
 
-The row is written on its first use, and only for one of the two teams of the fixture. A captain sets and clears the mark of their own team, and an admin sets either. Creating, editing or deleting a pairing of the fixture clears both teams' marks in the same transaction. The mark is advisory: it never blocks publishing a pairing. `seen_at` is written by its own call, never as a side effect of a read, so a page that lists the pairings marks the ones changed after it. Every captain reads the marks of a fixture; the stamp answers only for a team the caller captains. See [GNL season](../../concepts/gnl-season.md).
+The row is written on its first use, and only for one of the two teams of the fixture. A captain sets and clears the mark of their own team, and an admin sets either. Creating, editing or deleting a pairing of the fixture clears both teams' marks in the same transaction. The mark is advisory: it never blocks publishing a pairing. `seen_at` is written by its own call, never as a side effect of a read, so a page that lists the pairings marks the ones changed after it. Only a captain of that team writes the stamp; a caller with no seat on the team is refused, admin or not. Every captain reads the marks of a fixture; the stamp answers only for a team the caller captains. See [GNL season](../../concepts/gnl-season.md).

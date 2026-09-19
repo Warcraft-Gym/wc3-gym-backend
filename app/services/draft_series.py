@@ -350,15 +350,12 @@ class DraftSeriesService:
                 host_player_id=draft.host_player_id,
                 is_fantasy_match=draft.is_fantasy_match,
             )
-            match_id = draft.match_id
             # The draft goes first: the replaced series cascades it away
             session.delete(draft)
             session.flush()
             if replaced_id is not None:
                 Series.delete(session, replaced_id)
-            public = series_writer.add_in(session, create)
-            clear_ready(session, match_id)
-            return public
+            return series_writer.add_in(session, create)
 
     def replace_preview(self, draft_series_id: int) -> ReplacePreviewPublic:
         """What promoting this draft takes away: the booked time and the veto."""

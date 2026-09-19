@@ -278,8 +278,11 @@ def set_match_draft_seen(
     matches: MatchServiceDep,
     claims: RequireCaptain,
 ) -> None:
-    """Record that the team read the pairings, so later edits read as new."""
-    _own_side(claims, matches.get(match_id), team_id)
+    """Record that the team read the pairings; a captain of that team writes it."""
+    match = matches.get(match_id)
+    _own_side(claims, match, team_id)
+    if (team_id, match.season_id) not in claim_seats(claims):
+        raise ApiError(403, {"error": "Your team does not play this match"})
     service.set_seen(match_id, team_id)
 
 

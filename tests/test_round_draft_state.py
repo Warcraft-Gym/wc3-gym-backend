@@ -249,6 +249,16 @@ def test_publishing_a_replacement_swaps_the_series_in_one_action(
     )
     assert denied.status_code == 403, denied.text
 
+    teams = f"/draft-series/match/{draft['match_id']}/teams"
+    for team, headers in (
+        (draft["team_a"], draft["captain_a"]),
+        (draft["team_b"], draft["captain_b"]),
+    ):
+        ready = client.put(
+            f"{teams}/{team}/ready", json={"ready": True}, headers=headers
+        )
+        assert ready.status_code == 200, ready.text
+
     # A series delete first cascades the draft away and the draft delete warns
     with warnings.catch_warnings():
         warnings.filterwarnings("error", message="DELETE statement", category=SAWarning)
@@ -277,6 +287,12 @@ def test_publishing_a_replacement_swaps_the_series_in_one_action(
         f"/draft-series/match/{draft['match_id']}", headers=auth_headers
     )
     assert listed.json() == []
+
+    # Publishing changes no pairing, so both marks still stand
+    state = client.get(
+        f"/draft-series/match/{draft['match_id']}/state", headers=draft["captain_a"]
+    )
+    assert all(row["ready_at"] is not None for row in state.json()["teams"])
 
 
 def test_a_result_or_a_replay_on_the_replaced_series_refuses_the_publish(
@@ -450,7 +466,7 @@ def test_a_mark_names_a_team_that_plays_the_fixture(
 
 
 def test_the_seen_stamp_is_written_by_its_own_call(
-    client: Client, draft: dict[str, Any]
+    client: Client, draft: dict[str, Any], auth_headers: dict[str, str]
 ) -> None:
     """A read never writes: the page sends the seen call itself."""
     state = f"/draft-series/match/{draft['match_id']}/state"
@@ -461,6 +477,11 @@ def test_the_seen_stamp_is_written_by_its_own_call(
     assert crossed.status_code == 403, crossed.text
     plain = client.put(f"{teams}/{draft['team_a']}/seen", headers=draft["plain"])
     assert plain.status_code == 403, plain.text
+
+    # The stamp belongs to the team that reads, so an admin token holds no seat
+    admin = client.put(f"{teams}/{draft['team_a']}/seen", headers=auth_headers)
+    assert admin.status_code == 403, admin.text
+    assert client.get(state, headers=draft["captain_a"]).json()["seen_at"] is None
 
     seen = client.put(f"{teams}/{draft['team_a']}/seen", headers=draft["captain_a"])
     assert seen.status_code == 204, seen.text
