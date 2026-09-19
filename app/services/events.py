@@ -1175,20 +1175,27 @@ def _w3c_season(session: OrmSession) -> int:
     return session.scalar(select(func.max(col(W3CStats.wc3_season)))) or 0
 
 
-def _stats_for(user: User, race: Race | None, season: int) -> tuple[int | None, int]:
+def _stats_for(
+    user: User, race: Race | None, season: int, games_seasons: int | None = None
+) -> tuple[int | None, int]:
     """The player's current W3C rating on that race, and the games behind it.
 
     A season the player did not play on that race carries no rating, so the
     rating is the newest stored season that carries one, three seasons back
     from the season the app is on and no further: an older rating is not the
     player's current one. The games are every season the app has synced for
-    that race, because a min-games rule asks how much the player has played,
-    not how much this season.
+    that race, or the newest `games_seasons` of them where the event names a
+    window, because a min-games rule asks how much the player has played.
     """
     rows = [stat for stat in (user.w3c_stats or []) if stat.race == race]
     played = [stat for stat in rows if stat.mmr and stat.wc3_season > season - SEASONS]
     rating = max(played, key=lambda stat: stat.wc3_season).mmr if played else None
-    return rating, sum(stat.games or 0 for stat in rows)
+    counted = [
+        stat
+        for stat in rows
+        if games_seasons is None or stat.wc3_season > season - games_seasons
+    ]
+    return rating, sum(stat.games or 0 for stat in counted)
 
 
 def _warnings(
@@ -1394,7 +1401,11 @@ def _entrant_public(
     """One entrant payload: the identity, the rating it is seeded on, the warnings."""
     user = users.get(row.user_id)
     team = teams.get(row.team_id)
-    mmr, games = _stats_for(user, row.race, season) if user else (None, 0)
+    mmr, games = (
+        _stats_for(user, row.race, season, event.min_games_seasons)
+        if user
+        else (None, 0)
+    )
     if row.team_id is not None:
         mmr = means.get(row.team_id)
     return EventEntrantPublic(
