@@ -35,6 +35,7 @@ def _drafted_standing(
             return fantasy.Standing(
                 team_id=drafted_team.id,
                 team_name=drafted_team.name,
+                team_icon_url=drafted_team.icon_url,
                 final_score=season_info.final_score or 0,
                 points_against=season_info.points_against or 0,
                 points_available=season_info.points_available or 0,

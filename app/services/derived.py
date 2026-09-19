@@ -1214,7 +1214,7 @@ def _drafted_standing(
         if per_week is not None and weeks is not None
         else 0
     )
-    return fantasy.Standing(team_id, None, final, against, available)
+    return fantasy.Standing(team_id, None, None, final, against, available)
 
 
 def _grind_by_season(

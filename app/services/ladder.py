@@ -194,8 +194,10 @@ class LadderService:
                     races.get(row.user_id, {}),
                     synced_at=stamps.get(row.user_id),
                 )
-                # The tag of the team he plays for, null while he is on none
+                # The team he plays for, null while he is on none
                 player.team = row.team_name
+                player.team_id = row.team_id
+                player.team_icon_url = row.team_icon_url
                 players.append(player)
             return sorted(players, key=lambda player: player.name or "")
 
@@ -853,6 +855,7 @@ def _roster(session: OrmSession, season_id: int) -> Sequence[Row]:
             col(Team.id).label("team_id"),
             col(Team.name).label("team_name"),
             col(Team.long_name).label("team_long_name"),
+            col(Team.icon_url).label("team_icon_url"),
         )
         .join(DBUserSeasonSignup, col(DBUserSeasonSignup.user_id) == User.id)
         .outerjoin(
@@ -1402,6 +1405,7 @@ def _teams(
                 id=row.team_id,
                 name=row.team_name,
                 long_name=row.team_long_name,
+                icon_url=row.team_icon_url,
                 achievements=list((team_badges or {}).get(row.team_id, ())),
             ),
         )

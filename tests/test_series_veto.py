@@ -97,12 +97,14 @@ def test_the_two_players_ban_and_pick_until_the_veto_is_complete(
             "name": "P2",
             "team_id": None,
             "team_name": None,
+            "team_icon_url": None,
         },
         "player2": {
             "id": seeded["player_ids"][3],
             "name": "P4",
             "team_id": None,
             "team_name": None,
+            "team_icon_url": None,
         },
     }
 
@@ -493,8 +495,10 @@ def test_a_team_side_names_its_team_and_carries_no_user_id(
     seeded: dict[str, Any],
     member: Callable[..., dict[str, str]],
 ) -> None:
-    """A fixture side fields a team, so the board names the team in its own two
-    fields and leaves the user id empty for a client to compare against."""
+    """A fixture side fields a team, so the board names the team, its logo and
+    its id in its own fields, and leaves the user id empty to compare against."""
+    from app.core.db import Session
+    from app.models.team import Team
     from tests.test_stage_engine import generate, stage_series, team_cup
 
     event, stage, team_ids, tags = team_cup(client, auth_headers, member)
@@ -504,6 +508,8 @@ def test_a_team_side_names_its_team_and_carries_no_user_id(
         for row in stage_series(client, event, stage)["series"]
         if row["entrant1_id"] is not None
     )
+    with Session.begin() as session:
+        Team.update(session, series["team1"]["id"], icon_url="teams/1.png")
 
     board = read(client, series["id"], member(tags[0][0]))
 
@@ -512,5 +518,6 @@ def test_a_team_side_names_its_team_and_carries_no_user_id(
         "name": series["team1"]["name"],
         "team_id": series["team1"]["id"],
         "team_name": series["team1"]["name"],
+        "team_icon_url": "teams/1.png",
     }
     assert board["player1"]["team_id"] in team_ids

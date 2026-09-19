@@ -25,6 +25,7 @@ from app.models.season import Season
 from app.models.series import Series
 from app.models.team import Team
 from app.models.user import User
+from app.models.w3c_stats import W3CStats
 from app.services import stage_engine
 from tests.test_events import phase
 
@@ -1468,3 +1469,37 @@ def test_a_four_team_league_pairs_its_teams_into_fixtures(
     assert table[0]["rows"][0]["team_id"] == first
     assert table[0]["rows"][0]["points"] == 2
     assert table[0]["rows"][0]["won"] == 2
+
+
+def test_a_stage_series_rates_both_sides_on_the_race_it_names(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """The reduced player carries no stats, so the row holds the rating itself."""
+    ids = players(2)
+    with Session.begin() as session:
+        session.add_all(
+            [
+                W3CStats(user_id=ids[0], race=Race.HU, wc3_season=20, mmr=1500),
+                # A rating on another race is not the one the row names
+                W3CStats(user_id=ids[0], race=Race.OC, wc3_season=20, mmr=900),
+                W3CStats(user_id=ids[1], race=Race.HU, wc3_season=20, mmr=1400),
+            ]
+        )
+    event, (stage,) = cup(2, ids=ids)
+    generate(client, auth_headers, event, stage)
+    row = stage_series(client, event, stage)["series"][0]
+    assert (row["player1_race"], row["player2_race"]) == ("HU", "HU")
+    assert (row["player1_mmr"], row["player2_mmr"]) == (1500, 1400)
+    assert row["player1"]["w3c_stats"] == []
+
+
+def test_a_side_with_no_stats_on_its_race_is_rated_null(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    ids = players(2)
+    with Session.begin() as session:
+        session.add(W3CStats(user_id=ids[0], race=Race.HU, wc3_season=20, mmr=1500))
+    event, (stage,) = cup(2, ids=ids)
+    generate(client, auth_headers, event, stage)
+    row = stage_series(client, event, stage)["series"][0]
+    assert (row["player1_mmr"], row["player2_mmr"]) == (1500, None)

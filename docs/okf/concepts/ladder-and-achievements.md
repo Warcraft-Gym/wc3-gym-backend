@@ -4,7 +4,7 @@ title: W3C ladder and achievements
 description: Every ranked 1v1 match of a GNL player is stored once, scored per season on their signup race, and 24 badge rules run as one SQL union.
 resource: ../../../app/services/ladder.py
 tags: [w3champions]
-generated: { by: openai/gpt-6, at: 2026-09-15T10:44:28Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-09-19T00:00:00Z }
 sources:
   - id: ladder
     resource: ../../../app/services/ladder.py
@@ -37,6 +37,7 @@ Two sync pipelines exist and must not be confused: **matches** (this table, this
 - A player scores only on the race they signed the season up on; other races are stored and pay nothing; Random counts every race. The filter belongs in the read, never in the fetch.
 - The season window is the GNL `start_date..end_date` on that race. MMR carries across a W3Champions season boundary unchanged, so the read needs no season logic.
 - `GET /events/{id}/ladder` and `GET /users/{id}/ladder` answer the totals, per-day bars, MMR spans and badges. The event read is edge-cached; see [the pitfall](../pitfalls/edge-cache-cors.md).
+- A team card of the event ladder carries `icon_url`, and a row of `GET /events/{id}/ladder/players` carries `team`, `team_id` and `team_icon_url`, so both draw the logo and link the team page. The roster read carries the logo, so neither costs a statement.
 
 # Achievements
 
