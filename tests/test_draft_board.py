@@ -26,7 +26,7 @@ from app.models.season import Season
 from app.models.series import Series
 from app.models.team import Team
 from app.models.user import User
-from app.models.user_block import UserBlock
+from app.models.user_block import UserBlock, UserBusy
 from app.models.user_team_season import DBUserTeamSeason
 from app.models.w3c_ladder_match import W3CLadderMatch
 from app.models.w3c_stats import W3CStats
@@ -255,6 +255,48 @@ def test_a_round_with_no_dates_answers_the_board_without_hours(
     assert by_id[players[0]]["form"] == "LWLWLWLWLW"
     assert body["max_mmr_difference"] == 120
     assert body["published_series"] == 2
+
+
+def test_the_board_counts_the_hours_over_the_round_window_of_the_event_zone(
+    client: Client, board_league: dict[str, Any], captain: dict[str, str]
+) -> None:
+    """The board takes the round window every other reader takes, so the zone
+    the event names moves the board's hours with the free-time read's.
+
+    The round runs the seven days from Monday 5 January. In the named zone it
+    ends five hours later, so the day P4 marks busy after the last day covers
+    those five hours.
+    """
+    players = board_league["player_ids"]
+    with Session() as session:
+        season = session.get(Season, board_league["season_id"])
+        player4 = session.get(User, players[3])
+        assert season is not None and player4 is not None
+        season.round_end_zone = "America/New_York"
+        player4.timezone = "UTC"
+        session.add_all(
+            [
+                season,
+                player4,
+                UserBusy(
+                    user_id=players[3],
+                    first_day=date(2026, 1, 12),
+                    last_day=date(2026, 1, 12),
+                ),
+            ]
+        )
+        session.commit()
+    body = client.get(
+        f"/matches/{board_league['match_id']}/draft-board", headers=captain
+    ).json()
+    pairs = {(row["player1_id"], row["player2_id"]): row for row in body["pairs"]}
+    pair = client.get(
+        f"/events/{board_league['season_id']}/rounds/1/free-time",
+        params={"player1_id": players[1], "player2_id": players[3]},
+        headers=captain,
+    ).json()
+    assert pairs[(players[1], players[3])]["hours"] == pytest.approx(7 * 24 - 5)
+    assert pair["hours"] == pytest.approx(7 * 24 - 5)
 
 
 def test_the_head_to_head_reads_in_pairing_order_whoever_was_stored_first(

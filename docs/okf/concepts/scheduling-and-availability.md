@@ -4,7 +4,7 @@ title: Scheduling and availability
 description: A player answers whether they can play a round, keeps soft blocks that inform but never constrain, and a pair's shared free time is read as intervals for a series and as one count before one exists.
 resource: ../../../app/services/availability.py
 tags: [events, scheduling]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-19T12:00:00Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-09-19T21:00:00Z }
 sources:
   - id: availability
     resource: ../../../app/services/availability.py
@@ -23,6 +23,8 @@ sources:
 # The unit is the round
 
 The question "can you play?" belongs to a round, never to "every week". A round has a date window. Once a player has a series in a round the question is moot, and the series replaces the question on the dashboard. An answer is one row per player per round (`round_availability`); no row is no answer, and clearing an answer deletes the row. The player and their captain write the same row, and the last write wins. `PUT /player-availability` and `PUT /events/{event_id}/teams/{team_id}/availability` are the two writers, and the Discord `/availability` card is a third door to the same service.
+
+One write answers every round of the event that has not ended, for one player: `PUT /player-availability/all` for the player themselves, `PUT /events/{event_id}/teams/{team_id}/availability/all` for their captain or an admin. It takes the same permissions as the single-round writers, writes the rounds in one transaction, and a null answer clears those same rounds again. Both answer the player's rows for the event, as the single-round writers do.
 
 # Ask when someone cannot play
 
@@ -47,6 +49,14 @@ A captain pairing a round needs to know whether two players can meet at all, bef
 
 Both reads share one helper, which takes two player ids and a window. A caller that answers many pairs at once loads the blocks once per player and passes them in, so a player found there costs no statement.
 
+# When a round ends
+
+A round ends at midnight after its last day, in the zone the event names (`round_end_zone`). One helper answers the instants a round runs between, and every reader of a round window takes it: the check-in refusal, the check-in hint, the free-time reads and the draft board. An event that names no zone leaves each reader its own fallback: the check-in refusal and the free-time reads stand at UTC midnights, and the check-in hint and the derived out-on-blocked-times flag read the round in the player's own zone. A player's blocks stand in the player's own zone, the round window in the event's, so a player in another zone still reads against the same round.
+
 # Check-in
 
-A season may open a check-in a number of days before each round. `app/core/checkin_hint.py` computes what the check-in shows for one player and one round from their answer and their blocks; it writes nothing.
+A season may open a check-in a number of days before each round (`checkin_days`), which is the day the app asks. A player's own write is refused before that day and after the round ends; a captain's and an admin's are not. With `early_checkin` on, the player may answer every round of the event that has not ended, and the refusal after a round's end still holds. `app/core/checkin_hint.py` computes what the check-in shows for one player and one round from their answer and their blocks; it writes nothing.
+
+# Out on blocked times
+
+A player with no stored answer whose blocks cover a whole round window reads as blocked out. The round payloads carry it as `blocked_out`, derived on every read and never stored: such a row names no writer, and a stored answer always wins over it. The blocks of every player in the payload load in three statements, never one per row.

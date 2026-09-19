@@ -32,7 +32,7 @@ sources:
 | `events.py` | `/events`, `/me/events` | event CRUD and search, entrants, divisions, stages, standings |
 | `matches.py` | `/matches` | fixtures |
 | `series.py` | `/series`, `/events/{event_id}/series`, `/casts` | series, event series searches, result kind, places, sides, casts |
-| `draft_series.py` | `/draft-series` | a captain's proposed series |
+| `draft_series.py` | `/draft-series` | a captain's proposed series, and the Ready, seen and MMR state of one fixture's draft |
 | `public.py` | `/signup`, `/player-series`, `/player-availability`, `/player-blocks`, `/player-history`, `/user-info`, `/fantasy-team`, `/fantasy-bet` | a member's own flows |
 | `maps.py` | `/maps` | maps and the ladder import |
 | `fantasy.py` | `/fantasy`, `/events/{event_id}/fantasy` | admin fantasy management and event-scoped reads, tiers and breakdowns |

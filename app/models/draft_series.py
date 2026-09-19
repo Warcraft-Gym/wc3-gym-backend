@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import TYPE_CHECKING, Annotated, Self
+from typing import TYPE_CHECKING, Annotated, Optional, Self
 
 from sqlalchemy.orm.interfaces import ORMOption
 from sqlmodel import Field, Relationship, SQLModel
@@ -27,6 +27,10 @@ class DraftSeriesBase(SQLModel):
     player2_score: int | None = None
     host_player_id: int
     is_fantasy_match: bool | None = False
+    # The published series this pairing replaces; the promote removes it
+    replaces_series_id: int | None = Field(
+        default=None, index=True, foreign_key="series.id", ondelete="CASCADE"
+    )
 
 
 class DraftSeries(DraftSeriesBase, DBModel, table=True):
@@ -34,6 +38,14 @@ class DraftSeries(DraftSeriesBase, DBModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     created_at: datetime | None = Field(default=None, sa_type=UTCDateTime)
+    updated_at: datetime | None = Field(default=None, sa_type=UTCDateTime)
+    # Who wrote the pairing and who last changed it
+    created_by_user_id: int | None = Field(
+        default=None, foreign_key="users.id", ondelete="SET NULL"
+    )
+    updated_by_user_id: int | None = Field(
+        default=None, foreign_key="users.id", ondelete="SET NULL"
+    )
 
     match: "Match" = Relationship(
         sa_relationship_kwargs={"foreign_keys": "[DraftSeries.match_id]"}
@@ -43,6 +55,13 @@ class DraftSeries(DraftSeriesBase, DBModel, table=True):
     )
     player2: "User" = Relationship(
         sa_relationship_kwargs={"foreign_keys": "[DraftSeries.player2_id]"}
+    )
+    # Quoting the whole union breaks the mapper, so these keep Optional["User"]
+    created_by: Optional["User"] = Relationship(
+        sa_relationship_kwargs={"foreign_keys": "[DraftSeries.created_by_user_id]"}
+    )
+    updated_by: Optional["User"] = Relationship(
+        sa_relationship_kwargs={"foreign_keys": "[DraftSeries.updated_by_user_id]"}
     )
 
     @classmethod
@@ -63,6 +82,9 @@ class DraftSeries(DraftSeriesBase, DBModel, table=True):
             joinedload(rel(cls.player2)).selectinload(rel(User.w3c_stats)),
             joinedload(rel(cls.player2)).selectinload(rel(User.team_seasons)),
             joinedload(rel(cls.player2)).selectinload(rel(User.signup_seasons)),
+            # The two names ride the same statement; no query per row
+            joinedload(rel(cls.created_by)).noload("*"),
+            joinedload(rel(cls.updated_by)).noload("*"),
         )
 
 
@@ -90,6 +112,11 @@ class DraftSeriesPublic(DraftSeriesBase):
     host_player_id: int | None = None
     date_time: datetime | None = None
     created_at: datetime | None = None
+    updated_at: datetime | None = None
+    created_by_user_id: int | None = None
+    created_by_name: str | None = None
+    updated_by_user_id: int | None = None
+    updated_by_name: str | None = None
     match: MatchPublic | None = None
     player1: UserPublic | None = None
     player2: UserPublic | None = None
@@ -119,5 +146,15 @@ class DraftSeriesPublic(DraftSeriesBase):
             player2_score=draft_series.player2_score,
             host_player_id=draft_series.host_player_id,
             is_fantasy_match=draft_series.is_fantasy_match,
+            replaces_series_id=draft_series.replaces_series_id,
             created_at=draft_series.created_at,
+            updated_at=draft_series.updated_at,
+            created_by_user_id=draft_series.created_by_user_id,
+            created_by_name=draft_series.created_by.name
+            if draft_series.created_by
+            else None,
+            updated_by_user_id=draft_series.updated_by_user_id,
+            updated_by_name=draft_series.updated_by.name
+            if draft_series.updated_by
+            else None,
         )

@@ -38,7 +38,7 @@ sources:
 
 Primary key `id`. Foreign keys: `team1_id` and `team2_id` to [teams](teams.md), cascade; `season_id` to [event](event.md), cascade; `fixed_map_id` to [maps](maps.md); `round_id` to [event_round](event_round.md), cascade; `division_id` to [event_division](event_division.md), set null. Unique index on (`season_id`, `team1_id`, `team2_id`, `playday`).
 
-Pointed at by [series](series.md) and [draft_series](draft_series.md) through `match_id`.
+Pointed at by [series](series.md), [draft_series](draft_series.md), [match_draft_mark](match_draft_mark.md) and [match_draft_state](match_draft_state.md) through `match_id`.
 
 # Rules
 

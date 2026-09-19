@@ -4,7 +4,7 @@ title: GNL season
 description: Six drafted teams, five weekly rounds, one fixture per team pairing with captain-drafted series, and a phase that is derived from the series.
 resource: ../../../app/models/season.py
 tags: [events]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-19T19:00:00Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-09-19T21:00:00Z }
 sources:
   - id: season-model
     resource: ../../../app/models/season.py
@@ -46,8 +46,8 @@ GNL management uses `/events/{event_id}/teams`, `/series`, `/maps`, `/rounds`, `
 | `signups_open` | off: a signup is a request an admin may grant |
 | `scheduling_enabled` | off: the season takes no availability answers |
 | `checkin_enabled`, `checkin_days` | whether and when the round check-in opens |
-| `early_checkin` | whether a player may answer a round's check-in before its window opens; answered on the event payload, and no service reads it |
-| `round_end_zone` | the IANA zone a round ends at midnight in; null names no zone; answered on the event payload, and no service reads it |
+| `early_checkin` | whether a player may answer a round's check-in before its window opens; on, every round of the event that has not ended takes their answer |
+| `round_end_zone` | the IANA zone a round ends at midnight in; null names no zone, and the check-in refusal and the free-time reads then stand at UTC midnights while the check-in hint and the out-on-blocked-times flag read the round in the player's own zone |
 | `fantasy_grind` | whether the fantasy game offers the grind pick |
 | `fantasy_tier_cuts`, `fantasy_tiers_applied_at` | the MMR cuts between fantasy tiers |
 | `published` | off: a draft only an admin sees |
@@ -72,13 +72,21 @@ The `settings` row `current_gnl_season` names the season the captain check, the 
 
 A member signs up through `POST /signup` with a race and an MMR. The signup row carries `race`, `draft_position` (a hand-set place; null means sort by MMR), `draft_excluded` and `fantasy_tier`; `fantasy_tier_pinned` on the answer is derived from the tier and the season's apply date, never stored. See [user_season_signup](../data/tables/user_season_signup.md). A hand correction to the draft order is a position, never an adjusted MMR. See [the decision](../decisions/draft-order-rerank.md).
 
+# The round draft
+
+Inside a fixture the two captains write one shared draft of pairings, held in [draft_series](../data/tables/draft_series.md) until an admin publishes one. Either captain of the fixture creates, edits and deletes any pairing of it; only an admin publishes, and publishing writes the [series](../data/tables/series.md) row and deletes the draft in one transaction. Each pairing answers who wrote it and who last changed it, with the time of the change.
+
+A fixture drafts up to the event's `series_per_round` pairings, counting published series and open drafts together. A pairing that replaces a published series is free of that count: it names an open series of the same fixture and keeps one of its two players, at most one draft replaces a series, and publishing it removes the replaced series with the booked time, the veto steps, the casts and the fantasy rows that hang on it. A read beside the draft names what that removal takes, so the admin's confirm can state it. A replaced series that holds a result or a replay is refused and nothing changes.
+
+Each team keeps an advisory Ready mark in [match_draft_mark](../data/tables/match_draft_mark.md), which any change to a pairing clears; it never blocks publishing. A mark names one of the two teams of the fixture, so a write naming another team is refused, an admin's too. The same row holds when that team last read the pairings, written by its own call so a read never writes. The largest MMR difference the captains pair inside is a working value per fixture in [match_draft_state](../data/tables/match_draft_state.md), and the stage setting stands behind it. A GNL fixture refuses no repeat player: a player appears in more than one pairing of it unless a sibling series is drafted through a template.
+
 # The draft board
 
 One read fills the board a fixture is drafted on: `GET /matches/{match_id}/draft-board`, for a captain of either team of the fixture and for an admin. It answers figures, never rows, and it costs a constant number of statements, so a fixture of eight players a side costs what a fixture of two costs.
 
 Per player of both rosters it carries the race he registered the event on, his W3C rating on that race, the ladder games behind it with the games-rule flag (`under_min_games`, or `no_w3c_stats` where nothing is stored), his wins and losses on that race against each opponent race inside the event's window, and his last ten counted ladder games as a string of `W` and `L`, newest first.
 
-Per pairing of one player of each team it carries only what a client cannot work out: the hours both have open across the round, and, for two who have met, the score in the order of the pairing and the event they last met in. `hours` is null when the round has no dates: the round window is what the hours are counted over, and the fallback to the event window is refused beyond 31 days, so the rest of the board still answers. The MMR difference is not sent; the client subtracts the two ratings. The board also carries the captain-draft stage's largest MMR difference, the event's `series_per_round`, and how many series the fixture has published and how many drafts stand open on it.
+Per pairing of one player of each team it carries only what a client cannot work out: the hours both have open across the round, and, for two who have met, the score in the order of the pairing and the event they last met in. `hours` is null when the round has no dates: the hours are counted over the same round window the check-in and the free-time reads take, in the zone the event names (see [scheduling](scheduling-and-availability.md)), and the fallback to the event window is refused beyond 31 days, so the rest of the board still answers. The MMR difference is not sent; the client subtracts the two ratings. The board also carries the captain-draft stage's largest MMR difference, the event's `series_per_round`, and how many series the fixture has published and how many drafts stand open on it.
 
 `GET /users/{user_a}/meetings/{user_b}` is the detail read behind one pairing, for a signed-in member: every finished series the two played, newest first, at most twenty, each with its date, its league and event, the score in the order of the path, the race each side played and the MMR each held going into it. The date is the series time and is null where the series carries none. That MMR is derived on read: `mmr_after` of the last rated ladder game on the race played, before the series began; a series with no time reads the ladder against the first day of its round, and a side with no such game reads null. No column holds it. See [w3c_ladder_matches](../data/tables/w3c_ladder_matches.md).
 
