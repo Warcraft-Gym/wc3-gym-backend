@@ -124,3 +124,9 @@ class FreeTimePublic(SQLModel):
     end: datetime
     hours: float
     ranges: list[FreeRange]
+
+
+class PairFreeTimePublic(SQLModel):
+    """The hours two players share across a round: a count, never a range."""
+
+    hours: float
