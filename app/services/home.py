@@ -7,6 +7,7 @@ come in one more, and one pass names the race of both sides and rates it. None
 of them grows with the number of rows.
 """
 
+from datetime import timedelta
 from typing import Any, NamedTuple
 
 from sqlalchemy import Select, and_, func, or_, select
@@ -32,6 +33,9 @@ from app.services import derived
 NEXT = 5
 CASTS_UPCOMING = 3
 CASTS_RECENT = 4
+
+# How long a started series with no result stays in the booked lists
+GRACE = timedelta(hours=2)
 
 
 class _Labelled(NamedTuple):
@@ -137,7 +141,8 @@ def series() -> HomeSeries:
     """The three lists the hub draws: what is booked next, and what is cast."""
     now = utcnow()
     with Session() as session:
-        booked = _published().where(col(Series.date_time) >= now, _unplayed())
+        # A series that has started but carries no result is still what is on now
+        booked = _published().where(col(Series.date_time) >= now - GRACE, _unplayed())
         lists = [
             _rows(
                 session,
