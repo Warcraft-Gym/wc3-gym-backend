@@ -464,7 +464,9 @@ def test_a_captain_reads_a_series_of_his_team(
     client: Client, seeded: dict[str, Any], captain: dict[str, str]
 ) -> None:
     """P1 does not play the open series; P2 plays it for Alpha."""
-    assert free_time(client, seeded["series_open_id"], captain)["hours"] == 168.0
+    body = free_time(client, seeded["series_open_id"], captain)
+    assert body["hours"] == 168.0
+    assert body["blocked1"] == [] and body["blocked2"] == []
 
 
 def test_a_captain_does_not_read_a_series_of_another_team(

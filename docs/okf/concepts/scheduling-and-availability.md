@@ -4,7 +4,7 @@ title: Scheduling and availability
 description: A player answers whether they can play a round, keeps soft blocks that inform but never constrain, and a pair's shared free time is read as intervals for a series and as one count before one exists.
 resource: ../../../app/services/availability.py
 tags: [events, scheduling]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-20T09:00:00Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-09-20T10:00:00Z }
 sources:
   - id: availability
     resource: ../../../app/services/availability.py
@@ -41,7 +41,7 @@ What follows, each learned the hard way:
 
 # Free time of a series
 
-`GET /player-series/{id}/free-time` answers the intervals both players of a series have open inside its round, from their blocks, and beside them `blocked1` and `blocked2`: the blocked intervals of the series' player 1 and player 2 over the same window, merged and clipped to it. The two players of a series see each other's blocked hours, so the schedule dialog can name whose hours it draws; a block's label and id stay with their owner. Series times are stored in UTC, aware. See [the pitfall](../pitfalls/datetimes-are-utc.md).
+`GET /player-series/{id}/free-time` answers the intervals both players of a series have open inside its round, from their blocks, and beside them `blocked1` and `blocked2`: the blocked intervals of the series' player 1 and player 2 over the same window, merged and clipped to it. A player of the series, a captain of either team that season and an admin read it, and each of them sees both players' blocked hours, so the schedule dialog can name whose hours it draws; a block's label and id stay with their owner. Series times are stored in UTC, aware. See [the pitfall](../pitfalls/datetimes-are-utc.md).
 
 # Free time of a pair, before a series exists
 
