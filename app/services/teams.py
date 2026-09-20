@@ -74,7 +74,7 @@ def _fill_out_rounds(
 ) -> None:
     """The rounds each roster player sits out of the event, on their season stats.
 
-    Four statements answer the whole roster, never one per player.
+    A fixed number of statements answers the whole roster, never one per player.
     """
     out = availability.out_rounds(session, team_id, season_id)
     for player in public.player_by_season.get(season_id) or []:

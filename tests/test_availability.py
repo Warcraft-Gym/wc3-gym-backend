@@ -780,7 +780,12 @@ def out_rounds(client: Client, team_id: int, season_id: int) -> list[list[int]]:
     resp = client.get(f"/events/{season_id}/teams/{team_id}")
     assert resp.status_code == 200, resp.text
     players = resp.json()["player_by_season"][str(season_id)]
-    return [player["gnl_stats"][0]["out_rounds"] for player in players]
+    return [
+        stat["out_rounds"]
+        for player in players
+        for stat in player["gnl_stats"]
+        if stat["season_id"] == season_id
+    ]
 
 
 def test_the_roster_read_lists_the_rounds_a_player_sits_out(
@@ -854,6 +859,9 @@ def test_the_roster_read_costs_a_constant_number_of_statements(
     from tests.test_query_budget import count_statements
 
     team_id, season_id = seeded["team_a_id"], seeded["season_id"]
+    # A zoned player takes the derive past its early return, onto blocks and busy days
+    busy(seeded["player_ids"][0], "Europe/London", "2026-01-19", "2026-01-25")
+    busy(seeded["player_ids"][2], "Europe/London", "2026-01-19", "2026-01-25")
     with count_statements() as small:
         out_rounds(client, team_id, season_id)
 
