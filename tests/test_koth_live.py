@@ -14,6 +14,7 @@ from app.models.base import ident
 from app.models.enums import Race
 from app.models.user import User
 from app.models.w3c_stats import W3CStats
+from app.services.koth import legacy
 from tests.test_koth_night import enrol, open_night
 from tests.test_query_budget import count_statements
 
@@ -627,6 +628,53 @@ def test_every_live_write_takes_an_admin_and_nobody_else(
     assert len(line_of(payload, top)) == 2
     assert only(payload, top)["left"] == []
     assert start(client, auth_headers, night["id"], first, second).status_code == 201
+
+
+def test_the_king_loses_on_his_second_race_row_and_the_crown_moves(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """The crown follows the player, so it moves on whichever race row he plays."""
+    night = open_night(client, auth_headers)
+    top = bracket_ids(night)[0]
+    user_id = enrol("Two#1", 1700)
+    with Session.begin() as session:
+        session.add(
+            W3CStats(user_id=user_id, race=Race.NE, wc3_season=20, games=50, mmr=1700)
+        )
+    human = place_user(client, auth_headers, night, user_id, top)
+    elf = place_user(client, auth_headers, night, user_id, top, race="NE")
+    first = place(client, auth_headers, night, "One#2", 1700, top)
+    second = place(client, auth_headers, night, "Three#3", 1700, top)
+
+    play(client, auth_headers, night["id"], human, first)
+    payload = play(client, auth_headers, night["id"], elf, second, winner=2)
+
+    assert only(payload, top)["king"]["rows"][0]["entrant_id"] == second
+    assert only(payload, top)["played"][0]["throne"] == "moved"
+
+
+def test_a_king_who_withdraws_through_the_shared_route_frees_the_throne(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """A crown whose row left reads as an empty throne on every later result."""
+    night = open_night(client, auth_headers)
+    top = bracket_ids(night)[0]
+    king = place(client, auth_headers, night, "Away#1", 1700, top)
+    first = place(client, auth_headers, night, "Here#2", 1700, top)
+    second = place(client, auth_headers, night, "There#3", 1700, top)
+    play(client, auth_headers, night["id"], king, first)
+
+    legacy.withdraw("Away#1")
+
+    assert king_of(board(client, night["id"]), top) is None
+    payload = play(client, auth_headers, night["id"], first, second)
+    assert only(payload, top)["king"]["rows"][0]["entrant_id"] == first
+
+    back = client.post(
+        f"/koth/nights/{night['id']}/entrants/{king}/restore", headers=auth_headers
+    )
+    assert back.status_code == 200, back.text
+    assert only(back.json(), top)["king"]["rows"][0]["entrant_id"] == first
 
 
 def _by_tag(tag: str) -> Any:  # noqa: ANN401

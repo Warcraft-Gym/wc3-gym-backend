@@ -185,12 +185,14 @@ def _played(
         loser = stage_engine.entrant_of(row, takes_loser=True)
         if not stage_engine.scored(row) or winner is None or loser is None:
             continue
-        sides = (row.entrant1_id, row.entrant2_id)
+        # The king is a player, so the walk follows him over all his race rows
+        sides = (row.player1_id, row.player2_id)
+        won = row.player1_id if stage_engine.won_slot(row) == 1 else row.player2_id
         throne = "none" if king is not None and king not in sides else "moved"
-        if king == winner:
+        if king == won:
             throne = "held"
         if throne != "none":
-            king = winner
+            king = won
         if winner not in by_id or loser not in by_id:
             continue
         rows.append(

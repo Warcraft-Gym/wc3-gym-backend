@@ -1,10 +1,10 @@
 ---
 type: Domain Concept
 title: KOTH night
-description: A King of the Hill night is one event of the KOTH league with three MMR brackets as divisions, a chain per bracket, and a Twitch chat signup.
+description: A King of the Hill night is one event of the KOTH league with three MMR brackets as divisions and a Twitch chat signup.
 resource: ../../../app/services/koth/night.py
 tags: [events, koth]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-20T15:00:00Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-09-20T18:00:00Z }
 sources:
   - id: night
     resource: ../../../app/services/koth/night.py
@@ -46,7 +46,7 @@ A player may enter on more than one race. Each race is its own entrant row with 
 
 # The old payloads
 
-`/koth/events`, `/koth/events/active`, `/koth/signups`, `/koth/matches` and `/koth/events/{id}/kings` are deprecated: the OpenAPI document marks every route of `app/api/routes/koth.py` so, and the web app calls none of them. Nightbot, the stream overlay and old bookmarks still do. `app/services/koth/legacy.py` answers those shapes from the event rows: a signup is an entrant, a match is a series of the chain, a bracket is a division, the king is derived. An old route that names an entrant or a series refuses an id that is not a KOTH entrant or series. The four old `koth_*` tables are gone; `app/models/koth_legacy.py` holds only the shapes.
+`/koth/events`, `/koth/events/active`, `/koth/signups`, `/koth/matches` and `/koth/events/{id}/kings` are deprecated: the OpenAPI document marks every route of `app/api/routes/koth.py` so, and the web app calls none of them. Nightbot, the stream overlay and old bookmarks still do. `app/services/koth/legacy.py` answers those shapes from the event rows: a signup is an entrant, a match is a series of the chain, a bracket is a division, the king is the stored crown of the division. An old route that names an entrant or a series refuses an id that is not a KOTH entrant or series. The four old `koth_*` tables are gone; `app/models/koth_legacy.py` holds only the shapes.
 
 # Running the night
 

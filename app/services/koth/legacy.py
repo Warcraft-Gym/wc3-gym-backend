@@ -202,6 +202,7 @@ def withdraw(battle_tag: str, race: str | None = None) -> None:
             raise NotFoundError("No active signup to withdraw")
         for row in rows:
             row.withdrawn_at = utcnow()
+        stage_engine.uncrown(session, [ident(row) for row in rows])
 
 
 def set_bracket(signup_id: int, bracket: int) -> KothSignupPublic:

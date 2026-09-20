@@ -99,8 +99,7 @@ def set_result(night_id: int, series_id: int, data: SeriesResult) -> KothBoard:
         row.player1_score = 1 if data.winner == 1 else 0
         row.player2_score = 0 if data.winner == 1 else 1
         session.flush()
-        # The same result sent again changes nothing: the crown stays where it
-        # stands and the line keeps the order the first save gave it
+        # The same result sent again moves neither the crown nor the line
         if not was_scored or was_slot != data.winner:
             stage_engine.after_score(session, row, was_scored, was_slot)
             beaten = stage_engine.entrant_of(row, takes_loser=True)
@@ -160,10 +159,7 @@ def remove_entrant(night_id: int, entrant_id: int) -> KothBoard:
         night = _open_night(session, night_id)
         row = _entrant(session, ident(night), entrant_id)
         row.withdrawn_at = utcnow()
-        if row.division_id is not None:
-            division = session.get(EventDivision, row.division_id)
-            if division is not None and division.king_entrant_id == entrant_id:
-                division.king_entrant_id = None
+        stage_engine.uncrown(session, [entrant_id])
         for series in series_of(session, ident(night)):
             if not stage_engine.scored(series) and entrant_id in (
                 series.entrant1_id,

@@ -11,7 +11,7 @@ of that pair hang under, so a team league is read exactly as GNL is read.
 
 from collections.abc import Mapping, Sequence
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import Session as OrmSession
 from sqlmodel import col
 
@@ -420,8 +420,7 @@ def after_score(
 ) -> None:
     """Follow a score change into the bracket and move the crown behind it."""
     _follow_score(session, row, was_scored, was_slot, force)
-    # A save that leaves the winner as he was moves no crown, so re-saving an
-    # old series of a bracket never hands the crown back to the side it named
+    # Only a save that changes who won moves the crown
     if not was_scored or was_slot != won_slot(row):
         crown(session, row)
 
@@ -443,9 +442,33 @@ def crown(session: OrmSession, row: Series) -> None:
     winner = entrant_of(row)
     if division is None or winner is None:
         return
-    if division.king_entrant_id in (None, row.entrant1_id, row.entrant2_id):
+    wearer = (
+        session.get(EventEntrant, division.king_entrant_id)
+        if division.king_entrant_id is not None
+        else None
+    )
+    # A crown whose row is gone or left reads as an empty throne, and a king is
+    # a player, so he loses it on whichever of his race rows he played
+    if (
+        wearer is None
+        or wearer.withdrawn_at is not None
+        or wearer.user_id in (row.player1_id, row.player2_id)
+    ):
         division.king_entrant_id = winner
         session.flush()
+
+
+def uncrown(session: OrmSession, entrant_ids: Sequence[int]) -> None:
+    """Empty every throne these rows wear: a row that leaves loses the crown."""
+    ids = [entrant_id for entrant_id in entrant_ids if entrant_id is not None]
+    if not ids:
+        return
+    session.execute(
+        update(EventDivision)
+        .where(col(EventDivision.king_entrant_id).in_(ids))
+        .values(king_entrant_id=None)
+    )
+    session.flush()
 
 
 def _follow_score(
