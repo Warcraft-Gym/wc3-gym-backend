@@ -2,6 +2,7 @@
 
 ## 2026-09-20
 
+* **Update**: a KOTH night is paired by hand and generate refuses a `koth` stage; one signup rule holds at every door, an unrated signup stands unplaced, and the entrant seed is the line of its bracket.
 * **Update**: a round row of the player series read names the stage it sits in, as `stage_id` and `stage_name`.
 * **Update**: the series free-time read answers each player's own blocked ranges beside the shared ones, as `blocked1` and `blocked2`.
 * **Update**: the event roster read carries `out_rounds`, the rounds of the event each player sits out, on their season stats.

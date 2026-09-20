@@ -69,9 +69,10 @@ def signup(
                 " yet, the admin places you"
             ),
         }
+    rating = f" ({mmr} MMR)" if mmr is not None else ""
     return {
         "success": True,
-        "message": f"{twitch} signed up for {bracket} ({mmr} MMR)",
+        "message": f"{twitch} signed up for {bracket}{rating}",
     }
 
 

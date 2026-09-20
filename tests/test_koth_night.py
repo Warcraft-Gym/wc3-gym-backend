@@ -522,6 +522,37 @@ def test_an_admin_places_an_unplaced_row_and_a_recut_leaves_it(
     assert rows["Ghost#9999"]["seed"] == 2
 
 
+def test_the_chat_answer_of_a_hand_placed_row_names_no_rating(
+    client: Client,
+    auth_headers: dict[str, str],
+    seeded: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A placed row that W3Champions still does not rate reads its bracket alone."""
+    silent_w3c(monkeypatch)
+    night = open_night(client, auth_headers)
+    enrol("Rated#1001", 1500)
+    sign_up(client, "Rated#1001", "rated", "human")
+    sign_up(client, "Ghost#9999", "ghost", "human")
+    waiting = next(
+        row for row in entrants(client, night["id"]) if row["division_id"] is None
+    )
+    bracket = next(
+        row["division_id"]
+        for row in entrants(client, night["id"])
+        if row["division_id"] is not None
+    )
+    client.put(
+        f"/events/{night['id']}/entrants/{waiting['id']}",
+        json={"division_id": bracket},
+        headers=auth_headers,
+    )
+
+    again = sign_up(client, "Ghost#9999", "ghost", "human")
+
+    assert again.json()["message"] == "ghost signed up for Bracket 2"
+
+
 def test_a_rating_that_arrives_late_takes_the_end_of_its_bracket(
     client: Client,
     auth_headers: dict[str, str],

@@ -75,8 +75,7 @@ def follow(
         sync_rating(user_id, tag)
     EventService().assign_divisions(event_id)
     with Session.begin() as session:
-        # The cut moves more rows than the one that signed up, so every row it
-        # moved into a bracket takes the end of that bracket's line
+        # Every row the cut moved into a bracket takes the end of that line
         for one in _live_entrants(session, event_id):
             if one.division_id is None:
                 one.seed = None
