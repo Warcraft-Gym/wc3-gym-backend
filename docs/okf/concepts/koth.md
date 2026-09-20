@@ -4,7 +4,7 @@ title: KOTH night
 description: A King of the Hill night is one event of the KOTH league with three MMR brackets as divisions, a chain per bracket paired by hand, and one signup rule at every door.
 resource: ../../../app/services/koth/night.py
 tags: [events, koth]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-20T18:00:00Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-09-20T20:00:00Z }
 sources:
   - id: night
     resource: ../../../app/services/koth/night.py
@@ -39,9 +39,9 @@ Three ways in, all through the shared entrant write under the `anyone` policy:
 - an admin, `POST /events/{id}/entrants/admin`;
 - Twitch chat through Nightbot, `GET /koth/signup`, authenticated with a shared token held in settings, because Nightbot cannot send a body.
 
-One rule holds at every door. The battle tag is the identity and must be shaped `Name#1234`, trimmed, matched without case; a tag of another shape answers 400 and writes no player. The rating comes from W3Champions alone and is never typed: when the app holds no rating for the signup race inside the rating window, the signup asks w3champions once for that tag, under a timeout short enough for a chat answer, and a tag asked about in the last hour is not asked about again. A rating found cuts the row into the bracket its MMR reaches. Nothing found, or an ask that timed out or was turned away, still takes the signup: the row stands unplaced, with no division and no place in a line, and the chat answer says an admin places the player. `PUT /events/{id}/entrants/{entrant_id}` is that placement; it marks the row placed by hand, gives it the end of its new bracket's line, and a later cut leaves it alone.
+One rule holds at every door. The battle tag is the identity and must be shaped `Name#1234`, trimmed, matched without case; a tag of another shape answers 400 and writes no player. The rating comes from W3Champions alone and is never typed: when the app holds no rating for the signup race inside the rating window, the signup asks w3champions once for that tag, under a timeout short enough for a chat answer, and a tag asked about in the last hour is not asked about again. A rating found cuts the row into the bracket its MMR reaches. Nothing found, or an ask that timed out or was turned away, still takes the signup: the row stands unplaced, with no division and no place in a line, and the chat answer says an admin places the player. `PUT /events/{id}/entrants/{entrant_id}` is that placement; it marks the row placed by hand, gives it the end of its new bracket's line, and a later cut leaves it alone. A rating that arrives after the signup is read by the next cut: the row it moves into a bracket takes the end of that bracket's line, a row the cut leaves where it stands keeps its place, and a player who withdraws and signs up again takes the end again.
 
-A player may enter on more than one race. Each race is its own entrant row with its own MMR and its own bracket; the unique key is (event, user, race). The page lists the player once with the races under him. Two rows of one player in one bracket both stay; the chain seats the row with the lower seed and never the second, so the draw never pairs a player with himself. A withdraw that names a race withdraws that row; one that names none withdraws every row of the player. See [the decision](../decisions/koth-multi-entry.md).
+A player may enter on more than one race. Each race is its own entrant row with its own MMR and its own bracket; the unique key is (event, user, race). The page lists the player once with the races under him. Two rows of one player in one bracket both stay; a player a series of the chain already names takes no second seat in it. A withdraw that names a race withdraws that row; one that names none withdraws every row of the player. See [the decision](../decisions/koth-multi-entry.md).
 
 # The old payloads
 

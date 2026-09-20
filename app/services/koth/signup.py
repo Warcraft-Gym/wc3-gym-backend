@@ -10,6 +10,7 @@ signup stands either way for an admin to place by hand.
 import logging
 
 from app.core.db import Session
+from app.core.exceptions import ExternalServiceError
 from app.models.base import ident
 from app.models.enums import EventKind, Race
 from app.models.event_entrant import EventEntrant, EventEntrantPublic
@@ -21,6 +22,7 @@ from app.services.events import (
     _end_seed,
     _entrant_publics,
     _event,
+    _live_entrants,
     _stats_for,
     _w3c_season,
 )
@@ -40,7 +42,10 @@ SYNC_AGAIN = 3600
 def follow(
     event_id: int, entrant_id: int, synced: bool = False
 ) -> EventEntrantPublic | None:
-    """Cut the row a signup wrote into its bracket and seed it at the end.
+    """Cut the night into its brackets and seed at the end what the cut moved.
+
+    A row the cut leaves where it stands keeps its place in the line, so a
+    repeated signup costs a player nothing.
 
     The answer is the row as the door reads it back, or nothing when the event
     is no KOTH night: that is what lets the shared doors call this blind. A
@@ -63,19 +68,24 @@ def follow(
         )
         tag = (user.battleTag or "") if user is not None else ""
         user_id = ident(user) if user is not None else 0
+        before = {
+            ident(one): one.division_id for one in _live_entrants(session, event_id)
+        }
     if ask and tag:
         sync_rating(user_id, tag)
     EventService().assign_divisions(event_id)
     with Session.begin() as session:
+        # The cut moves more rows than the one that signed up, so every row it
+        # moved into a bracket takes the end of that bracket's line
+        for one in _live_entrants(session, event_id):
+            if one.division_id is None:
+                one.seed = None
+            elif one.division_id != before.get(ident(one)) or one.seed is None:
+                one.seed = _end_seed(session, event_id, one.division_id, ident(one))
+        session.flush()
         row = session.get(EventEntrant, entrant_id)
         if row is None:
             return None
-        row.seed = (
-            None
-            if row.division_id is None
-            else _end_seed(session, event_id, row.division_id, entrant_id)
-        )
-        session.flush()
         return _entrant_publics(session, _event(session, event_id), [row])[0]
 
 
@@ -108,5 +118,5 @@ def sync_rating(user_id: int, battle_tag: str) -> None:
         UserService(settings_app_service=SettingsService()).update_w3c_stats(
             UserReduced(id=user_id, battleTag=battle_tag), timeout=SYNC_TIMEOUT
         )
-    except Exception as error:
+    except ExternalServiceError as error:
         logger.info(f"No W3Champions rating for a KOTH signup: {error}")

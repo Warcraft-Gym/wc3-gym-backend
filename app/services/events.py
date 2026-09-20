@@ -636,14 +636,16 @@ class EventService:
                     raise BadRequestError(
                         f"Division not found by id: {data.division_id}"
                     )
+            moved = data.division_id != row.division_id
             row.division_id = data.division_id
             row.manual_placement = data.manual_placement
-            # The placed row stands at the end of its new division's line
-            row.seed = (
-                None
-                if data.division_id is None
-                else _end_seed(session, event_id, data.division_id, ident(row))
-            )
+            # A row moved into a division stands at the end of its line
+            if moved:
+                row.seed = (
+                    None
+                    if data.division_id is None
+                    else _end_seed(session, event_id, data.division_id, ident(row))
+                )
             session.flush()
             return _entrant_publics(session, event, [row])[0]
 
@@ -1747,6 +1749,8 @@ def _enter(
     if existing is not None:
         # The unique key is one row per entrant, so a return signup reopens it
         existing.withdrawn_at = None
+        # A player who left and comes back stands at the end of the line again
+        existing.seed = None
         existing.race = race
         existing.note = data.note
         existing.channel = data.channel

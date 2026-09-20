@@ -109,7 +109,10 @@ def enter(
         entrant_id = ident(row) if row is not None else 0
         if row is not None:
             row.race = chosen
-            row.withdrawn_at = None
+            if row.withdrawn_at is not None:
+                # A player who left and comes back stands at the end again
+                row.withdrawn_at = None
+                row.seed = None
 
     if entered:
         # The row stood already, so the rule runs over it here

@@ -11,14 +11,16 @@ from typing import Any
 
 import pytest
 from httpx2 import Client
+from sqlmodel import col, select
 
 from app.core.db import Session
 from app.core.exceptions import ExternalServiceError, W3CThrottledError
 from app.models.base import ident
 from app.models.enums import EventKind, Race
 from app.models.user import User
-from app.models.w3c_stats import W3CStats
+from app.models.w3c_stats import W3CStats, W3CStatsCreate
 from app.services.koth import legacy
+from app.services.users import UserService
 from app.services.w3c import W3CService
 from tests.test_event_entrants import Member
 from tests.test_event_entrants import sign_up as sign_up_to_event
@@ -31,6 +33,37 @@ NIGHT = "2026-09-14T19:00:00Z"
 LATER = "2026-09-21T19:00:00Z"
 # The site door reads the event phase, which shuts on a night already over
 TONIGHT = f"{datetime.now(tz=UTC).date():%Y-%m-%d}T19:00:00Z"
+
+
+def rate(tag: str, mmr: int, race: Race = Race.HU, season: int = 20) -> None:
+    """Store a W3Champions rating for a player the app already knows."""
+    with Session.begin() as session:
+        user = session.scalars(select(User).where(col(User.battleTag) == tag)).one()
+        session.add(
+            W3CStats(
+                user_id=ident(user), race=race, wc3_season=season, games=50, mmr=mmr
+            )
+        )
+
+
+def count_w3c(monkeypatch: pytest.MonkeyPatch, mmr: int | None = None) -> list[int]:
+    """Count what a signup asks w3champions; the one element is the ask count."""
+    calls = [0]
+
+    def answer(
+        self: W3CService, bnet_name: str, season_override: int | None = None
+    ) -> list[W3CStatsCreate]:
+        calls[0] += 1
+        if mmr is None:
+            return []
+        return [
+            W3CStatsCreate(
+                wc3_season=season_override or 20, race=Race.HU, games=50, mmr=mmr
+            )
+        ]
+
+    monkeypatch.setattr(W3CService, "get_player_stats", answer)
+    return calls
 
 
 def enrol(tag: str, mmr: int, race: Race = Race.HU, season: int = 20) -> int:
@@ -487,6 +520,103 @@ def test_an_admin_places_an_unplaced_row_and_a_recut_leaves_it(
     rows = {row["user"]["battleTag"]: row for row in entrants(client, night["id"])}
     assert rows["Ghost#9999"]["division_id"] == bracket
     assert rows["Ghost#9999"]["seed"] == 2
+
+
+def test_a_rating_that_arrives_late_takes_the_end_of_its_bracket(
+    client: Client,
+    auth_headers: dict[str, str],
+    seeded: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The cut moves more rows than the one signing up; each moved row is seeded."""
+    silent_w3c(monkeypatch)
+    night = open_night(client, auth_headers)
+    enrol("Rated#1001", 1500)
+    sign_up(client, "Rated#1001", "rated", "human")
+    sign_up(client, "Ghost#9999", "ghost", "human")
+    rate("Ghost#9999", 1500)
+
+    enrol("Third#1003", 1500)
+    assert sign_up(client, "Third#1003", "third", "human").status_code == 200
+
+    rows = entrants(client, night["id"])
+    assert {row["user"]["battleTag"]: row["seed"] for row in rows} == {
+        "Rated#1001": 1,
+        "Ghost#9999": 2,
+        "Third#1003": 3,
+    }
+    assert len({row["division_id"] for row in rows}) == 1
+    places = [(row["division_id"], row["seed"]) for row in rows]
+    assert len(set(places)) == len(places)
+
+
+def test_a_repeated_chat_command_keeps_the_place_in_the_line(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """Typing the command twice is normal on a Twitch night and costs no place."""
+    night = open_night(client, auth_headers)
+    for tag in ("A#1001", "B#1002", "C#1003"):
+        enrol(tag, 1500)
+        sign_up(client, tag, tag.split("#")[0], "human")
+
+    assert sign_up(client, "A#1001", "a", "human").status_code == 200
+
+    rows = entrants(client, night["id"])
+    assert [row["seed"] for row in rows] == [1, 2, 3]
+
+
+def test_a_tag_the_app_already_rates_asks_w3champions_at_no_door(
+    client: Client,
+    auth_headers: dict[str, str],
+    seeded: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A rating inside the window is the answer, so no door sends traffic."""
+    calls = count_w3c(monkeypatch)
+    night = open_night(client, auth_headers, starts_at=TONIGHT)
+    for tag in ("Chat#1001", "Site#1002", "Hand#1003"):
+        enrol(tag, 1500)
+
+    sign_up(client, "Chat#1001", "chat", "human")
+    sign_up_to_event(client, night["id"], battle_tag="Site#1002", race="HU")
+    client.post(
+        f"/events/{night['id']}/entrants/admin",
+        json={"battle_tag": "Hand#1003", "race": "HU"},
+        headers=auth_headers,
+    )
+
+    assert calls == [0]
+    assert len(entrants(client, night["id"])) == 3
+
+
+def test_a_new_tag_is_asked_about_once_and_lands_at_the_end(
+    client: Client,
+    auth_headers: dict[str, str],
+    seeded: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The one ask of a new tag is what places it, and the door asks no twice."""
+    monkeypatch.setattr(W3CService, "current_season", lambda self: 20)
+    count_w3c(monkeypatch, mmr=1500)
+    syncs = [0]
+    real = UserService.update_w3c_stats
+
+    def counted(self: UserService, user: Any, timeout: float = 10.0) -> None:  # noqa: ANN401
+        syncs[0] += 1
+        real(self, user, timeout=timeout)
+
+    monkeypatch.setattr(UserService, "update_w3c_stats", counted)
+    night = open_night(client, auth_headers)
+    enrol("Rated#1001", 1500)
+    sign_up(client, "Rated#1001", "rated", "human")
+
+    resp = sign_up(client, "New#1002", "new", "human")
+
+    assert resp.status_code == 200, resp.text
+    assert syncs == [1]
+    rows = {row["user"]["battleTag"]: row for row in entrants(client, night["id"])}
+    assert rows["New#1002"]["division_id"] == rows["Rated#1001"]["division_id"]
+    assert rows["New#1002"]["seed"] == 2
 
 
 def test_closing_a_night_deletes_the_series_nobody_played(
