@@ -308,8 +308,7 @@ def test_a_finished_casted_series_shows_with_its_score(
     client: Client, hub: dict[str, Any]
 ) -> None:
     with Session() as session:
-        # The channel-only claim is written first, so a card that fell back to the
-        # first claim would name the wrong caster and open no recording
+        # The channel-only claim is written first, so a fallback names the wrong caster
         session.add_all(
             [
                 SeriesCast(
@@ -365,7 +364,7 @@ def test_the_hub_read_is_cacheable_at_the_edge(
     assert resp.headers["access-control-allow-origin"] == "*"
 
 
-def test_the_hub_costs_a_fixed_number_of_statements_and_stays_small(
+def test_the_hub_costs_a_fixed_number_of_statements(
     client: Client, hub: dict[str, Any]
 ) -> None:
     """Three list statements, their two collection loads each, and one pass
