@@ -1,9 +1,9 @@
 ---
 type: Decision
 title: One KOTH entrant row per race
-description: A player may enter a KOTH night on more than one race; each race is its own entrant row, listed once on the page, and the draw never pairs a player with himself.
+description: A player may enter a KOTH night on more than one race; each race is its own entrant row, listed once on the page, and a player a series already names takes no second seat in it.
 tags: [koth]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-09-20T20:00:00Z }
 sources:
   - id: source
     resource: Maintainers' decision, 2026-09-15
@@ -12,7 +12,7 @@ sources:
 
 # Decision
 
-The entrant unique key widens from (event, user) to (event, user, race). A per-event switch, off by default and on for KOTH nights, allows the second row. Rows in the same bracket show once with the races as sub-rows. The chain draw gives a player one place and never pairs them with themself.
+The entrant unique key widens from (event, user) to (event, user, race). A per-event switch, off by default and on for KOTH nights, allows the second row. Rows in the same bracket show once with the races as sub-rows. A player a series of the chain already names takes no second seat in it.
 
 # Why
 

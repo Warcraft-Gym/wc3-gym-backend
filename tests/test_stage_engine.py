@@ -348,12 +348,27 @@ def test_an_odd_field_sits_one_entrant_out_of_every_round(
     assert len(set(pairs)) == len(pairs) == 21
 
 
-def test_a_koth_chain_of_four_runs_in_one_round(
+def test_a_chain_stage_is_never_generated(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """A chain is built pair by pair by its admin, so the draw refuses it."""
+    event, (stage,) = cup(4, StageFormat.koth)
+
+    response = client.post(
+        f"/events/{event}/stages/{stage}/generate", headers=auth_headers
+    )
+
+    assert response.status_code == 400, response.text
+    assert "paired by its admin" in response.json()["error"]
+    assert bracket(stage) == []
+
+
+def test_a_chain_of_four_runs_in_one_round(
     client: Client, auth_headers: dict[str, str]
 ) -> None:
     """Seeds 1 and 2 open and the winner meets the next seed, in sequence."""
     event, (stage,) = cup(4, StageFormat.koth)
-    assert generate(client, auth_headers, event, stage) == {"series": 3, "rounds": 1}
+    chain_of(client, auth_headers, event, stage)
     rows = bracket(stage)
     assert [row["sequence"] for row in rows] == [1, 2, 3]
     seeds = players_of(event)
@@ -362,6 +377,62 @@ def test_a_koth_chain_of_four_runs_in_one_round(
     assert rows[1]["sides"] == (None, seeds[2])
     assert rows[2]["slot1"] == (rows[1]["id"], False)
     assert rows[2]["sides"] == (None, seeds[3])
+
+
+def entrants_of(event: int, division: int | None = None) -> list[EventEntrant]:
+    """The entrant rows of a division, or of the whole event, in seed order."""
+    with Session.begin() as session:
+        rows = session.scalars(
+            select(EventEntrant)
+            .where(
+                col(EventEntrant.event_id) == event,
+                *([col(EventEntrant.division_id) == division] if division else []),
+            )
+            .order_by(col(EventEntrant.seed))
+        ).all()
+        session.expunge_all()
+        return list(rows)
+
+
+def open_chain(event: int, stage: int, division: int | None = None) -> int:
+    """The first series of a chain: the pair an admin makes to start a night."""
+    field = entrants_of(event, division)
+    with Session.begin() as session:
+        held = session.scalars(
+            select(DBEventRound).where(col(DBEventRound.stage_id) == stage)
+        ).first()
+        if held is None:
+            held = DBEventRound(
+                stage_id=stage, season_id=event, number=1, name="Round 1"
+            )
+            session.add(held)
+            session.flush()
+        row = Series(
+            round_id=ident(held),
+            division_id=field[0].division_id,
+            sequence=1,
+            host_player_id=field[0].user_id or 0,
+            player1_id=field[0].user_id,
+            player2_id=field[1].user_id,
+            entrant1_id=ident(field[0]),
+            entrant2_id=ident(field[1]),
+        )
+        session.add(row)
+        session.flush()
+        return ident(row)
+
+
+def chain_of(
+    client: Client,
+    headers: dict[str, str],
+    event: int,
+    stage: int,
+    division: int | None = None,
+) -> None:
+    """The whole chain of a division by hand: the first pair, then each challenger."""
+    open_chain(event, stage, division)
+    for row in entrants_of(event, division)[2:]:
+        assert append(client, headers, event, stage, ident(row)).status_code == 200
 
 
 def players_of(event: int) -> list[int]:
@@ -382,7 +453,7 @@ def test_a_result_fills_the_series_below_it(
     client: Client, auth_headers: dict[str, str]
 ) -> None:
     event, (stage,) = cup(4, StageFormat.koth)
-    generate(client, auth_headers, event, stage)
+    chain_of(client, auth_headers, event, stage)
     rows = bracket(stage)
     seeds = players_of(event)
     assert score(client, auth_headers, rows[0]["id"], 2, 0).status_code == 200
@@ -398,7 +469,7 @@ def test_a_walkover_scores_a_series_with_no_games(
     client: Client, auth_headers: dict[str, str]
 ) -> None:
     event, (stage,) = cup(4, StageFormat.koth)
-    generate(client, auth_headers, event, stage)
+    chain_of(client, auth_headers, event, stage)
     rows = bracket(stage)
     seeds = players_of(event)
     response = client.put(
@@ -429,7 +500,7 @@ def test_a_reopen_is_refused_while_a_later_series_is_scored(
 ) -> None:
     """Clearing a score takes the side back off everything below it."""
     event, (stage,) = cup(4, StageFormat.koth)
-    generate(client, auth_headers, event, stage)
+    chain_of(client, auth_headers, event, stage)
     rows = bracket(stage)
     seeds = players_of(event)
     score(client, auth_headers, rows[0]["id"], 2, 0)
@@ -550,7 +621,7 @@ def test_a_koth_table_puts_the_last_winner_on_the_throne(
     client: Client, auth_headers: dict[str, str]
 ) -> None:
     event, (stage,) = cup(4, StageFormat.koth)
-    generate(client, auth_headers, event, stage)
+    chain_of(client, auth_headers, event, stage)
     seeds = players_of(event)
     rows = bracket(stage)
     score(client, auth_headers, rows[0]["id"], 2, 0)
@@ -953,7 +1024,7 @@ def test_a_challenger_joins_the_chain_after_two_results(
 ) -> None:
     """The third series is fed by the second, and the king fills its front side."""
     event, (stage,) = cup(3, StageFormat.koth)
-    generate(client, auth_headers, event, stage)
+    chain_of(client, auth_headers, event, stage)
     rows = bracket(stage)
     seeds = players_of(event)
     assert score(client, auth_headers, rows[0]["id"], 2, 0).status_code == 200
@@ -976,7 +1047,7 @@ def test_a_challenger_waits_while_the_chain_is_unscored(
 ) -> None:
     """The new series carries its feeder and an empty front side."""
     event, (stage,) = cup(2, StageFormat.koth)
-    generate(client, auth_headers, event, stage)
+    chain_of(client, auth_headers, event, stage)
     opener = bracket(stage)[0]
     entrant = join(event, None, "Waiting")
     assert append(client, auth_headers, event, stage, entrant).status_code == 200
@@ -1012,8 +1083,9 @@ def test_an_entrant_of_another_division_is_refused(
 ) -> None:
     """A challenger grows the chain of his own division, never a neighbour's."""
     event, (stage,) = cup(2, StageFormat.koth, divisions=2)
-    generate(client, auth_headers, event, stage)
     weaker = divisions_of(event)[1]
+    for band in divisions_of(event):
+        open_chain(event, stage, band)
     entrant = join(event, weaker, "Outsider")
     with Session.begin() as session:
         stage_row = session.get(EventStage, stage)
