@@ -2,7 +2,7 @@
 
 The hub prints series of every event kind side by side, so a row carries the
 context label in parts and nothing the card does not draw. The player shape is
-this read's own: the reduced user of the other list reads carries stats, links
+this read's own: the reduced user of the other list reads carries links, ids
 and stamps the hub never prints, and the hub answers three lists in one request.
 """
 

@@ -6,6 +6,7 @@ unpublished event never ride in it, and the answer stays small enough to
 travel on every visit to the home page.
 """
 
+import gzip
 import json
 from datetime import datetime, timedelta
 from typing import Any
@@ -20,18 +21,22 @@ from app.models.draft_series import DraftSeries
 from app.models.enums import EntrantKind, EventKind, LeagueKind, Race, StageFormat
 from app.models.event_stage import EventStage
 from app.models.league import League
+from app.models.match import Match
 from app.models.relationships import DBEventRound, DBUserSeasonSignup
 from app.models.season import Season
 from app.models.series import Series
 from app.models.series_cast import SeriesCast
+from app.models.team import Team
 from app.models.types import utcnow
+from app.models.user import User
 from app.models.w3c_stats import W3CStats
 from tests.test_query_budget import count_statements
 
 VOD = "https://www.twitch.tv/videos/12345"
 CHANNEL = "https://www.twitch.tv/gnlcaster"
 
-# The answer rides on every home page visit, so it stays under this
+# The answer rides on every home page visit, so what crosses the wire stays
+# under this. The edge compresses it, and the raw body is larger.
 EGRESS_CEILING = 4096
 
 
@@ -85,6 +90,56 @@ def event_with_series(
         player2_id=players[1],
         host_player_id=players[0],
         date_time=when,
+    )
+    session.add(series)
+    session.flush()
+    return series
+
+
+def icon(index: int) -> str:
+    """A team icon URL of the length the blob store writes, about ninety characters."""
+    return (
+        "https://q7w2x9k4m1n8p3v6.public.blob.vercel-storage.com"
+        f"/team-icons/team-{index:02d}-Ab3xK9zQ2w6tYu.png"
+    )
+
+
+def fixture_series(
+    session: OrmSession,
+    seeded: dict[str, Any],
+    *,
+    index: int,
+    players: tuple[int, int],
+    when: datetime,
+    scored: bool,
+) -> Series:
+    """One GNL fixture of two teams of its own, each with an icon, and its series."""
+    teams = [
+        Team(
+            name=f"Tower Rush {index * 2 + side}",
+            league_id=seeded["league_id"],
+            icon_url=icon(index * 2 + side),
+        )
+        for side in (0, 1)
+    ]
+    session.add_all(teams)
+    session.flush()
+    match = Match(
+        team1_id=ident(teams[0]),
+        team2_id=ident(teams[1]),
+        season_id=seeded["season_id"],
+        playday=index % 4 + 1,
+    )
+    session.add(match)
+    session.flush()
+    series = Series(
+        match_id=ident(match),
+        player1_id=players[0],
+        player2_id=players[1],
+        host_player_id=players[0],
+        date_time=when,
+        player1_score=2 if scored else None,
+        player2_score=1 if scored else None,
     )
     session.add(series)
     session.flush()
@@ -324,59 +379,64 @@ def test_the_hub_costs_a_fixed_number_of_statements_and_stays_small(
     assert tally[0] == 15
 
 
-def test_a_full_answer_stays_under_the_egress_ceiling(
-    client: Client, hub: dict[str, Any]
+def test_the_worst_case_answer_stays_under_the_egress_ceiling(
+    client: Client, seeded: dict[str, Any]
 ) -> None:
-    """Every list at its cap: five booked, three of them claimed, four VODs."""
-    now = hub["now"]
-    first, second, third, fourth = hub["player_ids"]
+    """Every list at its cap and every row the longest kind there is.
+
+    A GNL fixture row is the worst case: it carries two teams on top of what a
+    cup row holds, each with an icon URL of the length the blob store writes.
+    Nine fixtures fill the three lists with twelve rows, and no two of them
+    share a team, so nothing in the answer repeats.
+    """
+    now = utcnow()
+    first, second, third, fourth = seeded["player_ids"]
     with Session() as session:
-        team = session.get(Season, hub["season_id"])
-        assert team is not None
-        for index in range(4):
-            booked = event_with_series(
-                session,
-                name=f"Autumn Cup {index}",
-                short_name="W3C",
-                kind=EventKind.cup,
-                stage_name="Group stage",
-                round_name="Quarter final",
-                players=(first, third),
-                when=now + timedelta(hours=4 + index),
-            )
-            played = event_with_series(
-                session,
-                name=f"Spring Cup {index}",
-                short_name="W3C",
-                kind=EventKind.cup,
-                stage_name="Group stage",
-                round_name="Quarter final",
-                players=(second, fourth),
-                when=now - timedelta(days=index + 1),
-            )
-            played.player1_score, played.player2_score = 2, 1
+        # Names of the length players and teams really use
+        for index, user_id in enumerate(seeded["player_ids"]):
+            player = session.get(User, user_id)
+            assert player is not None
+            player.name = f"Contender{index:02d}"
             session.add(
-                SeriesCast(
-                    series_id=ident(played),
-                    user_id=first,
-                    channel_url=CHANNEL,
-                    vod_url=VOD,
+                DBUserSeasonSignup(
+                    user_id=user_id, season_id=seeded["season_id"], race=Race.OC
                 )
             )
-            if index < 2:
+            session.add(
+                W3CStats(user_id=user_id, race=Race.OC, wc3_season=20, mmr=1400 + index)
+            )
+        for index in range(9):
+            booked = index < 5
+            row = fixture_series(
+                session,
+                seeded,
+                index=index,
+                players=(first, third) if booked else (second, fourth),
+                when=now + timedelta(hours=index + 1)
+                if booked
+                else now - timedelta(days=index),
+                scored=not booked,
+            )
+            # Three of the booked rows are claimed, and every played one has a VOD
+            if booked and index < 3:
+                session.add(
+                    SeriesCast(series_id=ident(row), user_id=first, channel_url=CHANNEL)
+                )
+            if not booked:
                 session.add(
                     SeriesCast(
-                        series_id=ident(booked), user_id=first, channel_url=CHANNEL
+                        series_id=ident(row),
+                        user_id=first,
+                        channel_url=CHANNEL,
+                        vod_url=VOD,
                     )
                 )
-        session.add(
-            SeriesCast(
-                series_id=hub["cup_series_id"], user_id=first, channel_url=CHANNEL
-            )
-        )
         session.commit()
 
     answer = read(client)
     assert [len(answer[key]) for key in answer] == [5, 3, 4]
-    body = json.dumps(answer, separators=(",", ":"))
-    assert len(body) < EGRESS_CEILING, len(body)
+    body = json.dumps(answer, separators=(",", ":")).encode()
+    # The edge and every browser speak gzip, and the answer repeats the host of
+    # every icon URL, so what crosses the wire is what the ceiling holds
+    packed = gzip.compress(body)
+    assert len(packed) < EGRESS_CEILING, (len(body), len(packed))

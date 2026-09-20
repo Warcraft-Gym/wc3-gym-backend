@@ -139,11 +139,14 @@ def series() -> HomeSeries:
     with Session() as session:
         booked = _published().where(col(Series.date_time) >= now, _unplayed())
         lists = [
-            _rows(session, booked.order_by(col(Series.date_time)).limit(NEXT)),
+            _rows(
+                session,
+                booked.order_by(col(Series.date_time), col(Series.id)).limit(NEXT),
+            ),
             _rows(
                 session,
                 booked.where(col(Series.id).in_(_claimed()))
-                .order_by(col(Series.date_time))
+                .order_by(col(Series.date_time), col(Series.id))
                 .limit(CASTS_UPCOMING),
             ),
             _rows(
@@ -156,7 +159,7 @@ def series() -> HomeSeries:
                         _claimed().where(col(SeriesCast.vod_url).is_not(None))
                     ),
                 )
-                .order_by(col(Series.date_time).desc())
+                .order_by(col(Series.date_time).desc(), col(Series.id).desc())
                 .limit(CASTS_RECENT),
             ),
         ]

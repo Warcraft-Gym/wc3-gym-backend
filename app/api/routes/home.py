@@ -17,7 +17,6 @@ def get_home_series(response: Response) -> HomeSeries:
     """
     # series are booked and claimed through the day; the edge serves one read for two minutes
     response.headers["Cache-Control"] = "public, s-maxage=120"
-    # the edge keeps the headers of the request that filled it, and CORSMiddleware
-    # writes none when that request has no Origin, so a browser reads a copy it blocks
+    # the edge stores the headers of the fill request; a fill with no Origin gets no CORS header
     response.headers["Access-Control-Allow-Origin"] = "*"
     return home.series()

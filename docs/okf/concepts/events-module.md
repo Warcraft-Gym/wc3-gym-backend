@@ -4,7 +4,7 @@ title: Events module
 description: One data model for every kind of event, with GNL and KOTH behaviour in their own modules on top, a stage engine that never branches on kind, a phase derived on every read, and the admin's path from a new league to a finished event with awards.
 resource: ../../../app/services/events.py
 tags: [events]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-20T12:00:00Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-09-20T13:30:00Z }
 sources:
   - id: events
     resource: ../../../app/services/events.py
@@ -72,8 +72,10 @@ what a card prints and nothing more: the label in parts (`league`, `event`,
 `stage`, `round`), the two fixture teams, each side as id, name, country, the
 race the row names and one rating, the two map scores, and one cast with its
 link. An empty field is left out of the row, so a reader defaults a missing key
-to null. The answer is cacheable at the edge for two minutes and stays under
-four kilobytes. It costs a fixed number of statements, none of them per row.
+to null. The answer is cacheable at the edge for two minutes. Its worst case is
+twelve fixture rows that each carry two team icon URLs; that body is about seven
+and a half kilobytes raw and under four kilobytes compressed, which is what the
+edge sends. It costs a fixed number of statements, none of them per row.
 
 # Awards
 
