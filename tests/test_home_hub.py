@@ -35,9 +35,10 @@ from tests.test_query_budget import count_statements
 VOD = "https://www.twitch.tv/videos/12345"
 CHANNEL = "https://www.twitch.tv/gnlcaster"
 
-# The answer rides on every home page visit, so what crosses the wire stays
-# under this. The edge compresses it, and the raw body is larger.
+# The wire body of every home page visit stays under this; the raw body is larger
 EGRESS_CEILING = 4096
+# A new field on a row shows here first, before the edge compresses the answer
+RAW_CEILING = 8192
 
 
 def event_with_series(
@@ -214,8 +215,7 @@ def test_the_hub_answers_every_event_kind_in_time_order(
     ]
 
     gnl, cup, koth = rows
-    # The context label in parts, and the fixture teams of a league series
-    # An empty field is left out of the row, so a reader defaults it
+    # The label in parts, the fixture teams, and no key at all for an empty field
     assert (gnl["league"], gnl["event"], gnl.get("stage"), gnl["round"]) == (
         "SL",
         "Season 1",
@@ -308,27 +308,45 @@ def test_a_finished_casted_series_shows_with_its_score(
     client: Client, hub: dict[str, Any]
 ) -> None:
     with Session() as session:
-        # A claim with no VOD is not a recent cast, and a played series is not next
+        # The channel-only claim is written first, so a card that fell back to the
+        # first claim would name the wrong caster and open no recording
         session.add_all(
             [
+                SeriesCast(
+                    series_id=hub["series_played_id"],
+                    user_id=hub["player_ids"][1],
+                    channel_url=CHANNEL,
+                ),
                 SeriesCast(
                     series_id=hub["series_played_id"],
                     user_id=hub["player_ids"][0],
                     channel_url=CHANNEL,
                     vod_url=VOD,
                 ),
-                SeriesCast(
-                    series_id=hub["series_played_id"],
-                    user_id=hub["player_ids"][1],
-                    channel_url=CHANNEL,
-                ),
             ]
+        )
+        # A played series whose only claim holds no VOD is not a recent cast
+        channel_only = fixture_series(
+            session,
+            hub,
+            index=9,
+            players=(hub["player_ids"][0], hub["player_ids"][2]),
+            when=hub["now"] - timedelta(days=1),
+            scored=True,
+        )
+        session.add(
+            SeriesCast(
+                series_id=ident(channel_only),
+                user_id=hub["player_ids"][0],
+                channel_url=CHANNEL,
+            )
         )
         session.commit()
 
     body = read(client)
-    (row,) = body["casts_recent"]
-    assert row["id"] == hub["series_played_id"]
+    # The channel-only series is newer, so it would sort first if it rode at all
+    assert [row["id"] for row in body["casts_recent"]] == [hub["series_played_id"]]
+    row = body["casts_recent"][0]
     assert (row["player1_score"], row["player2_score"]) == (2, 1)
     assert row["cast"] == {"name": "P1", "url": VOD}
     assert hub["series_played_id"] not in [next_row["id"] for next_row in body["next"]]
@@ -343,8 +361,7 @@ def test_the_hub_read_is_cacheable_at_the_edge(
 ) -> None:
     resp = client.get("/home/series")
     assert resp.headers["cache-control"] == "public, s-maxage=120"
-    # this client sends no Origin, the shape of a fill by curl or a bot. The copy the
-    # edge stores must still let a browser read it.
+    # this client sends no Origin, and the copy the edge stores must still read in a browser
     assert resp.headers["access-control-allow-origin"] == "*"
 
 
@@ -436,7 +453,7 @@ def test_the_worst_case_answer_stays_under_the_egress_ceiling(
     answer = read(client)
     assert [len(answer[key]) for key in answer] == [5, 3, 4]
     body = json.dumps(answer, separators=(",", ":")).encode()
-    # The edge and every browser speak gzip, and the answer repeats the host of
-    # every icon URL, so what crosses the wire is what the ceiling holds
+    # The edge and every browser speak gzip, so the packed body is what crosses the wire
     packed = gzip.compress(body)
     assert len(packed) < EGRESS_CEILING, (len(body), len(packed))
+    assert len(body) < RAW_CEILING, len(body)
