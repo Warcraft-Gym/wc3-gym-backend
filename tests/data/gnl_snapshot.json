@@ -43,24 +43,32 @@
         "end_date": "2026-01-11",
         "map_id": null,
         "playday": 1,
+        "stage_id": null,
+        "stage_name": null,
         "start_date": "2026-01-05"
       },
       {
         "end_date": "2026-01-18",
         "map_id": null,
         "playday": 2,
+        "stage_id": null,
+        "stage_name": null,
         "start_date": "2026-01-12"
       },
       {
         "end_date": "2026-01-25",
         "map_id": null,
         "playday": 3,
+        "stage_id": null,
+        "stage_name": null,
         "start_date": "2026-01-19"
       },
       {
         "end_date": "2026-02-01",
         "map_id": null,
         "playday": 4,
+        "stage_id": null,
+        "stage_name": null,
         "start_date": "2026-01-26"
       }
     ],
@@ -226,24 +234,32 @@
           "end_date": "2026-01-11",
           "map_id": null,
           "playday": 1,
+          "stage_id": null,
+          "stage_name": null,
           "start_date": "2026-01-05"
         },
         {
           "end_date": "2026-01-18",
           "map_id": null,
           "playday": 2,
+          "stage_id": null,
+          "stage_name": null,
           "start_date": "2026-01-12"
         },
         {
           "end_date": "2026-01-25",
           "map_id": null,
           "playday": 3,
+          "stage_id": null,
+          "stage_name": null,
           "start_date": "2026-01-19"
         },
         {
           "end_date": "2026-02-01",
           "map_id": null,
           "playday": 4,
+          "stage_id": null,
+          "stage_name": null,
           "start_date": "2026-01-26"
         }
       ],
@@ -286,24 +302,32 @@
         "end_date": "2026-01-11",
         "map_id": null,
         "playday": 1,
+        "stage_id": null,
+        "stage_name": null,
         "start_date": "2026-01-05"
       },
       {
         "end_date": "2026-01-18",
         "map_id": null,
         "playday": 2,
+        "stage_id": null,
+        "stage_name": null,
         "start_date": "2026-01-12"
       },
       {
         "end_date": "2026-01-25",
         "map_id": null,
         "playday": 3,
+        "stage_id": null,
+        "stage_name": null,
         "start_date": "2026-01-19"
       },
       {
         "end_date": "2026-02-01",
         "map_id": null,
         "playday": 4,
+        "stage_id": null,
+        "stage_name": null,
         "start_date": "2026-01-26"
       }
     ],
