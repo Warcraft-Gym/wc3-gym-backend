@@ -351,6 +351,60 @@ def test_a_finished_casted_series_shows_with_its_score(
     assert hub["series_played_id"] not in [next_row["id"] for next_row in body["next"]]
 
 
+def test_a_started_series_holds_its_place_for_two_hours(
+    client: Client, hub: dict[str, Any]
+) -> None:
+    """The booked lists keep a series two hours past its start, so a cast that
+    is live right now still has a card. A result drops it at once."""
+    now = hub["now"]
+    first, second, third, fourth = hub["player_ids"]
+    with Session() as session:
+        live = event_with_series(
+            session,
+            name="Live Cup",
+            short_name="LC",
+            kind=EventKind.cup,
+            stage_name=None,
+            round_name=None,
+            players=(first, second),
+            when=now - timedelta(hours=1),
+        )
+        stale = event_with_series(
+            session,
+            name="Stale Cup",
+            short_name="SC",
+            kind=EventKind.cup,
+            stage_name=None,
+            round_name=None,
+            players=(first, third),
+            when=now - timedelta(hours=3),
+        )
+        scored = event_with_series(
+            session,
+            name="Scored Cup",
+            short_name="CC",
+            kind=EventKind.cup,
+            stage_name=None,
+            round_name=None,
+            players=(second, fourth),
+            when=now - timedelta(hours=1),
+        )
+        scored.player1_score, scored.player2_score = 2, 0
+        session.add(
+            SeriesCast(series_id=ident(live), user_id=first, channel_url=CHANNEL)
+        )
+        session.commit()
+        live_id, stale_id, scored_id = ident(live), ident(stale), ident(scored)
+
+    body = read(client)
+    ids = [row["id"] for row in body["next"]]
+    # Soonest first, so the series that already started leads the list
+    assert ids[0] == live_id
+    assert stale_id not in ids
+    assert scored_id not in ids
+    assert [row["id"] for row in body["casts_upcoming"]] == [live_id]
+
+
 def test_an_empty_database_answers_three_empty_lists(client: Client) -> None:
     assert read(client) == {"next": [], "casts_upcoming": [], "casts_recent": []}
 
