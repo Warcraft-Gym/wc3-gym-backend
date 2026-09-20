@@ -29,10 +29,12 @@ THROTTLED_MESSAGE = "W3Champions throttled the sync, try again in a few minutes"
 # Matches per match search call, the largest page w3champions serves.
 MATCH_PAGE_SIZE = 100
 
-# Seasons the match walk may step back from the one it starts at. The search
+# The oldest w3champions season the match walk may step down to. The search
 # needs a season id and w3champions publishes no season dates, so a window
-# that reaches into an older season is walked, not looked up.
-MATCH_SEASON_STEPS = 6
+# that reaches into an older season is walked, not looked up. The walk stops
+# as soon as it sees a match older than the window, so this is the floor for
+# a window the walk never reaches, not the usual depth.
+WALK_FLOOR = 19
 
 # One connection pool for every w3champions call, so a sync pays no new TCP handshake.
 _session = requests.Session()
@@ -160,19 +162,26 @@ class W3CService:
         return _by_start_time(rows), complete
 
     def walk_player_matches(
-        self, battle_tag: str, season: int, since: datetime
+        self,
+        battle_tag: str,
+        season: int,
+        since: datetime,
+        floor: int = WALK_FLOOR,
     ) -> tuple[list[W3CLadderMatchCreate], dict[int, bool]]:
         """Every 1v1 match this player started at or after `since`.
 
-        Pages the season newest first and steps back a season until a page
-        older than `since` is seen, at most MATCH_SEASON_STEPS times. This is
-        the first read of a window, which has no stored match to name the
+        Pages the season newest first and steps down a season at a time until
+        a page older than `since` is seen, or `floor` is reached. This is the
+        first read of a window, which has no stored match to name the
         w3champions seasons it sits in.
+
+        `floor` is what stops a window whose matches the walk never finds. A
+        window that names its own start is stopped by `since` long before it,
+        so a lower floor costs nothing on a window inside stored history.
         """
         rows: dict[str, list[W3CLadderMatchCreate]] = {}
         complete: dict[int, bool] = {}
-        for step in range(MATCH_SEASON_STEPS + 1):
-            current = season - step
+        for current in range(season, min(floor, season) - 1, -1):
             if current < 0:
                 break
             older, complete[current] = self._page_season(
