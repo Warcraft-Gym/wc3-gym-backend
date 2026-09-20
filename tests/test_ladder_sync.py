@@ -303,13 +303,27 @@ def test_the_walk_reads_past_the_seasons_the_player_sat_out(
 
 
 def test_the_walk_is_capped(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Every season answers, so only the cap ends the walk."""
+    """Every season answers, so only the floor ends the walk."""
     every_season = dict.fromkeys(range(W3C_SEASON + 1), THANKS[:5])
     fake = serve(monkeypatch, every_season, page_size=10)
 
     W3CService().walk_player_matches("thanks#11187", W3C_SEASON, SINCE)
 
     assert fake.seasons() == [25, 24, 23, 22, 21, 20, 19]
+
+
+def test_the_walk_steps_down_to_the_floor_it_is_given(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A season imported from the old league sheets sits in a w3champions
+    season the default floor never reaches, so the caller names a lower one
+    and the walk goes there."""
+    every_season = dict.fromkeys(range(W3C_SEASON + 1), THANKS[:5])
+    fake = serve(monkeypatch, every_season, page_size=10)
+
+    W3CService().walk_player_matches("thanks#11187", W3C_SEASON, SINCE, floor=11)
+
+    assert fake.seasons() == list(range(W3C_SEASON, 10, -1))
 
 
 # The sync, against the database.

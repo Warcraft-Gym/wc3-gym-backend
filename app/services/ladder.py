@@ -74,8 +74,11 @@ from app.services.w3c import THROTTLED_MESSAGE, W3CService
 
 # Per rule id, the numbers a scope's price rows override
 ParamSet = Mapping[str, Mapping[str, int]]
-# The stored ladder history starts at w3champions season 23, where GNL S17 began
-FIRST_W3C_SEASON = 23
+# The oldest w3champions season the app stores. Season 11 opened in April
+# 2022, before GNL S10, so the seasons imported from the old league sheets
+# all sit inside it. A season already read to its end is never read again,
+# so reaching further back costs each player one pass, once.
+FIRST_W3C_SEASON = 11
 # The window of a player's whole stored ladder history
 ALL_TIME = datetime.combine(date.min, time.min, UTC)
 
@@ -561,7 +564,7 @@ class LadderService:
         try:
             if plan.seasons is None:
                 matches, complete = w3c_service.walk_player_matches(
-                    user.battleTag, plan.walk_from, plan.since
+                    user.battleTag, plan.walk_from, plan.since, FIRST_W3C_SEASON
                 )
             else:
                 wanted = []
