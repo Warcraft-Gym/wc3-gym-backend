@@ -2,8 +2,8 @@
 
 The row is the team_season link table; this is the shape the API sends
 for it, under the name seasons_info on a team. app.services.derived fills
-final_score, points_against and points_available from the series, and
-names the event and its league.
+final_score, points_against, points_available and the series record from
+the series, and names the event and its league.
 """
 
 from sqlmodel import SQLModel
@@ -18,3 +18,7 @@ class SeasonInfoPublic(SQLModel):
     final_score: int | None = None
     points_available: int | None = None
     points_against: int | None = None
+    # Scored series of the team's fixtures in that event; the side with more
+    # map wins takes one, an unscored series counts for neither
+    series_won: int = 0
+    series_lost: int = 0
