@@ -9,7 +9,7 @@
 * [GNL plays Bo3 only](bo3-only.md) - Every GNL series is a best of three; the backend keeps general best-of support, and no GNL screen offers a choice.
 * [Off race per series, signup race per season](off-race-per-series.md) - A player signs up on one race for the season; a series may record a different race played on one side, stored separately from the resolved race.
 * [One event model, kind modules on top](unified-event-model.md) - GNL, KOTH and community events share one data model; a kind that behaves differently gets its own module, and the shared engine never branches on kind.
-* [One KOTH entrant row per race](koth-multi-entry.md) - A player may enter a KOTH night on more than one race; each race is its own entrant row, listed once on the page, and the draw never pairs a player with himself.
+* [One KOTH entrant row per race](koth-multi-entry.md) - A player may enter a KOTH night on more than one race; each race is its own entrant row, listed once on the page, and a player a series already names takes no second seat in it.
 * [Pictures are URLs](pictures-as-urls.md) - Logos and map pictures live in a blob store as public URLs, uploaded from the admin UI; no bytes column exists in the database.
 * [Reads open, writes admin](reads-open-writes-admin.md) - Every GET serves any session; writes need an admin or the owning member, and the frontend hides the buttons of writes a role cannot make.
 * [The Discord adapter is its own small app](discord-adapter-separate.md) - Discord interactions land on a one-route Starlette app in a separate repository that verifies and forwards; the backend does the work.

@@ -14,8 +14,8 @@ from app.core.db import Session
 from app.models.enums import StageFormat
 from app.models.event_award import EventAward
 from app.models.series import Series
-from tests.test_koth_night import enrol, open_night, sign_up
-from tests.test_stage_engine import bracket, cup, generate, score, stage_series
+from tests.test_koth_night import enrol, entrants, open_night, sign_up
+from tests.test_stage_engine import bracket, cup, generate, open_chain, score
 
 
 def finish(client: Client, headers: dict[str, str], event: int) -> list[dict[str, Any]]:
@@ -90,12 +90,13 @@ def test_closing_a_koth_night_crowns_the_king_of_every_bracket(
 ) -> None:
     """The table puts the last winner on the throne, so he takes place one."""
     night = open_night(client, auth_headers)
-    for tag, mmr in (("King#1", 1300), ("Rival#2", 1400)):
+    for tag, mmr in (("King#1001", 1300), ("Rival#1002", 1400)):
         enrol(tag, mmr)
         sign_up(client, tag, tag.split("#")[0], "human")
-    row = stage_series(client, night["id"], night["stages"][0]["id"])["series"][0]
-    # The rival seeds first, so the second side takes the throne
-    assert score(client, auth_headers, row["id"], 0, 1).status_code == 200
+    pair = entrants(client, night["id"])
+    series = open_chain(night["id"], night["stages"][0]["id"])
+    # The admin paired them in signup order, so the second side takes the throne
+    assert score(client, auth_headers, series, 0, 1).status_code == 200
 
     closed = client.post(f"/koth/nights/{night['id']}/close", headers=auth_headers)
 
@@ -105,7 +106,7 @@ def test_closing_a_koth_night_crowns_the_king_of_every_bracket(
         (1, "Champion"),
         (2, "Runner-up"),
     ]
-    assert places[0][0] == row["player2_id"]
+    assert places[0][0] == pair[1]["user"]["id"]
 
 
 def test_a_cup_win_stands_beside_a_season_championship(

@@ -6,6 +6,7 @@ own phase word. The event phase is computed on every read and never stored.
 """
 
 import random
+import re
 from collections import Counter
 from collections.abc import Iterable, Sequence
 from datetime import UTC, date, datetime, time, timedelta
@@ -88,6 +89,9 @@ SEASONS = 3
 
 # The setting that names the W3C season the app is on
 W3C_SEASON_KEY = "current_w3c_season"
+
+# The shape of a battle tag: a name, then # and the player's number
+BATTLE_TAG = re.compile(r"[^\s#]+#\d{3,8}")
 
 # Maps and rounds are event relationships. The legacy season reads loaded
 # them first, but the canonical event payload now carries them too.
@@ -540,12 +544,18 @@ class EventService:
                     data,
                     user_id=ident(_signup_user(session, event, data, claims)),
                 )
-            return _entrant_publics(session, event, [row])[0]
+            entrant_id = ident(row)
+            public = _entrant_publics(session, event, [row])[0]
+        return _after_signup(event_id, entrant_id) or public
 
     def add_entrant_as_admin(
-        self, event_id: int, data: EntrantAdd
+        self, event_id: int, data: EntrantAdd, synced: bool = False
     ) -> EventEntrantPublic:
-        """Enter any player or team, whether signups stand open or not."""
+        """Enter any player or team, whether signups stand open or not.
+
+        A caller that has just read this player from w3champions says so, and
+        the follow-up the event's kind runs asks w3champions no second time.
+        """
         with Session.begin() as session:
             event = _event(session, event_id)
             if data.team_id is not None:
@@ -554,7 +564,9 @@ class EventService:
                 row = _enter(
                     session, event, data, user_id=ident(_named_user(session, data))
                 )
-            return _entrant_publics(session, event, [row])[0]
+            entrant_id = ident(row)
+            public = _entrant_publics(session, event, [row])[0]
+        return _after_signup(event_id, entrant_id, synced) or public
 
     def withdraw(
         self, event_id: int, claims: dict[str, Any] | None, race: Race | None = None
@@ -625,8 +637,16 @@ class EventService:
                     raise BadRequestError(
                         f"Division not found by id: {data.division_id}"
                     )
+            moved = data.division_id != row.division_id
             row.division_id = data.division_id
             row.manual_placement = data.manual_placement
+            # A row moved into a division stands at the end of its line
+            if moved:
+                row.seed = (
+                    None
+                    if data.division_id is None
+                    else _end_seed(session, event_id, data.division_id, ident(row))
+                )
             session.flush()
             return _entrant_publics(session, event, [row])[0]
 
@@ -664,8 +684,9 @@ class EventService:
     def assign_divisions(self, event_id: int) -> EventPublic:
         """Cut the entrants into the divisions from the MMR of their signup race.
 
-        An entrant an admin placed by hand keeps the division it was given.
-        The answer carries the divisions with the entrants each now holds.
+        An entrant an admin placed by hand keeps the division it was given,
+        and one no band of the cut takes stays unplaced. The answer carries
+        the divisions with the entrants each now holds.
         """
         with Session.begin() as session:
             event = _event(session, event_id)
@@ -690,7 +711,9 @@ class EventService:
                 ],
             )
             for row in rows:
-                row.division_id = divisions[bands[ident(row)]].id
+                band = bands.get(ident(row))
+                # The cut leaves out an entrant no band of it takes
+                row.division_id = None if band is None else divisions[band].id
             session.flush()
             return _public(session, event, full=True)
 
@@ -1265,8 +1288,14 @@ def _by_battle_tag(session: OrmSession, battle_tag: str, race: Race) -> User:
 
     An `anyone` event takes a battle tag the way the KOTH chat command does,
     so a player with no account still enters and keeps one row across events.
+    The tag is the identity, so a tag that is not shaped like one writes no
+    player: a typo would sign a second player up under the same name.
     """
     tag = battle_tag.strip()
+    if BATTLE_TAG.fullmatch(tag) is None:
+        raise BadRequestError(
+            f"'{tag}' is not a battle tag. A battle tag looks like Name#1234."
+        )
     folded = func.lower(func.trim(col(User.battleTag)))
     user = session.scalars(select(User).where(folded == tag.lower())).first()
     if user is not None:
@@ -1630,6 +1659,34 @@ def _entrant(session: OrmSession, event_id: int, entrant_id: int) -> EventEntran
     return row
 
 
+def _after_signup(
+    event_id: int, entrant_id: int, synced: bool = False
+) -> EventEntrantPublic | None:
+    """What the kind module of the event does with the row a door just wrote.
+
+    Only a KOTH night follows a signup up, so the doors call this blind and
+    answer their own payload when nothing came back.
+    """
+    # The KOTH module reads this one, so the import waits until the call
+    from app.services.koth.signup import follow
+
+    return follow(event_id, entrant_id, synced)
+
+
+def _end_seed(
+    session: OrmSession, event_id: int, division_id: int, entrant_id: int
+) -> int:
+    """One past the last seed of that division, so the row stands at the end."""
+    last = session.scalar(
+        select(func.max(col(EventEntrant.seed))).where(
+            col(EventEntrant.event_id) == event_id,
+            col(EventEntrant.division_id) == division_id,
+            col(EventEntrant.id) != entrant_id,
+        )
+    )
+    return (last or 0) + 1
+
+
 def _signup_user(
     session: OrmSession,
     event: Season,
@@ -1704,6 +1761,8 @@ def _enter(
     if existing is not None:
         # The unique key is one row per entrant, so a return signup reopens it
         existing.withdrawn_at = None
+        # A player who left and comes back stands at the end of the line again
+        existing.seed = None
         existing.race = race
         existing.note = data.note
         existing.channel = data.channel
