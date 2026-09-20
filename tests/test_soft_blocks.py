@@ -254,6 +254,8 @@ def test_blank_means_open(
         "end": "2026-01-12T00:00:00Z",
         "hours": 168.0,
         "ranges": [{"start": "2026-01-05T00:00:00Z", "end": "2026-01-12T00:00:00Z"}],
+        "blocked1": [],
+        "blocked2": [],
     }
 
 
@@ -286,10 +288,11 @@ def test_a_player_with_blocks_but_no_timezone_counts_as_free(
     assert free_time(client, seeded["series_open_id"], member("2"))["hours"] == 168.0
 
 
-def test_the_free_time_hides_whose_block_is_whose(
+def test_the_free_time_names_whose_block_is_whose(
     client: Client, seeded: dict[str, Any], member: Callable[..., dict[str, str]]
 ) -> None:
-    """The same block on either player gives the same answer, and no label or id."""
+    """A block lands in its own side's list, the other side stays empty, and no
+    label or id travels. P2 is player 1 of the open series, P4 player 2."""
     p2, p4 = seeded["player_ids"][1], seeded["player_ids"][3]
     for player in (p2, p4):
         set_zone(player, "Europe/London")
@@ -299,6 +302,7 @@ def test_the_free_time_hides_whose_block_is_whose(
         "start_local": "00:00",
         "end_local": "08:00",
     }
+    night = {"start": "2026-01-05T00:00:00Z", "end": "2026-01-05T08:00:00Z"}
 
     made = add_block(client, member("2"), **asleep)
     on_p2 = client.get(
@@ -310,14 +314,75 @@ def test_the_free_time_hides_whose_block_is_whose(
         f"/player-series/{seeded['series_open_id']}/free-time", headers=member("2")
     )
 
-    assert on_p2.json() == on_p4.json()
-    assert set(on_p2.json()) == {"start", "end", "hours", "ranges"}
+    assert set(on_p2.json()) == {
+        "start",
+        "end",
+        "hours",
+        "ranges",
+        "blocked1",
+        "blocked2",
+    }
     assert "Asleep" not in on_p2.text
-    assert on_p2.json()["hours"] == 7 * 16
+    assert on_p2.json()["hours"] == on_p4.json()["hours"] == 7 * 16
+    assert on_p2.json()["ranges"] == on_p4.json()["ranges"]
     assert on_p2.json()["ranges"][0] == {
         "start": "2026-01-05T08:00:00Z",
         "end": "2026-01-06T00:00:00Z",
     }
+    assert (on_p2.json()["blocked1"][0], on_p2.json()["blocked2"]) == (night, [])
+    assert (on_p4.json()["blocked2"][0], on_p4.json()["blocked1"]) == (night, [])
+
+
+def test_each_side_answers_its_own_blocks(
+    client: Client, seeded: dict[str, Any], member: Callable[..., dict[str, str]]
+) -> None:
+    """Two players who block overlapping hours: each list holds that player's
+    own hours, and the shared ranges hold what neither blocked."""
+    for player in (seeded["player_ids"][1], seeded["player_ids"][3]):
+        set_zone(player, "Europe/London")
+    add_block(client, member("2"), weekdays=127)
+    add_block(client, member("4"), weekdays=127, start_local="12:00", end_local="20:00")
+
+    body = free_time(client, seeded["series_open_id"], member("2"))
+
+    assert len(body["blocked1"]) == len(body["blocked2"]) == 7
+    assert body["blocked1"][0] == {
+        "start": "2026-01-05T09:00:00Z",
+        "end": "2026-01-05T17:00:00Z",
+    }
+    assert body["blocked2"][0] == {
+        "start": "2026-01-05T12:00:00Z",
+        "end": "2026-01-05T20:00:00Z",
+    }
+    assert body["hours"] == 7 * 13
+    assert body["ranges"][0] == {
+        "start": "2026-01-05T00:00:00Z",
+        "end": "2026-01-05T09:00:00Z",
+    }
+
+
+def test_a_block_across_the_window_edge_is_clipped(
+    client: Client, seeded: dict[str, Any], member: Callable[..., dict[str, str]]
+) -> None:
+    """Busy days that start before the round and end after it read as the part
+    inside the window only."""
+    set_zone(seeded["player_ids"][1], "Europe/London")
+    for first, last in (("2026-01-03", "2026-01-06"), ("2026-01-11", "2026-01-15")):
+        resp = client.post(
+            "/player-blocks/busy",
+            json={"first_day": first, "last_day": last},
+            headers=member("2"),
+        )
+        assert resp.status_code == 201, resp.text
+
+    body = free_time(client, seeded["series_open_id"], member("2"))
+
+    assert body["blocked1"] == [
+        {"start": "2026-01-05T00:00:00Z", "end": "2026-01-07T00:00:00Z"},
+        {"start": "2026-01-11T00:00:00Z", "end": "2026-01-12T00:00:00Z"},
+    ]
+    assert body["blocked2"] == []
+    assert body["hours"] == 4 * 24
 
 
 def test_a_window_can_be_asked_for(

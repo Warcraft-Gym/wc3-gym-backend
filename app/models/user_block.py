@@ -117,13 +117,17 @@ class FreeRange(SQLModel):
 class FreeTimePublic(SQLModel):
     """The hours both players of a series have free in a window, in UTC.
 
-    It carries no block and no player, so it never shows whose block is whose.
+    `blocked1` and `blocked2` hold the blocked ranges of the series' player 1
+    and player 2 over the same window: the two players of a series see each
+    other's blocked hours, never a label or a block id.
     """
 
     start: datetime
     end: datetime
     hours: float
     ranges: list[FreeRange]
+    blocked1: list[FreeRange]
+    blocked2: list[FreeRange]
 
 
 class PairFreeTimePublic(SQLModel):

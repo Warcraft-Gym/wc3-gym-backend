@@ -473,7 +473,8 @@ def get_series_free_time(
     """The hours both players have free, by default across the series' round.
 
     A player of the series, a captain of either team or an admin reads it. It
-    answers shared ranges and their sum, never whose block is whose.
+    answers the shared ranges, their sum, and each player's blocked ranges over
+    the same window, as `blocked1` and `blocked2`.
     """
     claims = require_member(request, credentials)
     admin = claims.get("role") == "admin" or claims["sub"] == "admin"
