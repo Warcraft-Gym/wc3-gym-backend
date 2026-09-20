@@ -4,7 +4,7 @@ title: Events module
 description: One data model for every kind of event, with GNL and KOTH behaviour in their own modules on top, a stage engine that never branches on kind, a phase derived on every read, and the admin's path from a new league to a finished event with awards.
 resource: ../../../app/services/events.py
 tags: [events]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-20T15:00:00Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-09-20T15:30:00Z }
 sources:
   - id: events
     resource: ../../../app/services/events.py
@@ -69,8 +69,10 @@ An event of a league that drafts its teams (`entrant_kind` is `drafted_teams`) t
 `GET /home/series` is the one read behind the home page's series panels, and it
 crosses every kind: a GNL fixture, a cup bracket and a KOTH night answer side by
 side. It needs no token. It holds three lists, `next` (the five soonest booked
-series with no result), `casts_upcoming` (three of those a caster has claimed)
+series), `casts_upcoming` (three of those a caster has claimed)
 and `casts_recent` (the four newest played series whose cast carries a VOD). A
+booked series is one with no result whose start is no more than two hours past,
+so a series that is being played right now still has a card and leads the list. A
 draft pairing and an event that is not published never appear. Each row carries
 what a card prints and nothing more: the label in parts (`league`, `event`,
 `stage`, `round`), the two fixture teams, each side as id, name, country, the
