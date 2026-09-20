@@ -4,7 +4,7 @@ title: Events module
 description: One data model for every kind of event, with GNL and KOTH behaviour in their own modules on top, a stage engine that never branches on kind, a phase derived on every read, and the admin's path from a new league to a finished event with awards.
 resource: ../../../app/services/events.py
 tags: [events]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-19T22:00:00Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-09-20T12:00:00Z }
 sources:
   - id: events
     resource: ../../../app/services/events.py
@@ -44,6 +44,10 @@ In a single elimination that plays a third-place series, that series decides pla
 # Phase
 
 An event's phase is derived on every read and never stored. The rungs, read from the last one back: `draft` while the event is unpublished; `finished` when an admin closed the event (`event.closed_at`), when the last stage by position holds series, every one of them is scored and the stage does not plan as a chain, or when the event has no series and its end has passed (its end date, else the day it starts); `running` once a series has started; `signups_open`; `checkin` while the check-in window of the next dated round is open; `seeded` otherwise. A scored stage with an empty stage after it reads `running`, so a cup whose playoff is still to be drawn is not finished. A chain grows while its admin names series, so a scored chain reads `running` until the close stamps the event. A list read answers the phase of a page of events from one grouped count, never one query per event.
+
+# The member read
+
+`GET /me/events` answers one row per published event with the caller's own state on it: the entrant, the check-in shape and its window, the next dated round, the phase and the one action the page offers. A caller who holds a captain seat in the event also gets `captain_fixture`: his own team's fixture of the next round that still has places left, with the two teams, the round's dates, `series_per_round` and the counts of published series and open drafts, so the home page links the round draft before the fixture holds any series. Every other caller reads it null. The whole list costs a fixed number of statements whatever it holds, four of them for the captain fixture.
 
 # Entrants, seeds, divisions
 
