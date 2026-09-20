@@ -66,6 +66,7 @@ def test_user_by_id_carries_the_season_record(
         "wins",
         "losses",
         "matchup_history",
+        "out_rounds",
     }
 
 

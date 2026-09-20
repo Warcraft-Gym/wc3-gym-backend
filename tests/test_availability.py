@@ -19,6 +19,7 @@ from app.models.round_availability import DBRoundAvailability
 from app.models.season import Season
 from app.models.user import User
 from app.models.user_block import UserBusy
+from app.models.user_team_season import DBUserTeamSeason
 from app.services.availability import AvailabilityService
 from tests.test_discord_auth import SESSION, stub_clerk
 
@@ -806,3 +807,104 @@ def test_the_bulk_answer_needs_a_session(
     resp = client.put("/player-availability/all", json={"available": False})
 
     assert resp.status_code == 401, resp.text
+
+
+def out_rounds(client: Client, team_id: int, season_id: int) -> list[list[int]]:
+    """The rounds each roster player of the event sits out, in roster order."""
+    resp = client.get(f"/events/{season_id}/teams/{team_id}")
+    assert resp.status_code == 200, resp.text
+    players = resp.json()["player_by_season"][str(season_id)]
+    return [
+        stat["out_rounds"]
+        for player in players
+        for stat in player["gnl_stats"]
+        if stat["season_id"] == season_id
+    ]
+
+
+def test_the_roster_read_lists_the_rounds_a_player_sits_out(
+    client: Client, seeded: dict[str, Any]
+) -> None:
+    """Round 1 runs 5 to 11 January and round 3 runs 19 to 25 January.
+
+    P1 checks in for round 1, sits out round 2 and has round 3 covered by his
+    own busy days; P2 answers nothing.
+    """
+    team_id, season_id = seeded["team_a_id"], seeded["season_id"]
+    player_id, mate = seeded["player_ids"][0], seeded["player_ids"][1]
+    service = AvailabilityService()
+    service.set(player_id, season_id, 1, True, set_by_user_id=mate)
+    service.set(player_id, season_id, 2, False, set_by_user_id=mate)
+    busy(player_id, "Europe/London", "2026-01-19", "2026-01-25")
+
+    assert out_rounds(client, team_id, season_id) == [[2, 3], []]
+
+
+def test_the_roster_read_says_nothing_about_why_a_player_is_out(
+    client: Client, seeded: dict[str, Any]
+) -> None:
+    """The payload carries the rounds alone: no writer, no blocked time."""
+    team_id, season_id = seeded["team_a_id"], seeded["season_id"]
+    AvailabilityService().set(
+        seeded["player_ids"][0],
+        season_id,
+        2,
+        False,
+        set_by_user_id=seeded["player_ids"][1],
+    )
+
+    stats = client.get(f"/events/{season_id}/teams/{team_id}").json()[
+        "player_by_season"
+    ][str(season_id)][0]["gnl_stats"][0]
+
+    assert stats["out_rounds"] == [2]
+    assert set(stats) == {
+        "user_id",
+        "team_id",
+        "season_id",
+        "games",
+        "wins",
+        "losses",
+        "matchup_history",
+        "out_rounds",
+    }
+
+
+def test_an_event_without_scheduling_lists_no_sat_out_round(
+    client: Client, seeded: dict[str, Any]
+) -> None:
+    team_id, season_id = seeded["team_a_id"], seeded["season_id"]
+    AvailabilityService().set(
+        seeded["player_ids"][0],
+        season_id,
+        2,
+        False,
+        set_by_user_id=seeded["player_ids"][1],
+    )
+    turn_off_scheduling(season_id)
+
+    assert out_rounds(client, team_id, season_id) == [[], []]
+
+
+def test_the_roster_read_costs_a_constant_number_of_statements(
+    client: Client, seeded: dict[str, Any]
+) -> None:
+    """A bigger roster costs the same statements: no query per player."""
+    from tests.test_query_budget import count_statements
+
+    team_id, season_id = seeded["team_a_id"], seeded["season_id"]
+    # A zoned player takes the derive past its early return, onto blocks and busy days
+    busy(seeded["player_ids"][0], "Europe/London", "2026-01-19", "2026-01-25")
+    busy(seeded["player_ids"][2], "Europe/London", "2026-01-19", "2026-01-25")
+    with count_statements() as small:
+        out_rounds(client, team_id, season_id)
+
+    with Session.begin() as session:
+        session.add_all(
+            DBUserTeamSeason(user_id=user_id, team_id=team_id, season_id=season_id)
+            for user_id in seeded["player_ids"][2:]
+        )
+    with count_statements() as large:
+        out_rounds(client, team_id, season_id)
+
+    assert small[0] == large[0]

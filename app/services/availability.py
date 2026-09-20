@@ -72,24 +72,7 @@ class AvailabilityService:
     def for_team(self, team_id: int, season_id: int) -> list[RoundAvailabilityPublic]:
         """The answers of the players the team holds that season."""
         with Session.begin() as session:
-            roster = list(
-                session.scalars(
-                    select(col(DBUserTeamSeason.user_id)).where(
-                        col(DBUserTeamSeason.team_id) == team_id,
-                        col(DBUserTeamSeason.season_id) == season_id,
-                    )
-                )
-            )
-            return _derive(
-                session,
-                session.get(Season, season_id),
-                roster,
-                _rows(
-                    session,
-                    col(DBRoundAvailability.season_id) == season_id,
-                    col(DBRoundAvailability.user_id).in_(roster),
-                ),
-            )
+            return team_rows(session, team_id, season_id)
 
     def on_roster(self, team_id: int, season_id: int, user_id: int) -> bool:
         with Session.begin() as session:
@@ -190,6 +173,45 @@ class AvailabilityService:
                 )
             session.flush()
             return _season_rows(session, season, user_id)
+
+
+def team_rows(
+    session: OrmSession, team_id: int, season_id: int
+) -> list[RoundAvailabilityPublic]:
+    """The stored and derived answers of the players the team holds that season."""
+    roster = list(
+        session.scalars(
+            select(col(DBUserTeamSeason.user_id)).where(
+                col(DBUserTeamSeason.team_id) == team_id,
+                col(DBUserTeamSeason.season_id) == season_id,
+            )
+        )
+    )
+    return _derive(
+        session,
+        session.get(Season, season_id),
+        roster,
+        _rows(
+            session,
+            col(DBRoundAvailability.season_id) == season_id,
+            col(DBRoundAvailability.user_id).in_(roster),
+        ),
+    )
+
+
+def out_rounds(
+    session: OrmSession, team_id: int, season_id: int
+) -> dict[int, list[int]]:
+    """The rounds each player of the event team sits out, by player id.
+
+    A stored "no" and a derived out-on-blocked-times round read the same here,
+    so the answer says which rounds, never why and never who wrote them.
+    """
+    out: dict[int, list[int]] = {}
+    for row in team_rows(session, team_id, season_id):
+        if not row.available:
+            out.setdefault(row.user_id, []).append(row.playday)
+    return out
 
 
 def _checkin_window(season: Season, playday: int) -> None:
