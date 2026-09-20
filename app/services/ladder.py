@@ -360,7 +360,7 @@ class LadderService:
             # already stored, an open one ends in the pinned season
             walk_from = None if open_window else _walk_start(session, end)
 
-        pending, skipped = self._pending(users, max_age)
+        pending, skipped = self._pending(users, max_age, seasons)
         if pending and seasons and open_window:
             # w3champions can have opened a season no stored match names yet
             open_season = W3CService(
@@ -394,20 +394,34 @@ class LadderService:
         return result
 
     def _pending(
-        self, users: Sequence[UserReduced], max_age: timedelta
+        self,
+        users: Sequence[UserReduced],
+        max_age: timedelta,
+        seasons: Sequence[int] | None = None,
     ) -> tuple[list[UserReduced], list[int]]:
         """The players to sync and the ids synced more recently than max_age;
-        a max_age of zero syncs everyone."""
+        a max_age of zero syncs everyone.
+
+        `seasons` names the w3champions seasons the window needs. Freshness is
+        then read from the ledger, which says which seasons a player was read
+        for. His own stamp cannot: it says only when he was last asked, so a
+        run over one window marked him fresh and the next window skipped him
+        with a season of its own never read.
+        """
         fresh_since = utcnow() - max_age
+        user_ids = [user.id for user in users]
         with Session.begin() as session:
-            synced_at = {
-                user_id: stamp
-                for user_id, stamp in session.execute(
-                    select(col(User.id), col(User.ladder_synced_at)).where(
-                        col(User.id).in_([user.id for user in users])
+            if seasons:
+                synced_at = _stamps(session, user_ids, list(seasons))
+            else:
+                synced_at = {
+                    user_id: stamp
+                    for user_id, stamp in session.execute(
+                        select(col(User.id), col(User.ladder_synced_at)).where(
+                            col(User.id).in_(user_ids)
+                        )
                     )
-                )
-            }
+                }
         pending: list[UserReduced] = []
         skipped: list[int] = []
         for user in users:
