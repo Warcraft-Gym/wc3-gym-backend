@@ -1235,3 +1235,125 @@ def test_a_captain_draft_stage_reads_the_default_largest_mmr_difference(
         headers=auth_headers,
     )
     assert plain.json()["stages"][0]["max_mmr_difference"] is None
+
+
+def captain_seat(event_id: int, team_id: int, user_id: int) -> None:
+    """One captain seat, as the team page writes it."""
+    from app.models.relationships import DBTeamSeasonCaptain
+
+    with Session.begin() as session:
+        session.add(
+            DBTeamSeasonCaptain(team_id=team_id, season_id=event_id, user_id=user_id)
+        )
+
+
+def add_fixture(event_id: int, team1_id: int, team2_id: int, playday: int) -> int:
+    """One fixture of a round, holding no series yet."""
+    from app.models.match import Match
+
+    with Session.begin() as session:
+        match = Match(
+            team1_id=team1_id, team2_id=team2_id, season_id=event_id, playday=playday
+        )
+        session.add(match)
+        session.flush()
+        return ident(match)
+
+
+def add_draft(match_id: int, player1_id: int, player2_id: int) -> None:
+    """One open draft pairing on the fixture."""
+    from app.models.draft_series import DraftSeries
+
+    with Session.begin() as session:
+        session.add(
+            DraftSeries(
+                match_id=match_id,
+                player1_id=player1_id,
+                player2_id=player2_id,
+                host_player_id=player1_id,
+            )
+        )
+
+
+def move_round(event_id: int, number: int, start: date, end: date) -> None:
+    with Session.begin() as session:
+        row = session.scalars(
+            select(DBEventRound).where(
+                col(DBEventRound.season_id) == event_id,
+                col(DBEventRound.number) == number,
+            )
+        ).one()
+        row.start_date = start
+        row.end_date = end
+
+
+def test_the_member_home_gives_a_captain_the_next_fixture_of_his_team(
+    client: Client, seeded: dict[str, Any], member: Callable[..., dict[str, str]]
+) -> None:
+    """The row carries the fixture before the fixture holds any series, which
+    is what the home links the round draft from."""
+    headers = member()
+    season = seeded["season_id"]
+    move_round(season, 2, TODAY, TODAY + timedelta(days=6))
+    fixture = add_fixture(season, seeded["team_a_id"], seeded["team_b_id"], 2)
+    captain_seat(season, seeded["team_a_id"], seeded["player_ids"][0])
+
+    row = my_events(client, headers)[season]["captain_fixture"]
+    assert (row["match_id"], row["playday"]) == (fixture, 2)
+    assert (row["published"], row["drafted"], row["series_per_round"]) == (0, 0, 2)
+    assert row["round_start"] == TODAY.isoformat()
+    assert row["round_end"] == (TODAY + timedelta(days=6)).isoformat()
+    assert (row["team1"]["id"], row["team2"]["id"]) == (
+        seeded["team_a_id"],
+        seeded["team_b_id"],
+    )
+    assert row["team1"]["icon_url"] is None
+
+    add_draft(fixture, seeded["player_ids"][0], seeded["player_ids"][2])
+    assert my_events(client, headers)[season]["captain_fixture"]["drafted"] == 1
+
+
+def test_the_captain_fixture_walks_past_a_round_that_is_fully_published(
+    client: Client, seeded: dict[str, Any], member: Callable[..., dict[str, str]]
+) -> None:
+    """The seeded fixture of round 1 holds both series the season plays per
+    round, so the row is null until a later round has one to draft."""
+    headers = member()
+    season = seeded["season_id"]
+    move_round(season, 1, TODAY, TODAY + timedelta(days=6))
+    captain_seat(season, seeded["team_a_id"], seeded["player_ids"][0])
+    assert my_events(client, headers)[season]["captain_fixture"] is None
+
+    move_round(season, 2, TODAY + timedelta(days=7), TODAY + timedelta(days=13))
+    later = add_fixture(season, seeded["team_a_id"], seeded["team_b_id"], 2)
+    row = my_events(client, headers)[season]["captain_fixture"]
+    assert (row["match_id"], row["playday"]) == (later, 2)
+
+
+def test_the_captain_fixture_asks_for_a_seat_and_not_for_a_role(
+    client: Client,
+    seeded: dict[str, Any],
+    member: Callable[..., dict[str, str]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A player on the roster reads null without a seat, and so does an admin."""
+    season = seeded["season_id"]
+    move_round(season, 2, TODAY, TODAY + timedelta(days=6))
+    add_fixture(season, seeded["team_a_id"], seeded["team_b_id"], 2)
+    captain_seat(season, seeded["team_a_id"], seeded["player_ids"][0])
+
+    assert my_events(client, member("2"))[season]["captain_fixture"] is None
+
+    monkeypatch.setenv("ADMIN_DISCORD_IDS", "3")
+    assert my_events(client, member("3"))[season]["captain_fixture"] is None
+
+
+def test_the_captain_fixture_needs_a_round_that_carries_dates(
+    client: Client, seeded: dict[str, Any], member: Callable[..., dict[str, str]]
+) -> None:
+    """An event with no rounds has no round to draft for."""
+    headers = member()
+    event = add_event(name="Team Cup", kind=EventKind.cup)
+    add_fixture(event, seeded["team_a_id"], seeded["team_b_id"], 1)
+    captain_seat(event, seeded["team_a_id"], seeded["player_ids"][0])
+    assert my_events(client, headers)[event]["captain_fixture"] is None

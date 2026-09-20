@@ -11,9 +11,9 @@ from collections.abc import Iterable, Sequence
 from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 
-from sqlalchemy import delete, distinct, func, select, update
+from sqlalchemy import delete, distinct, func, or_, select, update
 from sqlalchemy.orm import Session as OrmSession
-from sqlalchemy.orm import noload, selectinload
+from sqlalchemy.orm import joinedload, noload, selectinload
 from sqlmodel import col
 
 from app.core.checkin_hint import availability_hints
@@ -22,6 +22,7 @@ from app.core.divisions import cut
 from app.core.exceptions import ApiError, BadRequestError, NotFoundError
 from app.core.query import QueryElement, QueryUtil
 from app.models.base import ident
+from app.models.draft_series import DraftSeries
 from app.models.enums import (
     EntrantKind,
     EventKind,
@@ -50,6 +51,7 @@ from app.models.match import Match
 from app.models.relationships import (
     DBEventRound,
     DBMapSeason,
+    DBTeamSeasonCaptain,
     DBUserSeasonSignup,
     EventRoundPublic,
     SeasonRoundPublic,
@@ -58,6 +60,7 @@ from app.models.round_availability import DBRoundAvailability
 from app.models.season import (
     NO_SERIES,
     AvailabilityHint,
+    CaptainFixture,
     EventCreate,
     EventPhase,
     EventPublic,
@@ -177,18 +180,23 @@ def last_stage_drawn(
     return {event_id: played_out for event_id, (_, played_out) in last.items()}
 
 
+def open_rounds(event: Season) -> list[DBEventRound]:
+    """The dated rounds of the event that are not over, earliest first."""
+    now = _today()
+    dated = sorted(
+        (row for row in event.rounds if row.start_date is not None),
+        key=lambda row: (row.start_date, row.number),
+    )
+    return [row for row in dated if (row.end_date or row.start_date) >= now]
+
+
 def next_round(event: Season) -> DBEventRound | None:
     """The next dated round of the event: the earliest one that is not over.
 
     A round with no dates is no round to check into, and a stage that holds no
     rounds at all leaves the event checking in to itself.
     """
-    now = _today()
-    dated = sorted(
-        (row for row in event.rounds if row.start_date is not None),
-        key=lambda row: (row.start_date, row.number),
-    )
-    return next((row for row in dated if (row.end_date or row.start_date) >= now), None)
+    return next(iter(open_rounds(event)), None)
 
 
 def checkin_window(
@@ -481,6 +489,7 @@ class EventService:
                 },
             )
             answered = _round_answers(session, user_id, rounds)
+            fixtures = _captain_fixtures(session, user_id, events)
             return [
                 _member_row(
                     session,
@@ -492,6 +501,7 @@ class EventService:
                     rounds.get(event.id),
                     hints.get(event.id),
                     _answer_time(event, rounds.get(event.id), answered),
+                    fixtures.get(event.id) if event.id is not None else None,
                 )
                 for event in events
             ]
@@ -947,6 +957,100 @@ def _answer_time(
     return datetime.combine(opens, time(), tzinfo=UTC) if opens else None
 
 
+def _captain_fixtures(
+    session: OrmSession, user_id: int | None, events: Sequence[Season]
+) -> dict[int, CaptainFixture]:
+    """The next fixture with places left of every event the caller captains in.
+
+    Four statements answer the whole list whatever it holds: the caller's
+    seats, the fixtures of the events that still have a round to play, and the
+    published series and the open drafts of those fixtures. The rounds
+    themselves are already loaded on the events.
+    """
+    if user_id is None:
+        return {}
+    by_id = {event.id: event for event in events if event.id is not None}
+    if not by_id:
+        return {}
+    seats = {
+        event_id: team_id
+        for event_id, team_id in session.execute(
+            select(
+                col(DBTeamSeasonCaptain.season_id), col(DBTeamSeasonCaptain.team_id)
+            ).where(
+                col(DBTeamSeasonCaptain.user_id) == user_id,
+                col(DBTeamSeasonCaptain.season_id).in_(by_id),
+            )
+        ).all()
+    }
+    wanted = {
+        event_id: rounds
+        for event_id in seats
+        if (rounds := open_rounds(by_id[event_id]))
+    }
+    if not wanted:
+        return {}
+    matches = session.scalars(
+        select(Match)
+        .where(
+            col(Match.season_id).in_(wanted),
+            or_(
+                col(Match.team1_id).in_(seats.values()),
+                col(Match.team2_id).in_(seats.values()),
+            ),
+        )
+        .options(joinedload(rel(Match.team1)), joinedload(rel(Match.team2)))
+    ).all()
+    ids = [ident(match) for match in matches]
+    published = _match_counts(session, col(Series.match_id), ids)
+    drafted = _match_counts(session, col(DraftSeries.match_id), ids)
+    found: dict[int, CaptainFixture] = {}
+    for event_id, rounds in wanted.items():
+        event = by_id[event_id]
+        own = {
+            match.playday: match
+            for match in matches
+            if match.season_id == event_id
+            and seats[event_id] in (match.team1_id, match.team2_id)
+        }
+        for round_ in rounds:
+            fixture = own.get(round_.number)
+            if fixture is None:
+                continue
+            held = published.get(ident(fixture), 0)
+            if held >= event.series_per_round:
+                continue
+            found[event_id] = CaptainFixture(
+                match_id=ident(fixture),
+                playday=fixture.playday,
+                round_start=round_.start_date,
+                round_end=round_.end_date,
+                team1=TeamReduced.from_team(fixture.team1),
+                team2=TeamReduced.from_team(fixture.team2),
+                series_per_round=event.series_per_round,
+                published=held,
+                drafted=drafted.get(ident(fixture), 0),
+            )
+            break
+    return found
+
+
+def _match_counts(
+    session: OrmSession,
+    match_column: Any,  # noqa: ANN401  # the match id column of either table
+    match_ids: Sequence[int],
+) -> dict[int, int]:
+    """How many rows of that table each match holds, in one grouped read."""
+    if not match_ids:
+        return {}
+    rows = session.execute(
+        select(match_column, func.count())
+        .where(match_column.in_(match_ids))
+        .group_by(match_column)
+    ).all()
+    return {match_id: count for match_id, count in rows}
+
+
 def _member_row(
     session: OrmSession,
     event: Season,
@@ -957,6 +1061,7 @@ def _member_row(
     round_: DBEventRound | None,
     hint: AvailabilityHint | None,
     answered_at: datetime | None,
+    fixture: CaptainFixture | None,
 ) -> MemberEventRow:
     """One member home row: the event, and what the caller may do with it."""
     phase = phase_of(session, event, counts, last_stage)
@@ -996,6 +1101,7 @@ def _member_row(
         next_round=EventRoundPublic.from_row(round_) if round_ else None,
         availability_hint=hint,
         action=_member_action(phase, event, joined, checked_in_at, is_open),
+        captain_fixture=fixture,
     )
 
 
