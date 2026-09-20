@@ -13,6 +13,7 @@ import pytest
 from httpx2 import Client
 
 from app.core.db import Session
+from app.models.event_stage import EventStage
 from app.models.relationships import round_row
 from app.models.round_availability import DBRoundAvailability
 from app.models.season import Season
@@ -165,8 +166,6 @@ def test_player_series_rounds_name_the_stage_each_round_sits_in(
     member: Callable[..., dict[str, str]],
 ) -> None:
     """Two stages over one event: each round answers the stage it belongs to."""
-    from app.models.event_stage import EventStage
-
     with Session.begin() as session:
         group = EventStage(event_id=seeded["season_id"], position=1, name="Group stage")
         bracket = EventStage(event_id=seeded["season_id"], position=2, name="Playoffs")
