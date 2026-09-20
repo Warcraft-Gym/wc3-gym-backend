@@ -451,11 +451,11 @@ def crown(session: OrmSession, row: Series) -> None:
         if division.king_entrant_id is not None
         else None
     )
-    # A crown whose row is gone or left reads as an empty throne, and a king is
-    # a player, so he loses it on whichever of his race rows he played
+    # A wearer who is gone, left or now in another bracket is an empty throne
     if (
         wearer is None
         or wearer.withdrawn_at is not None
+        or wearer.division_id != row.division_id
         or wearer.user_id in (row.player1_id, row.player2_id)
     ):
         division.king_entrant_id = winner

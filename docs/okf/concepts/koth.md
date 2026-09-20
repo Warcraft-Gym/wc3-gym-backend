@@ -4,7 +4,7 @@ title: KOTH night
 description: A King of the Hill night is one event of the KOTH league with three MMR brackets as divisions, one signup rule at every door, and every series paired by hand while the night runs.
 resource: ../../../app/services/koth/night.py
 tags: [events, koth]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-20T20:00:00Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-09-20T21:00:00Z }
 sources:
   - id: night
     resource: ../../../app/services/koth/night.py
@@ -51,7 +51,7 @@ A player may enter on more than one race. Each race is its own entrant row with 
 
 # The old payloads
 
-`/koth/events`, `/koth/events/active`, `/koth/signups`, `/koth/matches` and `/koth/events/{id}/kings` are deprecated: the OpenAPI document marks every route of `app/api/routes/koth.py` so, and the web app calls none of them. Nightbot, the stream overlay and old bookmarks still do. `app/services/koth/legacy.py` answers those shapes from the event rows: a signup is an entrant, a match is a series of the chain, a bracket is a division, the king is the stored crown of the division. An old route that names an entrant or a series refuses an id that is not a KOTH entrant or series. The four old `koth_*` tables are gone; `app/models/koth_legacy.py` holds only the shapes.
+`/koth/events`, `/koth/events/active`, `/koth/signups`, `/koth/matches` and `/koth/events/{id}/kings` are deprecated: the OpenAPI document marks every route of `app/api/routes/koth.py` so, and the web app calls none of them. Nightbot, the stream overlay and old bookmarks still do. `app/services/koth/legacy.py` answers those shapes from the event rows: a signup is an entrant, a match is a series of the chain that names both entrant rows, a bracket is a division, the king is the stored crown of the division. An old route that names an entrant or a series refuses an id that is not a KOTH entrant or series. The four old `koth_*` tables are gone; `app/models/koth_legacy.py` holds only the shapes.
 
 # Running the night
 
@@ -62,5 +62,17 @@ The line is `event_entrant.seed` inside the bracket, first in line first, one pl
 # The board
 
 `GET /koth/nights/{id}/board`, and `GET /koth/board` for the night that takes signups, is the one read the run page and the public dashboard both draw. It takes no token and carries `Cache-Control: public, s-maxage=15` and `Access-Control-Allow-Origin: *`, because the dashboard polls it while the night runs. A night that is not published is an admin's own, so the public read answers not found. It answers the night and its counts, the rows no bracket holds yet, and per bracket its name and bound, the king with the race rows he holds there, the king of the last closed night while the throne is still empty, the series on the table, the line in order with one item per player and a mark on a player who plays in another bracket, the rows that left, and the series played, newest first, each saying whether the throne moved, was held, or never applied. A player on the table holds no seat in the line, whatever other race rows he has there. Every player line carries one rating integer and no W3Champions stats: the read asks for the rating of each (player, race) pair and four columns of each player, never a stored stats row. Thirty rows and one played series read 3973 bytes over ten statements, none of them per row.
+
+The shape it answers, as `app/models/koth_night.py` states it:
+
+- `KothBoard`: `night_id`, `name`, `starts_at`, `closed`, `entrant_count`, `series_count`, `unplaced` (`KothPlayer` list), `brackets` (`KothBracket` list). The header names the event by `night_id`, and a night that is over reads `closed` true; there is no state word.
+- `KothBracket`: `division_id`, `name`, `lower_bound`, `king` (`KothSeat` or null), `defender` (`KothPlayer` or null, and only while the throne is empty), `open_series` (`KothOpenSeries` or null), `queue` (`KothSeat` list), `left` (`KothPlayer` list), `played` (`KothPlayed` list, newest first).
+- `KothSeat`: `user_id`, `name`, `country`, `rows` (`KothRow` list), `busy`. One seat is one player, whatever races he holds in that bracket.
+- `KothRow`: `entrant_id`, `race`, `mmr`.
+- `KothPlayer`: `entrant_id`, `user_id`, `name`, `country`, `race`, `mmr`. One race row, not a seat.
+- `KothOpenSeries`: `series_id`, `side1`, `side2`, both `KothPlayer`.
+- `KothPlayed`: `series_id`, `winner`, `loser`, `throne` (`moved`, `held` or `none`), `replay`.
+
+`mmr` null on a race row of a bracket says W3Champions found no rating for that player on that race; no second field carries that. Every row of `unplaced` reads `mmr` null, because a row no bracket holds is not asked for a rating.
 
 The night routes are `POST /koth/nights` (open, with the start time and the three bounds), `POST /koth/nights/{id}/close`, and the event routes for everything else. The close deletes the series on every bracket's table and leaves the crowns readable, so the next night can name each bracket's defender.

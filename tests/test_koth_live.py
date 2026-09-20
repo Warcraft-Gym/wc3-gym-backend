@@ -7,6 +7,7 @@ crown, who stands where in line, and what the night refuses.
 
 from typing import Any
 
+import pytest
 from httpx2 import Client
 
 from app.core.db import Session
@@ -15,7 +16,8 @@ from app.models.enums import Race
 from app.models.user import User
 from app.models.w3c_stats import W3CStats
 from app.services.koth import legacy
-from tests.test_koth_night import enrol, open_night
+from tests.test_koth import silent_w3c
+from tests.test_koth_night import enrol, entrants, open_night
 from tests.test_query_budget import count_statements
 
 LATER = "2026-10-05T19:00:00Z"
@@ -472,9 +474,13 @@ def test_a_closed_night_takes_no_write(
 
 
 def test_the_board_carries_the_night_and_its_edge_headers(
-    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+    client: Client,
+    auth_headers: dict[str, str],
+    seeded: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The header counts the night, and the read is cached at the edge."""
+    silent_w3c(monkeypatch)
     night = open_night(client, auth_headers)
     top = bracket_ids(night)[0]
     first = place(client, auth_headers, night, "Head#1", 1700, top)
@@ -675,6 +681,49 @@ def test_a_king_who_withdraws_through_the_shared_route_frees_the_throne(
     )
     assert back.status_code == 200, back.text
     assert only(back.json(), top)["king"]["rows"][0]["entrant_id"] == first
+
+
+def test_a_king_moved_to_another_bracket_frees_the_throne_he_left(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """A wearer who stands in another bracket is an empty throne, not a block."""
+    night = open_night(client, auth_headers)
+    top, second_bracket = bracket_ids(night)[0], bracket_ids(night)[1]
+    king = place(client, auth_headers, night, "Moved#1", 1700, top)
+    first = place(client, auth_headers, night, "Stays#2", 1700, top)
+    third = place(client, auth_headers, night, "Also#3", 1700, top)
+    play(client, auth_headers, night["id"], king, first)
+
+    moved = client.put(
+        f"/events/{night['id']}/entrants/{king}",
+        json={"division_id": second_bracket},
+        headers=auth_headers,
+    )
+    assert moved.status_code == 200, moved.text
+
+    assert king_of(board(client, night["id"]), top) is None
+    payload = play(client, auth_headers, night["id"], first, third)
+    assert only(payload, top)["king"]["rows"][0]["entrant_id"] == first
+
+
+def test_a_signup_after_a_result_takes_a_seed_nobody_holds(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """A result renumbers the line, so the next signup still stands alone at its end."""
+    night = open_night(client, auth_headers)
+    top = bracket_ids(night)[0]
+    first = place(client, auth_headers, night, "Won#1", 1700, top)
+    second = place(client, auth_headers, night, "Lost#2", 1700, top)
+    play(client, auth_headers, night["id"], first, second)
+
+    late = place(client, auth_headers, night, "Late#3", 1700, top)
+
+    rows = [row for row in entrants(client, night["id"]) if row["division_id"] == top]
+    seeds = [row["seed"] for row in rows]
+    assert len(seeds) == len(set(seeds)), rows
+    assert late in [row["id"] for row in rows]
+    queue = only(board(client, night["id"]), top)["queue"]
+    assert [row["entrant_id"] for row in queue[-1]["rows"]] == [late]
 
 
 def _by_tag(tag: str) -> Any:  # noqa: ANN401

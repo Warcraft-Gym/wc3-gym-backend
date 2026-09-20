@@ -305,6 +305,8 @@ def create_match(
             host_player_id=first.user_id or 0,
             player1_id=first.user_id,
             player2_id=second.user_id,
+            entrant1_id=ident(first),
+            entrant2_id=ident(second),
         )
         session.add(row)
         session.flush()

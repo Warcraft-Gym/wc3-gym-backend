@@ -38,7 +38,6 @@ class EventDivisionPublic(SQLModel):
     name: Annotated[str | None, NumToStr] = None
     lower_bound: int | None = None
     size: int | None = None
-    king_entrant_id: int | None = None
     # The entrants of this division who have not withdrawn
     entrant_count: int | None = None
 
