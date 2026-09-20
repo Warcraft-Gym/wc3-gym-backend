@@ -4,7 +4,7 @@ title: Scheduling and availability
 description: A player answers whether they can play a round, keeps soft blocks that inform but never constrain, and a pair's shared free time is read as intervals for a series and as one count before one exists.
 resource: ../../../app/services/availability.py
 tags: [events, scheduling]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-19T21:00:00Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-09-20T09:00:00Z }
 sources:
   - id: availability
     resource: ../../../app/services/availability.py
@@ -23,6 +23,8 @@ sources:
 # The unit is the round
 
 The question "can you play?" belongs to a round, never to "every week". A round has a date window. Once a player has a series in a round the question is moot, and the series replaces the question on the dashboard. An answer is one row per player per round (`round_availability`); no row is no answer, and clearing an answer deletes the row. The player and their captain write the same row, and the last write wins. `PUT /player-availability` and `PUT /events/{event_id}/teams/{team_id}/availability` are the two writers, and the Discord `/availability` card is a third door to the same service.
+
+`GET /player-series` answers the player's own answers beside the rounds of the event. Each round carries its number, its date window, the fixed map of game 1 and the stage it sits in, as `stage_id` and `stage_name`, so the page groups the rounds under their stage. A round in no stage, and a stage with no name, answer null. One statement reads the rounds and their stage names together.
 
 One write answers every round of the event that has not ended, for one player: `PUT /player-availability/all` for the player themselves, `PUT /events/{event_id}/teams/{team_id}/availability/all` for their captain or an admin. It takes the same permissions as the single-round writers, writes the rounds in one transaction, and a null answer clears those same rounds again. Both answer the player's rows for the event, as the single-round writers do.
 

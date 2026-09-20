@@ -153,6 +153,41 @@ def test_player_series_carries_the_answers_and_the_rounds(
         (3, "2026-01-19"),
         (4, "2026-01-26"),
     ]
+    # The seeded rounds sit in no stage, so the player page draws no stage level
+    assert [(row["stage_id"], row["stage_name"]) for row in body["rounds"]] == [
+        (None, None)
+    ] * 4
+
+
+def test_player_series_rounds_name_the_stage_each_round_sits_in(
+    client: Client,
+    seeded: dict[str, Any],
+    member: Callable[..., dict[str, str]],
+) -> None:
+    """Two stages over one event: each round answers the stage it belongs to."""
+    from app.models.event_stage import EventStage
+
+    with Session.begin() as session:
+        group = EventStage(event_id=seeded["season_id"], position=1, name="Group stage")
+        bracket = EventStage(event_id=seeded["season_id"], position=2, name="Playoffs")
+        session.add_all([group, bracket])
+        session.flush()
+        for playday, stage in ((1, group), (2, group), (3, bracket)):
+            round_ = round_row(session, seeded["season_id"], playday)
+            assert round_
+            round_.stage_id = stage.id
+        ids = (group.id, bracket.id)
+
+    body = client.get("/player-series", headers=member()).json()
+
+    assert [
+        (row["playday"], row["stage_id"], row["stage_name"]) for row in body["rounds"]
+    ] == [
+        (1, ids[0], "Group stage"),
+        (2, ids[0], "Group stage"),
+        (3, ids[1], "Playoffs"),
+        (4, None, None),
+    ]
 
 
 @pytest.fixture

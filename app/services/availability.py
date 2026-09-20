@@ -15,6 +15,7 @@ from app.core.checkin_hint import blocked_rounds, round_window
 from app.core.db import Session
 from app.core.exceptions import ApiError, BadRequestError, NotFoundError
 from app.models.base import ident
+from app.models.event_stage import EventStage
 from app.models.relationships import DBEventRound, SeasonRoundPublic, round_row
 from app.models.round_availability import (
     DBRoundAvailability,
@@ -44,10 +45,16 @@ class AvailabilityService:
             return _season(session, season_id).round_count or 0
 
     def season_rounds(self, season_id: int) -> list[SeasonRoundPublic]:
-        """The rounds the dashboard asks about, with their date windows."""
+        """The rounds the dashboard asks about, with their windows and stage."""
         with Session.begin() as session:
-            season = _season(session, season_id)
-            return [SeasonRoundPublic.from_row(row) for row in season.rounds]
+            _season(session, season_id)
+            rows = session.execute(
+                select(DBEventRound, col(EventStage.name))
+                .outerjoin(EventStage, col(EventStage.id) == col(DBEventRound.stage_id))
+                .where(col(DBEventRound.season_id) == season_id)
+                .order_by(col(DBEventRound.number))
+            ).all()
+            return [SeasonRoundPublic.from_row(row, name) for row, name in rows]
 
     def for_user(self, user_id: int, season_id: int) -> list[RoundAvailabilityPublic]:
         with Session.begin() as session:

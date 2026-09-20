@@ -110,14 +110,20 @@ class SeasonRoundPublic(SQLModel):
     start_date: Annotated[IsoDate | None, LenientDate] = None
     end_date: Annotated[IsoDate | None, LenientDate] = None
     map_id: int | None = None
+    # The stage the round sits in; the player page groups its rounds under it
+    stage_id: int | None = None
+    # The stage's name, filled by the reads that join the stage
+    stage_name: str | None = None
 
     @classmethod
-    def from_row(cls, row: DBEventRound) -> Self:
+    def from_row(cls, row: DBEventRound, stage_name: str | None = None) -> Self:
         return cls(
             playday=row.number,
             start_date=row.start_date,
             end_date=row.end_date,
             map_id=row.map_id,
+            stage_id=row.stage_id,
+            stage_name=stage_name,
         )
 
 
