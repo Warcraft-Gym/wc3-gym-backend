@@ -30,6 +30,7 @@ from app.models.relationships import (
     EventRoundPublic,
     SeasonRoundPublic,
 )
+from app.models.team_reduced import TeamReduced
 from app.models.types import (
     AwareUTC,
     EnumValue,
@@ -685,6 +686,26 @@ class EventDiscordPost(SQLModel):
     channel_id: Annotated[str, NumToStr]
 
 
+class CaptainFixture(SQLModel):
+    """The caller's own team's next fixture of an event he holds a seat in.
+
+    It rides the member row so the home offers the round draft before the
+    fixture holds any series at all.
+    """
+
+    match_id: int
+    # The round the fixture is played in, by its number
+    playday: int
+    round_start: Annotated[IsoDate | None, LenientDate] = None
+    round_end: Annotated[IsoDate | None, LenientDate] = None
+    team1: TeamReduced
+    team2: TeamReduced
+    series_per_round: int
+    # Series the fixture already published, and drafts still open on it
+    published: int = 0
+    drafted: int = 0
+
+
 class MemberEventRow(SQLModel):
     """One row of the member home's events list, over every kind of event.
 
@@ -730,3 +751,6 @@ class MemberEventRow(SQLModel):
     # is finished, so the page reads the bracket or the standings; `closed`
     # nothing is open to the caller yet.
     action: MemberAction
+    # The caller's own team's next fixture with places left, on an event he
+    # holds a captain seat in; null for every other caller and every other event
+    captain_fixture: CaptainFixture | None = None
