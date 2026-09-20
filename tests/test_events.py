@@ -778,10 +778,10 @@ def my_events(client: Client, headers: dict[str, str]) -> dict[int, dict[str, An
     return {row["id"]: row for row in response.json()}
 
 
-def enter(event_id: int, user_id: int) -> int:
+def enter(event_id: int, user_id: int, race: Race = Race.HU) -> int:
     """One entrant row for the player, as a signup writes it."""
     with Session.begin() as session:
-        row = EventEntrant(event_id=event_id, user_id=user_id, race=Race.HU)
+        row = EventEntrant(event_id=event_id, user_id=user_id, race=race)
         session.add(row)
         session.flush()
         return ident(row)
@@ -873,6 +873,27 @@ def test_the_member_events_walk_the_action_words(
     set_fields(seeded["season_id"], end_date=TODAY + timedelta(days=7))
     running = my_events(client, headers)[seeded["season_id"]]
     assert (running["phase"], running["action"]) == ("running", "view")
+
+
+def test_the_member_event_row_names_the_races_the_caller_entered_on(
+    client: Client,
+    seeded: dict[str, Any],
+    member: Callable[..., dict[str, str]],
+) -> None:
+    """An event that takes one entry per race holds one row per race, so the
+    row names both, oldest row first. A caller who never entered reads []."""
+    headers = member()
+    player = seeded["player_ids"][0]
+    event = add_event(kind=EventKind.cup, signups_open=True, multi_entry=True)
+    other = add_event(name="Other Cup", kind=EventKind.cup, signups_open=True)
+
+    assert my_events(client, headers)[event]["entrant_races"] == []
+
+    enter(event, player, Race.NE)
+    enter(event, player, Race.HU)
+    rows = my_events(client, headers)
+    assert rows[event]["entrant_races"] == ["NE", "HU"]
+    assert rows[other]["entrant_races"] == []
 
 
 def test_the_event_check_in_refuses_when_the_event_checks_in_per_round(
