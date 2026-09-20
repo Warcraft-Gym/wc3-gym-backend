@@ -107,7 +107,8 @@ class SoftBlockService:
         """The hours both players have free, for a player of the series, a
         captain of either team that season, or an admin.
 
-        It answers ranges and a sum only, never whose block is whose.
+        It answers the shared ranges, their sum, and each side's own blocked
+        ranges over the same window; a block keeps its label to itself.
         """
         with Session.begin() as session:
             series = session.get(Series, series_id)
@@ -136,12 +137,15 @@ class SoftBlockService:
             side1, side2 = series.player1_id, series.player2_id
             if side1 is None or side2 is None:
                 raise BadRequestError("The series has no sides to compare yet")
-            ranges = shared_free(session, side1, side2, start, end)
+            both = blocked_pair(session, side1, side2, start, end)
+            ranges = free_time.free(start, end, *both)
         return FreeTimePublic(
             start=start,
             end=end,
             hours=free_hours(ranges),
-            ranges=[FreeRange(start=lo, end=hi) for lo, hi in ranges],
+            ranges=_public(ranges),
+            blocked1=_public(both[0]),
+            blocked2=_public(both[1]),
         )
 
     def pair_free_time(
@@ -181,6 +185,28 @@ class SoftBlockService:
         return PairFreeTimePublic(hours=free_hours(ranges))
 
 
+def blocked_pair(
+    session: OrmSession,
+    user_a: int,
+    user_b: int,
+    start: datetime,
+    end: datetime,
+    spans: Mapping[int, list[free_time.Interval]] | None = None,
+) -> list[list[free_time.Interval]]:
+    """Each player's merged blocked ranges inside [start, end), in caller order.
+
+    A caller that answers many pairs reads the blocks once per player and
+    passes them in spans, so a player found in spans costs no statement.
+    """
+    spans = spans or {}
+    return [
+        spans[side]
+        if side in spans
+        else blocked(session, side, start, end, zone_of(session, side))
+        for side in (user_a, user_b)
+    ]
+
+
 def shared_free(
     session: OrmSession,
     user_a: int,
@@ -189,19 +215,14 @@ def shared_free(
     end: datetime,
     spans: Mapping[int, list[free_time.Interval]] | None = None,
 ) -> list[free_time.Interval]:
-    """The UTC ranges both players have open inside [start, end).
-
-    A caller that answers many pairs reads the blocks once per player and
-    passes them in spans, so a player found in spans costs no statement.
-    """
-    spans = spans or {}
-    both = [
-        spans[side]
-        if side in spans
-        else blocked(session, side, start, end, zone_of(session, side))
-        for side in (user_a, user_b)
-    ]
+    """The UTC ranges both players have open inside [start, end)."""
+    both = blocked_pair(session, user_a, user_b, start, end, spans)
     return free_time.free(start, end, *both)
+
+
+def _public(spans: list[free_time.Interval]) -> list[FreeRange]:
+    """Intervals as the range shape the free-time read answers."""
+    return [FreeRange(start=lo, end=hi) for lo, hi in spans]
 
 
 def free_hours(ranges: list[free_time.Interval]) -> float:
