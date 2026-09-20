@@ -4,7 +4,7 @@ title: event_entrant
 description: One player or one pre-made team in one event, with its race, seed, division, check-in and withdrawal stamps; a withdrawn entrant keeps its row.
 resource: ../../../../app/models/event_entrant.py
 tags: [events, data]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-15T09:00:00Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-09-20T18:00:00Z }
 verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
 sources:
   - id: model
@@ -28,11 +28,11 @@ sources:
 | `team_id` | INTEGER | yes | The pre-made team, on a team event. |
 | `race` | VARCHAR | yes | The race a player enters on: `RANDOM`, `HU`, `OC`, `NE`, `UD`. A team row has none. The service refuses a player row without one. |
 | `note` | VARCHAR | yes | What the entrant wants to work on, asked by a signup-only event. |
-| `seed` | INTEGER | yes | The seed inside the division, from 1. Null until seeded, and cleared when a seed order leaves the entrant out. |
+| `seed` | INTEGER | yes | The seed inside the division, from 1. Null until seeded, and cleared when a seed order leaves the entrant out. On a KOTH night it is the line of the bracket: a new row takes the seed after the last one and an unplaced row holds none. |
 | `mmr_at_seed` | INTEGER | yes | The MMR the seed was cut from. |
 | `seed_source` | VARCHAR | yes | What ordered the seeds: `mmr`, `random`, `manual`, `previous_stage`, `qualifier` or `invitation`. |
 | `manual_placement` | BOOLEAN | no | On: an admin placed the entrant in its division by hand, so a reassign leaves it alone. |
-| `division_id` | INTEGER | yes | The division the entrant plays in. Null while the event has one table. |
+| `division_id` | INTEGER | yes | The division the entrant plays in. Null while the event has one table, and null on a row no cut could place. |
 | `group_no` | INTEGER | yes | The group of a group stage. Written by generate. |
 | `qualified_from_event_id` | INTEGER | yes | The qualifier the entrant came through. Null for a direct signup. Answered on the payload; no route writes it. |
 | `channel` | VARCHAR | no | Where the signup came from: `web`, `bot` or `twitch`. |

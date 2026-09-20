@@ -105,6 +105,10 @@ def generate(
             raise BadRequestError(
                 "A GNL stage is drafted by its admin and its captains, not generated"
             )
+        if stage.format is StageFormat.koth:
+            raise BadRequestError(
+                "A KOTH stage is paired by its admin during the night, not generated"
+            )
         drawn = _series_of(session, stage_id)
         if division_id is None and drawn:
             raise BadRequestError("This stage already holds series")

@@ -29,7 +29,7 @@ from app.models.w3c_stats import (
     W3CStatsCreate,
 )
 from app.services import derived
-from app.services.w3c import W3CService
+from app.services.w3c import REQUEST_TIMEOUT, W3CService
 
 if TYPE_CHECKING:
     from app.services.settings import SettingsService
@@ -250,8 +250,12 @@ class UserService:
             logger.debug(f"BattleTag validation failed for {battle_tag}: {e!s}")
             return False
 
-    def update_w3c_stats(self, user: UserReduced) -> None:
-        w3c_service = W3CService(settings_app_service=self.settings_app_service)
+    def update_w3c_stats(
+        self, user: UserReduced, timeout: float = REQUEST_TIMEOUT
+    ) -> None:
+        w3c_service = W3CService(
+            settings_app_service=self.settings_app_service, timeout=timeout
+        )
 
         # Resolve the season once, so both fetches agree and w3champions is
         # asked for the season list at most once per player.
