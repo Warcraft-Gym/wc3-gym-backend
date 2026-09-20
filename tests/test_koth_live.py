@@ -17,7 +17,7 @@ from app.models.user import User
 from app.models.w3c_stats import W3CStats
 from app.services.koth import legacy
 from tests.test_koth import silent_w3c
-from tests.test_koth_night import enrol, entrants, open_night
+from tests.test_koth_night import enrol, entrants, open_night, sign_up
 from tests.test_query_budget import count_statements
 
 LATER = "2026-10-05T19:00:00Z"
@@ -531,7 +531,7 @@ def test_the_board_of_thirty_rows_is_small_and_costs_a_fixed_read(
         client.get(f"/koth/nights/{night['id']}/board")
 
     assert small.status_code == 200, small.text
-    # 30 rows and one played series read 3973 bytes over 10 statements
+    # 30 rows and one played series read 3989 bytes over 10 statements
     assert len(small.content) < 5000
     assert ten[0] == sixty[0] == 10
 
@@ -619,6 +619,7 @@ def test_every_live_write_takes_an_admin_and_nobody_else(
         ("put", f"/koth/nights/{night['id']}/series/1/result"),
         ("put", f"/koth/nights/{night['id']}/brackets/{top}/queue"),
         ("put", f"/koth/nights/{night['id']}/brackets/{top}/crown"),
+        ("put", f"/koth/nights/{night['id']}/bounds"),
         ("delete", f"/koth/nights/{night['id']}/entrants/{first}"),
         ("post", f"/koth/nights/{night['id']}/entrants/{first}/restore"),
     ]
@@ -724,6 +725,220 @@ def test_a_signup_after_a_result_takes_a_seed_nobody_holds(
     assert late in [row["id"] for row in rows]
     queue = only(board(client, night["id"]), top)["queue"]
     assert [row["entrant_id"] for row in queue[-1]["rows"]] == [late]
+
+
+def set_bounds(
+    client: Client, headers: dict[str, str], night: dict[str, Any], values: list[int]
+) -> Any:  # noqa: ANN401
+    """Name every bracket of the night, strongest first, with its new bound."""
+    return client.put(
+        f"/koth/nights/{night['id']}/bounds",
+        json={
+            "bounds": [
+                {"division_id": division_id, "lower_bound": bound}
+                for division_id, bound in zip(bracket_ids(night), values, strict=True)
+            ]
+        },
+        headers=headers,
+    )
+
+
+def chat(client: Client, night: dict[str, Any], tag: str, mmr: int) -> int:
+    """One rated player through the chat door: the cut places him, no admin."""
+    enrol(tag, mmr)
+    resp = sign_up(client, tag, "streamer", "human")
+    assert resp.status_code == 200, resp.text
+    return next(
+        row["id"]
+        for row in entrants(client, night["id"])
+        if row["user"]["battleTag"] == tag
+    )
+
+
+def test_a_new_bound_keeps_every_bracket_row_its_crown_and_its_series(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """The bound moves in place: no bracket is written again, nothing is lost."""
+    night = open_night(client, auth_headers)
+    top, middle, low = bracket_ids(night)
+    first = place(client, auth_headers, night, "Keep#1", 1700, top)
+    second = place(client, auth_headers, night, "Keep#2", 1700, top)
+    played = play(client, auth_headers, night["id"], first, second)
+    crowned = king_of(played, top)
+    series_id = only(played, top)["played"][0]["series_id"]
+
+    resp = set_bounds(client, auth_headers, night, [1800, 1500, 0])
+
+    assert resp.status_code == 200, resp.text
+    payload = resp.json()
+    assert [row["division_id"] for row in payload["brackets"]] == [top, middle, low]
+    assert [row["name"] for row in payload["brackets"]] == [
+        "Bracket 3",
+        "Bracket 2",
+        "Bracket 1",
+    ]
+    assert [row["lower_bound"] for row in payload["brackets"]] == [1800, 1500, 0]
+    assert king_of(payload, top) == crowned
+    assert only(payload, top)["played"][0]["series_id"] == series_id
+
+
+def test_a_rated_row_falls_to_its_new_bracket_at_the_end_of_the_line(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """A new bound cuts the rated rows again, exactly as a signup cuts them."""
+    night = open_night(client, auth_headers)
+    _, middle, low = bracket_ids(night)
+    standing = place(client, auth_headers, night, "Stand#1", 1200, low)
+    moving = chat(client, night, "Drop#2222", 1500)
+    assert [
+        row["rows"][0]["entrant_id"]
+        for row in only(board(client, night["id"]), middle)["queue"]
+    ] == [moving]
+
+    resp = set_bounds(client, auth_headers, night, [1600, 1550, 0])
+
+    assert resp.status_code == 200, resp.text
+    payload = resp.json()
+    assert only(payload, middle)["queue"] == []
+    assert [row["rows"][0]["entrant_id"] for row in only(payload, low)["queue"]] == [
+        standing,
+        moving,
+    ]
+
+
+def test_a_hand_placed_row_and_an_unplaced_row_ignore_a_new_bound(
+    client: Client,
+    auth_headers: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+    seeded: dict[str, Any],
+) -> None:
+    """The cut touches neither a row an admin placed nor a row it never took."""
+    silent_w3c(monkeypatch)
+    night = open_night(client, auth_headers)
+    top, _, low = bracket_ids(night)
+    pinned = place(client, auth_headers, night, "Pin#1", 1500, top)
+    waiting = client.post(
+        f"/events/{night['id']}/entrants/admin",
+        json={"user_id": enrol("Wait#2", 1200), "race": "OC"},
+        headers=auth_headers,
+    )
+    assert waiting.status_code == 201, waiting.text
+
+    resp = set_bounds(client, auth_headers, night, [1600, 1550, 0])
+
+    assert resp.status_code == 200, resp.text
+    payload = resp.json()
+    assert [row["rows"][0]["entrant_id"] for row in only(payload, top)["queue"]] == [
+        pinned
+    ]
+    assert only(payload, low)["queue"] == []
+    assert [row["entrant_id"] for row in payload["unplaced"]] == [waiting.json()["id"]]
+
+
+def test_a_king_whose_row_falls_leaves_an_empty_throne(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """A crown never travels between brackets, so the cut empties the throne."""
+    night = open_night(client, auth_headers)
+    _, middle, low = bracket_ids(night)
+    king = chat(client, night, "Crown#1111", 1500)
+    rival = chat(client, night, "Rival#2222", 1500)
+    play(client, auth_headers, night["id"], king, rival)
+    assert king_of(board(client, night["id"]), middle) is not None
+
+    resp = set_bounds(client, auth_headers, night, [1600, 1550, 0])
+
+    assert resp.status_code == 200, resp.text
+    payload = resp.json()
+    assert king_of(payload, middle) is None
+    assert king_of(payload, low) is None
+    assert [row["rows"][0]["entrant_id"] for row in only(payload, low)["queue"]] == [
+        king,
+        rival,
+    ]
+
+
+def test_a_new_bound_waits_for_the_series_on_the_table(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """A cut under a running series would move a player off the table."""
+    night = open_night(client, auth_headers)
+    top = bracket_ids(night)[0]
+    first = place(client, auth_headers, night, "Busy#1", 1700, top)
+    second = place(client, auth_headers, night, "Busy#2", 1700, top)
+    opened = start(client, auth_headers, night["id"], first, second)
+    assert opened.status_code == 201, opened.text
+
+    resp = set_bounds(client, auth_headers, night, [1800, 1500, 0])
+
+    assert resp.status_code == 409, resp.text
+    assert resp.json() == {"error": "Finish or cancel the open series first."}
+
+
+def test_the_bounds_a_night_refuses(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """The bounds keep the order of the brackets and the weakest opens at 0."""
+    night = open_night(client, auth_headers)
+    top = bracket_ids(night)[0]
+    for values in (
+        [1600, 1600, 0],
+        [1400, 1500, 0],
+        [1600, 1500, 200],
+        [1600, 1500, -5],
+    ):
+        resp = set_bounds(client, auth_headers, night, values)
+        assert resp.status_code == 400, f"{values}: {resp.text}"
+        assert "error" in resp.json(), resp.text
+    one = {"division_id": top, "lower_bound": 1600}
+    for body in ({"bounds": [one]}, {"bounds": [one, one, one]}):
+        named = client.put(
+            f"/koth/nights/{night['id']}/bounds", json=body, headers=auth_headers
+        )
+        assert named.status_code == 400, named.text
+
+    assert [row["lower_bound"] for row in board(client, night["id"])["brackets"]] == [
+        1600,
+        1450,
+        0,
+    ]
+
+
+def test_a_closed_night_takes_no_new_bound(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """A night that is over is read only, bounds among everything else."""
+    night = open_night(client, auth_headers)
+    closed = client.post(f"/koth/nights/{night['id']}/close", headers=auth_headers)
+    assert closed.status_code == 200, closed.text
+
+    resp = set_bounds(client, auth_headers, night, [1800, 1500, 0])
+
+    assert resp.status_code == 400, resp.text
+
+
+def test_a_played_row_names_the_side_that_won(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """The board says which side won, so a correction needs no series read."""
+    night = open_night(client, auth_headers)
+    top = bracket_ids(night)[0]
+    first = place(client, auth_headers, night, "Side#1", 1700, top)
+    second = place(client, auth_headers, night, "Side#2", 1700, top)
+
+    one = play(client, auth_headers, night["id"], first, second)
+    two = play(client, auth_headers, night["id"], first, second, winner=2)
+
+    assert only(one, top)["played"][0]["winner_side"] == 1
+    assert only(two, top)["played"][0]["winner_side"] == 2
+    series_id = only(two, top)["played"][0]["series_id"]
+    turned = client.put(
+        f"/koth/nights/{night['id']}/series/{series_id}/result",
+        json={"winner": 1},
+        headers=auth_headers,
+    )
+    assert turned.status_code == 200, turned.text
+    assert only(turned.json(), top)["played"][0]["winner_side"] == 1
 
 
 def _by_tag(tag: str) -> Any:  # noqa: ANN401

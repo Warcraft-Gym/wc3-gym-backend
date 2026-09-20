@@ -17,6 +17,7 @@ from app.models.event_entrant import EventEntrant, EventEntrantPublic
 from app.models.season import Season
 from app.models.types import utcnow
 from app.models.user import User, UserReduced
+from app.services import stage_engine
 from app.services.events import (
     EventService,
     _end_seed,
@@ -68,24 +69,39 @@ def follow(
         )
         tag = (user.battleTag or "") if user is not None else ""
         user_id = ident(user) if user is not None else 0
-        before = {
-            ident(one): one.division_id for one in _live_entrants(session, event_id)
-        }
     if ask and tag:
         sync_rating(user_id, tag)
-    EventService().assign_divisions(event_id)
+    recut(event_id)
     with Session.begin() as session:
-        # Every row the cut moved into a bracket takes the end of that line
-        for one in _live_entrants(session, event_id):
-            if one.division_id is None:
-                one.seed = None
-            elif one.division_id != before.get(ident(one)) or one.seed is None:
-                one.seed = _end_seed(session, event_id, one.division_id, ident(one))
-        session.flush()
         row = session.get(EventEntrant, entrant_id)
         if row is None:
             return None
         return _entrant_publics(session, _event(session, event_id), [row])[0]
+
+
+def recut(event_id: int) -> None:
+    """Cut the rows no admin placed into the brackets as they now stand.
+
+    A row the cut leaves where it is keeps its place in the line. A row the
+    cut moves takes the end of its new line and leaves the throne it wore,
+    because a crown never travels between brackets.
+    """
+    with Session.begin() as session:
+        before = {
+            ident(one): one.division_id for one in _live_entrants(session, event_id)
+        }
+    EventService().assign_divisions(event_id)
+    with Session.begin() as session:
+        rows = _live_entrants(session, event_id)
+        moved = [one for one in rows if one.division_id != before.get(ident(one))]
+        # Every row the cut moved into a bracket takes the end of that line
+        for one in rows:
+            if one.division_id is None:
+                one.seed = None
+            elif one.division_id != before.get(ident(one)) or one.seed is None:
+                one.seed = _end_seed(session, event_id, one.division_id, ident(one))
+        stage_engine.uncrown(session, [ident(one) for one in moved])
+        session.flush()
 
 
 def unrated(user: User, race: Race | None, season: int) -> bool:

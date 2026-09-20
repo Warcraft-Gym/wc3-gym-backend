@@ -7,6 +7,8 @@ bracket holds one open series at a time, so the night never runs ahead of
 what is actually being played.
 """
 
+from itertools import pairwise
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session as OrmSession
 from sqlmodel import col
@@ -19,6 +21,7 @@ from app.models.event_division import EventDivision
 from app.models.event_entrant import EventEntrant
 from app.models.event_stage import EventStage
 from app.models.koth_night import (
+    BoundsWrite,
     CrownWrite,
     KothBoard,
     QueueWrite,
@@ -31,7 +34,8 @@ from app.models.series import Series
 from app.models.types import utcnow
 from app.services import stage_engine
 from app.services.koth import board
-from app.services.koth.night import series_of
+from app.services.koth.night import divisions_of, series_of
+from app.services.koth.signup import recut
 
 # The one round every series of a night is played in
 ROUND_NAME = "King of the Hill"
@@ -150,6 +154,37 @@ def set_crown(night_id: int, division_id: int, data: CrownWrite) -> KothBoard:
                 raise BadRequestError("The crown stays inside its own bracket")
             division.king_entrant_id = data.entrant_id
         session.flush()
+    return board.read(night_id)
+
+
+def set_bounds(night_id: int, data: BoundsWrite) -> KothBoard:
+    """Move the MMR bounds of the brackets while the night runs.
+
+    The bracket rows stay where they are, so their ids, their names, their
+    order, the crowns and every series keep their place; only the bound moves.
+    The night is then cut again by the new bounds, exactly as a signup cuts it.
+    """
+    with Session.begin() as session:
+        night = _open_night(session, night_id)
+        event_id = ident(night)
+        if any(not stage_engine.scored(row) for row in series_of(session, event_id)):
+            raise ApiError(409, {"error": "Finish or cancel the open series first."})
+        brackets = divisions_of(session, event_id)
+        named = {row.division_id: row.lower_bound for row in data.bounds}
+        if len(named) != len(data.bounds) or named.keys() != {
+            ident(row) for row in brackets
+        }:
+            raise BadRequestError("Name every bracket of the night exactly once")
+        # The brackets read strongest first, so the bounds fall to 0 down the list
+        wanted = [named[ident(row)] for row in brackets]
+        if any(bound <= lower for bound, lower in pairwise(wanted)):
+            raise BadRequestError("A stronger bracket opens at a higher MMR")
+        if wanted[-1] != 0:
+            raise BadRequestError("The weakest bracket opens at 0")
+        for bracket in brackets:
+            bracket.lower_bound = named[ident(bracket)]
+        session.flush()
+    recut(event_id)
     return board.read(night_id)
 
 
