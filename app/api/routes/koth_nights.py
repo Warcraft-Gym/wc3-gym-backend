@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, Response
 
 from app.api.deps import SettingsServiceDep, require_admin
 from app.models.koth_night import (
+    BoundsWrite,
     CrownWrite,
     KothBoard,
     NightOpen,
@@ -34,6 +35,12 @@ def open_night(data: NightOpen) -> EventPublic:
 def close_night(night_id: int) -> EventPublic:
     """Close the night: the unplayed series go, so every series left is scored."""
     return night.close_night(night_id)
+
+
+@router.put("/koth/nights/{night_id}/bounds", dependencies=[Depends(require_admin)])
+def set_bounds(night_id: int, data: BoundsWrite) -> KothBoard:
+    """Move the MMR bounds of the brackets and cut the night again."""
+    return live.set_bounds(night_id, data)
 
 
 @router.post(

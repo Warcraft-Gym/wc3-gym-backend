@@ -50,6 +50,19 @@ class CrownWrite(SQLModel):
     entrant_id: int | None = None
 
 
+class BracketBound(SQLModel):
+    """The MMR one bracket of the night opens at."""
+
+    division_id: int
+    lower_bound: int
+
+
+class BoundsWrite(SQLModel):
+    """Where the brackets of a running night cut, every bracket named once."""
+
+    bounds: list[BracketBound]
+
+
 class KothRow(SQLModel):
     """One race row a player holds in the bracket, with the rating behind it."""
 
@@ -93,11 +106,14 @@ class KothPlayed(SQLModel):
 
     `throne` says what the result did to the crown: `moved` crowned the winner,
     `held` left it with the king who played, `none` was a side game.
+    `winner_side` is the side of the series the winner played, so a client
+    turns the result around with the other side and needs no series read.
     """
 
     series_id: int
     winner: KothPlayer
     loser: KothPlayer
+    winner_side: Literal[1, 2]
     throne: Literal["moved", "held", "none"]
     replay: bool = False
 

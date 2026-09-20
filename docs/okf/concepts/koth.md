@@ -4,7 +4,7 @@ title: KOTH night
 description: A King of the Hill night is one event of the KOTH league with three MMR brackets as divisions, one signup rule at every door, and every series paired by hand while the night runs.
 resource: ../../../app/services/koth/night.py
 tags: [events, koth]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-20T21:00:00Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-09-20T23:00:00Z }
 sources:
   - id: night
     resource: ../../../app/services/koth/night.py
@@ -59,9 +59,11 @@ An admin makes every series by hand while the night runs. `POST /koth/nights/{id
 
 The line is `event_entrant.seed` inside the bracket, first in line first, one place per player whatever races he holds there. `PUT /koth/nights/{id}/brackets/{division_id}/queue` writes the order of one bracket and touches no other. `PUT /koth/nights/{id}/brackets/{division_id}/crown` passes the crown or empties the throne. `DELETE /koth/nights/{id}/entrants/{entrant_id}` takes a row out of the night, off the throne and off the table; `POST /koth/nights/{id}/entrants/{entrant_id}/restore` puts it back at the end of the line. Every one of these writes takes an admin and answers the board.
 
+`PUT /koth/nights/{id}/bounds` moves the MMR bounds of the brackets while the night runs. The body names every bracket of the night exactly once with its new `lower_bound`; the bounds keep the order of the brackets, no two are equal, and the weakest bracket opens at 0. A body that breaks one of those rules, or a closed night, answers 400, and the route answers 409 while any bracket of the night holds a series with no result. The bracket rows are written in place, so their ids, their names, their order, the crowns and every series keep their rows; only the bound changes. The night is then cut again by the new bounds, exactly as a signup cuts it: a row an admin placed by hand and a row no bound reaches stay where they are, a row the cut moves takes the end of its new bracket's line, and a king whose row moves leaves the throne he wore empty.
+
 # The board
 
-`GET /koth/nights/{id}/board`, and `GET /koth/board` for the night that takes signups, is the one read the run page and the public dashboard both draw. It takes no token and carries `Cache-Control: public, s-maxage=15` and `Access-Control-Allow-Origin: *`, because the dashboard polls it while the night runs. A night that is not published is an admin's own, so the public read answers not found. It answers the night and its counts, the rows no bracket holds yet, and per bracket its name and bound, the king with the race rows he holds there, the king of the last closed night while the throne is still empty, the series on the table, the line in order with one item per player and a mark on a player who plays in another bracket, the rows that left, and the series played, newest first, each saying whether the throne moved, was held, or never applied. A player on the table holds no seat in the line, whatever other race rows he has there. Every player line carries one rating integer and no W3Champions stats: the read asks for the rating of each (player, race) pair and four columns of each player, never a stored stats row. Thirty rows and one played series read 3973 bytes over ten statements, none of them per row.
+`GET /koth/nights/{id}/board`, and `GET /koth/board` for the night that takes signups, is the one read the run page and the public dashboard both draw. It takes no token and carries `Cache-Control: public, s-maxage=15` and `Access-Control-Allow-Origin: *`, because the dashboard polls it while the night runs. A night that is not published is an admin's own, so the public read answers not found. It answers the night and its counts, the rows no bracket holds yet, and per bracket its name and bound, the king with the race rows he holds there, the king of the last closed night while the throne is still empty, the series on the table, the line in order with one item per player and a mark on a player who plays in another bracket, the rows that left, and the series played, newest first, each saying whether the throne moved, was held, or never applied. A player on the table holds no seat in the line, whatever other race rows he has there. Every player line carries one rating integer and no W3Champions stats: the read asks for the rating of each (player, race) pair and four columns of each player, never a stored stats row. Thirty rows and one played series read 3989 bytes over ten statements, none of them per row.
 
 The shape it answers, as `app/models/koth_night.py` states it:
 
@@ -71,7 +73,7 @@ The shape it answers, as `app/models/koth_night.py` states it:
 - `KothRow`: `entrant_id`, `race`, `mmr`.
 - `KothPlayer`: `entrant_id`, `user_id`, `name`, `country`, `race`, `mmr`. One race row, not a seat.
 - `KothOpenSeries`: `series_id`, `side1`, `side2`, both `KothPlayer`.
-- `KothPlayed`: `series_id`, `winner`, `loser`, `throne` (`moved`, `held` or `none`), `replay`.
+- `KothPlayed`: `series_id`, `winner`, `loser`, `winner_side` (1 or 2), `throne` (`moved`, `held` or `none`), `replay`. `winner_side` is the side of the series the winner played, so a client turns a result around with the other side and reads no series.
 
 `mmr` null on a race row of a bracket says W3Champions found no rating for that player on that race; no second field carries that. Every row of `unplaced` reads `mmr` null, because a row no bracket holds is not asked for a rating.
 

@@ -200,6 +200,7 @@ def _played(
                 series_id=ident(row),
                 winner=_player(by_id[winner], users, mmrs),
                 loser=_player(by_id[loser], users, mmrs),
+                winner_side=2 if stage_engine.won_slot(row) == 2 else 1,
                 throne=throne,
                 replay=ident(row) in replays,
             )
