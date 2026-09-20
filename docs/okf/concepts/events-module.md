@@ -4,7 +4,7 @@ title: Events module
 description: One data model for every kind of event, with GNL and KOTH behaviour in their own modules on top, a stage engine that never branches on kind, a phase derived on every read, and the admin's path from a new league to a finished event with awards.
 resource: ../../../app/services/events.py
 tags: [events]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-20T13:30:00Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-09-20T15:30:00Z }
 sources:
   - id: events
     resource: ../../../app/services/events.py
@@ -50,7 +50,7 @@ An event's phase is derived on every read and never stored. The rungs, read from
 
 # The member read
 
-`GET /me/events` answers one row per published event with the caller's own state on it: the entrant, the check-in shape and its window, the next dated round, the phase and the one action the page offers. A caller who holds a captain seat in the event also gets `captain_fixture`: his own team's fixture of the next round that still has places left, with the two teams, the round's dates, `series_per_round` and the counts of published series and open drafts, so the home page links the round draft before the fixture holds any series. Every other caller reads it null. The whole list costs a fixed number of statements whatever it holds, four of them for the captain fixture.
+`GET /me/events` answers one row per published event with the caller's own state on it: the entrant, the race of every live entrant row of the caller in `entrant_races` (an event that takes one entry per race holds one row per race, and a caller who is not entered reads an empty list), the check-in shape and its window, the next dated round, the phase and the one action the page offers. A caller who holds a captain seat in the event also gets `captain_fixture`: his own team's fixture of the next round that still has places left, with the two teams, the round's dates, `series_per_round` and the counts of published series and open drafts, so the home page links the round draft before the fixture holds any series. Every other caller reads it null. The whole list costs a fixed number of statements whatever it holds, four of them for the captain fixture.
 
 # Entrants, seeds, divisions
 
@@ -69,8 +69,10 @@ An event of a league that drafts its teams (`entrant_kind` is `drafted_teams`) t
 `GET /home/series` is the one read behind the home page's series panels, and it
 crosses every kind: a GNL fixture, a cup bracket and a KOTH night answer side by
 side. It needs no token. It holds three lists, `next` (the five soonest booked
-series with no result), `casts_upcoming` (three of those a caster has claimed)
+series), `casts_upcoming` (three of those a caster has claimed)
 and `casts_recent` (the four newest played series whose cast carries a VOD). A
+booked series is one with no result whose start is no more than two hours past,
+so a series that is being played right now still has a card and leads the list. A
 draft pairing and an event that is not published never appear. Each row carries
 what a card prints and nothing more: the label in parts (`league`, `event`,
 `stage`, `round`), the two fixture teams, each side as id, name, country, the

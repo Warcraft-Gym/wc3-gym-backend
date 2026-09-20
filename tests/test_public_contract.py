@@ -240,6 +240,8 @@ def test_teams_season_carries_the_standings_and_roster_fields(
             "final_score",
             "points_available",
             "points_against",
+            "series_won",
+            "series_lost",
         }
         # Season 2 pays 36 and holds no series, so equality proves the season row.
         assert (
