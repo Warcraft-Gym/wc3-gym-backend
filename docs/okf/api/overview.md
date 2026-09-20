@@ -37,7 +37,7 @@ sources:
 | `public.py` | `/signup`, `/player-series`, `/player-availability`, `/player-blocks`, `/player-history`, `/user-info`, `/fantasy-team`, `/fantasy-bet`, `/events/{event_id}/rounds` | a member's own flows, and a captain's read of the hours a pair shares in a round |
 | `maps.py` | `/maps` | maps and the ladder import |
 | `fantasy.py` | `/fantasy`, `/events/{event_id}/fantasy` | admin fantasy management and event-scoped reads, tiers and breakdowns |
-| `koth.py`, `koth_nights.py` | `/koth` | nights and the old KOTH payloads |
+| `koth.py`, `koth_nights.py` | `/koth` | nights, the live night an admin runs, the board, and the old KOTH payloads |
 | `config.py` | `/config` | settings, admins, role bindings, role sync |
 | `stats.py` | `/stats/career` | career stats |
 | `import_export.py` | `/import`, `/export`, `/fantasy/import` | workbooks |
@@ -51,7 +51,7 @@ The OpenAPI version is `1.1.0`. This version adds GNL creation and management to
 
 # The error envelope
 
-Every error answers `{"error": "<text>"}` with the status: 404 `NotFoundError`, 400 `BadRequestError`, 502 `ExternalServiceError`, 409 integrity conflicts ("Row already exists" or "Row is still referenced"), 422 validation with the field names in the text, 500 with the fixed text "Internal Server Error" and the detail in the log. The router's own 404 and 405 carry the envelope too. A few public routes add a second key, `message`, with human text beside an `error` code. `tests/test_error_envelope.py` locks it. FastAPI's stock `{"detail": ...}` never reaches a client.
+Every error answers `{"error": "<text>"}` with the status: 404 `NotFoundError`, 400 `BadRequestError`, 502 `ExternalServiceError`, 409 integrity conflicts ("Row already exists" or "Row is still referenced") and the one rule conflict a route states in a sentence, 422 validation with the field names in the text, 500 with the fixed text "Internal Server Error" and the detail in the log. The router's own 404 and 405 carry the envelope too. A few public routes add a second key, `message`, with human text beside an `error` code. `tests/test_error_envelope.py` locks it. FastAPI's stock `{"detail": ...}` never reaches a client.
 
 # Paging and sorting
 
