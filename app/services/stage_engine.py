@@ -418,6 +418,40 @@ def after_score(
     was_slot: int | None,
     force: bool = False,
 ) -> None:
+    """Follow a score change into the bracket and move the crown behind it."""
+    _follow_score(session, row, was_scored, was_slot, force)
+    crown(session, row)
+
+
+def crown(session: OrmSession, row: Series) -> None:
+    """Move the crown of a koth division behind this result.
+
+    An empty throne is taken by the winner, and the reigning king keeps the
+    crown until he plays and loses: a side game between two other entrants
+    leaves it where it stands. Turning a result around moves it back, because
+    the king the old result crowned is one of the two sides.
+    """
+    if not scored(row) or row.division_id is None:
+        return
+    stage = _stage_of(session, row)
+    if stage is None or stage.format is not StageFormat.koth:
+        return
+    division = session.get(EventDivision, row.division_id)
+    winner = entrant_of(row)
+    if division is None or winner is None:
+        return
+    if division.king_entrant_id in (None, row.entrant1_id, row.entrant2_id):
+        division.king_entrant_id = winner
+        session.flush()
+
+
+def _follow_score(
+    session: OrmSession,
+    row: Series,
+    was_scored: bool,
+    was_slot: int | None,
+    force: bool = False,
+) -> None:
     """Follow a score change into the bracket. A series with no feeders and
     nothing below it, which is every GNL series, changes nothing here.
 
@@ -453,6 +487,7 @@ def set_result_kind(series_id: int, data: ResultKindWrite) -> SeriesPublic:
         _award(session, row, data.winner == 1, data.result_kind)
         on_scored(session, row)
         _auto_advance(session, row)
+        crown(session, row)
         public = SeriesPublic.from_series(row)
         derived.fill_series(session, [public])
         return public
@@ -1546,7 +1581,7 @@ def _table(
         reached = _reached(session, stage, order, series)
         table = sorted(table, key=lambda line: reached[line.entrant], reverse=True)
     elif stage.format is StageFormat.koth:
-        king = _king(series)
+        king = _king(session, field, series)
         table = sorted(table, key=lambda line: line.entrant == king, reverse=True)
     counted = _counted(order, results)
     names = _names(session, field)
@@ -1663,10 +1698,22 @@ def _third_place(
     )
 
 
-def _king(series: Sequence[Series]) -> int | None:
-    """The winner of the last series the chain has scored, who holds the throne."""
-    done = [row for row in series if scored(row)]
-    return entrant_of(done[-1]) if done else None
+def _king(
+    session: OrmSession, field: Sequence[EventEntrant], series: Sequence[Series]
+) -> int | None:
+    """The entrant who wears the crown of the division this field plays in.
+
+    A stage that runs no divisions has no row to store a crown on, so its
+    throne is the winner of the last series it scored.
+    """
+    division_id = next(
+        (row.division_id for row in field if row.division_id is not None), None
+    )
+    if division_id is None:
+        done = [row for row in series if scored(row)]
+        return entrant_of(done[-1]) if done else None
+    division = session.get(EventDivision, division_id)
+    return division.king_entrant_id if division else None
 
 
 def _counted(

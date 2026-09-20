@@ -72,23 +72,22 @@ def follow_signup(event_id: int) -> None:
 def kings_of(session: OrmSession, night: Season) -> dict[int, int]:
     """The king of each bracket position of that night, by the player behind him.
 
-    The throne is the last scored series of the chain, so a bracket nobody
-    played to the end has no king.
+    The crown is stored on the bracket, so a bracket nobody played and a
+    bracket whose king stepped down both answer nothing.
     """
-    positions = {
-        ident(division): division.position
+    crowns = {
+        division.king_entrant_id: division.position
         for division in divisions_of(session, ident(night))
+        if division.king_entrant_id is not None
     }
-    chains: dict[int | None, list[Series]] = {}
-    for row in series_of(session, ident(night)):
-        chains.setdefault(row.division_id, []).append(row)
-    kings: dict[int, int] = {}
-    for division_id, chain in chains.items():
-        played = [row for row in chain if stage_engine.scored(row)]
-        winner = stage_engine.winner_of(played[-1]) if played else None
-        if winner is not None and division_id in positions:
-            kings[positions[division_id]] = winner
-    return kings
+    if not crowns:
+        return {}
+    wearers = session.scalars(
+        select(EventEntrant).where(col(EventEntrant.id).in_(crowns))
+    )
+    return {
+        crowns[ident(row)]: row.user_id for row in wearers if row.user_id is not None
+    }
 
 
 def _stranded(chain: list[Series], field: list[EventEntrant]) -> list[int]:

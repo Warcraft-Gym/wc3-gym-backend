@@ -41,7 +41,7 @@ from app.models.types import utcnow
 from app.models.user import User
 from app.services import stage_engine
 from app.services.events import EventService, _stats_for, _users_for, _w3c_season
-from app.services.koth import night, nightbot
+from app.services.koth import carry, night, nightbot
 from app.services.series import SeriesService
 
 # A KOTH series is one player against one player, so every match reads this way
@@ -531,7 +531,7 @@ def _payloads(
     chains: dict[int | None, list[Series]] = {}
     for row in night.series_of(session, event_id):
         chains.setdefault(row.division_id, []).append(row)
-    kings = {_king(chain) for chain in chains.values()} - {None}
+    kings: set[int | None] = set(carry.kings_of(session, event).values())
     beaten = {
         _loser(row)
         for chain in chains.values()
@@ -555,12 +555,6 @@ def _payloads(
     ]
     matches.sort(key=lambda row: (row.bracket, row.id))
     return signups, matches
-
-
-def _king(chain: list[Series]) -> int | None:
-    """Who holds the throne of a chain: the winner of its last scored series."""
-    played = [row for row in chain if stage_engine.scored(row)]
-    return stage_engine.winner_of(played[-1]) if played else None
 
 
 def _loser(row: Series) -> int | None:
