@@ -4,7 +4,7 @@ title: Derived scores
 description: Series points, fixture scores, standings, career ratings and fantasy scores are computed from the map scores on every read, in a constant number of statements.
 resource: ../../../app/services/derived.py
 tags: [events, series, api]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-09-20T15:00:00Z }
 sources:
   - id: derived
     resource: ../../../app/services/derived.py
@@ -26,7 +26,7 @@ A series stores only the maps each side won. Everything else is computed when it
 
 - **Series points.** A lost series keeps its map score. A won series pays the top of the scale minus the loser's maps. The scale comes from the season's `score_system` and the maps a win takes: `standard` tops at 2*wins-1, `helpstone` at 2*wins. A Bo3 tops at 3 or 4.
 - **Fixture score.** The sum of the series points per side.
-- **Standings.** The sum over a team's fixtures. A team with no played series reads (0, 0, full points available); there is no null state.
+- **Standings.** The sum over a team's fixtures. A team with no played series reads (0, 0, full points available); there is no null state. The same sum counts the team's series record, `series_won` and `series_lost`: the side with more map wins takes the series, and a series with no score counts for neither.
 - **Career rating.** A season pays a player one point per series won, half a point per other series played, and one point for playing at all. Every league season first takes 15% off the rating a player carries. The fold runs over the seasons in order, so it depends on the whole league.
 - **Fantasy scores.** See [fantasy](fantasy.md).
 - **Per-player season record.** Games, wins and losses per season, from the series.

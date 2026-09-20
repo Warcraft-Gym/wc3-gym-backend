@@ -475,7 +475,7 @@ class EventService:
                 .options(selectinload(rel(Season.rounds)))
                 .order_by(col(Season.id).desc())
             ).all()
-            joined = _joined_events(session, user_id)
+            joined, races = _joined_events(session, user_id)
             ids = [event.id for event in events]
             counts = series_counts_by_event(session, ids)
             drawn = last_stage_drawn(session, ids)
@@ -502,6 +502,7 @@ class EventService:
                     drawn.get(event.id, True),
                     event.id in joined,
                     joined.get(event.id),
+                    races.get(event.id, []),
                     rounds.get(event.id),
                     hints.get(event.id),
                     _answer_time(event, rounds.get(event.id), answered),
@@ -883,21 +884,30 @@ def _day(event: Season) -> date | None:
 
 def _joined_events(
     session: OrmSession, user_id: int | None
-) -> dict[int, EventEntrant | None]:
-    """The player's entrant row per event he joined; a GNL signup has none.
+) -> tuple[dict[int, EventEntrant | None], dict[int, list[str]]]:
+    """The player's entrant row per event he joined, and the races of every one
+    of his rows there; a GNL signup has neither.
 
     A key with no row is a season the player signed up for, which carries no
-    entrant; an event he never entered is no key at all.
+    entrant; an event he never entered is no key at all. The same read answers
+    both maps, so an event that takes one entry per race costs no statement.
     """
     if user_id is None:
-        return {}
+        return {}, {}
     entered = session.scalars(
-        select(EventEntrant).where(
+        select(EventEntrant)
+        .where(
             col(EventEntrant.user_id) == user_id,
             col(EventEntrant.withdrawn_at).is_(None),
         )
+        .order_by(col(EventEntrant.id))
     )
-    joined: dict[int, EventEntrant | None] = {row.event_id: row for row in entered}
+    joined: dict[int, EventEntrant | None] = {}
+    races: dict[int, list[str]] = {}
+    for row in entered:
+        joined[row.event_id] = row
+        if row.race is not None:
+            races.setdefault(row.event_id, []).append(row.race.value)
     signed = session.scalars(
         select(col(DBUserSeasonSignup.season_id)).where(
             col(DBUserSeasonSignup.user_id) == user_id
@@ -905,7 +915,7 @@ def _joined_events(
     )
     for season_id in signed:
         joined.setdefault(season_id, None)
-    return joined
+    return joined, races
 
 
 def _round_hints(
@@ -1081,6 +1091,7 @@ def _member_row(
     last_stage: bool,
     joined: bool,
     entrant: EventEntrant | None,
+    races: list[str],
     round_: DBEventRound | None,
     hint: AvailabilityHint | None,
     answered_at: datetime | None,
@@ -1118,6 +1129,7 @@ def _member_row(
         joined=joined,
         url=event.page_url,
         entrant_id=ident(entrant) if entrant else None,
+        entrant_races=races,
         checked_in_at=checked_in_at,
         checkin_shape=shape,
         checkin_open=is_open,
