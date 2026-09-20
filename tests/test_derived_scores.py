@@ -16,7 +16,13 @@ from app.core.db import Session
 from app.models.settings import Settings
 
 # The five results a series can carry, as (player1_score, player2_score).
-RESULTS = [(2, 0), (2, 1), (1, 2), (0, 2), (None, None)]
+RESULTS: list[tuple[int | None, int | None]] = [
+    (2, 0),
+    (2, 1),
+    (1, 2),
+    (0, 2),
+    (None, None),
+]
 
 
 def post(
@@ -41,9 +47,13 @@ def set_score_system(system: str) -> None:
 
 
 def build_season(
-    client: Client, headers: dict[str, str], name: str, system: str
+    client: Client,
+    headers: dict[str, str],
+    name: str,
+    system: str,
+    results: list[tuple[int | None, int | None]] = RESULTS,
 ) -> dict[str, Any]:
-    """One season on the given system, with one match of five series."""
+    """One season on the given system, with one match of the given series."""
     season = post(
         client,
         headers,
@@ -72,7 +82,7 @@ def build_season(
                     "race": "HU",
                 },
             )
-            for index in range(len(RESULTS))
+            for index in range(len(results))
         ]
         for team in (1, 2)
     ]
@@ -115,7 +125,7 @@ def build_season(
                 "player2_score": two,
             },
         )["id"]
-        for index, (one, two) in enumerate(RESULTS)
+        for index, (one, two) in enumerate(results)
     ]
     return {
         "season_id": season["id"],
@@ -228,6 +238,49 @@ def standings(team: dict[str, Any], season_id: int) -> tuple[int, int, int]:
     """final_score, points_against and points_available of one season row."""
     info = next(i for i in team["seasons_info"] if i["season_id"] == season_id)
     return info["final_score"], info["points_against"], info["points_available"]
+
+
+def series_record(team: dict[str, Any], season_id: int) -> tuple[int, int]:
+    """series_won and series_lost of one season row."""
+    info = next(i for i in team["seasons_info"] if i["season_id"] == season_id)
+    return info["series_won"], info["series_lost"]
+
+
+def test_the_series_record_counts_the_scored_series_of_the_team(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """Team one takes a 2-0 and a 2-1, drops a 0-2 and plays one series with no
+    score; the unscored series and a draft pairing count for neither side."""
+    set_score_system("standard")
+    league = build_season(
+        client,
+        auth_headers,
+        "Record",
+        "standard",
+        [(2, 0), (2, 1), (0, 2), (None, None)],
+    )
+    rows = get(client, f"/teams/season/{league['season_id']}")
+    by_name = {team["name"]: team for team in rows}
+    assert series_record(by_name["Record one"], league["season_id"]) == (2, 1)
+    assert series_record(by_name["Record two"], league["season_id"]) == (1, 2)
+
+    played = get(client, f"/series/{league['series_ids'][0]}")
+    post(
+        client,
+        auth_headers,
+        "/draft-series",
+        {
+            "match_id": league["match_id"],
+            "player1_id": played["player1_id"],
+            "player2_id": played["player2_id"],
+            "host_player_id": played["player1_id"],
+            "player1_score": 2,
+            "player2_score": 0,
+        },
+    )
+    rows = get(client, f"/teams/season/{league['season_id']}")
+    by_name = {team["name"]: team for team in rows}
+    assert series_record(by_name["Record one"], league["season_id"]) == (2, 1)
 
 
 def test_a_season_with_no_match_stands_every_team_at_zero(

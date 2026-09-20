@@ -86,7 +86,7 @@ type Scale = tuple[str, int]
 DEFAULT_SCALE: Scale = (DEFAULT_SYSTEM, DEFAULT_WINS)
 # scale, series per week and number of weeks, per season
 type SeasonRules = dict[int, tuple[Scale, int | None, int | None]]
-# points for and points against, per (team, season)
+# points for, points against, series won and series lost, per (team, season)
 type TeamSums = dict[tuple[int, int], list[int]]
 
 
@@ -405,10 +405,12 @@ def _rules_by_season(session: Session, season_ids: set[int]) -> SeasonRules:
 
 
 def _sums_by_team(session: Session, rules: SeasonRules) -> TeamSums:
-    """The points for and against of every team of every season.
+    """The points for and against, and the series won and lost, of every team
+    of every season.
 
     One statement per scale, grouped by the two teams of a match, so a
-    team collects both the matches it holds as team1 and as team2.
+    team collects both the matches it holds as team1 and as team2. A series
+    goes to the side with more map wins; one with no score counts for neither.
     """
     by_scale: dict[Scale, list[int]] = {}
     for season_id, (scale, _, _) in rules.items():
@@ -431,17 +433,35 @@ def _sums_by_team(session: Session, rules: SeasonRules) -> TeamSums:
                         col(Series.player2_score), col(Series.player1_score), *scale
                     )
                 ),
+                func.sum(
+                    case(
+                        (col(Series.player1_score) > col(Series.player2_score), 1),
+                        else_=0,
+                    )
+                ),
+                func.sum(
+                    case(
+                        (col(Series.player2_score) > col(Series.player1_score), 1),
+                        else_=0,
+                    )
+                ),
             )
             .join(Series, col(Series.match_id) == Match.id)
             .where(col(Match.season_id).in_(season_ids))
             .group_by(col(Match.season_id), col(Match.team1_id), col(Match.team2_id))
         ).all()
-        for season_id, team1_id, team2_id, team1, team2 in rows:
+        for season_id, team1_id, team2_id, team1, team2, won1, won2 in rows:
             one, two = int(team1 or 0), int(team2 or 0)
-            for team_id, own, opp in ((team1_id, one, two), (team2_id, two, one)):
-                entry = sums.setdefault((team_id, season_id), [0, 0])
+            win1, win2 = int(won1 or 0), int(won2 or 0)
+            for team_id, own, opp, won, lost in (
+                (team1_id, one, two, win1, win2),
+                (team2_id, two, one, win2, win1),
+            ):
+                entry = sums.setdefault((team_id, season_id), [0, 0, 0, 0])
                 entry[0] += own
                 entry[1] += opp
+                entry[2] += won
+                entry[3] += lost
     return sums
 
 
@@ -457,7 +477,7 @@ def season_winners(session: Session, season_ids: set[int]) -> dict[int, int]:
     rules = _rules_by_season(session, season_ids)
     sums = _sums_by_team(session, rules)
     best: dict[int, tuple[int, int, int]] = {}
-    for (team_id, season_id), (final, against) in sums.items():
+    for (team_id, season_id), (final, against, *_) in sums.items():
         key = (-final, against, team_id)
         if season_id not in best or key < best[season_id]:
             best[season_id] = key
@@ -498,8 +518,8 @@ def fill_season_labels(session: Session, teams: Iterable[TeamPublic | None]) -> 
 
 
 def fill_standings(session: Session, teams: Iterable[TeamPublic | None]) -> None:
-    """Fill final_score, points_against and points_available on every
-    seasons_info row of every team."""
+    """Fill final_score, points_against, points_available and the series record
+    on every seasons_info row of every team."""
     infos = _season_infos(teams)
     if not infos:
         return
@@ -511,9 +531,11 @@ def fill_standings(session: Session, teams: Iterable[TeamPublic | None]) -> None
 
     for team_id, info in infos:
         scale, per_week, weeks = rules.get(info.season_id, (DEFAULT_SCALE, None, None))
-        final, against = sums.get((team_id, info.season_id), [0, 0])
+        final, against, won, lost = sums.get((team_id, info.season_id), [0, 0, 0, 0])
         info.final_score = final
         info.points_against = against
+        info.series_won = won
+        info.series_lost = lost
         info.points_available = (
             per_week * weeks * max_points(*scale) - final - against
             if per_week is not None and weeks is not None
@@ -1237,7 +1259,7 @@ def _drafted_standing(
     if team_id is None or season_id is None:
         return None
     scale, per_week, weeks = rules.get(season_id, (DEFAULT_SCALE, None, None))
-    final, against = sums.get((team_id, season_id), [0, 0])
+    final, against = sums.get((team_id, season_id), [0, 0, 0, 0])[:2]
     available = (
         per_week * weeks * max_points(*scale) - final - against
         if per_week is not None and weeks is not None

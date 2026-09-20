@@ -50,7 +50,7 @@ An event's phase is derived on every read and never stored. The rungs, read from
 
 # The member read
 
-`GET /me/events` answers one row per published event with the caller's own state on it: the entrant, the check-in shape and its window, the next dated round, the phase and the one action the page offers. A caller who holds a captain seat in the event also gets `captain_fixture`: his own team's fixture of the next round that still has places left, with the two teams, the round's dates, `series_per_round` and the counts of published series and open drafts, so the home page links the round draft before the fixture holds any series. Every other caller reads it null. The whole list costs a fixed number of statements whatever it holds, four of them for the captain fixture.
+`GET /me/events` answers one row per published event with the caller's own state on it: the entrant, the race of every live entrant row of the caller in `entrant_races` (an event that takes one entry per race holds one row per race, and a caller who is not entered reads an empty list), the check-in shape and its window, the next dated round, the phase and the one action the page offers. A caller who holds a captain seat in the event also gets `captain_fixture`: his own team's fixture of the next round that still has places left, with the two teams, the round's dates, `series_per_round` and the counts of published series and open drafts, so the home page links the round draft before the fixture holds any series. Every other caller reads it null. The whole list costs a fixed number of statements whatever it holds, four of them for the captain fixture.
 
 # Entrants, seeds, divisions
 
