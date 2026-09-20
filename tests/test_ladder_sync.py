@@ -7,7 +7,7 @@ answers with.
 
 import itertools
 import json
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -31,7 +31,7 @@ from app.models.w3c_ladder_match import W3CLadderMatch, W3CLadderMatchCreate
 from app.models.w3c_stats import W3CStats, W3CStatsCreate
 from app.services import w3c as w3c_module
 from app.services.ladder import ALL_TIME, FIRST_W3C_SEASON, LadderService
-from app.services.users import UserService
+from app.services.users import SYNC_MAX_AGE, UserService
 from app.services.w3c import THROTTLED_MESSAGE, W3CService
 
 FIXTURES = Path(__file__).parent / "data" / "w3c"
@@ -150,6 +150,21 @@ def sign_up(season_id: int, user_id: int, team_id: int | None = None) -> None:
                 DBUserTeamSeason(user_id=user_id, team_id=team_id, season_id=season_id)
             )
         session.commit()
+
+
+def add_season(league_id: int, start: date, end: date) -> int:
+    """Another season of the same league, over its own window."""
+    with Session() as session:
+        row = Season(
+            name=f"Season {start.year}",
+            league_id=league_id,
+            series_per_round=2,
+            start_date=start,
+            end_date=end,
+        )
+        session.add(row)
+        session.commit()
+        return row.id
 
 
 def store_match(user_id: int, season: int, start_time: datetime) -> None:
@@ -770,6 +785,29 @@ def test_a_player_synced_a_moment_ago_is_skipped(
     assert second.skipped == seeded["player_ids"]
     assert second.synced == []
     assert fake.calls == []
+
+
+def test_a_run_over_one_window_does_not_skip_a_season_of_another(
+    app: FastAPI, seeded: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A player carries one stamp, and it cannot say which w3champions seasons
+    he was read for. The ledger can, so the second window reads its own."""
+    player = add_player("Shibby", "Shibby#1234")
+    sign_up(seeded["season_id"], player.id)
+    # The seeded season runs 2026-01-05 to 2026-02-27
+    store_match(player.id, W3C_SEASON - 5, datetime(2026, 1, 10, tzinfo=UTC))
+    earlier = add_season(seeded["league_id"], date(2025, 6, 1), date(2025, 7, 15))
+    sign_up(earlier, player.id)
+    store_match(player.id, W3C_SEASON - 10, datetime(2025, 6, 10, tzinfo=UTC))
+    fake = serve(monkeypatch, {})
+
+    LadderService().sync_season_users(seeded["season_id"], [player], SYNC_MAX_AGE)
+    fake.calls.clear()
+    result = LadderService().sync_season_users(earlier, [player], SYNC_MAX_AGE)
+
+    assert result.skipped == []
+    assert fake.seasons() == [W3C_SEASON - 10]
+    assert set(ledger_of(player.id)) == {W3C_SEASON - 5, W3C_SEASON - 10}
 
 
 def test_a_player_is_synced_again_once_max_age_has_passed(
