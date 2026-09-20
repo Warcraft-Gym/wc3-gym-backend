@@ -33,23 +33,29 @@ from app.models.series import Series
 from app.models.series_replay import DBSeriesReplay
 from app.models.user import User
 from app.services import stage_engine
-from app.services.events import _mmrs, _users_for
+from app.services.events import race_ratings
 from app.services.koth import carry
 from app.services.koth.night import divisions_of, series_of, tonight
 
 # Where a row with no seed stands: behind every row that carries one
 LAST = 1_000_000
 
+# The name and the country of one player, which is all a player line shows
+Line = tuple[str, str | None]
+NOBODY: Line = ("", None)
 
-def read(night_id: int | None = None) -> KothBoard:
+
+def read(night_id: int | None = None, public: bool = False) -> KothBoard:
     """The whole night, or tonight's night when no id is named."""
     with Session() as session:
         night = _night(session, night_id)
+        if public and not night.published:
+            raise NotFoundError(f"KOTH night not found by id: {night_id}")
         event_id = ident(night)
         entrants = _entrants(session, event_id)
         series = series_of(session, event_id)
         mmrs = _mmrs(session, entrants)
-        users = _users_for(session, entrants)
+        users = _users(session, entrants)
         replays = _replays(session, series)
         defenders = _defenders(session, night)
         chains: dict[int | None, list[Series]] = {}
@@ -88,7 +94,7 @@ def _bracket(
     division: EventDivision,
     field: Sequence[EventEntrant],
     chain: Sequence[Series],
-    users: dict[int | None, User],
+    users: dict[int, Line],
     mmrs: dict[int, int | None],
     replays: set[int],
     busy: dict[int, int],
@@ -105,13 +111,14 @@ def _bracket(
     king = by_id.get(king_id) if king_id else None
     if king is not None and king.withdrawn_at is not None:
         king = None
+    # A player on the table holds no seat in the line, whatever race row he plays
     playing = (
-        {open_row.entrant1_id, open_row.entrant2_id} if open_row is not None else set()
+        {open_row.player1_id, open_row.player2_id} if open_row is not None else set()
     )
     seated = [
         row
         for row in live
-        if ident(row) not in playing and (king is None or row.user_id != king.user_id)
+        if row.user_id not in playing and (king is None or row.user_id != king.user_id)
     ]
     crowned = [row for row in live if king is not None and row.user_id == king.user_id]
     return KothBracket(
@@ -133,28 +140,28 @@ def _bracket(
 
 def _seats(
     rows: Sequence[EventEntrant],
-    users: dict[int | None, User],
+    users: dict[int, Line],
     mmrs: dict[int, int | None],
     busy: dict[int, int],
 ) -> list[KothSeat]:
     """One seat per player, his race rows under it, in the order they stand."""
     seats: dict[int, KothSeat] = {}
     places: dict[int, tuple[int, int]] = {}
-    for row in sorted(rows, key=_place):
+    for row in sorted(rows, key=place):
         if row.user_id is None:
             continue
-        user = users.get(row.user_id)
+        name, country = users.get(row.user_id, NOBODY)
         seat = seats.get(row.user_id)
         if seat is None:
             seat = KothSeat(
                 user_id=row.user_id,
-                name=_name(user),
-                country=user.country if user else None,
+                name=name,
+                country=country,
                 rows=[],
                 busy=busy.get(row.user_id) not in (None, row.division_id),
             )
             seats[row.user_id] = seat
-            places[row.user_id] = _place(row)
+            places[row.user_id] = place(row)
         seat.rows.append(
             KothRow(entrant_id=ident(row), race=_race(row), mmr=mmrs.get(ident(row)))
         )
@@ -164,7 +171,7 @@ def _seats(
 def _played(
     chain: Sequence[Series],
     by_id: dict[int, EventEntrant],
-    users: dict[int | None, User],
+    users: dict[int, Line],
     mmrs: dict[int, int | None],
     replays: set[int],
 ) -> list[KothPlayed]:
@@ -201,7 +208,7 @@ def _played(
 def _open(
     row: Series,
     by_id: dict[int, EventEntrant],
-    users: dict[int | None, User],
+    users: dict[int, Line],
     mmrs: dict[int, int | None],
 ) -> KothOpenSeries | None:
     """The series on the table; a side whose row is gone leaves no open series."""
@@ -219,7 +226,7 @@ def _open(
 def _defender(
     user_id: int | None,
     live: Sequence[EventEntrant],
-    users: dict[int | None, User],
+    users: dict[int, Line],
     mmrs: dict[int, int | None],
 ) -> KothPlayer | None:
     """The king from the last event, shown while he holds a live row here."""
@@ -228,15 +235,15 @@ def _defender(
 
 
 def _player(
-    row: EventEntrant, users: dict[int | None, User], mmrs: dict[int, int | None]
+    row: EventEntrant, users: dict[int, Line], mmrs: dict[int, int | None]
 ) -> KothPlayer:
     """One race row as a player line: no rating where none was read."""
-    user = users.get(row.user_id)
+    name, country = users.get(row.user_id or 0, NOBODY)
     return KothPlayer(
         entrant_id=ident(row),
         user_id=row.user_id,
-        name=_name(user),
-        country=user.country if user else None,
+        name=name,
+        country=country,
         race=_race(row),
         mmr=mmrs.get(ident(row)),
     )
@@ -282,6 +289,36 @@ def _replays(session: OrmSession, series: Sequence[Series]) -> set[int]:
     )
 
 
+def _mmrs(session: OrmSession, rows: Sequence[EventEntrant]) -> dict[int, int | None]:
+    """Each row against the rating of the race it signed up on, in two reads.
+
+    The board answers a figure per row and never the stored stat rows behind
+    it, because the dashboard draws this read all night.
+    """
+    ratings = race_ratings(session, [(row.user_id, _race(row)) for row in rows])
+    mmrs: dict[int, int | None] = {}
+    for row in rows:
+        race = _race(row)
+        if row.user_id is not None and race is not None:
+            mmrs[ident(row)] = ratings.get((row.user_id, race))
+    return mmrs
+
+
+def _users(session: OrmSession, rows: Sequence[EventEntrant]) -> dict[int, Line]:
+    """The name and the country of each player behind those rows, in four columns."""
+    ids = {row.user_id for row in rows if row.user_id is not None}
+    if not ids:
+        return {}
+    return {
+        user_id: (name or tag or "", country)
+        for user_id, name, tag, country in session.execute(
+            select(
+                col(User.id), col(User.name), col(User.battleTag), col(User.country)
+            ).where(col(User.id).in_(ids))
+        )
+    }
+
+
 def _entrants(session: OrmSession, event_id: int) -> list[EventEntrant]:
     """Every row of the night, the ones that left among them."""
     return list(
@@ -303,16 +340,9 @@ def _night(session: OrmSession, night_id: int | None) -> Season:
     return night
 
 
-def _place(row: EventEntrant) -> tuple[int, int]:
+def place(row: EventEntrant) -> tuple[int, int]:
     """Where a row stands in line: its seed, and its id behind an unseeded row."""
     return (row.seed if row.seed is not None else LAST, ident(row))
-
-
-def _name(user: User | None) -> str:
-    """The name the board shows: the player's name, or his battle tag."""
-    if user is None:
-        return ""
-    return user.name or user.battleTag or ""
 
 
 def _race(row: EventEntrant) -> str | None:

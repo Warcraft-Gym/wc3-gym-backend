@@ -524,9 +524,109 @@ def test_the_board_of_thirty_rows_is_small_and_costs_a_fixed_read(
         client.get(f"/koth/nights/{night['id']}/board")
 
     assert small.status_code == 200, small.text
-    # 30 rows and one played series read 3973 bytes over 12 statements
+    # 30 rows and one played series read 3973 bytes over 10 statements
     assert len(small.content) < 5000
-    assert ten[0] == sixty[0] == 12
+    assert ten[0] == sixty[0] == 10
+
+
+def test_a_save_that_turns_no_result_around_leaves_the_crown(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """A rematch moves the crown; saving a field of the older series moves nothing."""
+    night = open_night(client, auth_headers)
+    top = bracket_ids(night)[0]
+    first = place(client, auth_headers, night, "Again#1", 1700, top)
+    second = place(client, auth_headers, night, "Again#2", 1700, top)
+    one = play(client, auth_headers, night["id"], first, second)
+    series_id = only(one, top)["played"][0]["series_id"]
+    rematch = play(client, auth_headers, night["id"], first, second, winner=2)
+    crowned = king_of(rematch, top)
+
+    saved = client.put(
+        f"/series/{series_id}", json={"date_time": LATER}, headers=auth_headers
+    )
+
+    assert saved.status_code == 200, saved.text
+    assert king_of(board(client, night["id"]), top) == crowned
+
+
+def test_an_empty_throne_survives_a_save_of_an_old_series(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """A king who stepped down takes no crown back when his series is saved again."""
+    night = open_night(client, auth_headers)
+    top = bracket_ids(night)[0]
+    king = place(client, auth_headers, night, "Left#1", 1700, top)
+    beaten = place(client, auth_headers, night, "Fell#2", 1700, top)
+    played = play(client, auth_headers, night["id"], king, beaten)
+    series_id = only(played, top)["played"][0]["series_id"]
+    stepped = client.put(
+        f"/koth/nights/{night['id']}/brackets/{top}/crown",
+        json={"entrant_id": None},
+        headers=auth_headers,
+    )
+    assert stepped.status_code == 200, stepped.text
+
+    saved = client.put(
+        f"/series/{series_id}", json={"date_time": LATER}, headers=auth_headers
+    )
+
+    assert saved.status_code == 200, saved.text
+    assert king_of(board(client, night["id"]), top) is None
+
+
+def test_the_public_board_hides_a_night_that_is_not_published(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """A draft night is the admin's own, so the public read answers not found."""
+    night = open_night(client, auth_headers)
+    top = bracket_ids(night)[0]
+    first = place(client, auth_headers, night, "Draft#1", 1700, top)
+    second = place(client, auth_headers, night, "Draft#2", 1700, top)
+    hidden = client.put(
+        f"/events/{night['id']}", json={"published": False}, headers=auth_headers
+    )
+    assert hidden.status_code == 200, hidden.text
+
+    resp = client.get(f"/koth/nights/{night['id']}/board")
+
+    assert resp.status_code == 404, resp.text
+    opened = start(client, auth_headers, night["id"], first, second)
+    assert opened.status_code == 201, opened.text
+
+
+def test_every_live_write_takes_an_admin_and_nobody_else(
+    client: Client,
+    auth_headers: dict[str, str],
+    member: Any,  # noqa: ANN401
+    seeded: dict[str, Any],
+) -> None:
+    """Each write of the night answers 401 with no token and 403 to a member."""
+    night = open_night(client, auth_headers)
+    top = bracket_ids(night)[0]
+    first = place(client, auth_headers, night, "Shut#1", 1700, top)
+    second = place(client, auth_headers, night, "Shut#2", 1700, top)
+    writes = [
+        ("post", f"/koth/nights/{night['id']}/series"),
+        ("delete", f"/koth/nights/{night['id']}/series/1"),
+        ("put", f"/koth/nights/{night['id']}/series/1/result"),
+        ("put", f"/koth/nights/{night['id']}/brackets/{top}/queue"),
+        ("put", f"/koth/nights/{night['id']}/brackets/{top}/crown"),
+        ("delete", f"/koth/nights/{night['id']}/entrants/{first}"),
+        ("post", f"/koth/nights/{night['id']}/entrants/{first}/restore"),
+    ]
+
+    for method, path in writes:
+        anonymous = client.request(method, path, json={})
+        assert anonymous.status_code == 401, f"{path}: {anonymous.text}"
+        refused = client.request(method, path, json={}, headers=member("7"))
+        assert refused.status_code == 403, f"{path}: {refused.text}"
+
+    payload = board(client, night["id"])
+    assert payload["series_count"] == 0
+    assert len(line_of(payload, top)) == 2
+    assert only(payload, top)["left"] == []
+    assert start(client, auth_headers, night["id"], first, second).status_code == 201
 
 
 def _by_tag(tag: str) -> Any:  # noqa: ANN401

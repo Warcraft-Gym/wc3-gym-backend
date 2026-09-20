@@ -33,7 +33,7 @@ UPDATE event_division SET king_entrant_id = (
       AND series.player1_score IS NOT NULL
       AND series.player2_score IS NOT NULL
       AND series.player1_score <> series.player2_score
-    ORDER BY series.id DESC
+    ORDER BY series.sequence DESC, series.id DESC
     LIMIT 1
 )
 WHERE EXISTS (

@@ -26,10 +26,8 @@ class EventDivision(DBModel, table=True):
     lower_bound: int | None = None
     # How many entrants the division takes when the cut counts from the top
     size: int | None = None
-    # Who wears the crown of this division; null while the throne is empty.
-    # It carries no foreign key, because an entrant already points at its
-    # division and the pair of keys would make the two tables a cycle. A
-    # crown whose row is gone reads as an empty throne.
+    # The entrant who wears the crown; null is an empty throne, and the column
+    # has no key (cycle)
     king_entrant_id: int | None = None
 
 

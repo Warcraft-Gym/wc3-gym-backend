@@ -99,11 +99,14 @@ def set_result(night_id: int, series_id: int, data: SeriesResult) -> KothBoard:
         row.player1_score = 1 if data.winner == 1 else 0
         row.player2_score = 0 if data.winner == 1 else 1
         session.flush()
-        stage_engine.after_score(session, row, was_scored, was_slot)
-        beaten = stage_engine.entrant_of(row, takes_loser=True)
-        loser = session.get(EventEntrant, beaten) if beaten else None
-        if loser is not None:
-            _to_the_end(session, loser)
+        # The same result sent again changes nothing: the crown stays where it
+        # stands and the line keeps the order the first save gave it
+        if not was_scored or was_slot != data.winner:
+            stage_engine.after_score(session, row, was_scored, was_slot)
+            beaten = stage_engine.entrant_of(row, takes_loser=True)
+            loser = session.get(EventEntrant, beaten) if beaten else None
+            if loser is not None:
+                _to_the_end(session, loser)
     return board.read(night_id)
 
 
@@ -121,7 +124,9 @@ def set_queue(night_id: int, division_id: int, data: QueueWrite) -> KothBoard:
                 raise BadRequestError(f"Row {entrant_id} does not stand in line here")
             named.append(row)
         # A row the drag left out keeps its place behind the ones it names
-        for place, row in enumerate(named + sorted(rows.values(), key=_place), start=1):
+        for place, row in enumerate(
+            named + sorted(rows.values(), key=board.place), start=1
+        ):
             row.seed = place
         session.flush()
     return board.read(night_id)
@@ -155,9 +160,10 @@ def remove_entrant(night_id: int, entrant_id: int) -> KothBoard:
         night = _open_night(session, night_id)
         row = _entrant(session, ident(night), entrant_id)
         row.withdrawn_at = utcnow()
-        division = session.get(EventDivision, row.division_id)
-        if division is not None and division.king_entrant_id == entrant_id:
-            division.king_entrant_id = None
+        if row.division_id is not None:
+            division = session.get(EventDivision, row.division_id)
+            if division is not None and division.king_entrant_id == entrant_id:
+                division.king_entrant_id = None
         for series in series_of(session, ident(night)):
             if not stage_engine.scored(series) and entrant_id in (
                 series.entrant1_id,
@@ -186,7 +192,7 @@ def _to_the_end(session: OrmSession, row: EventEntrant) -> None:
     """
     if row.division_id is None:
         return
-    field = sorted(_live_field(session, row.event_id, row.division_id), key=_place)
+    field = sorted(_live_field(session, row.event_id, row.division_id), key=board.place)
     moved = [other for other in field if other.user_id == row.user_id]
     waiting = [other for other in field if other.user_id != row.user_id]
     for place, other in enumerate(waiting + moved, start=1):
@@ -266,8 +272,3 @@ def _round(session: OrmSession, stage: EventStage) -> DBEventRound:
         session.add(row)
         session.flush()
     return row
-
-
-def _place(row: EventEntrant) -> tuple[int, int]:
-    """Where a row stands in line: its seed, and its id behind an unseeded row."""
-    return (row.seed if row.seed is not None else board.LAST, ident(row))

@@ -117,10 +117,9 @@ def _board(response: Response, night_id: int | None) -> KothBoard:
     """The board, cached at the edge because the dashboard polls it."""
     # the dashboard polls every 30 seconds; the edge serves every viewer one read
     response.headers["Cache-Control"] = "public, s-maxage=15"
-    # the edge keeps the headers of the request that filled it, and CORSMiddleware
-    # writes none when that request has no Origin, so a browser reads a copy it blocks
+    # the edge keeps no CORS header of a request without an Origin, so write one
     response.headers["Access-Control-Allow-Origin"] = "*"
-    return board.read(night_id)
+    return board.read(night_id, public=True)
 
 
 @router.get("/koth/signup")

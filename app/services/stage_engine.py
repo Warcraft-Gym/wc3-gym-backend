@@ -420,7 +420,10 @@ def after_score(
 ) -> None:
     """Follow a score change into the bracket and move the crown behind it."""
     _follow_score(session, row, was_scored, was_slot, force)
-    crown(session, row)
+    # A save that leaves the winner as he was moves no crown, so re-saving an
+    # old series of a bracket never hands the crown back to the side it named
+    if not was_scored or was_slot != won_slot(row):
+        crown(session, row)
 
 
 def crown(session: OrmSession, row: Series) -> None:
