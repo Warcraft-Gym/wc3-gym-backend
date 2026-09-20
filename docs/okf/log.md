@@ -1,5 +1,11 @@
 # Bundle history
 
+## 2026-09-20
+
+* **Update**: a round row of the player series read names the stage it sits in, as `stage_id` and `stage_name`.
+* **Update**: the series free-time read answers each player's own blocked ranges beside the shared ones, as `blocked1` and `blocked2`.
+* **Update**: the event roster read carries `out_rounds`, the rounds of the event each player sits out, on their season stats.
+
 ## 2026-09-19
 
 * **Update**: one read answers every figure of a fixture's draft board, and a second read answers the meetings of one pairing; both carry a private cache header.
