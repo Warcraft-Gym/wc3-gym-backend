@@ -4,7 +4,7 @@ title: Scheduling and availability
 description: A player answers whether they can play a round, keeps soft blocks that inform but never constrain, and a pair's shared free time is read as intervals for a series and as one count before one exists.
 resource: ../../../app/services/availability.py
 tags: [events, scheduling]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-20T10:00:00Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-09-20T11:00:00Z }
 sources:
   - id: availability
     resource: ../../../app/services/availability.py
@@ -24,7 +24,7 @@ sources:
 
 The question "can you play?" belongs to a round, never to "every week". A round has a date window. Once a player has a series in a round the question is moot, and the series replaces the question on the dashboard. An answer is one row per player per round (`round_availability`); no row is no answer, and clearing an answer deletes the row. The player and their captain write the same row, and the last write wins. `PUT /player-availability` and `PUT /events/{event_id}/teams/{team_id}/availability` are the two writers, and the Discord `/availability` card is a third door to the same service.
 
-`GET /player-series` answers the player's own answers beside the rounds of the event. Each round carries its number, its date window, the fixed map of game 1 and the stage it sits in, as `stage_id` and `stage_name`, so the page groups the rounds under their stage. A round in no stage, and a stage with no name, answer null. One statement reads the rounds and their stage names together.
+`GET /player-series` answers the player's own answers beside the rounds of the event. Each round carries its number, its date window, the fixed map of game 1 and the stage it sits in, as `stage_id` and `stage_name`, so the page groups the rounds under their stage. A round in no stage, and a stage with no name, answer null. One statement reads the rounds and their stage names together. The round rows of an event payload carry `stage_id` too; that read does not join the stage, so `stage_name` reads null on it.
 
 One write answers every round of the event that has not ended, for one player: `PUT /player-availability/all` for the player themselves, `PUT /events/{event_id}/teams/{team_id}/availability/all` for their captain or an admin. It takes the same permissions as the single-round writers, writes the rounds in one transaction, and a null answer clears those same rounds again. Both answer the player's rows for the event, as the single-round writers do.
 
@@ -65,4 +65,4 @@ A player with no stored answer whose blocks cover a whole round window reads as 
 
 # The rounds a roster sits out
 
-`GET /events/{event_id}/teams/{team_id}` carries `out_rounds` on each player's season stats: the playdays of that event the player sits out, a stored "no" and a derived blocked-out round alike. The list says which rounds, never why and never who wrote the answer, so the public read holds no blocked time. An event without scheduling answers an empty list, and the whole roster costs a fixed number of statements, never one per player. The full grid with its writers stays on the captains' read, `GET /events/{event_id}/teams/{team_id}/availability`.
+`GET /events/{event_id}/teams/{team_id}` carries `out_rounds` on each player's season stats: the playdays of that event the player sits out, a stored "no" and a derived blocked-out round alike. The list says which rounds, never why and never who wrote the answer, so the public read holds no blocked time. An event without scheduling answers an empty list, and the whole roster costs a fixed number of statements, never one per player. Every other payload that carries these season stats answers an empty list as well, so the rounds a player sits out are read from the roster read alone. The full grid with its writers stays on the captains' read, `GET /events/{event_id}/teams/{team_id}/availability`.
