@@ -105,17 +105,13 @@ def tonight(session: OrmSession) -> Season:
     return night
 
 
-def last_night(
-    session: OrmSession, before_id: int | None = None, open_only: bool = False
-) -> Season | None:
-    """The newest KOTH night, the newest one before an event, or the open one."""
+def last_night(session: OrmSession, open_only: bool = False) -> Season | None:
+    """The newest KOTH night, or the newest one that takes signups."""
     statement = (
         select(Season)
         .where(col(Season.kind) == EventKind.koth)
         .order_by(col(Season.id).desc())
     )
-    if before_id is not None:
-        statement = statement.where(col(Season.id) < before_id)
     if open_only:
         statement = statement.where(
             col(Season.published).is_(True), col(Season.signups_open).is_(True)

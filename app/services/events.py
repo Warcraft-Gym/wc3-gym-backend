@@ -595,6 +595,7 @@ class EventService:
                 raise NotFoundError("No signup to withdraw")
             for row in rows:
                 row.withdrawn_at = utcnow()
+            stage_engine.uncrown(session, [ident(row) for row in rows])
 
     def check_in(
         self, event_id: int, entrant_id: int, claims: dict[str, Any] | None

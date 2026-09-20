@@ -4,7 +4,7 @@ title: API overview
 description: Twenty-one route modules under one FastAPI app, one error envelope, paging with a total header, a search language, and OpenAPI at /docs.
 resource: ../../../app/api/main.py
 tags: [api]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-20T12:00:00Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-09-20T21:00:00Z }
 sources:
   - id: router
     resource: ../../../app/api/main.py
@@ -37,7 +37,7 @@ sources:
 | `public.py` | `/signup`, `/player-series`, `/player-availability`, `/player-blocks`, `/player-history`, `/user-info`, `/fantasy-team`, `/fantasy-bet`, `/events/{event_id}/rounds` | a member's own flows, and a captain's read of the hours a pair shares in a round |
 | `maps.py` | `/maps` | maps and the ladder import |
 | `fantasy.py` | `/fantasy`, `/events/{event_id}/fantasy` | admin fantasy management and event-scoped reads, tiers and breakdowns |
-| `koth.py`, `koth_nights.py` | `/koth` | nights and the old KOTH payloads |
+| `koth.py`, `koth_nights.py` | `/koth` | nights, the live night an admin runs, the board, and the old KOTH payloads |
 | `config.py` | `/config` | settings, admins, role bindings, role sync |
 | `stats.py` | `/stats/career` | career stats |
 | `import_export.py` | `/import`, `/export`, `/fantasy/import` | workbooks |
@@ -51,7 +51,7 @@ The OpenAPI version is `1.1.0`. This version adds GNL creation and management to
 
 # The error envelope
 
-Every error answers `{"error": "<text>"}` with the status: 404 `NotFoundError`, 400 `BadRequestError`, 502 `ExternalServiceError`, 409 integrity conflicts ("Row already exists" or "Row is still referenced"), 422 validation with the field names in the text, 500 with the fixed text "Internal Server Error" and the detail in the log. The router's own 404 and 405 carry the envelope too. A few public routes add a second key, `message`, with human text beside an `error` code. `tests/test_error_envelope.py` locks it. FastAPI's stock `{"detail": ...}` never reaches a client.
+Every error answers `{"error": "<text>"}` with the status: 404 `NotFoundError`, 400 `BadRequestError`, 502 `ExternalServiceError`, 409 integrity conflicts ("Row already exists" or "Row is still referenced") and the one rule conflict a route states in a sentence, 422 validation with the field names in the text, 500 with the fixed text "Internal Server Error" and the detail in the log. The router's own 404 and 405 carry the envelope too. A few public routes add a second key, `message`, with human text beside an `error` code. `tests/test_error_envelope.py` locks it. FastAPI's stock `{"detail": ...}` never reaches a client.
 
 # Paging and sorting
 
@@ -66,6 +66,8 @@ List routes take `limit` (1 to 500, default 500) and `offset`. Seven routes carr
 # CORS and caching
 
 CORS allows every origin, because clients send bearer tokens and never cookies. A route that sets `Cache-Control: public` must write `Access-Control-Allow-Origin: *` itself, next to it. See [the pitfall](../pitfalls/edge-cache-cors.md). A route whose answer belongs to one caller sets `Cache-Control: private` and `Vary: Authorization` instead, so no shared cache stores a copy and the browser's own copy is keyed on the bearer that names the caller.
+
+`GET /koth/board` and `GET /koth/nights/{night_id}/board` are the pair that sets `public, s-maxage=15`. Both answer `KothBoard`, keyed `night_id` with a `closed` flag, and every write of a live night answers the same shape, so the run page needs no second read. See [KOTH night](../concepts/koth.md).
 
 # Examples
 
