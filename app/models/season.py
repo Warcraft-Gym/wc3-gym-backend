@@ -730,9 +730,7 @@ class MemberEventRow(SQLModel):
     url: str | None = None
     # The caller's own entrant row; null for a GNL signup, which holds no entrant
     entrant_id: int | None = None
-    # The race of every live entrant row of the caller, oldest row first; an
-    # event that takes one entry per race holds one row per race. Empty when
-    # the caller is not entered, and for an entrant row with no race
+    # The race of every live entrant row of the caller, oldest row first
     entrant_races: list[str] = []
     # When the caller checked in; null while the check-in is not taken. The
     # event shape reads the entrant stamp, the round shape the caller's round

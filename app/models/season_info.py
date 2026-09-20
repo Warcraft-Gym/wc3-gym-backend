@@ -20,5 +20,5 @@ class SeasonInfoPublic(SQLModel):
     points_against: int | None = None
     # Scored series of the team's fixtures in that event; the side with more
     # map wins takes one, an unscored series counts for neither
-    series_won: int = 0
-    series_lost: int = 0
+    series_won: int | None = None
+    series_lost: int | None = None
