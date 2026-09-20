@@ -1,10 +1,10 @@
 ---
 type: API Area
 title: API overview
-description: Seventeen route modules under one FastAPI app, one error envelope, paging with a total header, a search language, and OpenAPI at /docs.
+description: Twenty-one route modules under one FastAPI app, one error envelope, paging with a total header, a search language, and OpenAPI at /docs.
 resource: ../../../app/api/main.py
 tags: [api]
-generated: { by: openai/gpt-6, at: 2026-09-19T22:00:00Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-09-20T12:00:00Z }
 sources:
   - id: router
     resource: ../../../app/api/main.py
@@ -33,6 +33,7 @@ sources:
 | `matches.py` | `/matches` | fixtures |
 | `series.py` | `/series`, `/events/{event_id}/series`, `/casts` | series, event series searches, result kind, places, sides, casts |
 | `draft_series.py` | `/draft-series`, `/matches/{match_id}/draft-board` | a captain's proposed series, the Ready, seen and MMR state of one fixture's draft, and every figure its draft board draws |
+| `home.py` | `/home/series` | the home page's cross-event series lists |
 | `public.py` | `/signup`, `/player-series`, `/player-availability`, `/player-blocks`, `/player-history`, `/user-info`, `/fantasy-team`, `/fantasy-bet`, `/events/{event_id}/rounds` | a member's own flows, and a captain's read of the hours a pair shares in a round |
 | `maps.py` | `/maps` | maps and the ladder import |
 | `fantasy.py` | `/fantasy`, `/events/{event_id}/fantasy` | admin fantasy management and event-scoped reads, tiers and breakdowns |

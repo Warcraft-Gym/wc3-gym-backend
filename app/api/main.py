@@ -7,6 +7,7 @@ from app.api.routes import (
     events,
     fantasy,
     health,
+    home,
     import_export,
     jobs,
     koth,
@@ -33,6 +34,7 @@ api_router.include_router(events.router)
 api_router.include_router(leagues.router)
 api_router.include_router(import_export.router)
 api_router.include_router(public.router)
+api_router.include_router(home.router)
 api_router.include_router(series.router)
 api_router.include_router(draft_series.router)
 api_router.include_router(maps.router)
