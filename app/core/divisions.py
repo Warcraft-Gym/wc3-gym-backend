@@ -18,7 +18,7 @@ def cut(rated: Sequence[Rated], bands: Sequence[Band]) -> dict[int, int]:
 
     A band list that names any size cuts by size from the top and the last
     band takes what is left; otherwise every entrant falls in the first band
-    its rating reaches. An unrated entrant sits in the weakest band.
+    its rating reaches. An entrant the answer leaves out is unplaced.
     """
     if any(size is not None for _, size in bands):
         return _by_size(rated, [size for _, size in bands])
@@ -40,16 +40,24 @@ def _by_size(rated: Sequence[Rated], sizes: Sequence[int | None]) -> dict[int, i
 
 
 def _by_bound(rated: Sequence[Rated], bounds: Sequence[int | None]) -> dict[int, int]:
-    """The first band whose lower bound the rating reaches, counting from the top."""
+    """The first band whose lower bound the rating reaches, counting from the top.
+
+    An unrated entrant falls in the weakest band while that band names no
+    bound; a band list that bounds every band leaves it unplaced, because no
+    band of it takes a player the cut cannot read.
+    """
     weakest = len(bounds) - 1
-    return {
-        entrant_id: next(
+    bands: dict[int, int] = {}
+    for entrant_id, mmr in rated:
+        index = next(
             (
                 index
                 for index, bound in enumerate(bounds)
-                if bound is not None and (mmr or 0) >= bound
+                if bound is not None and mmr is not None and mmr >= bound
             ),
-            weakest,
+            None,
         )
-        for entrant_id, mmr in rated
-    }
+        if index is None and mmr is None and bounds[weakest] is not None:
+            continue
+        bands[entrant_id] = weakest if index is None else index
+    return bands

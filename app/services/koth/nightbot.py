@@ -21,14 +21,13 @@ from app.models.event_entrant import EntrantAdd, EventEntrant
 from app.models.season import Season
 from app.models.user import User
 from app.services.events import (
-    SEASONS,
     EventService,
     _by_battle_tag,
     _stats_for,
     _w3c_season,
 )
-from app.services.koth import carry
 from app.services.koth.night import tonight
+from app.services.koth.signup import follow, sync_rating, unrated
 
 if TYPE_CHECKING:
     from app.services.settings import SettingsService
@@ -59,8 +58,17 @@ def signup(
             if row and row.division_id
             else None
         )
-        bracket = division.name if division else "no bracket"
+        bracket = division.name if division is not None else None
         mmr = _stats_for(user, chosen, _w3c_season(session))[0]
+        tag = user.battleTag or battletag
+    if bracket is None:
+        return {
+            "success": True,
+            "message": (
+                f"{twitch} is signed up; W3Champions gave no rating for {tag}"
+                " yet, the admin places you"
+            ),
+        }
     return {
         "success": True,
         "message": f"{twitch} signed up for {bracket} ({mmr} MMR)",
@@ -77,26 +85,36 @@ def enter(
 
     A night that takes one entry per race holds a row per race: the command
     reopens the row of the race it names, or adds one. Any other event holds
-    one row per player and the command replaces its race and its bracket.
+    one row per player and the command replaces its race and its bracket. A
+    player w3champions carries no rating for enters unplaced.
     """
     named = _race(race)
     with Session.begin() as session:
-        season = _w3c_season(session)
         user = _by_battle_tag(session, battle_tag, named or Race.RANDOM)
         user_id = ident(user)
-        chosen = named or _best_race(user, season)
-        # A player with no current rating has no bracket, so nothing is written
-        if _stats_for(user, chosen, season)[0] is None:
-            raise BadRequestError(_no_rating(battle_tag, race))
+        tag = user.battleTag or battle_tag
+        ask = unrated(user, named, _w3c_season(session))
+    if ask:
+        sync_rating(user_id, tag)
+
+    with Session.begin() as session:
+        user = session.get(User, user_id)
+        chosen = named or (
+            _best_race(user, _w3c_season(session)) if user is not None else Race.RANDOM
+        )
         night = session.get(Season, event_id)
         per_race = chosen if night is not None and night.multi_entry else None
         row = _entrant(session, event_id, user_id, per_race)
         entered = row is not None
+        entrant_id = ident(row) if row is not None else 0
         if row is not None:
             row.race = chosen
             row.withdrawn_at = None
 
-    if not entered:
+    if entered:
+        # The row stood already, so the rule runs over it here
+        follow(event_id, entrant_id, synced=True)
+    else:
         EventService().add_entrant_as_admin(
             event_id,
             EntrantAdd(
@@ -105,9 +123,8 @@ def enter(
                 user_id=user_id,
                 channel=channel,
             ),
+            synced=True,
         )
-    EventService().assign_divisions(event_id)
-    carry.follow_signup(event_id)
     return chosen
 
 
@@ -132,16 +149,6 @@ def _race(race: str | None) -> Race | None:
         raise BadRequestError(
             f"Invalid race '{race}'. Valid options: {RACES}"
         ) from error
-
-
-def _no_rating(battle_tag: str, race: str | None) -> str:
-    """What chat reads when the player carries no rating the night can cut on."""
-    if race:
-        return (
-            f"No W3Champions statistics found for {battle_tag} with race"
-            f" {race} in the last {SEASONS} seasons"
-        )
-    return f"No valid MMR data found for {battle_tag} in the last {SEASONS} seasons"
 
 
 def _best_race(user: User, season: int) -> Race:

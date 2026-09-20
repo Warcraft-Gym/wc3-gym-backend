@@ -56,8 +56,14 @@ def _is_throttled(response: requests.Response) -> bool:
 
 
 class W3CService:
-    def __init__(self, settings_app_service: "SettingsService | None" = None) -> None:
+    def __init__(
+        self,
+        settings_app_service: "SettingsService | None" = None,
+        timeout: float = REQUEST_TIMEOUT,
+    ) -> None:
         self.settings_app_service = settings_app_service
+        # A caller that answers a chat message waits less than a sync job
+        self.timeout = timeout
 
     def _setting(self, key: str) -> str | None:
         """A settings value, or None when the row is absent."""
@@ -276,7 +282,7 @@ class W3CService:
     ) -> Any:  # noqa: ANN401  # the w3champions body has no fixed shape
         try:
             # Send the request
-            response = _session.get(url, params=params, timeout=REQUEST_TIMEOUT)
+            response = _session.get(url, params=params, timeout=self.timeout)
 
             if _is_throttled(response):
                 raise W3CThrottledError(THROTTLED_MESSAGE)
