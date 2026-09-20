@@ -19,7 +19,7 @@ from app.models.team import Team, TeamCreate, TeamPublic, TeamUpdate
 from app.models.team_season import DBTeamSeason
 from app.models.user import User, UserPublic
 from app.models.user_team_season import DBUserTeamSeason
-from app.services import blob, derived, discord_roles
+from app.services import availability, blob, derived, discord_roles
 from app.services.users import UserService
 
 logger = logging.getLogger(__name__)
@@ -67,6 +67,20 @@ def _fill(session: OrmSession, teams: list[TeamPublic]) -> None:
     ]
     derived.fill_user_signup_races(session, roster)
     derived.fill_gnl_stats(session, [player for player, _ in roster])
+
+
+def _fill_out_rounds(
+    session: OrmSession, public: TeamPublic, team_id: int, season_id: int
+) -> None:
+    """The rounds each roster player sits out of the event, on their season stats.
+
+    Four statements answer the whole roster, never one per player.
+    """
+    out = availability.out_rounds(session, team_id, season_id)
+    for player in public.player_by_season.get(season_id) or []:
+        for stat in player.gnl_stats:
+            if stat.season_id == season_id and stat.user_id in out:
+                stat.out_rounds = out[stat.user_id]
 
 
 def _public(session: OrmSession, team: Team) -> TeamPublic:
@@ -347,9 +361,9 @@ class TeamService:
     def get_with_nested_users_by_season(
         self, team_id: int, season_id: int
     ) -> TeamPublic:
-        """One team with the season's roster, captains and stats."""
+        """One team with the season's roster, captains, stats and sat-out rounds."""
         with Session.begin() as session:
-            _event_team(session, team_id, season_id)
+            _, event = _event_team(session, team_id, season_id)
             team = (
                 session.scalars(
                     select(Team)
@@ -361,7 +375,11 @@ class TeamService:
             )
             if not team:
                 raise NotFoundError("Team not found")
-            return _public(session, team)
+            public = _public(session, team)
+            # An event without scheduling asks nobody, so every list stays empty
+            if event.scheduling_enabled:
+                _fill_out_rounds(session, public, team_id, season_id)
+            return public
 
     def ensure_event_team(self, team_id: int, event_id: int) -> None:
         """Refuse a team that is not entered in this event or its league."""

@@ -4,7 +4,7 @@ title: Scheduling and availability
 description: A player answers whether they can play a round, keeps soft blocks that inform but never constrain, and a pair's shared free time is read as intervals for a series and as one count before one exists.
 resource: ../../../app/services/availability.py
 tags: [events, scheduling]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-19T21:00:00Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-09-20T00:00:00Z }
 sources:
   - id: availability
     resource: ../../../app/services/availability.py
@@ -60,3 +60,7 @@ A season may open a check-in a number of days before each round (`checkin_days`)
 # Out on blocked times
 
 A player with no stored answer whose blocks cover a whole round window reads as blocked out. The round payloads carry it as `blocked_out`, derived on every read and never stored: such a row names no writer, and a stored answer always wins over it. The blocks of every player in the payload load in three statements, never one per row.
+
+# The rounds a roster sits out
+
+`GET /events/{event_id}/teams/{team_id}` carries `out_rounds` on each player's season stats: the playdays of that event the player sits out, a stored "no" and a derived blocked-out round alike. The list says which rounds, never why and never who wrote the answer, so the public read holds no blocked time. An event without scheduling answers an empty list, and the whole roster costs four statements, never one per player. The full grid with its writers stays on the captains' read, `GET /events/{event_id}/teams/{team_id}/availability`.

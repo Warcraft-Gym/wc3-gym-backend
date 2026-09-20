@@ -39,6 +39,8 @@ class UserTeamSeasonStatsPublic(SQLModel):
     losses: int | None = None
     season_id: int | None = None
     matchup_history: Annotated[list[Any], NoneToList] = []
+    # The rounds of the event the player sits out; only the event roster read fills it
+    out_rounds: list[int] = []
 
     @classmethod
     def from_user_team_season(cls, uts: DBUserTeamSeason) -> Self:
