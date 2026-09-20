@@ -235,6 +235,8 @@ def _season(
                 "discordRole": "Discord Role",
                 "start_date": "Start Date",
                 "end_date": "End Date",
+                # a season that finished years ago takes no signups
+                "signups_open": "Signups Open",
             },
         ),
     )

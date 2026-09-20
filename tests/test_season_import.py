@@ -33,8 +33,9 @@ SHEETS: dict[str, tuple[list[str], list[list[Any]]]] = {
             "Start Date",
             "End Date",
             "Discord Role",
+            "Signups Open",
         ],
-        [[None, "Season 9", 4, 2, None, "2026-01-05", "2026-02-27", None]],
+        [[None, "Season 9", 4, 2, None, "2026-01-05", "2026-02-27", None, False]],
     ),
     "Teams": (
         ["ID", "Name", "Long Name", "Discord Role"],
@@ -164,6 +165,9 @@ def test_a_synchronous_import_writes_the_season(
         assert season.id == body["season_id"]
         assert season.round_count == 4
         assert season.league_id is not None
+        # a season imported from an old league sheet is over, so it takes no
+        # signups; a workbook without the column keeps the default
+        assert season.signups_open is False
         teams = session.scalars(select(Team)).all()
         assert len(teams) == 2
         assert {team.league_id for team in teams} == {season.league_id}
