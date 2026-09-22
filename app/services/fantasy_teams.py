@@ -3,7 +3,7 @@ import logging
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as OrmSession
-from sqlalchemy.orm import joinedload, noload
+from sqlalchemy.orm import joinedload, noload, selectinload
 from sqlmodel import col
 
 from app.core.db import Session, rel
@@ -119,15 +119,20 @@ class FantasyTeamService:
     # Every relation the list answer reads; the other sub-collections stay
     # empty. The drafted players carry their stats so the leaderboard shows
     # MMR and GNL record without one request per player.
+    # A player's own collections use selectinload: joining both of them under
+    # one player multiplies every team row by both. The season is one row every
+    # team of it shares, so selectin reads it once instead of once per team.
+    # The players stay joined, because the captain of a team is often drafted by
+    # another one, and a later statement leaves that shared player without stats.
     _reduced_options = (
-        joinedload(rel(FantasyTeam.season)).noload("*"),
+        selectinload(rel(FantasyTeam.season)).noload("*"),
         joinedload(rel(FantasyTeam.drafted_team)).noload("*"),
         joinedload(rel(FantasyTeam.captain)).noload("*"),
         joinedload(rel(FantasyTeam.drafted_players))
         .joinedload(rel(DBFantasyTeamPlayer.users))
         .options(
-            joinedload(rel(User.team_seasons)).noload("*"),
-            joinedload(rel(User.w3c_stats)),
+            selectinload(rel(User.team_seasons)).noload("*"),
+            selectinload(rel(User.w3c_stats)),
             noload("*"),
         ),
     )
