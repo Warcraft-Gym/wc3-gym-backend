@@ -62,10 +62,10 @@ def get_map(map_id: int, service: MapServiceDep) -> MapPublic:
 @router.get("/maps", response_model=list[MapPublic])
 def get_all_maps(
     service: MapServiceDep,
-    limit: Annotated[int, Query(ge=1, le=500)] = 500,
+    limit: Annotated[int, Query(ge=1, le=500)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[MapPublic]:
-    """Retrieve one page of maps, at most 500."""
+    """Retrieve one page of maps, 100 a page and at most 500."""
     return service.get_all(limit=limit, offset=offset)
 
 

@@ -201,10 +201,10 @@ def get_draft_series(
 def get_draft_series_by_match(
     match_id: int,
     service: DraftSeriesServiceDep,
-    limit: Annotated[int, Query(ge=1, le=500)] = 500,
+    limit: Annotated[int, Query(ge=1, le=500)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[DraftSeriesPublic]:
-    """Return one page of the draft series of a match, at most 500."""
+    """Return one page of the draft series of a match, 100 a page."""
     return service.get_by_match_id(match_id, limit=limit, offset=offset)
 
 

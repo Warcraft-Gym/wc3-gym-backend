@@ -112,10 +112,10 @@ def get_all_teams(
 def get_all_event_teams_basic(
     event_id: int,
     service: TeamServiceDep,
-    limit: Annotated[int, Query(ge=1, le=500)] = 500,
+    limit: Annotated[int, Query(ge=1, le=500)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[TeamPublic]:
-    """One page of event teams with event standings and no users."""
+    """One page of event teams with event standings and no users, 50 a page."""
     return service.get_teams_season_basic(event_id, limit=limit, offset=offset)
 
 
@@ -124,10 +124,10 @@ def get_all_event_teams_basic(
 def get_all_event_teams(
     event_id: int,
     service: TeamServiceDep,
-    limit: Annotated[int, Query(ge=1, le=500)] = 500,
+    limit: Annotated[int, Query(ge=1, le=500)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[TeamPublic]:
-    """One page of event teams with that event's roster and captains."""
+    """One page of event teams with that event's roster and captains, 50 a page."""
     return service.get_teams_season(event_id, limit=limit, offset=offset)
 
 

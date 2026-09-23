@@ -97,10 +97,10 @@ def get_all_users(
 def search_users(
     service: UserServiceDep,
     query: SearchQuery,
-    limit: Annotated[int, Query(ge=1, le=500)] = 500,
+    limit: Annotated[int, Query(ge=1, le=500)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[UserListPublic]:
-    """Search users by criteria using a custom query format."""
+    """Search users by criteria using a custom query format, 100 a page."""
     return service.search(query, limit=limit, offset=offset)
 
 

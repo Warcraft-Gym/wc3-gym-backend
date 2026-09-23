@@ -296,13 +296,13 @@ def get_player_series(
     response: Response,
     request: Request,
     credentials: Credentials,
-    limit: Annotated[int, Query(ge=1, le=500)] = 500,
+    limit: Annotated[int, Query(ge=1, le=500)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
     sort: SeriesSort | None = None,
     order: SortOrder = "asc",
     season_id: int | None = None,
 ) -> dict[str, Any]:
-    """Get one page of a player's series for the dashboard view, at most 500.
+    """Get one page of a player's series for the dashboard view, 100 a page.
 
     sort names the field the page is ordered by, and the series id breaks its ties.
     season_id picks the season; without it the identity's own season answers.
