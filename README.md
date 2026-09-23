@@ -63,6 +63,8 @@ One code, two mechanisms, three places you can reach from a laptop. Docker runs 
 
 The values come from `.env`, copied from `.env.example` and gitignored: `LOCAL_DB_URL`, `VERCEL_PROD_DB_URL`, `VERCEL_STAGING_DB_URL`, and `AZURE_STAGING_HOST`, which is `terraform -chdir=infra output -raw fqdn` in the gym-root workspace.
 
+`just db` tracks Supabase egress, which follows rows returned: `snapshot` records `pg_stat_statements` and the pooler counters of each project into `data/egress/` (gitignored), `report` diffs the last two snapshots, and `check` exits 2 over a daily budget. It reads the two `VERCEL_*_DB_URL` values plus `SUPABASE_PROD_PROJECT_REF`, `SUPABASE_STAGING_PROJECT_REF`, `SUPABASE_PROD_SECRET_KEY` and `SUPABASE_STAGING_SECRET_KEY`. One snapshot reads about 0.4 MB per project, so run it at most twice a day.
+
 The gym-root workspace owns what spans two repositories: Terraform for the Azure box, the box files, and the frontend. Its `just azure deploy` calls `just azure deploy <tag>` here for the backend half.
 
 ## Deploying to Vercel
