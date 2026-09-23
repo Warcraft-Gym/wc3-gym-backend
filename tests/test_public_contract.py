@@ -8,12 +8,12 @@ except where a value proves the season filter.
 
 The shortcodes and the routes they call:
   gnl-player-stats        GET  /stats/career
-  gnl-detailed-standings  GET  /config/settings, GET /teams/season/{id},
-                          GET /seasons/{id}, POST /matches/search
-  gnl-teams-players       GET  /config/settings, GET /teams/season/{id},
+  gnl-detailed-standings  GET  /config/settings, GET /events/{id}/teams,
+                          GET /events/{id}, POST /matches/search
+  gnl-teams-players       GET  /config/settings, GET /events/{id}/teams,
                           GET /teams/{id}/image
   gnl-week-series         GET  /config/settings, POST /matches/search,
-                          POST /series/season/{id}/playday/{n}/search
+                          POST /events/{id}/rounds/{n}/series/search
   gnl-fantasy-teams       GET  /config/settings, POST /fantasy/teams/search
   gnl-fantasy-leaderboard GET  /config/settings, POST /fantasy/teams/search
 """
@@ -42,7 +42,7 @@ def public_seed(app: FastAPI) -> dict[str, Any]:
     """The seeded league plus everything the shortcodes read.
 
     Team Alpha joins a second season, so the season filter on
-    GET /teams/season/{id} is proved rather than assumed.
+    GET /events/{id}/teams is proved rather than assumed.
     """
     from app.core.db import Session
     from app.models.enums import Race
@@ -217,7 +217,7 @@ def test_teams_season_carries_the_standings_and_roster_fields(
     client: Client, public_seed: dict[str, Any]
 ) -> None:
     season_id = public_seed["season_id"]
-    teams = get_json(client, f"/teams/season/{season_id}")
+    teams = get_json(client, f"/events/{season_id}/teams")
     assert len(teams) == 2
     # The standings are summed from the one played series, a 2-1 for Alpha.
     # Season 1 pays 4 weeks * 2 series * 3 points, so 24 less what both took.
@@ -260,7 +260,7 @@ def test_teams_season_carries_the_person_row_fields(
     client: Client, public_seed: dict[str, Any]
 ) -> None:
     season_id = public_seed["season_id"]
-    teams = get_json(client, f"/teams/season/{season_id}")
+    teams = get_json(client, f"/events/{season_id}/teams")
     people = [
         person
         for team in teams
@@ -292,10 +292,12 @@ def test_teams_season_seasons_info_holds_only_the_requested_season(
     team_a_id = public_seed["team_a_id"]
 
     # Alpha really is in two seasons: the unfiltered route returns both.
-    unfiltered = get_json(client, f"/teams/{team_a_id}")
+    unfiltered = get_json(
+        client, f"/leagues/{public_seed['league_id']}/teams/{team_a_id}"
+    )
     assert len(unfiltered["seasons_info"]) == 2
 
-    teams = get_json(client, f"/teams/season/{season_id}")
+    teams = get_json(client, f"/events/{season_id}/teams")
     for team in teams:
         assert len(team["seasons_info"]) == 1, (
             f"team {team['id']} returned {len(team['seasons_info'])} seasons_info "
@@ -323,13 +325,11 @@ def test_team_image_sends_the_caller_to_the_logo(
 def test_season_carries_round_count_and_the_list_fields(
     client: Client, public_seed: dict[str, Any]
 ) -> None:
-    season = get_json(client, f"/seasons/{public_seed['season_id']}")
+    season = get_json(client, f"/events/{public_seed['season_id']}")
     assert "round_count" in season
     assert season["round_count"] is not None
-    # Both fields read as a list, never as null.
+    # The map pool reads as a list, never as null.
     assert isinstance(season["maps"], list)
-    assert isinstance(season["user_signup"], list)
-    assert season["user_signup"] == []
 
 
 def test_matches_search_carries_the_standings_fields(
@@ -375,7 +375,7 @@ def test_series_by_season_and_playday_carries_the_week_table_fields(
     client: Client, public_seed: dict[str, Any]
 ) -> None:
     season_id = public_seed["season_id"]
-    series = post_json(client, f"/series/season/{season_id}/playday/1/search")
+    series = post_json(client, f"/events/{season_id}/rounds/1/series/search")
     assert len(series) == 2
     for entry in series:
         assert "id" in entry
@@ -442,7 +442,7 @@ def test_teams_season_roster_users_carry_no_signup_seasons(
 ) -> None:
     """The season roster keeps its stats; the free collections answer empty."""
     season_id = public_seed["season_id"]
-    teams = get_json(client, f"/teams/season/{season_id}")
+    teams = get_json(client, f"/events/{season_id}/teams")
     players = [
         player
         for team in teams

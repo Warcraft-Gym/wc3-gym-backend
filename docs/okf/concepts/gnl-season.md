@@ -4,7 +4,7 @@ title: GNL season
 description: Six drafted teams, five weekly rounds, one fixture per team pairing with captain-drafted series, and a phase that is derived from the series.
 resource: ../../../app/models/season.py
 tags: [events]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-19T22:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-23T04:29:00Z }
 sources:
   - id: season-model
     resource: ../../../app/models/season.py
@@ -33,7 +33,7 @@ The event routes are the canonical API for a GNL season. A client reads `GET /le
 
 `POST /events` creates a GNL season when `league_id` names the GNL league. The body may include `round_count`, `map_ids`, `series_per_round`, `map_rules`, `pick_ban`, `score_system` and `fantasy_grind`. The write creates the event, its single `gnl` stage, its rounds, its ordered map pool and its achievement rules in one transaction. The same event path updates and deletes it.
 
-GNL management uses `/events/{event_id}/teams`, `/series`, `/maps`, `/rounds`, `/signups`, `/ladder`, `/ladder-sync`, `/fantasy` and `/achievements`. Team identities are managed under `/leagues/{league_id}/teams`; their rosters, captains, availability and event standings are under `/events/{event_id}/teams`. Every `/seasons` route and every season-named team, series or fantasy route is a deprecated compatibility alias. A client can complete a GNL workflow without calling one.
+GNL management uses `/events/{event_id}/teams`, `/series`, `/maps`, `/rounds`, `/signups`, `/ladder`, `/ladder-sync`, `/fantasy` and `/achievements`. Team identities are managed under `/leagues/{league_id}/teams`; their rosters, captains, availability and event standings are under `/events/{event_id}/teams`. No `/seasons` route and no season-named team, series or fantasy route exists.
 
 # Fields on the season that drive behaviour
 
@@ -58,7 +58,7 @@ The number of rounds is not stored; the round rows are the count.
 
 A season's phase is derived on every read from its series and never stored: `open` while no series has started, `commenced` once one is scored or past its time, `overdue` when the end date passed with a result missing, `complete` when every series has a result. Every gate reads `phase`; nothing adds a date rule beside it. A `complete` season takes no signup. A `commenced` season takes a signup as a request an admin may grant.
 
-The event payload answers the common phase word (`draft`, `signups_open`, `checkin`, `seeded`, `running`, `finished`) from `app/services/events.py`; [the events module](events-module.md) lists the rungs. The deprecated season payload keeps its four phase words for compatibility.
+The event payload answers the common phase word (`draft`, `signups_open`, `checkin`, `seeded`, `running`, `finished`) from `app/services/events.py`; [the events module](events-module.md) lists the rungs. `SeasonPublic`, which the GNL management writes answer and a match nests as `season`, keeps the four GNL phase words.
 
 # Best of
 

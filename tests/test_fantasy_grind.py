@@ -99,8 +99,8 @@ def test_a_season_without_the_pick_pays_nothing(
 
     assert team(client, grind["fantasy_team_id"])["grind_points"] == 0
     resp = client.get(
-        f"/fantasy/teams/{grind['fantasy_team_id']}"
-        f"/season/{grind['season_id']}/breakdown"
+        f"/events/{grind['season_id']}/fantasy/teams/{grind['fantasy_team_id']}"
+        "/breakdown"
     )
     assert resp.status_code == 200, resp.text
     assert resp.json()["grind_breakdown"] == {}
@@ -111,8 +111,8 @@ def test_the_breakdown_names_the_picked_team(
     client: Client, grind: dict[str, Any]
 ) -> None:
     resp = client.get(
-        f"/fantasy/teams/{grind['fantasy_team_id']}"
-        f"/season/{grind['season_id']}/breakdown"
+        f"/events/{grind['season_id']}/fantasy/teams/{grind['fantasy_team_id']}"
+        "/breakdown"
     )
     assert resp.status_code == 200, resp.text
     breakdown = resp.json()["grind_breakdown"]

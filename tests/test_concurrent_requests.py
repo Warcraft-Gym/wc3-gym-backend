@@ -25,12 +25,12 @@ def test_two_sync_requests_run_at_the_same_time(
         meet.wait()  # raises BrokenBarrierError when the second request never arrives
         return []
 
-    monkeypatch.setattr(deps.season_service, "get_all", wait_for_the_other)
+    monkeypatch.setattr(deps.event_service, "get_all", wait_for_the_other)
 
     # One client in one context, so both requests share one event loop and
     # one thread pool, as they do in the server.
     with TestClient(app) as client, ThreadPoolExecutor(2) as pool:
-        answers = list(pool.map(lambda _: client.get("/seasons"), range(2)))
+        answers = list(pool.map(lambda _: client.get("/events"), range(2)))
 
     assert [a.status_code for a in answers] == [200, 200]
     assert meet.broken is False

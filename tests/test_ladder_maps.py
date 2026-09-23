@@ -98,7 +98,7 @@ def sources(monkeypatch: pytest.MonkeyPatch) -> list[str]:
 
 
 def rows(client: Client, season_id: int, headers: dict[str, str]) -> dict[str, dict]:
-    resp = client.get(f"/seasons/{season_id}/maps/ladder-import", headers=headers)
+    resp = client.get(f"/events/{season_id}/maps/ladder-import", headers=headers)
     assert resp.status_code == 200, resp.text
     return {row["w3c_name"]: row for row in resp.json()}
 
@@ -176,7 +176,7 @@ def test_the_import_creates_the_maps_and_points_at_their_pictures(
     season_id = seeded["season_id"]
 
     resp = client.post(
-        f"/seasons/{season_id}/maps/ladder-import",
+        f"/events/{season_id}/maps/ladder-import",
         json={"names": ["Echo Isles v2", "Nonesuch"]},
         headers=auth_headers,
     )
@@ -207,7 +207,7 @@ def test_the_import_keeps_a_known_map_and_fills_its_missing_picture(
         Map.update(session, seeded["map_id"], name="Echo Isles v2")
 
     resp = client.post(
-        f"/seasons/{seeded['season_id']}/maps/ladder-import",
+        f"/events/{seeded['season_id']}/maps/ladder-import",
         json={"names": ["Echo Isles v2", "Nonesuch"]},
         headers=auth_headers,
     )
@@ -233,7 +233,7 @@ def test_the_import_renames_a_drifted_map_instead_of_creating_a_twin(
     new_map("Echo Isles", "EI")
 
     resp = client.post(
-        f"/seasons/{seeded['season_id']}/maps/ladder-import",
+        f"/events/{seeded['season_id']}/maps/ladder-import",
         json={"names": ["Echo Isles v2"]},
         headers=auth_headers,
     )
@@ -262,7 +262,7 @@ def test_a_map_with_its_picture_keeps_it(
         Map.update(session, seeded["map_id"], name="Echo Isles v2", image=mine)
 
     resp = client.post(
-        f"/seasons/{seeded['season_id']}/maps/ladder-import",
+        f"/events/{seeded['season_id']}/maps/ladder-import",
         json={"names": ["Echo Isles v2"]},
         headers=auth_headers,
     )
@@ -283,7 +283,7 @@ def test_a_taken_short_name_falls_back_to_the_initials(
     new_map("Amber Lagoon", "AL2")
 
     resp = client.post(
-        f"/seasons/{seeded['season_id']}/maps/ladder-import",
+        f"/events/{seeded['season_id']}/maps/ladder-import",
         json={"names": ["Autumn Leaves v2"]},
         headers=auth_headers,
     )
@@ -306,7 +306,7 @@ def test_a_source_that_is_down_answers_502(
     monkeypatch.setattr(requests.Session, "request", fake_request)
 
     resp = client.get(
-        f"/seasons/{seeded['season_id']}/maps/ladder-import", headers=auth_headers
+        f"/events/{seeded['season_id']}/maps/ladder-import", headers=auth_headers
     )
 
     assert resp.status_code == 502
@@ -365,7 +365,7 @@ def test_the_global_import_renames_and_pictures_without_touching_a_pool(
         "Echo Isles v2",
         "Nonesuch",
     ]
-    pool = client.get(f"/seasons/{seeded['season_id']}").json()["maps"]
+    pool = client.get(f"/events/{seeded['season_id']}").json()["maps"]
     assert [map["name"] for map in pool] == ["Concealed Hill"]
 
 

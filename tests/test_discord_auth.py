@@ -288,7 +288,7 @@ def test_view_as_captain_names_the_chosen_team(
     assert me["team"]["id"] == seeded["team_a_id"]
     # the older header stands for one seat, so a seat-guarded route admits it
     guarded = client.get(
-        f"/teams/{seeded['team_a_id']}/seasons/{seeded['season_id']}/availability",
+        f"/events/{seeded['season_id']}/teams/{seeded['team_a_id']}/availability",
         headers=viewing,
     )
     assert guarded.status_code == 200, guarded.text
@@ -337,7 +337,7 @@ def _set_captains(
     client: Client, headers: dict[str, str], team_id: int, captain_ids: list[int]
 ) -> dict[str, Any]:
     resp = client.put(
-        f"/teams/{team_id}/seasons/1/captains",
+        f"/events/1/teams/{team_id}/captains",
         json={"captain_ids": captain_ids},
         headers=headers,
     )

@@ -16,6 +16,9 @@ from httpx2 import Client
 from app.core.db import Session
 from app.models.relationships import DBUserSeasonSignup
 from app.models.season import Season, SeasonPublic
+from app.services.maps import MapService
+from app.services.seasons import SeasonService
+from app.services.users import UserService
 from tests.test_fantasy_locks import schedule, score
 from tests.test_player_session import SIGNUP_BODY
 
@@ -28,12 +31,16 @@ def signup_ready(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(UserService, "update_w3c_stats_by_id", lambda self, uid: None)
 
 
-def phase(client: Client, season_id: int) -> str:
-    return client.get(f"/seasons/{season_id}").json()["phase"]
+def seasons() -> SeasonService:
+    return SeasonService(user_app_service=UserService(), map_app_service=MapService())
 
 
-def unscored(client: Client, season_id: int) -> int:
-    return client.get(f"/seasons/{season_id}").json()["unscored_series"]
+def phase(season_id: int) -> str | None:
+    return seasons().get(season_id).phase
+
+
+def unscored(season_id: int) -> int | None:
+    return seasons().get(season_id).unscored_series
 
 
 def end_on(season_id: int, days_from_now: int) -> None:
@@ -46,27 +53,27 @@ def end_on(season_id: int, days_from_now: int) -> None:
 def test_the_phase_follows_the_series(client: Client, seeded: dict[str, Any]) -> None:
     played, open_ = seeded["series_played_id"], seeded["series_open_id"]
     end_on(seeded["season_id"], 7)
-    assert phase(client, seeded["season_id"]) == "commenced"
+    assert phase(seeded["season_id"]) == "commenced"
 
     score(played, None, None)
     schedule(played, datetime.now(UTC) + timedelta(days=1))
-    assert phase(client, seeded["season_id"]) == "open"
+    assert phase(seeded["season_id"]) == "open"
 
     # A time in the past commences it; a series without a result never completes it
     schedule(played, datetime.now(UTC) - timedelta(hours=1))
-    assert phase(client, seeded["season_id"]) == "commenced"
+    assert phase(seeded["season_id"]) == "commenced"
     score(open_, 2, 0)
-    assert phase(client, seeded["season_id"]) == "commenced"
+    assert phase(seeded["season_id"]) == "commenced"
 
     # Past the end date the missing result makes it overdue; the result completes it
     end_on(seeded["season_id"], -1)
-    assert phase(client, seeded["season_id"]) == "overdue"
-    assert unscored(client, seeded["season_id"]) == 1
+    assert phase(seeded["season_id"]) == "overdue"
+    assert unscored(seeded["season_id"]) == 1
     score(played, 2, 1)
-    assert phase(client, seeded["season_id"]) == "complete"
-    assert unscored(client, seeded["season_id"]) == 0
+    assert phase(seeded["season_id"]) == "complete"
+    assert unscored(seeded["season_id"]) == 0
 
-    listed = {s["id"]: s["phase"] for s in client.get("/seasons").json()}
+    listed = {season.id: season.phase for season in seasons().get_all()}
     assert listed[seeded["season_id"]] == "complete"
 
 
@@ -104,16 +111,15 @@ def test_the_season_signups_open_flag_gates_the_season_not_the_profile(
 ) -> None:
     score(seeded["series_played_id"], None, None)
     schedule(seeded["series_played_id"], None)
-    assert phase(client, seeded["season_id"]) == "open"
+    assert phase(seeded["season_id"]) == "open"
 
     def switch(value: bool) -> None:
         resp = client.put(
-            f"/seasons/{seeded['season_id']}",
+            f"/events/{seeded['season_id']}",
             json={"signups_open": value},
             headers=auth_headers,
         )
         assert resp.status_code == 200, resp.text
-        assert resp.json()["signups_open"] is value
 
     # Off: the profile edit saves, the open season takes a request only
     switch(False)

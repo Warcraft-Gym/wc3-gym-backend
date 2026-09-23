@@ -17,7 +17,7 @@ from httpx2 import Client
 
 def breakdown(client: Client, seeded: dict[str, Any]) -> dict[str, Any]:
     resp = client.get(
-        f"/fantasy/teams/{seeded['fantasy_team_id']}/season/{seeded['season_id']}/breakdown"
+        f"/events/{seeded['season_id']}/fantasy/teams/{seeded['fantasy_team_id']}/breakdown"
     )
     assert resp.status_code == 200, resp.text
     return resp.json()
@@ -33,11 +33,11 @@ def test_no_route_that_carries_a_race_writes_the_repr(
     paths = [
         "/users",
         f"/users/{seeded['player_ids'][0]}",
-        f"/teams/{seeded['team_a_id']}/seasons/{season_id}",
+        f"/events/{season_id}/teams/{seeded['team_a_id']}",
         f"/series/{seeded['series_played_id']}",
         "/fantasy/teams",
         f"/fantasy/teams/{team_id}",
-        f"/fantasy/teams/{team_id}/season/{season_id}/breakdown",
+        f"/events/{season_id}/fantasy/teams/{team_id}/breakdown",
     ]
     for path in paths:
         resp = client.get(path)

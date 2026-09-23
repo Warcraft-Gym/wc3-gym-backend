@@ -18,7 +18,7 @@ scores no random pick that rolled it. The last four rows below are the
 players only that rule explains.
 
 The rules that read a team take the same roster wc3.no takes: it reads
-`GET /teams/season/{id}` off the GNL backend, so the test does too.
+`GET /events/{id}/teams` off the GNL backend, so the test does too.
 """
 
 import os
@@ -88,7 +88,7 @@ def oracle() -> dict[str, Any]:
     """The service, the w3champions season and the GNL roster, asked for once."""
     if not _state:
         service = W3CService()
-        teams = requests.get(f"{GNL_BACKEND}/teams/season/{GNL_SEASON}").json()
+        teams = requests.get(f"{GNL_BACKEND}/events/{GNL_SEASON}/teams").json()
         roster = {
             team["id"]: {
                 player["battleTag"].lower()

@@ -4,7 +4,7 @@ title: event
 description: "One run of a league that people sign up for: a GNL season, a KOTH night, a cup or a sign-up list; the class is still named Season."
 resource: ../../../../app/models/season.py
 tags: [events, data]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-19T20:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-23T04:29:00Z }
 verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
 sources:
   - id: model
@@ -23,7 +23,7 @@ sources:
 
 # Schema
 
-The first block is the fields introduced for GNL, on `SeasonBase`. The second block is the common event fields. `EventPublic` carries both blocks so a GNL client does not need the deprecated season payload.
+The first block is the fields introduced for GNL, on `SeasonBase`. The second block is the common event fields. `EventPublic` carries both blocks, so a GNL client reads one event payload.
 
 | Column | Type | Null | Meaning |
 |---|---|---|---|
@@ -74,4 +74,4 @@ Pointed at by [event_stage](event_stage.md), [event_round](event_round.md), [eve
 
 - Two derived values ride on the payloads and are never stored: the GNL phase (`open`, `commenced`, `overdue`, `complete`) and the event phase (`draft`, `signups_open`, `checkin`, `seeded`, `running`, `finished`). See [GNL season](../../concepts/gnl-season.md) and [events module](../../concepts/events-module.md).
 - The round count is not stored; the [event_round](event_round.md) rows are the count. `round_count`, `league_short_name` and `league_name` on the payloads are scalar subqueries.
-- The GNL columns stay on `SeasonBase`; the event and deprecated season payloads both carry them. `tests/test_gnl_snapshot.py` pins the season payload. See [the decision](../../decisions/unified-event-model.md).
+- The GNL columns stay on `SeasonBase`; `EventPublic` and `SeasonPublic` both carry them. `tests/test_gnl_snapshot.py` pins the GNL payloads. See [the decision](../../decisions/unified-event-model.md).

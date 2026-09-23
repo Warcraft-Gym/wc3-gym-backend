@@ -12,7 +12,7 @@ from app.api.deps import (
     require_admin,
 )
 from app.api.search import SearchQuery
-from app.core.exceptions import ApiError, BadRequestError
+from app.core.exceptions import ApiError
 from app.core.ordering import SortOrder
 from app.core.query import QueryUtil
 from app.core.security import is_admin
@@ -66,23 +66,13 @@ def require_admin_or_owner(
     tags=["events"],
     dependencies=[Depends(require_admin)],
 )
-@router.put(
-    "/fantasy/tiers",
-    status_code=204,
-    deprecated=True,
-    dependencies=[Depends(require_admin)],
-)
 def set_fantasy_tiers(
     allocation: FantasyTierAllocation,
     service: UserServiceDep,
-    event_id: int | None = None,
-    season_id: int | None = None,
+    event_id: int,
 ) -> None:
     """Replace one event's tier allocation; unlisted players lose theirs."""
-    selected = event_id if event_id is not None else season_id
-    if selected is None:
-        raise BadRequestError("missing event_id")
-    service.set_fantasy_tiers(selected, allocation.cuts, allocation.tiers)
+    service.set_fantasy_tiers(event_id, allocation.cuts, allocation.tiers)
 
 
 # Team endpoints
@@ -280,11 +270,6 @@ def search_bets(
 @router.get(
     "/events/{event_id}/fantasy/teams/{team_id}/breakdown",
     tags=["events"],
-    response_model=FantasyTeamScoreBreakdown,
-)
-@router.get(
-    "/fantasy/teams/{team_id}/season/{event_id}/breakdown",
-    deprecated=True,
     response_model=FantasyTeamScoreBreakdown,
 )
 def get_fantasy_team_breakdown(

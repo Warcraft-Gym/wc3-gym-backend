@@ -691,7 +691,7 @@ def test_a_database_error_names_its_class(
 
 
 def test_the_ladder_sync_route_needs_a_token(client: Client) -> None:
-    assert client.post("/seasons/1/ladder-sync").status_code == 401
+    assert client.post("/events/1/ladder-sync").status_code == 401
 
 
 def test_the_ladder_sync_route_pages_through_the_signups(
@@ -702,13 +702,13 @@ def test_the_ladder_sync_route_pages_through_the_signups(
 ) -> None:
     signed_up = seeded["player_ids"][:3]
     resp = client.post(
-        f"/seasons/{seeded['season_id']}/signups",
+        f"/events/{seeded['season_id']}/signups",
         json={"user_ids": signed_up, "race": "HU"},
         headers=auth_headers,
     )
     assert resp.status_code == 200
     serve(monkeypatch, {})
-    url = f"/seasons/{seeded['season_id']}/ladder-sync"
+    url = f"/events/{seeded['season_id']}/ladder-sync"
 
     first = client.post(f"{url}?limit=2", headers=auth_headers)
     second = client.post(f"{url}?limit=2&offset=2", headers=auth_headers)
@@ -737,14 +737,14 @@ def test_the_ladder_sync_route_stores_the_matches_of_the_signups(
         session.get(User, player).battleTag = "thanks#11187"
         session.commit()
     client.post(
-        f"/seasons/{seeded['season_id']}/signups",
+        f"/events/{seeded['season_id']}/signups",
         json={"user_ids": [player], "race": "HU"},
         headers=auth_headers,
     )
     serve(monkeypatch, {W3C_SEASON: THANKS[:4]})
 
     resp = client.post(
-        f"/seasons/{seeded['season_id']}/ladder-sync", headers=auth_headers
+        f"/events/{seeded['season_id']}/ladder-sync", headers=auth_headers
     )
 
     assert resp.status_code == 200
@@ -888,7 +888,7 @@ def test_the_single_player_route_syncs_the_season_running_today(
 def test_the_ladder_sync_route_answers_404_for_an_unknown_season(
     client: Client, auth_headers: dict[str, str]
 ) -> None:
-    resp = client.post("/seasons/9999/ladder-sync", headers=auth_headers)
+    resp = client.post("/events/9999/ladder-sync", headers=auth_headers)
 
     assert resp.status_code == 404
     assert resp.json() == {"error": "Season not found"}

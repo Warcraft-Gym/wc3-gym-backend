@@ -191,7 +191,7 @@ def test_an_imported_season_answers_the_record(
     if route == "user":
         stats = client.get(f"/users/{user_id}").json()["gnl_stats"]
     else:
-        teams = client.get(f"/teams/season/{season_id}").json()
+        teams = client.get(f"/events/{season_id}/teams").json()
         stats = next(
             player["gnl_stats"]
             for team in teams

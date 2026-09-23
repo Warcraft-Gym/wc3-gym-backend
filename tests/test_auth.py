@@ -53,13 +53,13 @@ def test_guarded_route_with_token(
 
 def test_team_w3c_sync_needs_a_token(client: Client, seeded: dict[str, Any]) -> None:
     resp = client.post(
-        f"/teams/{seeded['team_a_id']}/seasons/{seeded['season_id']}/w3c-sync"
+        f"/events/{seeded['season_id']}/teams/{seeded['team_a_id']}/ladder-sync"
     )
     assert resp.status_code == 401
 
 
 def test_season_w3c_sync_needs_a_token(client: Client, seeded: dict[str, Any]) -> None:
-    resp = client.post(f"/seasons/{seeded['season_id']}/w3c-sync")
+    resp = client.post(f"/events/{seeded['season_id']}/ladder-sync")
     assert resp.status_code == 401
 
 
@@ -89,7 +89,7 @@ def test_team_image_upload_needs_a_token(
     client: Client, seeded: dict[str, Any]
 ) -> None:
     resp = client.post(
-        f"/teams/{seeded['team_a_id']}/image",
+        f"/leagues/{seeded['league_id']}/teams/{seeded['team_a_id']}/image",
         files={"image": ("icon.png", PNG, "image/png")},
     )
     assert resp.status_code == 401
@@ -103,7 +103,7 @@ def test_team_image_upload_works_with_a_token(
 ) -> None:
     team_id = seeded["team_a_id"]
     resp = client.post(
-        f"/teams/{team_id}/image",
+        f"/leagues/{seeded['league_id']}/teams/{team_id}/image",
         files={"image": ("icon.png", PNG, "image/png")},
         headers=auth_headers,
     )

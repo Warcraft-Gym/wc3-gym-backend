@@ -35,7 +35,7 @@ def test_captains_left_out_of_the_body_clears_them(
     client: Client, seeded: dict[str, Any], auth_headers: dict[str, str]
 ) -> None:
     """A missing captain_ids reads as an empty list, as the dict body did."""
-    path = f"/teams/{seeded['team_a_id']}/seasons/{seeded['season_id']}/captains"
+    path = f"/events/{seeded['season_id']}/teams/{seeded['team_a_id']}/captains"
 
     resp = client.put(path, json={}, headers=auth_headers)
 

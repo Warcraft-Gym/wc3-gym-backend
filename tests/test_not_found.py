@@ -17,11 +17,11 @@ ROUTES = [
     ("PUT", "/maps/{id}", {"name": "Nowhere"}),
     ("GET", "/matches/{id}", None),
     ("PUT", "/matches/{id}", {"playday": 1}),
-    ("GET", "/seasons/{id}", None),
-    ("GET", "/seasons/{id}/signups", None),
-    ("PUT", "/seasons/{id}", {"name": "Nowhere"}),
-    ("GET", "/teams/{id}", None),
-    ("PUT", "/teams/{id}", {"name": "Nowhere"}),
+    ("GET", "/events/{id}", None),
+    ("GET", "/events/{id}/signups", None),
+    ("PUT", "/events/{id}", {"name": "Nowhere"}),
+    ("GET", "/leagues/{league_id}/teams/{id}", None),
+    ("PUT", "/leagues/{league_id}/teams/{id}", {"name": "Nowhere"}),
     ("GET", "/teams/{id}/image", None),
     ("GET", "/series/{id}", None),
     # Both scores: the route checks the score before it looks the row up.
@@ -45,7 +45,7 @@ def test_missing_row_answers_404(
     path: str,
     body: dict[str, Any] | None,
 ) -> None:
-    url = path.format(id=MISSING)
+    url = path.format(id=MISSING, league_id=seeded["league_id"])
     resp = client.request(method, url, headers=auth_headers, json=body)
     assert resp.status_code == 404, resp.text
 

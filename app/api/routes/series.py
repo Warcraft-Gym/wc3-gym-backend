@@ -122,7 +122,6 @@ def search_series(
 
 
 @router.post("/events/{event_id}/rounds/{playday}/series/search", tags=["events"])
-@router.post("/series/season/{event_id}/playday/{playday}/search", deprecated=True)
 def search_series_by_event_and_playday(
     event_id: int,
     playday: int,
@@ -139,7 +138,6 @@ def search_series_by_event_and_playday(
 
 
 @router.get("/events/{event_id}/series", tags=["events"])
-@router.get("/series/season/{event_id}", deprecated=True)
 def get_series_by_event(
     event_id: int,
     service: SeriesServiceDep,
@@ -151,7 +149,6 @@ def get_series_by_event(
 
 
 @router.post("/events/{event_id}/series/search", tags=["events"])
-@router.post("/series/season/{event_id}/search", deprecated=True)
 def search_series_by_event(
     event_id: int,
     service: SeriesServiceDep,

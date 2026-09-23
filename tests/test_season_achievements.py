@@ -43,13 +43,13 @@ def test_the_catalogue_lists_every_rule_with_its_numbers(client: Client) -> None
 def test_a_season_answers_its_rows_in_catalogue_order(
     client: Client, seeded: dict[str, Any]
 ) -> None:
-    resp = client.get(f"/seasons/{seeded['season_id']}/achievements")
+    resp = client.get(f"/events/{seeded['season_id']}/achievements")
     assert resp.status_code == 200, resp.text
     rows = resp.json()
 
     assert [row["rule_id"] for row in rows] == list(BY_ID)
     assert {row["rule_id"]: row["points"] for row in rows} == ALL_PAID
-    assert client.get("/seasons/999/achievements").status_code == 404
+    assert client.get("/events/999/achievements").status_code == 404
 
 
 def test_the_put_replaces_the_set_and_stores_only_the_overrides(
@@ -57,7 +57,7 @@ def test_the_put_replaces_the_set_and_stores_only_the_overrides(
 ) -> None:
     season_id = seeded["season_id"]
     resp = client.put(
-        f"/seasons/{season_id}/achievements",
+        f"/events/{season_id}/achievements",
         json=[HAT_TRICK_ROW, FULL_ROSTER_ROW],
         headers=auth_headers,
     )
@@ -66,7 +66,7 @@ def test_the_put_replaces_the_set_and_stores_only_the_overrides(
         ("hat_trick", 5, {"wins": 2}),
         ("full_roster", 30, {"games": 10}),
     ]
-    assert client.get(f"/seasons/{season_id}/achievements").json() == resp.json()
+    assert client.get(f"/events/{season_id}/achievements").json() == resp.json()
 
     with Session() as session:
         stored = session.scalars(
@@ -81,7 +81,7 @@ def test_the_put_replaces_the_set_and_stores_only_the_overrides(
 
     # A number equal to the default stores nothing, so the row follows the code
     resp = client.put(
-        f"/seasons/{season_id}/achievements",
+        f"/events/{season_id}/achievements",
         json=[{"rule_id": "hat_trick", "points": 5, "params": {"wins": 3}}],
         headers=auth_headers,
     )
@@ -118,20 +118,20 @@ def test_the_put_rejects_a_row_the_rule_cannot_read(
     message: str,
 ) -> None:
     resp = client.put(
-        f"/seasons/{seeded['season_id']}/achievements",
+        f"/events/{seeded['season_id']}/achievements",
         json=body,
         headers=auth_headers,
     )
     assert resp.status_code == status, resp.text
     assert message in resp.text
     # Nothing changed
-    assert len(
-        client.get(f"/seasons/{seeded['season_id']}/achievements").json()
-    ) == len(ALL_PAID)
+    assert len(client.get(f"/events/{seeded['season_id']}/achievements").json()) == len(
+        ALL_PAID
+    )
 
 
 def test_the_put_needs_an_admin(client: Client, seeded: dict[str, Any]) -> None:
-    resp = client.put(f"/seasons/{seeded['season_id']}/achievements", json=[])
+    resp = client.put(f"/events/{seeded['season_id']}/achievements", json=[])
     assert resp.status_code == 401, resp.text
 
 
@@ -157,7 +157,7 @@ def test_a_season_number_changes_who_earns_the_badge(
     assert rule_text() == "Win 3 games in a row"
 
     resp = client.put(
-        f"/seasons/{season_id}/achievements",
+        f"/events/{season_id}/achievements",
         json=[HAT_TRICK_ROW],
         headers=auth_headers,
     )

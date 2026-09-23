@@ -59,10 +59,10 @@ def test_the_season_payloads_name_the_league(
 ) -> None:
     """The full read, the list read and the nested read all carry it."""
     season_id = in_gnl["season_id"]
-    one = client.get(f"/seasons/{season_id}")
+    one = client.get(f"/events/{season_id}")
     assert one.status_code == 200, one.text
     assert one.json()["league_short_name"] == "GNL"
-    listed = client.get("/seasons").json()
+    listed = client.get("/events?kind=gnl").json()
     assert [row["league_short_name"] for row in listed] == ["GNL"]
     # The reduced form a match nests under itself
     match_id = in_gnl["match_id"]
@@ -135,7 +135,9 @@ def test_the_team_seasons_name_the_event_and_the_league(
     client: Client, in_gnl: dict[str, Any]
 ) -> None:
     """A team page labels its season tabs from seasons_info alone."""
-    answer = client.get(f"/teams/{in_gnl['team_a_id']}").json()
+    answer = client.get(
+        f"/leagues/{in_gnl['league_id']}/teams/{in_gnl['team_a_id']}"
+    ).json()
     assert [
         (row["season_id"], row["name"], row["league_short_name"])
         for row in answer["seasons_info"]
@@ -152,6 +154,8 @@ def test_a_team_season_with_no_league_reads_the_name_alone(
         session.add(season)
         session.flush()
         session.add(DBTeamSeason(team_id=seeded["team_a_id"], season_id=ident(season)))
-    answer = client.get(f"/teams/{seeded['team_a_id']}").json()
+    answer = client.get(
+        f"/leagues/{seeded['league_id']}/teams/{seeded['team_a_id']}"
+    ).json()
     row = next(info for info in answer["seasons_info"] if info["name"] == "Season 2")
     assert row["league_short_name"] is None

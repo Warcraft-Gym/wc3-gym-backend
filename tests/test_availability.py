@@ -200,7 +200,7 @@ def captain(
     """P1 captains Alpha this season, and his session sends these headers."""
     monkeypatch.delenv("DISCORD_BOT_TOKEN", raising=False)
     resp = client.put(
-        f"/teams/{seeded['team_a_id']}/seasons/{seeded['season_id']}/captains",
+        f"/events/{seeded['season_id']}/teams/{seeded['team_a_id']}/captains",
         json={"captain_ids": [seeded["player_ids"][0]]},
         headers=auth_headers,
     )
@@ -217,7 +217,7 @@ def test_a_captain_answers_for_a_player_of_his_team(
     mate = seeded["player_ids"][1]
 
     resp = client.put(
-        f"/teams/{team_id}/seasons/{season_id}/availability",
+        f"/events/{season_id}/teams/{team_id}/availability",
         json={"user_id": mate, "playday": 1, "available": False},
         headers=captain,
     )
@@ -235,7 +235,7 @@ def test_a_captain_answers_for_a_player_of_his_team(
     ]
 
     listed = client.get(
-        f"/teams/{team_id}/seasons/{season_id}/availability", headers=captain
+        f"/events/{season_id}/teams/{team_id}/availability", headers=captain
     )
     assert listed.status_code == 200, listed.text
     assert [row["user_id"] for row in listed.json()] == [mate]
@@ -246,7 +246,7 @@ def test_a_captain_cannot_answer_for_another_team(
 ) -> None:
     """P3 plays for Beta, so Alpha's captain does not write his weeks."""
     resp = client.put(
-        f"/teams/{seeded['team_a_id']}/seasons/{seeded['season_id']}/availability",
+        f"/events/{seeded['season_id']}/teams/{seeded['team_a_id']}/availability",
         json={"user_id": seeded["player_ids"][2], "playday": 1, "available": False},
         headers=captain,
     )
@@ -259,7 +259,7 @@ def test_a_captain_reaches_only_his_own_team(
     client: Client, seeded: dict[str, Any], captain: dict[str, str]
 ) -> None:
     resp = client.get(
-        f"/teams/{seeded['team_b_id']}/seasons/{seeded['season_id']}/availability",
+        f"/events/{seeded['season_id']}/teams/{seeded['team_b_id']}/availability",
         headers=captain,
     )
 
@@ -276,7 +276,7 @@ def test_the_player_writes_over_his_captains_answer(
     """One row per week, so the last writer holds it."""
     mate = seeded["player_ids"][1]
     client.put(
-        f"/teams/{seeded['team_a_id']}/seasons/{seeded['season_id']}/availability",
+        f"/events/{seeded['season_id']}/teams/{seeded['team_a_id']}/availability",
         json={"user_id": mate, "playday": 1, "available": False},
         headers=captain,
     )
@@ -321,7 +321,7 @@ def test_an_event_without_scheduling_refuses_the_captain(
     turn_off_scheduling(season_id)
 
     resp = client.put(
-        f"/teams/{team_id}/seasons/{season_id}/availability",
+        f"/events/{season_id}/teams/{team_id}/availability",
         json={"user_id": seeded["player_ids"][1], "playday": 1, "available": False},
         headers=captain,
     )
@@ -353,7 +353,7 @@ def test_shrinking_the_season_drops_the_answers_past_the_last_round(
 
     for count in (3, 4):
         resp = client.put(
-            f"/seasons/{season_id}", json={"round_count": count}, headers=auth_headers
+            f"/events/{season_id}", json={"round_count": count}, headers=auth_headers
         )
         assert resp.status_code == 200, resp.text
 
@@ -428,7 +428,7 @@ def test_a_captain_answers_outside_the_window(
     checkin_day("2026-01-07")
 
     resp = client.put(
-        f"/teams/{team_id}/seasons/{season_id}/availability",
+        f"/events/{season_id}/teams/{team_id}/availability",
         json={"user_id": seeded["player_ids"][1], "playday": 2, "available": False},
         headers=captain,
     )
@@ -442,15 +442,15 @@ def test_a_season_answers_its_check_in_window_and_takes_a_new_one(
     client: Client, seeded: dict[str, Any], auth_headers: dict[str, str]
 ) -> None:
     season_id = seeded["season_id"]
-    assert client.get(f"/seasons/{season_id}").json()["checkin_days"] == 3
+    assert client.get(f"/events/{season_id}").json()["checkin_days"] == 3
 
     resp = client.put(
-        f"/seasons/{season_id}", json={"checkin_days": 5}, headers=auth_headers
+        f"/events/{season_id}", json={"checkin_days": 5}, headers=auth_headers
     )
 
     assert resp.status_code == 200, resp.text
     assert resp.json()["checkin_days"] == 5
-    assert client.get(f"/seasons/{season_id}").json()["checkin_days"] == 5
+    assert client.get(f"/events/{season_id}").json()["checkin_days"] == 5
 
 
 def test_a_blank_check_in_window_keeps_the_check_in_open(
@@ -464,12 +464,12 @@ def test_a_blank_check_in_window_keeps_the_check_in_open(
     season_id = seeded["season_id"]
 
     resp = client.put(
-        f"/seasons/{season_id}", json={"checkin_days": None}, headers=auth_headers
+        f"/events/{season_id}", json={"checkin_days": None}, headers=auth_headers
     )
 
     assert resp.status_code == 200, resp.text
     assert resp.json()["checkin_days"] is None
-    listed = {row["id"]: row["checkin_days"] for row in client.get("/seasons").json()}
+    listed = {row["id"]: row["checkin_days"] for row in client.get("/events").json()}
     assert listed[season_id] is None
     checkin_day("2026-01-07")
     assert [row["playday"] for row in write(client, member(), 2, False)] == [2]
@@ -496,12 +496,17 @@ def test_a_negative_check_in_window_is_refused(
     client: Client, seeded: dict[str, Any], auth_headers: dict[str, str]
 ) -> None:
     created = client.post(
-        "/seasons",
-        json={"name": "S2", "series_per_round": 2, "checkin_days": -1},
+        "/events",
+        json={
+            "league_id": seeded["league_id"],
+            "name": "S2",
+            "series_per_round": 2,
+            "checkin_days": -1,
+        },
         headers=auth_headers,
     )
     updated = client.put(
-        f"/seasons/{seeded['season_id']}",
+        f"/events/{seeded['season_id']}",
         json={"checkin_days": -1},
         headers=auth_headers,
     )
@@ -635,7 +640,7 @@ def test_the_team_grid_carries_the_derived_rows(
     busy(mate, "Europe/London", "2026-01-05", "2026-01-18")
 
     rows = client.get(
-        f"/teams/{team_id}/seasons/{season_id}/availability", headers=captain
+        f"/events/{season_id}/teams/{team_id}/availability", headers=captain
     ).json()
 
     assert [(row["user_id"], row["playday"], row["blocked_out"]) for row in rows] == [

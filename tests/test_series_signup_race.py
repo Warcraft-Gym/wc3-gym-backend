@@ -51,7 +51,7 @@ def test_a_team_roster_carries_the_signup_race(
     client: Client, league: dict[str, Any]
 ) -> None:
     season_id = league["season_id"]
-    teams = client.get(f"/teams/season/{season_id}").json()
+    teams = client.get(f"/events/{season_id}/teams").json()
     players = {
         player["id"]: player
         for team in teams
@@ -86,7 +86,7 @@ def test_a_ladder_season_row_reads_the_signup_race(
     """The ladder roster is the signups of the season, so a player who did not
     register stands nowhere on it."""
     body = client.get(
-        f"/seasons/{league['season_id']}/ladder", headers=auth_headers
+        f"/events/{league['season_id']}/ladder", headers=auth_headers
     ).json()
     rows = {
         player["id"]: player for team in body["teams"] for player in team["players"]
@@ -129,7 +129,7 @@ def test_a_series_list_carries_the_signup_race(
     client: Client, league: dict[str, Any]
 ) -> None:
     season_id = league["season_id"]
-    response = client.post(f"/series/season/{season_id}/playday/1/search")
+    response = client.post(f"/events/{season_id}/rounds/1/series/search")
     entries = {entry["id"]: entry for entry in response.json()}
     assert len(entries) == 2
     played = entries[league["series_played_id"]]

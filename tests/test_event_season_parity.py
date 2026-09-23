@@ -1,4 +1,4 @@
-"""The event API replacement for the deprecated GNL season routes."""
+"""The event API that serves a GNL season."""
 
 from typing import Any
 
@@ -67,7 +67,6 @@ def test_event_reads_carry_the_useful_season_fields(
 ) -> None:
     created = create_gnl_event(client, auth_headers)
     event = client.get(f"/events/{created['id']}").json()
-    season = client.get(f"/seasons/{created['id']}").json()
 
     fields = {
         "round_count",
@@ -82,7 +81,6 @@ def test_event_reads_carry_the_useful_season_fields(
         "maps",
         "rounds",
     }
-    assert {key: event[key] for key in fields} == {key: season[key] for key in fields}
     listed = client.get(f"/events?league_id={created['league_id']}").json()
     assert len(listed) == 1
     assert {key: listed[0][key] for key in fields} == {
@@ -90,30 +88,11 @@ def test_event_reads_carry_the_useful_season_fields(
     }
 
 
-def test_the_season_collection_is_only_the_deprecated_gnl_view(
-    client: Client, auth_headers: dict[str, str]
-) -> None:
-    gnl = create_gnl_event(client, auth_headers)
-    cup = client.post(
-        "/events", json={"name": "Open Cup", "kind": "cup"}, headers=auth_headers
-    )
-    assert cup.status_code == 201, cup.text
-
-    assert [row["id"] for row in client.get("/seasons").json()] == [gnl["id"]]
-
-
-def test_season_routes_are_deprecated_and_event_replacements_are_public(
-    client: Client,
-) -> None:
+def test_the_season_routes_live_under_events_only(client: Client) -> None:
     paths = client.get("/openapi.json").json()["paths"]
-    assert all(
-        operation.get("deprecated") is True
-        for path, methods in paths.items()
-        if path.startswith("/seasons")
-        for operation in methods.values()
-    )
+    assert not [path for path in paths if path.startswith("/seasons")]
 
-    replacements = {
+    event_routes = {
         ("post", "/events"),
         ("post", "/events/search"),
         ("get", "/events/{event_id}"),
@@ -143,7 +122,7 @@ def test_season_routes_are_deprecated_and_event_replacements_are_public(
         ("get", "/events/{event_id}/ladder"),
         ("get", "/events/{event_id}/ladder/players"),
     }
-    for method, path in replacements:
+    for method, path in event_routes:
         assert path in paths
         methods = paths[path]
         assert method in methods
