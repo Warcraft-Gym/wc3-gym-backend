@@ -26,14 +26,14 @@ sources:
 |---|---|---|---|
 | the web app | `wc3-gym-frontend` | most routes | Clerk session or the admin token |
 | the GNL website | `wc3-gnl-website` | `GET /leagues`, the latest finished `GET /events?league_id={league_id}`, and that event's `/teams`, `/series` and `/fantasy/teams` | none |
-| the WordPress site | `gym_website_scripts` | eight routes on every page view, no cache: `GET /stats/career`, `GET /config/settings`, `GET /events/{id}/teams`, `GET /teams/{id}/image`, `GET /events/{id}`, `POST /matches/search`, `POST /events/{id}/rounds/{n}/series/search`, `POST /fantasy/teams/search` | none |
+| the WordPress site | `gym_website_scripts` | eight paths on every page view, no cache, against the older backend host: `GET /stats/career`, `GET /config/settings`, `GET /teams/season/{id}`, `GET /teams/{id}/image`, `GET /seasons/{id}`, `POST /matches/search`, `POST /series/season/{id}/playday/{n}/search`, `POST /fantasy/teams/search` | none |
 | the Discord adapter | `wc3-gym-discord-bot` | `POST /discord/interactions` | Discord's signature |
 | the cast-reminder worker | `wc3-gym-discord-bot`, `cron/` | `GET /jobs/cast-reminders` every five minutes | `CRON_SECRET` bearer |
 | Vercel cron | this repository's `vercel.json` | `GET /jobs/w3c-sync` once a day | `CRON_SECRET` bearer |
 | Nightbot | no repository | `GET /koth/signup`, and the deprecated `/koth/*` reads | the Nightbot token |
 | the stream overlay and bookmarks | none | the deprecated `/koth/*` reads | none |
 
-The WordPress shortcodes today call the older backend, not this deployment. When they move, they call the eight routes above, which are the contract.
+The WordPress shortcodes today call the older backend host, not this deployment, and that host answers 502, so the shortcodes show no data. Three of their paths do not exist here: `GET /teams/season/{id}`, `GET /seasons/{id}` and `POST /series/season/{id}/playday/{n}/search`. Before the shortcodes point at this deployment, those calls move to `GET /events/{id}/teams`, `GET /events/{id}` and `POST /events/{id}/rounds/{n}/series/search`. `GET /events/{id}` is not the old season payload: it has no `user_signup` or `signup_race`, and its `phase` and `signups_open` follow the event model, so the PHP that reads those fields changes with the move.
 
 # What pins the shapes
 
