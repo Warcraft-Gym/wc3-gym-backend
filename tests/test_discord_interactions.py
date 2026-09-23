@@ -5,7 +5,6 @@ from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 import pytest
-import requests
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from httpx2 import Client
 
@@ -428,7 +427,7 @@ def test_register_commands_puts_the_guild_list(monkeypatch: pytest.MonkeyPatch) 
         seen.append((method, url, kwargs.get("json")))
         return Ok()
 
-    monkeypatch.setattr(requests, "request", request)
+    monkeypatch.setattr(discord._session, "request", request)
     assert interactions.register_commands() == [
         "upcoming",
         "leaderboard",

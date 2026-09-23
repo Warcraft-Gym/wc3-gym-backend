@@ -4,7 +4,7 @@ title: Discord integration
 description: Slash commands arrive through a separate adapter and are checked and answered here, cards are posted and edited under a rate limit, and season roles are mirrored to the guild on a button press.
 resource: ../../../app/services/interactions.py
 tags: [discord]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T16:25:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-23T10:00:00Z }
 sources:
   - id: interactions
     resource: ../../../app/services/interactions.py
@@ -57,6 +57,8 @@ Card rules: a mention is a call to action, so `/upcoming` tags nobody and the re
 # The guild read and the roles
 
 An account's Discord token from Clerk only identifies it; the bot token reads the guild membership. `DISCORD_GUILD_ID` names the guild. Which guild it names is a maintainers' decision, never a configuration fix for a guest classification.
+
+Every Discord call goes through one `requests.Session` in `app/services/discord.py`, so calls reuse a connection. `role_for` keeps each account's member or guest answer for `ROLE_TTL` seconds in the process, so a guild join or leave shows within a minute; a failed read is never kept. `app_emojis` keeps the first successful read for the life of the process and reads again after a failure.
 
 `discord_role_binding` maps a role kind and scope to a guild role. `POST /config/discord-roles/sync` grants and revokes season roles; it never touches admin or coach roles, and it runs only when an admin presses the button. The bot's role must sit directly above the season roles in the guild's role list and below everything else, because a bot manages only roles below its own. See [roles](roles-and-permissions.md).
 
