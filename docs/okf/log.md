@@ -2,6 +2,9 @@
 
 ## 2026-09-23
 
+* **Fix**: the guild role, member or guest, is kept per process for one minute; the authentication page said nothing about membership was cached.
+* **Update**: the layering convention and the model families state the measured reasons for sync handlers and for validating response models.
+
 * **Update**: the deprecated `/seasons`, unscoped `/teams`, season-named team, series and fantasy aliases are removed; `GET /teams/{team_id}/image` stays, deprecated.
 * **Update**: a helper that builds on a guard is an `Annotated` dependency, and `is_admin` in `app/core/security.py` is the one admin test.
 
