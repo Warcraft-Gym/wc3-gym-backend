@@ -1,6 +1,6 @@
 # Tables
 
-The 42 tables, one concept each. A concept's `# Schema` lists every column; `tests/test_okf.py` fails when the columns and the concept disagree.
+The 43 tables, one concept each. A concept's `# Schema` lists every column; `tests/test_okf.py` fails when the columns and the concept disagree.
 
 # People and access
 
@@ -58,6 +58,10 @@ The 42 tables, one concept each. A concept's `# Schema` lists every column; `tes
 * [ladder_sync](ladder_sync.md) - The ledger of the match sync: one row per player per W3Champions season saying when it was read, from when, and whether the read reached the end.
 * [ladder_achievements](ladder_achievements.md) - One price for one achievement rule in one season, or for a player's lifetime when the season is null; the rule itself is code.
 * [player_career_stats](player_career_stats.md) - One player's baseline from the seasons played before the app, imported from a CSV and never edited; the career totals add the app's seasons on every read.
+
+# Operations
+
+* [egress_ledger](egress_ledger.md) - What each route cost the database, one row per day, route and method: calls, statements, rows read and response bytes.
 
 # Discord
 

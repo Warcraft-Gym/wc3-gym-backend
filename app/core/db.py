@@ -12,6 +12,8 @@ worker can start at the same time.
 """
 
 import os
+from contextvars import ContextVar
+from dataclasses import dataclass
 from typing import Any
 
 from sqlalchemy import Engine, create_engine, event
@@ -19,6 +21,46 @@ from sqlalchemy.orm import InstrumentedAttribute, sessionmaker
 
 # Unbound until init_engine runs; the services import this name at import time
 Session = sessionmaker()
+
+
+@dataclass
+class Cost:
+    """What one request asked of the database: statements sent and rows back."""
+
+    statements: int = 0
+    rows: int = 0
+
+
+# Mutable, so a worker thread that copied the request context adds to the same tally
+_cost: ContextVar[Cost | None] = ContextVar("request_cost", default=None)
+
+
+def start_request_cost() -> Cost:
+    """Start a fresh tally for the current request and return it."""
+    cost = Cost()
+    _cost.set(cost)
+    return cost
+
+
+def request_cost() -> Cost | None:
+    """The tally of the current request; None outside a request."""
+    return _cost.get()
+
+
+def _count_statement(conn: Any, cursor: Any, *args: Any) -> None:  # noqa: ANN401
+    """Add one statement and the rows the driver reports to the request tally."""
+    cost = _cost.get()
+    if cost is not None:
+        cost.statements += 1
+        cost.rows += max(cursor.rowcount, 0)
+
+
+def _count_row(cursor: Any, row: tuple[Any, ...]) -> tuple[Any, ...]:  # noqa: ANN401
+    """SQLite reports no rowcount for a SELECT, so it counts each row it fetches."""
+    cost = _cost.get()
+    if cost is not None:
+        cost.rows += 1
+    return row
 
 
 def rel(attr: Any) -> InstrumentedAttribute[Any]:  # noqa: ANN401
@@ -49,6 +91,10 @@ def init_engine(db_url: str | None = None) -> Engine:
         event.listen(
             engine, "connect", lambda conn, _: conn.execute("PRAGMA foreign_keys=ON")
         )
+        event.listen(
+            engine, "connect", lambda conn, _: setattr(conn, "row_factory", _count_row)
+        )
+    event.listen(engine, "after_cursor_execute", _count_statement)
     Session.configure(bind=engine)
     # the listeners: the blob store follows the rows, and every fixture and
     # series names the round it is played in

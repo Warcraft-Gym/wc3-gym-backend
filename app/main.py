@@ -12,16 +12,20 @@ import.
 
 import logging
 import os
+from time import perf_counter
 
+from anyio import to_thread
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from starlette.datastructures import MutableHeaders
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from app.api.main import api_router
-from app.core.db import init_engine
+from app.core.db import Cost, init_engine, start_request_cost
 from app.core.exceptions import (
     ApiError,
     BadRequestError,
@@ -29,8 +33,76 @@ from app.core.exceptions import (
     NotFoundError,
     W3CThrottledError,
 )
+from app.services import egress
 
 logger = logging.getLogger(__name__)
+
+# The ledger's own read route stays out of the ledger
+UNRECORDED_ROUTES = {"/jobs/egress"}
+
+
+class EgressMiddleware:
+    """Count what each request asks of the database.
+
+    The counts go out in three response headers and one log line, and into
+    the daily egress ledger. A request that matched no route is logged but
+    not recorded, so a scanner cannot grow the ledger. The headers carry the
+    counts at the start of the response; a streamed body is not buffered.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        cost = start_request_cost()
+        started = perf_counter()
+        # A request that raises past the handlers never starts a response: a 500
+        answer = {"status": 500, "bytes": 0}
+
+        async def send_with_cost(message: Message) -> None:
+            if message["type"] == "http.response.start":
+                headers = MutableHeaders(scope=message)
+                answer["status"] = message["status"]
+                answer["bytes"] = int(headers.get("content-length", 0))
+                headers["X-DB-Statements"] = str(cost.statements)
+                headers["X-DB-Rows"] = str(cost.rows)
+                headers["X-Response-Bytes"] = str(answer["bytes"])
+            await send(message)
+
+        try:
+            await self.app(scope, receive, send_with_cost)
+        finally:
+            # Read before the upsert, so the ledger write is not part of the request
+            spent = Cost(cost.statements, cost.rows)
+            route = scope.get("route")
+            template = getattr(route, "path", None) or scope["path"]
+            logger.info(
+                "egress route=%s method=%s status=%d statements=%d rows=%d bytes=%d ms=%d",
+                template,
+                scope["method"],
+                answer["status"],
+                spent.statements,
+                spent.rows,
+                answer["bytes"],
+                (perf_counter() - started) * 1000,
+            )
+            if route is not None and template not in UNRECORDED_ROUTES:
+                await to_thread.run_sync(
+                    record_egress, template, scope["method"], spent, answer["bytes"]
+                )
+
+
+def record_egress(route: str, method: str, cost: Cost, size: int) -> None:
+    """Add the request to the ledger; a failed write is logged, never raised."""
+    try:
+        egress.record(route, method, cost, size)
+    except Exception:
+        logger.warning(
+            "egress ledger write failed for %s %s", method, route, exc_info=True
+        )
 
 
 def create_app(db_url: str | None = None) -> FastAPI:
@@ -52,13 +124,19 @@ def create_app(db_url: str | None = None) -> FastAPI:
         description="API for Gym Newbie League Backend Data",
         version="1.1.0",
     )
+    app.add_middleware(EgressMiddleware)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
         allow_methods=["*"],
         allow_headers=["*"],
         # Browsers hide custom response headers unless CORS exposes them
-        expose_headers=["X-Total-Count"],
+        expose_headers=[
+            "X-Total-Count",
+            "X-DB-Statements",
+            "X-DB-Rows",
+            "X-Response-Bytes",
+        ],
     )
 
     @app.exception_handler(NotFoundError)
