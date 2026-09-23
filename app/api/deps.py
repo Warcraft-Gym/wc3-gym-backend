@@ -13,7 +13,7 @@ from typing import Annotated, Any
 import jwt
 from clerk_backend_api import AuthenticateRequestOptions, Clerk
 from clerk_backend_api.models import OAuthAccessToken
-from fastapi import Depends, Request
+from fastapi import Depends, Request, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.core.db import Session
@@ -44,6 +44,20 @@ _bearer = HTTPBearer(auto_error=False)
 Credentials = Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)]
 
 logger = logging.getLogger(__name__)
+
+
+def edge_cache(response: Response, s_maxage: int, swr: int | None = None) -> None:
+    """Let the edge serve every caller one copy of an open read for `s_maxage` seconds.
+
+    Use it only on a route with no guard whose answer is the same for every caller.
+    The edge keeps the headers of the request that filled it, and CORSMiddleware writes
+    none for a request with no Origin, so the CORS header is written here beside it.
+    """
+    value = f"public, s-maxage={s_maxage}"
+    if swr is not None:
+        value += f", stale-while-revalidate={swr}"
+    response.headers["Cache-Control"] = value
+    response.headers["Access-Control-Allow-Origin"] = "*"
 
 
 @cache

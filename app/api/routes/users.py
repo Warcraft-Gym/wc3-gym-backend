@@ -8,6 +8,7 @@ from app.api.deps import (
     RequireMember,
     SoftBlockServiceDep,
     UserServiceDep,
+    edge_cache,
     require_admin,
 )
 from app.api.search import SearchQuery
@@ -117,6 +118,7 @@ def sync_w3c_user(
 def get_user_ladder(
     user_id: int,
     service: LadderServiceDep,
+    response: Response,
     season_id: int | None = None,
 ) -> LadderPlayer:
     """One player's ladder record, on the race the league scores him on.
@@ -124,12 +126,14 @@ def get_user_ladder(
     Without a season the answer covers every match the player has. The
     matches themselves stay on w3champions, which the client links to.
     """
+    edge_cache(response, 900, 3600)
     return service.user_ladder(user_id, season_id)
 
 
 @router.get("/users/{user_id}/history")
-def get_user_history(user_id: int) -> PlayerHistory:
+def get_user_history(user_id: int, response: Response) -> PlayerHistory:
     """Every GNL season this player took part in, and every opponent they met."""
+    edge_cache(response, 120, 600)
     return player_history.history(user_id)
 
 

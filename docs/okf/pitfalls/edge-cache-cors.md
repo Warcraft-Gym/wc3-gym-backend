@@ -3,11 +3,14 @@ type: Pitfall
 title: The edge cache stores the CORS header
 description: A publicly cached route filled by a client with no Origin header is stored without the CORS header, and every browser then blocks it.
 tags: [api, deploy]
-generated: { by: openai/gpt-6, at: 2026-09-15T10:44:28Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-23T12:00:00Z }
 sources:
   - id: source
     resource: ../../../app/main.py
     title: The CORS middleware
+  - id: deps
+    resource: ../../../app/api/deps.py
+    title: The edge_cache helper
 ---
 
 # What happened
@@ -16,4 +19,4 @@ sources:
 
 # The rule
 
-A route that sets `Cache-Control: public` writes `Access-Control-Allow-Origin: *` itself, beside it. Test it with a client that sends no `Origin`. Reproduce with a cache-buster query so the real key is untouched. The frontend sends no bearer on that route, because a request with an Authorization header is never cached.
+A route that sets `Cache-Control: public` writes `Access-Control-Allow-Origin: *` itself, beside it. `edge_cache` in `app/api/deps.py` writes the two together; use it rather than either header alone. The cached routes are listed in [the API overview](../api/overview.md). Test it with a client that sends no `Origin`. Reproduce with a cache-buster query so the real key is untouched. The frontend sends no bearer on that route, because a request with an Authorization header is never cached.

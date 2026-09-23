@@ -1,9 +1,9 @@
 import logging
 import secrets
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 
-from app.api.deps import RequireAdmin, SettingsServiceDep, require_admin
+from app.api.deps import RequireAdmin, SettingsServiceDep, edge_cache, require_admin
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.models.admin_grant import AdminGrantCreate, AdminPublic
 from app.models.discord_role_binding import (
@@ -49,8 +49,9 @@ def get_settings(service: SettingsServiceDep) -> SettingsList:
 
 
 @router.get("/config/w3c")
-def get_w3c_config(service: SettingsServiceDep) -> W3CConfig:
+def get_w3c_config(service: SettingsServiceDep, response: Response) -> W3CConfig:
     """The w3champions base URL and season in use, so the config page can show them."""
+    edge_cache(response, 300, 3600)
     w3c = W3CService(settings_app_service=service)
     try:
         current_season = w3c.current_season()
@@ -61,8 +62,11 @@ def get_w3c_config(service: SettingsServiceDep) -> W3CConfig:
 
 
 @router.get("/config/settings/{key}")
-def get_setting(key: str, service: SettingsServiceDep) -> SettingsPublic:
+def get_setting(
+    key: str, service: SettingsServiceDep, response: Response
+) -> SettingsPublic:
     """Retrieve a specific setting by key."""
+    edge_cache(response, 300, 3600)
     if key in SECRET_SETTINGS:
         raise NotFoundError(f"Setting with key '{key}' not found")
     # get_by_key raises NotFoundError for an unknown key.

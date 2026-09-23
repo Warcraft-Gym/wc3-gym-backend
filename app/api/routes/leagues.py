@@ -1,16 +1,17 @@
 """The league routes. A league is the thing that repeats; its runs are events."""
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 
-from app.api.deps import EventServiceDep, OptionalLogin, require_admin
+from app.api.deps import EventServiceDep, OptionalLogin, edge_cache, require_admin
 from app.models.league import LeagueCreate, LeaguePublic, LeagueUpdate
 
 router = APIRouter(tags=["leagues"])
 
 
 @router.get("/leagues")
-def get_leagues(service: EventServiceDep) -> list[LeaguePublic]:
+def get_leagues(service: EventServiceDep, response: Response) -> list[LeaguePublic]:
     """Return every league, without its events."""
+    edge_cache(response, 300, 3600)
     return service.get_leagues()
 
 
