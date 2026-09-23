@@ -77,7 +77,7 @@ def record(monkeypatch: pytest.MonkeyPatch, status: int) -> list[tuple[str, str,
         calls.append((method, url, kwargs.get("json")))
         return Answer()
 
-    monkeypatch.setattr(discord.requests, "request", request)
+    monkeypatch.setattr(discord._session, "request", request)
     return calls
 
 

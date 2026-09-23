@@ -99,7 +99,7 @@ def test_a_rate_limited_channel_call_waits_and_tries_once_more(
         calls.append(method)
         return Answer(*answers.pop(0))
 
-    monkeypatch.setattr(discord.requests, "request", request)
+    monkeypatch.setattr(discord._session, "request", request)
     monkeypatch.setattr(discord, "sleep", sleeps.append)
     assert discord.post_to_channel("chan", {"content": "hi"}) == "m9"
     assert calls == ["POST", "POST"]

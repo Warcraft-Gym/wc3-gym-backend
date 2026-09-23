@@ -1,6 +1,6 @@
 """What the database says a Discord account should hold, and the sync of it.
 
-The guild is stood in for: `discord.requests.request` answers the member read
+The guild is stood in for: `discord._session.request` answers the member read
 and records the role writes. Without DISCORD_BOT_TOKEN nothing is called at
 all, and the suite fails any call a test did not stand in for.
 """
@@ -92,7 +92,7 @@ def _guild(
 
     monkeypatch.setenv("DISCORD_BOT_TOKEN", "a-bot-token")
     monkeypatch.setenv("DISCORD_GUILD_ID", GUILD_ID)
-    monkeypatch.setattr(discord.requests, "request", request)
+    monkeypatch.setattr(discord._session, "request", request)
     return calls
 
 
@@ -786,8 +786,7 @@ def test_app_emojis_read_once_and_upload_skips_what_exists(
         calls.append((method, url, kwargs.get("json")))
         return Answer()
 
-    monkeypatch.setattr(discord.requests, "request", request)
-    discord.app_emojis.cache_clear()
+    monkeypatch.setattr(discord._session, "request", request)
     (tmp_path / "HU.png").write_bytes(b"hu")
     (tmp_path / "OC.png").write_bytes(b"oc")
     assert discord.upload_app_emojis(tmp_path) == ["OC"]
@@ -798,4 +797,40 @@ def test_app_emojis_read_once_and_upload_skips_what_exists(
         ("POST", "https://discord.com/api/v10/applications/app/emojis"),
     ]
     assert calls[1][2] == {"name": "OC", "image": "data:image/png;base64,b2M="}
-    discord.app_emojis.cache_clear()
+
+
+def test_app_emojis_keep_no_failed_read(
+    monkeypatch: pytest.MonkeyPatch, bot_token: None
+) -> None:
+    answers = [
+        FakeResponse(503, {}),
+        FakeResponse(200, {"items": [{"name": "HU", "id": "11"}]}),
+    ]
+    monkeypatch.setattr(discord._session, "request", lambda *a, **k: answers.pop(0))
+
+    assert discord.app_emojis("app") == {}
+    assert discord.app_emojis("app") == {"HU": "11"}
+    assert discord.app_emojis("app") == {"HU": "11"}  # kept; no third read
+    assert answers == []
+
+
+def test_role_for_asks_discord_once_per_ttl(
+    monkeypatch: pytest.MonkeyPatch, bot_token: None
+) -> None:
+    calls: list[str] = []
+
+    def request(method: str, url: str, **kwargs: object) -> FakeResponse:
+        calls.append(url)
+        return FakeResponse(200, {"roles": []})
+
+    monkeypatch.setattr(discord._session, "request", request)
+    now = [100.0]
+    monkeypatch.setattr(discord, "monotonic", lambda: now[0])
+
+    assert discord.role_for("7") == "member"
+    now[0] += discord.ROLE_TTL - 1
+    assert discord.role_for("7") == "member"
+    assert len(calls) == 1
+    now[0] += 2
+    assert discord.role_for("7") == "member"
+    assert len(calls) == 2
