@@ -51,10 +51,10 @@ def get_settings(service: SettingsServiceDep) -> SettingsList:
 @router.get("/config/w3c")
 def get_w3c_config(service: SettingsServiceDep, response: Response) -> W3CConfig:
     """The w3champions base URL and season in use, so the config page can show them."""
-    edge_cache(response, 300, 3600)
     w3c = W3CService(settings_app_service=service)
     try:
         current_season = w3c.current_season()
+        edge_cache(response, 300, 3600)  # an outage answer is never cached
     except Exception as e:  # the page shows the URL even when w3champions is down
         logger.debug(f"w3champions gave no season: {e!s}")
         current_season = None
