@@ -5,12 +5,11 @@ team itself, a match, and the per-season stats of a player - and it
 depends on nothing, so importing it never closes a cycle.
 """
 
-from typing import TYPE_CHECKING, Annotated, Self
+from typing import TYPE_CHECKING, Self
 
 from sqlmodel import SQLModel
 
 from app.models.base import ident
-from app.models.types import NumToStr
 
 if TYPE_CHECKING:
     from app.models.team import Team
@@ -20,8 +19,8 @@ class TeamReduced(SQLModel):
     id: int
     league_id: int
     # name and long_name also receive numeric cells from the xlsx import.
-    name: Annotated[str | None, NumToStr] = None
-    long_name: Annotated[str | None, NumToStr] = None
+    name: str | None = None
+    long_name: str | None = None
     # where the logo is served from; None until one is uploaded
     icon_url: str | None = None
 

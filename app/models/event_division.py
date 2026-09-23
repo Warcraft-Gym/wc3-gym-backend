@@ -21,7 +21,7 @@ class EventDivision(DBModel, table=True):
     event_id: int = Field(index=True, foreign_key="event.id", ondelete="CASCADE")
     # Divisions read in this order, the strongest first
     position: int = Field(default=1)
-    name: Annotated[str | None, NumToStr] = Field(default=None, max_length=50)
+    name: str | None = Field(default=None, max_length=50)
     # The MMR the division opens at; null while the bands are unset
     lower_bound: int | None = None
     # How many entrants the division takes when the cut counts from the top
@@ -35,7 +35,7 @@ class EventDivisionPublic(SQLModel):
 
     id: int
     position: int
-    name: Annotated[str | None, NumToStr] = None
+    name: str | None = None
     lower_bound: int | None = None
     size: int | None = None
     # The entrants of this division who have not withdrawn

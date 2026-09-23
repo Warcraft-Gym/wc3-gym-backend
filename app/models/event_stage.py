@@ -34,7 +34,7 @@ class EventStage(DBModel, table=True):
     event_id: int = Field(index=True, foreign_key="event.id", ondelete="CASCADE")
     # Stages play in this order; the first is position 1
     position: int = Field(default=1)
-    name: Annotated[str | None, NumToStr] = Field(default=None, max_length=50)
+    name: str | None = Field(default=None, max_length=50)
     format: StageFormat = Field(
         default=StageFormat.round_robin,
         sa_column_kwargs={"server_default": "round_robin"},
@@ -51,7 +51,7 @@ class EventStage(DBModel, table=True):
     # How many players an FFA lobby seats
     lobby_size: int | None = None
     # One rule per game of a series: veto, loser, host or fixed
-    map_rules: Annotated[str | None, MapRules] = Field(default=None, max_length=100)
+    map_rules: str | None = Field(default=None, max_length=100)
     scheduling_mode: SchedulingMode = Field(
         default=SchedulingMode.agreed, sa_column_kwargs={"server_default": "agreed"}
     )
@@ -97,14 +97,14 @@ class EventStagePublic(SQLModel):
 
     id: int
     position: int
-    name: Annotated[str | None, NumToStr] = None
+    name: str | None = None
     format: StageFormat
     best_of: int
     series_per_entrant_per_round: int = 1
     swiss_rounds: int | None = None
     points_by_place: str | None = None
     lobby_size: int | None = None
-    map_rules: Annotated[str | None, MapRules] = None
+    map_rules: str | None = None
     scheduling_mode: SchedulingMode
     ranking_rule: str
     points_series_won: int
@@ -170,7 +170,7 @@ class StandingRow(SQLModel):
     entrant_id: int
     user_id: int | None = None
     team_id: int | None = None
-    name: Annotated[str | None, NumToStr] = None
+    name: str | None = None
     played: int = 0
     won: int = 0
     lost: int = 0
@@ -188,7 +188,7 @@ class DivisionStandings(SQLModel):
     """
 
     division_id: int | None = None
-    division_name: Annotated[str | None, NumToStr] = None
+    division_name: str | None = None
     group_no: int | None = None
-    group_name: Annotated[str | None, NumToStr] = None
+    group_name: str | None = None
     rows: list[StandingRow] = []

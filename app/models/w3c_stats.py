@@ -12,14 +12,13 @@ if TYPE_CHECKING:
 
 
 class W3CStatsBase(SQLModel):
-    # The w3champions API can send fractional numbers for these columns.
-    wc3_season: Annotated[int, RoundToInt]
-    wins: Annotated[int | None, RoundToInt] = None
-    losses: Annotated[int | None, RoundToInt] = None
-    games: Annotated[int | None, RoundToInt] = None
-    mmr: Annotated[int | None, RoundToInt] = None
+    wc3_season: int
+    wins: int | None = None
+    losses: int | None = None
+    games: int | None = None
+    mmr: int | None = None
     winrate: float | None = None
-    league: Annotated[int | None, RoundToInt] = None
+    league: int | None = None
 
 
 class W3CStats(W3CStatsBase, DBModel, table=True):
@@ -42,6 +41,13 @@ class W3CStats(W3CStatsBase, DBModel, table=True):
 
 
 class W3CStatsCreate(W3CStatsBase):
+    # The w3champions API can send fractional numbers for these columns.
+    wc3_season: Annotated[int, RoundToInt]
+    wins: Annotated[int | None, RoundToInt] = None
+    losses: Annotated[int | None, RoundToInt] = None
+    games: Annotated[int | None, RoundToInt] = None
+    mmr: Annotated[int | None, RoundToInt] = None
+    league: Annotated[int | None, RoundToInt] = None
     race: Annotated[Race | None, SuggestRace] = None
     # user_id is not here: the sync service supplies it
 

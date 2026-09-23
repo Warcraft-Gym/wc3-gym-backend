@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import Annotated
 
 from sqlalchemy import Index
@@ -7,7 +7,7 @@ from sqlmodel import Field, SQLModel
 from app.core.achievements import Achievement
 from app.models.base import DBModel
 from app.models.enums import Race
-from app.models.types import AwareUTC, EnumValue, IsoDate, UTCDateTime
+from app.models.types import AwareUTC, EnumValue, UTCDateTime
 from app.models.w3c_stats import W3CSyncResult
 
 
@@ -72,7 +72,7 @@ class LadderMmr(SQLModel):
 class LadderDay(SQLModel):
     """One day of one player: wins, losses and the MMR he ended the day on."""
 
-    d: IsoDate
+    d: date
     w: int = 0
     l: int = 0  # the client draws w and l as one bar per day
     mmr: int | None = None
@@ -133,7 +133,7 @@ class LadderTeam(SQLModel):
 class LadderSeasonDay(SQLModel):
     """One day of the season, and the matches played on it counted once each."""
 
-    d: IsoDate
+    d: date
     g: int = 0  # the client draws one bar per day
 
 
@@ -141,8 +141,8 @@ class LadderSeason(SQLModel):
     """The season the ladder answer covers."""
 
     id: int
-    start_date: IsoDate | None = None
-    end_date: IsoDate | None = None
+    start_date: date | None = None
+    end_date: date | None = None
     # The oldest ladder sync stamp of the roster, null while one is unread
     synced_at: datetime | None = None
 

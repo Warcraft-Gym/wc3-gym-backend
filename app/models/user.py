@@ -8,7 +8,6 @@ from app.models.base import DBModel, PublicModel, ident
 from app.models.enums import Race
 from app.models.season import SeasonPublic
 from app.models.types import (
-    EmptyStrToNone,
     EnumValue,
     KnownTimeZone,
     NoneToList,
@@ -28,23 +27,18 @@ if TYPE_CHECKING:
 
 
 class UserBase(SQLModel):
-    # The xlsx import sends numeric cells, and discordId numeric snowflakes
-    name: Annotated[str, NumToStr] = Field(max_length=50)
-    battleTag: Annotated[str, NumToStr] = Field(max_length=50)
-    discordTag: Annotated[str, NumToStr] = Field(max_length=50)
-    discordId: Annotated[str, NumToStr] = Field(max_length=50)
+    name: str = Field(max_length=50)
+    battleTag: str = Field(max_length=50)
+    discordTag: str = Field(max_length=50)
+    discordId: str = Field(max_length=50)
     mmr: int | None = None
     # ISO 3166-1 alpha-2, or a UK nation as GB-SCT
-    country: Annotated[str | None, NumToStr] = Field(default=None, max_length=6)
+    country: str | None = Field(default=None, max_length=6)
     # IANA name, as the browser reports it: America/New_York
-    timezone: Annotated[str | None, KnownTimeZone] = Field(default=None, max_length=64)
+    timezone: str | None = Field(default=None, max_length=64)
     # The player's own channels, as links; a video link is refused
-    twitch_url: Annotated[str | None, TwitchChannel] = Field(
-        default=None, max_length=200
-    )
-    youtube_url: Annotated[str | None, YouTubeChannel] = Field(
-        default=None, max_length=200
-    )
+    twitch_url: str | None = Field(default=None, max_length=200)
+    youtube_url: str | None = Field(default=None, max_length=200)
     # The Discord avatar image the login last read, written by the app
     avatar_url: str | None = Field(default=None, max_length=300)
 
@@ -98,6 +92,19 @@ class User(UserBase, DBModel, table=True):
 
 
 class UserCreate(UserBase):
+    # The xlsx import sends numeric cells, and discordId numeric snowflakes
+    name: Annotated[str, NumToStr] = Field(max_length=50)
+    battleTag: Annotated[str, NumToStr] = Field(max_length=50)
+    discordTag: Annotated[str, NumToStr] = Field(max_length=50)
+    discordId: Annotated[str, NumToStr] = Field(max_length=50)
+    country: Annotated[str | None, NumToStr] = Field(default=None, max_length=6)
+    timezone: Annotated[str | None, KnownTimeZone] = Field(default=None, max_length=64)
+    twitch_url: Annotated[str | None, TwitchChannel] = Field(
+        default=None, max_length=200
+    )
+    youtube_url: Annotated[str | None, YouTubeChannel] = Field(
+        default=None, max_length=200
+    )
     race: Annotated[Race, SuggestRace]
 
 
@@ -124,8 +131,7 @@ class PublicSignupWrite(SQLModel):
     mmr: int | None = None
     country: Annotated[str | None, NumToStr] = None
     timezone: str | None = None
-    season_id: Annotated[int | None, EmptyStrToNone] = None
-    seasonId: Annotated[int | None, EmptyStrToNone] = None
+    season_id: int | None = None
 
 
 class ProfileUpdate(SQLModel):
@@ -145,10 +151,10 @@ class UserReduced(UserBase, PublicModel):
 
     id: int
     # A user reached through another object may hold only some of these
-    name: Annotated[str | None, NumToStr] = None
-    battleTag: Annotated[str | None, NumToStr] = None
-    discordTag: Annotated[str | None, NumToStr] = None
-    discordId: Annotated[str | None, NumToStr] = None
+    name: str | None = None
+    battleTag: str | None = None
+    discordTag: str | None = None
+    discordId: str | None = None
     race: Annotated[str | None, EnumValue] = None
     w3c_synced_at: datetime | None = None
     ladder_synced_at: datetime | None = None
@@ -211,11 +217,11 @@ class TrophyPublic(SQLModel):
     title: str
     season_id: int | None = None
     # The season on its own, because the mark engraves it apart from the title
-    season_name: Annotated[str | None, NumToStr] = None
+    season_name: str | None = None
     # The short name of the season's league; null when the event has no league
-    league_short_name: Annotated[str | None, NumToStr] = None
+    league_short_name: str | None = None
     team_id: int | None = None
-    team_name: Annotated[str | None, NumToStr] = None
+    team_name: str | None = None
     team_icon_url: str | None = None
 
 

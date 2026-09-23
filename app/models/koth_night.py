@@ -67,7 +67,7 @@ class KothRow(SQLModel):
     """One race row a player holds in the bracket, with the rating behind it."""
 
     entrant_id: int
-    race: Annotated[str | None, NumToStr] = None
+    race: str | None = None
     mmr: int | None = None
 
 
@@ -89,7 +89,7 @@ class KothPlayer(SQLModel):
     user_id: int | None = None
     name: str
     country: str | None = None
-    race: Annotated[str | None, NumToStr] = None
+    race: str | None = None
     mmr: int | None = None
 
 

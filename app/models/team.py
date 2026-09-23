@@ -33,8 +33,8 @@ SeasonLists = BeforeValidator(_season_lists)
 
 class TeamBase(SQLModel):
     # name and long_name also receive numeric cells from the xlsx import.
-    name: Annotated[str, NumToStr] = Field(max_length=50)
-    long_name: Annotated[str | None, NumToStr] = Field(default=None, max_length=100)
+    name: str = Field(max_length=50)
+    long_name: str | None = Field(default=None, max_length=100)
 
 
 class Team(TeamBase, DBModel, table=True):
@@ -62,7 +62,8 @@ class Team(TeamBase, DBModel, table=True):
 
 
 class TeamCreate(TeamBase):
-    pass
+    name: Annotated[str, NumToStr] = Field(max_length=50)
+    long_name: Annotated[str | None, NumToStr] = Field(default=None, max_length=100)
 
 
 class TeamUpdate(SQLModel):

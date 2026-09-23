@@ -1,23 +1,23 @@
 """Field types that reproduce the request and response shapes of the API.
 
 Two groups. The input ones accept what the producers actually send: the
-xlsx import passes raw spreadsheet cells, the w3champions sync sends fractions
-for integer columns, and the admin forms send an empty string for a
-cleared field. The output ones pin what the consumers already read: the
-JSON of the response models is a public contract, because the leaderboard
-pages on warcraft-gym.com are generated from it offline.
+xlsx import passes raw spreadsheet cells and the w3champions sync sends
+fractions for integer columns. They sit on the input models only (Create,
+Update, Write), so a response built from a stored row never re-runs them.
+The output ones pin what the consumers already read: the JSON of the
+response models is a public contract, because the leaderboard pages on
+warcraft-gym.com are generated from it offline.
 
 Each type says which group it is in.
 """
 
 import difflib
 import numbers
-from datetime import UTC, date, datetime
+from datetime import UTC, datetime
 from functools import cache
-from typing import Annotated
 from zoneinfo import available_timezones
 
-from pydantic import BeforeValidator, PlainSerializer
+from pydantic import BeforeValidator
 from sqlalchemy import DateTime, Dialect
 from sqlalchemy.types import TypeDecorator
 
@@ -43,21 +43,6 @@ def _num_to_str[T](value: T) -> str | T:
     if isinstance(value, numbers.Real):
         number = float(value)
         return str(int(number)) if number.is_integer() else str(number)
-    return value
-
-
-def _lenient_date[T](value: T) -> date | None | T:
-    # Runs before pydantic's strict date parsing.
-    if value == "":
-        return None
-    if isinstance(value, datetime):
-        return value.date()
-    if isinstance(value, str):
-        try:
-            parsed = datetime.fromisoformat(value)
-        except ValueError:
-            return value
-        return parsed.date()
     return value
 
 
@@ -210,14 +195,6 @@ def _round_to_int[T](value: T) -> int | T:
     return value
 
 
-# Output. Pydantic writes a date as isoformat already; this pins it.
-IsoDate = Annotated[
-    date,
-    PlainSerializer(
-        lambda v: v.isoformat(), return_type=str, when_used="json-unless-none"
-    ),
-]
-
 # Output. The ORM holds an enum member; the API sends the plain value.
 EnumValue = BeforeValidator(race_value)
 # Output. Null reads as an empty list.
@@ -225,11 +202,9 @@ NoneToList = BeforeValidator(_none_to_list)
 
 # Input. String columns that also receive numbers: role ids, xlsx cells.
 NumToStr = BeforeValidator(_num_to_str)
-# Input. Date fields that arrive empty or as a full ISO datetime string.
-LenientDate = BeforeValidator(_lenient_date)
 # Input. Datetime fields are aware UTC; a bare value is read as UTC.
 AwareUTC = BeforeValidator(_aware_utc)
-# Input. Number fields where a cleared form field arrives as an empty string.
+# Input. Query parameters where a cleared form field arrives as an empty string.
 EmptyStrToNone = BeforeValidator(_empty_str_to_none)
 # Input. Integer fields fed by the w3champions API, which sends fractions.
 RoundToInt = BeforeValidator(_round_to_int)

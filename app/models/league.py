@@ -21,8 +21,8 @@ class League(DBModel, table=True):
     __tablename__ = "league"
 
     id: int | None = Field(default=None, primary_key=True)
-    name: Annotated[str, NumToStr] = Field(max_length=100, unique=True)
-    short_name: Annotated[str | None, NumToStr] = Field(default=None, max_length=20)
+    name: str = Field(max_length=100, unique=True)
+    short_name: str | None = Field(default=None, max_length=20)
     # The rules or landing page of the league, shown as one "Page" link
     page_url: str | None = Field(default=None, max_length=500)
     # The rules the league plays by, and where its games are streamed
@@ -49,8 +49,8 @@ class LeaguePublic(SQLModel):
     """
 
     id: int
-    name: Annotated[str, NumToStr]
-    short_name: Annotated[str | None, NumToStr] = None
+    name: str
+    short_name: str | None = None
     page_url: str | None = None
     rules_url: str | None = None
     stream_url: str | None = None

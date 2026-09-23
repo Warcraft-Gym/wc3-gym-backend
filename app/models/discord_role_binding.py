@@ -34,8 +34,7 @@ class DiscordRoleBindingBase(SQLModel):
     team_id: int | None = Field(
         default=None, index=True, foreign_key="teams.id", ondelete="CASCADE"
     )
-    # The xlsx import sends numeric cells, and a role id is a snowflake
-    discord_role: Annotated[str, NumToStr] = Field(max_length=50)
+    discord_role: str = Field(max_length=50)
     synced: bool = Field(default=False)
 
 
@@ -50,7 +49,8 @@ class DiscordRoleBinding(DiscordRoleBindingBase, DBModel, table=True):
 
 
 class DiscordRoleBindingCreate(DiscordRoleBindingBase):
-    pass
+    # The xlsx import sends numeric cells, and a role id is a snowflake
+    discord_role: Annotated[str, NumToStr] = Field(max_length=50)
 
 
 class DiscordRoleBindingUpdate(SQLModel):

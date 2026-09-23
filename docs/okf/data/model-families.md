@@ -4,7 +4,7 @@ title: Model families
 description: Every entity is a family of SQLModel classes, one table class and separate Create, Update and Public shapes, with validators in one module and every datetime aware UTC.
 resource: ../../../app/models/base.py
 tags: [data]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T15:15:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-23T12:00:00Z }
 sources:
   - id: base
     resource: ../../../app/models/base.py
@@ -35,7 +35,9 @@ Some tables have a table class and a Public class with `Write` shapes for the ad
 
 # Validators
 
-`app/models/types.py` holds the validators the shapes reuse as `Annotated` markers: `NumToStr` (the workbook import sends numeric cells), `LenientDate`, `MapRules`, `KnownScoreSystem`, `KnownTimeZone`, `SuggestRace`, `EnumValue`, `NoneToList`, `EmptyStrToNone`, `TwitchChannel`, `YouTubeChannel`. A validator's input is public JSON, so it takes any value and hands an unknown one back for pydantic to refuse with a 422.
+`app/models/types.py` holds the validators the shapes reuse as `Annotated` markers. The input validators sit on the input models (`XCreate`, `XUpdate`, the `Write` shapes, `ProfileUpdate`): `NumToStr` (the workbook import sends numeric cells), `MapRules`, `KnownScoreSystem`, `KnownTimeZone`, `PlacePoints`, `TwitchChannel`, `YouTubeChannel`, and `RoundToInt` on `W3CStatsCreate` (the ladder sends fractions). A field that carries one is declared plainly on `XBase` and again, with the validator, on the input model. An input validator's input is public JSON, so it takes any value and hands an unknown one back for pydantic to refuse with a 422.
+
+A response model is built from stored rows and carries the output validators, `EnumValue` and `NoneToList`. It never re-runs one of the input rules above, so a stored value that an input rule refuses still reads back. Two markers still reach responses through a shared base: `AwareUTC`, which only reads a stored datetime as UTC, and `SuggestRace` on the off races of `SeriesBase`, which passes every stored race.
 
 # Datetimes
 

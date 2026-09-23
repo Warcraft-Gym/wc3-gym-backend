@@ -22,8 +22,7 @@ def env_ids() -> set[str]:
 
 
 class AdminGrantBase(SQLModel):
-    # The admin form sends the id as a number, and an id is a snowflake
-    discord_id: Annotated[str, NumToStr] = Field(max_length=50, primary_key=True)
+    discord_id: str = Field(max_length=50, primary_key=True)
     # The display name of the account when the grant was made
     name: str = Field(default="", max_length=50)
 
@@ -39,7 +38,8 @@ class AdminGrant(AdminGrantBase, DBModel, table=True):
 
 
 class AdminGrantCreate(AdminGrantBase):
-    pass
+    # The admin form sends the id as a number, and an id is a snowflake
+    discord_id: Annotated[str, NumToStr] = Field(max_length=50)
 
 
 class AdminPublic(AdminGrantBase):
