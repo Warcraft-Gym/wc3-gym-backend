@@ -1,21 +1,21 @@
 import logging
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Query, Request, Response
+from fastapi import APIRouter, Depends, Query, Response
 
 from app.api.deps import (
-    Credentials,
     FantasyBetServiceDep,
     FantasyTeamServiceDep,
+    RequireLogin,
     SeasonServiceDep,
     UserServiceDep,
     require_admin,
-    require_login,
 )
 from app.api.search import SearchQuery
 from app.core.exceptions import ApiError, BadRequestError
 from app.core.ordering import SortOrder
 from app.core.query import QueryUtil
+from app.core.security import is_admin
 from app.models.fantasy_bet import (
     FantasyBetCreate,
     FantasyBetPublic,
@@ -39,8 +39,7 @@ router = APIRouter(tags=["fantasy"])
 
 def require_admin_or_owner(
     team_id: int,
-    request: Request,
-    credentials: Credentials,
+    claims: RequireLogin,
     service: FantasyTeamServiceDep,
     users: UserServiceDep,
     seasons: SeasonServiceDep,
@@ -49,8 +48,7 @@ def require_admin_or_owner(
 
     The owner writes only while his season is open; the admin routes stay open.
     """
-    claims = require_login(request, credentials)
-    if claims.get("role") == "admin" or claims["sub"] == "admin":
+    if is_admin(claims):
         return True
     rows = users.find_by_discord_id(claims["sub"])
     if claims.get("role") != "guest" and rows:

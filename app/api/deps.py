@@ -18,7 +18,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.core.db import Session
 from app.core.exceptions import ApiError
-from app.core.security import decode_token
+from app.core.security import decode_token, is_admin
 from app.models.clerk_account import ClerkAccount
 from app.services import admins, discord, discord_roles
 from app.services.availability import AvailabilityService
@@ -243,7 +243,7 @@ def require_member(request: Request, credentials: Credentials) -> dict[str, Any]
 def require_admin(request: Request, credentials: Credentials) -> str:
     """Admit an admin access token and answer its subject."""
     claims = require_login(request, credentials)
-    if claims.get("role") != "admin" and claims["sub"] != "admin":
+    if not is_admin(claims):
         raise ApiError(403, {"error": "Admins only"})
     return claims["sub"]
 
@@ -251,7 +251,7 @@ def require_admin(request: Request, credentials: Credentials) -> str:
 def require_captain(request: Request, credentials: Credentials) -> dict[str, Any]:
     """Admit a captain of any running season, or an admin."""
     claims = require_login(request, credentials)
-    if claims.get("role") not in ("captain", "admin") and claims["sub"] != "admin":
+    if claims.get("role") != "captain" and not is_admin(claims):
         raise ApiError(403, {"error": "Captains only"})
     return claims
 

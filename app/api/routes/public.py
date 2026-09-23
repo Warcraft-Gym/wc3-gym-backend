@@ -13,6 +13,8 @@ from app.api.deps import (
     Credentials,
     FantasyBetServiceDep,
     FantasyTeamServiceDep,
+    RequireCaptain,
+    RequireMember,
     SeasonServiceDep,
     SeriesServiceDep,
     SeriesVetoServiceDep,
@@ -21,7 +23,6 @@ from app.api.deps import (
     UserServiceDep,
     claim_seats,
     discord_token,
-    require_captain,
     require_login,
     require_member,
 )
@@ -29,6 +30,7 @@ from app.core.db import Session
 from app.core.exceptions import ApiError, BadRequestError, NotFoundError
 from app.core.ordering import SortOrder
 from app.core.query import QueryUtil
+from app.core.security import is_admin
 from app.models.fantasy_bet import (
     FantasyBetCreate,
     FantasyBetPublic,
@@ -106,6 +108,9 @@ def _identity(request: Request, credentials: Credentials) -> dict[str, Any]:
     return _entry(claims)
 
 
+Identity = Annotated[dict[str, Any], Depends(_identity)]
+
+
 def _entry(claims: dict[str, Any]) -> dict[str, Any]:
     """The Discord account behind a set of claims, and the season it acts in."""
     account = discord.identify(discord_token(claims["clerk_user_id"]).token)
@@ -118,16 +123,16 @@ def _entry(claims: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _player_or_admin(
-    request: Request, credentials: Credentials
-) -> tuple[dict[str, Any], bool]:
+def _player_or_admin(claims: RequireMember) -> tuple[dict[str, Any], bool]:
     """The identity behind a series write, and whether it is an admin, who
     acts for either side. The admin access token carries no Discord account."""
-    claims = require_member(request, credentials)
-    admin = claims.get("role") == "admin" or claims["sub"] == "admin"
+    admin = is_admin(claims)
     if claims["sub"] == "admin":
         return {}, admin
     return _entry(claims), admin
+
+
+PlayerOrAdmin = Annotated[tuple[dict[str, Any], bool], Depends(_player_or_admin)]
 
 
 def dashboard_player(
@@ -170,15 +175,13 @@ def _refuse_started(
 
 
 def _owned_bet(
-    request: Request,
-    credentials: Credentials,
+    entry: dict[str, Any],
     user_service: UserServiceDep,
     fantasy_bet_service: FantasyBetServiceDep,
     bet_id: int,
     verb: str,
 ) -> FantasyBetPublic:
     """The bet the identified player placed. Someone else's bet answers 403."""
-    entry = _identity(request, credentials)
     users = user_service.find_by_discord_id(str(entry.get("discord_id")))
     if not users:
         raise NotFoundError("user_not_found")
@@ -199,13 +202,11 @@ def _owned_bet(
 def public_create_user(
     user_service: UserServiceDep,
     season_service: SeasonServiceDep,
-    request: Request,
-    credentials: Credentials,
+    entry: Identity,
     data: PublicSignupWrite | None = None,
 ) -> dict[str, Any]:
     """Create user and optionally assign to season for the signed-in Discord member."""
     data = data or PublicSignupWrite()
-    entry = _identity(request, credentials)
 
     # Build user payload. Force discord fields from the identity to avoid spoofing.
     user_payload: dict[str, Any] = {
@@ -463,8 +464,7 @@ def delete_player_busy(
 @router.get("/player-series/{series_id}/free-time")
 def get_series_free_time(
     series_id: int,
-    request: Request,
-    credentials: Credentials,
+    claims: RequireMember,
     user_service: UserServiceDep,
     service: SoftBlockServiceDep,
     start: datetime | None = None,
@@ -476,8 +476,7 @@ def get_series_free_time(
     answers the shared ranges, their sum, and each player's blocked ranges over
     the same window, as `blocked1` and `blocked2`.
     """
-    claims = require_member(request, credentials)
-    admin = claims.get("role") == "admin" or claims["sub"] == "admin"
+    admin = is_admin(claims)
     users = [] if admin else user_service.find_by_discord_id(str(claims["sub"]))
     return service.free_time(
         series_id,
@@ -495,8 +494,7 @@ def get_pair_free_time(
     playday: int,
     player1_id: int,
     player2_id: int,
-    request: Request,
-    credentials: Credentials,
+    claims: RequireCaptain,
     service: SoftBlockServiceDep,
 ) -> PairFreeTimePublic:
     """The hours two players share across a round, before a series pairs them.
@@ -505,8 +503,7 @@ def get_pair_free_time(
     of the players their own team fields, and an admin any such pair. It
     answers a count, never a range.
     """
-    claims = require_captain(request, credentials)
-    admin = claims.get("role") == "admin" or claims["sub"] == "admin"
+    admin = is_admin(claims)
     return service.pair_free_time(
         event_id,
         playday,
@@ -529,13 +526,13 @@ async def update_player_series(
     request: Request,
     user_service: UserServiceDep,
     series_service: SeriesServiceDep,
-    credentials: Credentials,
+    caller: PlayerOrAdmin,
 ) -> dict[str, Any]:
     """Update a series the caller acts for: a player of a side, a captain of
     the team that fields it, or an admin, who acts for either side."""
-    # The caller is named before the body is read, so a torn body is answered
-    # as the bad request it is and never as an anonymous traceback
-    entry, admin = _player_or_admin(request, credentials)
+    # The dependency names the caller before the body is read, so a torn body
+    # is answered as the bad request it is and never as an anonymous traceback
+    entry, admin = caller
 
     # Handle both form data and JSON
     content_type = request.headers.get("content-type") or ""
@@ -556,7 +553,7 @@ async def update_player_series(
     # Only the fields the caller sent, so an untouched one keeps its value
     data = _validated(PlayerSeriesWrite, sent).model_dump(exclude_unset=True)
 
-    # Only the parsing and the identity check above need the event loop
+    # Only the parsing above needs the event loop; the caller resolves in a thread
     return await run_in_threadpool(
         player_series.update_player_series,
         series_id,
@@ -586,18 +583,35 @@ def _own_series(
     return series
 
 
+def _series_viewer(
+    request: Request,
+    credentials: Credentials,
+    user_service: UserServiceDep,
+) -> tuple[int | None, int | None]:
+    """The player behind the request, or null for an admin, who acts for either
+    side; and the player row to record as the author, if the account has one."""
+    if credentials is not None:
+        claims = require_login(request, credentials)
+        if is_admin(claims):
+            users = user_service.find_by_discord_id(str(claims["sub"]))
+            return None, users[0].id if users else None
+    player = dashboard_player(request, credentials, user_service)[1].id
+    return player, player
+
+
+SeriesViewer = Annotated[tuple[int | None, int | None], Depends(_series_viewer)]
+
+
 @router.post("/player-series/{series_id}/replays/{game_no}/upload-url")
 def replay_upload_url(
     series_id: int,
     game_no: int,
     series_service: SeriesServiceDep,
-    user_service: UserServiceDep,
-    request: Request,
-    credentials: Credentials,
+    caller: SeriesViewer,
 ) -> dict[str, str]:
     """Where the browser puts one game's replay, for whoever acts for a side of
     the series."""
-    viewer, _ = _series_viewer(request, credentials, user_service)
+    viewer, _ = caller
     _own_series(series_service, series_id, viewer)
     return {"url": replays.upload_url(series_id, game_no)}
 
@@ -607,14 +621,12 @@ def replace_replay(
     series_id: int,
     game_no: int,
     series_service: SeriesServiceDep,
-    user_service: UserServiceDep,
-    request: Request,
-    credentials: Credentials,
+    caller: SeriesViewer,
 ) -> SeriesReplayPublic:
     """Point one slot at the file just uploaded, for whoever acts for a side of
     the series. The first report confirms every game itself; this replaces one
     of them afterwards."""
-    viewer, uploader = _series_viewer(request, credentials, user_service)
+    viewer, uploader = caller
     series = _own_series(series_service, series_id, viewer)
     if series.player1_score is None or series.player2_score is None:
         raise BadRequestError("Report the result first")
@@ -631,32 +643,14 @@ def move_replay(
     game_no: int,
     to_game: int,
     series_service: SeriesServiceDep,
-    user_service: UserServiceDep,
-    request: Request,
-    credentials: Credentials,
+    caller: SeriesViewer,
 ) -> list[SeriesReplayPublic]:
     """Move this game's replay to another game of the series, for whoever acts for a side. When
     that game holds a replay the two swap. The answer is every replay of the series, in game
     order."""
-    viewer, _ = _series_viewer(request, credentials, user_service)
+    viewer, _ = caller
     _own_series(series_service, series_id, viewer)
     return replays.move(series_id, game_no, to_game)
-
-
-def _series_viewer(
-    request: Request,
-    credentials: Credentials,
-    user_service: UserServiceDep,
-) -> tuple[int | None, int | None]:
-    """The player behind the request, or null for an admin, who acts for either
-    side; and the player row to record as the author, if the account has one."""
-    if credentials is not None:
-        claims = require_login(request, credentials)
-        if claims.get("role") == "admin" or claims.get("sub") == "admin":
-            users = user_service.find_by_discord_id(str(claims["sub"]))
-            return None, users[0].id if users else None
-    player = dashboard_player(request, credentials, user_service)[1].id
-    return player, player
 
 
 @router.get("/series/{series_id}/games")
@@ -668,31 +662,27 @@ def get_series_games(series_id: int) -> list[SeriesGamePublic]:
 @router.get("/player-series/{series_id}/veto")
 def get_player_series_veto(
     series_id: int,
-    user_service: UserServiceDep,
     veto_service: SeriesVetoServiceDep,
-    request: Request,
-    credentials: Credentials,
+    caller: SeriesViewer,
 ) -> SeriesVetoPublic:
     """The map veto board of a series, read by whoever acts for a side of it
     or by an admin."""
-    viewer, player = _series_viewer(request, credentials, user_service)
+    viewer, player = caller
     return veto_service.board(series_id, viewer, player)
 
 
 @router.put("/player-series/{series_id}/veto")
 def set_player_series_veto(
     series_id: int,
-    user_service: UserServiceDep,
     veto_service: SeriesVetoServiceDep,
-    request: Request,
-    credentials: Credentials,
+    caller: SeriesViewer,
     data: SeriesVetoWrite,
     background: BackgroundTasks,
 ) -> SeriesVetoPublic:
     """Take the next step of the veto, or take back your own last one. An admin
     enters the step for whichever side is next and takes back any last step.
     The bot's post of the series, if any, is edited after the answer."""
-    viewer, entered_by = _series_viewer(request, credentials, user_service)
+    viewer, entered_by = caller
     board = veto_service.take(series_id, viewer, data.action, data.map_id, entered_by)
     background.add_task(discord_posts.refresh_series, series_id)
     return board
@@ -701,12 +691,9 @@ def set_player_series_veto(
 @router.get("/user-info", response_model=None)
 def get_user_info(
     user_service: UserServiceDep,
-    request: Request,
-    credentials: Credentials,
+    entry: Identity,
 ) -> dict[str, Any]:
     """Get user information (for fantasy team captains who may not be players)."""
-    entry = _identity(request, credentials)
-
     # Find the user by discord_id
     users = user_service.find_by_discord_id(str(entry.get("discord_id")))
 
@@ -731,12 +718,10 @@ def get_user_info(
 @router.put("/user-info", response_model=None)
 def update_user_info(
     user_service: UserServiceDep,
-    request: Request,
-    credentials: Credentials,
+    entry: Identity,
     data: ProfileUpdate,
 ) -> dict[str, Any]:
     """A member edits their own profile; open signups are not required for this."""
-    entry = _identity(request, credentials)
     users = user_service.find_by_discord_id(str(entry.get("discord_id")))
     if not users:
         raise NotFoundError("No profile for this account")
@@ -884,13 +869,11 @@ def create_fantasy_bet(
     user_service: UserServiceDep,
     fantasy_bet_service: FantasyBetServiceDep,
     series_service: SeriesServiceDep,
-    request: Request,
-    credentials: Credentials,
+    entry: Identity,
     data: PublicFantasyBetWrite | None = None,
 ) -> dict[str, Any] | None:
     """Create a fantasy bet for the identified player."""
     data = data or PublicFantasyBetWrite()
-    entry = _identity(request, credentials)
     series = _refuse_started(series_service, data.series_id)
 
     # Get or create user based on discord info
@@ -931,16 +914,14 @@ def update_fantasy_bet(
     user_service: UserServiceDep,
     fantasy_bet_service: FantasyBetServiceDep,
     series_service: SeriesServiceDep,
-    request: Request,
-    credentials: Credentials,
+    entry: Identity,
     data: PublicFantasyBetWrite | None = None,
 ) -> dict[str, Any] | None:
     """Update a fantasy bet of the identified player."""
     data = data or PublicFantasyBetWrite()
     patch = data.model_dump(exclude_unset=True)
     existing_bet = _owned_bet(
-        request,
-        credentials,
+        entry,
         user_service,
         fantasy_bet_service,
         bet_id,
@@ -974,12 +955,9 @@ def delete_fantasy_bet(
     user_service: UserServiceDep,
     fantasy_bet_service: FantasyBetServiceDep,
     series_service: SeriesServiceDep,
-    request: Request,
-    credentials: Credentials,
+    entry: Identity,
 ) -> None:
     """Delete a fantasy bet of the identified player."""
-    bet = _owned_bet(
-        request, credentials, user_service, fantasy_bet_service, bet_id, "delete"
-    )
+    bet = _owned_bet(entry, user_service, fantasy_bet_service, bet_id, "delete")
     _refuse_started(series_service, bet.series_id)
     fantasy_bet_service.delete(bet_id)

@@ -15,6 +15,7 @@ from app.api.deps import (
 )
 from app.api.search import SearchQuery
 from app.core.exceptions import ApiError, BadRequestError, NotFoundError
+from app.core.security import is_admin
 from app.models.round_availability import (
     RoundAvailabilityPublic,
     TeamAvailabilityAllWrite,
@@ -37,7 +38,7 @@ router = APIRouter(tags=["teams"])
 
 def _own_team(claims: dict[str, Any], team_id: int, event_id: int) -> None:
     """A captain reaches a team they captain in that event; an admin reaches any."""
-    if claims.get("role") == "admin" or claims["sub"] == "admin":
+    if is_admin(claims):
         return
     if (team_id, event_id) not in claim_seats(claims):
         raise ApiError(403, {"error": "Not your team"})
