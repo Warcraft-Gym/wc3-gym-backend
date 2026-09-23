@@ -4,9 +4,9 @@ The bot never runs a veto. Without a gateway there are no reactions to read,
 so the board on the website is the only place a step is taken.
 """
 
-import os
 from typing import Any
 
+from app.core.config import frontend_url
 from app.core.db import Session
 from app.models.map import Map
 from app.models.series import SeriesPublic
@@ -54,10 +54,10 @@ def ping(player: UserPublic | None) -> str:
 
 def board_link(series_id: int) -> str:
     """The board on the site; the site signs the member in through Discord."""
-    site = os.getenv("FRONTEND_URL")
+    site = frontend_url()
     if not site:
         return "The veto board is on the website."
-    return f"{site.rstrip('/')}/player-series/{series_id}/veto"
+    return f"{site}/player-series/{series_id}/veto"
 
 
 def state(series: SeriesPublic) -> str:

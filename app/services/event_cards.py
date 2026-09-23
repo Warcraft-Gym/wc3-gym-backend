@@ -6,9 +6,9 @@ through the same entrant service the site writes through, so the two agree,
 and the reply is private.
 """
 
-import os
 from typing import TYPE_CHECKING, Any
 
+from app.core.config import frontend_url
 from app.core.event_label import label as event_label
 from app.core.exceptions import ApiError, BadRequestError, NotFoundError
 from app.models.enums import Race, SignupChannel, SignupPolicy, StageFormat
@@ -97,7 +97,7 @@ def _entrants(event: EventPublic) -> str:
 
 
 def _links(event: EventPublic) -> list[str]:
-    site = (os.getenv("FRONTEND_URL") or "").rstrip("/")
+    site = frontend_url()
     lines = [f"[Event page](<{site}/events/{event.id}>)"] if site else []
     if event.page_url:
         lines.append(f"[Rules](<{event.page_url}>)")

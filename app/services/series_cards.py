@@ -10,6 +10,7 @@ from typing import Any, NamedTuple
 from sqlalchemy import func, select
 from sqlmodel import col
 
+from app.core.config import frontend_url
 from app.core.db import Session
 from app.core.event_label import label as event_label
 from app.core.map_order import DEFAULT_RULES
@@ -287,7 +288,7 @@ def result_lines(series: SeriesPublic, marks: Ratings) -> list[str]:
     ]
     if vods:
         lines += ["", "**VODs**", *vods]
-    site = (os.getenv("FRONTEND_URL") or "").rstrip("/")
+    site = frontend_url()
     if site and series.match:
         lines += ["", f"[Match page](<{site}/match/{series.match.id}>)"]
     return lines
@@ -357,7 +358,7 @@ def upcoming(
             break
     rest = len(rows) - shown
     if rest:
-        site = (os.getenv("FRONTEND_URL") or "").rstrip("/")
+        site = frontend_url()
         where = f" on the website: {site}/upcoming" if site else ""
         embeds[-1].append(f"And {rest} more series{where}")
     cards = [

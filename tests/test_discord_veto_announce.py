@@ -44,6 +44,21 @@ def test_veto_posts_the_board_link_and_the_state(
     assert delete[:2] == ("DELETE", f"{WEBHOOK}/messages/@original")
 
 
+def test_veto_link_has_no_double_slash_with_a_trailing_frontend_url(
+    client: Client,
+    public_key: None,
+    discord_calls: list,
+    seeded: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("FRONTEND_URL", f"{SITE}/")
+    series_id = seeded["series_open_id"]
+    send(client, command("veto", user="2", series=series_id))
+    assert discord_calls[0][2]["content"].endswith(
+        f"{SITE}/player-series/{series_id}/veto"
+    )
+
+
 def test_veto_says_complete_once_every_step_is_taken(
     client: Client,
     public_key: None,

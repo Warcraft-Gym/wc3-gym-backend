@@ -4,9 +4,9 @@ The site signs a member in through Clerk with Discord OAuth, so the buttons
 are plain links and carry no token.
 """
 
-import os
 from typing import Any
 
+from app.core.config import frontend_url
 from app.core.event_label import label as event_label
 from app.models.season import SeasonPhase
 from app.services import admins, discord, discord_roles, series_cards
@@ -67,7 +67,7 @@ def run(payload: dict[str, Any], services: Services) -> tuple[dict[str, Any], bo
     discord_id, _ = caller(payload)
     if not admins.is_admin(discord_id):
         return {"content": "Admins only."}, PRIVATE
-    site = (os.getenv("FRONTEND_URL") or "").rstrip("/")
+    site = frontend_url()
     if not site:
         return {"content": "FRONTEND_URL is not set."}, PRIVATE
     message = {

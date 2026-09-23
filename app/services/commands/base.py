@@ -8,6 +8,7 @@ from math import ceil
 from typing import Any, NamedTuple
 from urllib.parse import quote
 
+from app.core.config import frontend_url
 from app.core.query import QueryUtil
 from app.models.season import SeasonPublic
 from app.models.series import SeriesPublic
@@ -101,7 +102,7 @@ def flag(country: str | None) -> str:
 
 def player_url(user: UserPublic) -> str | None:
     """The player's GNL page, by BattleTag when he has one; none without FRONTEND_URL."""
-    site = (os.getenv("FRONTEND_URL") or "").rstrip("/")
+    site = frontend_url()
     if not site:
         return None
     key = quote(user.battleTag, safe="") if user.battleTag else user.id
