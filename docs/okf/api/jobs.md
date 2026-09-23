@@ -26,7 +26,7 @@ All three check `Authorization: Bearer <CRON_SECRET>`. With `CRON_SECRET` unset 
 
 # Request cost headers
 
-Every response carries `X-DB-Statements` and `X-DB-Rows`, what the request asked of the database, and `X-Response-Bytes`, the content length or 0 for a streamed body. CORS exposes all three. One log line per request repeats them: `egress route=<template> method= status= statements= rows= bytes= ms=`. `tests/test_query_budget.py` pins a rows-per-call ceiling for the list and detail routes it covers.
+Every response carries `X-DB-Statements` and `X-DB-Rows`, the statements the request sent and the rows returned by reads plus rows changed by writes, and `X-Response-Bytes`, the content length or 0 for a streamed body. CORS exposes all three. One log line per request repeats them: `egress route=<template> method= status= statements= rows= bytes= ms=`. The W3Champions sync workers count toward the request that started them. `tests/test_query_budget.py` pins a rows-per-call ceiling for the list and detail routes it covers.
 
 # Why the worker exists
 

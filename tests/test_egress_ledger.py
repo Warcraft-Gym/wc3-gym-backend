@@ -29,6 +29,7 @@ def test_the_ledger_counts_every_call(
         client.get(f"/events/{seeded['season_id']}/series")
     client.get("/users")
     client.get("/no/such/path")
+    assert client.request("FOO", "/users").status_code == 405
 
     response = client.get("/jobs/egress", headers=scheduler)
     assert response.status_code == 200
@@ -50,3 +51,22 @@ def test_the_ledger_is_behind_the_scheduler_secret(
     client: Client, scheduler: dict[str, str]
 ) -> None:
     assert client.get("/jobs/egress").status_code == 401
+
+
+def test_a_worker_thread_counts_toward_the_request(app: object) -> None:
+    """The W3C sync runs its players in a thread pool; their statements are the request's."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    from sqlalchemy import text
+
+    from app.core.db import Session, start_request_cost, submit_in_context
+
+    def read() -> None:
+        with Session() as session:
+            session.execute(text("SELECT 1")).all()
+
+    cost = start_request_cost()
+    with ThreadPoolExecutor(2) as pool:
+        submit_in_context(pool, read).result()
+        pool.submit(read).result()
+    assert (cost.statements, cost.rows) == (1, 1)

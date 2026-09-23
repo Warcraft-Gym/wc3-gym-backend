@@ -12,7 +12,9 @@ worker can start at the same time.
 """
 
 import os
-from contextvars import ContextVar
+from collections.abc import Callable
+from concurrent.futures import Executor, Future
+from contextvars import ContextVar, copy_context
 from dataclasses import dataclass
 from typing import Any
 
@@ -25,7 +27,8 @@ Session = sessionmaker()
 
 @dataclass
 class Cost:
-    """What one request asked of the database: statements sent and rows back."""
+    """What one request asked of the database: statements sent, and rows
+    returned by reads plus rows changed by writes."""
 
     statements: int = 0
     rows: int = 0
@@ -47,8 +50,17 @@ def request_cost() -> Cost | None:
     return _cost.get()
 
 
+def submit_in_context[**P, R](
+    pool: Executor, fn: Callable[P, R], *args: P.args, **kwargs: P.kwargs
+) -> Future[R]:
+    """Submit to a thread pool in a copy of the caller's context, so the
+    worker's statements count toward the caller's request."""
+    context = copy_context()
+    return pool.submit(lambda: context.run(fn, *args, **kwargs))
+
+
 def _count_statement(conn: Any, cursor: Any, *args: Any) -> None:  # noqa: ANN401
-    """Add one statement and the rows the driver reports to the request tally."""
+    """Add one statement and its rowcount: rows returned by a read, rows changed by a write."""
     cost = _cost.get()
     if cost is not None:
         cost.statements += 1

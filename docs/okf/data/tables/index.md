@@ -61,7 +61,7 @@ The 43 tables, one concept each. A concept's `# Schema` lists every column; `tes
 
 # Operations
 
-* [egress_ledger](egress_ledger.md) - What each route cost the database, one row per day, route and method: calls, statements, rows read and response bytes.
+* [egress_ledger](egress_ledger.md) - What each route cost the database, one row per day, route and method: calls, statements, rows and response bytes.
 
 # Discord
 

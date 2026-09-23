@@ -45,8 +45,8 @@ class EgressMiddleware:
     """Count what each request asks of the database.
 
     The counts go out in three response headers and one log line, and into
-    the daily egress ledger. A request that matched no route is logged but
-    not recorded, so a scanner cannot grow the ledger. The headers carry the
+    the daily egress ledger. A 404 or a 405 is logged but not recorded, so a
+    scanner cannot grow the ledger with made-up paths or methods. The headers carry the
     counts at the start of the response; a streamed body is not buffered.
     """
 
@@ -89,7 +89,11 @@ class EgressMiddleware:
                 answer["bytes"],
                 (perf_counter() - started) * 1000,
             )
-            if route is not None and template not in UNRECORDED_ROUTES:
+            if (
+                route is not None
+                and answer["status"] not in (404, 405)
+                and template not in UNRECORDED_ROUTES
+            ):
                 await to_thread.run_sync(
                     record_egress, template, scope["method"], spent, answer["bytes"]
                 )

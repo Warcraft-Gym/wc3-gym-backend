@@ -587,7 +587,7 @@ ROWS_PER_CALL = {
     "/events/{season_id}/teams": 55,
     "/users": 37,
     "/users/{player_id}": 14,
-    "/seasons": 7,
+    "/events": 7,
 }
 # Room for a row or two of drift before the ceiling fails
 ROWS_MARGIN = 2
