@@ -9,9 +9,8 @@ import base64
 import logging
 import os
 from collections import Counter
-from functools import cache
 from pathlib import Path
-from time import sleep
+from time import monotonic, sleep
 from typing import Any
 
 import requests
@@ -27,10 +26,19 @@ API_URL = "https://discord.com/api/v10"
 REQUEST_TIMEOUT = 10
 # The longest a channel call waits out a rate limit before it gives up.
 RETRY_WAIT_LIMIT = 5.0
+# Seconds a guild membership answer is reused before the bot asks again.
+ROLE_TTL = 60.0
+
+# One connection pool for every Discord call, so a call pays no new TCP handshake.
+_session = requests.Session()
+# discord id -> (monotonic expiry, role)
+_roles: dict[str, tuple[float, str]] = {}
+# application id -> emoji id by name, filled only by a successful read
+_emojis: dict[str, dict[str, str]] = {}
 
 
 def _user_get(access_token: str, path: str) -> requests.Response:
-    return requests.get(
+    return _session.get(
         f"{API_URL}{path}",
         headers={"Authorization": f"Bearer {access_token}"},
         timeout=REQUEST_TIMEOUT,
@@ -59,7 +67,7 @@ def _bot_get(path: str) -> requests.Response | None:
     if not headers:
         return None
     try:
-        return requests.request(
+        return _session.request(
             "GET", f"{API_URL}{path}", headers=headers, timeout=REQUEST_TIMEOUT
         )
     except requests.RequestException as error:
@@ -69,14 +77,21 @@ def _bot_get(path: str) -> requests.Response | None:
 
 def role_for(discord_id: str) -> str:
     """The account's role as the bot sees it: "member", or "guest" outside the guild."""
+    # ponytail: per-process cache; a guild join or leave shows after up to ROLE_TTL seconds
+    cached = _roles.get(discord_id)
+    if cached and cached[0] > monotonic():
+        return cached[1]
     guild_id = os.getenv("DISCORD_GUILD_ID", "")
     member = _bot_get(f"/guilds/{guild_id}/members/{discord_id}")
     if member is not None and member.status_code == 404:
         # A guest logs in and sees the public pages; the routes of a player refuse it.
-        return "guest"
-    if member is None or not member.ok:
+        role = "guest"
+    elif member is None or not member.ok:
         raise ApiError(502, {"error": "Discord refused the membership check"})
-    return "member"
+    else:
+        role = "member"
+    _roles[discord_id] = (monotonic() + ROLE_TTL, role)
+    return role
 
 
 def _bot_headers() -> dict[str, str] | None:
@@ -94,7 +109,7 @@ def set_role(discord_id: str, role_id: str, grant: bool) -> None:
     method = "PUT" if grant else "DELETE"
     url = f"{API_URL}/guilds/{guild_id}/members/{discord_id}/roles/{role_id}"
     try:
-        response = requests.request(
+        response = _session.request(
             method, url, headers=headers, timeout=REQUEST_TIMEOUT
         )
     except requests.RequestException as error:
@@ -212,7 +227,7 @@ def _interaction_call(
 ) -> None:
     url = f"{API_URL}/webhooks/{application_id}/{token}{path}"
     try:
-        response = requests.request(method, url, json=message, timeout=REQUEST_TIMEOUT)
+        response = _session.request(method, url, json=message, timeout=REQUEST_TIMEOUT)
     except requests.RequestException as error:
         logger.warning("Discord interaction call failed for %s: %s", path, error)
         return
@@ -236,7 +251,7 @@ def _channel_call(
     if not headers:
         return None
     try:
-        response = requests.request(
+        response = _session.request(
             method,
             f"{API_URL}/channels/{path}",
             headers=headers,
@@ -247,7 +262,7 @@ def _channel_call(
         if response.status_code == 429:
             wait = float(response.json().get("retry_after", RETRY_WAIT_LIMIT))
             sleep(min(wait, RETRY_WAIT_LIMIT))
-            response = requests.request(
+            response = _session.request(
                 method,
                 f"{API_URL}/channels/{path}",
                 headers=headers,
@@ -298,17 +313,20 @@ def post_reply(
     return None
 
 
-@cache
 def app_emojis(application_id: str) -> dict[str, str]:
-    """The application's emojis by name, read once per process; empty until
-    `just discord-emojis` uploads them, without an application id, or when
-    Discord cannot be reached."""
+    """The application's emojis by name, kept after the first successful read;
+    empty until `just discord-emojis` uploads them, without an application id,
+    or while Discord cannot be reached."""
     if not application_id:
         return {}
+    if application_id in _emojis:
+        return _emojis[application_id]
     response = _bot_get(f"/applications/{application_id}/emojis")
     if response is None or not response.ok:
         return {}
-    return {item["name"]: item["id"] for item in response.json()["items"]}
+    emojis = {item["name"]: item["id"] for item in response.json()["items"]}
+    _emojis[application_id] = emojis
+    return emojis
 
 
 def emoji_url(emoji_id: str) -> str:
@@ -329,7 +347,7 @@ def upload_app_emoji(name: str, image: bytes, mime: str = "image/png") -> bool:
     if name in app_emojis(application_id):
         return False
     encoded = base64.b64encode(image).decode()
-    response = requests.request(
+    response = _session.request(
         "POST",
         f"{API_URL}/applications/{application_id}/emojis",
         headers=headers,
@@ -363,7 +381,7 @@ def register_guild_commands(commands: list[dict[str, Any]]) -> list[str]:
                 "error": "DISCORD_BOT_TOKEN, DISCORD_APPLICATION_ID and DISCORD_GUILD_ID are needed"
             },
         )
-    response = requests.request(
+    response = _session.request(
         "PUT",
         f"{API_URL}/applications/{application_id}/guilds/{guild_id}/commands",
         headers=headers,

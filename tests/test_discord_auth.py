@@ -435,7 +435,7 @@ def test_saving_captains_writes_the_guild_role(
     with Session.begin() as session:  # every test names its own account
         session.execute(delete(ClerkAccount))
     monkeypatch.setenv("DISCORD_GUILD_ID", GUILD_ID)
-    monkeypatch.setattr(discord.requests, "request", request)
+    monkeypatch.setattr(discord._session, "request", request)
     team = _set_captains(
         client, auth_headers, seeded["team_a_id"], [seeded["player_ids"][1]]
     )
