@@ -55,6 +55,9 @@ once per child row, while a selectin statement reads every distinct row once.
 The fantasy team list adds one for the season of the answer and two for the
 drafted players' stats; the bet list adds four, for the season, the series,
 the match and the match's season. None of the seven grows with the answer.
+Naming the W3C season the drafted players' stats window reads costs one
+statement more, and a second one where no `current_w3c_season` setting is
+stored.
 """
 
 from collections.abc import Iterator
@@ -290,20 +293,21 @@ from sqlmodel import col
 from tests.seed import add_fantasy_teams
 
 
-def test_the_fantasy_team_list_costs_seven_statements(league: dict[str, Any]) -> None:
+def test_the_fantasy_team_list_costs_nine_statements(league: dict[str, Any]) -> None:
     """One count, one for the teams, one for their season, two for the standings,
-    one for the season's series and one for the captains' bets."""
+    one for the season's series, one for the captains' bets and two for the W3C
+    season the stats window reads."""
     service = FantasyTeamService()
     with count_statements() as tally:
         teams, total = service.get_all()
     assert len(teams) == 1
     assert total == 1
     assert teams[0].total_points == 30
-    assert tally[0] == 7
+    assert tally[0] == 9
 
 
 def test_the_fantasy_count_holds_when_the_teams_grow(league: dict[str, Any]) -> None:
-    """Four more fantasy teams, each drafting a player, the same twelve."""
+    """Four more fantasy teams, each drafting a player, the same fourteen."""
     add_fantasy_teams(league, 4)
 
     service = FantasyTeamService()
@@ -311,14 +315,14 @@ def test_the_fantasy_count_holds_when_the_teams_grow(league: dict[str, Any]) -> 
         teams, total = service.get_all()
     assert len(teams) == 5
     assert total == 5
-    assert tally[0] == 12
+    assert tally[0] == 14
 
 
-def test_the_fantasy_team_search_costs_eleven_statements(
+def test_the_fantasy_team_search_costs_thirteen_statements(
     league: dict[str, Any],
 ) -> None:
-    """The season-scoped search the leaderboards call pays the list's twelve less
-    the count."""
+    """The season-scoped search the leaderboards call pays the list's fourteen
+    less the count."""
     add_fantasy_teams(league, 4)
 
     service = FantasyTeamService()
@@ -327,7 +331,7 @@ def test_the_fantasy_team_search_costs_eleven_statements(
         teams, total = service.search(query)
     assert len(teams) == 5
     assert total is None
-    assert tally[0] == 11
+    assert tally[0] == 13
 
 
 def test_career_stats_cost_four_statements(league: dict[str, Any]) -> None:
