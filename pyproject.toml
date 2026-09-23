@@ -44,10 +44,7 @@ ignore = [
     "N815",    # battleTag/discordTag columns mirror the wire format
     "PLW0211", # staticmethod argument named cls
     "RUF012",  # mutable class attribute default
-    "S110",    # try-except-pass
     "TRY002",  # raise Exception
-    "TRY004",  # fixing it changes the raised exception type
-    "TRY401",  # redundant exception object in logging.exception
 ]
 
 [tool.pytest]
@@ -66,4 +63,4 @@ invalid-assignment = "ignore"
 not-subscriptable = "ignore"
 unsupported-operator = "ignore"
 missing-argument = "ignore"
-deprecated = "ignore"
+deprecated = "error"

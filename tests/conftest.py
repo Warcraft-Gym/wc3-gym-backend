@@ -173,6 +173,15 @@ def no_third_party_calls(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(requests.Session, "request", refuse)
 
 
+@pytest.fixture(autouse=True)
+def discord_caches() -> None:
+    """Every test starts with no remembered guild role and no remembered emojis."""
+    from app.services import discord
+
+    discord._roles.clear()
+    discord._emojis.clear()
+
+
 @pytest.fixture
 def seeded(app: FastAPI) -> dict[str, Any]:
     """A small consistent league. Returns the ids the tests refer to."""

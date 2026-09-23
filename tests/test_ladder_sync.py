@@ -21,6 +21,7 @@ from sqlmodel import col
 
 from app.core.db import Session
 from app.core.exceptions import W3CThrottledError
+from app.models.base import ident
 from app.models.enums import Race
 from app.models.ladder_sync import LadderSync
 from app.models.relationships import DBUserSeasonSignup
@@ -164,7 +165,7 @@ def add_season(league_id: int, start: date, end: date) -> int:
         )
         session.add(row)
         session.commit()
-        return row.id
+        return ident(row)
 
 
 def store_match(user_id: int, season: int, start_time: datetime) -> None:

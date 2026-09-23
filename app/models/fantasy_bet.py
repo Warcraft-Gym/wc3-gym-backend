@@ -1,7 +1,7 @@
 from typing import Annotated, Self
 
 from sqlalchemy import Index
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import joinedload, selectinload
 from sqlalchemy.orm.interfaces import ORMOption
 from sqlmodel import Field, Relationship, SQLModel
 
@@ -97,28 +97,30 @@ class FantasyBet(FantasyBetBase, DBModel, table=True):
     @classmethod
     def list_eager_options(cls) -> tuple[ORMOption, ...]:
         """The to-one relations the reduced public bet reads."""
+        # A season, a series and a match are each shared by many bets of a page,
+        # so selectin reads every distinct row once, not once per bet
         return (
-            joinedload(rel(cls.season)),
+            selectinload(rel(cls.season)),
             joinedload(rel(cls.user)),
             joinedload(rel(cls.winner)),
-            joinedload(rel(cls.series)).joinedload(rel(Series.player1)),
-            joinedload(rel(cls.series)).joinedload(rel(Series.player2)),
-            joinedload(rel(cls.series))
-            .joinedload(rel(Series.match))
+            selectinload(rel(cls.series)).joinedload(rel(Series.player1)),
+            selectinload(rel(cls.series)).joinedload(rel(Series.player2)),
+            selectinload(rel(cls.series))
+            .selectinload(rel(Series.match))
             .joinedload(rel(Match.team1)),
-            joinedload(rel(cls.series))
-            .joinedload(rel(Series.match))
+            selectinload(rel(cls.series))
+            .selectinload(rel(Series.match))
             .joinedload(rel(Match.team2)),
-            joinedload(rel(cls.series))
-            .joinedload(rel(Series.match))
-            .joinedload(rel(Match.season)),
-            joinedload(rel(cls.series))
-            .joinedload(rel(Series.match))
+            selectinload(rel(cls.series))
+            .selectinload(rel(Series.match))
+            .selectinload(rel(Match.season)),
+            selectinload(rel(cls.series))
+            .selectinload(rel(Series.match))
             .joinedload(rel(Match.fixed_map)),
-            joinedload(rel(cls.series))
+            selectinload(rel(cls.series))
             .selectinload(rel(Series.casts))
             .joinedload(rel(SeriesCast.user)),
-            joinedload(rel(cls.series))
+            selectinload(rel(cls.series))
             .selectinload(rel(Series.veto_steps))
             .joinedload(rel(DBSeriesVetoStep.map)),
         )

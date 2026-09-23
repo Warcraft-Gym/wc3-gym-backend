@@ -2,7 +2,7 @@ import logging
 from typing import TYPE_CHECKING, Any, Literal
 
 from sqlalchemy import ColumnElement, func, select
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import joinedload, selectinload
 from sqlmodel import col
 
 from app.core.db import Session, rel
@@ -168,17 +168,19 @@ class FantasyBetService:
             statement = (
                 select(FantasyBet)
                 .options(
-                    joinedload(rel(FantasyBet.season)).noload("*"),
+                    # A season and a series are each shared by many bets, so
+                    # selectin reads every distinct row once, not once per bet
+                    selectinload(rel(FantasyBet.season)).noload("*"),
                     joinedload(rel(FantasyBet.user)).noload("*"),
                     joinedload(rel(FantasyBet.winner)).noload("*"),
-                    joinedload(rel(FantasyBet.series)).noload("*"),
-                    joinedload(rel(FantasyBet.series))
+                    selectinload(rel(FantasyBet.series)).noload("*"),
+                    selectinload(rel(FantasyBet.series))
                     .joinedload(rel(Series.player1))
                     .noload("*"),
-                    joinedload(rel(FantasyBet.series))
+                    selectinload(rel(FantasyBet.series))
                     .joinedload(rel(Series.player2))
                     .noload("*"),
-                    joinedload(rel(FantasyBet.series))
+                    selectinload(rel(FantasyBet.series))
                     .joinedload(rel(Series.match))
                     .noload("*"),
                 )
