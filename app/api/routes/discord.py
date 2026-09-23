@@ -18,7 +18,7 @@ from app.services import interactions
 router = APIRouter(tags=["discord"])
 
 
-@router.post("/discord/interactions", response_model=None)
+@router.post("/discord/interactions")
 async def discord_interaction(
     request: Request,
     series_service: SeriesServiceDep,
