@@ -57,32 +57,11 @@ def test_a_team_cannot_join_an_event_of_another_league(
     assert "Remove the event's teams" in response.json()["error"]
 
 
-def test_the_unscoped_and_season_named_team_routes_are_deprecated(
+def test_the_only_unscoped_team_route_is_the_deprecated_image_read(
     client: Client,
 ) -> None:
     paths = client.get("/openapi.json").json()["paths"]
-    old_paths = [
-        "/teams",
-        "/teams/basic",
-        "/teams/search",
-        "/teams/{team_id}",
-        "/teams/{team_id}/image",
-        "/teams/season/{event_id}",
-        "/teams/season/{event_id}/basic",
-        "/teams/{team_id}/seasons/{event_id}",
-        "/teams/{team_id}/seasons/{event_id}/availability",
-        "/teams/{team_id}/seasons/{event_id}/captains",
-        "/teams/{team_id}/seasons/{event_id}/players",
-        "/teams/{team_id}/seasons/{event_id}/w3c-sync",
-        "/seasons/{event_id}/teams",
-        "/series/season/{event_id}",
-        "/series/season/{event_id}/search",
-        "/series/season/{event_id}/playday/{playday}/search",
-        "/fantasy/tiers",
-        "/fantasy/teams/{team_id}/season/{event_id}/breakdown",
-    ]
-    assert all(
-        operation.get("deprecated") is True
-        for path in old_paths
-        for operation in paths[path].values()
-    )
+    unscoped = {path for path in paths if path.startswith("/teams")}
+    assert unscoped == {"/teams/{team_id}/image"}
+    assert list(paths["/teams/{team_id}/image"]) == ["get"]
+    assert paths["/teams/{team_id}/image"]["get"]["deprecated"] is True

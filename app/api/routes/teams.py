@@ -45,38 +45,23 @@ def _own_team(claims: dict[str, Any], team_id: int, event_id: int) -> None:
         raise ApiError(403, {"error": "Not your team"})
 
 
-def _league_id(league_id: int | None, service: TeamServiceDep) -> int:
-    """Keep the old GNL-only create working while consumers move to leagues."""
-    return league_id if league_id is not None else service.legacy_gnl_league_id()
-
-
-# League-owned team collection. The unscoped forms are compatibility aliases.
+# League-owned team collection.
 @router.post(
     "/leagues/{league_id}/teams",
     status_code=201,
     response_model=TeamPublic,
     dependencies=[Depends(require_admin)],
 )
-@router.post(
-    "/teams",
-    status_code=201,
-    response_model=TeamPublic,
-    deprecated=True,
-    dependencies=[Depends(require_admin)],
-)
-def add_team(
-    data: TeamCreate, service: TeamServiceDep, league_id: int | None = None
-) -> TeamPublic:
+def add_team(data: TeamCreate, service: TeamServiceDep, league_id: int) -> TeamPublic:
     """Create a team owned by a league."""
-    return service.add(_league_id(league_id, service), data)
+    return service.add(league_id, data)
 
 
 @router.get("/leagues/{league_id}/teams/basic")
-@router.get("/teams/basic", deprecated=True)
 def get_all_teams_basic(
     service: TeamServiceDep,
     response: Response,
-    league_id: int | None = None,
+    league_id: int,
     limit: Annotated[int, Query(ge=1, le=500)] = 500,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[TeamPublic]:
@@ -86,11 +71,10 @@ def get_all_teams_basic(
 
 
 @router.post("/leagues/{league_id}/teams/search")
-@router.post("/teams/search", deprecated=True)
 def search_teams(
     service: TeamServiceDep,
     query: SearchQuery,
-    league_id: int | None = None,
+    league_id: int,
     limit: Annotated[int, Query(ge=1, le=500)] = 500,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[TeamPublic]:
@@ -99,11 +83,10 @@ def search_teams(
 
 
 @router.get("/leagues/{league_id}/teams")
-@router.get("/teams", deprecated=True)
 def get_all_teams(
     service: TeamServiceDep,
     response: Response,
-    league_id: int | None = None,
+    league_id: int,
     limit: Annotated[int, Query(ge=1, le=500)] = 500,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[TeamPublic]:
@@ -112,9 +95,8 @@ def get_all_teams(
     return service.get_all(limit=limit, offset=offset, league_id=league_id)
 
 
-# Event-owned team data. The season-named forms are compatibility aliases.
+# Event-owned team data.
 @router.get("/events/{event_id}/teams/basic", tags=["events"])
-@router.get("/teams/season/{event_id}/basic", deprecated=True)
 def get_all_event_teams_basic(
     event_id: int,
     service: TeamServiceDep,
@@ -128,7 +110,6 @@ def get_all_event_teams_basic(
 
 
 @router.get("/events/{event_id}/teams", tags=["events"])
-@router.get("/teams/season/{event_id}", deprecated=True)
 def get_all_event_teams(
     event_id: int,
     service: TeamServiceDep,
@@ -142,7 +123,6 @@ def get_all_event_teams(
 
 
 @router.get("/events/{event_id}/teams/{team_id}", tags=["events"])
-@router.get("/teams/{team_id}/seasons/{event_id}", deprecated=True)
 def get_event_team(
     event_id: int, team_id: int, service: TeamServiceDep, response: Response
 ) -> TeamPublic:
@@ -152,7 +132,6 @@ def get_event_team(
 
 
 @router.get("/events/{event_id}/teams/{team_id}/availability", tags=["events"])
-@router.get("/teams/{team_id}/seasons/{event_id}/availability", deprecated=True)
 def get_team_availability(
     event_id: int,
     team_id: int,
@@ -167,7 +146,6 @@ def get_team_availability(
 
 
 @router.put("/events/{event_id}/teams/{team_id}/availability", tags=["events"])
-@router.put("/teams/{team_id}/seasons/{event_id}/availability", deprecated=True)
 def set_team_availability(
     event_id: int,
     team_id: int,
@@ -229,11 +207,6 @@ def set_team_availability_all(
     tags=["events"],
     dependencies=[Depends(require_admin)],
 )
-@router.post(
-    "/teams/{team_id}/seasons/{event_id}/players",
-    deprecated=True,
-    dependencies=[Depends(require_admin)],
-)
 def add_players(
     event_id: int, team_id: int, data: TeamPlayerIds, service: TeamServiceDep
 ) -> TeamPublic:
@@ -244,11 +217,6 @@ def add_players(
 @router.delete(
     "/events/{event_id}/teams/{team_id}/players",
     tags=["events"],
-    dependencies=[Depends(require_admin)],
-)
-@router.delete(
-    "/teams/{team_id}/seasons/{event_id}/players",
-    deprecated=True,
     dependencies=[Depends(require_admin)],
 )
 def remove_players(
@@ -263,11 +231,6 @@ def remove_players(
     tags=["events"],
     dependencies=[Depends(require_admin)],
 )
-@router.put(
-    "/teams/{team_id}/seasons/{event_id}/captains",
-    deprecated=True,
-    dependencies=[Depends(require_admin)],
-)
 def set_captains(
     event_id: int, team_id: int, data: TeamCaptainIds, service: TeamServiceDep
 ) -> TeamPublic:
@@ -278,11 +241,6 @@ def set_captains(
 @router.post(
     "/events/{event_id}/teams/{team_id}/ladder-sync",
     tags=["events"],
-    dependencies=[Depends(require_admin)],
-)
-@router.post(
-    "/teams/{team_id}/seasons/{event_id}/w3c-sync",
-    deprecated=True,
     dependencies=[Depends(require_admin)],
 )
 def sync_event_team_ladder(
@@ -299,12 +257,11 @@ def sync_event_team_ladder(
 # League-owned team item routes. Keep these after /basic and /search so the
 # literal paths win over {team_id}.
 @router.get("/leagues/{league_id}/teams/{team_id}")
-@router.get("/teams/{team_id}", deprecated=True)
 def get_team(
     team_id: int,
     service: TeamServiceDep,
     response: Response,
-    league_id: int | None = None,
+    league_id: int,
 ) -> TeamPublic:
     """Retrieve one team from its league."""
     edge_cache(response, 120, 600)
@@ -314,12 +271,11 @@ def get_team(
 @router.put(
     "/leagues/{league_id}/teams/{team_id}", dependencies=[Depends(require_admin)]
 )
-@router.put("/teams/{team_id}", deprecated=True, dependencies=[Depends(require_admin)])
 def update_team(
     team_id: int,
     data: TeamUpdate,
     service: TeamServiceDep,
-    league_id: int | None = None,
+    league_id: int,
 ) -> TeamPublic:
     """Update a team in its league."""
     return service.update(team_id, data, league_id=league_id)
@@ -330,15 +286,7 @@ def update_team(
     status_code=204,
     dependencies=[Depends(require_admin)],
 )
-@router.delete(
-    "/teams/{team_id}",
-    status_code=204,
-    deprecated=True,
-    dependencies=[Depends(require_admin)],
-)
-def delete_team(
-    team_id: int, service: TeamServiceDep, league_id: int | None = None
-) -> None:
+def delete_team(team_id: int, service: TeamServiceDep, league_id: int) -> None:
     """Delete a team from its league."""
     service.delete(team_id, league_id=league_id)
 
@@ -347,15 +295,10 @@ def delete_team(
     "/leagues/{league_id}/teams/{team_id}/image",
     dependencies=[Depends(require_admin)],
 )
-@router.post(
-    "/teams/{team_id}/image",
-    deprecated=True,
-    dependencies=[Depends(require_admin)],
-)
 def upload_team_image(
     team_id: int,
     service: TeamServiceDep,
-    league_id: int | None = None,
+    league_id: int,
     image: Annotated[UploadFile | None, File()] = None,
 ) -> dict[str, str]:
     """Upload or replace a team's public image."""

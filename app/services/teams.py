@@ -10,8 +10,6 @@ from sqlmodel import col
 from app.core.db import Session, rel
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.core.query import QueryElement, QueryUtil
-from app.models.base import ident
-from app.models.enums import EntrantKind, LeagueKind
 from app.models.league import League
 from app.models.relationships import DBTeamSeasonCaptain
 from app.models.season import Season, progress_by_seasons
@@ -130,23 +128,6 @@ _LIST_OPTIONS = (
 class TeamService:
     def __init__(self, user_app_service: UserService) -> None:
         self.user_app_service = user_app_service
-
-    def legacy_gnl_league_id(self) -> int:
-        """The GNL owner used only by the deprecated unscoped team create."""
-        with Session.begin() as session:
-            league = session.scalars(
-                select(League).where(col(League.kind) == LeagueKind.gnl)
-            ).first()
-            if league is None:
-                league = League(
-                    name="GNL",
-                    short_name="GNL",
-                    kind=LeagueKind.gnl,
-                    entrant_kind=EntrantKind.drafted_teams,
-                )
-                session.add(league)
-                session.flush()
-            return ident(league)
 
     def add(self, league_id: int, team: TeamCreate) -> TeamPublic:
         with Session.begin() as session:

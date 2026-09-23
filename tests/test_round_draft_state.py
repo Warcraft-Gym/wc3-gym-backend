@@ -27,7 +27,7 @@ def draft(
     """
     for team, place in ((seeded["team_a_id"], 0), (seeded["team_b_id"], 2)):
         seated = client.put(
-            f"/teams/{team}/seasons/{seeded['season_id']}/captains",
+            f"/events/{seeded['season_id']}/teams/{team}/captains",
             json={"captain_ids": [seeded["player_ids"][place]]},
             headers=auth_headers,
         )
@@ -58,15 +58,19 @@ def gamma(
     member: Callable[..., dict[str, str]],
 ) -> dict[str, Any]:
     """P2 captains Gamma, a team of the season that does not play the fixture."""
-    team = client.post("/teams", json={"name": "Gamma"}, headers=auth_headers).json()
+    team = client.post(
+        f"/leagues/{seeded['league_id']}/teams",
+        json={"name": "Gamma"},
+        headers=auth_headers,
+    ).json()
     joined = client.post(
-        f"/seasons/{seeded['season_id']}/teams",
+        f"/events/{seeded['season_id']}/teams",
         json={"team_ids": [team["id"]]},
         headers=auth_headers,
     )
     assert joined.status_code == 200, joined.text
     seated = client.put(
-        f"/teams/{team['id']}/seasons/{seeded['season_id']}/captains",
+        f"/events/{seeded['season_id']}/teams/{team['id']}/captains",
         json={"captain_ids": [seeded["player_ids"][1]]},
         headers=auth_headers,
     )

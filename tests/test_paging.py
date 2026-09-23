@@ -25,19 +25,19 @@ from app.models.base import ident
 
 # The path templates take the ids of the seeded league
 PAGED_ROUTES = [
-    ("GET", "/seasons"),
-    ("POST", "/seasons/search?query=id > 0"),
-    ("GET", "/seasons/{season_id}/signups"),
+    ("GET", "/events"),
+    ("POST", "/events/search?query=id > 0"),
+    ("GET", "/events/{season_id}/signups"),
     ("POST", "/matches/search?query=id > 0"),
     ("POST", "/series/search?query=id > 0"),
-    ("GET", "/series/season/{season_id}"),
-    ("POST", "/series/season/{season_id}/search?query=id > 0"),
-    ("POST", "/series/season/{season_id}/playday/1/search?query=id > 0"),
-    ("GET", "/teams"),
-    ("GET", "/teams/basic"),
-    ("POST", "/teams/search?query=id > 0"),
-    ("GET", "/teams/season/{season_id}"),
-    ("GET", "/teams/season/{season_id}/basic"),
+    ("GET", "/events/{season_id}/series"),
+    ("POST", "/events/{season_id}/series/search?query=id > 0"),
+    ("POST", "/events/{season_id}/rounds/1/series/search?query=id > 0"),
+    ("GET", "/leagues/{league_id}/teams"),
+    ("GET", "/leagues/{league_id}/teams/basic"),
+    ("POST", "/leagues/{league_id}/teams/search?query=id > 0"),
+    ("GET", "/events/{season_id}/teams"),
+    ("GET", "/events/{season_id}/teams/basic"),
     ("GET", "/users"),
     ("POST", "/users/search?query=id > 0"),
     ("GET", "/maps"),
@@ -55,6 +55,7 @@ def build(path: str, seeded: dict[str, Any], **params: int) -> str:
     """The path with the seeded ids and the paging parameters in place."""
     path = path.format(
         season_id=seeded["season_id"],
+        league_id=seeded["league_id"],
         match_id=seeded["match_id"],
     )
     separator = "&" if "?" in path else "?"
@@ -138,7 +139,7 @@ def test_offset_walks_the_seeded_users(client: Client, league: dict[str, Any]) -
 def test_offset_past_the_end_answers_an_empty_list(
     client: Client, league: dict[str, Any]
 ) -> None:
-    resp = client.get("/teams?limit=10&offset=10")
+    resp = client.get(f"/leagues/{league['league_id']}/teams?limit=10&offset=10")
     assert resp.status_code == 200
     assert resp.json() == []
 
@@ -152,7 +153,7 @@ def test_a_page_carries_whole_rows(client: Client, league: dict[str, Any]) -> No
     season_id = league["season_id"]
     pages = []
     for offset in (0, 1):
-        resp = client.get(f"/teams/season/{season_id}?limit=1&offset={offset}")
+        resp = client.get(f"/events/{season_id}/teams?limit=1&offset={offset}")
         assert resp.status_code == 200
         assert len(resp.json()) == 1
         pages.append(resp.json()[0])
@@ -176,32 +177,32 @@ def test_the_limit_reaches_the_statement(league: dict[str, Any]) -> None:
 
 # The ORDER BY every route writes when no sort parameter is sent
 DEFAULT_ORDER = {
-    # The two collection statements order the map pool and the rounds
-    "GET /seasons": ["event.id", "event_round.number", "map_season.position"],
-    "POST /seasons/search?query=id > 0": [
-        "event.id",
+    # Newest first; the collection statements order the rounds and the map pool
+    "GET /events": ["event.id DESC", "event_round.number", "map_season.position"],
+    "POST /events/search?query=id > 0": [
+        "event.id DESC",
         "event_round.number",
         "map_season.position",
     ],
-    "GET /seasons/{season_id}/signups": [
+    "GET /events/{season_id}/signups": [
         "user_season_signup.user_id",
         "anon_1.user_id",
     ],
     "POST /matches/search?query=id > 0": ["matches.id"],
     "POST /series/search?query=id > 0": ["series.id"],
-    "GET /series/season/{season_id}": ["series.id"],
-    "POST /series/season/{season_id}/search?query=id > 0": ["series.id"],
-    "POST /series/season/{season_id}/playday/1/search?query=id > 0": ["series.id"],
-    "GET /teams": ["teams.id"],
-    "GET /teams/basic": ["teams.id"],
-    "POST /teams/search?query=id > 0": ["teams.id"],
+    "GET /events/{season_id}/series": ["series.id"],
+    "POST /events/{season_id}/series/search?query=id > 0": ["series.id"],
+    "POST /events/{season_id}/rounds/1/series/search?query=id > 0": ["series.id"],
+    "GET /leagues/{league_id}/teams": ["teams.id"],
+    "GET /leagues/{league_id}/teams/basic": ["teams.id"],
+    "POST /leagues/{league_id}/teams/search?query=id > 0": ["teams.id"],
     # The last fragment orders the matchup history of the season record
-    "GET /teams/season/{season_id}": [
+    "GET /events/{season_id}/teams": [
         "teams.id",
         "anon_1.id, team_season_captain_1.user_id",
         "anon_1.playday, anon_1.series_id",
     ],
-    "GET /teams/season/{season_id}/basic": ["teams.id", "anon_1.id"],
+    "GET /events/{season_id}/teams/basic": ["teams.id", "anon_1.id"],
     "GET /users": ["users.id", "anon_1.id"],
     "POST /users/search?query=id > 0": ["users.id", "anon_1.id"],
     "GET /maps": ["maps.id"],

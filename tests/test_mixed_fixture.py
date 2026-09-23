@@ -76,7 +76,7 @@ def clan_war(
         team_ids = [ident(team) for team in teams]
     rosters = [ids[:4], ids[4:]]
     for place, (team_id, roster) in enumerate(zip(team_ids, rosters, strict=True)):
-        base = f"/teams/{team_id}/seasons/{event_id}"
+        base = f"/events/{event_id}/teams/{team_id}"
         added = client.post(
             f"{base}/players", json={"player_ids": roster}, headers=auth_headers
         )

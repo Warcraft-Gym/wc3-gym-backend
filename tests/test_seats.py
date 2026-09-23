@@ -128,12 +128,12 @@ def test_the_availability_guard_reads_the_pair_not_the_team(
     later = _add_season("Season next", complete=False, seeded=seeded)
     _captain(seeded["team_a_id"], seeded["season_id"], seeded["player_ids"][0])
 
-    path = f"/teams/{seeded['team_a_id']}/seasons"
-    refused = client.get(f"{path}/{later}/availability", headers=p1)
+    team = f"teams/{seeded['team_a_id']}/availability"
+    refused = client.get(f"/events/{later}/{team}", headers=p1)
     assert refused.status_code == 403, refused.text
     assert refused.json() == {"error": "Not your team"}
 
-    held = client.get(f"{path}/{seeded['season_id']}/availability", headers=p1)
+    held = client.get(f"/events/{seeded['season_id']}/{team}", headers=p1)
     assert held.status_code == 200, held.text
 
 
@@ -201,7 +201,7 @@ def test_me_lists_every_running_season(
     later = _add_season("Season next", complete=False, seeded=seeded)
     done = _add_season("Season done", complete=True, seeded=seeded)
     signed = client.post(
-        f"/seasons/{seeded['season_id']}/signups",
+        f"/events/{seeded['season_id']}/signups",
         json={"user_ids": [seeded["player_ids"][0]], "race": "HU"},
         headers=auth_headers,
     )

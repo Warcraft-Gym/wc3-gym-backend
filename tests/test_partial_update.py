@@ -28,10 +28,10 @@ def test_a_season_update_keeps_the_fields_it_was_not_given(
     client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
 ) -> None:
     season_id = seeded["season_id"]
-    before = client.get(f"/seasons/{season_id}").json()
+    before = client.get(f"/events/{season_id}").json()
 
     resp = client.put(
-        f"/seasons/{season_id}", headers=auth_headers, json={"pick_ban": "Pick_A"}
+        f"/events/{season_id}", headers=auth_headers, json={"pick_ban": "Pick_A"}
     )
     assert resp.status_code == 200, resp.text
     after = resp.json()
@@ -51,11 +51,10 @@ def test_a_team_update_keeps_the_fields_it_was_not_given(
     client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
 ) -> None:
     team_id = seeded["team_a_id"]
-    before = client.get(f"/teams/{team_id}").json()
+    path = f"/leagues/{seeded['league_id']}/teams/{team_id}"
+    before = client.get(path).json()
 
-    resp = client.put(
-        f"/teams/{team_id}", headers=auth_headers, json={"long_name": "Alpha Club"}
-    )
+    resp = client.put(path, headers=auth_headers, json={"long_name": "Alpha Club"})
     assert resp.status_code == 200, resp.text
     after = resp.json()
 

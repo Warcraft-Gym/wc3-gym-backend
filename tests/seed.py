@@ -48,6 +48,15 @@ def add_season(session: Session, rounds: int, **fields: Any) -> Season:  # noqa:
     return row
 
 
+def gnl_league_id() -> int:
+    """The GNL league, found or made, for a season created through POST /events."""
+    from app.core.db import Session as AppSession
+    from app.services.seasons import gnl_league
+
+    with AppSession.begin() as session:
+        return ident(gnl_league(session))
+
+
 def seed_league(session: Session) -> dict[str, Any]:
     rounds = 4
     league = League(

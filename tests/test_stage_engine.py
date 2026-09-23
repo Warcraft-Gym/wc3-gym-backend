@@ -1195,7 +1195,7 @@ def team_cup(
         team_ids = [ident(team) for team in teams]
     rosters = [ids[place * 2 : place * 2 + 2] for place in range(4)]
     for place, (team_id, roster) in enumerate(zip(team_ids, rosters, strict=True)):
-        base = f"/teams/{team_id}/seasons/{event_id}"
+        base = f"/events/{event_id}/teams/{team_id}"
         added = client.post(
             f"{base}/players", json={"player_ids": roster}, headers=auth
         )
@@ -1251,7 +1251,7 @@ def test_a_series_holds_the_roster_of_its_own_two_sides(
         session.flush()
         third_id = ident(third)
     added = client.post(
-        f"/teams/{team_ids[0]}/seasons/{event}/players",
+        f"/events/{event}/teams/{team_ids[0]}/players",
         json={"player_ids": [third_id]},
         headers=auth_headers,
     )

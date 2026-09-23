@@ -183,7 +183,7 @@ def test_the_weekly_race_tally_counts_the_race_played(
 ) -> None:
     """The fantasy race points read the race of the series, not the profile
     race and not the signup race the side did not play that week."""
-    breakdown = f"/fantasy/teams/{league['fantasy_team_id']}/season/{league['season_id']}/breakdown"
+    breakdown = f"/events/{league['season_id']}/fantasy/teams/{league['fantasy_team_id']}/breakdown"
     before = client.get(breakdown).json()["race_breakdown"]
 
     # P1 signed up UD and beat P3, so only UD scores the week

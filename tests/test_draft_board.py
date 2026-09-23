@@ -114,7 +114,7 @@ def captain(
     """P1 captains Alpha, which plays the seeded match."""
     monkeypatch.delenv("DISCORD_BOT_TOKEN", raising=False)
     resp = client.put(
-        f"/teams/{board_league['team_a_id']}/seasons/{board_league['season_id']}/captains",
+        f"/events/{board_league['season_id']}/teams/{board_league['team_a_id']}/captains",
         json={"captain_ids": [board_league["player_ids"][0]]},
         headers=auth_headers,
     )
@@ -353,13 +353,13 @@ def test_a_captain_of_a_team_that_does_not_play_the_match_is_refused(
         session.commit()
         gamma_id = ident(gamma)
     resp = client.post(
-        f"/seasons/{board_league['season_id']}/teams",
+        f"/events/{board_league['season_id']}/teams",
         json={"team_ids": [gamma_id]},
         headers=auth_headers,
     )
     assert resp.status_code == 200, resp.text
     resp = client.put(
-        f"/teams/{gamma_id}/seasons/{board_league['season_id']}/captains",
+        f"/events/{board_league['season_id']}/teams/{gamma_id}/captains",
         json={"captain_ids": [board_league["player_ids"][1]]},
         headers=auth_headers,
     )

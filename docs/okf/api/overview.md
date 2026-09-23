@@ -26,8 +26,8 @@ sources:
 |---|---|---|
 | `login.py` | `/login`, `/me` | the admin token login and the session answer |
 | `users.py` | `/users` | players, bans, blocks, W3Champions sync, history, the meetings of two players |
-| `teams.py` | `/leagues/{league_id}/teams`, `/events/{event_id}/teams`, `/teams` | league-owned teams, event rosters, captains, availability grid, logos; deprecated unscoped aliases |
-| `seasons.py` | `/events/{event_id}`, `/seasons`, `/achievements` | GNL maps, rounds, signups, ladder reads and badges; deprecated season aliases |
+| `teams.py` | `/leagues/{league_id}/teams`, `/events/{event_id}/teams`, `/teams/{team_id}/image` | league-owned teams, event rosters, captains, availability grid, logos; the unscoped logo read is deprecated |
+| `seasons.py` | `/events/{event_id}`, `/achievements` | GNL maps, rounds, signups, ladder reads and badges |
 | `leagues.py` | `/leagues` | leagues |
 | `events.py` | `/events`, `/me/events` | event CRUD and search, entrants, divisions, stages, standings |
 | `matches.py` | `/matches` | fixtures |
@@ -47,7 +47,7 @@ sources:
 
 Swagger UI is at `/docs` and the OpenAPI document at `/openapi.json`. FastAPI includes routers lazily, so enumerate routes from `app.openapi()["paths"]`, not from `app.routes`.
 
-The OpenAPI version is `1.1.0`. This version adds GNL creation and management to the event routes. Every `/seasons` operation is deprecated in OpenAPI and remains available during the consumer migration.
+The OpenAPI version is `1.1.0`. GNL creation and management live on the event routes; no `/seasons` route exists.
 
 # The error envelope
 

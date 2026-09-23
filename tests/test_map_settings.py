@@ -12,7 +12,7 @@ from httpx2 import Client
 
 
 def pool(client: Client, season_id: int) -> list[str]:
-    resp = client.get(f"/seasons/{season_id}")
+    resp = client.get(f"/events/{season_id}")
     assert resp.status_code == 200, resp.text
     return [map["shortname"] for map in resp.json()["maps"]]
 
@@ -37,7 +37,7 @@ def three_maps(
         assert resp.status_code == 201, resp.text
         ids.append(resp.json()["id"])
     resp = client.post(
-        f"/seasons/{seeded['season_id']}/maps",
+        f"/events/{seeded['season_id']}/maps",
         json={"map_ids": ids[1:]},
         headers=auth_headers,
     )
@@ -60,7 +60,7 @@ def test_the_admin_reorders_the_pool(
     season_id = seeded["season_id"]
 
     resp = client.put(
-        f"/seasons/{season_id}/maps/order",
+        f"/events/{season_id}/maps/order",
         json={"map_ids": list(reversed(three_maps))},
         headers=auth_headers,
     )
@@ -78,7 +78,7 @@ def test_a_map_added_after_a_reorder_still_lands_last(
 ) -> None:
     season_id = seeded["season_id"]
     client.put(
-        f"/seasons/{season_id}/maps/order",
+        f"/events/{season_id}/maps/order",
         json={"map_ids": list(reversed(three_maps))},
         headers=auth_headers,
     )
@@ -86,7 +86,7 @@ def test_a_map_added_after_a_reorder_still_lands_last(
         "/maps", json={"name": "LR", "shortname": "LR"}, headers=auth_headers
     )
     client.post(
-        f"/seasons/{season_id}/maps",
+        f"/events/{season_id}/maps",
         json={"map_ids": [resp.json()["id"]]},
         headers=auth_headers,
     )
@@ -113,7 +113,7 @@ def test_an_order_that_is_not_the_whole_pool_is_refused(
         map_ids[1] = map_ids[0]
 
     resp = client.put(
-        f"/seasons/{seeded['season_id']}/maps/order",
+        f"/events/{seeded['season_id']}/maps/order",
         json={"map_ids": map_ids},
         headers=auth_headers,
     )
@@ -128,14 +128,14 @@ def test_a_season_takes_its_map_rules(
     client: Client, seeded: dict[str, Any], auth_headers: dict[str, str], rules: str
 ) -> None:
     resp = client.put(
-        f"/seasons/{seeded['season_id']}",
+        f"/events/{seeded['season_id']}",
         json={"map_rules": rules},
         headers=auth_headers,
     )
 
     assert resp.status_code == 200, resp.text
     assert resp.json()["map_rules"] == rules
-    assert client.get(f"/seasons/{seeded['season_id']}").json()["map_rules"] == rules
+    assert client.get(f"/events/{seeded['season_id']}").json()["map_rules"] == rules
 
 
 @pytest.mark.parametrize("rules", ["ban", "week", "fixed loser"])
@@ -143,14 +143,14 @@ def test_a_rule_the_season_does_not_know_is_refused(
     client: Client, seeded: dict[str, Any], auth_headers: dict[str, str], rules: str
 ) -> None:
     resp = client.put(
-        f"/seasons/{seeded['season_id']}",
+        f"/events/{seeded['season_id']}",
         json={"map_rules": rules},
         headers=auth_headers,
     )
 
     assert resp.status_code == 422, resp.text
     assert "is not a map rule" in resp.json()["error"]
-    assert client.get(f"/seasons/{seeded['season_id']}").json()["map_rules"] is None
+    assert client.get(f"/events/{seeded['season_id']}").json()["map_rules"] is None
 
 
 @pytest.mark.parametrize("system", ["Helpstone", "helpStone", "standart"])
@@ -159,14 +159,14 @@ def test_the_season_write_refuses_an_unknown_score_system(
 ) -> None:
     """A typo would re-score every series of the season one point low."""
     resp = client.put(
-        f"/seasons/{seeded['season_id']}",
+        f"/events/{seeded['season_id']}",
         json={"score_system": system},
         headers=auth_headers,
     )
 
     assert resp.status_code == 422, resp.text
     assert "is not a score system" in resp.json()["error"]
-    stored = client.get(f"/seasons/{seeded['season_id']}").json()["score_system"]
+    stored = client.get(f"/events/{seeded['season_id']}").json()["score_system"]
     assert stored == "standard"
 
 
@@ -179,7 +179,7 @@ def test_the_admin_names_and_clears_the_map_of_a_week(
     season_id = seeded["season_id"]
 
     resp = client.put(
-        f"/seasons/{season_id}/rounds",
+        f"/events/{season_id}/rounds",
         json={"playday": 2, "map_id": three_maps[1]},
         headers=auth_headers,
     )
@@ -188,23 +188,23 @@ def test_the_admin_names_and_clears_the_map_of_a_week(
 
     # A second write to the same week replaces the map
     client.put(
-        f"/seasons/{season_id}/rounds",
+        f"/events/{season_id}/rounds",
         json={"playday": 1, "map_id": three_maps[0]},
         headers=auth_headers,
     )
     resp = client.put(
-        f"/seasons/{season_id}/rounds",
+        f"/events/{season_id}/rounds",
         json={"playday": 2, "map_id": three_maps[2]},
         headers=auth_headers,
     )
     assert week_maps(resp.json()) == {1: three_maps[0], 2: three_maps[2]}
-    assert week_maps(client.get(f"/seasons/{season_id}").json()) == {
+    assert week_maps(client.get(f"/events/{season_id}").json()) == {
         1: three_maps[0],
         2: three_maps[2],
     }
 
     resp = client.put(
-        f"/seasons/{season_id}/rounds",
+        f"/events/{season_id}/rounds",
         json={"playday": 2, "map_id": None},
         headers=auth_headers,
     )
@@ -221,7 +221,7 @@ def test_a_week_outside_the_season_takes_no_map(
 ) -> None:
     """The seeded season runs four weeks."""
     resp = client.put(
-        f"/seasons/{seeded['season_id']}/rounds",
+        f"/events/{seeded['season_id']}/rounds",
         json={"playday": playday, "map_id": three_maps[0]},
         headers=auth_headers,
     )
@@ -237,14 +237,14 @@ def test_a_map_leaving_the_pool_takes_its_week_with_it(
     auth_headers: dict[str, str],
 ) -> None:
     client.put(
-        f"/seasons/{seeded['season_id']}/rounds",
+        f"/events/{seeded['season_id']}/rounds",
         json={"playday": 1, "map_id": three_maps[1]},
         headers=auth_headers,
     )
 
     resp = client.request(
         "DELETE",
-        f"/seasons/{seeded['season_id']}/maps",
+        f"/events/{seeded['season_id']}/maps",
         json={"map_ids": [three_maps[1]]},
         headers=auth_headers,
     )
@@ -261,7 +261,7 @@ def test_a_map_outside_the_pool_is_not_a_week_map(
     ).json()["id"]
 
     resp = client.put(
-        f"/seasons/{seeded['season_id']}/rounds",
+        f"/events/{seeded['season_id']}/rounds",
         json={"playday": 1, "map_id": outside},
         headers=auth_headers,
     )
@@ -282,7 +282,7 @@ def test_a_map_without_a_picture_has_none_to_fetch(
 def settings(
     client: Client, season_id: int, headers: dict[str, str], **body: str
 ) -> Any:  # noqa: ANN401  # a response
-    return client.put(f"/seasons/{season_id}", json=body, headers=headers)
+    return client.put(f"/events/{season_id}", json=body, headers=headers)
 
 
 def test_the_games_take_the_picks_and_the_pool_allows_the_bans(
@@ -328,7 +328,7 @@ def test_the_games_take_the_picks_and_the_pool_allows_the_bans(
     assert fixed.status_code == 200, fixed.text
     over = settings(client, season_id, auth_headers, pick_ban="Ban_A|Pick_A|Pick_B")
     assert over.status_code == 400, over.text
-    assert client.get(f"/seasons/{season_id}").json()["pick_ban"] == "Pick_A|Pick_B"
+    assert client.get(f"/events/{season_id}").json()["pick_ban"] == "Pick_A|Pick_B"
 
 
 def test_a_step_the_board_does_not_know_is_refused(
@@ -368,7 +368,7 @@ def test_a_map_the_order_needs_cannot_leave_the_pool(
 
     resp = client.request(
         "DELETE",
-        f"/seasons/{season_id}/maps",
+        f"/events/{season_id}/maps",
         json={"map_ids": three_maps[:1]},
         headers=auth_headers,
     )

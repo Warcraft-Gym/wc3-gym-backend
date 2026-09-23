@@ -21,7 +21,7 @@ def captain(
     """P1 captains Alpha this season, and his session sends these headers."""
     monkeypatch.delenv("DISCORD_BOT_TOKEN", raising=False)
     resp = client.put(
-        f"/teams/{seeded['team_a_id']}/seasons/{seeded['season_id']}/captains",
+        f"/events/{seeded['season_id']}/teams/{seeded['team_a_id']}/captains",
         json={"captain_ids": [seeded["player_ids"][0]]},
         headers=auth_headers,
     )
@@ -78,15 +78,19 @@ def test_a_captain_of_an_uninvolved_team_is_refused(
 ) -> None:
     """P2 captains Gamma, which does not play the seeded match."""
     monkeypatch.delenv("DISCORD_BOT_TOKEN", raising=False)
-    team = client.post("/teams", json={"name": "Gamma"}, headers=auth_headers).json()
+    team = client.post(
+        f"/leagues/{seeded['league_id']}/teams",
+        json={"name": "Gamma"},
+        headers=auth_headers,
+    ).json()
     resp = client.post(
-        f"/seasons/{seeded['season_id']}/teams",
+        f"/events/{seeded['season_id']}/teams",
         json={"team_ids": [team["id"]]},
         headers=auth_headers,
     )
     assert resp.status_code == 200, resp.text
     resp = client.put(
-        f"/teams/{team['id']}/seasons/{seeded['season_id']}/captains",
+        f"/events/{seeded['season_id']}/teams/{team['id']}/captains",
         json={"captain_ids": [seeded["player_ids"][1]]},
         headers=auth_headers,
     )

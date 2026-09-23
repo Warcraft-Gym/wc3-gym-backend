@@ -19,6 +19,7 @@ from app.services.maps import MapService
 from app.services.seasons import SeasonService
 from app.services.users import UserService
 from tests.migrate import downgrade_to, fresh_database, upgrade_to, upgrade_to_head
+from tests.seed import gnl_league_id
 
 # The revision before the week map became the rounds table
 BEFORE_ROUNDS = "d5e8f1a2b3c4"
@@ -32,8 +33,9 @@ def test_a_new_season_gets_a_week_long_round_per_playday(
     client: Client, auth_headers: dict[str, str]
 ) -> None:
     resp = client.post(
-        "/seasons",
+        "/events",
         json={
+            "league_id": gnl_league_id(),
             "name": "S2",
             "round_count": 3,
             "series_per_round": 2,
@@ -54,15 +56,20 @@ def test_a_season_without_a_start_has_undated_rounds_until_one_is_set(
     client: Client, auth_headers: dict[str, str]
 ) -> None:
     resp = client.post(
-        "/seasons",
-        json={"name": "S2", "round_count": 2, "series_per_round": 2},
+        "/events",
+        json={
+            "league_id": gnl_league_id(),
+            "name": "S2",
+            "round_count": 2,
+            "series_per_round": 2,
+        },
         headers=auth_headers,
     )
     assert rounds(resp.json()) == [(1, None, None), (2, None, None)]
 
     resp = client.put(
-        f"/seasons/{resp.json()['id']}",
-        json={"start_date": "2026-10-05"},
+        f"/events/{resp.json()['id']}",
+        json={"start_date": "2026-10-05", "round_count": 2},
         headers=auth_headers,
     )
     assert rounds(resp.json()) == [
@@ -77,13 +84,13 @@ def test_changing_the_week_count_adds_and_drops_rounds_but_moves_none(
     """The seeded season runs four weeks from 5 Jan 2026."""
     season_id = seeded["season_id"]
     client.put(
-        f"/seasons/{season_id}/rounds",
+        f"/events/{season_id}/rounds",
         json={"playday": 2, "start_date": "2026-01-13", "end_date": "2026-01-14"},
         headers=auth_headers,
     )
 
     resp = client.put(
-        f"/seasons/{season_id}", json={"round_count": 5}, headers=auth_headers
+        f"/events/{season_id}", json={"round_count": 5}, headers=auth_headers
     )
     assert rounds(resp.json()) == [
         (1, "2026-01-05", "2026-01-11"),
@@ -94,7 +101,7 @@ def test_changing_the_week_count_adds_and_drops_rounds_but_moves_none(
     ]
 
     resp = client.put(
-        f"/seasons/{season_id}", json={"round_count": 2}, headers=auth_headers
+        f"/events/{season_id}", json={"round_count": 2}, headers=auth_headers
     )
     assert rounds(resp.json()) == [
         (1, "2026-01-05", "2026-01-11"),
@@ -107,7 +114,7 @@ def test_a_round_write_keeps_the_fields_it_leaves_out(
 ) -> None:
     season_id = seeded["season_id"]
     resp = client.put(
-        f"/seasons/{season_id}/rounds",
+        f"/events/{season_id}/rounds",
         json={"playday": 1, "end_date": "2026-01-05"},
         headers=auth_headers,
     )
@@ -116,7 +123,7 @@ def test_a_round_write_keeps_the_fields_it_leaves_out(
 
     # A null end date makes a one-day round
     resp = client.put(
-        f"/seasons/{season_id}/rounds",
+        f"/events/{season_id}/rounds",
         json={"playday": 1, "end_date": None},
         headers=auth_headers,
     )
@@ -127,7 +134,7 @@ def test_a_round_cannot_end_before_it_starts(
     client: Client, seeded: dict[str, Any], auth_headers: dict[str, str]
 ) -> None:
     resp = client.put(
-        f"/seasons/{seeded['season_id']}/rounds",
+        f"/events/{seeded['season_id']}/rounds",
         json={"playday": 1, "end_date": "2026-01-04"},
         headers=auth_headers,
     )
@@ -200,20 +207,25 @@ def test_the_round_count_follows_the_rows_not_a_stored_number(
     """Nothing stores the count. The round rows are the count, so deleting one
     through the season's own endpoint moves it."""
     body = client.post(
-        "/seasons",
-        json={"name": "Counted", "round_count": 4, "series_per_round": 2},
+        "/events",
+        json={
+            "league_id": gnl_league_id(),
+            "name": "Counted",
+            "round_count": 4,
+            "series_per_round": 2,
+        },
         headers=auth_headers,
     ).json()
     assert (body["round_count"], len(body["rounds"])) == (4, 4)
 
     fewer = client.put(
-        f"/seasons/{body['id']}", json={"round_count": 2}, headers=auth_headers
+        f"/events/{body['id']}", json={"round_count": 2}, headers=auth_headers
     ).json()
     assert (fewer["round_count"], len(fewer["rounds"])) == (2, 2)
 
     # a change that touches neither the count nor the dates leaves the rows alone
     same = client.put(
-        f"/seasons/{body['id']}", json={"name": "Renamed"}, headers=auth_headers
+        f"/events/{body['id']}", json={"name": "Renamed"}, headers=auth_headers
     ).json()
     assert (same["round_count"], len(same["rounds"])) == (2, 2)
 
@@ -239,7 +251,7 @@ def test_an_answer_goes_with_the_round_the_count_drops(
         )
 
     resp = client.put(
-        f"/seasons/{season_id}", json={"round_count": 3}, headers=auth_headers
+        f"/events/{season_id}", json={"round_count": 3}, headers=auth_headers
     )
 
     assert resp.status_code == 200, resp.text
@@ -263,7 +275,7 @@ def test_a_round_a_match_sits_on_holds_the_count_up(
         )
 
     resp = client.put(
-        f"/seasons/{season_id}", json={"round_count": 2}, headers=auth_headers
+        f"/events/{season_id}", json={"round_count": 2}, headers=auth_headers
     )
 
     assert resp.status_code == 400, resp.text
@@ -373,7 +385,7 @@ def test_a_stage_write_keeps_the_id_and_the_matches_on_it(
     with Session() as session:
         assert session.get(Match, seeded["match_id"]) is not None
         assert session.get(Series, seeded["series_played_id"]) is not None
-        assert len(client.get(f"/seasons/{season_id}").json()["rounds"]) == 4
+        assert len(client.get(f"/events/{season_id}").json()["rounds"]) == 4
 
 
 def test_a_stage_that_holds_rounds_holds_the_list_up(
@@ -401,4 +413,4 @@ def test_a_stage_that_holds_rounds_holds_the_list_up(
         assert kept is not None and kept.name == "Stage 1"
         assert session.get(EventStage, second_id) is not None
         assert session.get(Match, seeded["match_id"]) is not None
-        assert len(client.get(f"/seasons/{season_id}").json()["rounds"]) == 5
+        assert len(client.get(f"/events/{season_id}").json()["rounds"]) == 5

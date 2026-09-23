@@ -104,7 +104,7 @@ def test_season_signups_answer_list_rows(
         )
         session.commit()
 
-    rows = get_json(client, f"/seasons/{seeded['season_id']}/signups")
+    rows = get_json(client, f"/events/{seeded['season_id']}/signups")
     assert len(rows) == 1
     assert rows[0]["battleTag"] == "P1#1111"
     assert rows[0]["w3c_stats"] == []
@@ -114,7 +114,7 @@ def test_season_signups_answer_list_rows(
 def test_match_by_id_carries_the_season_length(
     client: Client, seeded: dict[str, Any]
 ) -> None:
-    """The match page reads round_count here, not from /seasons/{id}."""
+    """The match page reads round_count here, not from /events/{id}."""
     match = get_json(client, f"/matches/{seeded['match_id']}")
     assert match["season"]["id"] == seeded["season_id"]
     assert match["season"]["round_count"] == 4
@@ -122,7 +122,7 @@ def test_match_by_id_carries_the_season_length(
 
 
 def test_seasons_list(client: Client, seeded: dict[str, Any]) -> None:
-    seasons = get_json(client, "/seasons")
+    seasons = get_json(client, "/events?kind=gnl")
     assert len(seasons) == 1
     season = seasons[0]
     assert season["name"] == "Season 1"
@@ -135,7 +135,7 @@ def test_seasons_list(client: Client, seeded: dict[str, Any]) -> None:
 
 
 def test_teams_basic(client: Client, seeded: dict[str, Any]) -> None:
-    teams = get_json(client, "/teams/basic")
+    teams = get_json(client, f"/leagues/{seeded['league_id']}/teams/basic")
     assert {t["name"] for t in teams} == {"Alpha", "Beta"}
     alpha = next(t for t in teams if t["name"] == "Alpha")
     assert alpha["long_name"] == "Team Alpha"
@@ -143,7 +143,7 @@ def test_teams_basic(client: Client, seeded: dict[str, Any]) -> None:
 
 def test_series_for_season(client: Client, seeded: dict[str, Any]) -> None:
     ids = seeded
-    series = get_json(client, f"/series/season/{ids['season_id']}")
+    series = get_json(client, f"/events/{ids['season_id']}/series")
     assert len(series) == 2
     played = next(s for s in series if s["id"] == ids["series_played_id"])
     assert played["player1_score"] == 2
@@ -265,7 +265,7 @@ def test_fantasy_teams(client: Client, seeded: dict[str, Any]) -> None:
 
 
 def test_empty_database_returns_empty_lists(client: Client) -> None:
-    for path in ["/users", "/seasons", "/maps", "/stats/career"]:
+    for path in ["/users", "/events", "/maps", "/stats/career"]:
         assert get_json(client, path) == []
 
 
@@ -280,7 +280,7 @@ def test_series_season_list_keeps_every_key_with_empty_collections(
             )
         session.commit()
 
-    series = get_json(client, f"/series/season/{seeded['season_id']}")[0]
+    series = get_json(client, f"/events/{seeded['season_id']}/series")[0]
     assert series["player1"]["name"]
     assert series["player1"]["race"]
     assert series["match"]["team1"]["name"]
@@ -324,7 +324,7 @@ def test_teams_list_keeps_scalars_and_standings(
     client: Client, seeded: dict[str, Any]
 ) -> None:
     """The plain teams list answers scalars and standings, no rosters."""
-    team = get_json(client, "/teams")[0]
+    team = get_json(client, f"/leagues/{seeded['league_id']}/teams")[0]
     assert team["name"]
     assert "long_name" in team
     assert isinstance(team["seasons_info"], list) and team["seasons_info"]

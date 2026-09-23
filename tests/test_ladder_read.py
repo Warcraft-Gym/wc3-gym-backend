@@ -152,7 +152,7 @@ def league(seeded: dict[str, Any]) -> dict[str, Any]:
 def ladder_of(
     client: Client, headers: dict[str, str], season_id: int
 ) -> dict[str, Any]:
-    resp = client.get(f"/seasons/{season_id}/ladder", headers=headers)
+    resp = client.get(f"/events/{season_id}/ladder", headers=headers)
     assert resp.status_code == 200, resp.text
     return resp.json()
 
@@ -615,7 +615,7 @@ def test_the_players_route_answers_one_row_per_signup(
 
     ladder_body = ladder_of(client, auth_headers, league["season_id"])
     resp = client.get(
-        f"/seasons/{league['season_id']}/ladder/players", headers=auth_headers
+        f"/events/{league['season_id']}/ladder/players", headers=auth_headers
     )
 
     assert resp.status_code == 200, resp.text
@@ -639,7 +639,7 @@ def test_both_ladder_answers_carry_the_team_logo(
 
     body = ladder_of(client, auth_headers, league["season_id"])
     rows = client.get(
-        f"/seasons/{league['season_id']}/ladder/players", headers=auth_headers
+        f"/events/{league['season_id']}/ladder/players", headers=auth_headers
     ).json()
 
     alpha = next(team for team in body["teams"] if team["name"] == "Alpha")
@@ -794,8 +794,8 @@ def test_the_user_ladder_without_a_season_reads_every_match(
 
 
 def test_the_ladder_reads_need_no_token(client: Client, league: dict[str, Any]) -> None:
-    assert client.get(f"/seasons/{league['season_id']}/ladder").status_code == 200
-    players = client.get(f"/seasons/{league['season_id']}/ladder/players")
+    assert client.get(f"/events/{league['season_id']}/ladder").status_code == 200
+    players = client.get(f"/events/{league['season_id']}/ladder/players")
     assert players.status_code == 200
     assert client.get(f"/users/{league['player_ids'][0]}/ladder").status_code == 200
 
@@ -803,14 +803,14 @@ def test_the_ladder_reads_need_no_token(client: Client, league: dict[str, Any]) 
 def test_the_season_ladder_is_cacheable_at_the_edge(
     client: Client, league: dict[str, Any]
 ) -> None:
-    ladder = client.get(f"/seasons/{league['season_id']}/ladder")
+    ladder = client.get(f"/events/{league['season_id']}/ladder")
     assert ladder.headers["cache-control"] == "public, s-maxage=3600"
     # this client sends no Origin, the shape of a fill by curl or a bot. The copy the
     # edge stores must still let a browser read it.
     assert ladder.headers["access-control-allow-origin"] == "*"
 
     origin = client.get(
-        f"/seasons/{league['season_id']}/ladder", headers={"Origin": "https://gnl.test"}
+        f"/events/{league['season_id']}/ladder", headers={"Origin": "https://gnl.test"}
     )
     assert origin.headers.get_list("access-control-allow-origin") == ["*"]
 
@@ -818,7 +818,7 @@ def test_the_season_ladder_is_cacheable_at_the_edge(
 def test_both_routes_answer_404_for_an_unknown_id(
     client: Client, auth_headers: dict[str, str], league: dict[str, Any]
 ) -> None:
-    season = client.get("/seasons/9999/ladder", headers=auth_headers)
+    season = client.get("/events/9999/ladder", headers=auth_headers)
     user = client.get("/users/9999/ladder", headers=auth_headers)
     window = client.get(
         f"/users/{league['player_ids'][0]}/ladder?season_id=9999", headers=auth_headers

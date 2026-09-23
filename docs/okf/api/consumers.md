@@ -4,7 +4,7 @@ title: Consumers of the API
 description: Who calls the backend, which routes each one reads, and which tests pin those shapes.
 resource: ../../../tests/test_public_contract.py
 tags: [api]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-16T17:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-23T04:29:00Z }
 sources:
   - id: public-contract
     resource: ../../../tests/test_public_contract.py
@@ -26,21 +26,21 @@ sources:
 |---|---|---|---|
 | the web app | `wc3-gym-frontend` | most routes | Clerk session or the admin token |
 | the GNL website | `wc3-gnl-website` | `GET /leagues`, the latest finished `GET /events?league_id={league_id}`, and that event's `/teams`, `/series` and `/fantasy/teams` | none |
-| the WordPress site | `gym_website_scripts` | eight routes on every page view, no cache: `GET /stats/career`, `GET /config/settings`, `GET /teams/season/{id}`, `GET /teams/{id}/image`, `GET /seasons/{id}`, `POST /matches/search`, `POST /series/season/{id}/playday/{n}/search`, `POST /fantasy/teams/search` | none |
+| the WordPress site | `gym_website_scripts` | eight paths on every page view, no cache, against the older backend host: `GET /stats/career`, `GET /config/settings`, `GET /teams/season/{id}`, `GET /teams/{id}/image`, `GET /seasons/{id}`, `POST /matches/search`, `POST /series/season/{id}/playday/{n}/search`, `POST /fantasy/teams/search` | none |
 | the Discord adapter | `wc3-gym-discord-bot` | `POST /discord/interactions` | Discord's signature |
 | the cast-reminder worker | `wc3-gym-discord-bot`, `cron/` | `GET /jobs/cast-reminders` every five minutes | `CRON_SECRET` bearer |
 | Vercel cron | this repository's `vercel.json` | `GET /jobs/w3c-sync` once a day | `CRON_SECRET` bearer |
 | Nightbot | no repository | `GET /koth/signup`, and the deprecated `/koth/*` reads | the Nightbot token |
 | the stream overlay and bookmarks | none | the deprecated `/koth/*` reads | none |
 
-The WordPress shortcodes today call the older backend on the Azure box, not this deployment. When they move, the eight routes above are the contract.
+The WordPress shortcodes today call the older backend host, not this deployment, and that host answers 502, so the shortcodes show no data. Three of their paths do not exist here: `GET /teams/season/{id}`, `GET /seasons/{id}` and `POST /series/season/{id}/playday/{n}/search`. Before the shortcodes point at this deployment, those calls move to `GET /events/{id}/teams`, `GET /events/{id}` and `POST /events/{id}/rounds/{n}/series/search`. `GET /events/{id}` is not the old season payload: it has no `user_signup` or `signup_race`, and its `phase` and `signups_open` follow the event model, so the PHP that reads those fields changes with the move.
 
 # What pins the shapes
 
 - `tests/test_public_contract.py`: presence and shape of the fields the PHP reads, route by route.
 - `tests/test_contract.py`: the fields the offline leaderboard reads.
 - `tests/test_gnl_snapshot.py`: the GNL season, dashboard and card payloads byte for byte against `tests/data/gnl_snapshot.json`. Set `UPDATE_GNL_SNAPSHOT=1` to rewrite it, and read the diff: a change to it is a change to a public contract.
-- `tests/test_event_season_parity.py`: GNL creation through `/events`, the GNL fields on `EventPublic`, the event replacements for season subresources and the deprecated markers on `/seasons`.
+- `tests/test_event_season_parity.py`: GNL creation through `/events`, the GNL fields on `EventPublic`, the event routes for season subresources, and that no `/seasons` route exists.
 - `tests/test_error_envelope.py`: the `error` key every client reads.
 - `tests/test_paging.py`: the paged routes, their default order and sort names.
 
@@ -51,6 +51,6 @@ A change that fails one of these is a cross-repository change. Ship the consumer
 - Every error is `{"error": ...}`.
 - A field is added, never renamed in place. `week_map_id` on the veto board and `playday` on fixtures are examples of names kept for consumers.
 - The GNL season payloads keep `season_id`, `phase` and `playday` although the table is `event`.
-- New consumers use the league routes for team identity and the event routes for GNL data. Existing consumers may use the deprecated season-named routes while they migrate their four-state season phase to the common event phase.
+- Consumers use the league routes for team identity and the event routes for GNL data. The one unscoped team route is `GET /teams/{team_id}/image`, deprecated, which the web app's logo fallback reads.
 - List routes page with `limit` and `offset` and answer `X-Total-Count`.
 - Reads are open. Writes need an admin, or the owning member for self-service routes.

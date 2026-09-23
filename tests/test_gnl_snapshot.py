@@ -51,15 +51,14 @@ def gnl_payloads(
 
     matches = client.post(f"/matches/search?query=season_id == {season_id}")
     assert matches.status_code == 200, matches.text
-    series = get(f"/series/season/{season_id}")
+    series = get(f"/events/{season_id}/series")
     # The /upcoming reply, whose card text hangs on the round and the match
     cards = series_cards.upcoming(
         [SeriesPublic.model_validate(row) for row in series], lambda _: False
     )
     return {
-        "GET /seasons": get("/seasons"),
-        f"GET /seasons/{season_id}": get(f"/seasons/{season_id}"),
-        f"GET /series/season/{season_id}": series,
+        f"GET /events/{season_id}": get(f"/events/{season_id}"),
+        f"GET /events/{season_id}/series": series,
         "POST /matches/search?query=season_id": matches.json(),
         f"GET /users/{player_id}": get(f"/users/{player_id}"),
         f"GET /users/{player_id}/history": get(f"/users/{player_id}/history"),

@@ -235,7 +235,7 @@ def test_a_gnl_series_keeps_its_season_rules_under_a_backfilled_stage(
 
     rules = "veto,veto,veto,veto,veto"
     priced = client.put(
-        f"/seasons/{season_id}", json={"map_rules": rules}, headers=auth_headers
+        f"/events/{season_id}", json={"map_rules": rules}, headers=auth_headers
     )
     assert priced.status_code == 200, priced.text
 

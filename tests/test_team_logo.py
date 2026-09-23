@@ -18,10 +18,11 @@ REAL_PUT_ICON = blob.put_icon
 
 
 def upload(
-    client: Client, team_id: int, headers: dict[str, str], data: bytes
+    client: Client, seeded: dict[str, Any], headers: dict[str, str], data: bytes
 ) -> Response:
+    """Upload a logo for the seeded team A."""
     return client.post(
-        f"/teams/{team_id}/image",
+        f"/leagues/{seeded['league_id']}/teams/{seeded['team_a_id']}/image",
         files={"image": ("icon.png", data, "image/png")},
         headers=headers,
     )
@@ -33,7 +34,7 @@ def test_something_that_is_not_a_png_is_refused(
     auth_headers: dict[str, str],
     blob_store: dict[str, bytes],
 ) -> None:
-    resp = upload(client, seeded["team_a_id"], auth_headers, b"GIF89a" + b"0" * 64)
+    resp = upload(client, seeded, auth_headers, b"GIF89a" + b"0" * 64)
     assert resp.status_code == 400
     assert not blob_store, "a refused upload must not reach the store"
 
@@ -45,7 +46,7 @@ def test_an_oversized_image_is_refused(
     blob_store: dict[str, bytes],
 ) -> None:
     too_big = PNG + b"0" * blob.MAX_ICON_BYTES
-    resp = upload(client, seeded["team_a_id"], auth_headers, too_big)
+    resp = upload(client, seeded, auth_headers, too_big)
     assert resp.status_code == 400
     assert not blob_store
 
@@ -56,10 +57,9 @@ def test_replacing_a_logo_drops_the_one_it_replaces(
     auth_headers: dict[str, str],
     blob_store: dict[str, bytes],
 ) -> None:
-    team_id = seeded["team_a_id"]
-    upload(client, team_id, auth_headers, PNG)
+    upload(client, seeded, auth_headers, PNG)
     second = PNG + b"second"
-    upload(client, team_id, auth_headers, second)
+    upload(client, seeded, auth_headers, second)
     assert list(blob_store.values()) == [second], (
         "the replaced logo should not be left behind"
     )
@@ -71,10 +71,10 @@ def test_the_team_answer_carries_the_logo_url(
     auth_headers: dict[str, str],
     blob_store: dict[str, bytes],
 ) -> None:
-    team_id = seeded["team_a_id"]
-    assert client.get(f"/teams/{team_id}").json()["icon_url"] is None
-    upload(client, team_id, auth_headers, PNG)
-    url = client.get(f"/teams/{team_id}").json()["icon_url"]
+    path = f"/leagues/{seeded['league_id']}/teams/{seeded['team_a_id']}"
+    assert client.get(path).json()["icon_url"] is None
+    upload(client, seeded, auth_headers, PNG)
+    url = client.get(path).json()["icon_url"]
     assert blob_store[url] == PNG
 
 
@@ -91,7 +91,7 @@ def test_a_jpeg_is_accepted(
     blob_store: dict[str, bytes],
 ) -> None:
     """Three of the ten production logos are JPEGs that were stored as image/png."""
-    resp = upload(client, seeded["team_a_id"], auth_headers, JPEG)
+    resp = upload(client, seeded, auth_headers, JPEG)
     assert resp.status_code == 200
     assert list(blob_store.values()) == [JPEG]
 
@@ -126,7 +126,7 @@ def test_the_image_route_redirects_once_a_logo_is_in_the_store(
     blob_store: dict[str, bytes],
 ) -> None:
     team_id = seeded["team_a_id"]
-    upload(client, team_id, auth_headers, PNG)
+    upload(client, seeded, auth_headers, PNG)
     resp = client.get(f"/teams/{team_id}/image", follow_redirects=False)
     assert resp.status_code == 307
     assert resp.headers["location"] in blob_store

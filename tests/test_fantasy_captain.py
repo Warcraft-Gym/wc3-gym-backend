@@ -41,7 +41,7 @@ def open_season(
             race=Race.HU,
         )
     resp = client.put(
-        f"/fantasy/tiers?season_id={seeded['season_id']}",
+        f"/events/{seeded['season_id']}/fantasy/tiers",
         json={"cuts": [1100, 1300], "tiers": {}},
         headers=auth_headers,
     )

@@ -450,7 +450,7 @@ def captain(
     """P1 captains Alpha this season, and his session sends these headers."""
     monkeypatch.delenv("DISCORD_BOT_TOKEN", raising=False)
     resp = client.put(
-        f"/teams/{seeded['team_a_id']}/seasons/{seeded['season_id']}/captains",
+        f"/events/{seeded['season_id']}/teams/{seeded['team_a_id']}/captains",
         json={"captain_ids": [seeded["player_ids"][0]]},
         headers=auth_headers,
     )

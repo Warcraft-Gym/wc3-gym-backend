@@ -43,7 +43,7 @@ def test_a_never_played_series_pays_neither_team(
     client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
 ) -> None:
     """Alpha won the one played series, and the 0-0 leaves the standings alone."""
-    before = client.get(f"/teams/season/{seeded['season_id']}").json()
+    before = client.get(f"/events/{seeded['season_id']}/teams").json()
     scores = {team["name"]: team["seasons_info"][0]["final_score"] for team in before}
 
     resp = client.put(
@@ -53,7 +53,7 @@ def test_a_never_played_series_pays_neither_team(
     )
     assert resp.status_code == 200, resp.text
 
-    after = client.get(f"/teams/season/{seeded['season_id']}").json()
+    after = client.get(f"/events/{seeded['season_id']}/teams").json()
     assert {t["name"]: t["seasons_info"][0]["final_score"] for t in after} == scores
 
 

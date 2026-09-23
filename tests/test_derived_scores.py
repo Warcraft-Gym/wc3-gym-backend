@@ -14,6 +14,7 @@ from httpx2 import Client
 
 from app.core.db import Session
 from app.models.settings import Settings
+from tests.seed import gnl_league_id
 
 # The five results a series can carry, as (player1_score, player2_score).
 RESULTS: list[tuple[int | None, int | None]] = [
@@ -54,19 +55,22 @@ def build_season(
     results: list[tuple[int | None, int | None]] = RESULTS,
 ) -> dict[str, Any]:
     """One season on the given system, with one match of the given series."""
+    league_id = gnl_league_id()
     season = post(
         client,
         headers,
-        "/seasons",
+        "/events",
         {
+            "league_id": league_id,
             "name": name,
             "round_count": 2,
             "series_per_round": 5,
             "score_system": system,
         },
     )
-    team1 = post(client, headers, "/teams", {"name": f"{name} one"})
-    team2 = post(client, headers, "/teams", {"name": f"{name} two"})
+    teams = f"/leagues/{league_id}/teams"
+    team1 = post(client, headers, teams, {"name": f"{name} one"})
+    team2 = post(client, headers, teams, {"name": f"{name} two"})
     # A pair of players meet once in a match, so each result needs its own pair
     rosters = [
         [
@@ -89,14 +93,14 @@ def build_season(
     post(
         client,
         headers,
-        f"/seasons/{season['id']}/teams",
+        f"/events/{season['id']}/teams",
         {"team_ids": [team1["id"], team2["id"]]},
     )
     for team, roster in zip((team1, team2), rosters, strict=True):
         post(
             client,
             headers,
-            f"/teams/{team['id']}/seasons/{season['id']}/players",
+            f"/events/{season['id']}/teams/{team['id']}/players",
             {"player_ids": [player["id"] for player in roster]},
         )
 
@@ -191,7 +195,7 @@ def test_the_series_list_answers_the_points_of_every_row(
     set_score_system(system)
     league = build_season(client, auth_headers, "Parity", system)
 
-    rows = get(client, f"/series/season/{league['season_id']}")
+    rows = get(client, f"/events/{league['season_id']}/series")
     assert len(rows) == len(RESULTS)
     by_id = dict(zip(league["series_ids"], expected_points(sweep, close), strict=True))
     for row in rows:
@@ -259,7 +263,7 @@ def test_the_series_record_counts_the_scored_series_of_the_team(
         "standard",
         [(2, 0), (2, 1), (0, 2), (None, None)],
     )
-    rows = get(client, f"/teams/season/{league['season_id']}")
+    rows = get(client, f"/events/{league['season_id']}/teams")
     by_name = {team["name"]: team for team in rows}
     assert series_record(by_name["Record one"], league["season_id"]) == (2, 1)
     assert series_record(by_name["Record two"], league["season_id"]) == (1, 2)
@@ -278,7 +282,7 @@ def test_the_series_record_counts_the_scored_series_of_the_team(
             "player2_score": 0,
         },
     )
-    rows = get(client, f"/teams/season/{league['season_id']}")
+    rows = get(client, f"/events/{league['season_id']}/teams")
     by_name = {team["name"]: team for team in rows}
     assert series_record(by_name["Record one"], league["season_id"]) == (2, 1)
 
@@ -286,24 +290,35 @@ def test_the_series_record_counts_the_scored_series_of_the_team(
 def test_a_season_with_no_match_stands_every_team_at_zero(
     client: Client, auth_headers: dict[str, str]
 ) -> None:
+    league_id = gnl_league_id()
     season = post(
         client,
         auth_headers,
-        "/seasons",
-        {"name": "Empty", "round_count": 3, "series_per_round": 4},
+        "/events",
+        {
+            "league_id": league_id,
+            "name": "Empty",
+            "round_count": 3,
+            "series_per_round": 4,
+        },
     )
     teams = [
-        post(client, auth_headers, "/teams", {"name": f"Empty {index}"})
+        post(
+            client,
+            auth_headers,
+            f"/leagues/{league_id}/teams",
+            {"name": f"Empty {index}"},
+        )
         for index in (1, 2, 3)
     ]
     post(
         client,
         auth_headers,
-        f"/seasons/{season['id']}/teams",
+        f"/events/{season['id']}/teams",
         {"team_ids": [team["id"] for team in teams]},
     )
 
-    rows = get(client, f"/teams/season/{season['id']}")
+    rows = get(client, f"/events/{season['id']}/teams")
     assert len(rows) == 3
     # 3 weeks * 4 series * 3 points, and no team has taken any of it
     for team in rows:
@@ -321,7 +336,7 @@ def test_a_season_stands_on_the_scale_of_its_own_system(
     """
     for system, expected in (("standard", (6, 6, 18)), ("helpstone", (8, 8, 24))):
         season_id = two_seasons[system]["season_id"]
-        rows = get(client, f"/teams/season/{season_id}")
+        rows = get(client, f"/events/{season_id}/teams")
         assert len(rows) == 2
         for team in rows:
             assert standings(team, season_id) == expected
