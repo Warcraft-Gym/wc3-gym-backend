@@ -38,6 +38,7 @@ from app.models.relationships import (
 from app.models.season import Season, SeasonCreate
 from app.models.series import Series, SeriesCreate
 from app.models.series_cast import SeriesCast, channel_url
+from app.models.series_side import SeriesSide
 from app.models.team import Team, TeamCreate
 from app.models.team_season import DBTeamSeason
 from app.models.types import utcnow
@@ -606,6 +607,8 @@ def _series(
     touched: list[Series] = []
     old_ids: dict[int, Series] = {}
     casters: list[tuple[Series, str]] = []
+    # A 2v2 series and its two sides, each side as its two players
+    pairs: list[tuple[Series, tuple[User, User], tuple[User, User]]] = []
     for row in rows:
         match = matches.get(whole_number(row["Match ID"]))
         player1 = users.by_old_id.get(whole_number(row["Player1 ID"]))
@@ -616,6 +619,7 @@ def _series(
             )
         host = users.by_old_id.get(whole_number(row["Host Player ID"])) or player1
         values = _series_values(row, ident(match), player1, player2, host)
+        partners = _partners(row, users)
         key = (ident(match), player1.id, player2.id)
         series = stored.get(key)
         if series:
@@ -625,6 +629,9 @@ def _series(
             written.append(series)
             stored[key] = series
         touched.append(series)
+        if partners:
+            series.side_size = 2
+            pairs.append((series, (player1, partners[0]), (player2, partners[1])))
         old_id = whole_number(row["ID"])
         if old_id:
             old_ids[old_id] = series
@@ -641,10 +648,52 @@ def _series(
         url = _cast_url(caster)
         if all(cast.channel_url != url for cast in series.casts):
             series.casts.append(SeriesCast(channel_url=url))
+    _sides(session, pairs)
     session.flush()
     return {
         old_id: series.id for old_id, series in old_ids.items() if series.id is not None
     }
+
+
+def _partners(row: Row, users: Users) -> tuple[User, User] | None:
+    """The second player of each side of a 2v2 row: the Player1b ID and
+    Player2b ID cells. A row without both is a 1v1."""
+    if row.get("Player1b ID") is None or row.get("Player2b ID") is None:
+        return None
+    partner1 = users.by_old_id.get(whole_number(row["Player1b ID"]))
+    partner2 = users.by_old_id.get(whole_number(row["Player2b ID"]))
+    if not partner1 or not partner2:
+        raise BadRequestError(f"Series {row['ID']} names a player the workbook lacks")
+    return partner1, partner2
+
+
+def _sides(
+    session: OrmSession,
+    pairs: list[tuple[Series, tuple[User, User], tuple[User, User]]],
+) -> None:
+    """The `series_side` rows of the 2v2 series: side 1 is player1 and his
+    partner, side 2 is player2 and his. The series keeps player1 and player2,
+    so the GNL reads that know only those columns still find the series."""
+    # ponytail: adds missing rows only; a re-import that swaps a partner keeps the old row
+    if not pairs:
+        return
+    held = {
+        (side.series_id, side.side_no, side.user_id)
+        for side in session.scalars(
+            select(SeriesSide).where(
+                col(SeriesSide.series_id).in_([ident(series) for series, *_ in pairs])
+            )
+        )
+    }
+    for series, *teams in pairs:
+        for side_no, team in enumerate(teams, start=1):
+            for player in team:
+                key = (ident(series), side_no, ident(player))
+                if key not in held:
+                    held.add(key)
+                    session.add(
+                        SeriesSide(series_id=key[0], side_no=side_no, user_id=key[2])
+                    )
 
 
 def _cast_url(caster: str) -> str:
