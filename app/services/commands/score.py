@@ -5,11 +5,11 @@ links the browser uses, then the result goes through the write the dashboard use
 so the veto rule and the best-of rule are the same in both places.
 """
 
-import os
 from typing import Any
 
 import requests
 
+from app.core.config import frontend_url
 from app.core.exceptions import ApiError, BadRequestError, NotFoundError
 from app.models.user import UserPublic
 from app.services import discord, player_series, replays
@@ -120,7 +120,7 @@ def _refused(text: str) -> tuple[dict[str, Any], bool]:
 
 def _veto_warning(series_id: int) -> str:
     """The result stands, and the veto still belongs with it."""
-    site = (os.getenv("FRONTEND_URL") or "").rstrip("/")
+    site = frontend_url()
     board = (
         f"[veto board]({site}/player-series/{series_id}/veto)"
         if site
