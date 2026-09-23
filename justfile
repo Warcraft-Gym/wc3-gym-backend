@@ -89,23 +89,23 @@ _load-seed dir url:
     #!/usr/bin/env bash
     set -euo pipefail
     export DB_URL="{{ url }}"
-    # the URLs the load is about to drop; deleted last, so a failed upload leaves an orphan, not a broken image
-    previous=$(uv run python -c 'from sqlalchemy import text; from app.core.db import Session, init_engine; init_engine(); print(*[u for (u,) in Session().execute(text("SELECT icon_url FROM teams WHERE icon_url IS NOT NULL"))])')
     uv run python -m app.core.seed "{{ dir }}" "$DB_URL"
+    # The seed's icon_url values are production's live logos in the one store every environment shares:
+    # cleared before the upload, or update_icon would delete them as the URLs it replaces.
+    uv run python -c 'from sqlalchemy import text; from app.core.db import Session, init_engine; init_engine(); s = Session(); s.execute(text("UPDATE teams SET icon_url = NULL")); s.commit()'
     if [ -z "${BLOB_READ_WRITE_TOKEN:-}" ]; then echo "logos: BLOB_READ_WRITE_TOKEN is not set, teams keep the default logo" >&2; exit 0; fi
-    uv run python - "{{ dir }}/logos" $previous <<'PY'
+    # ponytail: the previous load's logos stay in the store as orphans (about 400 KB a load); a
+    # previous URL can be production's, so nothing here deletes by URL
+    uv run python - "{{ dir }}/logos" <<'PY'
     import sys
     from pathlib import Path
     from app.api.deps import team_service
     from app.core.db import init_engine
-    from app.services import blob
     init_engine()
     logos = sorted(Path(sys.argv[1]).glob("*.*")) if Path(sys.argv[1]).is_dir() else []
     for file in logos:
         team_service.update_icon(int(file.stem), file.read_bytes())
-    for url in sys.argv[2:]:
-        blob.delete_icon(url)
-    print(f"logos: {len(logos)} uploaded, {len(sys.argv) - 2} replaced")
+    print(f"logos: {len(logos)} uploaded")
     PY
 
 # Regenerate docs/okf/index.html, the graph viewer that GitHub Pages serves. Node colours per concept type.
