@@ -34,3 +34,10 @@ def decode_token(token: str) -> dict[str, Any]:
         # A token minted this second must not read as from the future
         leeway=5,
     )
+
+
+def is_admin(claims: dict[str, Any] | None) -> bool:
+    """Whether the claims carry the admin role, or are the admin access token's."""
+    return claims is not None and (
+        claims.get("role") == "admin" or claims.get("sub") == "admin"
+    )

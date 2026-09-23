@@ -22,6 +22,7 @@ from app.core.db import Session, rel
 from app.core.divisions import cut
 from app.core.exceptions import ApiError, BadRequestError, NotFoundError
 from app.core.query import QueryElement, QueryUtil
+from app.core.security import is_admin
 from app.models.base import ident
 from app.models.draft_series import DraftSeries
 from app.models.enums import (
@@ -272,7 +273,7 @@ class EventService:
             statement = statement.where(col(Season.league_id) == league_id)
         if published is not None:
             statement = statement.where(col(Season.published).is_(published))
-        if not _is_admin(claims):
+        if not is_admin(claims):
             statement = statement.where(col(Season.published).is_(True))
         with Session.begin() as session:
             events = session.scalars(statement.offset(offset).limit(limit)).all()
@@ -295,7 +296,7 @@ class EventService:
             .where(filter)
             .order_by(col(Season.id).desc())
         )
-        if not _is_admin(claims):
+        if not is_admin(claims):
             statement = statement.where(col(Season.published).is_(True))
         with Session.begin() as session:
             events = session.scalars(statement.offset(offset).limit(limit)).all()
@@ -309,7 +310,7 @@ class EventService:
         """
         with Session.begin() as session:
             event = _event(session, event_id, full=True)
-            admin = _is_admin(claims)
+            admin = is_admin(claims)
             if not event.published and not admin:
                 raise NotFoundError(f"Event not found by id: {event_id}")
             return _public(session, event, full=True, drafts=admin)
@@ -437,7 +438,7 @@ class EventService:
                 .where(col(Season.league_id) == league_id)
                 .order_by(col(Season.id).desc())
             )
-            if not _is_admin(claims):
+            if not is_admin(claims):
                 statement = statement.where(col(Season.published).is_(True))
             events = session.scalars(statement).all()
             public = LeaguePublic.model_validate(league)
@@ -532,7 +533,7 @@ class EventService:
             if not _signups_open(event, phase_of(session, event)):
                 raise BadRequestError("Signups are closed for this event")
             if data.team_id is not None:
-                if not _is_admin(claims) and data.team_id not in _captains(claims):
+                if not is_admin(claims) and data.team_id not in _captains(claims):
                     raise ApiError(
                         403, {"error": "Only a captain of the team enters it"}
                     )
@@ -612,7 +613,7 @@ class EventService:
                     "This event checks in per round. Answer the round instead."
                 )
             row = _entrant(session, event_id, entrant_id)
-            if not _is_admin(claims):
+            if not is_admin(claims):
                 user = _caller(session, claims)
                 if user is None or row.user_id != user.id:
                     raise ApiError(403, {"error": "Check in your own signup"})
@@ -1251,13 +1252,6 @@ def _public(
         for row in session.scalars(children)
     ]
     return public
-
-
-def _is_admin(claims: dict[str, Any] | None) -> bool:
-    """Whether those claims carry the admin role, or the admin access token."""
-    return bool(claims) and (
-        claims.get("role") == "admin" or claims.get("sub") == "admin"
-    )
 
 
 def _captains(claims: dict[str, Any] | None) -> set[int]:

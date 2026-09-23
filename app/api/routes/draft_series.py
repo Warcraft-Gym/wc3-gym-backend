@@ -13,6 +13,7 @@ from app.api.deps import (
 )
 from app.core.db import Session
 from app.core.exceptions import ApiError
+from app.core.security import is_admin
 from app.models.draft_board import DraftBoard
 from app.models.draft_series import (
     DraftSeriesCreate,
@@ -41,15 +42,11 @@ router = APIRouter(tags=["draft-series"])
 RequireCaptain = Annotated[dict[str, Any], Depends(require_captain)]
 
 
-def _is_admin(claims: dict[str, Any]) -> bool:
-    return claims.get("role") == "admin" or claims["sub"] == "admin"
-
-
 def _own_match(
     claims: dict[str, Any], match_id: int | None, matches: MatchService
 ) -> None:
     """A captain drafts the matches their team plays; an admin drafts any."""
-    if _is_admin(claims):
+    if is_admin(claims):
         return
     match = matches.get(match_id) if match_id is not None else None
     seats = claim_seats(claims)
@@ -64,7 +61,7 @@ def _own_side(claims: dict[str, Any], match: MatchPublic, team_id: int) -> None:
     """A captain marks his own team's side of the fixture; an admin marks either."""
     if team_id not in (match.team1_id, match.team2_id):
         raise ApiError(400, {"error": "That team does not play this match"})
-    if _is_admin(claims):
+    if is_admin(claims):
         return
     if (team_id, match.season_id) not in claim_seats(claims):
         raise ApiError(403, {"error": "Your team does not play this match"})

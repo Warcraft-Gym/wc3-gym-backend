@@ -1,8 +1,10 @@
 """A player reports a result from the dashboard once the replays are in the bucket."""
 
+import asyncio
 from collections.abc import Callable
 from typing import Any
 
+import pytest
 from httpx2 import Client
 
 
@@ -90,6 +92,36 @@ def test_the_caller_is_checked_before_the_body(
     )
 
     assert resp.status_code == 401, resp.text
+
+
+def test_the_caller_is_resolved_off_the_event_loop(
+    client: Client,
+    seeded: dict[str, Any],
+    member: Callable[..., dict[str, str]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The identity check reads Clerk, the database and Discord, so it runs in a
+    worker thread and never stalls the other requests on the event loop."""
+    from app.api.routes import public
+
+    on_loop: list[bool] = []
+    entry = public._entry
+
+    def spy(claims: dict[str, Any]) -> dict[str, Any]:
+        try:
+            asyncio.get_running_loop()
+            on_loop.append(True)
+        except RuntimeError:
+            on_loop.append(False)
+        return entry(claims)
+
+    monkeypatch.setattr(public, "_entry", spy)
+    resp = client.put(
+        f"/player-series/{seeded['series_open_id']}", headers=member("2"), json={}
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert on_loop == [False]
 
 
 def test_an_empty_body_changes_nothing(

@@ -4,7 +4,7 @@ title: Authentication
 description: A bearer token is either the admin token's JWT or a Clerk session; the claims resolve the Discord id and the role once per request, and five guards build on them.
 resource: ../../../app/api/deps.py
 tags: [auth]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T17:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-23T10:00:00Z }
 sources:
   - id: deps
     resource: ../../../app/api/deps.py
@@ -43,7 +43,7 @@ Every check is live, so a kick, a grant or a seat change shows on the next reque
 | `require_captain` | a captain of a running season, or an admin |
 | `require_admin` | an admin, or the admin token |
 
-Routes use them as `Annotated` types (`RequireAdmin`, `RequireMember`) or as `dependencies=[Depends(require_admin)]`. See [roles](../concepts/roles-and-permissions.md) for the ownership checks that sit beside them.
+Routes use them as `Annotated` types (`RequireAdmin`, `RequireMember`) or as `dependencies=[Depends(require_admin)]`. A helper that builds on a guard, such as the player identity in `app/api/routes/public.py`, is an `Annotated` dependency too, so FastAPI runs it in the thread pool before the handler. `is_admin(claims)` in `app/core/security.py` is the one admin test: the `admin` role or the admin token. See [roles](../concepts/roles-and-permissions.md) for the ownership checks that sit beside them.
 
 # /me
 

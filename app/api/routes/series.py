@@ -13,6 +13,7 @@ from app.api.deps import (
 from app.api.search import SearchQuery
 from app.core.exceptions import ApiError, NotFoundError
 from app.core.query import QueryUtil
+from app.core.security import is_admin
 from app.models.series import (
     ResultKindWrite,
     SeriesCreate,
@@ -88,7 +89,7 @@ def set_sides(
     fields, which a captain of that team writes for his own side. Seating a
     lobby again stays an admin act.
     """
-    admin = claims.get("role") == "admin" or claims["sub"] == "admin"
+    admin = is_admin(claims)
     if not admin and not data.sides:
         raise ApiError(403, {"error": "Admins only"})
     caller = None if admin else users.id_by_discord_id(str(claims["sub"]))
@@ -168,7 +169,7 @@ def caster(claims: RequireMember, user_service: UserServiceDep) -> tuple[int, bo
     user_id = user_service.id_by_discord_id(str(claims["sub"]))
     if user_id is None:
         raise NotFoundError("player_not_found")
-    admin = claims.get("role") == "admin" or claims["sub"] == "admin"
+    admin = is_admin(claims)
     return user_id, admin
 
 

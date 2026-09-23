@@ -4,7 +4,7 @@ title: Layering
 description: Routes call services, services own their transactions, models hold the schema and the shapes, and pure rules live in app/core.
 resource: ../../../app/main.py
 tags: [events, data, api]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-23T10:00:00Z }
 sources:
   - id: main
     resource: ../../../app/main.py
@@ -41,7 +41,7 @@ The same module holds the guards: `require_login`, `require_member`, `require_ca
 
 # Sync, not async
 
-Route handlers and services are plain `def`. FastAPI runs them in a thread pool. The SQLAlchemy layer blocks, so `async def` around it would be worse, not better.
+Route handlers and services are plain `def`. FastAPI runs them in a thread pool. The SQLAlchemy layer blocks, so `async def` around it would be worse, not better. A handler that must be `async def` to read its body takes its guard as a dependency and hands the service call to `run_in_threadpool`; a guard called from its body would block the event loop.
 
 # Errors
 
