@@ -198,7 +198,7 @@ def _owned_bet(
     return bet
 
 
-@router.post("/signup", status_code=201, response_model=None)
+@router.post("/signup", status_code=201)
 def public_create_user(
     user_service: UserServiceDep,
     season_service: SeasonServiceDep,
@@ -289,7 +289,7 @@ def public_create_user(
     return user.to_dict()
 
 
-@router.get("/player-series", response_model=None)
+@router.get("/player-series")
 def get_player_series(
     user_service: UserServiceDep,
     series_service: SeriesServiceDep,
@@ -520,7 +520,7 @@ def get_player_history(player: DashboardPlayer) -> PlayerHistory:
     return player_history.history(player[1].id)
 
 
-@router.put("/player-series/{series_id}", response_model=None)
+@router.put("/player-series/{series_id}")
 async def update_player_series(
     series_id: int,
     request: Request,
@@ -688,7 +688,7 @@ def set_player_series_veto(
     return board
 
 
-@router.get("/user-info", response_model=None)
+@router.get("/user-info")
 def get_user_info(
     user_service: UserServiceDep,
     entry: Identity,
@@ -715,7 +715,7 @@ def get_user_info(
     }
 
 
-@router.put("/user-info", response_model=None)
+@router.put("/user-info")
 def update_user_info(
     user_service: UserServiceDep,
     entry: Identity,
@@ -744,7 +744,7 @@ def update_user_info(
     return {"user": user.to_dict()}
 
 
-@router.post("/fantasy-team", status_code=201, response_model=None)
+@router.post("/fantasy-team", status_code=201)
 def create_fantasy_team(
     settings_service: SettingsServiceDep,
     user_service: UserServiceDep,
@@ -864,7 +864,7 @@ def create_fantasy_team(
     return final_team.to_dict()
 
 
-@router.post("/fantasy-bet", status_code=201, response_model=None)
+@router.post("/fantasy-bet", status_code=201)
 def create_fantasy_bet(
     user_service: UserServiceDep,
     fantasy_bet_service: FantasyBetServiceDep,
@@ -908,7 +908,7 @@ def create_fantasy_bet(
     return bet.to_dict()
 
 
-@router.put("/fantasy-bet/{bet_id}", response_model=None)
+@router.put("/fantasy-bet/{bet_id}")
 def update_fantasy_bet(
     bet_id: int,
     user_service: UserServiceDep,
@@ -949,7 +949,7 @@ def update_fantasy_bet(
     return bet.to_dict()
 
 
-@router.delete("/fantasy-bet/{bet_id}", status_code=204, response_model=None)
+@router.delete("/fantasy-bet/{bet_id}", status_code=204)
 def delete_fantasy_bet(
     bet_id: int,
     user_service: UserServiceDep,
