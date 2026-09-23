@@ -1,4 +1,5 @@
 import logging
+from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
@@ -19,10 +20,39 @@ from app.models.relationships import DBFantasyTeamPlayer, DBUserSeasonSignup
 from app.models.season import Season, tier_count
 from app.models.team_season import DBTeamSeason
 from app.models.user import User
+from app.models.w3c_stats import W3CStats
 from app.services import derived, discord_roles
+from app.services.events import SEASONS, _w3c_season
 from app.services.seasons import resolved_tiers
 
 logger = logging.getLogger(__name__)
+
+
+def _reduced_options(session: OrmSession) -> list[Any]:
+    """Every relation the list answer reads; the other sub-collections stay
+    empty. The drafted players carry their stats so the leaderboard shows MMR
+    and GNL record without one request per player.
+
+    The stats stop at the W3C seasons the app rates against, the same window
+    app.services.events.race_ratings reads: an older season carries no current
+    rating, so a stored history reaching back to W3C season 0 would multiply
+    this read for rows no client draws.
+    """
+    stats = rel(User.w3c_stats).and_(
+        col(W3CStats.wc3_season) > _w3c_season(session) - SEASONS
+    )
+    return [
+        joinedload(rel(FantasyTeam.season)).noload("*"),
+        joinedload(rel(FantasyTeam.drafted_team)).noload("*"),
+        joinedload(rel(FantasyTeam.captain)).noload("*"),
+        joinedload(rel(FantasyTeam.drafted_players))
+        .joinedload(rel(DBFantasyTeamPlayer.users))
+        .options(
+            joinedload(rel(User.team_seasons)).noload("*"),
+            joinedload(stats),
+            noload("*"),
+        ),
+    ]
 
 
 def _check_grind(
@@ -116,22 +146,6 @@ class FantasyTeamService:
             derived.fill_fantasy_teams(session, [public])
             return public
 
-    # Every relation the list answer reads; the other sub-collections stay
-    # empty. The drafted players carry their stats so the leaderboard shows
-    # MMR and GNL record without one request per player.
-    _reduced_options = (
-        joinedload(rel(FantasyTeam.season)).noload("*"),
-        joinedload(rel(FantasyTeam.drafted_team)).noload("*"),
-        joinedload(rel(FantasyTeam.captain)).noload("*"),
-        joinedload(rel(FantasyTeam.drafted_players))
-        .joinedload(rel(DBFantasyTeamPlayer.users))
-        .options(
-            joinedload(rel(User.team_seasons)).noload("*"),
-            joinedload(rel(User.w3c_stats)),
-            noload("*"),
-        ),
-    )
-
     def get_all(
         self, limit: int | None = None, offset: int = 0
     ) -> tuple[list[FantasyTeamPublic], int]:
@@ -141,7 +155,7 @@ class FantasyTeamService:
             # Offset paging is deterministic only with a fixed order
             statement = (
                 select(FantasyTeam)
-                .options(*self._reduced_options)
+                .options(*_reduced_options(session))
                 .order_by(col(FantasyTeam.id))
                 .offset(offset)
                 .limit(limit)
@@ -171,7 +185,7 @@ class FantasyTeamService:
             # Offset paging is deterministic only with a fixed order
             statement = (
                 select(FantasyTeam)
-                .options(*self._reduced_options)
+                .options(*_reduced_options(session))
                 .where(filter)
                 .order_by(col(FantasyTeam.id))
                 .offset(offset)
