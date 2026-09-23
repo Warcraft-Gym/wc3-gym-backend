@@ -123,6 +123,8 @@ def push(session: OrmSession, source: Path) -> dict[str, tuple[int, int, int]]:
                 insert(model)
                 .values(values[start : start + CHUNK])
                 .on_conflict_do_nothing(index_elements=key)
+                # psycopg reports -1 for a multi-row insert unless asked to keep the count
+                .execution_options(preserve_rowcount=True)
             )
             inserted += result.rowcount  # ty: ignore[unresolved-attribute]
         counts[name] = (read, inserted, read - len(values))
