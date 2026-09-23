@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 
 
 class FantasyTeamBase(SQLModel):
-    name: Annotated[str, NumToStr] = Field(max_length=100)
+    name: str = Field(max_length=100)
     season_id: int = Field(index=True, foreign_key="event.id", ondelete="CASCADE")
     captain_id: int = Field(index=True, foreign_key="users.id", ondelete="CASCADE")
     drafted_team_id: int | None = Field(
@@ -86,6 +86,7 @@ class PublicFantasyTeamWrite(SQLModel):
 
 
 class FantasyTeamCreate(FantasyTeamBase):
+    name: Annotated[str, NumToStr] = Field(max_length=100)
     drafted_race: Annotated[Race | None, SuggestRace] = None
 
 
@@ -108,7 +109,7 @@ class FantasyTeamPublic(FantasyTeamBase, PublicModel):
     grind_points: int | None = None
     total_points: int | None = None
     id: int
-    name: Annotated[str | None, NumToStr] = None
+    name: str | None = None
     season_id: int | None = None
     captain_id: int | None = None
     drafted_race: Annotated[str | None, EnumValue] = None

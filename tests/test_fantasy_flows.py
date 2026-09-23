@@ -123,14 +123,15 @@ def test_bet_update_carrying_bet_points_validates_them(
     client: Client, seeded: dict[str, Any], auth_headers: dict[str, str]
 ) -> None:
     bet = get_json(client, "/fantasy/bets")[0]
-    for bad_value in (0, ""):
+    # 0 is a number the service refuses; "" is not a number, so the model refuses it
+    for bad_value, status in ((0, 400), ("", 422)):
         resp = client.put(
             f"/fantasy/bets/{bet['id']}",
             json={"bet_points": bad_value},
             headers=auth_headers,
         )
-        assert resp.status_code == 400
-        assert "bet_points" in resp.json()["error"]
+        assert resp.status_code == status
+        assert "bet_points" in str(resp.json()["error"])
 
 
 def test_add_and_remove_players(

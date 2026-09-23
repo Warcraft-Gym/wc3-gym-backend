@@ -34,10 +34,8 @@ from app.models.team_reduced import TeamReduced
 from app.models.types import (
     AwareUTC,
     EnumValue,
-    IsoDate,
     KnownScoreSystem,
     KnownTimeZone,
-    LenientDate,
     MapRules,
     NoneToList,
     NumToStr,
@@ -55,19 +53,19 @@ if TYPE_CHECKING:
 
 
 class SeasonBase(SQLModel):
-    name: Annotated[str, NumToStr] = Field(max_length=50)
+    name: str = Field(max_length=50)
     # How many series one fixture holds, and a fixture pairs two team
     # entrants, so it reads only on a team event. How many rounds the season has
     # is not stored: the round rows are the count.
     series_per_round: int
-    pick_ban: Annotated[str | None, NumToStr] = Field(default=None, max_length=100)
-    start_date: Annotated[date | None, LenientDate] = None
-    end_date: Annotated[date | None, LenientDate] = None
-    discordRole: Annotated[str | None, NumToStr] = Field(default=None, max_length=50)
+    pick_ban: str | None = Field(default=None, max_length=100)
+    start_date: date | None = None
+    end_date: date | None = None
+    discordRole: str | None = Field(default=None, max_length=50)
     # One rule per game of a series: veto, loser, host or fixed
-    map_rules: Annotated[str | None, MapRules] = Field(default=None, max_length=100)
+    map_rules: str | None = Field(default=None, max_length=100)
     # The scale the series points use; an unknown value would re-score the season
-    score_system: Annotated[str, KnownScoreSystem] = Field(
+    score_system: str = Field(
         default="standard",
         max_length=20,
         sa_column_kwargs={"server_default": "standard"},
@@ -161,9 +159,7 @@ class Season(SeasonBase, DBModel, table=True):
     page_url: str | None = Field(default=None, max_length=500)
     stream_url: str | None = Field(default=None, max_length=500)
     # The Discord message the event card was last posted as; a repost edits it
-    discord_event_id: Annotated[str | None, NumToStr] = Field(
-        default=None, max_length=50
-    )
+    discord_event_id: str | None = Field(default=None, max_length=50)
     description: str | None = Field(default=None, max_length=2000)
     # A cup or a KOTH night starts at a time; a GNL season keeps its dates
     starts_at: Annotated[datetime | None, AwareUTC] = Field(
@@ -174,9 +170,7 @@ class Season(SeasonBase, DBModel, table=True):
         default=False, sa_column_kwargs={"server_default": false()}
     )
     # IANA name; a round of this event ends at midnight in this zone
-    round_end_zone: Annotated[str | None, KnownTimeZone] = Field(
-        default=None, max_length=64
-    )
+    round_end_zone: str | None = Field(default=None, max_length=64)
     # Eligibility bounds. They warn on the entrant row and never refuse a signup.
     min_games: int | None = None
     # How many of the newest W3C seasons min_games counts over; null counts them all
@@ -336,6 +330,14 @@ Season.league_name = column_property(LEAGUE_NAME)
 
 
 class SeasonCreate(SeasonBase):
+    # The xlsx import sends numeric cells
+    name: Annotated[str, NumToStr] = Field(max_length=50)
+    pick_ban: Annotated[str | None, NumToStr] = Field(default=None, max_length=100)
+    discordRole: Annotated[str | None, NumToStr] = Field(default=None, max_length=50)
+    map_rules: Annotated[str | None, MapRules] = Field(default=None, max_length=100)
+    score_system: Annotated[str, KnownScoreSystem] = Field(
+        default="standard", max_length=20
+    )
     # How many rounds to make. Nothing stores it; the round rows are the count.
     round_count: int | None = None
 
@@ -346,8 +348,8 @@ class SeasonUpdate(SQLModel):
     # How many rounds to keep. Nothing stores it; the round rows are the count.
     round_count: int | None = None
     pick_ban: Annotated[str | None, NumToStr] = None
-    start_date: Annotated[date | None, LenientDate] = None
-    end_date: Annotated[date | None, LenientDate] = None
+    start_date: date | None = None
+    end_date: date | None = None
     discordRole: Annotated[str | None, NumToStr] = None
     map_rules: Annotated[str | None, MapRules] = None
     score_system: Annotated[str | None, KnownScoreSystem] = None
@@ -397,9 +399,9 @@ class SeasonSignupUpdate(SQLModel):
 class SeasonPublic(SeasonBase):
     id: int
     # The short name of the season's league; null when the event has no league
-    league_short_name: Annotated[str | None, NumToStr] = None
+    league_short_name: str | None = None
     # The full name of that league; null when the event has no league
-    league_name: Annotated[str | None, NumToStr] = None
+    league_name: str | None = None
     # How many rounds the season has, counted from its round rows
     round_count: int | None = None
     # The short form of a season carries only the name, so these read null
@@ -413,8 +415,8 @@ class SeasonPublic(SeasonBase):
     # Derived from the series when the season is the subject; null when nested
     phase: SeasonPhase | None = None
     unscored_series: int | None = None
-    start_date: Annotated[IsoDate | None, LenientDate] = None
-    end_date: Annotated[IsoDate | None, LenientDate] = None
+    start_date: date | None = None
+    end_date: date | None = None
     maps: Annotated[list[MapPublic], NoneToList] = []
     rounds: Annotated[list[SeasonRoundPublic], NoneToList] = []
     # Always empty; the public pages read this field
@@ -526,21 +528,21 @@ class EventPublic(SQLModel):
     id: int
     league_id: int | None = None
     # The short name of the event's league; null when the event has no league
-    league_short_name: Annotated[str | None, NumToStr] = None
+    league_short_name: str | None = None
     # The full name of that league; null when the event has no league
-    league_name: Annotated[str | None, NumToStr] = None
+    league_name: str | None = None
     kind: EventKind = EventKind.gnl
     # The event this one feeds; a qualifier reads its parent here
     parent_id: int | None = None
     signup_policy: SignupPolicy = SignupPolicy.members
     entrant_kind: EntrantKind = EntrantKind.solo
-    name: Annotated[str | None, NumToStr] = None
+    name: str | None = None
     description: str | None = None
     published: bool = True
     signups_open: bool = True
     scheduling_enabled: bool = True
-    start_date: Annotated[IsoDate | None, LenientDate] = None
-    end_date: Annotated[IsoDate | None, LenientDate] = None
+    start_date: date | None = None
+    end_date: date | None = None
     starts_at: Annotated[datetime | None, AwareUTC] = None
     checkin_enabled: bool = True
     multi_entry: bool = False
@@ -548,7 +550,7 @@ class EventPublic(SQLModel):
     region: str | None = None
     page_url: str | None = None
     stream_url: str | None = None
-    map_rules: Annotated[str | None, MapRules] = None
+    map_rules: str | None = None
     min_games: int | None = None
     # How many of the newest W3C seasons min_games counts over; null counts them all
     min_games_seasons: int | None = None
@@ -566,8 +568,8 @@ class EventPublic(SQLModel):
     # read here as event configuration so a client never has to fetch the
     # legacy season payload for a GNL run.
     round_count: int | None = None
-    pick_ban: Annotated[str | None, NumToStr] = None
-    discordRole: Annotated[str | None, NumToStr] = None
+    pick_ban: str | None = None
+    discordRole: str | None = None
     score_system: str | None = None
     fantasy_grind: bool | None = None
     fantasy_tiers: int | None = None
@@ -605,8 +607,8 @@ class EventCreate(SQLModel):
     published: bool = True
     signups_open: bool = True
     scheduling_enabled: bool = True
-    start_date: Annotated[date | None, LenientDate] = None
-    end_date: Annotated[date | None, LenientDate] = None
+    start_date: date | None = None
+    end_date: date | None = None
     starts_at: Annotated[datetime | None, AwareUTC] = None
     checkin_enabled: bool = True
     # On, a player may enter once per race; each row seeds on its own race
@@ -654,8 +656,8 @@ class EventUpdate(SQLModel):
     published: bool | None = None
     signups_open: bool | None = None
     scheduling_enabled: bool | None = None
-    start_date: Annotated[date | None, LenientDate] = None
-    end_date: Annotated[date | None, LenientDate] = None
+    start_date: date | None = None
+    end_date: date | None = None
     starts_at: Annotated[datetime | None, AwareUTC] = None
     checkin_enabled: bool | None = None
     multi_entry: bool | None = None
@@ -696,8 +698,8 @@ class CaptainFixture(SQLModel):
     match_id: int
     # The round the fixture is played in, by its number
     playday: int
-    round_start: Annotated[IsoDate | None, LenientDate] = None
-    round_end: Annotated[IsoDate | None, LenientDate] = None
+    round_start: date | None = None
+    round_end: date | None = None
     team1: TeamReduced
     team2: TeamReduced
     series_per_round: int
@@ -715,13 +717,13 @@ class MemberEventRow(SQLModel):
 
     kind: EventKind
     id: int
-    name: Annotated[str | None, NumToStr] = None
+    name: str | None = None
     # The short name of the event's league; null when the event has no league
-    league_short_name: Annotated[str | None, NumToStr] = None
+    league_short_name: str | None = None
     # The full name of that league; null when the event has no league
-    league_name: Annotated[str | None, NumToStr] = None
-    start: Annotated[IsoDate | None, LenientDate] = None
-    end: Annotated[IsoDate | None, LenientDate] = None
+    league_name: str | None = None
+    start: date | None = None
+    end: date | None = None
     phase: EventPhase
     signups_open: bool
     # The caller holds an entrant row, or a GNL signup, for this event

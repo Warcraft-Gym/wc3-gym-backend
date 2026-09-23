@@ -1,4 +1,4 @@
-from typing import Annotated, Self
+from typing import Self
 
 from sqlalchemy import Index
 from sqlalchemy.orm import joinedload, selectinload
@@ -13,7 +13,6 @@ from app.models.season import Season, SeasonPublic
 from app.models.series import Series, SeriesPublic
 from app.models.series_cast import SeriesCast
 from app.models.series_veto_step import DBSeriesVetoStep
-from app.models.types import EmptyStrToNone
 from app.models.user import User, UserPublic
 
 
@@ -128,7 +127,7 @@ class FantasyBet(FantasyBetBase, DBModel, table=True):
 
 class FantasyBetCreate(FantasyBetBase):
     # NOT NULL in the database; the service fills it in for fixed bet points
-    bet_points: Annotated[int | None, EmptyStrToNone] = None
+    bet_points: int | None = None
 
 
 class FantasyBetUpdate(SQLModel):
@@ -136,7 +135,7 @@ class FantasyBetUpdate(SQLModel):
     series_id: int | None = None
     user_id: int | None = None
     winner_id: int | None = None
-    bet_points: Annotated[int | None, EmptyStrToNone] = None
+    bet_points: int | None = None
 
 
 class PublicFantasyBetWrite(SQLModel):
@@ -148,7 +147,7 @@ class PublicFantasyBetWrite(SQLModel):
 
     series_id: int | None = None
     winner_id: int | None = None
-    bet_points: Annotated[int | None, EmptyStrToNone] = None
+    bet_points: int | None = None
 
 
 class FantasyBetPublic(FantasyBetBase, PublicModel):

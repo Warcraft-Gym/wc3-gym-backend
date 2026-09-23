@@ -5,7 +5,7 @@ team_season.py and user_team_season.py.
 """
 
 from datetime import date
-from typing import TYPE_CHECKING, Annotated, Self
+from typing import TYPE_CHECKING, Self
 
 from sqlalchemy import UniqueConstraint, select
 from sqlalchemy.orm import Session as OrmSession
@@ -13,7 +13,6 @@ from sqlmodel import Field, Relationship, SQLModel, col
 
 from app.models.base import DBModel, ident
 from app.models.enums import Race
-from app.models.types import IsoDate, LenientDate
 
 if TYPE_CHECKING:
     from app.models.fantasy_team import FantasyTeam
@@ -107,8 +106,8 @@ def round_row(session: OrmSession, season_id: int, number: int) -> DBEventRound 
 
 class SeasonRoundPublic(SQLModel):
     playday: int
-    start_date: Annotated[IsoDate | None, LenientDate] = None
-    end_date: Annotated[IsoDate | None, LenientDate] = None
+    start_date: date | None = None
+    end_date: date | None = None
     map_id: int | None = None
     # The stage the round sits in; the player page groups its rounds under it
     stage_id: int | None = None
@@ -133,8 +132,8 @@ class EventRoundPublic(SQLModel):
     id: int
     number: int
     name: str | None = None
-    start_date: Annotated[IsoDate | None, LenientDate] = None
-    end_date: Annotated[IsoDate | None, LenientDate] = None
+    start_date: date | None = None
+    end_date: date | None = None
     # Overrides the stage's best of; null follows the stage
     best_of: int | None = None
 
@@ -154,8 +153,8 @@ class SeasonRoundWrite(SQLModel):
     """One round's settings. A field left out keeps its value; a null clears it."""
 
     playday: int
-    start_date: Annotated[date | None, LenientDate] = None
-    end_date: Annotated[date | None, LenientDate] = None
+    start_date: date | None = None
+    end_date: date | None = None
     map_id: int | None = None
 
 

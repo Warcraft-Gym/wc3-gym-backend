@@ -9,7 +9,7 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from app.models.user import ProfileUpdate
+from app.models.user import ProfileUpdate, User, UserCreate, UserPublic, UserReduced
 from app.services import casts
 from app.services.users import UserService
 from tests.conftest import Client
@@ -152,3 +152,25 @@ def test_the_profile_channel_pre_fills_the_next_claim(
     # twitch comes first when the profile carries both
     client.put("/user-info", json={"twitch_url": "gnlcaster"}, headers=player_one)
     assert casts.last_channel(user_id) == "https://twitch.tv/gnlcaster"
+
+
+BAD_STORED = {
+    "twitch_url": "https://www.twitch.tv/videos/123",
+    "timezone": "Mars/Olympus",
+}
+
+
+@pytest.mark.parametrize("shape", [UserReduced, UserPublic])
+def test_a_response_carries_a_bad_stored_link_or_zone(shape: type[UserReduced]) -> None:
+    # The input validators sit on the input models, so a bad stored value never 500s a read
+    user = User(id=7, name="p", battleTag="p#1", discordTag="p", discordId="7")
+    user.twitch_url, user.timezone = BAD_STORED["twitch_url"], BAD_STORED["timezone"]
+    public = shape.from_user_reduced(user)
+    assert (public.twitch_url, public.timezone) == (user.twitch_url, user.timezone)
+
+
+@pytest.mark.parametrize("field", sorted(BAD_STORED))
+def test_the_input_model_refuses_a_bad_link_or_zone(field: str) -> None:
+    fields = {"name": "p", "battleTag": "p#1", "discordTag": "p", "discordId": "7"}
+    with pytest.raises(ValidationError, match=field):
+        UserCreate(race="HU", **fields, **{field: BAD_STORED[field]})

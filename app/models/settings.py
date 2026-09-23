@@ -10,8 +10,7 @@ from app.models.types import NumToStr
 
 class SettingsBase(SQLModel):
     key: str = Field(max_length=255, unique=True, index=True)
-    # A setting value is a string in the database, and callers pass numbers.
-    value: Annotated[str | None, NumToStr] = Field(default=None, max_length=1000)
+    value: str | None = Field(default=None, max_length=1000)
     description: str | None = Field(default=None, max_length=500)
 
 
@@ -33,7 +32,8 @@ class Settings(SettingsBase, DBModel, table=True):
 
 
 class SettingsCreate(SettingsBase):
-    pass
+    # A setting value is a string in the database, and callers pass numbers.
+    value: Annotated[str | None, NumToStr] = Field(default=None, max_length=1000)
 
 
 class SettingsUpdate(SQLModel):

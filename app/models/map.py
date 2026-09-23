@@ -11,11 +11,10 @@ if TYPE_CHECKING:
 
 
 class MapBase(SQLModel):
-    # The xlsx import passes cells through, so a numeric name arrives as a number
-    name: Annotated[str | None, NumToStr] = Field(default=None, max_length=50)
-    shortname: Annotated[str | None, NumToStr] = Field(default=None, max_length=50)
+    name: str | None = Field(default=None, max_length=50)
+    shortname: str | None = Field(default=None, max_length=50)
     # where the picture is published: the blob an admin uploaded, else what the ladder import found
-    image: Annotated[str | None, NumToStr] = Field(default=None, max_length=500)
+    image: str | None = Field(default=None, max_length=500)
 
 
 class Map(MapBase, DBModel, table=True):
@@ -32,11 +31,17 @@ class Map(MapBase, DBModel, table=True):
 
 
 class MapCreate(MapBase):
-    pass
+    # The xlsx import passes cells through, so a numeric name arrives as a number
+    name: Annotated[str | None, NumToStr] = Field(default=None, max_length=50)
+    shortname: Annotated[str | None, NumToStr] = Field(default=None, max_length=50)
+    image: Annotated[str | None, NumToStr] = Field(default=None, max_length=500)
 
 
 class MapUpdate(MapBase):
-    pass
+    # The xlsx import passes cells through, so a numeric name arrives as a number
+    name: Annotated[str | None, NumToStr] = Field(default=None, max_length=50)
+    shortname: Annotated[str | None, NumToStr] = Field(default=None, max_length=50)
+    image: Annotated[str | None, NumToStr] = Field(default=None, max_length=500)
 
 
 class MapPublic(MapBase):

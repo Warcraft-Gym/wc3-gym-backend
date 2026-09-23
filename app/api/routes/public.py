@@ -245,9 +245,7 @@ def public_create_user(
         user = user_service.update(
             existing_users[0].id,
             UserUpdate(
-                **data.model_dump(
-                    exclude_unset=True, exclude={"season_id", "seasonId"}
-                ),
+                **data.model_dump(exclude_unset=True, exclude={"season_id"}),
                 discordId=entry.get("discord_id"),
                 discordTag=entry.get("discord_tag"),
             ),
@@ -258,7 +256,7 @@ def public_create_user(
 
     # Add to season if specified, on the race the form names
     # A closed or non-open season takes the profile only; an admin may add them
-    season_id = data.season_id or data.seasonId or entry.get("season_id")
+    season_id = data.season_id or entry.get("season_id")
     closed: str | None = None
     if season_id:
         season = season_service.get(int(season_id))
