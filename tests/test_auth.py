@@ -5,6 +5,8 @@ from typing import Any
 import pytest
 from httpx2 import Client
 
+from app.core.security import is_admin
+
 # A 1x1 PNG. The route stores the bytes as they arrive.
 PNG = (
     b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
@@ -120,3 +122,19 @@ def test_team_image_download_stays_public(
     # no icon, so a reachable route answers 404 rather than 401.
     resp = client.get(f"/teams/{seeded['team_a_id']}/image")
     assert resp.status_code == 404
+
+
+@pytest.mark.parametrize(
+    ("claims", "admin"),
+    [
+        ({"sub": "1", "role": "admin"}, True),
+        ({"sub": "admin", "type": "access"}, True),
+        ({"sub": "1", "role": "captain"}, False),
+        ({"sub": "1", "role": "member"}, False),
+        ({"sub": "1", "role": "guest"}, False),
+        (None, False),
+    ],
+)
+def test_is_admin(claims: dict[str, Any] | None, admin: bool) -> None:
+    """The admin role or the admin access token; no other role."""
+    assert is_admin(claims) is admin

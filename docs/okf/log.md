@@ -1,5 +1,9 @@
 # Bundle history
 
+## 2026-09-23
+
+* **Update**: a helper that builds on a guard is an `Annotated` dependency, and `is_admin` in `app/core/security.py` is the one admin test.
+
 ## 2026-09-20
 
 * **Update**: a KOTH night is paired by hand and generate refuses a `koth` stage; one signup rule holds at every door, an unrated signup stands unplaced, and the entrant seed is the line of its bracket.
