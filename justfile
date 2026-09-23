@@ -90,10 +90,10 @@ _load-seed dir url:
     set -euo pipefail
     export DB_URL="{{ url }}"
     uv run python -m app.core.seed "{{ dir }}" "$DB_URL"
-    # The seed's icon_url values are production's live logos in the one store every environment shares:
-    # cleared before the upload, or update_icon would delete them as the URLs it replaces.
+    # The seed's icon_url values are production's live logos: cleared before the upload, so update_icon
+    # has nothing of production's to try to delete (the store would refuse another environment's token).
     uv run python -c 'from sqlalchemy import text; from app.core.db import Session, init_engine; init_engine(); s = Session(); s.execute(text("UPDATE teams SET icon_url = NULL")); s.commit()'
-    if [ -z "${BLOB_READ_WRITE_TOKEN:-}" ]; then echo "logos: BLOB_READ_WRITE_TOKEN is not set, teams keep the default logo" >&2; exit 0; fi
+    if [ -z "${BLOB_STORE_ID:-}" ]; then echo "logos: BLOB_STORE_ID is not set, teams keep the default logo" >&2; exit 0; fi
     # ponytail: the previous load's logos stay in the store as orphans (about 400 KB a load); a
     # previous URL can be production's, so nothing here deletes by URL
     uv run python - "{{ dir }}/logos" <<'PY'

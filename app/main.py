@@ -20,9 +20,10 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
-from starlette.datastructures import MutableHeaders
+from starlette.datastructures import Headers, MutableHeaders
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
+from vercel.headers import set_headers
 
 from app.api.main import api_router
 from app.core.db import Cost, init_engine, start_request_cost
@@ -39,6 +40,20 @@ logger = logging.getLogger(__name__)
 
 # The ledger's own read route stays out of the ledger
 UNRECORDED_ROUTES = {"/jobs/egress"}
+
+
+class VercelHeadersMiddleware:
+    """Hand each request's headers to the vercel SDK. On Vercel the OIDC token the blob store
+    accepts arrives as the x-vercel-oidc-token header, and the SDK's token lookup reads it from
+    this context, so the blob calls deep in the services and the after-commit hooks need no argument."""
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] == "http":
+            set_headers(Headers(scope=scope))
+        await self.app(scope, receive, send)
 
 
 class EgressMiddleware:
@@ -129,6 +144,7 @@ def create_app(db_url: str | None = None) -> FastAPI:
         version="1.1.0",
     )
     app.add_middleware(EgressMiddleware)
+    app.add_middleware(VercelHeadersMiddleware)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],

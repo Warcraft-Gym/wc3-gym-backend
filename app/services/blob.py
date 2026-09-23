@@ -4,7 +4,11 @@ The SDK is imported inside each call, not at module scope: it carries its own ht
 other packages, and only the upload route ever needs them. Reads never come here at all, because a
 public blob is fetched by the browser straight from the store.
 
-`BLOB_READ_WRITE_TOKEN` comes from the store connected to the Vercel project.
+Each environment has its own store: `gnl-media` for production, `gnl-media-staging` for preview
+and development. A call authenticates with the Vercel OIDC token and `BLOB_STORE_ID`, both from
+the store connection, so an environment can only write to and delete from its own store. On Vercel
+the token arrives with each request (VercelHeadersMiddleware hands it to the SDK); a local run
+reads `VERCEL_OIDC_TOKEN`, which `vercel env pull` writes.
 
 The store follows the rows: a delete that drops a series, by itself or through the cascade from
 its match, season, team or player, drops its replays after the commit, and a deleted team or map
@@ -12,7 +16,9 @@ drops its picture. app.core.db registers the listeners with the session.
 """
 
 import logging
+import os
 
+import requests
 from sqlalchemy import event, or_, select
 from sqlalchemy.orm import Session as OrmSession
 from sqlmodel import col
@@ -37,6 +43,7 @@ EXTENSION = {"image/png": "png", "image/jpeg": "jpg"}
 MAX_ICON_BYTES = 2 * 1024 * 1024
 # a blob never changes under its own URL, because every upload gets a new random suffix
 ICON_CACHE_SECONDS = 31_536_000
+BLOB_API = "https://vercel.com/api/blob"
 
 
 def icon_type(data: bytes) -> str:
@@ -52,21 +59,55 @@ def icon_type(data: bytes) -> str:
     raise BadRequestError("Image must be a PNG or a JPEG")
 
 
+def _blob_api(
+    method: str,
+    path: str,
+    *,
+    params: dict[str, str] | None = None,
+    data: bytes | None = None,
+    json: dict[str, list[str]] | None = None,
+    headers: dict[str, str] | None = None,
+) -> requests.Response:
+    """One call to the Blob API with the OIDC token. The Python SDK authenticates only with a
+    static read-write token, so the two calls are made here the way @vercel/blob makes them:
+    the token as the bearer, and the store id beside it, because the token does not name one."""
+    from vercel.oidc import get_vercel_oidc_token
+
+    auth = {
+        "authorization": f"Bearer {get_vercel_oidc_token()}",
+        "x-vercel-blob-store-id": os.environ["BLOB_STORE_ID"].removeprefix("store_"),
+        "x-api-version": "11",
+    }
+    response = requests.request(
+        method,
+        f"{BLOB_API}{path}",
+        params=params,
+        data=data,
+        json=json,
+        headers={**auth, **(headers or {})},
+        timeout=30,
+    )
+    response.raise_for_status()
+    return response
+
+
 def put_icon(name: str, data: bytes) -> str:
     """Store the picture under this name, such as `teams/4`, and answer its public URL."""
-    from vercel import blob
-
     media_type = icon_type(data)
-    result = blob.put(
-        f"{name}.{EXTENSION[media_type]}",
-        data,
-        access="public",
-        content_type=media_type,
-        # a new URL every time, so no browser holds a replaced logo for the cache year
-        add_random_suffix=True,
-        cache_control_max_age=ICON_CACHE_SECONDS,
+    response = _blob_api(
+        "PUT",
+        "/",
+        params={"pathname": f"{name}.{EXTENSION[media_type]}"},
+        data=data,
+        headers={
+            "x-content-type": media_type,
+            "x-vercel-blob-access": "public",
+            # a new URL every time, so no browser holds a replaced logo for the cache year
+            "x-add-random-suffix": "1",
+            "x-cache-control-max-age": str(ICON_CACHE_SECONDS),
+        },
     )
-    return result.url
+    return response.json()["url"]
 
 
 def ours(url: str) -> bool:
@@ -77,14 +118,13 @@ def ours(url: str) -> bool:
 
 def delete_blob(url: str) -> None:
     """Drop a replaced blob. Deletes are free, and a missing blob is not an error worth raising."""
-    from vercel import blob
-    from vercel.blob import BlobError
+    from vercel.oidc import VercelOidcTokenError
 
     try:
-        blob.delete(url)
-    except BlobError:
-        # a blob that is already gone is fine, but a bad token or a suspended store also lands
-        # here and would otherwise leak a blob per replacement with nothing said
+        _blob_api("POST", "/delete", json={"urls": [url]})
+    except (requests.RequestException, VercelOidcTokenError, KeyError):
+        # a blob that is already gone is fine, but a missing or bad token (the KeyError is an
+        # unset BLOB_STORE_ID) or a suspended store also lands here and would otherwise leak a blob per replacement with nothing said
         logger.warning("could not delete the replaced blob %s", url, exc_info=True)
 
 

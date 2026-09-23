@@ -2,7 +2,7 @@
 
 ## Where they live
 
-In Vercel Blob, in the store `gnl-media`, connected to this project so `BLOB_READ_WRITE_TOKEN` is set. `teams.icon_url` holds the public URL and nothing else; the `teams.icon` bytes column is gone. A caller that reads `icon_url` off the team answer fetches the image straight from the store. A caller that still asks `GET /teams/{id}/image` pays one function invocation and one `SELECT icon_url` for the redirect, which is deliberately not cacheable: a replacement deletes the blob it replaced, so a cached redirect would point at something that no longer exists.
+In Vercel Blob: the store `gnl-media` for production and `gnl-media-staging` for preview and development, each connected to this project for its environments. A call authenticates with `BLOB_STORE_ID` and the Vercel OIDC token, which only the connected store accepts, so a preview holding production's URLs cannot delete production's files. The Python SDK takes only a static read-write token, so `app/services/blob.py` makes its two calls (put and delete) over HTTP the way `@vercel/blob` does, and `VercelHeadersMiddleware` hands each request's token header to the SDK's token lookup. `teams.icon_url` holds the public URL and nothing else; the `teams.icon` bytes column is gone. A caller that reads `icon_url` off the team answer fetches the image straight from the store. A caller that still asks `GET /teams/{id}/image` pays one function invocation and one `SELECT icon_url` for the redirect, which is deliberately not cacheable: a replacement deletes the blob it replaced, so a cached redirect would point at something that no longer exists.
 
 `POST /leagues/{league_id}/teams/{id}/image` uploads. It checks the magic bytes — PNG or JPEG, since three of the ten live logos are JPEGs that were stored as `image/png` — and a 2 MB cap, because the file becomes a public URL. Every upload gets a new random suffix, so replacing a logo changes its URL and no browser holds the old one behind the year-long cache; the blob it replaced is deleted straight after.
 
@@ -34,6 +34,6 @@ An upload wins over an import: the import fills `image` only where it is empty. 
 
 ## Seeded databases
 
-A seeded database gets its logos from the seed repo, which carries `logos/<team id>.png` or `.jpg`. `just _load-seed` pushes each through `TeamService.update_icon` after the CSVs load, so the database owns its blobs and a replaced production logo cannot break it. Without `BLOB_READ_WRITE_TOKEN` the upload is skipped and teams show the default logo.
+A seeded database gets its logos from the seed repo, which carries `logos/<team id>.png` or `.jpg`. `just _load-seed` pushes each through `TeamService.update_icon` after the CSVs load, so the database owns its blobs and a replaced production logo cannot break it. Without `BLOB_STORE_ID` the upload is skipped and teams show the default logo.
 
 The WordPress shortcodes are not part of this. They call `backend.warcraft-gym.com`, which is the Azure box running the older Flask app against MySQL, so they never read Supabase and never blocked any of it.
