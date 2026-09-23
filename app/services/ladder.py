@@ -26,7 +26,9 @@ from sqlalchemy import (
     tuple_,
     update,
 )
-from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session as OrmSession
 from sqlmodel import col
 
@@ -81,6 +83,8 @@ ParamSet = Mapping[str, Mapping[str, int]]
 FIRST_W3C_SEASON = 11
 # The window of a player's whole stored ladder history
 ALL_TIME = datetime.combine(date.min, time.min, UTC)
+# Rows per match insert; 14 columns keeps it under the 65,535 Postgres bind limit
+WRITE_CHUNK = 1_000
 
 if TYPE_CHECKING:
     from app.services.settings import SettingsService
@@ -656,32 +660,23 @@ class LadderService:
     def _write_matches(
         self, session: OrmSession, user_id: int, rows: list[W3CLadderMatchCreate]
     ) -> None:
-        """Insert the matches this player has no row for yet."""
-        if not rows:
-            return
-        # Only the ids in hand, not the player's whole history
-        stored = set(
-            session.scalars(
-                select(col(W3CLadderMatch.w3c_match_id)).where(
-                    col(W3CLadderMatch.user_id) == user_id,
-                    col(W3CLadderMatch.w3c_match_id).in_(
-                        [row.w3c_match_id for row in rows]
-                    ),
-                )
+        """Insert the matches this player has no row for yet, in bulk.
+
+        ON CONFLICT DO NOTHING skips a match already stored, one repeated in
+        the batch and one a concurrent run wrote first; any other integrity
+        error fails the sync.
+        """
+        dialect = session.get_bind().dialect.name
+        insert = pg_insert if dialect == "postgresql" else sqlite_insert
+        values = [
+            row.model_dump(exclude={"battleTag"}) | {"user_id": user_id} for row in rows
+        ]
+        for start in range(0, len(values), WRITE_CHUNK):
+            session.execute(
+                insert(W3CLadderMatch)
+                .values(values[start : start + WRITE_CHUNK])
+                .on_conflict_do_nothing(index_elements=["w3c_match_id", "user_id"])
             )
-        )
-        for row in rows:
-            if row.w3c_match_id in stored:
-                continue
-            values = row.model_dump(exclude={"battleTag"}) | {"user_id": user_id}
-            try:
-                # A savepoint, so a lost race rolls back the insert alone
-                with session.begin_nested():
-                    W3CLadderMatch.add(session, values)
-            except IntegrityError:
-                # Another run of the same player wrote the row first
-                pass
-            stored.add(row.w3c_match_id)
 
 
 def _window(season: Season) -> tuple[datetime, datetime]:

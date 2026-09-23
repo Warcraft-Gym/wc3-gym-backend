@@ -378,6 +378,38 @@ def test_a_second_sync_writes_no_second_row(
     assert len(stored()) == first
 
 
+def test_a_stored_and_a_repeated_match_are_written_once(
+    app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ON CONFLICT skips a match already stored and one repeated in the batch."""
+    thanks = add_player("thanks", "thanks#11187")
+    serve(monkeypatch, {})
+    rows = [
+        row
+        for match in THANKS[:3]
+        for row in W3CService().parse_match(match)
+        if row.battleTag == "thanks#11187"
+    ]
+    with Session.begin() as session:
+        W3CLadderMatch.add(
+            session, rows[0].model_dump(exclude={"battleTag"}) | {"user_id": thanks.id}
+        )
+    batch = [*rows, rows[1]]
+    monkeypatch.setattr(
+        W3CService,
+        "get_player_matches",
+        lambda self, battle_tag, seasons: (batch, {W3C_SEASON: True}),
+    )
+
+    result = LadderService().sync_users([thanks], SINCE, [W3C_SEASON])
+
+    assert result.synced == [thanks.id]
+    assert result.failed == []
+    assert sorted(row.w3c_match_id for row in stored()) == sorted(
+        match["id"] for match in THANKS[:3]
+    )
+
+
 def test_a_player_w3champions_refuses_does_not_stop_the_others(
     app: FastAPI, monkeypatch: pytest.MonkeyPatch
 ) -> None:
