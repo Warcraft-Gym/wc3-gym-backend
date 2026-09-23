@@ -4,7 +4,7 @@ title: API overview
 description: Twenty-one route modules under one FastAPI app, one error envelope, paging with a total header, a search language, and OpenAPI at /docs.
 resource: ../../../app/api/main.py
 tags: [api]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-23T03:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-23T12:00:00Z }
 sources:
   - id: router
     resource: ../../../app/api/main.py
@@ -67,7 +67,22 @@ List routes take `limit` (1 to 500) and `offset`. The default page is 500, excep
 
 CORS allows every origin, because clients send bearer tokens and never cookies. A route that sets `Cache-Control: public` must write `Access-Control-Allow-Origin: *` itself, next to it. See [the pitfall](../pitfalls/edge-cache-cors.md). A route whose answer belongs to one caller sets `Cache-Control: private` and `Vary: Authorization` instead, so no shared cache stores a copy and the browser's own copy is keyed on the bearer that names the caller.
 
-`GET /koth/board` and `GET /koth/nights/{night_id}/board` are the pair that sets `public, s-maxage=15`. Both answer `KothBoard`, keyed `night_id` with a `closed` flag, and every write of a live night answers the same shape, so the run page needs no second read. See [KOTH night](../concepts/koth.md).
+`edge_cache(response, s_maxage, swr)` in `app/api/deps.py` writes both headers: `Cache-Control: public, s-maxage=<s_maxage>`, with `stale-while-revalidate=<swr>` when given, and `Access-Control-Allow-Origin: *`. Only a route with no guard whose answer is the same for every caller uses it. An error answer carries neither header, because the error handlers build a fresh response. These routes use it, and their deprecated aliases with them:
+
+| Route | s-maxage | stale-while-revalidate |
+|---|---|---|
+| `GET /koth/board`, `GET /koth/nights/{night_id}/board` | 15 | none |
+| `GET /home/series` | 120 | none |
+| `GET /events/{event_id}/ladder` | 3600 | none |
+| `GET /events/{event_id}/ladder/players`, `GET /users/{user_id}/ladder` | 900 | 3600 |
+| `GET /leagues`, `GET /maps`, `GET /config/w3c`, `GET /config/settings/{key}` | 300 | 3600 |
+| `GET /users/{user_id}/history` | 120 | 600 |
+| `GET /events/{event_id}/teams`, its `basic` twin, `GET /events/{event_id}/teams/{team_id}` | 120 | 600 |
+| `GET /leagues/{league_id}/teams`, its `basic` twin, `GET /leagues/{league_id}/teams/{team_id}` | 120 | 600 |
+
+The edge serves a cached copy only to a request with no Authorization header. The frontend sends a route without its bearer only when its `EDGE_CACHED` pattern lists the route, and an admin's requests always carry the bearer, so an admin reads past the cache. A route added here is cached once the frontend pattern lists it too. `tests/test_edge_cache.py` pins every row.
+
+`GET /koth/board` and `GET /koth/nights/{night_id}/board` Both answer `KothBoard`, keyed `night_id` with a `closed` flag, and every write of a live night answers the same shape, so the run page needs no second read. See [KOTH night](../concepts/koth.md).
 
 # Examples
 

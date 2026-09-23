@@ -3,7 +3,12 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Response
 
-from app.api.deps import LadderServiceDep, SeasonServiceDep, require_admin
+from app.api.deps import (
+    LadderServiceDep,
+    SeasonServiceDep,
+    edge_cache,
+    require_admin,
+)
 from app.api.search import SearchQuery
 from app.models.ladder_achievement import (
     SeasonAchievementPublic,
@@ -367,18 +372,15 @@ def get_season_ladder(
     event_id: int, service: LadderServiceDep, response: Response
 ) -> SeasonLadder:
     """The ladder of a season: its teams, its players and its hours."""
-    # matches change once a day at the cron; the edge serves every viewer one read
-    response.headers["Cache-Control"] = "public, s-maxage=3600"
-    # the edge keeps the headers of the request that filled it, and CORSMiddleware
-    # writes none when that request has no Origin, so a browser reads a copy it blocks
-    response.headers["Access-Control-Allow-Origin"] = "*"
+    edge_cache(response, 3600)  # matches change once a day at the cron
     return service.season_ladder(event_id)
 
 
 @router.get("/events/{event_id}/ladder/players", tags=["events"])
 @router.get("/seasons/{event_id}/ladder/players", deprecated=True)
 def get_season_ladder_players(
-    event_id: int, service: LadderServiceDep
+    event_id: int, service: LadderServiceDep, response: Response
 ) -> list[SeasonPlayer]:
     """Every signup of the season with his ladder record, without the achievements."""
+    edge_cache(response, 900, 3600)
     return service.season_players(event_id)

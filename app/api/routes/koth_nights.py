@@ -9,7 +9,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Response
 
-from app.api.deps import SettingsServiceDep, require_admin
+from app.api.deps import SettingsServiceDep, edge_cache, require_admin
 from app.models.koth_night import (
     BoundsWrite,
     CrownWrite,
@@ -122,10 +122,7 @@ def get_board(night_id: int, response: Response) -> KothBoard:
 
 def _board(response: Response, night_id: int | None) -> KothBoard:
     """The board, cached at the edge because the dashboard polls it."""
-    # the dashboard polls every 30 seconds; the edge serves every viewer one read
-    response.headers["Cache-Control"] = "public, s-maxage=15"
-    # the edge keeps no CORS header of a request without an Origin, so write one
-    response.headers["Access-Control-Allow-Origin"] = "*"
+    edge_cache(response, 15)  # the dashboard polls every 30 seconds
     return board.read(night_id, public=True)
 
 

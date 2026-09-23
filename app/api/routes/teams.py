@@ -1,7 +1,7 @@
 import logging
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, File, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Query, Response, UploadFile
 from fastapi.responses import RedirectResponse
 
 from app.api.deps import (
@@ -11,6 +11,7 @@ from app.api.deps import (
     TeamServiceDep,
     UserServiceDep,
     claim_seats,
+    edge_cache,
     require_admin,
 )
 from app.api.search import SearchQuery
@@ -74,11 +75,13 @@ def add_team(
 @router.get("/teams/basic", deprecated=True)
 def get_all_teams_basic(
     service: TeamServiceDep,
+    response: Response,
     league_id: int | None = None,
     limit: Annotated[int, Query(ge=1, le=500)] = 500,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[TeamPublic]:
     """One page of a league's teams without roster users."""
+    edge_cache(response, 120, 600)
     return service.get_all_basic(limit=limit, offset=offset, league_id=league_id)
 
 
@@ -99,11 +102,13 @@ def search_teams(
 @router.get("/teams", deprecated=True)
 def get_all_teams(
     service: TeamServiceDep,
+    response: Response,
     league_id: int | None = None,
     limit: Annotated[int, Query(ge=1, le=500)] = 500,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[TeamPublic]:
     """Retrieve one page of a league's teams."""
+    edge_cache(response, 120, 600)
     return service.get_all(limit=limit, offset=offset, league_id=league_id)
 
 
@@ -113,10 +118,12 @@ def get_all_teams(
 def get_all_event_teams_basic(
     event_id: int,
     service: TeamServiceDep,
+    response: Response,
     limit: Annotated[int, Query(ge=1, le=500)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[TeamPublic]:
     """One page of event teams with event standings and no users, 50 a page."""
+    edge_cache(response, 120, 600)
     return service.get_teams_season_basic(event_id, limit=limit, offset=offset)
 
 
@@ -125,17 +132,22 @@ def get_all_event_teams_basic(
 def get_all_event_teams(
     event_id: int,
     service: TeamServiceDep,
+    response: Response,
     limit: Annotated[int, Query(ge=1, le=500)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[TeamPublic]:
     """One page of event teams with that event's roster and captains, 50 a page."""
+    edge_cache(response, 120, 600)
     return service.get_teams_season(event_id, limit=limit, offset=offset)
 
 
 @router.get("/events/{event_id}/teams/{team_id}", tags=["events"])
 @router.get("/teams/{team_id}/seasons/{event_id}", deprecated=True)
-def get_event_team(event_id: int, team_id: int, service: TeamServiceDep) -> TeamPublic:
+def get_event_team(
+    event_id: int, team_id: int, service: TeamServiceDep, response: Response
+) -> TeamPublic:
     """Retrieve one event team with that event's roster, captains and stats."""
+    edge_cache(response, 120, 600)
     return service.get_with_nested_users_by_season(team_id, event_id)
 
 
@@ -289,9 +301,13 @@ def sync_event_team_ladder(
 @router.get("/leagues/{league_id}/teams/{team_id}")
 @router.get("/teams/{team_id}", deprecated=True)
 def get_team(
-    team_id: int, service: TeamServiceDep, league_id: int | None = None
+    team_id: int,
+    service: TeamServiceDep,
+    response: Response,
+    league_id: int | None = None,
 ) -> TeamPublic:
     """Retrieve one team from its league."""
+    edge_cache(response, 120, 600)
     return service.get(team_id, league_id=league_id)
 
 

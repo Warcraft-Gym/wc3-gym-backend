@@ -1,10 +1,10 @@
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Query, Response, UploadFile
 from fastapi.responses import RedirectResponse
 
-from app.api.deps import MapServiceDep, require_admin
+from app.api.deps import MapServiceDep, edge_cache, require_admin
 from app.api.search import SearchQuery
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.models.map import LadderMapNames, LadderMapRow, MapCreate, MapPublic, MapUpdate
@@ -62,10 +62,12 @@ def get_map(map_id: int, service: MapServiceDep) -> MapPublic:
 @router.get("/maps", response_model=list[MapPublic])
 def get_all_maps(
     service: MapServiceDep,
+    response: Response,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[MapPublic]:
     """Retrieve one page of maps, 100 a page and at most 500."""
+    edge_cache(response, 300, 3600)
     return service.get_all(limit=limit, offset=offset)
 
 
