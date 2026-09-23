@@ -235,6 +235,7 @@ def _season(
                 "discordRole": "Discord Role",
                 "start_date": "Start Date",
                 "end_date": "End Date",
+                "signups_open": "Signups Open",
             },
         ),
     )

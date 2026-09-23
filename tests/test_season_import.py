@@ -176,11 +176,12 @@ def _branding(
     discord_role: str | None,
     long_name: str | None,
     image: str | None,
+    signups_open: bool | None = None,
 ) -> dict[str, tuple[list[str], list[list[Any]]]]:
     """The sheets whose optional cells carry branding, filled or blank."""
     return {
         "Season": (
-            SHEETS["Season"][0],
+            [*SHEETS["Season"][0], "Signups Open"],
             [
                 [
                     None,
@@ -191,6 +192,7 @@ def _branding(
                     "2026-01-05",
                     "2026-02-27",
                     discord_role,
+                    signups_open,
                 ]
             ],
         ),
@@ -215,6 +217,7 @@ def test_a_blank_cell_keeps_the_stored_value(
         discord_role="9001",
         long_name="Team Alpha",
         image="https://example.com/ei.png",
+        signups_open=False,
     )
     first = _post(client, _workbook(extra=filled), auth_headers)
     assert first.status_code == 200, first.text
@@ -234,6 +237,7 @@ def test_a_blank_cell_keeps_the_stored_value(
         binding = session.scalars(select(DiscordRoleBinding)).one()
 
     assert (season.pick_ban, season.discordRole) == ("EI, LR", "9001")
+    assert season.signups_open is False
     assert team.long_name == "Team Alpha"
     # The Discord Role cell of a team binds the role, and a blank cell keeps it
     assert (
