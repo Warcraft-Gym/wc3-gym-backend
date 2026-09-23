@@ -467,11 +467,16 @@ def test_a_workbook_the_pipeline_cannot_read_writes_nothing(
         assert session.scalars(select(User)).all() == []
 
 
-def _refused(client: Client, auth_headers: dict[str, str], row: list[Any]) -> str:
+def _refused(
+    client: Client,
+    auth_headers: dict[str, str],
+    row: list[Any],
+    extra_columns: tuple[str, ...] = (),
+) -> str:
     """Import a workbook whose one series is the row. Answers the error, after
     checking the import left no season behind."""
     columns, _ = SHEETS["Series"]
-    book = _workbook(extra={"Series": (columns, [row])})
+    book = _workbook(extra={"Series": ([*columns, *extra_columns], [row])})
 
     response = _post(client, book, auth_headers)
 
@@ -691,3 +696,22 @@ def test_a_2v2_row_writes_both_sides_and_scores_like_any_series(
     team = client.get(f"/events/{season_id}/teams/{ident(alpha)}").json()
     info = next(i for i in team["seasons_info"] if i["season_id"] == season_id)
     assert (info["final_score"], info["points_against"]) == (2, 1)
+
+
+PARTNERS = ("Player1b ID", "Player2b ID")
+
+
+def test_a_2v2_row_with_one_partner_is_refused(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    row = [1, 1, 1, 2, 2, 1, 2, 1, 1, None, None, False, 2, None]
+    error = _refused(client, auth_headers, row, PARTNERS)
+    assert error == "Series 1 needs both Player1b ID and Player2b ID for a 2v2"
+
+
+def test_a_2v2_row_with_an_unknown_partner_is_refused(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    row = [1, 1, 1, 2, 2, 1, 2, 1, 1, None, None, False, 1, 99]
+    error = _refused(client, auth_headers, row, PARTNERS)
+    assert error == "Series 1 names a player the workbook lacks"

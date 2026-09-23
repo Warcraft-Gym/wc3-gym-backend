@@ -657,9 +657,14 @@ def _series(
 
 def _partners(row: Row, users: Users) -> tuple[User, User] | None:
     """The second player of each side of a 2v2 row: the Player1b ID and
-    Player2b ID cells. A row without both is a 1v1."""
-    if row.get("Player1b ID") is None or row.get("Player2b ID") is None:
+    Player2b ID cells. A row with neither is a 1v1; a row with one is refused."""
+    filled = [row.get(column) is not None for column in ("Player1b ID", "Player2b ID")]
+    if not any(filled):
         return None
+    if not all(filled):
+        raise BadRequestError(
+            f"Series {row['ID']} needs both Player1b ID and Player2b ID for a 2v2"
+        )
     partner1 = users.by_old_id.get(whole_number(row["Player1b ID"]))
     partner2 = users.by_old_id.get(whole_number(row["Player2b ID"]))
     if not partner1 or not partner2:
