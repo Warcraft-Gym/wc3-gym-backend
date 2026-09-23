@@ -178,10 +178,10 @@ def get_event_fantasy_teams(
     event_id: int,
     service: FantasyTeamServiceDep,
     response: Response,
-    limit: Annotated[int, Query(ge=1, le=500)] = 500,
+    limit: Annotated[int, Query(ge=1, le=500)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[FantasyTeamPublic]:
-    """Retrieve one page of fantasy teams belonging to an event."""
+    """Retrieve one page of fantasy teams belonging to an event, 100 a page."""
     query = QueryUtil.parse_query(f"season_id == {event_id}")
     teams, total = service.search(query, limit=limit, offset=offset)
     response.headers["X-Total-Count"] = str(total or 0)
@@ -245,10 +245,10 @@ def get_bet(bet_id: int, service: FantasyBetServiceDep) -> FantasyBetPublic:
 def get_all_bets(
     service: FantasyBetServiceDep,
     response: Response,
-    limit: Annotated[int, Query(ge=1, le=500)] = 500,
+    limit: Annotated[int, Query(ge=1, le=500)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[FantasyBetPublic]:
-    """Retrieve one page of fantasy bets, at most 500."""
+    """Retrieve one page of fantasy bets, 50 a page and at most 500."""
     bets, total = service.get_all(limit=limit, offset=offset)
     if total is not None:
         response.headers["X-Total-Count"] = str(total)

@@ -486,7 +486,23 @@ TEST_DB_URL="postgresql+psycopg://gym_user:gym_user@localhost:5432/postgres" uv 
 
 ## List routes and paging
 
-The list routes take `limit` (1 to 500, default 500) and `offset` (>= 0, default 0) query parameters. A limit outside that range answers 422. The page is ordered by `id`, and both values go into the SQL statement, so a large table never becomes a large answer. `tests/test_paging.py` names every paged route.
+The list routes take `limit` (1 to 500) and `offset` (>= 0, default 0) query parameters. A limit outside that range answers 422. The page is ordered by `id`, and both values go into the SQL statement, so a large table never becomes a large answer. `tests/test_paging.py` names every paged route.
+
+A route whose set is bounded by the structure of a season pages smaller by default, so a client that names no limit reads a page its own size instead of the ceiling. The ceiling stays 500 on every route, so a client that names `limit=500` reads what it always read.
+
+| Route | Default page size | What bounds the set |
+| --- | --- | --- |
+| `GET /events/{event_id}/teams` | 50 | the teams of one event, 4 to 10 in every season so far |
+| `GET /events/{event_id}/teams/basic` | 50 | the same set, without the rosters |
+| `GET /fantasy/bets` | 50 | nothing; no client reads this route, and the bets pages walk `/fantasy/bets/search` |
+| `GET /events/{event_id}/fantasy/teams` | 100 | the fantasy teams of one event, 27 in the largest season |
+| `POST /users/search` | 100 | the ids a caller asks for by name |
+| `POST /matches/search` | 100 | the matches of one event, 36 in the largest season |
+| `GET /maps` | 100 | the map pool, 15 maps |
+| `GET /draft-series/match/{match_id}` | 100 | the draft series of one match |
+| `GET /player-series` | 100 | one player's series in one event |
+
+Every other list route keeps the default of 500, because its client reads the whole set in one request: the season reads of `/events/{event_id}/series`, the assign screen's `/events/{event_id}/signups`, the league-wide team routes, and the routes the page-walking clients call with `limit=500` of their own (`GET /users`, `GET /fantasy/teams`, `POST /fantasy/teams/search`, `POST /fantasy/bets/search`, `GET /stats/career`).
 
 Seven routes carry the total row count in an `X-Total-Count` response header, which CORS exposes to browsers. A client reads the header, then walks the pages with `limit` and `offset`. The count holds for the whole set the route answers, not for the page.
 
@@ -495,9 +511,9 @@ Seven routes carry the total row count in an `X-Total-Count` response header, wh
 | `GET /users` | 500 |
 | `GET /fantasy/teams` | 500 |
 | `POST /fantasy/teams/search` | 500 |
-| `GET /fantasy/bets` | 500 |
+| `GET /fantasy/bets` | 50 |
 | `POST /fantasy/bets/search` | 500 |
-| `GET /player-series` | 500 |
+| `GET /player-series` | 100 |
 | `GET /stats/career` | 500 |
 
 `GET /stats/career` takes an optional `search` string as well, which keeps the rows whose player name or user name holds it, without case. The header counts the kept rows.

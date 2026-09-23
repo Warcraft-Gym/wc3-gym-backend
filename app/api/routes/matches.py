@@ -61,8 +61,8 @@ def get_match_replays(match_id: int) -> list[SeriesReplayPublic]:
 def search_match(
     service: MatchServiceDep,
     query: SearchQuery,
-    limit: Annotated[int, Query(ge=1, le=500)] = 500,
+    limit: Annotated[int, Query(ge=1, le=500)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[MatchPublic]:
-    """Search matches by criteria using a custom query format."""
+    """Search matches by criteria using a custom query format, 100 a page."""
     return service.search(query, limit=limit, offset=offset)

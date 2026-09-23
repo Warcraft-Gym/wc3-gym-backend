@@ -1,7 +1,8 @@
 """The list routes answer at most 500 rows, and the cap is SQL.
 
 Every route in PAGED_ROUTES takes limit and offset. A limit outside
-1..500 answers 422, and the default limit is 500. The cap goes into the
+1..500 answers 422. The default limit is 500, or the smaller page a
+route names for a set a season's structure bounds. The cap goes into the
 statement as LIMIT, so a large table never becomes a large Python list.
 
 Three routes also take sort and order. DEFAULT_ORDER holds the ORDER BY
@@ -100,7 +101,7 @@ def test_a_limit_outside_the_range_is_rejected(
 
 
 def test_the_default_limit_cuts_a_long_list(client: Client) -> None:
-    """600 maps, and the route answers the first 500 of them."""
+    """600 maps: /maps answers its page of 100, and limit 500 answers 500."""
     from app.models.map import Map
 
     with Session() as session:
@@ -110,7 +111,11 @@ def test_the_default_limit_cuts_a_long_list(client: Client) -> None:
 
     resp = client.get("/maps")
     assert resp.status_code == 200
-    assert len(resp.json()) == 500
+    assert len(resp.json()) == 100
+
+    capped = client.get("/maps?limit=500")
+    assert capped.status_code == 200
+    assert len(capped.json()) == 500
 
 
 def test_offset_walks_the_seeded_users(client: Client, league: dict[str, Any]) -> None:
