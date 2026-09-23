@@ -26,6 +26,7 @@ from app.models import (
     discord_post,
     discord_role_binding,
     draft_series,
+    egress_ledger,
     enums,
     event_award,
     event_division,

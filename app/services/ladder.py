@@ -32,7 +32,7 @@ from sqlmodel import col
 
 from app.core import achievement_rules, achievements, ladder, team_achievements
 from app.core.achievement_rules import Context
-from app.core.db import Session
+from app.core.db import Session, submit_in_context
 from app.core.exceptions import (
     BadRequestError,
     ExternalServiceError,
@@ -488,7 +488,8 @@ class LadderService:
         # Each worker opens its own session; the threads share the engine only
         with ThreadPoolExecutor(W3C_SYNC_WORKERS) as pool:
             futures = {
-                pool.submit(self._sync_user, u, w3c_service, plan): u for u in users
+                submit_in_context(pool, self._sync_user, u, w3c_service, plan): u
+                for u in users
             }
             for future in as_completed(futures):
                 if future.cancelled():

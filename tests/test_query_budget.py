@@ -66,6 +66,7 @@ from typing import Any
 
 import pytest
 from fastapi import FastAPI
+from httpx2 import Client
 from sqlalchemy import event, select
 from sqlalchemy.orm import joinedload
 
@@ -99,13 +100,17 @@ STATS_PER_PLAYER = 8
 
 @contextmanager
 def count_statements() -> Iterator[list[int]]:
-    """Report how many statements the engine sent inside the block."""
+    """Report how many statements the engine sent inside the block.
+
+    The egress ledger write after each request is not the route's own cost,
+    so it is left out."""
     with Session() as session:
         engine = session.get_bind()
     tally = [0]
 
-    def on_execute(*args: object) -> None:
-        tally[0] += 1
+    def on_execute(conn: object, cursor: object, statement: str, *args: object) -> None:
+        if "egress_ledger" not in statement:
+            tally[0] += 1
 
     event.listen(engine, "before_cursor_execute", on_execute)
     try:
@@ -569,3 +574,31 @@ def test_the_season_list_costs_the_same_when_seasons_grow(
     assert len(seasons) == 5
     assert [season.phase for season in seasons[1:]] == ["open"] * 4
     assert tally[0] == one_season
+
+
+# Rows one call of each route reads on the league fixture, as X-DB-Rows reports it
+ROWS_PER_CALL = {
+    "/series/{series_played_id}": 29,
+    "/events/{season_id}/series": 22,
+    "/fantasy/bets": 10,
+    "/fantasy/teams": 9,
+    "/stats/career": 8,
+    "/stats/career/{player_id}": 6,
+    "/events/{season_id}/teams": 55,
+    "/users": 37,
+    "/users/{player_id}": 14,
+    "/events": 7,
+}
+# Room for a row or two of drift before the ceiling fails
+ROWS_MARGIN = 2
+
+
+@pytest.mark.parametrize("route", sorted(ROWS_PER_CALL))
+def test_rows_per_call_stay_under_the_ceiling(
+    client: Client, league: dict[str, Any], route: str
+) -> None:
+    """A route that starts reading more rows per call fails here."""
+    path = route.format(player_id=league["player_ids"][0], **league)
+    response = client.get(path)
+    assert response.status_code == 200
+    assert int(response.headers["X-DB-Rows"]) <= ROWS_PER_CALL[route] + ROWS_MARGIN

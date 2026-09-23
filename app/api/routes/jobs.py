@@ -1,18 +1,20 @@
 import os
 from datetime import timedelta
 from time import monotonic
+from typing import Annotated
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query, Response
 from sqlmodel import col, select
 
 from app.api.deps import Credentials, LadderServiceDep
 from app.core.db import Session
 from app.core.exceptions import ApiError
+from app.models.egress_ledger import EgressLedger
 from app.models.relationships import DBUserSeasonSignup
 from app.models.types import utcnow
 from app.models.user import User, UserReduced
 from app.models.w3c_stats import W3CSyncResult
-from app.services import casts, discord_posts
+from app.services import casts, discord_posts, egress
 from app.services.users import W3C_SYNC_WORKERS
 
 router = APIRouter(tags=["jobs"])
@@ -85,3 +87,16 @@ def sync_w3c_cron(credentials: Credentials, service: LadderServiceDep) -> W3CSyn
         result.failed += wave.failed
         if not wave.synced or monotonic() >= deadline:
             return result
+
+
+@router.get("/jobs/egress")
+def egress_ledger(
+    credentials: Credentials,
+    response: Response,
+    days: Annotated[int, Query(ge=1, le=90)] = 7,
+) -> list[EgressLedger]:
+    """What each route cost the database over the last `days` days, today
+    included, most rows first. This route is not recorded in the ledger."""
+    only_the_scheduler(credentials)
+    response.headers["Cache-Control"] = "no-store"
+    return egress.recent(days)

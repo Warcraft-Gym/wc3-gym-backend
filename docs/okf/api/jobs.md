@@ -1,10 +1,10 @@
 ---
 type: API Area
 title: Scheduled jobs
-description: Two job routes behind a shared secret, one called daily by Vercel and one every five minutes by a Cloudflare Worker, because the hosting plan allows one cron a day.
+description: Three job routes behind a shared secret, one called daily by Vercel, one every five minutes by a Cloudflare Worker, because the hosting plan allows one cron a day, and one that reads the egress ledger.
 resource: ../../../app/api/routes/jobs.py
 tags: [deploy]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-23T12:40:00Z }
 sources:
   - id: jobs
     resource: ../../../app/api/routes/jobs.py
@@ -20,8 +20,13 @@ sources:
 |---|---|---|
 | `GET /jobs/w3c-sync` | drains the stalest players' ladder matches and stats for 50 seconds, inside the 60 second function limit | Vercel cron at 04:00 UTC, shifted by up to 59 minutes |
 | `GET /jobs/cast-reminders` | posts the reminder card for series that start soon | the Cloudflare Worker in the Discord adapter repository, every five minutes |
+| `GET /jobs/egress?days=7` | the [egress ledger](../data/tables/egress_ledger.md) rows of the last `days` days (1 to 90), most rows first, with `Cache-Control: no-store` | an operator, with `just egress-routes` against a local server |
 
-Both check `Authorization: Bearer <CRON_SECRET>`. With `CRON_SECRET` unset every job route answers 503, so a deployment without the secret runs no job.
+All three check `Authorization: Bearer <CRON_SECRET>`. With `CRON_SECRET` unset every job route answers 503, so a deployment without the secret runs no job.
+
+# Request cost headers
+
+Every response carries `X-DB-Statements` and `X-DB-Rows`, the statements the request sent and the rows returned by reads plus rows changed by writes, and `X-Response-Bytes`, the content length or 0 for a streamed body. CORS exposes all three. One log line per request repeats them: `egress route=<template> method= status= statements= rows= bytes= ms=`. The W3Champions sync workers count toward the request that started them. `tests/test_query_budget.py` pins a rows-per-call ceiling for the list and detail routes it covers.
 
 # Why the worker exists
 
