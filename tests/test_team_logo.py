@@ -97,26 +97,49 @@ def test_a_jpeg_is_accepted(
 
 
 def test_put_icon_follows_the_bytes(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The conftest stub replaces put_icon wholesale, so the pathname and content type it chooses
-    are only covered here, by standing in for the SDK instead."""
-    from vercel import blob as sdk
+    """The conftest stub replaces put_icon wholesale, so the pathname, the content type and the
+    OIDC credentials it sends are only covered here, by standing in for the HTTP call instead."""
+    import requests
+    import vercel.oidc
 
     seen: dict[str, object] = {}
 
-    class Result:
-        url = "https://blob.test/x"
+    class Response:
+        def raise_for_status(self) -> None:
+            pass
 
-    def fake_put(path: str, body: bytes, **kwargs: object) -> Result:
-        seen["path"] = path
-        seen["content_type"] = kwargs["content_type"]
-        return Result()
+        def json(self) -> dict[str, str]:
+            return {"url": "https://blob.test/x"}
 
-    monkeypatch.setattr(sdk, "put", fake_put)
-    REAL_PUT_ICON("teams/7", JPEG)
-    assert seen == {"path": "teams/7.jpg", "content_type": "image/jpeg"}
+    def fake_request(
+        method: str,
+        url: str,
+        *,
+        params: dict[str, str],
+        headers: dict[str, str],
+        **_: object,
+    ) -> Response:
+        seen.update(method=method, url=url, pathname=params["pathname"])
+        seen["content_type"] = headers["x-content-type"]
+        seen["auth"] = headers["authorization"]
+        seen["store"] = headers["x-vercel-blob-store-id"]
+        return Response()
+
+    monkeypatch.setattr(requests, "request", fake_request)
+    monkeypatch.setattr(vercel.oidc, "get_vercel_oidc_token", lambda: "oidc-token")
+    monkeypatch.setenv("BLOB_STORE_ID", "store_AbC123")
+    assert REAL_PUT_ICON("teams/7", JPEG) == "https://blob.test/x"
+    assert seen == {
+        "method": "PUT",
+        "url": "https://vercel.com/api/blob/",
+        "pathname": "teams/7.jpg",
+        "content_type": "image/jpeg",
+        "auth": "Bearer oidc-token",
+        "store": "AbC123",
+    }
 
     REAL_PUT_ICON("teams/7", PNG)
-    assert seen == {"path": "teams/7.png", "content_type": "image/png"}
+    assert (seen["pathname"], seen["content_type"]) == ("teams/7.png", "image/png")
 
 
 def test_the_image_route_redirects_once_a_logo_is_in_the_store(

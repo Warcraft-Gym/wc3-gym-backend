@@ -239,7 +239,8 @@ FRONTEND_URL="http://localhost:5003"
 | `DISCORD_PUBLIC_KEY` | The app's public key from the Discord Developer Portal; `POST /discord/interactions` checks Discord's signature with it and answers 503 while it is unset | 64-character hex string |
 | `DISCORD_APPLICATION_ID` | The Discord application id; `just discord-commands` registers the slash commands on the guild with it | `123456789012345678` |
 | `CRON_SECRET` | Bearer token the `/jobs` routes check; unset, every `/jobs` route answers 503 | 64-character hex string |
-| `BLOB_READ_WRITE_TOKEN` | Token of the Vercel Blob store holding the team logos and map thumbnails; the icon upload routes and the `seed` recipes write with it | `vercel_blob_rw_...` |
+| `BLOB_STORE_ID` | The Vercel Blob store holding the team logos and map thumbnails: `gnl-media` in production, `gnl-media-staging` elsewhere. Set by the store connection | `store_...` |
+| `VERCEL_OIDC_TOKEN` | Local runs only: the OIDC token the blob calls authenticate with. On Vercel it arrives with each request. `vercel env pull` writes it; it lasts 12 hours | `eyJ...` |
 | `CLOUDFLARE_ACCOUNT_ID` | The Cloudflare account holding the replay bucket | `a1b2c3...` |
 | `CLOUDFLARE_R2_BUCKET` | The R2 bucket the replays live in; see `.env.example` for which bucket each target uses | `gnl-replays` |
 | `CLOUDFLARE_ACCESS_KEY_ID` | The R2 API token's key id, scoped to that bucket | `a1b2c3...` |
@@ -333,7 +334,7 @@ uv run alembic current             # show the revision the database is on
 uv run alembic history             # list the revisions
 ```
 
-Each place wraps these in its own module: `just local alembic upgrade head`, `just local alembic history`, `just vercel migrate staging`, `just azure alembic upgrade head`. The URLs come from `.env` (`LOCAL_DB_URL`, `VERCEL_PROD_DB_URL`, `VERCEL_STAGING_DB_URL`), gitignored, copied from `.env.example`; `just vercel url staging` prints one. The Azure box has no URL reachable from a laptop, so its recipes run alembic and the seed script inside the backend container over SSH. `seed` also uploads the seed repo's `logos/` through the logo upload path when `BLOB_READ_WRITE_TOKEN` is set (in `.env`, from the Vercel project), so a seeded database owns its blobs.
+Each place wraps these in its own module: `just local alembic upgrade head`, `just local alembic history`, `just vercel migrate staging`, `just azure alembic upgrade head`. The URLs come from `.env` (`LOCAL_DB_URL`, `VERCEL_PROD_DB_URL`, `VERCEL_STAGING_DB_URL`), gitignored, copied from `.env.example`; `just vercel url staging` prints one. The Azure box has no URL reachable from a laptop, so its recipes run alembic and the seed script inside the backend container over SSH. `seed` also uploads the seed repo's `logos/` through the logo upload path when `BLOB_STORE_ID` and `VERCEL_OIDC_TOKEN` are set (in `.env`, from `vercel env pull`), so a seeded database owns its blobs.
 
 ### DB_URL names the same database twice
 
