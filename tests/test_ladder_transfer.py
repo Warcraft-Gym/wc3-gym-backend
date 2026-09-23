@@ -96,11 +96,11 @@ def test_rows_come_back_identical_and_a_second_push_adds_none(
     clear()
 
     with Session.begin() as session:
-        assert push(session, tmp_path) == {MATCHES: (8, 8, 0), SYNC: (4, 4, 0)}
+        assert push(session, tmp_path) == {MATCHES: (8, 8, 0, 0), SYNC: (4, 4, 0, 0)}
     assert snapshot() == before
 
     with Session.begin() as session:
-        assert push(session, tmp_path) == {MATCHES: (8, 0, 0), SYNC: (4, 0, 0)}
+        assert push(session, tmp_path) == {MATCHES: (8, 0, 0, 0), SYNC: (4, 0, 0, 0)}
 
 
 def test_an_event_filter_leaves_out_unrostered_players(
@@ -131,7 +131,28 @@ def test_an_unknown_tag_is_skipped_and_counted(
         )
 
     with Session.begin() as session:
-        assert push(session, tmp_path) == {MATCHES: (4, 2, 2), SYNC: (2, 1, 1)}
+        assert push(session, tmp_path) == {MATCHES: (4, 2, 0, 2), SYNC: (2, 1, 0, 1)}
+
+
+def test_an_older_ledger_row_on_the_target_takes_the_exported_values(
+    seeded: dict[str, Any], tmp_path: Path
+) -> None:
+    add_rows(seeded["player_ids"][:1])
+    with Session.begin() as session:
+        export(session, tmp_path, [])
+        exported = session.scalars(select(LadderSync)).one().model_dump(exclude={"id"})
+        # The target read the season earlier and did not reach its end
+        session.execute(
+            update(LadderSync).values(
+                synced_at=datetime(2026, 8, 1, tzinfo=UTC), complete=False
+            )
+        )
+
+    with Session.begin() as session:
+        assert push(session, tmp_path)[SYNC] == (1, 0, 1, 0)
+    with Session() as session:
+        row = session.scalars(select(LadderSync)).one()
+        assert row.model_dump(exclude={"id"}) == exported
 
 
 def test_push_refuses_a_directory_without_both_files(tmp_path: Path) -> None:

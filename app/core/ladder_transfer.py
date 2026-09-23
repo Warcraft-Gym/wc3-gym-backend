@@ -17,7 +17,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import Executable, and_, case, not_, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session as OrmSession
@@ -89,8 +89,41 @@ def export(session: OrmSession, out: Path, event_ids: list[int]) -> dict[str, in
     return counts
 
 
-def push(session: OrmSession, source: Path) -> dict[str, tuple[int, int, int]]:
-    """Insert the rows the target lacks: rows read, inserted and skipped per file."""
+def _newer(insert: Any, values: list[dict[str, Any]]) -> Executable:  # noqa: ANN401
+    """Move each ledger row the target holds to what either side knows: the later
+    stamp, complete when either read the season to its end, the earlier read_from.
+    A row that would not change is left alone, so the count is rows changed."""
+    stmt = insert(LadderSync).values(values)
+    new = stmt.excluded
+    synced, done, since = (
+        col(LadderSync.synced_at),
+        col(LadderSync.complete),
+        col(LadderSync.read_from),
+    )
+    later = new.synced_at > synced
+    earlier = or_(
+        and_(since.is_(None), new.read_from.is_not(None)), new.read_from < since
+    )
+    return stmt.on_conflict_do_update(
+        index_elements=["user_id", "wc3_season"],
+        set_={
+            "synced_at": case((later, new.synced_at), else_=synced),
+            "complete": or_(done, new.complete),
+            "read_from": case((earlier, new.read_from), else_=since),
+        },
+        where=or_(later, and_(new.complete, not_(done)), earlier),
+    )
+
+
+def _count(session: OrmSession, stmt: Executable) -> int:
+    # psycopg reports -1 for a multi-row insert unless asked to keep the count
+    result = session.execute(stmt, execution_options={"preserve_rowcount": True})
+    return result.rowcount  # ty: ignore[unresolved-attribute]
+
+
+def push(session: OrmSession, source: Path) -> dict[str, tuple[int, int, int, int]]:
+    """Insert the rows the target lacks and bring its ledger rows up to date:
+    rows read, inserted, updated and skipped per file."""
     missing = [name for name, *_ in TABLES if not (source / name).is_file()]
     if missing:
         raise FileNotFoundError(f"{source} lacks {', '.join(missing)}")
@@ -117,17 +150,18 @@ def push(session: OrmSession, source: Path) -> dict[str, tuple[int, int, int]]:
                     base.model_validate(data | {"user_id": user_id}).model_dump()
                     | {"user_id": user_id}
                 )
-        inserted = 0
+        inserted = updated = 0
+        # ponytail: copies _write_matches, share a helper when a third caller appears
         for start in range(0, len(values), CHUNK):
-            result = session.execute(
-                insert(model)
-                .values(values[start : start + CHUNK])
-                .on_conflict_do_nothing(index_elements=key)
-                # psycopg reports -1 for a multi-row insert unless asked to keep the count
-                .execution_options(preserve_rowcount=True)
+            chunk = values[start : start + CHUNK]
+            inserted += _count(
+                session,
+                insert(model).values(chunk).on_conflict_do_nothing(index_elements=key),
             )
-            inserted += result.rowcount  # ty: ignore[unresolved-attribute]
-        counts[name] = (read, inserted, read - len(values))
+            # Every row of the chunk now exists, so this one only updates
+            if model is LadderSync:
+                updated += _count(session, _newer(insert, chunk))
+        counts[name] = (read, inserted, updated, read - len(values))
     return counts
 
 
@@ -135,7 +169,10 @@ def main() -> None:
     action, source, env, *events = sys.argv[1:]
     if env not in URLS:
         sys.exit(f"env must be one of {', '.join(URLS)}")
-    init_engine(os.environ[URLS[env]])
+    url = os.environ.get(URLS[env])
+    if not url:
+        sys.exit(f"{URLS[env]} is not set")
+    init_engine(url)
     path = Path(source)
     with Session.begin() as session:
         if action == "export":
@@ -146,9 +183,9 @@ def main() -> None:
                 counts = push(session, path)
             except FileNotFoundError as err:
                 sys.exit(str(err))
-            for name, (read, inserted, skipped) in counts.items():
+            for name, (read, inserted, updated, skipped) in counts.items():
                 print(
-                    f"{name}: read {read:,}, inserted {inserted:,},"
+                    f"{name}: read {read:,}, inserted {inserted:,}, updated {updated:,},"
                     f" skipped {skipped:,} for an unknown tag"
                 )
 
