@@ -4,7 +4,7 @@ title: Authentication
 description: A bearer token is either the admin token's JWT or a Clerk session; the claims resolve the Discord id and the role once per request, and five guards build on them.
 resource: ../../../app/api/deps.py
 tags: [auth]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-23T10:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-23T17:45:00Z }
 sources:
   - id: deps
     resource: ../../../app/api/deps.py
@@ -31,7 +31,7 @@ Once per request, `clerk_claims` resolves and caches on `request.state`:
 - the Discord id behind the Clerk user, from `clerk_account`, written by the first request of a login and rewritten only when Clerk names another Discord account;
 - the role: `admin` from `admin_grant` or `ADMIN_DISCORD_IDS` with no guild read; else `member` or `guest` from the guild read; a member with captain seats in a running season becomes `captain` with a `seats` list.
 
-Every check is live, so a kick, a grant or a seat change shows on the next request. Nothing about membership is cached across requests.
+An admin grant and a captain seat are read live, so they show on the next request. The guild answer, member or guest, is kept per process for one minute (`ROLE_TTL` in `app/services/discord.py`), so a guild join, leave or kick shows within a minute. A failed guild read is never kept. See [Discord integration](../concepts/discord-integration.md).
 
 # The guards
 
