@@ -75,7 +75,7 @@ CORS allows every origin, because clients send bearer tokens and never cookies. 
 | `GET /home/series` | 120 | none |
 | `GET /events/{event_id}/ladder` | 3600 | none |
 | `GET /events/{event_id}/ladder/players`, `GET /users/{user_id}/ladder` | 900 | 3600 |
-| `GET /leagues`, `GET /maps`, `GET /config/w3c`, `GET /config/settings/{key}` | 300 | 3600 |
+| `GET /leagues`, `GET /maps`, `GET /config/w3c`, `GET /config/settings/{key}`, `GET /stats/career` | 300 | 3600 |
 | `GET /users/{user_id}/history` | 120 | 600 |
 | `GET /events/{event_id}/teams`, its `basic` twin, `GET /events/{event_id}/teams/{team_id}`, `GET /events/{event_id}/series` | 120, or 3600 once the event is finished | 600, or 86400 once the event is finished |
 | `GET /leagues/{league_id}/teams`, its `basic` twin, `GET /leagues/{league_id}/teams/{team_id}` | 120 | 600 |

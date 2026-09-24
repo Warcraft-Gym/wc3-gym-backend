@@ -14,6 +14,7 @@ SHORT = "public, s-maxage=120, stale-while-revalidate=600"
 ROUTES = [
     ("/leagues", LONG),
     ("/maps", LONG),
+    ("/stats/career", LONG),
     ("/config/w3c", LONG),
     ("/config/settings/score_system", LONG),
     ("/events/{season_id}/ladder/players", LADDER),

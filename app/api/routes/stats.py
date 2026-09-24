@@ -5,7 +5,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, File, Query, Response, UploadFile
 
-from app.api.deps import StatsServiceDep, require_admin
+from app.api.deps import StatsServiceDep, edge_cache, require_admin
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.core.ordering import SortOrder
 from app.models.player_career_stats import (
@@ -39,6 +39,7 @@ def get_all_career_stats(
         limit=limit, offset=offset, search=search, sort=sort, order=order
     )
     response.headers["X-Total-Count"] = str(total)
+    edge_cache(response, 300, 3600)
     return [stat.to_dict() for stat in stats]
 
 
