@@ -20,10 +20,11 @@ from app.core.db import Session
 from app.core.exceptions import ApiError
 from app.core.security import decode_token, is_admin
 from app.models.clerk_account import ClerkAccount
+from app.models.season import Season
 from app.services import admins, discord, discord_roles
 from app.services.availability import AvailabilityService
 from app.services.draft_series import DraftSeriesService
-from app.services.events import EventService
+from app.services.events import EventService, phase_of
 from app.services.fantasy_bets import FantasyBetService
 from app.services.fantasy_teams import FantasyTeamService
 from app.services.gnl_events import GnlEventService
@@ -58,6 +59,18 @@ def edge_cache(response: Response, s_maxage: int, swr: int | None = None) -> Non
         value += f", stale-while-revalidate={swr}"
     response.headers["Cache-Control"] = value
     response.headers["Access-Control-Allow-Origin"] = "*"
+
+
+def event_edge_cache(response: Response, event_id: int) -> None:
+    """`edge_cache` sized to the event: a day's grace for a finished event, which
+    changes only when an admin corrects it, and two minutes while it runs."""
+    with Session.begin() as session:
+        event = Season.get_by_id(session, event_id)
+        finished = event is not None and phase_of(session, event) == "finished"
+    if finished:
+        edge_cache(response, 3600, 86400)
+    else:
+        edge_cache(response, 120, 600)
 
 
 @cache

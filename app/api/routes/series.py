@@ -4,11 +4,11 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query, Response
 
 from app.api.deps import (
-    edge_cache,
     RequireLogin,
     RequireMember,
     SeriesServiceDep,
     UserServiceDep,
+    event_edge_cache,
     require_admin,
 )
 from app.api.search import SearchQuery
@@ -147,7 +147,7 @@ def get_series_by_event(
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[SeriesPublic]:
     """Return one page of an event's series, at most 500."""
-    edge_cache(response, 120, 600)
+    event_edge_cache(response, event_id)
     return service.search_for_season(event_id, None, limit=limit, offset=offset)
 
 
