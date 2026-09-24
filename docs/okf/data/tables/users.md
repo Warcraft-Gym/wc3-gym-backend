@@ -4,7 +4,7 @@ title: users
 description: One person, made by the first way in that meets them and found by any battle tag they hold or by Discord id, with the profile fields the forms write and three sync stamps.
 resource: ../../../../app/models/user.py
 tags: [auth, data]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-24T09:42:05Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-24T10:00:35Z }
 verified: { by: process:test_okf, at: 2026-09-24T09:51:01Z }
 sources:
   - id: model
@@ -19,6 +19,9 @@ sources:
   - id: tags
     resource: ../../../../app/services/battle_tags.py
     title: Finds a person by any tag and attaches a tag
+  - id: merge
+    resource: ../../../../app/services/merge.py
+    title: The merge of two people
 ---
 
 # Schema
@@ -73,3 +76,16 @@ The member signup takes a row only when no other login holds it. A row has a log
 - `GET /users/{key}` takes an id, or any tag the person holds, without case.
 - The user reads (`GET /users/{key}`, `GET /users`, `POST /users/search`) carry `tags`: every tag row as `{id, tag, verified, active, source, first_seen, last_seen}`, the active one first, loaded in one statement per page. `verified` is true when `bnet_account_id` is set. A user nested in another read carries `tags` empty.
 - A batch alter of this table on SQLite drops the three expression indexes; the migration writes them back. See [migrations](../migrations.md).
+- `GET /users` takes `no_discord=true`, the people with no login, and `tag_source=<source>`, the people who hold a tag row of that source. Both combine with `limit` and `offset`, and `X-Total-Count` counts the filtered rows.
+
+# Merge
+
+`POST /users/{id}/merge` `{into_user_id, dry_run}` is admin only. It moves person `{id}` into `into_user_id`: every column that holds a user id changes, in one transaction, and `{id}` is deleted. The columns are every foreign key to `users.id` in the table metadata, and three user id columns with no foreign key: `series.host_player_id`, `draft_series.host_player_id` and `series_side.user_id`. A new table with a foreign key to `users.id` joins the merge by itself.
+
+The answer to a dry run is `{stops, removes, moves}`, each a list of plain sentences:
+
+- `stops`: two rows that would share a unique key once the ids match, such as the same season signup, team season seat, round availability, fantasy bet or event entry, a seat in the same series, or a series the two play against each other. Both people having a Discord login is a stop too. A real run with any stop answers 409 with the same body and an `error`.
+- `removes`: copies of one W3Champions fact. A duplicate [w3c_ladder_matches](w3c_ladder_matches.md) row or [w3cstats](w3cstats.md) row of `{id}` goes; of two [ladder_sync](ladder_sync.md) rows for one season, the older goes.
+- `moves`: the rows that change, counted per table, such as `12 series` or `3 signups`.
+
+The target keeps its profile and its active tag; the tags of `{id}` become its inactive tags, or the active one moves across when the target had none. A target with no login takes the Discord id and name of `{id}`. A real run answers the merged user read.

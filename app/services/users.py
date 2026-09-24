@@ -4,13 +4,13 @@ from datetime import timedelta
 from itertools import pairwise
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ColumnElement, Select, func, select, update
+from sqlalchemy import ColumnElement, Select, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as OrmSession
 from sqlalchemy.orm import joinedload, noload, selectinload
 from sqlmodel import col
 
-from app.core.battle_tags import has_login
+from app.core.battle_tags import STAND_IN_ID_PREFIX, has_login, is_real_tag
 from app.core.db import Session, rel
 from app.core.exceptions import (
     ApiError,
@@ -30,12 +30,21 @@ from app.models.user import (
     UserReduced,
     UserUpdate,
 )
+from app.models.user_battle_tag import MergePlan, UserBattleTag
 from app.models.w3c_stats import (
     W3CStats,
     W3CStatsCreate,
 )
-from app.services import derived
-from app.services.battle_tags import attach_tag, person_by_tag
+from app.services import derived, merge
+from app.services.battle_tags import (
+    active_row,
+    attach_tag,
+    drop_tag,
+    move_tag,
+    person_by_tag,
+    set_active_tag,
+    tag_row,
+)
 from app.services.w3c import REQUEST_TIMEOUT, W3CService
 
 if TYPE_CHECKING:
@@ -301,21 +310,147 @@ class UserService:
             return [UserListPublic.from_user(user) for user in users]
 
     def get_all(
-        self, limit: int | None = None, offset: int = 0
+        self,
+        limit: int | None = None,
+        offset: int = 0,
+        no_discord: bool = False,
+        tag_source: str | None = None,
     ) -> tuple[list[UserListPublic], int]:
-        """The users, or one page of them, and the total row count."""
+        """The users, or one page of them, and the total row count.
+
+        no_discord keeps the people with no login; tag_source keeps the people
+        who hold a tag row of that source.
+        """
+        filters: list[ColumnElement[bool]] = []
+        if no_discord:
+            discord_id = func.trim(col(User.discordId))
+            filters.append(
+                or_(
+                    col(User.discordId).is_(None),
+                    discord_id == "",
+                    discord_id.startswith(STAND_IN_ID_PREFIX),
+                )
+            )
+        if tag_source:
+            filters.append(
+                col(User.id).in_(
+                    select(col(UserBattleTag.user_id)).where(
+                        col(UserBattleTag.source) == tag_source
+                    )
+                )
+            )
         with Session.begin() as session:
-            total = session.scalar(select(func.count()).select_from(User)) or 0
+            total = (
+                session.scalar(select(func.count()).select_from(User).where(*filters))
+                or 0
+            )
             # Offset paging is deterministic only with a fixed order
             statement = (
                 select(User)
                 .options(*_LIST_OPTIONS)
+                .where(*filters)
                 .order_by(col(User.id))
                 .offset(offset)
                 .limit(limit)
             )
             users = session.scalars(statement).unique().all()
             return [UserListPublic.from_user(user) for user in users], total
+
+    def _own(self, session: OrmSession, discord_id: str) -> User:
+        user = session.scalars(
+            select(User).where(col(User.discordId) == discord_id)
+        ).first()
+        if user is None:
+            raise NotFoundError("No profile for this account")
+        return user
+
+    def _own_tag(self, session: OrmSession, user: User, tag_id: int) -> UserBattleTag:
+        row = session.get(UserBattleTag, tag_id)
+        if row is None or row.user_id != user.id:
+            raise NotFoundError(f"No tag {tag_id} on your profile")
+        return row
+
+    def add_own_tag(self, discord_id: str, tag: str) -> UserPublic:
+        """A tag the member also played as: a new unverified row with source
+        `claim`, active only when they hold no active tag.
+
+        A tag held by a person with no login moves to the member, as the
+        signup claims such a person; a tag another login holds answers 409.
+        """
+        tag = tag.strip()
+        if not is_real_tag(tag) or not self.validate_battle_tag(tag):
+            raise NotFoundError(f"W3Champions does not know {tag}")
+        with Session.begin() as session:
+            user = self._own(session, discord_id)
+            row = tag_row(session, tag)
+            holder = session.get(User, row.user_id) if row is not None else None
+            if row is not None and holder is not None and holder.id != user.id:
+                if has_login(holder.discordId):
+                    raise ApiError(
+                        409,
+                        {
+                            "error": f"{row.tag} belongs to another player."
+                            " Ask an admin to move it."
+                        },
+                    )
+                move_tag(session, row, user, "claim")
+            elif row is None:
+                attach_tag(
+                    session,
+                    user,
+                    tag,
+                    "claim",
+                    active=active_row(session, user.id or 0) is None,
+                )
+            user_id = user.id
+        return self.get(str(user_id))
+
+    def activate_own_tag(self, discord_id: str, tag_id: int) -> UserPublic:
+        """Make one of the member's tags the active one."""
+        with Session.begin() as session:
+            user = self._own(session, discord_id)
+            set_active_tag(session, user, self._own_tag(session, user, tag_id))
+            user_id = user.id
+        return self.get(str(user_id))
+
+    def remove_own_tag(self, discord_id: str, tag_id: int) -> UserPublic:
+        """Remove an unverified, inactive tag of the member and its games."""
+        with Session.begin() as session:
+            user = self._own(session, discord_id)
+            drop_tag(session, self._own_tag(session, user, tag_id))
+            user_id = user.id
+        return self.get(str(user_id))
+
+    def give_tag(self, user_id: int, tag_id: int, to_user_id: int) -> UserPublic:
+        """An admin gives one tag row of a person to another person."""
+        with Session.begin() as session:
+            row = session.get(UserBattleTag, tag_id)
+            if row is None or row.user_id != user_id:
+                raise NotFoundError(f"No tag {tag_id} on user {user_id}")
+            if to_user_id == user_id:
+                raise BadRequestError("The tag is already on this person")
+            to = session.get(User, to_user_id)
+            if to is None:
+                raise NotFoundError(f"User not found: {to_user_id}")
+            move_tag(session, row, to, "admin")
+        return self.get(str(to_user_id))
+
+    def merge_into(
+        self, user_id: int, into_user_id: int, dry_run: bool
+    ) -> MergePlan | UserPublic:
+        """Merge one person into another; a dry run answers the plan alone."""
+        if user_id == into_user_id:
+            raise BadRequestError("A person cannot be merged into themselves")
+        with Session.begin() as session:
+            source = session.get(User, user_id)
+            target = session.get(User, into_user_id)
+            if source is None or target is None:
+                missing = user_id if source is None else into_user_id
+                raise NotFoundError(f"User not found: {missing}")
+            if dry_run:
+                return merge.plan(session, source, target)[0]
+            merge.merge(session, source, target)
+        return self.get(str(into_user_id))
 
     def validate_battle_tag(self, battle_tag: str) -> bool:
         """

@@ -10,7 +10,7 @@ The functions take the caller's session, so they join its transaction.
 
 from collections.abc import Iterable
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, desc, func, select, update
 from sqlalchemy.orm import Session as OrmSession
 from sqlmodel import col
 
@@ -21,6 +21,7 @@ from app.models.ladder_sync import LadderSync
 from app.models.types import utcnow
 from app.models.user import User
 from app.models.user_battle_tag import UserBattleTag
+from app.models.w3c_ladder_match import W3CLadderMatch
 
 FOLDED_TAG = func.lower(func.trim(col(UserBattleTag.tag)))
 FOLDED_USER_TAG = func.lower(func.trim(col(User.battleTag)))
@@ -107,3 +108,78 @@ def attach_tag(
         set_active_tag(session, user, row)
     session.flush()
     return row
+
+
+def active_row(session: OrmSession, user_id: int) -> UserBattleTag | None:
+    """The person's active tag row, or None."""
+    return session.scalars(
+        select(UserBattleTag).where(
+            col(UserBattleTag.user_id) == user_id, col(UserBattleTag.is_active)
+        )
+    ).first()
+
+
+def move_tag(session: OrmSession, row: UserBattleTag, to: User, source: str) -> None:
+    """Give a tag row to another person, with the games fetched under it.
+
+    When the row was active, the owner's newest other tag becomes active, or
+    none and users.battleTag is null. The row is active on its new person only
+    when they had no active tag. Both ladder ledgers clear, so the next sync
+    reads each person's tags again.
+    """
+    owner = session.get(User, row.user_id)
+    assert owner is not None
+    was_active = row.is_active
+    row.is_active = False
+    row.user_id = ident(to)
+    row.source = source
+    session.flush()
+    if was_active:
+        newest = session.scalars(
+            select(UserBattleTag)
+            .where(col(UserBattleTag.user_id) == ident(owner))
+            .order_by(desc(col(UserBattleTag.last_seen)), desc(col(UserBattleTag.id)))
+        ).first()
+        if newest is None:
+            owner.battleTag = None
+        else:
+            set_active_tag(session, owner, newest)
+        # users.battleTag is unique, so the owner lets go before the new person takes it
+        session.flush()
+    held = select(col(W3CLadderMatch.w3c_match_id)).where(
+        col(W3CLadderMatch.user_id) == ident(to)
+    )
+    stamped = col(W3CLadderMatch.battle_tag_id) == row.id
+    session.execute(
+        delete(W3CLadderMatch).where(
+            stamped, col(W3CLadderMatch.w3c_match_id).in_(held)
+        )
+    )
+    session.execute(update(W3CLadderMatch).where(stamped).values(user_id=ident(to)))
+    session.execute(
+        delete(LadderSync).where(col(LadderSync.user_id).in_([ident(owner), ident(to)]))
+    )
+    if active_row(session, ident(to)) is None:
+        set_active_tag(session, to, row)
+    session.flush()
+
+
+def drop_tag(session: OrmSession, row: UserBattleTag) -> None:
+    """Remove a spare tag row, the games fetched under it and its person's
+    ladder ledger. An active or a verified row stays: 409."""
+    if row.is_active:
+        raise ApiError(
+            409,
+            {"error": f"{row.tag} is your active tag. Make another tag active first."},
+        )
+    if row.bnet_account_id is not None:
+        raise ApiError(
+            409,
+            {"error": f"{row.tag} is verified by Battle.net. An admin can move it."},
+        )
+    session.execute(
+        delete(W3CLadderMatch).where(col(W3CLadderMatch.battle_tag_id) == row.id)
+    )
+    session.execute(delete(LadderSync).where(col(LadderSync.user_id) == row.user_id))
+    session.delete(row)
+    session.flush()
