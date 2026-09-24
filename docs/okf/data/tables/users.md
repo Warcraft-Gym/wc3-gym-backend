@@ -4,7 +4,7 @@ title: users
 description: One person, made by the first way in that meets them and found by any battle tag they hold or by Discord id, with the profile fields the forms write and three sync stamps.
 resource: ../../../../app/models/user.py
 tags: [auth, data]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-24T10:20:55Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-24T13:20:54Z }
 verified: { by: process:test_okf, at: 2026-09-24T10:21:07Z }
 sources:
   - id: model
@@ -65,7 +65,7 @@ A row is made by the first way in that meets the player, and each way in looks f
 
 A person with no known tag has no tag row, and the user reads answer `battleTag` null: a fantasy captain on no roster, the review season's made-up players, and a workbook row whose tag is blank or a stand-in (`Name#GNLnn`, `Fantasy_User#…`, `Review#…`). The workbook import finds such a person again by name, so renaming them makes the next import write a new person. A Players row of the workbook must name a Discord id, and a Fantasy Users row with none carries a blank. A person from an earlier season who never logged in has a null `discordId`: the workbook import writes null where the sheet holds a `gnl-` stand-in id, and null for the stand-in Discord tag that came with it. See [events module](../../concepts/events-module.md) and [KOTH](../../concepts/koth.md) for the entrant ways in.
 
-The member signup takes a row only when no other login holds it. A row has a login when its `discordId` is neither null, blank, nor a `gnl-` stand-in. The login's own row comes first. A row that holds the tag the member types, without case, and that has no login becomes the member's; the tag becomes its active one. A `battleTag` another login holds answers 409 with an `error` that names the tag. A row with no login that matches only on `discordTag` answers 409 with a `link` object of `player`, `discord_id` and `battle_tag`, the details an admin needs to set `discordId` on that row; so does a row with no login that holds the typed tag when the member already has a row. A `discordTag` that a row with another login holds is left blank on the member's row, because Discord names repeat and the column is unique.
+The member signup takes a row only when no other login holds it. A row has a login when its `discordId` is neither null, blank, nor a `gnl-` stand-in. The login's own row comes first. A row that holds the tag the member types, without case, and that has no login becomes the member's; the tag becomes its active one. A `battleTag` another login holds answers 409 with an `error` that names the tag. A row with no login that holds the typed tag when the member already has a row joins the member's row by a merge, unverified; a merge stop answers 409. A row with no login that matches only on `discordTag` lets go of that name, the member's row takes it, and the row becomes a suggestion to the member; see [link_prompt](link_prompt.md). A `discordTag` that a row with another login holds is left blank on the member's row, because Discord names repeat and the column is unique.
 
 # Rules
 

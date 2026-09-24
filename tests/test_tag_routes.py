@@ -96,7 +96,7 @@ def count(model: type, **where: int) -> int:
 # Member: POST /users/me/tags
 
 
-def test_a_tag_a_person_with_no_login_holds_moves_to_the_member(
+def test_a_tag_a_person_with_no_login_holds_joins_that_person_to_the_member(
     client: Client,
     seeded: dict[str, Any],
     on_w3c: None,
@@ -110,13 +110,10 @@ def test_a_tag_a_person_with_no_login_holds_moves_to_the_member(
     assert resp.json()["battleTag"] == "P1#1111"
     assert {(t["tag"], t["source"], t["active"]) for t in resp.json()["tags"]} == {
         ("P1#1111", "signup", True),
-        ("Old#5555", "claim", False),
+        ("Old#5555", "sheet", False),
     }
-    assert tags_of(old) == []
     with Session() as session:
-        left = session.get(User, old)
-        assert left is not None
-        assert left.battleTag is None
+        assert session.get(User, old) is None
 
 
 def test_a_tag_new_to_the_app_is_added_unverified_and_inactive(

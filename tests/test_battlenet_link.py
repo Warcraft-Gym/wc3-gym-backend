@@ -239,12 +239,38 @@ def test_a_tag_a_person_with_no_login_holds_moves_to_the_member(
     ]
 
 
-def test_a_tag_another_login_holds_answers_409(
+def test_a_tag_another_login_holds_unverified_moves_and_that_login_is_told(
     client: Client, seeded: dict[str, Any], member: Callable[..., dict[str, str]]
 ) -> None:
+    """Verified beats unverified: the tag moves, its old holder gets a notice."""
+    status, body = finish(client, member(), "acc-1", "P2#2222")
+
+    assert status == 200, body
+    assert ("P2#2222", "link", True, "acc-1") in rows_of(seeded["player_ids"][0])
+    assert rows_of(seeded["player_ids"][1]) == []
+    notices = client.get("/users/me/prompts", headers=member("2")).json()
+    assert [(n["kind"], n["tag"]) for n in notices] == [("taken", "P2#2222")]
+
+
+def test_a_tag_another_login_verified_answers_409(
+    client: Client, seeded: dict[str, Any], member: Callable[..., dict[str, str]]
+) -> None:
+    assert finish(client, member("2"), "acc-2", "P2#2222")[0] == 200
+
     assert finish(client, member(), "acc-1", "P2#2222") == (409, TAKEN)
-    assert rows_of(seeded["player_ids"][1]) == [("P2#2222", "signup", True, None)]
     assert rows_of(seeded["player_ids"][0]) == [("P1#1111", "signup", True, None)]
+
+
+def test_a_second_verified_account_leaves_main_where_it_is(
+    client: Client, seeded: dict[str, Any], member: Callable[..., dict[str, str]]
+) -> None:
+    assert finish(client, member(), "acc-1", "P1#1111")[0] == 200
+
+    assert finish(client, member(), "acc-9", "Alt#9999")[0] == 200
+    assert rows_of(seeded["player_ids"][0]) == [
+        ("P1#1111", "link", True, "acc-1"),
+        ("Alt#9999", "link", False, "acc-9"),
+    ]
 
 
 def test_an_account_another_person_holds_answers_409(

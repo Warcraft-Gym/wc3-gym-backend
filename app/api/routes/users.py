@@ -14,6 +14,7 @@ from app.api.deps import (
 from app.api.search import SearchQuery
 from app.core.exceptions import ApiError
 from app.models.draft_board import PairMeeting
+from app.models.link_prompt import LinkPromptPublic, PromptAnswer
 from app.models.player_history import PlayerHistory
 from app.models.user import UserCreate, UserListPublic, UserPublic, UserUpdate
 from app.models.user_battle_tag import MergePlan, MergeWrite, TagMoveWrite, TagWrite
@@ -51,6 +52,23 @@ def add_my_tag(
     """Add a tag I also played as. W3Champions must know it; a tag a person
     with no login holds moves to me, one another login holds answers 409."""
     return service.add_own_tag(_discord_id(claims), data.tag)
+
+
+@router.get("/users/me/prompts")
+def my_prompts(
+    claims: RequireMember, service: UserServiceDep
+) -> list[LinkPromptPublic]:
+    """My open suggestions of an earlier player, and notices of a tag another
+    login verified. Only my own answer closes one."""
+    return service.own_prompts(_discord_id(claims))
+
+
+@router.post("/users/me/prompts/{prompt_id}")
+def answer_my_prompt(
+    prompt_id: int, data: PromptAnswer, claims: RequireMember, service: UserServiceDep
+) -> UserPublic:
+    """Accept a suggestion to join the player, unverified, or close a prompt."""
+    return service.answer_own_prompt(_discord_id(claims), prompt_id, data.accept)
 
 
 @router.put("/users/me/tags/{tag_id}/active")

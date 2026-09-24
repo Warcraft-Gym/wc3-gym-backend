@@ -37,6 +37,7 @@ from app.models import (
     ladder_achievement,
     ladder_sync,
     league,
+    link_prompt,
     map,
     match,
     match_draft,
