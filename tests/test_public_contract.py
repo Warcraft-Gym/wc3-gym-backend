@@ -55,7 +55,7 @@ def public_seed(app: FastAPI) -> dict[str, Any]:
     from app.models.user import User
     from app.models.user_team_season import DBUserTeamSeason
     from app.models.w3c_stats import W3CStats
-    from tests.seed import seed_league
+    from tests.seed import active, seed_league
 
     with Session() as session:
         ids = seed_league(session)
@@ -69,7 +69,7 @@ def public_seed(app: FastAPI) -> dict[str, Any]:
         )
         captain = User(
             name="C1",
-            battleTag="C1#9999",
+            battle_tags=active("C1#9999"),
             discordTag="c1",
             discordId="9",
             race=Race.RANDOM,

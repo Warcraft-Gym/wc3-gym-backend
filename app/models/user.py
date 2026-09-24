@@ -1,9 +1,10 @@
 from datetime import datetime
-from typing import TYPE_CHECKING, Annotated, Self
+from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
-from sqlalchemy import Index, text
+from sqlalchemy import Index, select, text
+from sqlalchemy.orm import column_property
 from sqlalchemy.orm.attributes import instance_state
-from sqlmodel import Field, Relationship, SQLModel
+from sqlmodel import Field, Relationship, SQLModel, col
 
 from app.models.base import DBModel, PublicModel, ident
 from app.models.enums import Race
@@ -30,8 +31,6 @@ if TYPE_CHECKING:
 
 class UserBase(SQLModel):
     name: str = Field(max_length=50)
-    # A copy of the active tag; ponytail: typed str until a way in writes null
-    battleTag: str = Field(max_length=50, nullable=True)
     # Null for a person who never logged in
     discordTag: str | None = Field(max_length=50)
     discordId: str | None = Field(max_length=50)
@@ -49,11 +48,9 @@ class UserBase(SQLModel):
 
 class User(UserBase, DBModel, table=True):
     __tablename__ = "users"
-    # The importers match a player by battle tag and a bettor by Discord tag,
-    # and neither service is case sensitive. A Clerk session matches a player by
-    # Discord id. A blank or null Discord tag or id means unknown.
+    # The fantasy importer matches a bettor by Discord tag, case blind. A Clerk
+    # session matches a player by Discord id. Blank or null means unknown.
     __table_args__ = (
-        Index("uq_users_battle_tag", text('lower(trim("battleTag"))'), unique=True),
         Index(
             "uq_users_discord_tag",
             text('lower(trim("discordTag"))'),
@@ -71,6 +68,8 @@ class User(UserBase, DBModel, table=True):
     )
 
     id: int | None = Field(default=None, primary_key=True)
+    # The active tag's text, null with no tag; read-only, mapped below the class
+    battleTag: ClassVar[str | None]
     race: Race
     # When the app last asked w3champions about this player, null when never
     w3c_synced_at: datetime | None = Field(default=None, sa_type=UTCDateTime)
@@ -100,6 +99,15 @@ class User(UserBase, DBModel, table=True):
             "order_by": "(UserBattleTag.is_active.desc(), UserBattleTag.id)",
         }
     )
+
+
+# One indexed lookup inside every users SELECT, so a list of users costs no extra statement
+User.battleTag = column_property(
+    select(col(UserBattleTag.tag))
+    .where(col(UserBattleTag.user_id) == col(User.id), col(UserBattleTag.is_active))
+    .correlate_except(UserBattleTag)
+    .scalar_subquery()
+)
 
 
 class UserCreate(UserBase):

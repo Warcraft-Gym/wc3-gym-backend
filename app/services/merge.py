@@ -228,17 +228,14 @@ def merge(session: OrmSession, source: User, target: User) -> None:
         )
     s, t = source.id, target.id
     kept = active_row(session, t or 0)
-    moved = active_row(session, s or 0)
     login = (
         (source.discordId, source.discordTag)
         if not has_login(target.discordId)
         else None
     )
-    # users.battleTag and discordId are unique, so the source lets go first
+    # discordId and discordTag are unique, so the source lets go first
     session.execute(
-        update(User)
-        .where(col(User.id) == s)
-        .values(battleTag=None, discordId=None, discordTag=None)
+        update(User).where(col(User.id) == s).values(discordId=None, discordTag=None)
     )
     if kept is not None:
         session.execute(
@@ -250,12 +247,11 @@ def merge(session: OrmSession, source: User, target: User) -> None:
         table = SQLModel.metadata.tables[name]
         for c in columns:
             session.execute(update(table).where(table.c[c] == s).values({c: t}))
-    values: dict[str, Any] = {}
-    if kept is None and moved is not None:
-        values["battleTag"] = moved.tag
     if login is not None and has_login(login[0]):
-        values |= {"discordId": login[0], "discordTag": login[1]}
-    if values:
-        session.execute(update(User).where(col(User.id) == t).values(**values))
+        session.execute(
+            update(User)
+            .where(col(User.id) == t)
+            .values(discordId=login[0], discordTag=login[1])
+        )
     session.execute(delete(User).where(col(User.id) == s))
     session.expire_all()
