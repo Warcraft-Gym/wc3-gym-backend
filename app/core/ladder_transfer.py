@@ -26,6 +26,7 @@ from sqlmodel import col
 from app.core.db import Session, init_engine
 from app.models.ladder_sync import LadderSync, LadderSyncBase
 from app.models.user import User
+from app.models.user_battle_tag import UserBattleTag
 from app.models.user_team_season import DBUserTeamSeason
 from app.models.w3c_ladder_match import W3CLadderMatch, W3CLadderMatchBase
 
@@ -127,9 +128,12 @@ def push(session: OrmSession, source: Path) -> dict[str, tuple[int, int, int, in
     missing = [name for name, *_ in TABLES if not (source / name).is_file()]
     if missing:
         raise FileNotFoundError(f"{source} lacks {', '.join(missing)}")
+    # any tag the person holds finds them, not only the active one
     users = {
         _tag(tag): uid
-        for uid, tag in session.execute(select(col(User.id), col(User.battleTag)))
+        for uid, tag in session.execute(
+            select(col(UserBattleTag.user_id), col(UserBattleTag.tag))
+        )
     }
     insert = (
         pg_insert if session.get_bind().dialect.name == "postgresql" else sqlite_insert

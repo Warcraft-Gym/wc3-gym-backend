@@ -13,6 +13,7 @@ from app.core.ladder_transfer import export, push
 from app.models.enums import Race
 from app.models.ladder_sync import LadderSync
 from app.models.user import User
+from app.models.user_battle_tag import UserBattleTag
 from app.models.w3c_ladder_match import W3CLadderMatch
 
 MATCHES = "w3c_ladder_matches.csv"
@@ -125,9 +126,9 @@ def test_an_unknown_tag_is_skipped_and_counted(
     # The target knows the second player under another tag
     with Session.begin() as session:
         session.execute(
-            update(User)
-            .where(col(User.id) == seeded["player_ids"][1])
-            .values(battleTag="Other#0")
+            update(UserBattleTag)
+            .where(col(UserBattleTag.user_id) == seeded["player_ids"][1])
+            .values(tag="Other#0")
         )
 
     with Session.begin() as session:
