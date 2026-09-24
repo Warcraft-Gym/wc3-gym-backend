@@ -39,7 +39,7 @@ def get_all_career_stats(
         limit=limit, offset=offset, search=search, sort=sort, order=order
     )
     response.headers["X-Total-Count"] = str(total)
-    edge_cache(response, 300, 3600)
+    edge_cache(response, 3600, 3600)  # ratings move only when a result is reported
     return [stat.to_dict() for stat in stats]
 
 
