@@ -4,7 +4,7 @@ title: API overview
 description: Twenty-one route modules under one FastAPI app, one error envelope, paging with a total header, a search language, and OpenAPI at /docs.
 resource: ../../../app/api/main.py
 tags: [api]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-25T15:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-24T17:00:00Z }
 sources:
   - id: router
     resource: ../../../app/api/main.py
@@ -18,9 +18,6 @@ sources:
   - id: readme
     resource: ../../../README.md
     title: List routes and paging
-  - id: edge-purge
-    resource: ../../../app/services/edge_purge.py
-    title: The cache tags a write clears
 ---
 
 # Route modules
@@ -70,20 +67,18 @@ List routes take `limit` (1 to 500) and `offset`. The default page is 500, excep
 
 CORS allows every origin, because clients send bearer tokens and never cookies. A route that sets `Cache-Control: public` must write `Access-Control-Allow-Origin: *` itself, next to it. See [the pitfall](../pitfalls/edge-cache-cors.md). A route whose answer belongs to one caller sets `Cache-Control: private` and `Vary: Authorization` instead, so no shared cache stores a copy and the browser's own copy is keyed on the bearer that names the caller.
 
-`edge_cache(response, s_maxage, swr)` in `app/api/deps.py` writes both headers: `Cache-Control: public, s-maxage=<s_maxage>`, with `stale-while-revalidate=<swr>` when given, and `Access-Control-Allow-Origin: *`. Only a route with no guard whose answer is the same for every caller uses it. `event_edge_cache(response, event_id)` beside it picks the timing by the event's phase: a finished event changes only when an admin corrects it. `edge_cache` also takes `tags`, written as the `Vercel-Cache-Tag` header, which the edge reads and strips; `event_edge_cache` tags its answer `event-{event_id}`. An error answer carries none of these headers, because the error handlers build a fresh response. These routes use it, and their deprecated aliases with them:
+`edge_cache(response, s_maxage, swr)` in `app/api/deps.py` writes both headers: `Cache-Control: public, s-maxage=<s_maxage>`, with `stale-while-revalidate=<swr>` when given, and `Access-Control-Allow-Origin: *`. Only a route with no guard whose answer is the same for every caller uses it. `event_edge_cache(response, event_id)` beside it picks the timing by the event's phase: a finished event changes only when an admin corrects it. An error answer carries neither header, because the error handlers build a fresh response. These routes use it, and their deprecated aliases with them:
 
-| Route | s-maxage | stale-while-revalidate | Cache tags |
-|---|---|---|---|
-| `GET /koth/board`, `GET /koth/nights/{night_id}/board` | 15 | none | none |
-| `GET /home/series` | 120 | none | `home` |
-| `GET /events/{event_id}/ladder` | 3600 | none | `event-{event_id}`, `ladder` |
-| `GET /events/{event_id}/ladder/players` | 900 | 3600 | `event-{event_id}`, `ladder` |
-| `GET /users/{user_id}/ladder` | 900 | 3600 | `ladder` |
-| `GET /stats/career` | 300 | 3600 | `career` |
-| `GET /leagues`, `GET /maps`, `GET /config/w3c`, `GET /config/settings/{key}` | 300 | 3600 | none |
-| `GET /users/{user_id}/history` | 120 | 600 | none |
-| `GET /events/{event_id}/teams`, its `basic` twin, `GET /events/{event_id}/teams/{team_id}`, `GET /events/{event_id}/series` | 120, or 3600 once the event is finished | 600, or 86400 once the event is finished | `event-{event_id}` |
-| `GET /leagues/{league_id}/teams`, its `basic` twin, `GET /leagues/{league_id}/teams/{team_id}` | 120 | 600 | none |
+| Route | s-maxage | stale-while-revalidate |
+|---|---|---|
+| `GET /koth/board`, `GET /koth/nights/{night_id}/board` | 15 | none |
+| `GET /home/series` | 120 | none |
+| `GET /events/{event_id}/ladder` | 3600 | none |
+| `GET /events/{event_id}/ladder/players`, `GET /users/{user_id}/ladder` | 900 | 3600 |
+| `GET /leagues`, `GET /maps`, `GET /config/w3c`, `GET /config/settings/{key}`, `GET /stats/career` | 300 | 3600 |
+| `GET /users/{user_id}/history` | 120 | 600 |
+| `GET /events/{event_id}/teams`, its `basic` twin, `GET /events/{event_id}/teams/{team_id}`, `GET /events/{event_id}/series` | 120, or 3600 once the event is finished | 600, or 86400 once the event is finished |
+| `GET /leagues/{league_id}/teams`, its `basic` twin, `GET /leagues/{league_id}/teams/{team_id}` | 120 | 600 |
 
 The edge serves a cached copy only to a request with no Authorization header. The frontend sends a route without its bearer only when its `EDGE_CACHED` pattern lists the route, and an admin's requests always carry the bearer, so an admin reads past the cache. A route added here is cached once the frontend pattern lists it too. `tests/test_edge_cache.py` pins every row.
 
@@ -91,7 +86,7 @@ The edge serves a cached copy only to a request with no Authorization header. Th
 
 A cache hit is served by the Vercel edge: the function does not run and the database is not read. A miss runs the route once and fills the entry for that region. So the database cost of an open read is the rows one miss reads times the number of misses, and the number of page views does not enter it. A route with no `edge_cache` has a miss on every call.
 
-A write clears the tags it changes. The session listener in `app/services/edge_purge.py` maps each row a commit writes to its tags. A series and its casts, sides, veto steps, games and replays clear its event and `home`, and the old event too when the series moves; a change to a score, a result kind or a player, and any game, also clears `career`. A fixture clears its event and `home`. An event team, a roster seat, a captain, a signup and the event itself clear the event. A team clears `home` and the events it plays in. A player or a battle tag clears `home`, `career`, `ladder` and the events where the player holds a roster seat or a signup. A map clears the events that use it. A career row clears `career`, and a ladder match or sync stamp clears `ladder`. A bulk statement the listener cannot see names its tags beside it. A settings change names no tag. Once the response is sent, the middleware deletes the event tags (`POST /v1/edge-cache/dangerously-delete-by-tags`), so the next reader of the event gets a fresh answer, and invalidates `home`, `career` and `ladder` (`POST /v1/edge-cache/invalidate-by-tags`), so the next reader gets the stale copy once while it refills. A rollback clears nothing. A failed call or a failed tag lookup is logged and ignored, and never fails the write. With `VERCEL_CACHE_TOKEN` unset nothing is sent. A route without a tag, or a change no tag names, reaches a reader up to `s-maxage` plus `stale-while-revalidate` seconds late, unless the reader sends a bearer, which skips the edge.
+A write does not clear the edge. A reader sees a change up to `s-maxage` plus `stale-while-revalidate` seconds late, unless the reader sends a bearer, which skips the edge. Pick `s-maxage` by how often the answer changes and how late a reader may see it:
 
 | Answer | `s-maxage` |
 |---|---|
