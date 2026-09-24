@@ -8,13 +8,14 @@ from app.services.w3c import W3CService
 from tests.conftest import Client
 
 LONG = "public, s-maxage=300, stale-while-revalidate=3600"
+CAREER = "public, s-maxage=3600, stale-while-revalidate=3600"
 LADDER = "public, s-maxage=900, stale-while-revalidate=3600"
 SHORT = "public, s-maxage=120, stale-while-revalidate=600"
 
 ROUTES = [
     ("/leagues", LONG),
     ("/maps", LONG),
-    ("/stats/career", LONG),
+    ("/stats/career", CAREER),
     ("/config/w3c", LONG),
     ("/config/settings/score_system", LONG),
     ("/events/{season_id}/ladder/players", LADDER),
