@@ -1,13 +1,14 @@
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 
 from app.api.deps import (
     RequireLogin,
     RequireMember,
     SeriesServiceDep,
     UserServiceDep,
+    event_edge_cache,
     require_admin,
 )
 from app.api.search import SearchQuery
@@ -141,10 +142,12 @@ def search_series_by_event_and_playday(
 def get_series_by_event(
     event_id: int,
     service: SeriesServiceDep,
+    response: Response,
     limit: Annotated[int, Query(ge=1, le=500)] = 500,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[SeriesPublic]:
     """Return one page of an event's series, at most 500."""
+    event_edge_cache(response, event_id)
     return service.search_for_season(event_id, None, limit=limit, offset=offset)
 
 

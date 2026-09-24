@@ -12,6 +12,7 @@ from app.api.deps import (
     UserServiceDep,
     claim_seats,
     edge_cache,
+    event_edge_cache,
     require_admin,
 )
 from app.api.search import SearchQuery
@@ -105,7 +106,7 @@ def get_all_event_teams_basic(
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[TeamPublic]:
     """One page of event teams with event standings and no users, 50 a page."""
-    edge_cache(response, 120, 600)
+    event_edge_cache(response, event_id)
     return service.get_teams_season_basic(event_id, limit=limit, offset=offset)
 
 
@@ -118,7 +119,7 @@ def get_all_event_teams(
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[TeamPublic]:
     """One page of event teams with that event's roster and captains, 50 a page."""
-    edge_cache(response, 120, 600)
+    event_edge_cache(response, event_id)
     return service.get_teams_season(event_id, limit=limit, offset=offset)
 
 
@@ -127,7 +128,7 @@ def get_event_team(
     event_id: int, team_id: int, service: TeamServiceDep, response: Response
 ) -> TeamPublic:
     """Retrieve one event team with that event's roster, captains and stats."""
-    edge_cache(response, 120, 600)
+    event_edge_cache(response, event_id)
     return service.get_with_nested_users_by_season(team_id, event_id)
 
 

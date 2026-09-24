@@ -4,7 +4,7 @@ title: API overview
 description: Twenty-one route modules under one FastAPI app, one error envelope, paging with a total header, a search language, and OpenAPI at /docs.
 resource: ../../../app/api/main.py
 tags: [api]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-24T15:30:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-24T17:00:00Z }
 sources:
   - id: router
     resource: ../../../app/api/main.py
@@ -67,7 +67,7 @@ List routes take `limit` (1 to 500) and `offset`. The default page is 500, excep
 
 CORS allows every origin, because clients send bearer tokens and never cookies. A route that sets `Cache-Control: public` must write `Access-Control-Allow-Origin: *` itself, next to it. See [the pitfall](../pitfalls/edge-cache-cors.md). A route whose answer belongs to one caller sets `Cache-Control: private` and `Vary: Authorization` instead, so no shared cache stores a copy and the browser's own copy is keyed on the bearer that names the caller.
 
-`edge_cache(response, s_maxage, swr)` in `app/api/deps.py` writes both headers: `Cache-Control: public, s-maxage=<s_maxage>`, with `stale-while-revalidate=<swr>` when given, and `Access-Control-Allow-Origin: *`. Only a route with no guard whose answer is the same for every caller uses it. An error answer carries neither header, because the error handlers build a fresh response. These routes use it, and their deprecated aliases with them:
+`edge_cache(response, s_maxage, swr)` in `app/api/deps.py` writes both headers: `Cache-Control: public, s-maxage=<s_maxage>`, with `stale-while-revalidate=<swr>` when given, and `Access-Control-Allow-Origin: *`. Only a route with no guard whose answer is the same for every caller uses it. `event_edge_cache(response, event_id)` beside it picks the timing by the event's phase: a finished event changes only when an admin corrects it. An error answer carries neither header, because the error handlers build a fresh response. These routes use it, and their deprecated aliases with them:
 
 | Route | s-maxage | stale-while-revalidate |
 |---|---|---|
@@ -75,9 +75,9 @@ CORS allows every origin, because clients send bearer tokens and never cookies. 
 | `GET /home/series` | 120 | none |
 | `GET /events/{event_id}/ladder` | 3600 | none |
 | `GET /events/{event_id}/ladder/players`, `GET /users/{user_id}/ladder` | 900 | 3600 |
-| `GET /leagues`, `GET /maps`, `GET /config/w3c`, `GET /config/settings/{key}` | 300 | 3600 |
+| `GET /leagues`, `GET /maps`, `GET /config/w3c`, `GET /config/settings/{key}`, `GET /stats/career` | 300 | 3600 |
 | `GET /users/{user_id}/history` | 120 | 600 |
-| `GET /events/{event_id}/teams`, its `basic` twin, `GET /events/{event_id}/teams/{team_id}` | 120 | 600 |
+| `GET /events/{event_id}/teams`, its `basic` twin, `GET /events/{event_id}/teams/{team_id}`, `GET /events/{event_id}/series` | 120, or 3600 once the event is finished | 600, or 86400 once the event is finished |
 | `GET /leagues/{league_id}/teams`, its `basic` twin, `GET /leagues/{league_id}/teams/{team_id}` | 120 | 600 |
 
 The edge serves a cached copy only to a request with no Authorization header. The frontend sends a route without its bearer only when its `EDGE_CACHED` pattern lists the route, and an admin's requests always carry the bearer, so an admin reads past the cache. A route added here is cached once the frontend pattern lists it too. `tests/test_edge_cache.py` pins every row.
