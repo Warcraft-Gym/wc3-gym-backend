@@ -4,7 +4,7 @@ title: user_battle_tag
 description: One battle tag a person has played under; a tag names at most one person, and each person has at most one active tag.
 resource: ../../../../app/models/user_battle_tag.py
 tags: [auth, data]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-24T10:20:55Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-24T11:21:07Z }
 verified: { by: process:test_okf, at: 2026-09-24T10:21:07Z }
 sources:
   - id: model
@@ -22,6 +22,9 @@ sources:
   - id: routes
     resource: ../../../../app/api/routes/users.py
     title: The member tag routes, the admin move and the merge
+  - id: battlenet
+    resource: ../../../../app/api/routes/battlenet.py
+    title: The Battle.net link routes
   - id: merge
     resource: ../../../../app/services/merge.py
     title: The merge of two people
@@ -67,5 +70,7 @@ A member manages their own tags; the session names the person. Each route answer
 | `POST /users/{id}/tags/{tag_id}/move` `{to_user_id}` | Admin. Moves the row to another person with source `admin`, and answers that person. |
 
 A row of another person is 404 to a member.
+
+`POST /users/me/bnet/finish`, the last step of a Battle.net link (see [authentication](../../api/auth.md)), writes `bnet_account_id` on the row of the tag Blizzard names, sets its source to `link` and makes it active. A tag the member holds is marked. A tag new to the app gets a new row. A tag held by a person with no login moves to the member first, as a claim does. A tag another login holds, or an account id already on another person's row, answers 409 `{"error": "That Battle.net account or tag belongs to another player. Ask an admin."}`. A renamed Battle.net account gets a new row; the old row keeps its account id.
 
 A row that moves, by a claim or by an admin, takes the matches stamped with it to the new person; a match the new person already holds is dropped. When the row was active, the old person's newest other row becomes active, or none and the person's `battleTag` reads null. The row is active on the new person only when they had no active row. Both people's [ladder_sync](ladder_sync.md) rows clear. `GET /users?tag_source=claim` lists the people who hold a claimed row. A merge moves every row of a person; see [users](users.md).

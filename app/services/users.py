@@ -40,6 +40,7 @@ from app.services.battle_tags import (
     active_row,
     attach_tag,
     drop_tag,
+    link_bnet,
     move_tag,
     person_by_tag,
     set_active_tag,
@@ -402,6 +403,14 @@ class UserService:
                     "claim",
                     active=active_row(session, user.id or 0) is None,
                 )
+            user_id = user.id
+        return self.get(str(user_id))
+
+    def link_own_bnet(self, discord_id: str, account_id: str, tag: str) -> UserPublic:
+        """Record the member's Battle.net account on its tag; taken answers 409."""
+        with Session.begin() as session:
+            user = self._own(session, discord_id)
+            link_bnet(session, user, account_id, tag)
             user_id = user.id
         return self.get(str(user_id))
 

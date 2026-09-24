@@ -14,7 +14,7 @@ from sqlalchemy import delete, desc, func, select, update
 from sqlalchemy.orm import Session as OrmSession
 from sqlmodel import col
 
-from app.core.battle_tags import fold, is_real_tag
+from app.core.battle_tags import fold, has_login, is_real_tag
 from app.core.exceptions import ApiError
 from app.models.base import ident
 from app.models.ladder_sync import LadderSync
@@ -196,3 +196,35 @@ def drop_tag(session: OrmSession, row: UserBattleTag) -> None:
     session.execute(delete(LadderSync).where(col(LadderSync.user_id) == row.user_id))
     session.delete(row)
     session.flush()
+
+
+TAKEN = "That Battle.net account or tag belongs to another player. Ask an admin."
+
+
+def link_bnet(
+    session: OrmSession, user: User, account_id: str, tag: str
+) -> UserBattleTag | None:
+    """Mark the tag as proved by this Battle.net account and make it active.
+
+    A tag a person with no login holds moves here first. A tag another login
+    holds, or an account another person holds, answers 409. A renamed
+    account keeps its old row and gets a new one.
+    """
+    elsewhere = select(UserBattleTag).where(
+        col(UserBattleTag.bnet_account_id) == account_id,
+        col(UserBattleTag.user_id) != ident(user),
+    )
+    if session.scalars(elsewhere).first() is not None:
+        raise ApiError(409, {"error": TAKEN})
+    row = tag_row(session, tag)
+    if row is not None and row.user_id != ident(user):
+        holder = session.get(User, row.user_id)
+        if holder is not None and has_login(holder.discordId):
+            raise ApiError(409, {"error": TAKEN})
+        move_tag(session, row, user, "link")
+    row = attach_tag(session, user, tag, "link")
+    if row is not None:
+        row.bnet_account_id = account_id
+        row.source = "link"
+        session.flush()
+    return row

@@ -8,13 +8,14 @@ from typing import Any
 import jwt
 
 
-def create_access_token(identity: str, minutes: int) -> str:
-    """The admin token's access token; a player's session belongs to Clerk."""
+def create_access_token(identity: str, minutes: int, kind: str = "access") -> str:
+    """The admin token's access token; a player's session belongs to Clerk.
+    Another `kind` is no login: the Battle.net link signs its state with it."""
     now = datetime.now(UTC)
     return jwt.encode(
         {
             "sub": identity,
-            "type": "access",
+            "type": kind,
             "jti": str(uuid.uuid4()),
             "iat": now,
             "nbf": now,

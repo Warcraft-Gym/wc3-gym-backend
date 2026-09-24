@@ -78,6 +78,12 @@ class TagWrite(SQLModel):
     tag: str = Field(min_length=3, max_length=50)
 
 
+class BnetFinishWrite(SQLModel):
+    """The link token the Battle.net callback sent to the profile page."""
+
+    token: str
+
+
 class TagMoveWrite(SQLModel):
     to_user_id: int
 
