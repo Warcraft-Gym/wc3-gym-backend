@@ -1,11 +1,12 @@
 # Tables
 
-The 44 tables, one concept each. A concept's `# Schema` lists every column; `tests/test_okf.py` fails when the columns and the concept disagree.
+The 45 tables, one concept each. A concept's `# Schema` lists every column; `tests/test_okf.py` fails when the columns and the concept disagree.
 
 # People and access
 
 * [users](users.md) - One person, made by the first way in that meets them and found by any battle tag they hold or by Discord id, with the profile fields the forms write and three sync stamps.
 * [user_battle_tag](user_battle_tag.md) - One battle tag a person has played under; a tag names at most one person, and each person has at most one active tag.
+* [link_prompt](link_prompt.md) - A suggestion that an earlier player is a login, answered once by that login, or the notice that another login verified a tag and took it.
 * [clerk_account](clerk_account.md) - The Discord account behind one Clerk user, written on the first guarded request of a login so no later request asks Clerk.
 * [admin_grant](admin_grant.md) - One Discord account that administers the site, granted on the Config page; the bootstrap ids in ADMIN_DISCORD_IDS need no row.
 * [settings](settings.md) - One key-value row per runtime setting an admin edits, including the two season pointers and the Discord channel ids.

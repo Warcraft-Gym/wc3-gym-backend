@@ -27,6 +27,8 @@ from sqlmodel import SQLModel, col
 
 from app.core.battle_tags import has_login
 from app.core.exceptions import ApiError
+from app.models.link_prompt import LinkPrompt
+from app.models.types import utcnow
 from app.models.user import User
 from app.models.user_battle_tag import MergePlan, UserBattleTag
 from app.services.battle_tags import active_row
@@ -227,6 +229,14 @@ def merge(session: OrmSession, source: User, target: User) -> None:
             delete(table).where(and_(*(table.c[n] == v for n, v in pk.items())))
         )
     s, t = source.id, target.id
+    # joining a login answers the source's open prompts; into another earlier
+    # player they stay open and follow the repointed person_id
+    if has_login(target.discordId):
+        session.execute(
+            update(LinkPrompt)
+            .where(col(LinkPrompt.person_id) == s, col(LinkPrompt.closed_at).is_(None))
+            .values(closed_at=utcnow(), outcome="joined")
+        )
     kept = active_row(session, t or 0)
     login = (
         (source.discordId, source.discordTag)

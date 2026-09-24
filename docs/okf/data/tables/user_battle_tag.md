@@ -4,7 +4,7 @@ title: user_battle_tag
 description: One battle tag a person has played under; a tag names at most one person, and each person has at most one active tag.
 resource: ../../../../app/models/user_battle_tag.py
 tags: [auth, data]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-24T11:21:07Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-24T13:20:36Z }
 verified: { by: process:test_okf, at: 2026-09-24T10:21:07Z }
 sources:
   - id: model
@@ -64,13 +64,13 @@ A member manages their own tags; the session names the person. Each route answer
 
 | Route | Does |
 |---|---|
-| `POST /users/me/tags` `{tag}` | Adds a tag the member also played as. W3Champions must know it, or 404. A new tag gets a row with source `claim`, unverified, active only when the member has no active tag. A tag held by a person with no login moves to the member with source `claim`, as below. A tag another login holds answers 409 `{"error": "<tag> belongs to another player. Ask an admin to move it."}`. |
+| `POST /users/me/tags` `{tag}` | Adds a tag the member also played as. W3Champions must know it, or 404. A new tag gets a row with source `claim`, unverified, active only when the member has no active tag. A tag an earlier player (a person with no login) holds joins that whole player to the member at once, unverified, by a merge; a merge stop answers 409. A tag another login holds answers 409 `{"error": "<tag> belongs to another player. Ask an admin to move it."}`. |
 | `PUT /users/me/tags/{tag_id}/active` | Makes one of the member's rows active; `battleTag` in the user read follows. |
 | `DELETE /users/me/tags/{tag_id}` | Removes an unverified, inactive row of the member, the [w3c_ladder_matches](w3c_ladder_matches.md) stamped with it and the member's [ladder_sync](ladder_sync.md) rows. The active or a verified row answers 409. |
-| `POST /users/{id}/tags/{tag_id}/move` `{to_user_id}` | Admin. Moves the row to another person with source `admin`, and answers that person. |
+| `POST /users/{id}/tags/{tag_id}/move` `{to_user_id}` | Admin. Moves the row to another person with source `admin`, unverified, and answers that person. Only the player's own Battle.net sign-in verifies a tag. |
 
 A row of another person is 404 to a member.
 
-`POST /users/me/bnet/finish`, the last step of a Battle.net link (see [authentication](../../api/auth.md)), writes `bnet_account_id` on the row of the tag Blizzard names, sets its source to `link` and makes it active. A tag the member holds is marked. A tag new to the app gets a new row. A tag held by a person with no login moves to the member first, as a claim does. A tag another login holds, or an account id already on another person's row, answers 409 `{"error": "That Battle.net account or tag belongs to another player. Ask an admin."}`. A renamed Battle.net account gets a new row; the old row keeps its account id.
+`POST /users/me/bnet/finish`, the last step of a Battle.net link (see [authentication](../../api/auth.md)), writes `bnet_account_id` on the row of the tag Blizzard names, and sets its source to `link`. It becomes active only when the member had no verified row, or when it renames the account of the active row. A tag the member holds is marked. A tag new to the app gets a new row. An earlier player holding the tag joins the member first, and so does every earlier player an open `sheet` suggestion on the tag names; see [link_prompt](link_prompt.md). A tag another login holds unverified moves to the member, and that login gets a `taken` notice. A tag another login verified, or an account id already on another person's row, answers 409 `{"error": "That Battle.net account or tag belongs to another player. Ask an admin."}`. A renamed Battle.net account gets a new row; the old row keeps its account id.
 
-A row that moves, by a claim or by an admin, takes the matches stamped with it to the new person; a match the new person already holds is dropped. When the row was active, the old person's newest other row becomes active, or none and the person's `battleTag` reads null. The row is active on the new person only when they had no active row. Both people's [ladder_sync](ladder_sync.md) rows clear. `GET /users?tag_source=claim` lists the people who hold a claimed row. A merge moves every row of a person; see [users](users.md).
+A row that moves, by a verify or by an admin, takes the matches stamped with it to the new person; a match the new person already holds is dropped. When the row was active, the old person's newest other row becomes active, or none and the person's `battleTag` reads null. The row is active on the new person only when they had no active row. Both people's [ladder_sync](ladder_sync.md) rows clear. `GET /users?tag_source=claim` lists the people who hold a claimed row. A merge moves every row of a person; see [users](users.md).

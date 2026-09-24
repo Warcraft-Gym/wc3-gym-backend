@@ -235,7 +235,7 @@ def public_create_user(
         )
 
     # The login's own row, a row whose tag no login holds, or a new one
-    row_id, name_free = user_service.signup_match(
+    row_id, name_free, suggest_id = user_service.signup_match(
         str(entry.get("discord_id")),
         str(entry.get("discord_tag")),
         str(user_payload["battleTag"]),
@@ -257,6 +257,9 @@ def public_create_user(
             user_create.model_copy(update={"discordTag": discord_tag}),
             source="signup",
         )
+
+    if suggest_id is not None:
+        user_service.suggest_person(suggest_id, user.id)
 
     # Add to season if specified, on the race the form names
     # A closed or non-open season takes the profile only; an admin may add them

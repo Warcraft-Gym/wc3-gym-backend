@@ -273,26 +273,25 @@ def test_a_second_login_typing_a_claimed_tag_is_refused(
     assert _row(earlier)["discordId"] == "1"
 
 
-def test_a_row_holding_only_the_discord_name_needs_an_admin(
+def test_a_row_holding_only_the_discord_name_becomes_a_suggestion(
     app: FastAPI, client: Client, w3c_free: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The name alone is a guess: nothing is written, and the answer carries
-    what an admin needs to link the row."""
+    """The name alone is a guess: the signup goes through with the name, and
+    the earlier player is suggested to the new login."""
     earlier = _player("Old", "Old#1111", discord_tag="p1")
 
     resp = _signup(client, monkeypatch, "New#2222")
 
-    assert resp.status_code == 409, resp.text
-    assert resp.json()["link"] == {
-        "player": "Old",
-        "discord_id": "1",
-        "battle_tag": "New#2222",
-    }
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["discordTag"] == "p1"
     assert _row(earlier) == {
         "discordId": "",
-        "discordTag": "p1",
+        "discordTag": None,
         "battleTag": "Old#1111",
     }
+    headers = member_session(monkeypatch, discord_id="1", name="p1")
+    prompts = client.get("/users/me/prompts", headers=headers).json()
+    assert [(p["kind"], p["name"]) for p in prompts] == [("suggest", "Old")]
 
 
 def test_a_namesake_with_a_login_is_left_alone(
@@ -310,18 +309,23 @@ def test_a_namesake_with_a_login_is_left_alone(
     assert _row(namesake)["discordId"] == "888"
 
 
-def test_an_own_row_typing_an_earlier_players_tag_needs_an_admin(
+def test_an_own_row_typing_an_earlier_players_tag_joins_that_player(
     app: FastAPI, client: Client, w3c_free: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Two rows would become one person: that is a merge, never a signup."""
-    _player("Me", "Me#5555", discord_id="1", discord_tag="p1")
+    """Typing a tag is a claim: the earlier player joins the login, unverified."""
+    me = _player("Me", "Me#5555", discord_id="1", discord_tag="p1")
     earlier = _player("Old me", "OldMe#6666")
 
     resp = _signup(client, monkeypatch, "OldMe#6666")
 
-    assert resp.status_code == 409, resp.text
-    assert "OldMe#6666" in resp.json()["error"]
-    assert _row(earlier)["discordId"] == ""
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["id"] == me
+    assert resp.json()["battleTag"] == "OldMe#6666"
+    from app.core.db import Session
+    from app.models.user import User
+
+    with Session() as session:
+        assert session.get(User, earlier) is None
 
 
 def test_nothing_matching_makes_a_new_player(
@@ -342,8 +346,8 @@ def test_a_discord_name_matches_without_case(
 
     resp = _signup(client, monkeypatch, "Fresh#7777")
 
-    assert resp.status_code == 409, resp.text
-    assert resp.json()["link"]["player"] == "Old"
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["discordTag"] == "p1"
 
 
 def test_a_namesake_differing_only_in_case_is_left_alone(

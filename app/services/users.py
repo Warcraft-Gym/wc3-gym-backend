@@ -19,6 +19,7 @@ from app.core.exceptions import (
     W3CThrottledError,
 )
 from app.core.query import QueryElement, QueryUtil
+from app.models.link_prompt import LinkPromptPublic
 from app.models.relationships import DBUserSeasonSignup
 from app.models.season import Season
 from app.models.types import utcnow
@@ -35,16 +36,13 @@ from app.models.w3c_stats import (
     W3CStats,
     W3CStatsCreate,
 )
-from app.services import derived, merge
+from app.services import derived, link_prompts, merge
 from app.services.battle_tags import (
-    active_row,
     attach_tag,
     drop_tag,
-    link_bnet,
     move_tag,
     person_by_tag,
     set_active_tag,
-    tag_row,
 )
 from app.services.w3c import REQUEST_TIMEOUT, W3CService
 
@@ -228,28 +226,22 @@ class UserService:
 
     def signup_match(
         self, discord_id: str, discord_name: str, battle_tag: str
-    ) -> tuple[int | None, bool]:
-        """The row a member signup writes, None for a new one, and whether the
-        Discord name may be stored on it.
+    ) -> tuple[int | None, bool, int | None]:
+        """The row a member signup writes (None for a new one), whether the
+        Discord name may be stored on it, and the earlier player to suggest.
 
-        The login's own row first. A tag no login holds is claimed by the login
-        that types it exactly; a tag another login holds is refused. A row that
-        holds only the Discord name is a guess an admin confirms, so it is
-        refused. A namesake with a login of its own is another person: the name
-        repeats, so it is left off rather than break its unique index.
+        The login's own row first. Typing a tag an earlier player (no login)
+        holds claims that player at once, unverified: a login with no row
+        becomes it, one with a row joins it. A tag another login holds is
+        refused. An earlier player holding only the Discord name is a guess:
+        it lets go of the name and becomes a suggestion. A namesake with a
+        login of its own is another person, so the name is left off.
         """
         with Session.begin() as session:
             own = session.scalars(
                 select(User).where(col(User.discordId) == discord_id)
             ).first()
             tagged = person_by_tag(session, battle_tag)
-            named = session.scalars(
-                select(User).where(
-                    func.lower(func.trim(col(User.discordTag)))
-                    == discord_name.strip().lower()
-                )
-            ).first()
-            link = {"discord_id": discord_id, "battle_tag": battle_tag}
             if tagged is not None and (own is None or tagged.id != own.id):
                 if has_login(tagged.discordId):
                     raise ApiError(
@@ -261,33 +253,23 @@ class UserService:
                         },
                     )
                 if own is not None:
-                    raise ApiError(
-                        409,
-                        {
-                            "error": f"The battle tag {battle_tag} belongs to the earlier"
-                            " player"
-                            f" {tagged.name}. An admin needs to join it to your"
-                            " profile.",
-                            "link": link | {"player": tagged.name},
-                        },
-                    )
+                    link_prompts.join(session, tagged, own)
+                    tagged = None
             row = own or tagged
-            if (
-                named is not None
-                and not has_login(named.discordId)
-                and (row is None or named.id != row.id)
-            ):
-                raise ApiError(
-                    409,
-                    {
-                        "error": f"Your Discord name matches the earlier player"
-                        f" {named.name}. An admin needs to link {named.name} to"
-                        " your login before you sign up.",
-                        "link": link | {"player": named.name},
-                    },
+            named = session.scalars(
+                select(User).where(
+                    func.lower(func.trim(col(User.discordTag)))
+                    == discord_name.strip().lower()
                 )
-            name_free = named is None or (row is not None and named.id == row.id)
-            return (row.id if row is not None else None), name_free
+            ).first()
+            suggest_id = None
+            if named is not None and (row is None or named.id != row.id):
+                if has_login(named.discordId):
+                    return (row.id if row is not None else None), False, None
+                named.discordTag = None
+                session.flush()
+                suggest_id = named.id
+            return (row.id if row is not None else None), True, suggest_id
 
     def _where(
         self,
@@ -373,36 +355,14 @@ class UserService:
 
     def add_own_tag(self, discord_id: str, tag: str) -> UserPublic:
         """A tag the member also played as: a new unverified row with source
-        `claim`, active only when they hold no active tag.
-
-        A tag held by a person with no login moves to the member, as the
-        signup claims such a person; a tag another login holds answers 409.
-        """
+        `claim`, active only when they hold no active tag. An earlier player
+        holding it joins the member at once; another login holding it is 409."""
         tag = tag.strip()
         if not is_real_tag(tag) or not self.validate_battle_tag(tag):
             raise NotFoundError(f"W3Champions does not know {tag}")
         with Session.begin() as session:
             user = self._own(session, discord_id)
-            row = tag_row(session, tag)
-            holder = session.get(User, row.user_id) if row is not None else None
-            if row is not None and holder is not None and holder.id != user.id:
-                if has_login(holder.discordId):
-                    raise ApiError(
-                        409,
-                        {
-                            "error": f"{row.tag} belongs to another player."
-                            " Ask an admin to move it."
-                        },
-                    )
-                move_tag(session, row, user, "claim")
-            elif row is None:
-                attach_tag(
-                    session,
-                    user,
-                    tag,
-                    "claim",
-                    active=active_row(session, user.id or 0) is None,
-                )
+            link_prompts.claim(session, user, tag)
             user_id = user.id
         return self.get(str(user_id))
 
@@ -410,7 +370,29 @@ class UserService:
         """Record the member's Battle.net account on its tag; taken answers 409."""
         with Session.begin() as session:
             user = self._own(session, discord_id)
-            link_bnet(session, user, account_id, tag)
+            link_prompts.verify(session, user, account_id, tag)
+            user_id = user.id
+        return self.get(str(user_id))
+
+    def suggest_person(self, person_id: int, user_id: int) -> None:
+        """Suggest an earlier player to a login by the Discord name they share."""
+        with Session.begin() as session:
+            person = session.get(User, person_id)
+            if person is not None and not has_login(person.discordId):
+                link_prompts.suggest(session, person, "discord", user_id=user_id)
+
+    def own_prompts(self, discord_id: str) -> list[LinkPromptPublic]:
+        """The member's open suggestions and notices."""
+        with Session() as session:
+            return link_prompts.open_for(session, self._own(session, discord_id))
+
+    def answer_own_prompt(
+        self, discord_id: str, prompt_id: int, accept: bool
+    ) -> UserPublic:
+        """Accept or dismiss one of the member's prompts."""
+        with Session.begin() as session:
+            user = self._own(session, discord_id)
+            link_prompts.answer(session, user, prompt_id, accept)
             user_id = user.id
         return self.get(str(user_id))
 
@@ -442,6 +424,8 @@ class UserService:
             if to is None:
                 raise NotFoundError(f"User not found: {to_user_id}")
             move_tag(session, row, to, "admin")
+            # only the player's own Battle.net sign-in verifies a tag
+            row.bnet_account_id = None
         return self.get(str(to_user_id))
 
     def merge_into(

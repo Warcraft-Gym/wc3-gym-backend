@@ -8,6 +8,7 @@ A failure leaves the database as it was.
 import io
 import logging
 from dataclasses import dataclass, field
+from datetime import UTC, datetime, time
 from typing import Any, NamedTuple
 
 import openpyxl
@@ -45,7 +46,8 @@ from app.models.types import utcnow
 from app.models.user import User, UserCreate
 from app.models.user_battle_tag import UserBattleTag
 from app.models.user_team_season import DBUserTeamSeason
-from app.services.battle_tags import people_by_names, people_by_tags
+from app.services.battle_tags import FOLDED_TAG, people_by_names
+from app.services.link_prompts import suggest, suggested_people
 from app.services.series import both_scores, in_season
 
 logger = logging.getLogger(__name__)
@@ -69,6 +71,8 @@ class Users:
 
     by_old_id: dict[int, User] = field(default_factory=dict)
     by_tag: dict[str, User] = field(default_factory=dict)
+    # Folded tags a login holds unverified: a hint, never a match
+    hinted: set[str] = field(default_factory=set)
 
 
 def _key(value: UserCreate) -> str:
@@ -465,8 +469,17 @@ def _players(
     reused as it stands too."""
     rows = _rows(sheets["Players"], ["ID"])
     values = [_player_values(row) for row in rows]
-    users = Users(by_tag=_people(session, values))
-    _new_people(session, values, users)
+    users = Users()
+    users.by_tag = _people(session, values, users.hinted)
+    start = season.start_date
+    seen = datetime.combine(start, time(), UTC) if start else None
+    _new_people(session, values, users, seen)
+    # A name-search guess is a suggestion only; the person holds no such tag
+    for row, value in zip(rows, values, strict=True):
+        guess = (row.get("Suggested Tag") or "").strip()
+        person = users.by_tag[_key(value)]
+        if is_real_tag(guess) and not has_login(person.discordId):
+            suggest(session, person, "probable", tag=guess)
 
     signups = {
         signup.user_id: signup
@@ -708,21 +721,59 @@ def _cast_url(caster: str) -> str:
         return f"https://www.twitch.tv/{caster.strip().lstrip('@').lower()}"
 
 
-def _people(session: OrmSession, values: list[UserCreate]) -> dict[str, User]:
+def _people(
+    session: OrmSession, values: list[UserCreate], hinted: set[str]
+) -> dict[str, User]:
     """The stored person behind each row, by `_key`. A real tag matches its
-    tag row; a blank or stand-in tag, a person with no tag of the same name."""
-    found = people_by_tags(session, [v.battleTag for v in values])
+    tag row; a blank or stand-in tag, a person with no tag of the same name.
+
+    A tag a login holds unverified is only a hint: the row is the earlier
+    player a `sheet` suggestion on that tag names, or a new one. Only a tag
+    Battle.net verified joins the login."""
+    real = {folded(v.battleTag) for v in values if is_real_tag(v.battleTag)}
+    found: dict[str, User] = {}
+    unverified: set[str] = set()
+    for tag, user, account in session.execute(
+        select(FOLDED_TAG, User, col(UserBattleTag.bnet_account_id))
+        .join(User, col(User.id) == col(UserBattleTag.user_id))
+        .where(FOLDED_TAG.in_(real))
+    ).all():
+        found[tag] = user
+        if account is None:
+            unverified.add(tag)
+    # a row naming the login's own Discord id is that login
+    own = {_key(v): v.discordId for v in values if v.discordId}
+    held = [
+        k
+        for k, user in found.items()
+        if has_login(user.discordId)
+        and k in unverified
+        and own.get(k) != user.discordId
+    ]
+    for key in held:
+        del found[key]
+    hinted.update(held)
+    found |= {tag: people[0] for tag, people in suggested_people(session, held).items()}
     names = [v.name for v in values if not is_real_tag(v.battleTag)]
     for name, user in people_by_names(session, names).items():
         found[f"name:{name}"] = user
     return found
 
 
-def _new_people(session: OrmSession, values: list[UserCreate], users: Users) -> None:
+def _new_people(
+    session: OrmSession,
+    values: list[UserCreate],
+    users: Users,
+    seen: datetime | None = None,
+) -> None:
     """Write a person for every row no one stored: a real tag becomes their
     active tag, a blank or stand-in tag none. A gnl- stand-in Discord id is no
     login, so it is written null, and so is the stand-in Discord tag the
-    history import paired with it."""
+    history import paired with it.
+
+    A tag or a Discord name a login holds stays with the login: the new person
+    goes without it, and a suggestion asks the login. `seen` dates the new
+    tag rows, the season's start for a season sheet."""
     written: dict[str, User] = {}
     tags: dict[str, str] = {}
     for value in values:
@@ -737,22 +788,47 @@ def _new_people(session: OrmSession, values: list[UserCreate], users: Users) -> 
                 data["discordTag"] = None
         users.by_tag[key] = written[key] = User(**data)
         tags[key] = value.battleTag.strip()
+    handles = {folded(u.discordTag): u for u in written.values() if u.discordTag}
+    held_names = (
+        {
+            folded(user.discordTag): user
+            for user in session.scalars(
+                select(User).where(
+                    func.lower(func.trim(col(User.discordTag))).in_(list(handles))
+                )
+            )
+            if has_login(user.discordId)
+        }
+        if handles
+        else {}
+    )
+    for handle, person in handles.items():
+        if handle in held_names:
+            person.discordTag = None
     session.add_all(written.values())
     session.flush()
-    now = utcnow()
+    for handle, person in handles.items():
+        if handle in held_names:
+            suggest(session, person, "discord", user_id=held_names[handle].id)
+    now = seen or utcnow()
     # One bulk statement: the tag rows need no ids read back
-    rows = [
-        {
-            "user_id": ident(user),
-            "tag": tags[key],
-            "source": "sheet",
-            "is_active": True,
-            "first_seen": now,
-            "last_seen": now,
-        }
-        for key, user in written.items()
-        if is_real_tag(tags[key])
-    ]
+    rows = []
+    for key, user in written.items():
+        if not is_real_tag(tags[key]):
+            continue
+        if folded(tags[key]) in users.hinted:
+            suggest(session, user, "sheet", tag=tags[key])
+            continue
+        rows.append(
+            {
+                "user_id": ident(user),
+                "tag": tags[key],
+                "source": "sheet",
+                "is_active": True,
+                "first_seen": now,
+                "last_seen": now,
+            }
+        )
     if rows:
         session.execute(insert(UserBattleTag), rows)
 
@@ -774,7 +850,7 @@ def _fantasy_users(session: OrmSession, sheets: Sheets, users: Users) -> None:
     ]
     unknown = [v for v in values if _key(v) not in users.by_tag]
     if unknown:
-        users.by_tag |= _people(session, unknown)
+        users.by_tag |= _people(session, unknown, users.hinted)
     _new_people(session, values, users)
 
     for row, value in zip(rows, values, strict=True):
