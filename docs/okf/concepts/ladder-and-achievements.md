@@ -4,7 +4,7 @@ title: W3C ladder and achievements
 description: Every ranked 1v1 match of a GNL player is stored once, scored per season on their signup race, and 24 badge rules run as one SQL union.
 resource: ../../../app/services/ladder.py
 tags: [w3champions]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-19T13:36:34Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-24T09:42:05Z }
 sources:
   - id: ladder
     resource: ../../../app/services/ladder.py
@@ -27,7 +27,9 @@ sources:
 
 `w3c_ladder_matches` holds one row per GNL player per ranked 1v1 match, unique on (match id, user). Both the selected race and the rolled race are stored per side, because W3Champions filters on the selected race and Random counts everything. History starts at W3Champions season 23, where GNL S17 began.
 
-`ladder_sync` is the ledger: one row per (player, W3Champions season) with `synced_at` and `complete`. A closed season marked complete is never fetched again; the open season is re-read from its stamp. The season and team "last synced" stamps derive as the earliest stamp across the roster and are never stored on the season.
+The sync reads every [user_battle_tag](../data/tables/user_battle_tag.md) row of a person, active first, and stamps each match with the row in `battle_tag_id`. A person with no tag row syncs the tag `users.battleTag` holds. The stats sync reads the active tag alone. A person with n tags costs n match reads per W3Champions season where a person with one tag costs one.
+
+`ladder_sync` is the ledger: one row per (player, W3Champions season) with `synced_at` and `complete`. A season is stamped once every tag of the player read it, and complete only when every tag read it to its end. Adding a tag to a person clears their ledger rows. A closed season marked complete is never fetched again; the open season is re-read from its stamp. The season and team "last synced" stamps derive as the earliest stamp across the roster and are never stored on the season.
 
 Two sync pipelines exist and must not be confused: **matches** (this table, this ledger, the Sync Ladder button, `POST /events/{id}/ladder-sync` in chunks) and **MMR and stats** (`w3cstats`, `users.w3c_synced_at`, the older Sync W3C buttons, `POST /users/{id}/w3c-sync`). Different endpoints, different stamps.
 
@@ -36,6 +38,7 @@ Two sync pipelines exist and must not be confused: **matches** (this table, this
 - A match pays 3 points for a win and 1 for a loss. A match of `MIN_DURATION_S` or less pays nothing and is not a game. The rule has a Python and a SQL face in `app/core/ladder.py`.
 - A player scores only on the race they signed the season up on; other races are stored and pay nothing; Random counts every race. The filter belongs in the read, never in the fetch.
 - The season window is the GNL `start_date..end_date` on that race. MMR carries across a W3Champions season boundary unchanged, so the read needs no season logic.
+- Games, wins, losses and points add up across every tag of the person. The MMR span and the MMR on a date read only the matches of the active tag, because each tag has its own rating.
 - `GET /events/{id}/ladder` and `GET /users/{id}/ladder` answer the totals, per-day bars, MMR spans and badges. The event read is edge-cached; see [the pitfall](../pitfalls/edge-cache-cors.md).
 - A team card of the event ladder carries `icon_url`, and a row of `GET /events/{id}/ladder/players` carries `team`, `team_id` and `team_icon_url`. The roster read carries the logo, so neither costs a statement.
 

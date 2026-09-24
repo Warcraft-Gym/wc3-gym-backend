@@ -176,6 +176,7 @@ def _player(name: str, tag: str, discord_id: str = "", discord_tag: str = "") ->
     from app.core.db import Session
     from app.models.enums import Race
     from app.models.user import User
+    from app.services.battle_tags import attach_tag
 
     with Session() as session:
         user = User(
@@ -186,6 +187,7 @@ def _player(name: str, tag: str, discord_id: str = "", discord_tag: str = "") ->
             race=Race.HU,
         )
         session.add(user)
+        attach_tag(session, user, tag, "sheet")
         session.commit()
         assert user.id is not None
         return user.id

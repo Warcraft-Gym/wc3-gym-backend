@@ -4,7 +4,7 @@ title: API overview
 description: Twenty-one route modules under one FastAPI app, one error envelope, paging with a total header, a search language, and OpenAPI at /docs.
 resource: ../../../app/api/main.py
 tags: [api]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-23T12:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-24T10:00:35Z }
 sources:
   - id: router
     resource: ../../../app/api/main.py
@@ -25,7 +25,7 @@ sources:
 | Module | Prefix | Area |
 |---|---|---|
 | `login.py` | `/login`, `/me` | the admin token login and the session answer |
-| `users.py` | `/users` | players, bans, blocks, W3Champions sync, history, the meetings of two players |
+| `users.py` | `/users` | players, a member's own battle tags, the admin tag move and merge, bans, blocks, W3Champions sync, history, the meetings of two players |
 | `teams.py` | `/leagues/{league_id}/teams`, `/events/{event_id}/teams`, `/teams/{team_id}/image` | league-owned teams, event rosters, captains, availability grid, logos; the unscoped logo read is deprecated |
 | `seasons.py` | `/events/{event_id}`, `/achievements` | GNL maps, rounds, signups, ladder reads and badges |
 | `leagues.py` | `/leagues` | leagues |

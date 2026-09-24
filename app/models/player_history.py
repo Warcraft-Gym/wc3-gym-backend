@@ -70,8 +70,20 @@ class HistoryEvent(SQLModel):
     running: bool = False
     # The race the player signed this season up on; null when they never did
     signup_race: str | None = None
+    # The tag the player signed this season up with; null when none is known
+    played_as: str | None = None
+
+
+class HistoryCaptainSeat(SQLModel):
+    """One team the player captained in one season."""
+
+    season_id: int
+    team_id: int
+    team_name: str | None = None
 
 
 class PlayerHistory(SQLModel):
     events: list[HistoryEvent]
     opponents: list[HistoryOpponent]
+    # Every captain seat the player held, newest season first
+    captain_of: list[HistoryCaptainSeat] = []

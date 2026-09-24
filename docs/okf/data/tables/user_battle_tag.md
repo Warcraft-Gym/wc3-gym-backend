@@ -4,8 +4,8 @@ title: user_battle_tag
 description: One battle tag a person has played under; a tag names at most one person, and each person has at most one active tag.
 resource: ../../../../app/models/user_battle_tag.py
 tags: [auth, data]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-24T09:19:27Z }
-verified: { by: process:test_okf, at: 2026-09-24T09:20:16Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-24T10:00:35Z }
+verified: { by: process:test_okf, at: 2026-09-24T09:51:01Z }
 sources:
   - id: model
     resource: ../../../../app/models/user_battle_tag.py
@@ -13,6 +13,18 @@ sources:
   - id: migration
     resource: ../../../../migrations/versions/e07324d2b4f9_add_the_user_battle_tag_table.py
     title: The table and its backfill from users
+  - id: service
+    resource: ../../../../app/services/battle_tags.py
+    title: The lookup by tag and the attach step
+  - id: rule
+    resource: ../../../../app/core/battle_tags.py
+    title: Which tags are real
+  - id: routes
+    resource: ../../../../app/api/routes/users.py
+    title: The member tag routes, the admin move and the merge
+  - id: merge
+    resource: ../../../../app/services/merge.py
+    title: The merge of two people
 ---
 
 # Schema
@@ -37,5 +49,23 @@ Pointed at by [w3c_ladder_matches](w3c_ladder_matches.md) `battle_tag_id`.
 # Rules
 
 - A person holds many tags. A season signup records the tag of that season in `user_season_signup.played_as`; see [user_season_signup](user_season_signup.md).
-- `users.battleTag` holds a copy of the active row's tag.
-- A real tag is `Name#digits`. Importer stand-ins get no row: a tag ending `#GNL` and two digits, a tag that begins `Fantasy_User#` or `Review#`, and a tag with no `#`.
+- `users.battleTag` holds a copy of the active row's tag. `set_active_tag` in `app/services/battle_tags.py` writes the flag and the copy together.
+- Every way in finds a person by any of their tags through this table: the member signup, an `anyone` entrant, the Twitch chat signup and withdraw, the workbook import and `GET /users/{key}`. See [users](users.md).
+- A new person gets one active row. A tag new to an existing person is added and becomes active; the old rows stay. Adding a tag clears the person's [ladder_sync](ladder_sync.md) rows, so the next sync reads the new tag's seasons.
+- The ladder sync reads the matches of every row and stamps each match with the row it came under. The MMR reads use only the matches of the active row; games, wins, losses and points add up across rows. See [ladder and achievements](../../concepts/ladder-and-achievements.md).
+- A real tag is `Name#digits`. Importer stand-ins get no row: a tag ending `#GNL` and two digits, a tag that begins `Fantasy_User#` or `Review#`, and a tag with no `#`. The rule lives in `app/core/battle_tags.py`; the migration keeps a frozen copy, and a test pins the two together.
+
+# Routes
+
+A member manages their own tags; the session names the person. Each route answers the member's user read.
+
+| Route | Does |
+|---|---|
+| `POST /users/me/tags` `{tag}` | Adds a tag the member also played as. W3Champions must know it, or 404. A new tag gets a row with source `claim`, unverified, active only when the member has no active tag. A tag held by a person with no login moves to the member with source `claim`, as below. A tag another login holds answers 409 `{"error": "<tag> belongs to another player. Ask an admin to move it."}`. |
+| `PUT /users/me/tags/{tag_id}/active` | Makes one of the member's rows active; `users.battleTag` follows. |
+| `DELETE /users/me/tags/{tag_id}` | Removes an unverified, inactive row of the member, the [w3c_ladder_matches](w3c_ladder_matches.md) stamped with it and the member's [ladder_sync](ladder_sync.md) rows. The active or a verified row answers 409. |
+| `POST /users/{id}/tags/{tag_id}/move` `{to_user_id}` | Admin. Moves the row to another person with source `admin`, and answers that person. |
+
+A row of another person is 404 to a member.
+
+A row that moves, by a claim or by an admin, takes the matches stamped with it to the new person; a match the new person already holds is dropped. When the row was active, the old person's newest other row becomes active, or none and `users.battleTag` is null. The row is active on the new person only when they had no active row. Both people's [ladder_sync](ladder_sync.md) rows clear. `GET /users?tag_source=claim` lists the people who hold a claimed row. A merge moves every row of a person; see [users](users.md).

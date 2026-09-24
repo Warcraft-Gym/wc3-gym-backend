@@ -84,6 +84,7 @@ from app.models.user import User, UserPublic
 from app.models.user_team_season import DBUserTeamSeason
 from app.models.w3c_stats import W3CStats
 from app.services import stage_engine
+from app.services.battle_tags import attach_tag, person_by_tag
 
 # How many W3C seasons back a rating is still the player's current one
 SEASONS = 3
@@ -1279,10 +1280,11 @@ def _signup_race(data: EntrantSignup) -> Race:
 
 
 def _by_battle_tag(session: OrmSession, battle_tag: str, race: Race) -> User:
-    """The player row with that battle tag, created when the tag is new.
+    """The person who holds that battle tag, created when the tag is new.
 
     An `anyone` event takes a battle tag the way the KOTH chat command does,
     so a player with no account still enters and keeps one row across events.
+    Any tag the person holds finds them, so a member's second tag enters them.
     The tag is the identity, so a tag that is not shaped like one writes no
     player: a typo would sign a second player up under the same name.
     """
@@ -1291,8 +1293,7 @@ def _by_battle_tag(session: OrmSession, battle_tag: str, race: Race) -> User:
         raise BadRequestError(
             f"'{tag}' is not a battle tag. A battle tag looks like Name#1234."
         )
-    folded = func.lower(func.trim(col(User.battleTag)))
-    user = session.scalars(select(User).where(folded == tag.lower())).first()
+    user = person_by_tag(session, tag)
     if user is not None:
         return user
     user = User(
@@ -1303,7 +1304,7 @@ def _by_battle_tag(session: OrmSession, battle_tag: str, race: Race) -> User:
         race=race,
     )
     session.add(user)
-    session.flush()
+    attach_tag(session, user, tag, "signup")
     return user
 
 

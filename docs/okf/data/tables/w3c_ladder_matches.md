@@ -4,8 +4,8 @@ title: w3c_ladder_matches
 description: One ranked 1v1 W3Champions match of one GNL player, with the selected and the played race on both sides; points and badges derive from it.
 resource: ../../../../app/models/w3c_ladder_match.py
 tags: [w3champions, data]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-24T09:19:27Z }
-verified: { by: process:test_okf, at: 2026-09-24T09:20:16Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-24T09:42:05Z }
+verified: { by: process:test_okf, at: 2026-09-24T09:51:01Z }
 sources:
   - id: model
     resource: ../../../../app/models/w3c_ladder_match.py
@@ -21,7 +21,7 @@ sources:
 |---|---|---|---|
 | `id` | INTEGER | no | Primary key. |
 | `user_id` | INTEGER | no | The GNL player the row belongs to. |
-| `battle_tag_id` | INTEGER | yes | The [user_battle_tag](user_battle_tag.md) row the match was fetched under. Null when that row is gone or the match was never stamped. |
+| `battle_tag_id` | INTEGER | yes | The [user_battle_tag](user_battle_tag.md) row the match was fetched under; the sync stamps every match it writes. Null when that row is gone or the match was never stamped. The MMR reads take only the matches of the person's active row, and count a null as that row. |
 | `w3c_match_id` | VARCHAR | no | The W3Champions match id. One row per player per match. |
 | `wc3_season` | INTEGER | no | The W3Champions season number. |
 | `start_time` | TIMESTAMP | no | When the match started, UTC. |

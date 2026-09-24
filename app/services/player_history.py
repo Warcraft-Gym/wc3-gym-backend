@@ -1,13 +1,13 @@
 """What one player did in the league, derived at read time.
 
-Ten statements answer the whole page, and none of them grows with the number
+Eleven statements answer the whole page, and none of them grows with the number
 of events or opponents: one reads every series the player stood in with its
 event and its opponent, one the teams they were rostered on, one the events
 they entered as an entrant, one the GNL seasons they signed up for, one the
 teams each of those events held, one the current season setting, a pair reads
 the maps of the played series (the fixed map and the veto picks), and the last
 pair is the score system and the points of every team, borrowed from
-app.services.derived.
+app.services.derived. The eleventh reads the teams the player captained.
 
 Every kind of event answers here. A GNL series hangs off a fixture, which
 names the season; a bracket series has no fixture and names its round, which
@@ -36,12 +36,17 @@ from app.models.event_entrant import EventEntrant
 from app.models.map import Map
 from app.models.match import Match
 from app.models.player_history import (
+    HistoryCaptainSeat,
     HistoryEvent,
     HistoryMeeting,
     HistoryOpponent,
     PlayerHistory,
 )
-from app.models.relationships import DBEventRound, DBUserSeasonSignup
+from app.models.relationships import (
+    DBEventRound,
+    DBTeamSeasonCaptain,
+    DBUserSeasonSignup,
+)
 from app.models.season import LEAGUE_SHORT_NAME, Season
 from app.models.series import Series
 from app.models.series_veto_step import DBSeriesVetoStep
@@ -197,11 +202,33 @@ def _signups(session: OrmSession, user_id: int) -> SignedUp:
             LEAGUE_SHORT_NAME,
             col(Season.kind).label("kind"),
             col(DBUserSeasonSignup.race).label("race"),
+            col(DBUserSeasonSignup.played_as).label("played_as"),
         )
         .join(DBUserSeasonSignup, col(DBUserSeasonSignup.season_id) == Season.id)
         .where(col(DBUserSeasonSignup.user_id) == user_id)
     ).all()
     return {row.season_id: row for row in rows}
+
+
+def _captain_seats(session: OrmSession, user_id: int) -> list[HistoryCaptainSeat]:
+    """Every team the player captained, newest season first, in one statement."""
+    rows = session.execute(
+        select(
+            col(DBTeamSeasonCaptain.season_id),
+            col(DBTeamSeasonCaptain.team_id),
+            col(Team.name),
+        )
+        .join(Team, col(Team.id) == col(DBTeamSeasonCaptain.team_id))
+        .where(col(DBTeamSeasonCaptain.user_id) == user_id)
+        .order_by(
+            col(DBTeamSeasonCaptain.season_id).desc(),
+            col(DBTeamSeasonCaptain.team_id),
+        )
+    ).all()
+    return [
+        HistoryCaptainSeat(season_id=season_id, team_id=team_id, team_name=name)
+        for season_id, team_id, name in rows
+    ]
 
 
 def _runs_today(row: Row[Any] | None) -> bool:
@@ -309,6 +336,7 @@ def _events(
                 team_count=team_count,
                 running=season_id == current_id or _runs_today(entered.get(season_id)),
                 signup_race=race_value(signup.race) if signup else None,
+                played_as=signup.played_as if signup else None,
             )
         )
     return events
@@ -418,4 +446,5 @@ def history(user_id: int) -> PlayerHistory:
                 int(value) if value and value.isdigit() else None,
             ),
             opponents=_opponents(rows, _series_maps(session, played_ids)),
+            captain_of=_captain_seats(session, user_id),
         )

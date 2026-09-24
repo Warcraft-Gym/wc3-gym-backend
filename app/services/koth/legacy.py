@@ -15,6 +15,7 @@ from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session as OrmSession
 from sqlmodel import col
 
+from app.core.battle_tags import fold
 from app.core.db import Session
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.models.base import ident
@@ -40,6 +41,7 @@ from app.models.series import Series, SeriesUpdate
 from app.models.types import utcnow
 from app.models.user import User
 from app.services import stage_engine
+from app.services.battle_tags import person_by_tag
 from app.services.events import EventService, _stats_for, _users_for, _w3c_season
 from app.services.koth import carry, night, nightbot
 from app.services.series import SeriesService
@@ -185,15 +187,14 @@ def withdraw(battle_tag: str, race: str | None = None) -> None:
     named = _race(race)
     with Session.begin() as session:
         event_id = ident(night.tonight(session))
-        statement = (
-            select(EventEntrant)
-            .join(User, col(User.id) == col(EventEntrant.user_id))
-            .where(
-                col(EventEntrant.event_id) == event_id,
-                func.lower(func.trim(col(User.battleTag)))
-                == battle_tag.strip().lower(),
-                col(EventEntrant.withdrawn_at).is_(None),
-            )
+        # Any tag the person holds withdraws them
+        user = person_by_tag(session, battle_tag)
+        if user is None:
+            raise NotFoundError("No active signup to withdraw")
+        statement = select(EventEntrant).where(
+            col(EventEntrant.event_id) == event_id,
+            col(EventEntrant.user_id) == user.id,
+            col(EventEntrant.withdrawn_at).is_(None),
         )
         if named is not None:
             statement = statement.where(col(EventEntrant.race) == named)
@@ -629,8 +630,11 @@ def _match(
 
 
 def _mine(event_id: int, battle_tag: str) -> list[KothSignupPublic]:
-    """The signups of one battle tag in a night; one entrant, so one row."""
-    tag = battle_tag.strip().lower()
+    """The signups of the person who holds the battle tag in a night. A row
+    shows the person's active tag, which a second tag differs from."""
+    with Session.begin() as session:
+        user = person_by_tag(session, battle_tag)
+        tag = fold((user.battleTag if user is not None else None) or battle_tag)
     return [
         row
         for row in signups_of(event_id)

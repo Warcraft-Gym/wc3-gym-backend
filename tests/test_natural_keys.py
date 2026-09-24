@@ -163,16 +163,12 @@ def test_a_null_discord_tag_or_id_may_repeat(seeded: dict[str, Any]) -> None:
 
 
 def test_a_person_holds_many_tags_and_one_is_active(seeded: dict[str, Any]) -> None:
+    """The seeded P1#1111 row is the active one; the two more stay inactive."""
     with Session() as session:
         session.add_all(
             [
-                UserBattleTag(
-                    user_id=seeded["player_ids"][0],
-                    tag=tag,
-                    source="sheet",
-                    is_active=tag == "Main#1",
-                )
-                for tag in ("Main#1", "Smurf#2", "Old#3")
+                UserBattleTag(user_id=seeded["player_ids"][0], tag=tag, source="sheet")
+                for tag in ("Smurf#2", "Old#3")
             ]
         )
         session.commit()

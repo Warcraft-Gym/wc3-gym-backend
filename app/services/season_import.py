@@ -12,10 +12,11 @@ from typing import Any, NamedTuple
 
 import openpyxl
 from pydantic import ValidationError
-from sqlalchemy import func, select
+from sqlalchemy import func, insert, select
 from sqlalchemy.orm import Session as OrmSession
 from sqlmodel import col
 
+from app.core.battle_tags import has_login, is_real_tag
 from app.core.db import Session
 from app.core.exceptions import BadRequestError
 from app.core.scoring import DEFAULT_SYSTEM, SYSTEMS
@@ -39,8 +40,11 @@ from app.models.series import Series, SeriesCreate
 from app.models.series_cast import SeriesCast, channel_url
 from app.models.team import Team, TeamCreate
 from app.models.team_season import DBTeamSeason
+from app.models.types import utcnow
 from app.models.user import User, UserCreate
+from app.models.user_battle_tag import UserBattleTag
 from app.models.user_team_season import DBUserTeamSeason
+from app.services.battle_tags import people_by_tags
 from app.services.series import both_scores, in_season
 
 logger = logging.getLogger(__name__)
@@ -452,27 +456,8 @@ def _players(
     reused as it stands too."""
     rows = _rows(sheets["Players"], ["Battle Tag"])
     values = [_player_values(row) for row in rows]
-    users = Users(
-        by_tag={
-            folded(user.battleTag): user
-            for user in session.scalars(
-                select(User).where(
-                    func.lower(User.battleTag).in_(
-                        {folded(value.battleTag) for value in values}
-                    )
-                )
-            )
-        }
-    )
-
-    written: list[User] = []
-    for value in values:
-        if folded(value.battleTag) not in users.by_tag:
-            user = User(**value.model_dump())
-            written.append(user)
-            users.by_tag[folded(value.battleTag)] = user
-    session.add_all(written)
-    session.flush()
+    users = Users(by_tag=people_by_tags(session, [v.battleTag for v in values]))
+    _new_people(session, values, users)
 
     signups = {
         signup.user_id: signup
@@ -487,7 +472,10 @@ def _players(
         user = users.by_tag[folded(value.battleTag)]
         if ident(user) not in signups:
             signups[ident(user)] = DBUserSeasonSignup(
-                user_id=ident(user), season_id=ident(season), race=value.race
+                user_id=ident(user),
+                season_id=ident(season),
+                race=value.race,
+                played_as=value.battleTag if is_real_tag(value.battleTag) else None,
             )
             session.add(signups[ident(user)])
         old_id = whole_number(row["ID"])
@@ -658,6 +646,42 @@ def _cast_url(caster: str) -> str:
         return f"https://www.twitch.tv/{caster.strip().lstrip('@').lower()}"
 
 
+def _new_people(session: OrmSession, values: list[UserCreate], users: Users) -> None:
+    """Write a person for every tag no one holds, each with its tag as the
+    active one. A gnl- stand-in Discord id is no login, so it is written null,
+    and so is the stand-in Discord tag the history import paired with it."""
+    written: dict[str, User] = {}
+    for value in values:
+        key = folded(value.battleTag)
+        if key in users.by_tag:
+            continue
+        data = value.model_dump()
+        if data["discordId"] and not has_login(data["discordId"]):
+            data["discordId"] = None
+            tag = data["discordTag"] or ""
+            if "#GNL" in tag or folded(tag) == key:
+                data["discordTag"] = None
+        users.by_tag[key] = written[key] = User(**data)
+    session.add_all(written.values())
+    session.flush()
+    now = utcnow()
+    # One bulk statement: the tag rows need no ids read back
+    tags = [
+        {
+            "user_id": ident(user),
+            "tag": user.battleTag.strip(),
+            "source": "sheet",
+            "is_active": True,
+            "first_seen": now,
+            "last_seen": now,
+        }
+        for user in written.values()
+        if is_real_tag(user.battleTag)
+    ]
+    if tags:
+        session.execute(insert(UserBattleTag), tags)
+
+
 def _fantasy_users(session: OrmSession, sheets: Sheets, users: Users) -> None:
     """The captains and bettors on no roster, mapped before the sheets that
     name them. A stored player is reused as it stands."""
@@ -673,25 +697,10 @@ def _fantasy_users(session: OrmSession, sheets: Sheets, users: Users) -> None:
         )
         for row in rows
     ]
-    unknown = {
-        folded(value.battleTag)
-        for value in values
-        if folded(value.battleTag) not in users.by_tag
-    }
+    unknown = [v.battleTag for v in values if folded(v.battleTag) not in users.by_tag]
     if unknown:
-        for user in session.scalars(
-            select(User).where(func.lower(User.battleTag).in_(unknown))
-        ):
-            users.by_tag[folded(user.battleTag)] = user
-
-    written: list[User] = []
-    for value in values:
-        if folded(value.battleTag) not in users.by_tag:
-            user = User(**value.model_dump())
-            written.append(user)
-            users.by_tag[folded(value.battleTag)] = user
-    session.add_all(written)
-    session.flush()
+        users.by_tag |= people_by_tags(session, unknown)
+    _new_people(session, values, users)
 
     for row, value in zip(rows, values, strict=True):
         old_id = whole_number(row["ID"])
