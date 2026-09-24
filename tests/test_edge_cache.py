@@ -21,6 +21,7 @@ ROUTES = [
     ("/users/{player}/ladder?season_id={season_id}", LADDER),
     ("/users/{player}/history", SHORT),
     ("/events/{season_id}/teams", SHORT),
+    ("/events/{season_id}/series", SHORT),
     ("/events/{season_id}/teams/basic", SHORT),
     ("/events/{season_id}/teams/{team_a_id}", SHORT),
     ("/leagues/{league_id}/teams", SHORT),

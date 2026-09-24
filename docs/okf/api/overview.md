@@ -78,6 +78,7 @@ CORS allows every origin, because clients send bearer tokens and never cookies. 
 | `GET /leagues`, `GET /maps`, `GET /config/w3c`, `GET /config/settings/{key}` | 300 | 3600 |
 | `GET /users/{user_id}/history` | 120 | 600 |
 | `GET /events/{event_id}/teams`, its `basic` twin, `GET /events/{event_id}/teams/{team_id}` | 120 | 600 |
+| `GET /events/{event_id}/series` | 120 | 600 |
 | `GET /leagues/{league_id}/teams`, its `basic` twin, `GET /leagues/{league_id}/teams/{team_id}` | 120 | 600 |
 
 The edge serves a cached copy only to a request with no Authorization header. The frontend sends a route without its bearer only when its `EDGE_CACHED` pattern lists the route, and an admin's requests always carry the bearer, so an admin reads past the cache. A route added here is cached once the frontend pattern lists it too. `tests/test_edge_cache.py` pins every row.
