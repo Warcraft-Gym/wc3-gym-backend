@@ -4,7 +4,7 @@ title: API overview
 description: Twenty-one route modules under one FastAPI app, one error envelope, paging with a total header, a search language, and OpenAPI at /docs.
 resource: ../../../app/api/main.py
 tags: [api]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-24T10:00:35Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-24T15:30:00Z }
 sources:
   - id: router
     resource: ../../../app/api/main.py
@@ -81,6 +81,25 @@ CORS allows every origin, because clients send bearer tokens and never cookies. 
 | `GET /leagues/{league_id}/teams`, its `basic` twin, `GET /leagues/{league_id}/teams/{team_id}` | 120 | 600 |
 
 The edge serves a cached copy only to a request with no Authorization header. The frontend sends a route without its bearer only when its `EDGE_CACHED` pattern lists the route, and an admin's requests always carry the bearer, so an admin reads past the cache. A route added here is cached once the frontend pattern lists it too. `tests/test_edge_cache.py` pins every row.
+
+## What a read costs
+
+A cache hit is served by the Vercel edge: the function does not run and the database is not read. A miss runs the route once and fills the entry for that region. So the database cost of an open read is the rows one miss reads times the number of misses, and the number of page views does not enter it. A route with no `edge_cache` has a miss on every call.
+
+A write does not clear the edge. A reader sees a change up to `s-maxage` plus `stale-while-revalidate` seconds late, unless the reader sends a bearer, which skips the edge. Pick `s-maxage` by how often the answer changes and how late a reader may see it:
+
+| Answer | `s-maxage` |
+|---|---|
+| a live board during a night | seconds |
+| a running event: fixtures, results, teams | minutes |
+| a finished event, which changes only when an admin corrects it | an hour or more, with a long `stale-while-revalidate` |
+| the list of leagues, maps, settings | minutes, with an hour of `stale-while-revalidate` |
+
+## Rules for a route a consumer reads
+
+- An open GET that answers every caller the same sets `edge_cache`. A route left without it says why in its docstring.
+- A route returns the rows its readers use. When a page needs one team's or one player's rows, add a route scoped to that team or player instead of having the page filter an event-wide list.
+- `X-DB-Rows` on the response, the egress ledger and `tests/test_query_budget.py` give the rows per call. A pull request that adds or widens a consumer's read states the rows per call and the cache time. See [Consumers of the API](consumers.md) for the consumer's side.
 
 `GET /koth/board` and `GET /koth/nights/{night_id}/board` Both answer `KothBoard`, keyed `night_id` with a `closed` flag, and every write of a live night answers the same shape, so the run page needs no second read. See [KOTH night](../concepts/koth.md).
 

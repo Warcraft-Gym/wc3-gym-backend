@@ -25,4 +25,5 @@ The review that merges the pull request repeats step 1.
 
 - `uv run just test` runs the suite, `uv run just lint` formats and lints, `uv run just typecheck` runs ty. CI runs all three.
 - The code rules live in the bundle: [layering](docs/okf/conventions/layering.md), [code style](docs/okf/conventions/code-style.md), [testing](docs/okf/conventions/testing.md), [git and pull requests](docs/okf/conventions/git-and-pull-requests.md).
+- A route a consumer reads costs the database once per call that misses the edge cache. Before adding or widening one, read [what a read costs](docs/okf/api/overview.md#what-a-read-costs) and [the consumer rules](docs/okf/api/consumers.md#rules-a-consumer-follows); the pull request states the rows per call and the cache time.
 - `just okf-validate` checks the bundle with a third-party OKF validator. `just okf-drift` lists the concepts to re-read after a code change.
