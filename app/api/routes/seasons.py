@@ -26,6 +26,7 @@ from app.models.season import (
 )
 from app.models.user import UserListPublic
 from app.models.w3c_ladder_match import LadderSyncResult, SeasonLadder, SeasonPlayer
+from app.services.edge_purge import event_tag
 from app.services.users import W3C_SYNC_WORKERS
 
 logger = logging.getLogger(__name__)
@@ -222,7 +223,8 @@ def get_season_ladder(
     event_id: int, service: LadderServiceDep, response: Response
 ) -> SeasonLadder:
     """The ladder of a season: its teams, its players and its hours."""
-    edge_cache(response, 3600)  # matches change once a day at the cron
+    # matches change once a day at the cron
+    edge_cache(response, 3600, tags=(event_tag(event_id), "ladder"))
     return service.season_ladder(event_id)
 
 
@@ -231,5 +233,5 @@ def get_season_ladder_players(
     event_id: int, service: LadderServiceDep, response: Response
 ) -> list[SeasonPlayer]:
     """Every signup of the season with his ladder record, without the achievements."""
-    edge_cache(response, 900, 3600)
+    edge_cache(response, 900, 3600, tags=(event_tag(event_id), "ladder"))
     return service.season_players(event_id)

@@ -34,7 +34,7 @@ from app.core.exceptions import (
     NotFoundError,
     W3CThrottledError,
 )
-from app.services import egress
+from app.services import edge_purge, egress
 
 logger = logging.getLogger(__name__)
 
@@ -114,6 +114,28 @@ class EgressMiddleware:
                 )
 
 
+class EdgePurgeMiddleware:
+    """Clear the edge copies the request's writes changed, after the response is sent.
+
+    The session listener in app/services/edge_purge.py fills the set at each
+    commit; the call runs once the handler returns, so it never slows the write.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        tags = edge_purge.start_request()
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            if tags:
+                await to_thread.run_sync(edge_purge.send, tags)
+
+
 def record_egress(route: str, method: str, cost: Cost, size: int) -> None:
     """Add the request to the ledger; a failed write is logged, never raised."""
     try:
@@ -143,6 +165,7 @@ def create_app(db_url: str | None = None) -> FastAPI:
         description="API for Gym Newbie League Backend Data",
         version="1.1.0",
     )
+    app.add_middleware(EdgePurgeMiddleware)
     app.add_middleware(EgressMiddleware)
     app.add_middleware(VercelHeadersMiddleware)
     app.add_middleware(

@@ -108,8 +108,8 @@ def init_engine(db_url: str | None = None) -> Engine:
         )
     event.listen(engine, "after_cursor_execute", _count_statement)
     Session.configure(bind=engine)
-    # the listeners: the blob store follows the rows, and every fixture and
-    # series names the round it is played in
-    from app.services import blob, round_link  # noqa: F401
+    # the listeners: the blob store follows the rows, every fixture and series
+    # names the round it is played in, and a write clears its edge copies
+    from app.services import blob, edge_purge, round_link  # noqa: F401
 
     return engine
