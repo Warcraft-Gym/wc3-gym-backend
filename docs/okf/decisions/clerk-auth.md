@@ -3,7 +3,7 @@ type: Decision
 title: Clerk owns the session
 description: Members sign in through Clerk with Discord as the only social connection; the guild check and the roles stay app code.
 tags: [auth]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-24T11:14:37Z }
 sources:
   - id: source
     resource: Maintainers' decision, 2026-08-29
@@ -24,4 +24,4 @@ The maintainers want a library to own session management rather than a custom to
 - Keep the guard ladder `require_login < require_member < require_admin` and the guild read as app code. Only the token is Clerk's.
 - Production runs the Clerk production instance in proxy mode through the frontend; previews and local use the dev instance. A preview must never point at the production backend.
 - The Clerk user to Discord id link is one row, written on the first request of a login and read after that.
-- Battle.net linking, when it comes, is a custom OIDC connection on Clerk.
+- Battle.net is a linked proof on a tag, never a login. The backend runs its authorization-code flow itself; see [authentication](../api/auth.md).

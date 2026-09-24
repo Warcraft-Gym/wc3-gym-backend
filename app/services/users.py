@@ -40,6 +40,7 @@ from app.services.battle_tags import (
     active_row,
     attach_tag,
     drop_tag,
+    link_bnet,
     move_tag,
     person_by_tag,
     set_active_tag,
@@ -404,6 +405,11 @@ class UserService:
                 )
             user_id = user.id
         return self.get(str(user_id))
+
+    def link_own_bnet(self, discord_id: str, account_id: str, tag: str) -> None:
+        """Record the member's Battle.net account on its tag; raises TagTakenError."""
+        with Session.begin() as session:
+            link_bnet(session, self._own(session, discord_id), account_id, tag)
 
     def activate_own_tag(self, discord_id: str, tag_id: int) -> UserPublic:
         """Make one of the member's tags the active one."""

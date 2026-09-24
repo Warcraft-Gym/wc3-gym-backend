@@ -4,7 +4,7 @@ title: Authentication
 description: A bearer token is either the admin token's JWT or a Clerk session; the claims resolve the Discord id and the role once per request, and five guards build on them.
 resource: ../../../app/api/deps.py
 tags: [auth]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-23T17:45:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-24T11:14:37Z }
 sources:
   - id: deps
     resource: ../../../app/api/deps.py
@@ -12,6 +12,9 @@ sources:
   - id: login
     resource: ../../../app/api/routes/login.py
     title: /login and /me
+  - id: battlenet
+    resource: ../../../app/api/routes/battlenet.py
+    title: The Battle.net link routes
   - id: security
     resource: ../../../app/core/security.py
     title: The admin token's JWT
@@ -44,6 +47,16 @@ An admin grant and a captain seat are read live, so they show on the next reques
 | `require_admin` | an admin, or the admin token |
 
 Routes use them as `Annotated` types (`RequireAdmin`, `RequireMember`) or as `dependencies=[Depends(require_admin)]`. A helper that builds on a guard, such as the player identity in `app/api/routes/public.py`, is an `Annotated` dependency too, so FastAPI runs it in the thread pool before the handler. `is_admin(claims)` in `app/core/security.py` is the one admin test: the `admin` role or the admin token. See [roles](../concepts/roles-and-permissions.md) for the ownership checks that sit beside them.
+
+# Battle.net link
+
+A member proves they own a battle tag with their Battle.net account. The link is no login and Clerk plays no part.
+
+1. `GET /users/me/bnet/start` (`require_login`) answers `{"url": ...}`, the Blizzard authorize URL with scope `openid`. Its `state` is a JWT signed with `JWT_SECRET_KEY` that names the Discord id, lasts 10 minutes and has type `bnet_state`, so `require_login` refuses it as a bearer. The `redirect_uri` is this backend's `/auth/battlenet/callback`, with the scheme from `x-forwarded-proto`. `BNET_CLIENT_ID` or `BNET_CLIENT_SECRET` unset answers 503 `{"error": "Battle.net login is not configured"}`.
+2. `GET /auth/battlenet/callback?code=&state=` takes no bearer. It checks the state, trades the code for a token with the client id and secret, reads `sub` and `battletag` from Blizzard's userinfo, and records the account on the tag; see [user_battle_tag](../data/tables/user_battle_tag.md).
+3. The callback answers 302 to `FRONTEND_URL` + `/profile?bnet=linked`, or `/profile?bnet=error&reason=<reason>`: `denied` (the member cancelled), `state` (a bad or expired state, or no profile), `token` (Blizzard refused the code) or `taken` (the tag or the account belongs to another person).
+
+Register each backend's callback URL on the Blizzard client.
 
 # /me
 
