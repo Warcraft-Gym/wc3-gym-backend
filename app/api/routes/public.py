@@ -234,25 +234,27 @@ def public_create_user(
             " - no W3Champions stats found"
         )
 
-    # Check for existing user by discord id or tag
-    existing_users = user_service.find_by_discord_id_or_tag(
-        str(entry.get("discord_id")), str(entry.get("discord_tag"))
+    # The login's own row, a row whose tag no login holds, or a new one
+    row_id, name_free = user_service.signup_match(
+        str(entry.get("discord_id")),
+        str(entry.get("discord_tag")),
+        str(user_payload["battleTag"]),
     )
-
-    if existing_users and len(existing_users) > 0:
-        # update first matched user
+    discord_tag = entry.get("discord_tag") if name_free else ""
+    if row_id is not None:
         # Only the fields the form sent: an omitted one, such as mmr, keeps its value
         user = user_service.update(
-            existing_users[0].id,
+            row_id,
             UserUpdate(
                 **data.model_dump(exclude_unset=True, exclude={"season_id"}),
                 discordId=entry.get("discord_id"),
-                discordTag=entry.get("discord_tag"),
+                discordTag=discord_tag,
             ),
         )
     else:
-        # create new user
-        user = user_service.add(user_create)
+        user = user_service.add(
+            user_create.model_copy(update={"discordTag": discord_tag})
+        )
 
     # Add to season if specified, on the race the form names
     # A closed or non-open season takes the profile only; an admin may add them

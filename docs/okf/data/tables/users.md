@@ -4,8 +4,8 @@ title: users
 description: One player, made by the first way in that meets them and found by battle tag or Discord id, with the profile fields the forms write and three sync stamps.
 resource: ../../../../app/models/user.py
 tags: [auth, data]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-24T05:45:16Z }
-verified: { by: process:test_okf, at: 2026-09-24T05:45:38Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-24T07:07:32Z }
+verified: { by: process:test_okf, at: 2026-09-24T07:07:47Z }
 sources:
   - id: model
     resource: ../../../../app/models/user.py
@@ -50,12 +50,14 @@ A row is made by the first way in that meets the player, and each way in looks f
 
 | Way in | Looks for a row by | Makes a row with |
 |---|---|---|
-| The member signup, `POST /signup` | `discordId`, or `discordTag` exactly | the form's fields and the session's Discord id and tag |
+| The member signup, `POST /signup` | `discordId`, then `battleTag` without case, then `discordTag` exactly | the form's fields and the session's Discord id and tag |
 | An `anyone` entrant, the Twitch chat signup, an admin who types a battle tag | `battleTag`, without case | the tag, its name part as `name`, blank Discord fields |
 | The workbook import | `battleTag`, without case | the workbook row's fields |
 | The fantasy import | `discordTag`, without case | a captain on no roster |
 
 Because `battleTag`, `discordTag` and `discordId` are not nullable, a row that knows no value carries a blank or a stand-in: a Players row of the workbook must name a Discord id, a Fantasy Users row with none carries a blank, and a fantasy captain with no battle tag carries a tag that begins `Fantasy_User#`. See [events module](../../concepts/events-module.md) and [KOTH](../../concepts/koth.md) for the entrant ways in.
+
+The member signup takes a row only when no other login holds it. A row has a login when its `discordId` is neither blank nor a `gnl-` stand-in. The login's own row comes first. A row whose `battleTag` the member types exactly and that has no login becomes the member's. A `battleTag` another login holds answers 409 with an `error` that names the tag. A row with no login that matches only on `discordTag` answers 409 with a `link` object of `player`, `discord_id` and `battle_tag`, the details an admin needs to set `discordId` on that row; so does a row with no login that holds the typed tag when the member already has a row. A `discordTag` that a row with another login holds is left blank on the member's row, because Discord names repeat and the column is unique.
 
 # Rules
 
