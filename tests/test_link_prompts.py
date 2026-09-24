@@ -94,6 +94,7 @@ def test_one_dismiss_closes_every_suggestion_of_the_player_to_the_login(
     _suggest(old, "sheet", tag="P1#1111")
     _suggest(old, "discord", user_id=seeded["player_ids"][0])
     [prompt] = _prompts(client, member())
+    assert prompt["tag"] == "P1#1111"
 
     resp = client.post(
         f"/users/me/prompts/{prompt['id']}", json={"accept": False}, headers=member()

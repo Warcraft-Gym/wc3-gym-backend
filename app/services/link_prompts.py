@@ -233,6 +233,7 @@ def open_for(session: OrmSession, user: User) -> list[LinkPromptPublic]:
                 ),
             ),
         )
+        .order_by(col(LinkPrompt.id))
     ).all()
     person_ids = {p.person_id for p in candidates if p.kind == "suggest"}
     rivals = session.scalars(
