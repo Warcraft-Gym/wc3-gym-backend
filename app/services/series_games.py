@@ -18,7 +18,6 @@ from app.core.exceptions import BadRequestError, NotFoundError
 from app.models.relationships import round_row
 from app.models.series import Series
 from app.models.series_game import DBSeriesGame, SeriesGamePublic
-from app.services import edge_purge
 
 SIDES = map_order.SIDES
 
@@ -68,8 +67,6 @@ def record(series_id: int, games: list[dict[str, Any]]) -> list[SeriesGamePublic
         session.execute(
             delete(DBSeriesGame).where(col(DBSeriesGame.series_id) == series_id)
         )
-        series = session.get(Series, series_id)
-        edge_purge.add(session, *edge_purge.series_tags(session, series), "career")
         for game in games:
             map_id = game.get("map_id")
             session.add(

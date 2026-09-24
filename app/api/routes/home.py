@@ -16,6 +16,5 @@ def get_home_series(response: Response) -> HomeSeries:
     They hold published events only and no draft pairing. A field with no
     value is left out of the row, so a reader treats a missing key as null.
     """
-    # series are booked and claimed through the day
-    edge_cache(response, 120, tags=("home",))
+    edge_cache(response, 120)  # series are booked and claimed through the day
     return home.series()

@@ -24,7 +24,6 @@ from app.models.season import Season
 from app.services import admins, discord, discord_roles
 from app.services.availability import AvailabilityService
 from app.services.draft_series import DraftSeriesService
-from app.services.edge_purge import event_tag
 from app.services.events import EventService, phase_of
 from app.services.fantasy_bets import FantasyBetService
 from app.services.fantasy_teams import FantasyTeamService
@@ -48,41 +47,30 @@ Credentials = Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)]
 logger = logging.getLogger(__name__)
 
 
-def edge_cache(
-    response: Response,
-    s_maxage: int,
-    swr: int | None = None,
-    *,
-    tags: tuple[str, ...] = (),
-) -> None:
+def edge_cache(response: Response, s_maxage: int, swr: int | None = None) -> None:
     """Let the edge serve every caller one copy of an open read for `s_maxage` seconds.
 
     Use it only on a route with no guard whose answer is the same for every caller.
     The edge keeps the headers of the request that filled it, and CORSMiddleware writes
     none for a request with no Origin, so the CORS header is written here beside it.
-    The tags name the writes that clear the copy early; see app/services/edge_purge.py.
     """
     value = f"public, s-maxage={s_maxage}"
     if swr is not None:
         value += f", stale-while-revalidate={swr}"
     response.headers["Cache-Control"] = value
     response.headers["Access-Control-Allow-Origin"] = "*"
-    if tags:
-        response.headers["Vercel-Cache-Tag"] = ",".join(tags)
 
 
 def event_edge_cache(response: Response, event_id: int) -> None:
     """`edge_cache` sized to the event: a day's grace for a finished event, which
-    changes only when an admin corrects it, and two minutes while it runs.
-    Tagged with the event, so a write to it clears the copy."""
+    changes only when an admin corrects it, and two minutes while it runs."""
     with Session.begin() as session:
         event = Season.get_by_id(session, event_id)
         finished = event is not None and phase_of(session, event) == "finished"
-    tags = (event_tag(event_id),)
     if finished:
-        edge_cache(response, 3600, 86400, tags=tags)
+        edge_cache(response, 3600, 86400)
     else:
-        edge_cache(response, 120, 600, tags=tags)
+        edge_cache(response, 120, 600)
 
 
 @cache

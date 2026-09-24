@@ -40,7 +40,7 @@ from app.models.season import EventUpdate, Season
 from app.models.series import Series, SeriesUpdate
 from app.models.types import utcnow
 from app.models.user import User
-from app.services import edge_purge, stage_engine
+from app.services import stage_engine
 from app.services.battle_tags import person_by_tag
 from app.services.events import EventService, _stats_for, _users_for, _w3c_season
 from app.services.koth import carry, night, nightbot
@@ -121,10 +121,6 @@ def activate_event(event_id: int) -> KothEventPublic:
     """Open this night and close every other one, the way the old flag did."""
     with Session.begin() as session:
         row = _night(session, event_id)
-        others = session.scalars(
-            select(col(Season.id)).where(col(Season.kind) == EventKind.koth)
-        )
-        edge_purge.add(session, "home", *(edge_purge.event_tag(o) for o in others if o))
         session.execute(
             update(Season)
             .where(col(Season.kind) == EventKind.koth, col(Season.id) != event_id)
@@ -140,7 +136,6 @@ def delete_event(event_id: int) -> None:
     """Delete a night: its series and its rounds first, then the event row."""
     with Session.begin() as session:
         _night(session, event_id)
-        edge_purge.add(session, edge_purge.event_tag(event_id), "home")
         rounds = select(col(DBEventRound.id)).where(
             col(DBEventRound.season_id) == event_id
         )

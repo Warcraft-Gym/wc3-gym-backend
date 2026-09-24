@@ -22,7 +22,6 @@ from app.models.types import utcnow
 from app.models.user import User
 from app.models.user_battle_tag import UserBattleTag
 from app.models.w3c_ladder_match import W3CLadderMatch
-from app.services import edge_purge
 
 FOLDED_TAG = func.lower(func.trim(col(UserBattleTag.tag)))
 
@@ -75,7 +74,6 @@ def person_by_tag(session: OrmSession, tag: str) -> User | None:
 
 def set_active_tag(session: OrmSession, user: User, row: UserBattleTag) -> None:
     """Make the row the person's active tag; User.battleTag follows."""
-    edge_purge.add_users(session, [ident(user)])
     session.execute(
         update(UserBattleTag)
         .where(
@@ -121,7 +119,6 @@ def attach_tag(
         session.execute(
             delete(LadderSync).where(col(LadderSync.user_id) == ident(user))
         )
-        edge_purge.add_users(session, [ident(user)])
     if active:
         set_active_tag(session, user, row)
     session.flush()
@@ -147,7 +144,6 @@ def move_tag(session: OrmSession, row: UserBattleTag, to: User, source: str) -> 
     """
     owner = session.get(User, row.user_id)
     assert owner is not None
-    edge_purge.add_users(session, [ident(owner), ident(to)])
     was_active = row.is_active
     row.is_active = False
     row.user_id = ident(to)
@@ -194,7 +190,6 @@ def drop_tag(session: OrmSession, row: UserBattleTag) -> None:
             409,
             {"error": f"{row.tag} is verified by Battle.net. An admin can move it."},
         )
-    edge_purge.add_users(session, [row.user_id])
     session.execute(
         delete(W3CLadderMatch).where(col(W3CLadderMatch.battle_tag_id) == row.id)
     )

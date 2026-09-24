@@ -37,8 +37,6 @@ os.environ.pop("DB_URL", None)
 os.environ.pop("SCORE_SYSTEM", None)
 # A bot token would send the role sync to Discord, and the guard below fails that
 os.environ.pop("DISCORD_BOT_TOKEN", None)
-# A purge token would send each write's cache tags to Vercel
-os.environ.pop("VERCEL_CACHE_TOKEN", None)
 
 from app.main import create_app
 from app.services import blob, r2, replays

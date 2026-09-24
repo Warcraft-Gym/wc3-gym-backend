@@ -73,7 +73,6 @@ from app.models.w3c_ladder_match import (
     W3CLadderMatchCreate,
 )
 from app.models.w3c_stats import W3CSyncFailure, W3CSyncResult
-from app.services import edge_purge
 from app.services.users import SYNC_MAX_AGE, W3C_SYNC_WORKERS, UserService
 from app.services.w3c import THROTTLED_MESSAGE, W3CService
 
@@ -707,7 +706,6 @@ class LadderService:
             | {"user_id": user_id, "battle_tag_id": battle_tag_id}
             for row in rows
         ]
-        edge_purge.add(session, "ladder")
         for start in range(0, len(values), WRITE_CHUNK):
             session.execute(
                 insert(W3CLadderMatch)

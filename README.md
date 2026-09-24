@@ -241,14 +241,12 @@ FRONTEND_URL="http://localhost:5003"
 | `CRON_SECRET` | Bearer token the `/jobs` routes check; unset, every `/jobs` route answers 503 | 64-character hex string |
 | `BLOB_STORE_ID` | The Vercel Blob store holding the team logos and map thumbnails: `gnl-media` in production, `gnl-media-staging` elsewhere. Set by the store connection | `store_...` |
 | `VERCEL_OIDC_TOKEN` | Local runs only: the OIDC token the blob calls authenticate with. On Vercel it arrives with each request. `vercel env pull` writes it; it lasts 12 hours | `eyJ...` |
-| `VERCEL_CACHE_TOKEN` | A Vercel access token the backend deletes cache tags with after a write; unset, a write clears no edge copy and readers wait out `s-maxage` | a Vercel access token |
-| `VERCEL_TEAM_ID` | The Vercel team that owns the project, sent with the cache purge; needed when the project belongs to a team | `team_...` |
 | `CLOUDFLARE_ACCOUNT_ID` | The Cloudflare account holding the replay bucket | `a1b2c3...` |
 | `CLOUDFLARE_R2_BUCKET` | The R2 bucket the replays live in; see `.env.example` for which bucket each target uses | `gnl-replays` |
 | `CLOUDFLARE_ACCESS_KEY_ID` | The R2 API token's key id, scoped to that bucket | `a1b2c3...` |
 | `CLOUDFLARE_SECRET_ACCESS_KEY` | The R2 API token's secret | 64-character hex string |
 
-This table is the deploy list: every variable a deployment sets. Vercel injects two more the code reads. `VERCEL_ENV` opens every replay key in the R2 bucket, so one deployment never overwrites another's file (`production/replays/12/game1.w3g`; off Vercel the key starts with `development`). `VERCEL_ENV` also gates the preview database: only a deployment reading `preview` picks a database at all, and it takes the copy named by `VERCEL_GIT_COMMIT_REF` when the build made one, the shared `wc3gym_staging` otherwise. `VERCEL_PROJECT_ID` names the project the cache purge clears, and `VERCEL_ENV` limits it to the deployment's own environment. `.env.example` is the local list, the subset a working tree needs, and the four `CLOUDFLARE_*` rows carry their bucket note there.
+This table is the deploy list: every variable a deployment sets. Vercel injects two more the code reads. `VERCEL_ENV` opens every replay key in the R2 bucket, so one deployment never overwrites another's file (`production/replays/12/game1.w3g`; off Vercel the key starts with `development`). `VERCEL_ENV` also gates the preview database: only a deployment reading `preview` picks a database at all, and it takes the copy named by `VERCEL_GIT_COMMIT_REF` when the build made one, the shared `wc3gym_staging` otherwise. `.env.example` is the local list, the subset a working tree needs, and the four `CLOUDFLARE_*` rows carry their bucket note there.
 
 **Important Notes:**
 - `host.docker.internal` is a special DNS name that resolves to the host machine from within a Docker container
