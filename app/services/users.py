@@ -4,14 +4,19 @@ from datetime import timedelta
 from itertools import pairwise
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ColumnElement, Select, func, or_, select, update
+from sqlalchemy import ColumnElement, Select, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as OrmSession
 from sqlalchemy.orm import joinedload, noload, selectinload
 from sqlmodel import col
 
 from app.core.db import Session, rel
-from app.core.exceptions import BadRequestError, NotFoundError, W3CThrottledError
+from app.core.exceptions import (
+    ApiError,
+    BadRequestError,
+    NotFoundError,
+    W3CThrottledError,
+)
 from app.core.query import QueryElement, QueryUtil
 from app.models.relationships import DBUserSeasonSignup
 from app.models.season import Season
@@ -193,12 +198,73 @@ class UserService:
                 select(col(User.id)).where(col(User.discordId) == discord_id)
             )
 
-    def find_by_discord_id_or_tag(
-        self, discord_id: str, discord_tag: str
-    ) -> list[UserListPublic]:
-        return self._where(
-            or_(col(User.discordId) == discord_id, col(User.discordTag) == discord_tag)
-        )
+    def signup_match(
+        self, discord_id: str, discord_name: str, battle_tag: str
+    ) -> tuple[int | None, bool]:
+        """The row a member signup writes, None for a new one, and whether the
+        Discord name may be stored on it.
+
+        The login's own row first. A tag no login holds is claimed by the login
+        that types it exactly; a tag another login holds is refused. A row that
+        holds only the Discord name is a guess an admin confirms, so it is
+        refused. A namesake with a login of its own is another person: the name
+        repeats, so it is left off rather than break its unique index.
+        """
+        with Session.begin() as session:
+            own = session.scalars(
+                select(User).where(col(User.discordId) == discord_id)
+            ).first()
+            tagged = session.scalars(
+                select(User).where(
+                    func.lower(func.trim(col(User.battleTag)))
+                    == battle_tag.strip().lower()
+                )
+            ).first()
+            named = session.scalars(
+                select(User).where(
+                    func.lower(func.trim(col(User.discordTag)))
+                    == discord_name.strip().lower()
+                )
+            ).first()
+            link = {"discord_id": discord_id, "battle_tag": battle_tag}
+            if tagged is not None and (own is None or tagged.id != own.id):
+                if _has_login(tagged):
+                    raise ApiError(
+                        409,
+                        {
+                            "error": f"The battle tag {battle_tag} is on another player's"
+                            " profile."
+                            " Ask an admin on Discord to move it to you."
+                        },
+                    )
+                if own is not None:
+                    raise ApiError(
+                        409,
+                        {
+                            "error": f"The battle tag {battle_tag} belongs to the earlier"
+                            " player"
+                            f" {tagged.name}. An admin needs to join it to your"
+                            " profile.",
+                            "link": link | {"player": tagged.name},
+                        },
+                    )
+            row = own or tagged
+            if (
+                named is not None
+                and not _has_login(named)
+                and (row is None or named.id != row.id)
+            ):
+                raise ApiError(
+                    409,
+                    {
+                        "error": f"Your Discord name matches the earlier player"
+                        f" {named.name}. An admin needs to link {named.name} to"
+                        " your login before you sign up.",
+                        "link": link | {"player": named.name},
+                    },
+                )
+            name_free = named is None or (row is not None and named.id == row.id)
+            return (row.id if row is not None else None), name_free
 
     def _where(
         self,
@@ -339,3 +405,10 @@ class UserService:
     def update_w3c_stats_by_id(self, user_id: int) -> UserPublic:
         self.update_w3c_stats(self.get(user_id))
         return self.get(user_id)
+
+
+def _has_login(user: User) -> bool:
+    """A row someone logged in as: a Discord id that is neither blank nor the
+    history import's gnl- stand-in."""
+    discord_id = (user.discordId or "").strip()
+    return bool(discord_id) and not discord_id.startswith("gnl-")
