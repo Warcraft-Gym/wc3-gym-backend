@@ -1,5 +1,5 @@
 import logging
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Query, Response
 
@@ -12,9 +12,11 @@ from app.api.deps import (
     require_admin,
 )
 from app.api.search import SearchQuery
+from app.core.exceptions import ApiError
 from app.models.draft_board import PairMeeting
 from app.models.player_history import PlayerHistory
 from app.models.user import UserCreate, UserListPublic, UserPublic, UserUpdate
+from app.models.user_battle_tag import MergePlan, MergeWrite, TagMoveWrite, TagWrite
 from app.models.user_block import SoftBlocksPublic
 from app.models.w3c_ladder_match import LadderPlayer
 from app.services import draft_board, player_history
@@ -33,6 +35,57 @@ router = APIRouter(tags=["users"])
 def add_user(data: UserCreate, service: UserServiceDep) -> UserPublic:
     """Create a new user with the provided details."""
     return service.add(data)
+
+
+def _discord_id(claims: dict[str, Any]) -> str:
+    """The Discord id of a member session; the admin token names no person."""
+    if claims["sub"] == "admin":
+        raise ApiError(401, {"error": "not_a_discord_member"})
+    return str(claims["sub"])
+
+
+@router.post("/users/me/tags")
+def add_my_tag(
+    data: TagWrite, claims: RequireMember, service: UserServiceDep
+) -> UserPublic:
+    """Add a tag I also played as. W3Champions must know it; a tag a person
+    with no login holds moves to me, one another login holds answers 409."""
+    return service.add_own_tag(_discord_id(claims), data.tag)
+
+
+@router.put("/users/me/tags/{tag_id}/active")
+def activate_my_tag(
+    tag_id: int, claims: RequireMember, service: UserServiceDep
+) -> UserPublic:
+    """Make one of my tags the active one; battleTag follows."""
+    return service.activate_own_tag(_discord_id(claims), tag_id)
+
+
+@router.delete("/users/me/tags/{tag_id}")
+def remove_my_tag(
+    tag_id: int, claims: RequireMember, service: UserServiceDep
+) -> UserPublic:
+    """Remove an unverified, inactive tag of mine and the games fetched under it."""
+    return service.remove_own_tag(_discord_id(claims), tag_id)
+
+
+@router.post(
+    "/users/{user_id}/tags/{tag_id}/move", dependencies=[Depends(require_admin)]
+)
+def move_tag(
+    user_id: int, tag_id: int, data: TagMoveWrite, service: UserServiceDep
+) -> UserPublic:
+    """Move one tag row to another person; answers that person."""
+    return service.give_tag(user_id, tag_id, data.to_user_id)
+
+
+@router.post("/users/{user_id}/merge", dependencies=[Depends(require_admin)])
+def merge_user(
+    user_id: int, data: MergeWrite, service: UserServiceDep
+) -> MergePlan | UserPublic:
+    """Merge a person into another. A dry run answers the plan; a real run
+    with a stop answers 409 with the plan and an error."""
+    return service.merge_into(user_id, data.into_user_id, data.dry_run)
 
 
 @router.put(
@@ -87,9 +140,17 @@ def get_all_users(
     response: Response,
     limit: Annotated[int, Query(ge=1, le=500)] = 500,
     offset: Annotated[int, Query(ge=0)] = 0,
+    no_discord: bool = False,
+    tag_source: str | None = None,
 ) -> list[UserListPublic]:
-    """Retrieve one page of users, at most 500, ordered by id."""
-    users, total = service.get_all(limit=limit, offset=offset)
+    """Retrieve one page of users, at most 500, ordered by id.
+
+    no_discord keeps the people with no login; tag_source keeps the people
+    holding a tag of that source, such as `claim`.
+    """
+    users, total = service.get_all(
+        limit=limit, offset=offset, no_discord=no_discord, tag_source=tag_source
+    )
     response.headers["X-Total-Count"] = str(total)
     return users
 
