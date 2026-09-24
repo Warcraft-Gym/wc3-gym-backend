@@ -20,6 +20,7 @@ from app.models.relationships import DBUserSeasonSignup
 from app.models.series import Series
 from app.models.user import User
 from app.models.w3c_stats import W3CStats
+from tests.seed import active
 from tests.test_player_session import member_session
 from tests.test_query_budget import count_statements
 
@@ -182,7 +183,7 @@ def grow_series(seeded: dict[str, Any], count: int) -> None:
             tag = f"G{number:02d}"
             opponent = User(
                 name=tag,
-                battleTag=f"{tag}#9999",
+                battle_tags=active(f"{tag}#9999"),
                 discordTag=tag.lower(),
                 discordId=f"9{number:02d}",
                 race=Race.NE,

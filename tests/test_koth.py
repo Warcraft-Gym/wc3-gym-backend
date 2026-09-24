@@ -19,6 +19,7 @@ from app.models.enums import Race
 from app.models.user import User
 from app.models.w3c_stats import W3CStats
 from app.services.w3c import W3CService
+from tests.seed import active
 
 EVENT = {"name": "KOTH 1", "event_date": "2026-01-10T20:00:00Z"}
 SIGNUP = {
@@ -37,7 +38,7 @@ def rate(tag: str, race: Race, mmr: int, season: int = 20) -> int:
         if user is None:
             user = User(
                 name=tag.split("#")[0],
-                battleTag=tag,
+                battle_tags=active(tag),
                 discordTag="",
                 discordId="",
                 race=race,

@@ -32,6 +32,7 @@ from app.models.season import Season
 from app.models.team import Team
 from app.models.user import User
 from app.models.w3c_ladder_match import W3CLadderMatch
+from tests.seed import active
 from tests.test_query_budget import count_statements
 
 # The seeded season runs 2026-01-05 to 2026-02-27.
@@ -602,7 +603,7 @@ def test_the_players_route_answers_one_row_per_signup(
     with Session() as session:
         loose = User(
             name="P5",
-            battleTag="P5#5555",
+            battle_tags=active("P5#5555"),
             discordTag="p5",
             discordId="5",
             race=Race.HU,

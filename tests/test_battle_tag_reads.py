@@ -1,7 +1,7 @@
 """Every way in and every read finds a person through user_battle_tag.
 
-A person holds many tags. Any of them finds the person; the active one is the
-copy users.battleTag holds, and the one the MMR and the stats come from. The
+A person holds many tags. Any of them finds the person; the active one is
+what User.battleTag reads, and the one the MMR and the stats come from. The
 ladder sync reads every tag and stamps each game with the tag it came under.
 """
 
@@ -186,6 +186,84 @@ def test_the_import_finds_a_person_by_a_second_tag(
         )
     assert signup is not None
     assert signup.played_as == "Import#3333"
+
+
+def test_a_re_import_finds_a_name_only_person_by_name(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """A stand-in tag writes no tag row. The next import finds the person by
+    name, whether the cell holds the stand-in or is blank, as an export writes it."""
+    from tests.test_season_import import SHEETS
+
+    columns, rows = SHEETS["Players"]
+    at = {name: index for index, name in enumerate(columns)}
+    nobody = [None] * len(columns)
+    nobody[at["ID"]], nobody[at["Name"]], nobody[at["Race"]] = 3, "Nobody", "HU"
+    nobody[at["Team ID"]] = 1
+    # The history workbook's stand-in Discord pair, which the import writes null
+    nobody[at["Discord Tag"]], nobody[at["Discord ID"]] = "Nobody", "gnl-nobody-gnl05"
+
+    def ids(tag: str | None) -> list[int | None]:
+        nobody[at["Battle Tag"]] = tag
+        book = _workbook(extra={"Players": (columns, [*rows, nobody])})
+        resp = _post(client, book, auth_headers)
+        assert resp.status_code == 200, resp.text
+        with Session() as session:
+            return list(
+                session.scalars(select(col(User.id)).where(col(User.name) == "Nobody"))
+            )
+
+    first = ids("Nobody#GNL05")
+
+    assert ids(None) == ids("Nobody#GNL05") == first
+    assert len(first) == 1
+    body = client.get(f"/users/{first[0]}").json()
+    assert (body["battleTag"], body["tags"]) == (None, [])
+
+
+def test_the_user_battle_tag_reads_the_active_row(
+    client: Client, seeded: dict[str, Any]
+) -> None:
+    """Null with no tag; the active row's text once one is active."""
+    from app.services.battle_tags import set_active_tag
+
+    p1 = seeded["player_ids"][0]
+    smurf = second_tag(p1)
+    with Session.begin() as session:
+        set_active_tag(
+            session, session.get_one(User, p1), session.get_one(UserBattleTag, smurf)
+        )
+        empty = User(name="Empty", discordId="77", race=Race.HU)
+        session.add(empty)
+        session.flush()
+        empty_id = empty.id
+
+    assert client.get(f"/users/{p1}").json()["battleTag"] == "Smurf#2222"
+    assert client.get(f"/users/{empty_id}").json()["battleTag"] is None
+    listed = client.get("/users").json()
+    assert {row["id"]: row["battleTag"] for row in listed}[p1] == "Smurf#2222"
+
+
+def test_an_admin_created_user_holds_the_tag_as_a_row(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    body = {
+        "name": "New",
+        "battleTag": "New#4444",
+        "discordTag": "new",
+        "discordId": "44",
+        "race": "HU",
+    }
+
+    resp = client.post("/users", json=body, headers=auth_headers)
+
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["battleTag"] == "New#4444"
+    with Session() as session:
+        row = session.scalars(
+            select(UserBattleTag).where(col(UserBattleTag.user_id) == resp.json()["id"])
+        ).one()
+    assert (row.tag, row.source, row.is_active) == ("New#4444", "admin", True)
 
 
 def test_a_user_reads_by_any_tag_they_hold(

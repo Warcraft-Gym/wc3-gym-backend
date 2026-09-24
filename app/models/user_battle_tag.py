@@ -1,7 +1,7 @@
 """The battle tags a person has played under.
 
 A person holds many tags and a tag belongs to at most one person. The active
-row is the account the sites show; users.battleTag holds a copy of its tag.
+row is the account the sites show; User.battleTag reads its tag.
 """
 
 from datetime import datetime

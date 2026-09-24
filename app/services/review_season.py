@@ -57,7 +57,6 @@ def player(session: OrmSession, discord_id: str) -> User:
     if user is None:
         user = User(
             name=f"Review Player {discord_id[-4:]}",
-            battleTag=f"Review#{discord_id[-4:]}",
             discordTag="",
             discordId=discord_id,
             race=Race.RANDOM,

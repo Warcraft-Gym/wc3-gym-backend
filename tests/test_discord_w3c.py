@@ -13,6 +13,7 @@ from app.models.user import User
 from app.services import discord
 from app.services.ladder import LadderService
 from tests.discord import CHANNEL, autocomplete, command, signed
+from tests.seed import active
 from tests.test_ladder_read import INSIDE, add_match, sign_up, stamp_ladder
 
 SYNCED = datetime(2026, 1, 20, 8, 0, tzinfo=UTC)
@@ -132,7 +133,11 @@ def test_stats_says_when_nothing_is_synced(
     # A player with no series and no games
     with Session() as session:
         user = User(
-            name="P9", battleTag="P9#9999", discordTag="p9", discordId="9", race=Race.UD
+            name="P9",
+            battle_tags=active("P9#9999"),
+            discordTag="p9",
+            discordId="9",
+            race=Race.UD,
         )
         session.add(user)
         session.commit()

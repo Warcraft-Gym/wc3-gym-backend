@@ -20,6 +20,7 @@ from app.models.season import Season
 from app.models.team import Team
 from app.models.user import User
 from tests.conftest import write_workbook
+from tests.seed import active
 from tests.test_query_budget import count_statements
 
 SHEETS: dict[str, tuple[list[str], list[list[Any]]]] = {
@@ -255,7 +256,7 @@ def _add_captain() -> None:
         session.add(
             User(
                 name="Cap",
-                battleTag="Cap#7777",
+                battle_tags=active("Cap#7777"),
                 discordTag="cap",
                 discordId="7",
                 race=Race.NE,

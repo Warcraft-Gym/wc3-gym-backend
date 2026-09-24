@@ -18,6 +18,8 @@ from typing import Any
 import pytest
 from httpx2 import Client
 
+from tests.seed import active
+
 
 def _second_season(seeded: dict[str, Any]) -> dict[str, Any]:
     """The seeded season, plus a second one the same two teams played."""
@@ -280,7 +282,7 @@ def test_a_player_with_no_history_answers_empty_lists(
         session.add(
             User(
                 name="P9",
-                battleTag="P9#9999",
+                battle_tags=active("P9#9999"),
                 discordTag="p9",
                 discordId="9",
                 race=Race.HU,
@@ -516,7 +518,11 @@ def test_a_gnl_signup_alone_puts_the_season_on_the_page(
 
     with Session.begin() as session:
         undrafted = User(
-            name="P9", battleTag="P9#9999", discordTag="p9", discordId="9", race=Race.HU
+            name="P9",
+            battle_tags=active("P9#9999"),
+            discordTag="p9",
+            discordId="9",
+            race=Race.HU,
         )
         session.add(undrafted)
         session.flush()

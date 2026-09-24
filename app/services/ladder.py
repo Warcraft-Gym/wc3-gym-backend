@@ -569,7 +569,6 @@ class LadderService:
         self.user_app_service.update_w3c_stats(user)
 
         with Session.begin() as session:
-            # A person with no tag row syncs the tag users.battleTag holds
             tags: list[tuple[int | None, str]] = [
                 (row.id, row.tag)
                 for row in session.execute(
@@ -579,7 +578,7 @@ class LadderService:
                         col(UserBattleTag.is_active).desc(), col(UserBattleTag.id)
                     )
                 )
-            ] or ([(None, user.battleTag)] if user.battleTag else [])
+            ]
             ledger = {
                 row.wc3_season: row
                 for row in session.execute(

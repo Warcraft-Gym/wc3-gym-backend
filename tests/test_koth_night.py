@@ -22,6 +22,7 @@ from app.models.w3c_stats import W3CStats, W3CStatsCreate
 from app.services.koth import legacy
 from app.services.users import UserService
 from app.services.w3c import W3CService
+from tests.seed import active
 from tests.test_event_entrants import Member
 from tests.test_event_entrants import sign_up as sign_up_to_event
 from tests.test_events import add_event
@@ -73,7 +74,7 @@ def enrol(tag: str, mmr: int, race: Race = Race.HU, season: int = 20) -> int:
     with Session.begin() as session:
         user = User(
             name=tag.split("#")[0],
-            battleTag=tag,
+            battle_tags=active(tag),
             discordTag="",
             discordId="",
             race=race,

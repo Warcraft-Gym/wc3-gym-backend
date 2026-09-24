@@ -26,6 +26,7 @@ from app.models.series import Series
 from app.models.team import Team
 from app.models.user import User
 from app.models.user_battle_tag import UserBattleTag
+from tests.seed import active
 from tests.test_season_import import SHEETS, _post, _workbook
 
 type Rows = Callable[[dict[str, Any]], list[SQLModel]]
@@ -34,7 +35,7 @@ type Rows = Callable[[dict[str, Any]], list[SQLModel]]
 def user(tag: str, **kwargs: Any) -> User:  # noqa: ANN401  # model fields
     return User(
         name=kwargs.pop("name", tag),
-        battleTag=tag,
+        battle_tags=active(tag),
         discordTag=kwargs.pop("discordTag", tag),
         discordId=kwargs.pop("discordId", tag),
         race=Race.HU,
@@ -45,7 +46,6 @@ def user(tag: str, **kwargs: Any) -> User:  # noqa: ANN401  # model fields
 # Each pair repeats one natural key. The case and the spaces differ because
 # neither makes a new player, season, team or map.
 REPEATS: dict[str, Rows] = {
-    "users.battleTag": lambda _: [user("Repeat#1"), user(" repeat#1 ", name="Other")],
     "users.discordTag": lambda _: [
         user("A#1", discordTag="Dup"),
         user("B#2", discordTag="dup"),
@@ -190,13 +190,13 @@ def test_two_clubs_may_share_a_short_name(seeded: dict[str, Any]) -> None:
 def test_a_repeated_key_answers_409_and_says_which_conflict(
     client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
 ) -> None:
-    """A battle tag another player holds is a conflict with a row, not a
+    """A Discord id another player holds is a conflict with a row, not a
     reference from one, and the message says so."""
     body = {
         "name": "Impostor",
-        "battleTag": "P1#1111",
+        "battleTag": "Impostor#8888",
         "discordTag": "impostor",
-        "discordId": "8",
+        "discordId": "1",
         "race": "HU",
     }
     resp = client.post("/users", json=body, headers=auth_headers)

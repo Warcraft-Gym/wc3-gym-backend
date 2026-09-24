@@ -13,6 +13,7 @@ from app.models.user import ProfileUpdate, User, UserCreate, UserPublic, UserRed
 from app.services import casts
 from app.services.users import UserService
 from tests.conftest import Client
+from tests.seed import active
 from tests.test_discord_auth import SESSION, stub_clerk
 
 AVATAR = "https://cdn.discordapp.com/avatars/1/abc.png"
@@ -163,7 +164,9 @@ BAD_STORED = {
 @pytest.mark.parametrize("shape", [UserReduced, UserPublic])
 def test_a_response_carries_a_bad_stored_link_or_zone(shape: type[UserReduced]) -> None:
     # The input validators sit on the input models, so a bad stored value never 500s a read
-    user = User(id=7, name="p", battleTag="p#1", discordTag="p", discordId="7")
+    user = User(
+        id=7, name="p", battle_tags=active("p#1"), discordTag="p", discordId="7"
+    )
     user.twitch_url, user.timezone = BAD_STORED["twitch_url"], BAD_STORED["timezone"]
     public = shape.from_user_reduced(user)
     assert (public.twitch_url, public.timezone) == (user.twitch_url, user.timezone)

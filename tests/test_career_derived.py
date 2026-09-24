@@ -24,6 +24,7 @@ from app.models.season import Season
 from app.models.series import Series
 from app.models.team import Team
 from app.models.user import User
+from tests.seed import active
 
 # Ids, scores and season of every series of the league, by player name
 RESULTS = [
@@ -193,7 +194,7 @@ def league(client: Client) -> dict[str, Any]:
         players = {
             name: User(
                 name=name,
-                battleTag=f"{name}#1000",
+                battle_tags=active(f"{name}#1000"),
                 discordTag=name.lower(),
                 discordId=str(number),
                 race=Race.HU,
@@ -325,7 +326,7 @@ def test_the_search_matches_the_user_name_of_a_stored_row(
     with Session() as session:
         player = User(
             name="Foxtrot",
-            battleTag="Foxtrot#1000",
+            battle_tags=active("Foxtrot#1000"),
             discordTag="foxtrot",
             discordId="5",
             race=Race.HU,
