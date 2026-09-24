@@ -74,6 +74,8 @@ KOTH_BACKFILL = "a3f7c05b2e91"
 BEFORE_KOTH_DROP = "c9f2b6a41d38"
 # The revision before a KOTH night takes one entrant row per race
 BEFORE_MULTI_ENTRY = "e7d4b1c6a539"
+# The revision before a person holds battle tags in their own table
+BEFORE_TAG_TABLE = "1e8e59906cec"
 
 
 def comparable(
@@ -1337,3 +1339,110 @@ def test_a_past_koth_night_with_signups_closed_is_closed_by_the_upgrade(
         assert phase_of(session, past, counts=(2, 2, 2), last_stage=False) == (
             "finished"
         )
+
+
+def test_the_tag_backfill_gives_each_real_tag_one_active_row(tmp_path: Path) -> None:
+    """A stand-in tag gets no row, and a gnl- stand-in Discord id is cleared."""
+    url = fresh_database(tmp_path, "tag-table")
+    upgrade_to(url, BEFORE_TAG_TABLE)
+
+    engine = create_engine(url)
+    users = table(
+        "users",
+        *(
+            column(c)
+            for c in ("id", "name", "battleTag", "discordTag", "discordId", "race")
+        ),
+    )
+    # id, battle tag, Discord tag, Discord id
+    rows = [
+        (1, "Member#1234", "member", "111"),
+        (2, " Oldie#5678 ", "oldie#4321", "gnl-s12-17"),
+        (3, "Nobody#GNL05", "Nobody#GNL05", "gnl-nobody-gnl05"),
+        (4, "Fantasy_User#bettor#1234", "bettor#1234", ""),
+        (5, "Review#4321", "", "999994321"),
+        (6, "NoHash", "nohash", "222"),
+    ]
+    with engine.begin() as connection:
+        for id_, tag, discord_tag, discord_id in rows:
+            connection.execute(
+                users.insert().values(
+                    id=id_,
+                    name=f"P{id_}",
+                    battleTag=tag,
+                    discordTag=discord_tag,
+                    discordId=discord_id,
+                    race="HU",
+                )
+            )
+        connection.execute(
+            text(
+                "INSERT INTO w3c_ladder_matches (w3c_match_id, wc3_season, start_time, "
+                "duration_s, won, user_id) VALUES "
+                "('m1', 22, '2025-01-01 00:00:00', 600, true, 1), "
+                "('m2', 22, '2025-01-01 00:00:00', 600, false, 6)"
+            )
+        )
+
+    upgrade_to(url, "head")
+
+    with engine.connect() as connection:
+        tag_rows = connection.execute(
+            text(
+                "SELECT user_id, tag, source, is_active FROM user_battle_tag "
+                "ORDER BY user_id"
+            )
+        ).all()
+        identity = connection.execute(
+            text('SELECT id, "discordTag", "discordId" FROM users ORDER BY id')
+        ).all()
+        games = connection.execute(
+            text(
+                "SELECT m.user_id, t.tag FROM w3c_ladder_matches m "
+                "LEFT JOIN user_battle_tag t ON t.id = m.battle_tag_id ORDER BY m.user_id"
+            )
+        ).all()
+
+    assert [tuple(r) for r in tag_rows] == [
+        (1, "Member#1234", "signup", True),
+        (2, "Oldie#5678", "sheet", True),
+    ]
+    assert [tuple(r) for r in identity] == [
+        (1, "member", "111"),
+        (2, "oldie#4321", None),
+        (3, None, None),
+        (4, "bettor#1234", ""),
+        (5, "", "999994321"),
+        (6, "nohash", "222"),
+    ]
+    assert [tuple(r) for r in games] == [(1, "Member#1234"), (6, None)]
+
+
+def test_the_tag_table_and_its_columns_are_dropped_on_downgrade(
+    tmp_path: Path,
+) -> None:
+    url = fresh_database(tmp_path, "tag-table-down")
+    upgrade_to_head(url)
+    engine = create_engine(url)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                'INSERT INTO users (id, name, "battleTag", "discordTag", "discordId", race) '
+                "VALUES (1, 'P1', 'P1#1', NULL, NULL, 'HU')"
+            )
+        )
+
+    downgrade_to(url, BEFORE_TAG_TABLE)
+
+    inspector = inspect(engine)
+    assert "user_battle_tag" not in inspector.get_table_names()
+    assert "played_as" not in {
+        c["name"] for c in inspector.get_columns("user_season_signup")
+    }
+    assert "battle_tag_id" not in {
+        c["name"] for c in inspector.get_columns("w3c_ladder_matches")
+    }
+    with engine.connect() as connection:
+        assert connection.execute(
+            text('SELECT "discordTag", "discordId" FROM users')
+        ).one() == ("", "")

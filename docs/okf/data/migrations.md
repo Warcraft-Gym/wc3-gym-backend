@@ -4,7 +4,7 @@ title: Migrations
 description: Alembic owns the schema, the production build migrates while the old code serves, a preview gets its own database copy, and one head is allowed at a time.
 resource: ../../../migrations/env.py
 tags: [data]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-16T18:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-24T09:19:27Z }
 sources:
   - id: env
     resource: ../../../migrations/env.py
@@ -54,7 +54,7 @@ There is no scheduled backup. Take a `pg_dump` by hand from a machine that holds
 
 # SQLite
 
-The tests run on SQLite, which needs a batch rebuild for some alterations. Never batch-alter `users` on SQLite: it drops the expression index on the Discord tag.
+The tests run on SQLite, which needs a batch rebuild for some alterations. A batch alter of `users` on SQLite drops its three expression indexes, so the migration writes them back by hand after the rebuild.
 
 # Checkpoint
 

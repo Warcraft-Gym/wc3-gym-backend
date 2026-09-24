@@ -25,6 +25,7 @@ from app.models.season import Season
 from app.models.series import Series
 from app.models.team import Team
 from app.models.user import User
+from app.models.user_battle_tag import UserBattleTag
 from tests.test_season_import import SHEETS, _post, _workbook
 
 type Rows = Callable[[dict[str, Any]], list[SQLModel]]
@@ -52,6 +53,16 @@ REPEATS: dict[str, Rows] = {
     "users.discordId": lambda _: [
         user("A#1", discordId="42"),
         user("B#2", discordId=" 42 "),
+    ],
+    "user_battle_tag.tag": lambda seeded: [
+        UserBattleTag(user_id=seeded["player_ids"][0], tag="Twin#1", source="sheet"),
+        UserBattleTag(user_id=seeded["player_ids"][1], tag=" twin#1 ", source="sheet"),
+    ],
+    "user_battle_tag.is_active": lambda seeded: [
+        UserBattleTag(
+            user_id=seeded["player_ids"][0], tag=tag, source="sheet", is_active=True
+        )
+        for tag in ("First#1", "Second#2")
     ],
     "seasons.name": lambda _: [
         Season(name="Season 9", series_per_round=2),
@@ -134,6 +145,34 @@ def test_a_blank_discord_tag_or_id_may_repeat(seeded: dict[str, Any]) -> None:
             [
                 user("Blank#1", discordTag="", discordId=""),
                 user("Blank#2", discordTag="", discordId=""),
+            ]
+        )
+        session.commit()
+
+
+def test_a_null_discord_tag_or_id_may_repeat(seeded: dict[str, Any]) -> None:
+    """A person who never logged in holds no Discord tag or id."""
+    with Session() as session:
+        session.add_all(
+            [
+                user("Null#1", discordTag=None, discordId=None),
+                user("Null#2", discordTag=None, discordId=None),
+            ]
+        )
+        session.commit()
+
+
+def test_a_person_holds_many_tags_and_one_is_active(seeded: dict[str, Any]) -> None:
+    with Session() as session:
+        session.add_all(
+            [
+                UserBattleTag(
+                    user_id=seeded["player_ids"][0],
+                    tag=tag,
+                    source="sheet",
+                    is_active=tag == "Main#1",
+                )
+                for tag in ("Main#1", "Smurf#2", "Old#3")
             ]
         )
         session.commit()

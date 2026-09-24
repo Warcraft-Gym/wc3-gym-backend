@@ -28,6 +28,8 @@ class DBUserSeasonSignup(DBModel, table=True):
     season_id: int = Field(index=True, foreign_key="event.id", primary_key=True)
     # The race the player registered on for this season
     race: Race
+    # The battle tag the player played this season under; null means the active tag
+    played_as: str | None = Field(default=None, max_length=50)
     # The fantasy tier this season cut the player into, null when not allocated
     fantasy_tier: int | None = None
     # The slot an admin moved the player to in the draft order; null sorts by MMR

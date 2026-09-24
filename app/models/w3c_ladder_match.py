@@ -46,6 +46,10 @@ class W3CLadderMatch(W3CLadderMatchBase, DBModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     user_id: int = Field(foreign_key="users.id")
+    # The user_battle_tag row the game was fetched under
+    battle_tag_id: int | None = Field(
+        default=None, foreign_key="user_battle_tag.id", ondelete="SET NULL"
+    )
 
 
 class W3CLadderMatchCreate(W3CLadderMatchBase):

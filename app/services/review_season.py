@@ -224,10 +224,11 @@ def build(discord_a: str, discord_b: str) -> str:
         else:
             session.add(Settings(key="current_gnl_season", value=str(sid)))
         for user in (a, b):
-            if session.get(AdminGrant, user.discordId) is None:
+            discord_id = user.discordId
+            if discord_id and session.get(AdminGrant, discord_id) is None:
                 session.add(
                     AdminGrant(
-                        discord_id=user.discordId,
+                        discord_id=discord_id,
                         name=user.name,
                         granted_by="review_season",
                     )

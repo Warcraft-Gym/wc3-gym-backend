@@ -4,8 +4,8 @@ title: user_season_signup
 description: "One GNL signup: a player registered for one season on one race, with the draft order and fantasy tier an admin sets."
 resource: ../../../../app/models/relationships.py
 tags: [teams, data]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T15:15:00Z }
-verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-24T09:19:27Z }
+verified: { by: process:test_okf, at: 2026-09-24T09:20:16Z }
 sources:
   - id: model
     resource: ../../../../app/models/relationships.py
@@ -25,6 +25,7 @@ sources:
 | `user_id` | INTEGER | no | The player. Part of the key. |
 | `season_id` | INTEGER | no | The season. Part of the key. |
 | `race` | VARCHAR | no | The signup race: `RANDOM`, `HU`, `OC`, `NE`, `UD`. The race the league scores the player on. |
+| `played_as` | VARCHAR | yes | The battle tag the player played this season under, never edited. Null means the pages show the person's active tag. |
 | `fantasy_tier` | INTEGER | yes | The tier an admin's allocation cut the player into. Null means not allocated; the read then derives the tier from the MMR on the apply date. |
 | `draft_position` | INTEGER | yes | The slot an admin moved the player to in the draft order. Null sorts by MMR. |
 | `draft_excluded` | BOOLEAN | no | On: an admin took the player out of the pick list, so they hold no draft slot. |
