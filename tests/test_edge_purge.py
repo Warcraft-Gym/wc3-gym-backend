@@ -37,6 +37,12 @@ def purges(monkeypatch: pytest.MonkeyPatch) -> Iterator[list[dict[str, Any]]]:
     edge_purge._config.cache_clear()
 
 
+def by_url(calls: list[dict[str, Any]]) -> dict[str, list[str]]:
+    """The tags each endpoint was sent, one call per endpoint."""
+    assert len({call["url"] for call in calls}) == len(calls), calls
+    return {call["url"]: call["json"]["tags"] for call in calls}
+
+
 @pytest.fixture
 def pending() -> Iterator[set[str]]:
     """The set a request collects its tags in, outside any request."""
@@ -60,14 +66,15 @@ def test_a_result_report_clears_its_event_once(
     purges.clear()
     resp = client.put(f"/player-series/{series_id}", data=scores, headers=side_a)
     assert resp.status_code == 200, resp.text
-    assert len(purges) == 1
-    call = purges[0]
-    assert call["in_request"], "sent by the middleware after the response"
-    assert call["url"] == edge_purge.API_URL
-    assert call["params"] == {"projectIdOrName": "test-project"}
-    assert call["headers"] == {"Authorization": "Bearer test-purge-token"}
-    assert f"event-{seeded['season_id']}" in call["json"]["tags"]
-    assert {"home", "career"} <= set(call["json"]["tags"])
+    # the event copy is deleted, the global lists are invalidated: one call each
+    assert by_url(purges) == {
+        edge_purge.DELETE: [f"event-{seeded['season_id']}"],
+        edge_purge.INVALIDATE: ["career", "home"],
+    }
+    for call in purges:
+        assert call["in_request"], "sent by the middleware after the response"
+        assert call["params"] == {"projectIdOrName": "test-project"}
+        assert call["headers"] == {"Authorization": "Bearer test-purge-token"}
 
 
 def test_an_admin_series_edit_clears_its_event_once(
@@ -82,8 +89,11 @@ def test_an_admin_series_edit_clears_its_event_once(
     purges.clear()
     resp = client.put(f"/series/{series_id}", json=answer, headers=auth_headers)
     assert resp.status_code == 200, resp.text
-    assert len(purges) == 1
-    assert f"event-{seeded['season_id']}" in purges[0]["json"]["tags"]
+    # a booking moves no career total
+    assert by_url(purges) == {
+        edge_purge.DELETE: [f"event-{seeded['season_id']}"],
+        edge_purge.INVALIDATE: ["home"],
+    }
 
 
 def test_a_read_clears_nothing(
@@ -123,6 +133,118 @@ def test_the_commit_hands_the_tags_to_the_request(
         series.player1_score = 1
     assert pending == {f"event-{seeded['season_id']}", "home", "career"}
     assert purges == []
+
+
+def edit_series(series_id: int, **fields: Any) -> None:  # noqa: ANN401
+    from app.core.db import Session
+    from app.models.series import Series
+
+    with Session.begin() as session:
+        series = session.get(Series, series_id)
+        assert series is not None
+        for name, value in fields.items():
+            setattr(series, name, value)
+
+
+def test_a_booking_clears_no_career_and_a_score_does(
+    seeded: dict[str, Any], purges: list[dict[str, Any]], pending: set[str]
+) -> None:
+    from datetime import UTC, datetime
+
+    event = f"event-{seeded['season_id']}"
+    edit_series(
+        seeded["series_open_id"], date_time=datetime(2026, 9, 5, 18, tzinfo=UTC)
+    )
+    assert pending == {event, "home"}
+    pending.clear()
+    edit_series(seeded["series_open_id"], player1_score=2, player2_score=0)
+    assert pending == {event, "home", "career"}
+
+
+def test_a_moved_series_clears_its_old_event_and_its_new_one(
+    seeded: dict[str, Any], purges: list[dict[str, Any]], pending: set[str]
+) -> None:
+    from app.core.db import Session
+    from app.models.match import Match
+    from tests.test_events import add_event
+
+    other = add_event(published=True)
+    with Session.begin() as session:
+        match = Match(
+            team1_id=seeded["team_a_id"],
+            team2_id=seeded["team_b_id"],
+            season_id=other,
+            playday=1,
+        )
+        session.add(match)
+        session.flush()
+        match_id = match.id
+    pending.clear()
+    edit_series(seeded["series_open_id"], match_id=match_id)
+    assert {f"event-{seeded['season_id']}", f"event-{other}"} <= pending
+
+
+def test_a_player_rename_clears_the_lists_and_the_events_he_plays_in(
+    seeded: dict[str, Any], purges: list[dict[str, Any]], pending: set[str]
+) -> None:
+    from app.core.db import Session
+    from app.models.user import User
+
+    with Session.begin() as session:
+        user = session.get(User, seeded["player_ids"][0])
+        assert user is not None
+        user.name = "Renamed"
+    assert pending == {f"event-{seeded['season_id']}", "home", "career", "ladder"}
+
+
+def test_a_map_rename_clears_the_events_that_use_it(
+    seeded: dict[str, Any], purges: list[dict[str, Any]], pending: set[str]
+) -> None:
+    from sqlmodel import select
+
+    from app.core.db import Session
+    from app.models.map import Map
+
+    with Session.begin() as session:
+        game_map = session.scalars(select(Map)).one()
+        game_map.name = "Renamed"
+    assert pending == {f"event-{seeded['season_id']}"}
+
+
+def test_a_bulk_statement_names_its_tags(
+    seeded: dict[str, Any], purges: list[dict[str, Any]], pending: set[str]
+) -> None:
+    from app.api.deps import season_service
+    from app.services import series_games
+
+    event = f"event-{seeded['season_id']}"
+    season_service.set_achievements(seeded["season_id"], [])
+    assert pending == {event, "ladder"}
+    pending.clear()
+    # a bulk delete of the games, with no game written after it
+    series_games.record(seeded["series_played_id"], [])
+    assert pending == {event, "home", "career"}
+
+
+def test_a_failed_tag_lookup_never_fails_the_write(
+    seeded: dict[str, Any],
+    purges: list[dict[str, Any]],
+    pending: set[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.core.db import Session
+    from app.models.series import Series
+
+    def broken(*args: object) -> set[str]:
+        raise RuntimeError
+
+    monkeypatch.setattr(edge_purge, "tags_of", broken)
+    edit_series(seeded["series_open_id"], player1_score=1)
+    with Session.begin() as session:
+        series = session.get(Series, seeded["series_open_id"])
+        assert series is not None
+        assert series.player1_score == 1
+    assert pending == set()
 
 
 def test_with_no_token_nothing_is_sent(
@@ -166,7 +288,7 @@ def test_a_preview_write_clears_the_preview_copies(
     monkeypatch.setenv("VERCEL_ENV", "preview")
     monkeypatch.setenv("VERCEL_TEAM_ID", "test-team")
     edge_purge._config.cache_clear()
-    edge_purge.send([f"t{n}" for n in range(20)])
+    edge_purge.send([f"event-{n}" for n in range(20)])
     assert [len(call["json"]["tags"]) for call in purges] == [16, 4]
     assert {call["json"]["target"] for call in purges} == {"preview"}
     assert purges[0]["params"]["teamId"] == "test-team"

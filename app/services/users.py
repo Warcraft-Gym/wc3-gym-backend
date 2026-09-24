@@ -36,7 +36,7 @@ from app.models.w3c_stats import (
     W3CStats,
     W3CStatsCreate,
 )
-from app.services import derived, link_prompts, merge
+from app.services import derived, edge_purge, link_prompts, merge
 from app.services.battle_tags import (
     attach_tag,
     drop_tag,
@@ -141,6 +141,7 @@ class UserService:
             season.fantasy_tier_cuts = cuts
             season.fantasy_tiers_applied_at = utcnow()
             session.execute(signups.values(fantasy_tier=None))
+            edge_purge.add(session, edge_purge.event_tag(season_id))
             for tier, ids in by_tier.items():
                 session.execute(
                     signups.where(col(DBUserSeasonSignup.user_id).in_(ids)).values(
