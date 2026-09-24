@@ -28,7 +28,7 @@ from app.models.series import Series
 from app.models.team import Team
 from app.models.team_season import DBTeamSeason
 from app.models.user import User
-from tests.seed import add_season
+from tests.seed import active, add_season
 
 SCORE_FIELDS = (
     "player_points",
@@ -44,7 +44,7 @@ SCORE_FIELDS = (
 def player(name: str, race: Race) -> User:
     return User(
         name=name,
-        battleTag=f"{name}#1",
+        battle_tags=active(f"{name}#1"),
         discordTag=name.lower(),
         discordId=name,
         race=race,

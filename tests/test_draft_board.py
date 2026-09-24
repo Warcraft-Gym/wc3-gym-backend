@@ -30,6 +30,7 @@ from app.models.user_block import UserBlock, UserBusy
 from app.models.user_team_season import DBUserTeamSeason
 from app.models.w3c_ladder_match import W3CLadderMatch
 from app.models.w3c_stats import W3CStats
+from tests.seed import active
 from tests.test_discord_auth import SESSION, stub_clerk
 from tests.test_query_budget import count_statements
 
@@ -505,7 +506,7 @@ def _grow_rosters(seeded: dict[str, Any], extra: int) -> None:
         for index in range(extra * 2):
             user = User(
                 name=f"Extra {index}",
-                battleTag=f"Extra{index}#9",
+                battle_tags=active(f"Extra{index}#9"),
                 discordTag=f"extra{index}",
                 discordId=f"80{index}",
                 race=Race.HU,

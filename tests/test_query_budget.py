@@ -295,7 +295,7 @@ def test_the_bets_count_holds_when_the_bets_grow(league: dict[str, Any]) -> None
 
 from sqlmodel import col
 
-from tests.seed import add_fantasy_teams
+from tests.seed import active, add_fantasy_teams
 
 
 def test_the_fantasy_team_list_costs_nine_statements(league: dict[str, Any]) -> None:
@@ -373,7 +373,7 @@ def test_career_statement_count_holds_when_the_players_grow(
         players = [
             User(
                 name=f"Extra {index}",
-                battleTag=f"E{index}#1",
+                battle_tags=active(f"E{index}#1"),
                 discordTag=f"e{index}",
                 discordId=f"9{index}",
                 race=Race.HU,

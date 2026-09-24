@@ -27,6 +27,7 @@ from app.models.team import Team
 from app.models.user import User
 from app.models.w3c_stats import W3CStats
 from app.services import stage_engine
+from tests.seed import active
 from tests.test_events import phase
 
 
@@ -36,7 +37,7 @@ def players(count: int) -> list[int]:
         rows = [
             User(
                 name=f"E{number}",
-                battleTag=f"E{number}#{number:04d}",
+                battle_tags=active(f"E{number}#{number:04d}"),
                 discordTag=f"e{number}",
                 discordId=f"9{number:04d}",
                 race=Race.HU,
@@ -980,7 +981,7 @@ def join(event: int, division: int | None, name: str) -> int:
     with Session.begin() as session:
         user = User(
             name=name,
-            battleTag=f"{name}#1111",
+            battle_tags=active(f"{name}#1111"),
             discordTag=name.lower(),
             discordId=f"8{name}",
             race=Race.HU,
@@ -1242,7 +1243,7 @@ def test_a_series_holds_the_roster_of_its_own_two_sides(
     with Session.begin() as session:
         third = User(
             name="E9",
-            battleTag="E9#0009",
+            battle_tags=active("E9#0009"),
             discordTag="e9",
             discordId="90009",
             race=Race.HU,

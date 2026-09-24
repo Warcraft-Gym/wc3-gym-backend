@@ -1,8 +1,8 @@
 """Which battle tags and Discord ids name a real account.
 
-The importers write stand-ins where a sheet had no value: a `Name#GNLnn`,
+A workbook may carry a stand-in where a sheet had no tag: a `Name#GNLnn`,
 `Fantasy_User#` or `Review#` battle tag. A stand-in gets no user_battle_tag
-row. Migration e07324d2b4f9 holds a frozen copy of this rule, and
+row, and the season import finds its person by name. Migration e07324d2b4f9 holds a frozen copy of this rule, and
 tests/test_battle_tags.py pins the two to each other.
 """
 

@@ -24,7 +24,7 @@ from app.models.user import User
 from app.models.user_block import UserBusy
 from app.models.user_team_season import DBUserTeamSeason
 from app.services.availability import NO_SCHEDULING, AvailabilityService
-from tests.seed import add_season
+from tests.seed import active, add_season
 from tests.test_discord_auth import SESSION, stub_clerk
 
 WORK = {"label": "Work", "weekdays": 31, "start_local": "09:00", "end_local": "17:00"}
@@ -697,7 +697,11 @@ def outsider() -> int:
     """A player of no team in the seeded event."""
     with Session.begin() as session:
         user = User(
-            name="P5", battleTag="P5#5555", discordTag="p5", discordId="5", race=Race.HU
+            name="P5",
+            battle_tags=active("P5#5555"),
+            discordTag="p5",
+            discordId="5",
+            race=Race.HU,
         )
         session.add(user)
         session.flush()

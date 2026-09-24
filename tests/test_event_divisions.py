@@ -22,6 +22,7 @@ from app.models.team import Team
 from app.models.user import User
 from app.models.user_team_season import DBUserTeamSeason
 from app.models.w3c_stats import W3CStats
+from tests.seed import active
 from tests.test_events import add_event
 
 
@@ -30,7 +31,7 @@ def add_player(name: str, ratings: dict[Race, int]) -> int:
     with Session.begin() as session:
         user = User(
             name=name,
-            battleTag=f"{name}#1000",
+            battle_tags=active(f"{name}#1000"),
             discordTag="",
             discordId="",
             race=next(iter(ratings), Race.HU),

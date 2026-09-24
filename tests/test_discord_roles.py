@@ -21,6 +21,7 @@ from app.models.season import Season
 from app.models.user import User
 from app.models.user_team_season import DBUserTeamSeason
 from app.services import discord, discord_roles
+from tests.seed import active
 from tests.test_discord_auth import GUILD_ID, FakeResponse
 
 MEMBERS = f"{discord.API_URL}/guilds/{GUILD_ID}/members"
@@ -133,7 +134,11 @@ def test_a_signup_earns_the_participant_role(seeded: dict[str, Any]) -> None:
     _bind(RoleKind.gnl_participant, "gnl")
     with Session() as session:
         waiting = User(
-            name="Sub", battleTag="Sub#8", discordTag="sub", discordId="8", race="HU"
+            name="Sub",
+            battle_tags=active("Sub#8"),
+            discordTag="sub",
+            discordId="8",
+            race="HU",
         )
         session.add(waiting)
         session.commit()
@@ -176,7 +181,11 @@ def test_a_captain_earns_no_participant_role(seeded: dict[str, Any]) -> None:
     _bind(RoleKind.captain, "captain-role")
     with Session() as session:
         outsider = User(
-            name="Cap", battleTag="Cap#7", discordTag="cap", discordId="7", race="HU"
+            name="Cap",
+            battle_tags=active("Cap#7"),
+            discordTag="cap",
+            discordId="7",
+            race="HU",
         )
         session.add(outsider)
         session.commit()
@@ -317,7 +326,7 @@ def test_a_full_report_reads_the_guild_once(
             session.add(
                 User(
                     name=f"U{n}",
-                    battleTag=f"U{n}#1",
+                    battle_tags=active(f"U{n}#1"),
                     discordTag=f"u{n}",
                     discordId=f"9{n}",
                     race="HU",

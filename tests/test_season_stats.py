@@ -26,6 +26,7 @@ from app.models.series import Series
 from app.models.user import User, UserPublic
 from app.models.user_team_season import UserTeamSeasonStatsPublic
 from app.services import derived
+from tests.seed import active
 
 
 @pytest.fixture(autouse=True)
@@ -137,7 +138,7 @@ def test_a_player_with_no_series_in_the_season_counts_nothing(
     with Session() as session:
         stranger = User(
             name="P5",
-            battleTag="P5#5555",
+            battle_tags=active("P5#5555"),
             discordTag="p5",
             discordId="5",
             race=Race.HU,
@@ -158,7 +159,7 @@ def test_an_opponent_with_no_signup_reads_null(
     with Session() as session:
         stranger = User(
             name="P5",
-            battleTag="P5#5555",
+            battle_tags=active("P5#5555"),
             discordTag="p5",
             discordId="5",
             race=Race.HU,

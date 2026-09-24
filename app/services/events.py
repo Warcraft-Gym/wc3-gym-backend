@@ -1298,7 +1298,6 @@ def _by_battle_tag(session: OrmSession, battle_tag: str, race: Race) -> User:
         return user
     user = User(
         name=tag.split("#")[0] or tag,
-        battleTag=tag,
         discordTag="",
         discordId="",
         race=race,

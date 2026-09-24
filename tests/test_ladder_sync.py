@@ -130,8 +130,7 @@ def at(match_id: str, season: int, when: datetime) -> dict[str, Any]:
 
 
 def retag(session: OrmSession, user_id: int, tag: str) -> None:
-    """Rename a seeded player's active tag, and its copy on users."""
-    session.get_one(User, user_id).battleTag = tag
+    """Rename a seeded player's active tag."""
     session.scalars(
         select(UserBattleTag).where(
             col(UserBattleTag.user_id) == user_id, col(UserBattleTag.is_active)

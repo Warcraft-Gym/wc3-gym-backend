@@ -76,6 +76,8 @@ BEFORE_KOTH_DROP = "c9f2b6a41d38"
 BEFORE_MULTI_ENTRY = "e7d4b1c6a539"
 # The revision before a person holds battle tags in their own table
 BEFORE_TAG_TABLE = "1e8e59906cec"
+# The revision before users.battleTag is dropped
+BEFORE_TAG_DROP = "e07324d2b4f9"
 
 
 def comparable(
@@ -651,7 +653,6 @@ def test_the_soft_block_tables_refuse_a_bad_row_and_are_dropped(
                     for c in (
                         "id",
                         "name",
-                        "battleTag",
                         "discordTag",
                         "discordId",
                         "race",
@@ -662,7 +663,6 @@ def test_the_soft_block_tables_refuse_a_bad_row_and_are_dropped(
             .values(
                 id=1,
                 name="P1",
-                battleTag="P1#1",
                 discordTag="p1",
                 discordId="1",
                 race="HU",
@@ -1421,16 +1421,32 @@ def test_the_tag_backfill_gives_each_real_tag_one_active_row(tmp_path: Path) -> 
 def test_the_tag_table_and_its_columns_are_dropped_on_downgrade(
     tmp_path: Path,
 ) -> None:
+    """users.battleTag comes back from the active tag row, or a stand-in for a
+    person with none, then the table goes."""
     url = fresh_database(tmp_path, "tag-table-down")
     upgrade_to_head(url)
     engine = create_engine(url)
     with engine.begin() as connection:
         connection.execute(
             text(
-                'INSERT INTO users (id, name, "battleTag", "discordTag", "discordId", race) '
-                "VALUES (1, 'P1', 'P1#1', NULL, NULL, 'HU')"
+                'INSERT INTO users (id, name, "discordTag", "discordId", race) '
+                "VALUES (1, 'P1', NULL, NULL, 'HU'), (2, 'P2', NULL, NULL, 'HU')"
             )
         )
+        connection.execute(
+            text(
+                "INSERT INTO user_battle_tag (user_id, tag, source, is_active, "
+                "first_seen, last_seen) VALUES "
+                "(1, 'Old#1', 'sheet', false, '2025-01-01', '2025-01-01'), "
+                "(1, 'P1#1', 'sheet', true, '2025-01-01', '2025-01-01')"
+            )
+        )
+
+    downgrade_to(url, BEFORE_TAG_DROP)
+    with engine.connect() as connection:
+        assert connection.execute(
+            text('SELECT id, "battleTag" FROM users ORDER BY id')
+        ).all() == [(1, "P1#1"), (2, "Review#2")]
 
     downgrade_to(url, BEFORE_TAG_TABLE)
 
@@ -1444,5 +1460,5 @@ def test_the_tag_table_and_its_columns_are_dropped_on_downgrade(
     }
     with engine.connect() as connection:
         assert connection.execute(
-            text('SELECT "discordTag", "discordId" FROM users')
+            text('SELECT "discordTag", "discordId" FROM users WHERE id = 1')
         ).one() == ("", "")

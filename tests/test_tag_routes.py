@@ -38,7 +38,7 @@ def on_w3c(monkeypatch: pytest.MonkeyPatch) -> None:
 def no_login_person(tag: str = "Old#5555", name: str = "Old") -> int:
     """A person from an earlier season: one active tag, no Discord id."""
     with Session.begin() as session:
-        user = User(name=name, battleTag=tag, discordId=None, race=Race.HU)
+        user = User(name=name, discordId=None, race=Race.HU)
         session.add(user)
         session.flush()
         assert user.id is not None
@@ -267,7 +267,7 @@ def test_moving_the_only_tag_to_a_person_with_none_makes_it_theirs_and_active(
     with Session.begin() as session:
         user = session.get(User, old)
         assert user is not None
-        empty = User(name="Empty", battleTag="Empty", discordId="77", race=Race.HU)
+        empty = User(name="Empty", discordId="77", race=Race.HU)
         session.add(empty)
         session.flush()
         empty_id = empty.id

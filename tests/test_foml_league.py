@@ -20,6 +20,7 @@ from app.models.base import ident
 from app.models.enums import Race
 from app.models.user import User
 from app.models.w3c_stats import W3CStats
+from tests.seed import active
 from tests.test_events import phase
 from tests.test_stage_engine import generate, score, stage_series
 
@@ -35,7 +36,7 @@ def enrol(number: int) -> int:
     with Session.begin() as session:
         user = User(
             name=f"F{number}",
-            battleTag=f"F{number}#{number:04d}",
+            battle_tags=active(f"F{number}#{number:04d}"),
             discordTag=f"f{number}",
             discordId=str(number),
             race=Race.HU,
