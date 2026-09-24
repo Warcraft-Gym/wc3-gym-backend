@@ -1,10 +1,10 @@
 ---
 type: API Area
 title: Consumers of the API
-description: Who calls the backend, which routes each one reads, and which tests pin those shapes.
+description: Who calls the backend, which routes each one reads, which tests pin those shapes, and the rules a consumer follows to keep reads off the database.
 resource: ../../../tests/test_public_contract.py
 tags: [api]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-23T04:29:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-24T15:30:00Z }
 sources:
   - id: public-contract
     resource: ../../../tests/test_public_contract.py
@@ -25,7 +25,7 @@ sources:
 | Consumer | Repository | Reads | Auth |
 |---|---|---|---|
 | the web app | `wc3-gym-frontend` | most routes | Clerk session or the admin token |
-| the GNL website | `wc3-gnl-website` | `GET /leagues`, the latest finished `GET /events?league_id={league_id}`, and that event's `/teams`, `/series` and `/fantasy/teams` | none |
+| the GNL website | `wc3-gnl-website` | server-side, from Next.js: `GET /leagues`, `GET /events`, `GET /leagues/{league_id}/teams`, and for finished events `/events/{event_id}/teams`, `/series`, `/ladder` and `/fantasy/teams`; for a player `GET /users/{user_id}`, `GET /users/{user_id}/history` and `GET /stats/career` | none needed; a `GNL_SERVICE_TOKEN` bearer when that variable is set |
 | the WordPress site | `gym_website_scripts` | eight paths on every page view, no cache, against the older backend host: `GET /stats/career`, `GET /config/settings`, `GET /teams/season/{id}`, `GET /teams/{id}/image`, `GET /seasons/{id}`, `POST /matches/search`, `POST /series/season/{id}/playday/{n}/search`, `POST /fantasy/teams/search` | none |
 | the Discord adapter | `wc3-gym-discord-bot` | `POST /discord/interactions` | Discord's signature |
 | the cast-reminder worker | `wc3-gym-discord-bot`, `cron/` | `GET /jobs/cast-reminders` every five minutes | `CRON_SECRET` bearer |
@@ -54,3 +54,13 @@ A change that fails one of these is a cross-repository change. Ship the consumer
 - Consumers use the league routes for team identity and the event routes for GNL data. The one unscoped team route is `GET /teams/{team_id}/image`, deprecated, which the web app's logo fallback reads.
 - List routes page with `limit` and `offset` and answer `X-Total-Count`.
 - Reads are open. Writes need an admin, or the owning member for self-service routes.
+
+# Rules a consumer follows
+
+The database cost of a read is the rows one call reads times the number of calls that reach the function. See [what a read costs](overview.md#what-a-read-costs).
+
+- Send no Authorization header on an open read. The edge never stores or serves a request that carries one, so a bearer turns every call into a database read. The web app does this with its `EDGE_CACHED` pattern.
+- Cache on the consumer's side as well, for as long as the data allows. A finished event changes only when an admin corrects it, so a page that shows one can hold it for an hour or more. A running event's results can be held for minutes.
+- Read the narrowest route that answers the page: `GET /stats/career/{user_id}` for one player, not `GET /stats/career`. When no narrow route exists, ask for one instead of filtering a list on the consumer.
+- A list route answers one page, at most 500 rows by default. Read `X-Total-Count` and page with `offset` when a list can be longer.
+- Local development of a consumer points at a local server (`just serve`), never at production. A development server fetches on every reload.
