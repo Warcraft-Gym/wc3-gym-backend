@@ -229,12 +229,14 @@ def merge(session: OrmSession, source: User, target: User) -> None:
             delete(table).where(and_(*(table.c[n] == v for n, v in pk.items())))
         )
     s, t = source.id, target.id
-    # the source's open prompts are answered by the merge itself
-    session.execute(
-        update(LinkPrompt)
-        .where(col(LinkPrompt.person_id) == s, col(LinkPrompt.closed_at).is_(None))
-        .values(closed_at=utcnow(), outcome="joined")
-    )
+    # joining a login answers the source's open prompts; into another earlier
+    # player they stay open and follow the repointed person_id
+    if has_login(target.discordId):
+        session.execute(
+            update(LinkPrompt)
+            .where(col(LinkPrompt.person_id) == s, col(LinkPrompt.closed_at).is_(None))
+            .values(closed_at=utcnow(), outcome="joined")
+        )
     kept = active_row(session, t or 0)
     login = (
         (source.discordId, source.discordTag)
