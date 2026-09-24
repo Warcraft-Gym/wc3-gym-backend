@@ -329,3 +329,27 @@ def test_nothing_matching_makes_a_new_player(
     assert resp.status_code == 201, resp.text
     assert resp.json()["discordId"] == "1"
     assert resp.json()["discordTag"] == "p1"
+
+
+def test_a_discord_name_matches_without_case(
+    app: FastAPI, client: Client, w3c_free: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The unique index folds case, so the lookup folds it too."""
+    _player("Old", "Old#1111", discord_tag="P1")
+
+    resp = _signup(client, monkeypatch, "Fresh#7777")
+
+    assert resp.status_code == 409, resp.text
+    assert resp.json()["link"]["player"] == "Old"
+
+
+def test_a_namesake_differing_only_in_case_is_left_alone(
+    app: FastAPI, client: Client, w3c_free: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    namesake = _player("Other", "Other#3333", discord_id="888", discord_tag="P1")
+
+    resp = _signup(client, monkeypatch, "Mine#4444")
+
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["discordTag"] == ""
+    assert _row(namesake)["discordId"] == "888"

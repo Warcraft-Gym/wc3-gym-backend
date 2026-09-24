@@ -221,7 +221,10 @@ class UserService:
                 )
             ).first()
             named = session.scalars(
-                select(User).where(col(User.discordTag) == discord_name)
+                select(User).where(
+                    func.lower(func.trim(col(User.discordTag)))
+                    == discord_name.strip().lower()
+                )
             ).first()
             link = {"discord_id": discord_id, "battle_tag": battle_tag}
             if tagged is not None and (own is None or tagged.id != own.id):
@@ -229,7 +232,8 @@ class UserService:
                     raise ApiError(
                         409,
                         {
-                            "error": f"{battle_tag} is on another player's profile."
+                            "error": f"The battle tag {battle_tag} is on another player's"
+                            " profile."
                             " Ask an admin on Discord to move it to you."
                         },
                     )
@@ -237,7 +241,8 @@ class UserService:
                     raise ApiError(
                         409,
                         {
-                            "error": f"{battle_tag} belongs to the earlier player"
+                            "error": f"The battle tag {battle_tag} belongs to the earlier"
+                            " player"
                             f" {tagged.name}. An admin needs to join it to your"
                             " profile.",
                             "link": link | {"player": tagged.name},
