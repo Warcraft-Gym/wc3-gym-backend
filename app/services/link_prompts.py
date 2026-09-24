@@ -220,7 +220,8 @@ def open_for(session: OrmSession, user: User) -> list[LinkPromptPublic]:
     that speak to it alone. A player two logins could be goes to no one."""
     folded_mine = select(FOLDED_TAG).where(col(UserBattleTag.user_id) == ident(user))
     candidates = session.scalars(
-        select(LinkPrompt).where(
+        select(LinkPrompt)
+        .where(
             col(LinkPrompt.closed_at).is_(None),
             or_(
                 col(LinkPrompt.user_id) == ident(user),
