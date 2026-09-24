@@ -699,7 +699,7 @@ def _people(
     for key in held:
         del found[key]
     hinted.update(held)
-    found |= suggested_people(session, held)
+    found |= {tag: people[0] for tag, people in suggested_people(session, held).items()}
     names = [v.name for v in values if not is_real_tag(v.battleTag)]
     for name, user in people_by_names(session, names).items():
         found[f"name:{name}"] = user

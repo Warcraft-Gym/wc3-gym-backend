@@ -241,3 +241,57 @@ def test_verifying_the_tag_joins_the_player_a_sheet_suggestion_names(
     with Session() as session:
         assert session.get(User, old) is None
         assert session.get(User, guess) is not None
+
+
+def test_reading_the_prompts_closes_nothing(
+    client: Client, seeded: dict[str, Any], member: Callable[..., dict[str, str]]
+) -> None:
+    _suggest(no_login_person(), "sheet", tag="P1#1111")
+
+    first = _prompts(client, member())
+
+    assert _prompts(client, member()) == first
+    assert len(first) == 1
+
+
+def _people_named(name: str) -> int:
+    with Session() as session:
+        return len(session.scalars(select(User).where(col(User.name) == name)).all())
+
+
+def test_a_reimport_after_accept_joins_the_login_and_writes_no_second_player(
+    client: Client, auth_headers: dict[str, str], member: Callable[..., dict[str, str]]
+) -> None:
+    login = _login("900", "P1#1111")
+    assert _post(client, _history_book(), auth_headers).status_code == 200
+    [prompt] = _prompts(client, member("900"))
+    accepted = client.post(
+        f"/users/me/prompts/{prompt['id']}",
+        json={"accept": True},
+        headers=member("900"),
+    )
+    assert accepted.status_code == 200, accepted.text
+
+    assert _post(client, _history_book(), auth_headers).status_code == 200
+
+    assert _signed_up(login)
+    assert _people_named("P1") == 0
+    assert _prompts(client, member("900")) == []
+
+
+def test_a_reimport_after_dismiss_reuses_the_earlier_player(
+    client: Client, auth_headers: dict[str, str], member: Callable[..., dict[str, str]]
+) -> None:
+    _login("900", "P1#1111")
+    assert _post(client, _history_book(), auth_headers).status_code == 200
+    [prompt] = _prompts(client, member("900"))
+    client.post(
+        f"/users/me/prompts/{prompt['id']}",
+        json={"accept": False},
+        headers=member("900"),
+    )
+
+    assert _post(client, _history_book(), auth_headers).status_code == 200
+
+    assert _people_named("P1") == 1
+    assert _prompts(client, member("900")) == []

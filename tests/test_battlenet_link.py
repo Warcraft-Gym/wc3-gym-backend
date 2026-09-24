@@ -250,6 +250,7 @@ def test_a_tag_another_login_holds_unverified_moves_and_that_login_is_told(
     assert rows_of(seeded["player_ids"][1]) == []
     notices = client.get("/users/me/prompts", headers=member("2")).json()
     assert [(n["kind"], n["tag"]) for n in notices] == [("taken", "P2#2222")]
+    assert client.get("/users/me/prompts", headers=member()).json() == []
 
 
 def test_a_tag_another_login_verified_answers_409(

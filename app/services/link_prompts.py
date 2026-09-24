@@ -11,7 +11,7 @@ The functions take the caller's session, so they join its transaction.
 
 from collections import defaultdict
 
-from sqlalchemy import ColumnElement, func, or_, select, update
+from sqlalchemy import ColumnElement, and_, func, or_, select, update
 from sqlalchemy.orm import Session as OrmSession
 from sqlmodel import col
 
@@ -36,6 +36,7 @@ from app.services.battle_tags import (
 )
 
 TAKEN = "That Battle.net account or tag belongs to another player. Ask an admin."
+PROMPT_TAG = func.lower(func.trim(col(LinkPrompt.tag)))
 STOPPED = (
     "Your profile and that player both hold rows that cannot be joined. Ask an admin."
 )
@@ -49,12 +50,12 @@ def suggest(
     user_id: int | None = None,
 ) -> None:
     """Suggest the earlier player to the login holding `tag`, or to `user_id`.
-    The same open suggestion is written once."""
+    A suggestion is written once, open or closed, so a re-import brings back
+    none the login answered."""
     same = select(LinkPrompt).where(
         col(LinkPrompt.kind) == "suggest",
         col(LinkPrompt.person_id) == ident(person),
-        col(LinkPrompt.closed_at).is_(None),
-        col(LinkPrompt.tag) == tag if tag else col(LinkPrompt.user_id) == user_id,
+        PROMPT_TAG == fold(tag) if tag else col(LinkPrompt.user_id) == user_id,
     )
     if session.scalars(same).first() is None:
         session.add(
@@ -69,21 +70,33 @@ def suggest(
         session.flush()
 
 
-def suggested_people(session: OrmSession, tags: list[str]) -> dict[str, User]:
-    """The earlier player an open `sheet` suggestion names, by folded tag."""
+def suggested_people(
+    session: OrmSession, tags: list[str], open_only: bool = False
+) -> dict[str, list[User]]:
+    """The people `sheet` suggestions on each folded tag name, newest first.
+    A closed one counts unless `open_only`: a merge repoints an accepted
+    suggestion at the login, and a dismissed one still names the earlier
+    player, so a re-import finds the same person again."""
     wanted = {fold(tag) for tag in tags}
     if not wanted:
         return {}
-    rows = session.execute(
-        select(col(LinkPrompt.tag), User)
+    query = (
+        select(PROMPT_TAG, User)
         .join(User, col(User.id) == col(LinkPrompt.person_id))
         .where(
             col(LinkPrompt.kind) == "suggest",
             col(LinkPrompt.reason) == "sheet",
-            col(LinkPrompt.closed_at).is_(None),
+            PROMPT_TAG.in_(wanted),
         )
-    ).all()
-    return {fold(tag): user for tag, user in rows if tag and fold(tag) in wanted}
+        .order_by(col(LinkPrompt.id).desc())
+    )
+    if open_only:
+        query = query.where(col(LinkPrompt.closed_at).is_(None))
+    found: dict[str, list[User]] = defaultdict(list)
+    for tag, user in session.execute(query).all():
+        if user not in found[tag]:
+            found[tag].append(user)
+    return found
 
 
 def _close(session: OrmSession, where: ColumnElement[bool], outcome: str) -> None:
@@ -95,14 +108,13 @@ def _close(session: OrmSession, where: ColumnElement[bool], outcome: str) -> Non
 
 
 def join(session: OrmSession, person: User, user: User, strict: bool = True) -> bool:
-    """Merge the earlier player into the login and close its suggestions.
+    """Merge the earlier player into the login; the merge closes its prompts.
     A stop refuses with 409 when strict, else leaves both as they are."""
     result, _ = merge.plan(session, person, user)
     if result.stops:
         if strict:
             raise ApiError(409, {"error": STOPPED, **result.model_dump()})
         return False
-    _close(session, col(LinkPrompt.person_id) == ident(person), "joined")
     merge.merge(session, person, user)
     return True
 
@@ -159,7 +171,8 @@ def verify(session: OrmSession, user: User, account_id: str, tag: str) -> None:
         holder = session.get(User, row.user_id)
         assert holder is not None
         if not has_login(holder.discordId):
-            join(session, holder, user, strict=False)
+            # a stop leaves the tag with its player rather than split them
+            join(session, holder, user)
         elif row.bnet_account_id is not None:
             raise ApiError(409, {"error": TAKEN})
         else:
@@ -171,8 +184,10 @@ def verify(session: OrmSession, user: User, account_id: str, tag: str) -> None:
         session.refresh(row)
         if row.user_id != ident(user):
             move_tag(session, row, user, "link")
-    for person in suggested_people(session, [tag]).values():
-        join(session, person, user, strict=False)
+    for people in suggested_people(session, [tag], open_only=True).values():
+        for person in people:
+            if not has_login(person.discordId):
+                join(session, person, user, strict=False)
     row = attach_tag(session, user, tag, "link", active=False)
     assert row is not None
     row.bnet_account_id = account_id
@@ -209,7 +224,13 @@ def open_for(session: OrmSession, user: User) -> list[LinkPromptPublic]:
             col(LinkPrompt.closed_at).is_(None),
             or_(
                 col(LinkPrompt.user_id) == ident(user),
-                func.lower(func.trim(col(LinkPrompt.tag))).in_(folded_mine),
+                # a tag speaks for a suggestion with no login of its own;
+                # a notice goes only to the login it names
+                and_(
+                    col(LinkPrompt.kind) == "suggest",
+                    col(LinkPrompt.user_id).is_(None),
+                    PROMPT_TAG.in_(folded_mine),
+                ),
             ),
         )
     ).all()
