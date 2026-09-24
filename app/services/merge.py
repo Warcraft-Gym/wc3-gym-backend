@@ -31,6 +31,7 @@ from app.models.link_prompt import LinkPrompt
 from app.models.types import utcnow
 from app.models.user import User
 from app.models.user_battle_tag import MergePlan, UserBattleTag
+from app.services import edge_purge
 from app.services.battle_tags import active_row
 
 # User id columns that carry no foreign key: 0 on series_side means no player
@@ -224,6 +225,8 @@ def merge(session: OrmSession, source: User, target: User) -> None:
                 **result.model_dump(),
             },
         )
+    # the bulk statements below pass the session listener by
+    edge_purge.add_users(session, [u for u in (source.id, target.id) if u is not None])
     for table, pk in removals:
         session.execute(
             delete(table).where(and_(*(table.c[n] == v for n, v in pk.items())))

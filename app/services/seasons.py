@@ -44,7 +44,7 @@ from app.models.season import (
 from app.models.team import Team
 from app.models.team_season import DBTeamSeason
 from app.models.user import User, UserListPublic
-from app.services import ladder_maps
+from app.services import edge_purge, ladder_maps
 from app.services.ladder import mmr_on
 from app.services.maps import MapService
 from app.services.series_veto import check_order
@@ -265,6 +265,7 @@ class SeasonService:
                     col(LadderAchievement.season_id) == season_id
                 )
             )
+            edge_purge.add(session, edge_purge.event_tag(season_id), "ladder")
             session.add_all(
                 LadderAchievement(
                     season_id=season_id,

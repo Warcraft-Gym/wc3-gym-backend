@@ -92,12 +92,41 @@ def test_an_event_not_finished_is_cached_for_two_minutes(
     assert resp.headers["cache-control"] == SHORT
 
 
+TAGGED = [
+    ("/events/{season_id}/series", "event-{season_id}"),
+    ("/events/{season_id}/teams", "event-{season_id}"),
+    ("/events/{season_id}/teams/basic", "event-{season_id}"),
+    ("/events/{season_id}/teams/{team_a_id}", "event-{season_id}"),
+    ("/events/{season_id}/ladder", "event-{season_id},ladder"),
+    ("/events/{season_id}/ladder/players", "event-{season_id},ladder"),
+    ("/users/{player}/ladder", "ladder"),
+    ("/stats/career", "career"),
+    ("/home/series", "home"),
+]
+
+
+@pytest.mark.parametrize(("path", "tag"), TAGGED)
+def test_a_cached_read_names_the_tags_a_write_clears(
+    client: Client,
+    seeded: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+    path: str,
+    tag: str,
+) -> None:
+    monkeypatch.setattr(W3CService, "current_season", lambda self: 20)
+    ids = {"player": seeded["player_ids"][0], **seeded}
+    resp = client.get(path.format(**ids))
+    assert resp.status_code == 200, resp.text
+    assert resp.headers["vercel-cache-tag"] == tag.format(**ids)
+
+
 def test_a_not_found_on_a_cached_route_is_not_cached(
     client: Client, seeded: dict[str, Any]
 ) -> None:
     resp = client.get(f"/events/{seeded['season_id']}/teams/999999")
     assert resp.status_code == 404
     assert "public" not in resp.headers.get("cache-control", "")
+    assert "vercel-cache-tag" not in resp.headers
 
 
 def test_a_w3c_outage_answer_is_not_cached(client: Client) -> None:

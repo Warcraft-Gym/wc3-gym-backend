@@ -205,7 +205,7 @@ def get_user_ladder(
     Without a season the answer covers every match the player has. The
     matches themselves stay on w3champions, which the client links to.
     """
-    edge_cache(response, 900, 3600)
+    edge_cache(response, 900, 3600, tags=("ladder",))
     return service.user_ladder(user_id, season_id)
 
 
