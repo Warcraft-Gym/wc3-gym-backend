@@ -604,13 +604,19 @@ def _series_values(
 def _series(
     session: OrmSession, sheets: Sheets, matches: dict[int, Match], users: Users
 ) -> dict[int, int]:
-    """The series of those matches, matched by match and the two players."""
+    """The series of those matches, matched by match, the two players and
+    the side size: a week can hold a 1v1 and a 2v2 led by the same two."""
     rows = _rows(sheets["Series"], ["Match ID", "Player1 ID", "Player2 ID"])
     match_ids = {ident(match) for match in matches.values()}
-    stored: dict[tuple[int, int, int], Series] = {}
+    stored: dict[tuple[int, int, int, int], Series] = {}
     if match_ids:
         stored = {
-            (series.match_id, series.player1_id, series.player2_id): series
+            (
+                series.match_id,
+                series.player1_id,
+                series.player2_id,
+                series.side_size,
+            ): series
             for series in session.scalars(
                 select(Series).where(col(Series.match_id).in_(match_ids))
             )
@@ -633,7 +639,13 @@ def _series(
         host = users.by_old_id.get(whole_number(row["Host Player ID"])) or player1
         values = _series_values(row, ident(match), player1, player2, host)
         partners = _partners(row, users)
-        key = (ident(match), player1.id, player2.id)
+        key = (ident(match), player1.id, player2.id, 2 if partners else 1)
+        # the unique index holds one series per pair of leads in a fixture
+        if (*key[:3], 1 if partners else 2) in stored:
+            raise BadRequestError(
+                f"Series {row['ID']} has the same two leads as another series of"
+                " its match: lead the 2v2 with the partners"
+            )
         series = stored.get(key)
         if series:
             series.sqlmodel_update(values.model_dump(exclude_unset=True))

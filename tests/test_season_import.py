@@ -702,6 +702,40 @@ def test_a_2v2_row_writes_both_sides_and_scores_like_any_series(
 PARTNERS = ("Player1b ID", "Player2b ID")
 
 
+def test_a_2v2_row_led_by_the_two_players_of_a_1v1_is_refused(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """GNL S1 and S2 weeks hold a 1v1 and a 2v2 of the same two players. The
+    2v2 never overwrites the 1v1: the import asks for the partners to lead."""
+    players, rows = SHEETS["Players"]
+    series_columns, _ = SHEETS["Series"]
+    book = {
+        "Players": (
+            players,
+            [
+                *rows,
+                [3, "P3", "P3#3333", "p3", 3, "NE", 1300, "DE", 1, 1],
+                [4, "P4", "P4#4444", "p4", 4, "UD", 1200, "DE", 1, 2],
+            ],
+        ),
+        "Series": (
+            [*series_columns, *PARTNERS],
+            [
+                [1, 1, 1, 2, 2, 1, 2, 1, 1, None, None, False, None, None],
+                [2, 1, 1, 2, 0, 2, 2, 1, 1, None, None, False, 3, 4],
+            ],
+        ),
+    }
+
+    response = _post(client, _workbook(extra=book), auth_headers)
+
+    assert response.status_code == 400, response.text
+    assert response.json()["error"] == (
+        "Series 2 has the same two leads as another series of its match:"
+        " lead the 2v2 with the partners"
+    )
+
+
 def test_a_2v2_row_with_one_partner_is_refused(
     client: Client, auth_headers: dict[str, str]
 ) -> None:
