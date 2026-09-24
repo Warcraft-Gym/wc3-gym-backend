@@ -55,7 +55,7 @@ A row is made by the first way in that meets the player, and each way in looks f
 | The workbook import | `battleTag`, without case | the workbook row's fields |
 | The fantasy import | `discordTag`, without case | a captain on no roster |
 
-Because `battleTag`, `discordTag` and `discordId` are not nullable, a row that knows no value carries a blank or a stand-in: a workbook row with no known Discord id carries one that begins `gnl-`, and a fantasy captain with no battle tag carries one that begins `Fantasy_User#`. See [events module](../../concepts/events-module.md) and [KOTH](../../concepts/koth.md) for the entrant ways in.
+Because `battleTag`, `discordTag` and `discordId` are not nullable, a row that knows no value carries a blank or a stand-in: a Players row of the workbook must name a Discord id, a Fantasy Users row with none carries a blank, and a fantasy captain with no battle tag carries a tag that begins `Fantasy_User#`. See [events module](../../concepts/events-module.md) and [KOTH](../../concepts/koth.md) for the entrant ways in.
 
 # Rules
 
