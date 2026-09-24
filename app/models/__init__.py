@@ -57,6 +57,7 @@ from app.models import (
     team_season,
     types,
     user,
+    user_battle_tag,
     user_block,
     user_team_season,
     w3c_ladder_match,

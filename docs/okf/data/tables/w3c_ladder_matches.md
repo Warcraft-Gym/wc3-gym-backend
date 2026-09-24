@@ -4,8 +4,8 @@ title: w3c_ladder_matches
 description: One ranked 1v1 W3Champions match of one GNL player, with the selected and the played race on both sides; points and badges derive from it.
 resource: ../../../../app/models/w3c_ladder_match.py
 tags: [w3champions, data]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T15:15:00Z }
-verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-24T09:19:27Z }
+verified: { by: process:test_okf, at: 2026-09-24T09:20:16Z }
 sources:
   - id: model
     resource: ../../../../app/models/w3c_ladder_match.py
@@ -21,6 +21,7 @@ sources:
 |---|---|---|---|
 | `id` | INTEGER | no | Primary key. |
 | `user_id` | INTEGER | no | The GNL player the row belongs to. |
+| `battle_tag_id` | INTEGER | yes | The [user_battle_tag](user_battle_tag.md) row the match was fetched under. Null when that row is gone or the match was never stamped. |
 | `w3c_match_id` | VARCHAR | no | The W3Champions match id. One row per player per match. |
 | `wc3_season` | INTEGER | no | The W3Champions season number. |
 | `start_time` | TIMESTAMP | no | When the match started, UTC. |
@@ -37,7 +38,7 @@ sources:
 
 # Keys and joins
 
-Primary key `id`. Foreign key `user_id` to [users](users.md). Unique index on (`w3c_match_id`, `user_id`). Index on (`user_id`, `start_time`).
+Primary key `id`. Foreign keys: `user_id` to [users](users.md); `battle_tag_id` to [user_battle_tag](user_battle_tag.md), set null when the tag row goes. Unique index on (`w3c_match_id`, `user_id`). Index on (`user_id`, `start_time`).
 
 # Rules
 

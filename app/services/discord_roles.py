@@ -196,10 +196,13 @@ def _diffs(
     guild = discord.guild_members() if len(users) > 5 else None
     reports = []
     for user in users:
+        discord_id = user.discordId
+        if not discord_id:
+            continue
         if guild is not None:
-            actual = guild.get(user.discordId)
+            actual = guild.get(discord_id)
         else:
-            actual = discord.member_roles(user.discordId)
+            actual = discord.member_roles(discord_id)
         if actual is None:
             continue
         expected = expected_of[ident(user)] & bound
@@ -209,7 +212,7 @@ def _diffs(
             reports.append(
                 DiscordRoleReport(
                     user_id=ident(user),
-                    discord_id=user.discordId,
+                    discord_id=discord_id,
                     name=user.name,
                     missing=missing,
                     extra=extra,

@@ -28,9 +28,11 @@ if TYPE_CHECKING:
 
 class UserBase(SQLModel):
     name: str = Field(max_length=50)
-    battleTag: str = Field(max_length=50)
-    discordTag: str = Field(max_length=50)
-    discordId: str = Field(max_length=50)
+    # A copy of the active tag; ponytail: typed str until a way in writes null
+    battleTag: str = Field(max_length=50, nullable=True)
+    # Null for a person who never logged in
+    discordTag: str | None = Field(max_length=50)
+    discordId: str | None = Field(max_length=50)
     mmr: int | None = None
     # ISO 3166-1 alpha-2, or a UK nation as GB-SCT
     country: str | None = Field(default=None, max_length=6)
@@ -47,7 +49,7 @@ class User(UserBase, DBModel, table=True):
     __tablename__ = "users"
     # The importers match a player by battle tag and a bettor by Discord tag,
     # and neither service is case sensitive. A Clerk session matches a player by
-    # Discord id. A blank Discord tag or id means unknown.
+    # Discord id. A blank or null Discord tag or id means unknown.
     __table_args__ = (
         Index("uq_users_battle_tag", text('lower(trim("battleTag"))'), unique=True),
         Index(

@@ -67,7 +67,7 @@ def test_no_stored_name_carries_the_spaces_the_workbooks_hold(app: object) -> No
     assert any(user.name == "DerMave" for user in users)
     for user in users:
         for field in (user.name, user.battleTag, user.discordTag, user.discordId):
-            assert field == field.strip(), field
+            assert field is None or field == field.strip(), field
 
 
 def test_the_export_of_both_seasons_imports_into_a_fresh_database(
