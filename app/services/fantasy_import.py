@@ -25,7 +25,7 @@ from app.models.season import Season
 from app.models.series import Series
 from app.models.settings import Settings
 from app.models.team import Team
-from app.models.user import User, UserCreate
+from app.models.user import User
 from app.services.fantasy_bets import resolve_bet_points
 from app.services.season_import import (
     Cells,
@@ -147,15 +147,9 @@ def _drafts(
             captain = found_users[0]
         else:
             logger.debug(f"No user found for discordTag {tag}: create a fantasy user")
+            # A bettor holds no battle tag; the Discord tag finds them again
             captain = User(
-                **UserCreate(
-                    name=tag,
-                    # A bettor holds no battle tag and two cannot share one
-                    battleTag=f"Fantasy_User#{tag}"[:50],
-                    discordTag=tag,
-                    discordId="",
-                    race=Race.RANDOM,
-                ).model_dump()
+                name=str(tag), discordTag=str(tag), discordId="", race=Race.RANDOM
             )
             captains.append(captain)
             by_tag[folded(tag)] = [captain]

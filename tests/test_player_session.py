@@ -10,6 +10,7 @@ import pytest
 from fastapi import FastAPI
 from httpx2 import Client, Response
 
+from tests.seed import active
 from tests.test_discord_auth import SESSION, stub_clerk
 
 
@@ -181,7 +182,7 @@ def _player(name: str, tag: str, discord_id: str = "", discord_tag: str = "") ->
     with Session() as session:
         user = User(
             name=name,
-            battleTag=tag,
+            battle_tags=active(tag),
             discordTag=discord_tag,
             discordId=discord_id,
             race=Race.HU,

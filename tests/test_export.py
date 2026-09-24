@@ -14,6 +14,7 @@ from httpx2 import Client
 
 from app.api.routes import import_export
 from app.models.base import ident
+from tests.seed import active
 
 SHEETS = [
     "Season",
@@ -68,7 +69,7 @@ def add_outsider(seeded: dict[str, Any]) -> int:
     with Session() as session:
         outsider = User(
             name="Cap",
-            battleTag="Cap#7777",
+            battle_tags=active("Cap#7777"),
             discordTag="cap",
             discordId="7",
             race=Race.NE,
@@ -205,7 +206,7 @@ def draft_outsider(seeded: dict[str, Any]) -> int:
     with Session() as session:
         drafted = User(
             name="Sub",
-            battleTag="Sub#9999",
+            battle_tags=active("Sub#9999"),
             discordTag="sub",
             discordId="9",
             race=Race.UD,

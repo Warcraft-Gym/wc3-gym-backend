@@ -2,6 +2,7 @@
 
 ## 2026-09-24
 
+* **Update**: `users` holds no battle tag. `User.battleTag` reads the active tag row, null with none, and the workbook import finds a person with no tag by name.
 * **Update**: the member signup takes a row only when no other login holds it; a tag another login holds, and a row matched only by Discord name, answer 409.
 * **Update**: the users table states how a row is made: each way in, the key it looks a player up by, that a login makes no row, and the stand-in values a row with no known tag or Discord id carries.
 

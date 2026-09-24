@@ -36,6 +36,19 @@ from app.models.user_battle_tag import UserBattleTag
 from app.models.user_team_season import DBUserTeamSeason
 
 
+def active(tag: str) -> list[UserBattleTag]:
+    """A person's one tag row, active: `User(..., battle_tags=active("P1#1111"))`."""
+    return [
+        UserBattleTag(
+            tag=tag,
+            source="signup",
+            is_active=True,
+            first_seen=datetime(2026, 1, 1, tzinfo=UTC),
+            last_seen=datetime(2026, 1, 1, tzinfo=UTC),
+        )
+    ]
+
+
 def add_season(session: Session, rounds: int, **fields: Any) -> Season:  # noqa: ANN401
     """A season row plus the round rows that are its count. Build a season this
     way, never with `Season(...)` alone: nothing stores the count, so a season
@@ -83,7 +96,7 @@ def seed_league(session: Session) -> dict[str, Any]:
     players = [
         User(
             name="P1",
-            battleTag="P1#1111",
+            battle_tags=active("P1#1111"),
             discordTag="p1",
             discordId="1",
             race=Race.HU,
@@ -92,7 +105,7 @@ def seed_league(session: Session) -> dict[str, Any]:
         ),
         User(
             name="P2",
-            battleTag="P2#2222",
+            battle_tags=active("P2#2222"),
             discordTag="p2",
             discordId="2",
             race=Race.OC,
@@ -101,7 +114,7 @@ def seed_league(session: Session) -> dict[str, Any]:
         ),
         User(
             name="P3",
-            battleTag="P3#3333",
+            battle_tags=active("P3#3333"),
             discordTag="p3",
             discordId="3",
             race=Race.NE,
@@ -110,7 +123,7 @@ def seed_league(session: Session) -> dict[str, Any]:
         ),
         User(
             name="P4",
-            battleTag="P4#4444",
+            battle_tags=active("P4#4444"),
             discordTag="p4",
             discordId="4",
             race=Race.UD,
@@ -123,18 +136,6 @@ def seed_league(session: Session) -> dict[str, Any]:
 
     session.add_all([season, team_a, team_b, game_map, *players])
     session.flush()
-    # Every real tag has its user_battle_tag row, as the migration backfilled
-    session.add_all(
-        UserBattleTag(
-            user_id=ident(player),
-            tag=player.battleTag,
-            source="signup",
-            is_active=True,
-            first_seen=datetime(2026, 1, 1, tzinfo=UTC),
-            last_seen=datetime(2026, 1, 1, tzinfo=UTC),
-        )
-        for player in players
-    )
 
     # The rounds a week apart, written before the series so each one names its
     # round through the round_link listener the way a live season does
@@ -315,7 +316,7 @@ def add_fantasy_teams(seeded: dict[str, Any], count: int) -> None:
         captains = [
             User(
                 name=f"Extra cap {index}",
-                battleTag=f"ExtraCap{index}#9",
+                battle_tags=active(f"ExtraCap{index}#9"),
                 discordTag=f"extracap{index}",
                 discordId=f"90{index}",
                 race=Race.HU,

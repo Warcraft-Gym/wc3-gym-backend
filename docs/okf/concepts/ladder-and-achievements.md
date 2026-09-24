@@ -4,7 +4,7 @@ title: W3C ladder and achievements
 description: Every ranked 1v1 match of a GNL player is stored once, scored per season on their signup race, and 24 badge rules run as one SQL union.
 resource: ../../../app/services/ladder.py
 tags: [w3champions]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-24T09:42:05Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-24T10:20:55Z }
 sources:
   - id: ladder
     resource: ../../../app/services/ladder.py
@@ -27,7 +27,7 @@ sources:
 
 `w3c_ladder_matches` holds one row per GNL player per ranked 1v1 match, unique on (match id, user). Both the selected race and the rolled race are stored per side, because W3Champions filters on the selected race and Random counts everything. History starts at W3Champions season 23, where GNL S17 began.
 
-The sync reads every [user_battle_tag](../data/tables/user_battle_tag.md) row of a person, active first, and stamps each match with the row in `battle_tag_id`. A person with no tag row syncs the tag `users.battleTag` holds. The stats sync reads the active tag alone. A person with n tags costs n match reads per W3Champions season where a person with one tag costs one.
+The sync reads every [user_battle_tag](../data/tables/user_battle_tag.md) row of a person, active first, and stamps each match with the row in `battle_tag_id`. A person with no tag row has nothing to read, and the stats sync refuses them. The stats sync reads the active tag alone. A person with n tags costs n match reads per W3Champions season where a person with one tag costs one.
 
 `ladder_sync` is the ledger: one row per (player, W3Champions season) with `synced_at` and `complete`. A season is stamped once every tag of the player read it, and complete only when every tag read it to its end. Adding a tag to a person clears their ledger rows. A closed season marked complete is never fetched again; the open season is re-read from its stamp. The season and team "last synced" stamps derive as the earliest stamp across the roster and are never stored on the season.
 

@@ -44,7 +44,7 @@ from app.models.types import utcnow
 from app.models.user import User, UserCreate
 from app.models.user_battle_tag import UserBattleTag
 from app.models.user_team_season import DBUserTeamSeason
-from app.services.battle_tags import people_by_tags
+from app.services.battle_tags import people_by_names, people_by_tags
 from app.services.series import both_scores, in_season
 
 logger = logging.getLogger(__name__)
@@ -64,10 +64,17 @@ class ImportedSeason(NamedTuple):
 
 @dataclass
 class Users:
-    """The users the workbook names, by the id it carries and by folded battle tag."""
+    """The users the workbook names, by the id it carries and by `_key`."""
 
     by_old_id: dict[int, User] = field(default_factory=dict)
     by_tag: dict[str, User] = field(default_factory=dict)
+
+
+def _key(value: UserCreate) -> str:
+    """A row's person: its real tag, else its name, folded."""
+    if is_real_tag(value.battleTag):
+        return folded(value.battleTag)
+    return f"name:{folded(value.name)}"
 
 
 def folded[T](value: T) -> T | str:
@@ -439,7 +446,7 @@ def _player_values(row: Row) -> UserCreate:
         "country": "Country",
     }
     try:
-        return UserCreate(battleTag=row["Battle Tag"], **_cells(row, columns))
+        return UserCreate(battleTag=row.get("Battle Tag") or "", **_cells(row, columns))
     except ValidationError as error:
         missing = ", ".join(str(detail["loc"][0]) for detail in error.errors())
         raise BadRequestError(
@@ -450,13 +457,13 @@ def _player_values(row: Row) -> UserCreate:
 def _players(
     session: OrmSession, sheets: Sheets, season: Season, teams: dict[int, int]
 ) -> Users:
-    """The rostered players, matched by battle tag. A stored player is
-    reused as it stands, so the workbook overwrites no profile. A row signs
+    """The rostered players, matched by battle tag, or a stand-in tag by
+    name. A stored player is reused as it stands, so the workbook overwrites no profile. A row signs
     its player up for the season on the race it carries; a stored signup is
     reused as it stands too."""
-    rows = _rows(sheets["Players"], ["Battle Tag"])
+    rows = _rows(sheets["Players"], ["ID"])
     values = [_player_values(row) for row in rows]
-    users = Users(by_tag=people_by_tags(session, [v.battleTag for v in values]))
+    users = Users(by_tag=_people(session, values))
     _new_people(session, values, users)
 
     signups = {
@@ -469,7 +476,7 @@ def _players(
     }
     roster: set[tuple[int, int]] = set()
     for row, value in zip(rows, values, strict=True):
-        user = users.by_tag[folded(value.battleTag)]
+        user = users.by_tag[_key(value)]
         if ident(user) not in signups:
             signups[ident(user)] = DBUserSeasonSignup(
                 user_id=ident(user),
@@ -646,66 +653,79 @@ def _cast_url(caster: str) -> str:
         return f"https://www.twitch.tv/{caster.strip().lstrip('@').lower()}"
 
 
+def _people(session: OrmSession, values: list[UserCreate]) -> dict[str, User]:
+    """The stored person behind each row, by `_key`. A real tag matches its
+    tag row; a blank or stand-in tag, a person with no tag of the same name."""
+    found = people_by_tags(session, [v.battleTag for v in values])
+    names = [v.name for v in values if not is_real_tag(v.battleTag)]
+    for name, user in people_by_names(session, names).items():
+        found[f"name:{name}"] = user
+    return found
+
+
 def _new_people(session: OrmSession, values: list[UserCreate], users: Users) -> None:
-    """Write a person for every tag no one holds, each with its tag as the
-    active one. A gnl- stand-in Discord id is no login, so it is written null,
-    and so is the stand-in Discord tag the history import paired with it."""
+    """Write a person for every row no one stored: a real tag becomes their
+    active tag, a blank or stand-in tag none. A gnl- stand-in Discord id is no
+    login, so it is written null, and so is the stand-in Discord tag the
+    history import paired with it."""
     written: dict[str, User] = {}
+    tags: dict[str, str] = {}
     for value in values:
-        key = folded(value.battleTag)
+        key = _key(value)
         if key in users.by_tag:
             continue
-        data = value.model_dump()
+        data = value.model_dump(exclude={"battleTag"})
         if data["discordId"] and not has_login(data["discordId"]):
             data["discordId"] = None
             tag = data["discordTag"] or ""
-            if "#GNL" in tag or folded(tag) == key:
+            if "#GNL" in tag or folded(tag) == folded(value.battleTag):
                 data["discordTag"] = None
         users.by_tag[key] = written[key] = User(**data)
+        tags[key] = value.battleTag.strip()
     session.add_all(written.values())
     session.flush()
     now = utcnow()
     # One bulk statement: the tag rows need no ids read back
-    tags = [
+    rows = [
         {
             "user_id": ident(user),
-            "tag": user.battleTag.strip(),
+            "tag": tags[key],
             "source": "sheet",
             "is_active": True,
             "first_seen": now,
             "last_seen": now,
         }
-        for user in written.values()
-        if is_real_tag(user.battleTag)
+        for key, user in written.items()
+        if is_real_tag(tags[key])
     ]
-    if tags:
-        session.execute(insert(UserBattleTag), tags)
+    if rows:
+        session.execute(insert(UserBattleTag), rows)
 
 
 def _fantasy_users(session: OrmSession, sheets: Sheets, users: Users) -> None:
     """The captains and bettors on no roster, mapped before the sheets that
     name them. A stored player is reused as it stands."""
-    rows = _rows(sheets.get("Fantasy Users"), ["ID", "Battle Tag"])
+    rows = _rows(sheets.get("Fantasy Users"), ["ID"])
     values = [
         UserCreate(
-            battleTag=row["Battle Tag"],
+            battleTag=row.get("Battle Tag") or "",
             # A fantasy user plays no series, and the sheet carries no race
             race=Race.RANDOM,
-            name=row.get("Name") or row["Battle Tag"],
+            name=row.get("Name") or row.get("Battle Tag") or "",
             discordTag=row.get("Discord Tag") or "",
             discordId=row.get("Discord ID") or "",
         )
         for row in rows
     ]
-    unknown = [v.battleTag for v in values if folded(v.battleTag) not in users.by_tag]
+    unknown = [v for v in values if _key(v) not in users.by_tag]
     if unknown:
-        users.by_tag |= people_by_tags(session, unknown)
+        users.by_tag |= _people(session, unknown)
     _new_people(session, values, users)
 
     for row, value in zip(rows, values, strict=True):
         old_id = whole_number(row["ID"])
         if old_id is not None:
-            users.by_old_id.setdefault(old_id, users.by_tag[folded(value.battleTag)])
+            users.by_old_id.setdefault(old_id, users.by_tag[_key(value)])
 
 
 def _fantasy_teams(

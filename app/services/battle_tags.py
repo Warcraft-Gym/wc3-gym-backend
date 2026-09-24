@@ -1,9 +1,9 @@
 """Find a person by any battle tag they hold, and attach a tag to a person.
 
 Every way in finds a person through user_battle_tag, so a second tag lands
-on the person who holds it. A stand-in tag has no row and matches on
-users.battleTag. users.battleTag holds a copy of the active tag; only
-set_active_tag writes it for a real tag.
+on the person who holds it. A stand-in tag gets no row: the person holds no
+tag, and an importer finds them again by name. User.battleTag reads the
+active row.
 
 The functions take the caller's session, so they join its transaction.
 """
@@ -24,7 +24,6 @@ from app.models.user_battle_tag import UserBattleTag
 from app.models.w3c_ladder_match import W3CLadderMatch
 
 FOLDED_TAG = func.lower(func.trim(col(UserBattleTag.tag)))
-FOLDED_USER_TAG = func.lower(func.trim(col(User.battleTag)))
 
 
 def tag_row(session: OrmSession, tag: str) -> UserBattleTag | None:
@@ -33,23 +32,39 @@ def tag_row(session: OrmSession, tag: str) -> UserBattleTag | None:
 
 
 def people_by_tags(session: OrmSession, tags: Iterable[str]) -> dict[str, User]:
-    """The person behind each tag, keyed by the folded tag; two statements
-    at most. A real tag matches its user_battle_tag row, a stand-in the
-    users.battleTag it was written with."""
-    wanted = {fold(tag) for tag in tags if tag and tag.strip()}
-    real = {tag for tag in wanted if is_real_tag(tag)}
-    found: dict[str, User] = {}
-    if real:
+    """The person behind each real tag, keyed by the folded tag, in one
+    statement. A stand-in names no one."""
+    real = {fold(tag) for tag in tags if is_real_tag(tag)}
+    if not real:
+        return {}
+    return {
+        folded: user
         for folded, user in session.execute(
             select(FOLDED_TAG, User)
             .join(User, col(User.id) == col(UserBattleTag.user_id))
             .where(FOLDED_TAG.in_(real))
-        ).all():
-            found[folded] = user
-    if stand_ins := wanted - real:
-        for user in session.scalars(select(User).where(FOLDED_USER_TAG.in_(stand_ins))):
-            found[fold(user.battleTag or "")] = user
-    return found
+        ).all()
+    }
+
+
+def people_by_names(session: OrmSession, names: Iterable[str]) -> dict[str, User]:
+    """The people who hold no tag, keyed by the folded name, in one statement.
+    The lowest id wins a repeated name."""
+    wanted = {fold(name) for name in names if name and name.strip()}
+    if not wanted:
+        return {}
+    tagless = (
+        select(User)
+        .where(
+            func.lower(func.trim(col(User.name))).in_(wanted),
+            ~select(col(UserBattleTag.id))
+            .where(col(UserBattleTag.user_id) == col(User.id))
+            .exists(),
+        )
+        .order_by(desc(col(User.id)))
+    )
+    # ponytail: the name is the key, so a renamed name-only person is new to the next import
+    return {fold(user.name): user for user in session.scalars(tagless)}
 
 
 def person_by_tag(session: OrmSession, tag: str) -> User | None:
@@ -58,7 +73,7 @@ def person_by_tag(session: OrmSession, tag: str) -> User | None:
 
 
 def set_active_tag(session: OrmSession, user: User, row: UserBattleTag) -> None:
-    """Make the row the person's active tag; users.battleTag follows."""
+    """Make the row the person's active tag; User.battleTag follows."""
     session.execute(
         update(UserBattleTag)
         .where(
@@ -70,7 +85,8 @@ def set_active_tag(session: OrmSession, user: User, row: UserBattleTag) -> None:
     )
     row.is_active = True
     row.last_seen = utcnow()
-    user.battleTag = row.tag
+    session.flush()
+    session.expire(user, ["battleTag"])
 
 
 def attach_tag(
@@ -82,13 +98,12 @@ def attach_tag(
 ) -> UserBattleTag | None:
     """Give the person this tag and, by default, make it active.
 
-    A stand-in tag gets no row; it is written to users.battleTag as it is.
+    A stand-in tag gets no row and changes nothing.
     A tag another person holds answers 409. A tag new to a person clears
     their ladder ledger, so the next sync reads the new tag's seasons too.
     """
     text = tag.strip()
     if not is_real_tag(text):
-        user.battleTag = text
         return None
     session.flush()
     row = tag_row(session, text)
@@ -123,7 +138,7 @@ def move_tag(session: OrmSession, row: UserBattleTag, to: User, source: str) -> 
     """Give a tag row to another person, with the games fetched under it.
 
     When the row was active, the owner's newest other tag becomes active, or
-    none and users.battleTag is null. The row is active on its new person only
+    none and User.battleTag reads null. The row is active on its new person only
     when they had no active tag. Both ladder ledgers clear, so the next sync
     reads each person's tags again.
     """
@@ -141,11 +156,9 @@ def move_tag(session: OrmSession, row: UserBattleTag, to: User, source: str) -> 
             .order_by(desc(col(UserBattleTag.last_seen)), desc(col(UserBattleTag.id)))
         ).first()
         if newest is None:
-            owner.battleTag = None
+            session.expire(owner, ["battleTag"])
         else:
             set_active_tag(session, owner, newest)
-        # users.battleTag is unique, so the owner lets go before the new person takes it
-        session.flush()
     held = select(col(W3CLadderMatch.w3c_match_id)).where(
         col(W3CLadderMatch.user_id) == ident(to)
     )
