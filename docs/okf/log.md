@@ -1,5 +1,9 @@
 # Bundle history
 
+## 2026-09-24
+
+* **Update**: the users table states how a row is made: each way in, the key it looks a player up by, that a login makes no row, and the stand-in values a row with no known tag or Discord id carries.
+
 ## 2026-09-23
 
 * **Fix**: the guild role, member or guest, is kept per process for one minute; the authentication page said nothing about membership was cached.
