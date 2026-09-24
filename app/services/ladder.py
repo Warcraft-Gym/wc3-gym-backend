@@ -22,6 +22,7 @@ from sqlalchemy import (
     distinct,
     extract,
     func,
+    or_,
     select,
     tuple_,
     update,
@@ -56,6 +57,7 @@ from app.models.team import Team
 from app.models.team_season import DBTeamSeason
 from app.models.types import utcnow
 from app.models.user import User, UserReduced
+from app.models.user_battle_tag import UserBattleTag
 from app.models.user_team_season import DBUserTeamSeason
 from app.models.w3c_ladder_match import (
     LadderDay,
@@ -556,15 +558,28 @@ class LadderService:
         plan: _Plan,
     ) -> None:
         """Sync this player: his w3champions stats, then the matches he still
-        owes the plan.
+        owes the plan, under every tag he holds.
 
-        A throttle part way through the plan still writes the seasons read
+        The stats and the MMR come from the active tag alone. Each tag's
+        matches are stamped with it, so the totals add up across tags. A
+        throttle part way through the plan still writes the seasons read
         before it, and then refuses the player.
         """
         # One worker per player, so the stats and the matches are one sync
         self.user_app_service.update_w3c_stats(user)
 
         with Session.begin() as session:
+            # A person with no tag row syncs the tag users.battleTag holds
+            tags: list[tuple[int | None, str]] = [
+                (row.id, row.tag)
+                for row in session.execute(
+                    select(col(UserBattleTag.id), col(UserBattleTag.tag))
+                    .where(col(UserBattleTag.user_id) == user.id)
+                    .order_by(
+                        col(UserBattleTag.is_active).desc(), col(UserBattleTag.id)
+                    )
+                )
+            ] or ([(None, user.battleTag)] if user.battleTag else [])
             ledger = {
                 row.wc3_season: row
                 for row in session.execute(
@@ -577,43 +592,57 @@ class LadderService:
                 )
             }
 
-        if not user.battleTag:
+        if not tags:
             raise BadRequestError(f"User {user.id} has no battle tag to sync")
-        throttled: W3CThrottledError | None = None
-        try:
-            if plan.seasons is None:
-                matches, complete = w3c_service.walk_player_matches(
-                    user.battleTag, plan.walk_from, plan.since, FIRST_W3C_SEASON
-                )
-            else:
-                wanted = []
-                for season in plan.seasons:
-                    row = ledger.get(season)
-                    is_open = season == plan.open_season
-                    if not _read_to_the_end(row, is_open, plan.since):
-                        wanted.append((season, _since_of(row, is_open, plan.since)))
-                matches, complete = w3c_service.get_player_matches(
-                    user.battleTag, wanted
-                )
-        except W3CThrottledError as refusal:
-            # The seasons read before the refusal are written and stamped, so
-            # the next run asks for the ones it never reached
-            if refusal.fetched is None:
-                raise
-            matches, complete = refusal.fetched
-            throttled = refusal
+        wanted = []
+        for season in plan.seasons or ():
+            row = ledger.get(season)
+            is_open = season == plan.open_season
+            if not _read_to_the_end(row, is_open, plan.since):
+                wanted.append((season, _since_of(row, is_open, plan.since)))
 
-        # A worker writes this player alone; writing the opponent's rows too
-        # made two workers order the same users in reverse and deadlock
-        tag = user.battleTag.lower()
-        own = [row for row in matches if row.battleTag.lower() == tag]
+        throttled: W3CThrottledError | None = None
+        # The ledger is per person: a season is read once every tag read it
+        complete: dict[int, bool] | None = None
+        own: list[tuple[int | None, list[W3CLadderMatchCreate]]] = []
+        for tag_id, tag in tags:
+            try:
+                if plan.seasons is None:
+                    matches, done = w3c_service.walk_player_matches(
+                        tag, plan.walk_from, plan.since, FIRST_W3C_SEASON
+                    )
+                else:
+                    matches, done = w3c_service.get_player_matches(tag, wanted)
+            except W3CThrottledError as refusal:
+                # The seasons read before the refusal are written and stamped,
+                # so the next run asks for the ones it never reached
+                if refusal.fetched is None and not own:
+                    raise
+                matches, done = refusal.fetched or ([], {})
+                throttled = refusal
+            # A worker writes this player alone; writing the opponent's rows
+            # too made two workers order the same users in reverse and deadlock
+            folded = tag.lower()
+            own.append((tag_id, [m for m in matches if m.battleTag.lower() == folded]))
+            complete = (
+                done
+                if complete is None
+                else {
+                    season: finished and done[season]
+                    for season, finished in complete.items()
+                    if season in done
+                }
+            )
+            if throttled is not None:
+                break
 
         stamp = utcnow()
         with Session.begin() as session:
-            self._write_matches(session, user.id, own)
+            for tag_id, rows in own:
+                self._write_matches(session, user.id, rows, tag_id)
             # The ledger names the seasons this run read; a skipped one keeps
             # the stamp of the run that read it
-            for season, done in complete.items():
+            for season, done in (complete or {}).items():
                 self._stamp(session, user.id, season, stamp, done, plan.since)
             # The stamp says when the app last asked, not that matches were found
             session.execute(
@@ -658,9 +687,14 @@ class LadderService:
             row.read_from = read_from
 
     def _write_matches(
-        self, session: OrmSession, user_id: int, rows: list[W3CLadderMatchCreate]
+        self,
+        session: OrmSession,
+        user_id: int,
+        rows: list[W3CLadderMatchCreate],
+        battle_tag_id: int | None = None,
     ) -> None:
-        """Insert the matches this player has no row for yet, in bulk.
+        """Insert the matches this player has no row for yet, in bulk, each
+        stamped with the tag it was fetched under.
 
         ON CONFLICT DO NOTHING skips a match already stored, one repeated in
         the batch and one a concurrent run wrote first; any other integrity
@@ -669,7 +703,9 @@ class LadderService:
         dialect = session.get_bind().dialect.name
         insert = pg_insert if dialect == "postgresql" else sqlite_insert
         values = [
-            row.model_dump(exclude={"battleTag"}) | {"user_id": user_id} for row in rows
+            row.model_dump(exclude={"battleTag"})
+            | {"user_id": user_id, "battle_tag_id": battle_tag_id}
+            for row in rows
         ]
         for start in range(0, len(values), WRITE_CHUNK):
             session.execute(
@@ -707,6 +743,7 @@ def mmr_on(
         col(W3CLadderMatch.user_id).in_(user_ids),
         col(W3CLadderMatch.mmr_before).is_not(None),
         col(W3CLadderMatch.mmr_after).is_not(None),
+        _active_tag(),
     ]
     key = (col(W3CLadderMatch.user_id), col(W3CLadderMatch.race))
     before = (
@@ -963,6 +1000,17 @@ def _totals(session: OrmSession, scope: list[ColumnElement[bool]]) -> dict[int, 
     return {row.user_id: row for row in rows}
 
 
+def _active_tag() -> ColumnElement[bool]:
+    """A match fetched under its person's active tag. The MMR reads only
+    these; an unstamped match counts as the active tag's."""
+    return or_(
+        col(W3CLadderMatch.battle_tag_id).is_(None),
+        col(W3CLadderMatch.battle_tag_id).in_(
+            select(col(UserBattleTag.id)).where(col(UserBattleTag.is_active))
+        ),
+    )
+
+
 def _mmr_span(session: OrmSession, scope: list[ColumnElement[bool]]) -> dict[int, Row]:
     """Where every player's MMR opened, its range, and where it stands.
 
@@ -970,7 +1018,7 @@ def _mmr_span(session: OrmSession, scope: list[ColumnElement[bool]]) -> dict[int
     match, at either end, so the span runs from the first rated match to the
     last and a player still placing has none at all.
     """
-    rated = [*scope, col(W3CLadderMatch.mmr_before).is_not(None)]
+    rated = [*scope, col(W3CLadderMatch.mmr_before).is_not(None), _active_tag()]
     ordered = (
         select(
             col(W3CLadderMatch.user_id).label("user_id"),
@@ -1025,7 +1073,10 @@ def _utc(
 def _per_day(
     session: OrmSession, scope: list[ColumnElement[bool]]
 ) -> dict[int, list[Row]]:
-    """Every player's days in order, with the MMR he opened and closed each on."""
+    """Every player's days in order, with the MMR he opened and closed each on.
+
+    ponytail: the day MMR reads every tag; filter it to the active tag if a
+    player's two tags ever play on one day."""
     day = func.date(_utc(session, col(W3CLadderMatch.start_time)))
     ordered = (
         select(

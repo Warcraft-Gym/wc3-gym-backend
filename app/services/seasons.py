@@ -512,9 +512,14 @@ class SeasonService:
             return _public(session, season)
 
     def add_user_signup(
-        self, season_id: int, user_ids: list[int], race: str
+        self,
+        season_id: int,
+        user_ids: list[int],
+        race: str,
+        played_as: str | None = None,
     ) -> SeasonPublic:
-        """Sign these users up, all on the race the caller names."""
+        """Sign these users up, all on the race the caller names. played_as is
+        the tag a member typed; a signup already stored keeps its own."""
         with Session.begin() as session:
             season = session.get(Season, season_id)
             if not season:
@@ -529,7 +534,10 @@ class SeasonService:
                     with session.begin_nested():
                         session.add(
                             DBUserSeasonSignup(
-                                season=season, user=user, race=signup_race
+                                season=season,
+                                user=user,
+                                race=signup_race,
+                                played_as=played_as,
                             )
                         )
                 except IntegrityError:
@@ -629,6 +637,7 @@ class SeasonService:
                         user_public.signup_race = (
                             signup.race.value if signup.race else None
                         )
+                        user_public.played_as = signup.played_as
                         # A season allocated before it had an Apply date stored every
                         # tier, so those read as the allocation, not as pins
                         user_public.fantasy_tier_pinned = (

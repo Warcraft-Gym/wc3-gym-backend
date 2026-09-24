@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Annotated, Self
 
 from sqlalchemy import Index, text
+from sqlalchemy.orm.attributes import instance_state
 from sqlmodel import Field, Relationship, SQLModel
 
 from app.models.base import DBModel, PublicModel, ident
@@ -17,6 +18,7 @@ from app.models.types import (
     UTCDateTime,
     YouTubeChannel,
 )
+from app.models.user_battle_tag import UserBattleTag, UserBattleTagPublic
 from app.models.user_team_season import UserTeamSeasonStatsPublic
 from app.models.w3c_stats import W3CStats, W3CStatsPublic
 
@@ -91,6 +93,13 @@ class User(UserBase, DBModel, table=True):
         back_populates="user", sa_relationship_kwargs={"cascade": "all, delete"}
     )
     career_stats: list["PlayerCareerStats"] = Relationship(back_populates="user")
+    # Every tag the person played under, the active one first
+    battle_tags: list[UserBattleTag] = Relationship(
+        sa_relationship_kwargs={
+            "cascade": "all, delete",
+            "order_by": "(UserBattleTag.is_active.desc(), UserBattleTag.id)",
+        }
+    )
 
 
 class UserCreate(UserBase):
@@ -189,12 +198,17 @@ class UserListPublic(UserReduced):
     signup_seasons: Annotated[list[SeasonPublic], NoneToList] = []
     # The race and tier of one signup, filled by the signups answer of a single season
     signup_race: Annotated[str | None, EnumValue] = None
+    # The tag of that signup, null when it names none
+    played_as: str | None = None
     fantasy_tier: int | None = None
     # Set by hand on the signup row; an unpinned tier derives from the MMR
     fantasy_tier_pinned: bool = False
     draft_position: int | None = None
     # An admin took the player out of the pick list of the season
     draft_excluded: bool = False
+    # Every tag the person holds, the active one first; empty where the read
+    # loads no tags
+    tags: Annotated[list[UserBattleTagPublic], NoneToList] = []
 
     @classmethod
     def from_user(cls, user: User) -> Self:
@@ -203,9 +217,14 @@ class UserListPublic(UserReduced):
             W3CStatsPublic.model_validate(stat) for stat in (user.w3c_stats or [])
         ]
         row.signup_seasons = [
-            SeasonPublic.from_season_reduced(signup.season, signup.race)
+            SeasonPublic.from_season_reduced(
+                signup.season, signup.race, signup.played_as
+            )
             for signup in (user.signup_seasons or [])
         ]
+        # A read that did not load the tags leaves them empty, never lazy loads
+        if "battle_tags" not in instance_state(user).unloaded:
+            row.tags = [UserBattleTagPublic.from_row(tag) for tag in user.battle_tags]
         return row
 
 

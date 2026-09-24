@@ -260,11 +260,31 @@ def clear_kept_off_race(session: Session, row: Series) -> None:
 def fill_user_signup_races(
     session: Session, pairs: Iterable[tuple[UserListPublic, int | None]]
 ) -> None:
-    """Fill the signup race of every player for the season he is named with."""
+    """Fill the signup race and the played-as tag of every player for the
+    season he is named with, in one statement."""
     named = [(player, season_id) for player, season_id in pairs if season_id]
-    races = _signup_races(session, {(player.id, season) for player, season in named})
+    keys = {(player.id, season) for player, season in named}
+    rows = (
+        session.execute(
+            select(
+                col(DBUserSeasonSignup.user_id),
+                col(DBUserSeasonSignup.season_id),
+                col(DBUserSeasonSignup.race),
+                col(DBUserSeasonSignup.played_as),
+            ).where(
+                tuple_(
+                    col(DBUserSeasonSignup.user_id), col(DBUserSeasonSignup.season_id)
+                ).in_(keys)
+            )
+        ).all()
+        if keys
+        else []
+    )
+    signed = {(row[0], row[1]): row for row in rows}
     for player, season_id in named:
-        player.signup_race = races.get((player.id, season_id))
+        row = signed.get((player.id, season_id))
+        player.signup_race = row.race.value if row and row.race else None
+        player.played_as = row.played_as if row else None
 
 
 def fill_signup_races(

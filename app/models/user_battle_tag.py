@@ -5,12 +5,12 @@ row is the account the sites show; users.battleTag holds a copy of its tag.
 """
 
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Self
 
 from sqlalchemy import Index, text
 from sqlmodel import Field, SQLModel
 
-from app.models.base import DBModel
+from app.models.base import DBModel, ident
 from app.models.types import AwareUTC, UTCDateTime, utcnow
 
 
@@ -45,3 +45,28 @@ class UserBattleTag(UserBattleTagBase, DBModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     user_id: int = Field(index=True, foreign_key="users.id", ondelete="CASCADE")
+
+
+class UserBattleTagPublic(SQLModel):
+    """One tag of a person, as every user read sends it."""
+
+    id: int
+    tag: str
+    # A Battle.net link proved the tag
+    verified: bool
+    active: bool
+    source: str
+    first_seen: datetime
+    last_seen: datetime
+
+    @classmethod
+    def from_row(cls, row: UserBattleTag) -> Self:
+        return cls(
+            id=ident(row),
+            tag=row.tag,
+            verified=row.bnet_account_id is not None,
+            active=row.is_active,
+            source=row.source,
+            first_seen=row.first_seen,
+            last_seen=row.last_seen,
+        )

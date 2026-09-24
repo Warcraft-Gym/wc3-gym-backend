@@ -533,15 +533,17 @@ def test_career_options_cover_the_player_graph(league: dict[str, Any]) -> None:
     assert not hasattr(public.user, "w3c_stats")
 
 
-def test_the_user_list_costs_three_statements(league: dict[str, Any]) -> None:
-    """The count, the users with their W3C rows, and one statement for every
-    signup on the page. A signup read per user cost one round trip each."""
+def test_the_user_list_costs_four_statements(league: dict[str, Any]) -> None:
+    """The count, the users with their W3C rows, one statement for every
+    signup on the page and one for every tag. A signup read per user cost one
+    round trip each."""
     service = UserService()
     with count_statements() as tally:
         users, total = service.get_all(limit=50)
     assert total == len(users) == len(league["player_ids"])
     assert all(len(user.signup_seasons) == 1 for user in users)
-    assert tally[0] == 3
+    assert all(len(user.tags) == 1 for user in users)
+    assert tally[0] == 4
 
 
 def test_the_caller_lookup_costs_one_statement(league: dict[str, Any]) -> None:
@@ -585,7 +587,8 @@ ROWS_PER_CALL = {
     "/stats/career": 8,
     "/stats/career/{player_id}": 6,
     "/events/{season_id}/teams": 55,
-    "/users": 37,
+    # One tag row per player
+    "/users": 41,
     "/users/{player_id}": 14,
     "/events": 7,
 }

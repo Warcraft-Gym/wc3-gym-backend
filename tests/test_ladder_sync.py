@@ -27,6 +27,7 @@ from app.models.ladder_sync import LadderSync
 from app.models.relationships import DBUserSeasonSignup
 from app.models.season import Season
 from app.models.user import User, UserCreate, UserReduced
+from app.models.user_battle_tag import UserBattleTag
 from app.models.user_team_season import DBUserTeamSeason
 from app.models.w3c_ladder_match import W3CLadderMatch, W3CLadderMatchCreate
 from app.models.w3c_stats import W3CStats, W3CStatsCreate
@@ -126,6 +127,16 @@ def at(match_id: str, season: int, when: datetime) -> dict[str, Any]:
         "season": season,
         "startTime": when.replace(tzinfo=UTC).isoformat(),
     }
+
+
+def retag(session: OrmSession, user_id: int, tag: str) -> None:
+    """Rename a seeded player's active tag, and its copy on users."""
+    session.get_one(User, user_id).battleTag = tag
+    session.scalars(
+        select(UserBattleTag).where(
+            col(UserBattleTag.user_id) == user_id, col(UserBattleTag.is_active)
+        )
+    ).one().tag = tag
 
 
 def add_player(name: str, battle_tag: str) -> UserReduced:
@@ -708,6 +719,7 @@ def test_a_database_error_names_its_class(
         session: OrmSession,
         user_id: int,
         rows: list[W3CLadderMatchCreate],
+        battle_tag_id: int | None = None,
     ) -> None:
         raise IntegrityError("statement", {}, Exception("duplicate key"))
 
@@ -766,7 +778,7 @@ def test_the_ladder_sync_route_stores_the_matches_of_the_signups(
     """The window starts at the season start date, so the chunk backfills."""
     player = seeded["player_ids"][0]
     with Session() as session:
-        session.get(User, player).battleTag = "thanks#11187"
+        retag(session, player, "thanks#11187")
         session.commit()
     client.post(
         f"/events/{seeded['season_id']}/signups",
@@ -865,7 +877,7 @@ def test_one_sync_writes_the_stats_and_the_matches_of_a_player(
     """One press per player: his MMR row and his ladder rows in one worker."""
     player = seeded["player_ids"][0]
     with Session() as session:
-        session.get(User, player).battleTag = "thanks#11187"
+        retag(session, player, "thanks#11187")
         session.commit()
     sign_up(seeded["season_id"], player)
     serve(monkeypatch, {W3C_SEASON: THANKS[:2]})
@@ -903,8 +915,7 @@ def test_the_single_player_route_syncs_the_season_running_today(
     player = seeded["player_ids"][0]
     today = datetime.now(UTC).date()
     with Session() as session:
-        user = session.get(User, player)
-        user.battleTag = "thanks#11187"
+        retag(session, player, "thanks#11187")
         season = session.get(Season, seeded["season_id"])
         season.start_date = today - timedelta(days=1)
         season.end_date = today + timedelta(days=1)

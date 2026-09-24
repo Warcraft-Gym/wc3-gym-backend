@@ -250,10 +250,12 @@ def public_create_user(
                 discordId=entry.get("discord_id"),
                 discordTag=discord_tag,
             ),
+            source="signup",
         )
     else:
         user = user_service.add(
-            user_create.model_copy(update={"discordTag": discord_tag})
+            user_create.model_copy(update={"discordTag": discord_tag}),
+            source="signup",
         )
 
     # Add to season if specified, on the race the form names
@@ -264,7 +266,10 @@ def public_create_user(
         season = season_service.get(int(season_id))
         if season.phase == "open" and season.signups_open:
             season_service.add_user_signup(
-                int(season_id), [user.id], user_create.race.value
+                int(season_id),
+                [user.id],
+                user_create.race.value,
+                played_as=user_create.battleTag.strip(),
             )
         else:
             closed = (
@@ -735,7 +740,7 @@ def update_user_info(
             f"BattleNet name '{tag}' is not valid - no W3Champions stats found"
         )
 
-    user = user_service.update(users[0].id, UserUpdate(**fields))
+    user = user_service.update(users[0].id, UserUpdate(**fields), source="signup")
     if tag:
         try:  # a refused sync must not fail the edit
             user_service.update_w3c_stats_by_id(user.id)
@@ -802,7 +807,7 @@ def create_fantasy_team(
             "race": "RANDOM",
         }
 
-        user = user_service.add(UserCreate(**user_payload))
+        user = user_service.add(UserCreate(**user_payload), source="signup")
         logger.info(f"Created new user for fantasy team captain: {user.id}")
     else:
         user = users[0]

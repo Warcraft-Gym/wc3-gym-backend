@@ -269,7 +269,7 @@ def test_a_meeting_carries_the_fixed_map_and_the_picks(
     assert meeting["maps"] == ["Concealed Hill", "Echo Isles"]
 
 
-def test_a_player_with_no_history_answers_two_empty_lists(
+def test_a_player_with_no_history_answers_empty_lists(
     client: Client, seeded: dict[str, Any], member: Callable[..., dict[str, str]]
 ) -> None:
     from app.core.db import Session
@@ -291,15 +291,16 @@ def test_a_player_with_no_history_answers_two_empty_lists(
     resp = client.get("/player-history", headers=member("9"))
 
     assert resp.status_code == 200, resp.text
-    assert resp.json() == {"events": [], "opponents": []}
+    assert resp.json() == {"events": [], "opponents": [], "captain_of": []}
 
 
-def test_the_answer_costs_ten_statements_however_long_the_career(
+def test_the_answer_costs_eleven_statements_however_long_the_career(
     seeded: dict[str, Any],
 ) -> None:
     """HARD GATE: neither block loops. One season and one opponent cost what
     two seasons and two opponents cost. The ninth statement is the entrant
-    read that carries the events outside GNL, the tenth the GNL signup read."""
+    read that carries the events outside GNL, the tenth the GNL signup read,
+    the eleventh the captain seats."""
     from app.services.player_history import history
     from tests.test_query_budget import count_statements
 
@@ -309,7 +310,7 @@ def test_the_answer_costs_ten_statements_however_long_the_career(
     with count_statements() as two_seasons:
         history(seeded["player_ids"][0])
 
-    assert one_season[0] == two_seasons[0] == 10
+    assert one_season[0] == two_seasons[0] == 11
 
 
 def test_an_unknown_player_answers_404(
@@ -341,7 +342,7 @@ def test_the_history_of_an_unknown_id_is_empty(
     resp = client.get("/users/404404/history")
 
     assert resp.status_code == 200, resp.text
-    assert resp.json() == {"events": [], "opponents": []}
+    assert resp.json() == {"events": [], "opponents": [], "captain_of": []}
 
 
 def _signup_race(season_id: int, user_id: int, race: object) -> None:

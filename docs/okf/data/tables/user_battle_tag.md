@@ -4,8 +4,8 @@ title: user_battle_tag
 description: One battle tag a person has played under; a tag names at most one person, and each person has at most one active tag.
 resource: ../../../../app/models/user_battle_tag.py
 tags: [auth, data]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-24T09:19:27Z }
-verified: { by: process:test_okf, at: 2026-09-24T09:20:16Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-24T09:42:05Z }
+verified: { by: process:test_okf, at: 2026-09-24T09:51:01Z }
 sources:
   - id: model
     resource: ../../../../app/models/user_battle_tag.py
@@ -13,6 +13,12 @@ sources:
   - id: migration
     resource: ../../../../migrations/versions/e07324d2b4f9_add_the_user_battle_tag_table.py
     title: The table and its backfill from users
+  - id: service
+    resource: ../../../../app/services/battle_tags.py
+    title: The lookup by tag and the attach step
+  - id: rule
+    resource: ../../../../app/core/battle_tags.py
+    title: Which tags are real
 ---
 
 # Schema
@@ -37,5 +43,8 @@ Pointed at by [w3c_ladder_matches](w3c_ladder_matches.md) `battle_tag_id`.
 # Rules
 
 - A person holds many tags. A season signup records the tag of that season in `user_season_signup.played_as`; see [user_season_signup](user_season_signup.md).
-- `users.battleTag` holds a copy of the active row's tag.
-- A real tag is `Name#digits`. Importer stand-ins get no row: a tag ending `#GNL` and two digits, a tag that begins `Fantasy_User#` or `Review#`, and a tag with no `#`.
+- `users.battleTag` holds a copy of the active row's tag. `set_active_tag` in `app/services/battle_tags.py` writes the flag and the copy together.
+- Every way in finds a person by any of their tags through this table: the member signup, an `anyone` entrant, the Twitch chat signup and withdraw, the workbook import and `GET /users/{key}`. See [users](users.md).
+- A new person gets one active row. A tag new to an existing person is added and becomes active; the old rows stay. Adding a tag clears the person's [ladder_sync](ladder_sync.md) rows, so the next sync reads the new tag's seasons.
+- The ladder sync reads the matches of every row and stamps each match with the row it came under. The MMR reads use only the matches of the active row; games, wins, losses and points add up across rows. See [ladder and achievements](../../concepts/ladder-and-achievements.md).
+- A real tag is `Name#digits`. Importer stand-ins get no row: a tag ending `#GNL` and two digits, a tag that begins `Fantasy_User#` or `Review#`, and a tag with no `#`. The rule lives in `app/core/battle_tags.py`; the migration keeps a frozen copy, and a test pins the two together.

@@ -10,7 +10,7 @@ career stats row per player on team A, one map in the season pool, one
 active KOTH event.
 """
 
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -32,6 +32,7 @@ from app.models.settings import Settings
 from app.models.team import Team
 from app.models.team_season import DBTeamSeason
 from app.models.user import User
+from app.models.user_battle_tag import UserBattleTag
 from app.models.user_team_season import DBUserTeamSeason
 
 
@@ -122,6 +123,18 @@ def seed_league(session: Session) -> dict[str, Any]:
 
     session.add_all([season, team_a, team_b, game_map, *players])
     session.flush()
+    # Every real tag has its user_battle_tag row, as the migration backfilled
+    session.add_all(
+        UserBattleTag(
+            user_id=ident(player),
+            tag=player.battleTag,
+            source="signup",
+            is_active=True,
+            first_seen=datetime(2026, 1, 1, tzinfo=UTC),
+            last_seen=datetime(2026, 1, 1, tzinfo=UTC),
+        )
+        for player in players
+    )
 
     # The rounds a week apart, written before the series so each one names its
     # round through the round_link listener the way a live season does

@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session as OrmSession
 from sqlalchemy.orm import joinedload, noload, selectinload
 from sqlmodel import col
 
+from app.core.battle_tags import has_login
 from app.core.db import Session, rel
 from app.core.exceptions import (
     ApiError,
@@ -34,6 +35,7 @@ from app.models.w3c_stats import (
     W3CStatsCreate,
 )
 from app.services import derived
+from app.services.battle_tags import attach_tag, person_by_tag
 from app.services.w3c import REQUEST_TIMEOUT, W3CService
 
 if TYPE_CHECKING:
@@ -55,6 +57,7 @@ _LIST_OPTIONS = (
     noload(rel(User.team_seasons)),
     joinedload(rel(User.w3c_stats)),
     selectinload(rel(User.signup_seasons)).joinedload(rel(DBUserSeasonSignup.season)),
+    selectinload(rel(User.battle_tags)),
 )
 
 
@@ -70,16 +73,26 @@ class UserService:
     def __init__(self, settings_app_service: "SettingsService | None" = None) -> None:
         self.settings_app_service = settings_app_service
 
-    def add(self, user: UserCreate) -> UserPublic:
+    def add(self, user: UserCreate, source: str = "admin") -> UserPublic:
+        """A new person, and their tag as the active one."""
         with Session.begin() as session:
             row = User.add(session, user.model_dump())
+            attach_tag(session, row, user.battleTag, source)
             return _public(session, row)
 
-    def update(self, user_id: int, user: UserUpdate) -> UserPublic:
+    def update(
+        self, user_id: int, user: UserUpdate, source: str = "admin"
+    ) -> UserPublic:
+        """Change the fields sent. A tag sent becomes the active one; a tag
+        the person held before stays theirs."""
+        fields = user.model_dump(exclude_unset=True)
+        tag = fields.pop("battleTag", None)
         with Session.begin() as session:
-            row = User.update(session, user_id, **user.model_dump(exclude_unset=True))
+            row = User.update(session, user_id, **fields)
             if not row:
                 raise NotFoundError("User not found")
+            if tag:
+                attach_tag(session, row, tag, source)
             return _public(session, row)
 
     def set_avatar(self, user_id: int, avatar_url: str | None) -> None:
@@ -141,16 +154,17 @@ class UserService:
             row.banned_at = utcnow() if banned else None
 
     def get(self, key: int | str) -> UserPublic:
-        """One user by id, or by battle tag when the key is not all digits.
+        """One user by id, or by any tag they hold when the key is not all digits.
 
         A battle tag always carries a `#`, so the two never collide.
         """
         key = str(key).strip()
-        if key.isdecimal():
-            where = col(User.id) == int(key)
-        else:
-            where = func.lower(func.trim(col(User.battleTag))) == key.lower()
         with Session.begin() as session:
+            if key.isdecimal():
+                user_id: int | None = int(key)
+            else:
+                held = person_by_tag(session, key)
+                user_id = held.id if held is not None else None
             # Eager load related entities, disable nested loading
             user = (
                 session.scalars(
@@ -158,8 +172,12 @@ class UserService:
                     .options(
                         joinedload(rel(User.team_seasons)).noload("*"),
                         joinedload(rel(User.w3c_stats)),
+                        selectinload(rel(User.signup_seasons)).joinedload(
+                            rel(DBUserSeasonSignup.season)
+                        ),
+                        selectinload(rel(User.battle_tags)),
                     )
-                    .where(where)
+                    .where(col(User.id) == user_id)
                 )
                 .unique()
                 .first()
@@ -214,12 +232,7 @@ class UserService:
             own = session.scalars(
                 select(User).where(col(User.discordId) == discord_id)
             ).first()
-            tagged = session.scalars(
-                select(User).where(
-                    func.lower(func.trim(col(User.battleTag)))
-                    == battle_tag.strip().lower()
-                )
-            ).first()
+            tagged = person_by_tag(session, battle_tag)
             named = session.scalars(
                 select(User).where(
                     func.lower(func.trim(col(User.discordTag)))
@@ -228,7 +241,7 @@ class UserService:
             ).first()
             link = {"discord_id": discord_id, "battle_tag": battle_tag}
             if tagged is not None and (own is None or tagged.id != own.id):
-                if _has_login(tagged):
+                if has_login(tagged.discordId):
                     raise ApiError(
                         409,
                         {
@@ -251,7 +264,7 @@ class UserService:
             row = own or tagged
             if (
                 named is not None
-                and not _has_login(named)
+                and not has_login(named.discordId)
                 and (row is None or named.id != row.id)
             ):
                 raise ApiError(
@@ -405,10 +418,3 @@ class UserService:
     def update_w3c_stats_by_id(self, user_id: int) -> UserPublic:
         self.update_w3c_stats(self.get(user_id))
         return self.get(user_id)
-
-
-def _has_login(user: User) -> bool:
-    """A row someone logged in as: a Discord id that is neither blank nor the
-    history import's gnl- stand-in."""
-    discord_id = (user.discordId or "").strip()
-    return bool(discord_id) and not discord_id.startswith("gnl-")
