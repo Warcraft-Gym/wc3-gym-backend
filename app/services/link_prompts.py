@@ -261,7 +261,8 @@ def open_for(session: OrmSession, user: User) -> list[LinkPromptPublic]:
         seasons[user_id].append(name)
     out: list[LinkPromptPublic] = []
     shown: set[int] = set()
-    for p in candidates:
+    # a suggestion naming the tag reads better than one on the Discord name
+    for p in sorted(candidates, key=lambda p: p.tag is None):
         if p.kind == "taken":
             out.append(LinkPromptPublic(id=ident(p), kind="taken", tag=p.tag))
             continue
@@ -286,7 +287,8 @@ def open_for(session: OrmSession, user: User) -> list[LinkPromptPublic]:
 
 def answer(session: OrmSession, user: User, prompt_id: int, accept: bool) -> None:
     """The login's answer to one of its open prompts. Accepting a suggestion
-    joins the player, unverified; anything else closes the prompt."""
+    joins the player, unverified; anything else closes the prompt, and a
+    dismissed player's other suggestions to this login with it."""
     prompt = next((p for p in open_for(session, user) if p.id == prompt_id), None)
     if prompt is None:
         raise NotFoundError(f"No open prompt {prompt_id} on your profile")
@@ -296,8 +298,17 @@ def answer(session: OrmSession, user: User, prompt_id: int, accept: bool) -> Non
         _close(session, col(LinkPrompt.id) == prompt_id, "accepted")
         join(session, person, user)
         return
-    _close(
-        session,
-        col(LinkPrompt.id) == prompt_id,
-        "dismissed" if prompt.kind == "suggest" else "seen",
-    )
+    if prompt.kind != "suggest":
+        _close(session, col(LinkPrompt.id) == prompt_id, "seen")
+        return
+    # the sheet's tag and its Discord name can both name the player: one answer
+    same = session.scalars(
+        select(LinkPrompt).where(
+            col(LinkPrompt.kind) == "suggest",
+            col(LinkPrompt.closed_at).is_(None),
+            col(LinkPrompt.person_id) == prompt.person_id,
+        )
+    ).all()
+    to = _recipients(session, list(same))
+    ids = [ident(p) for p in same if to[ident(p)] == ident(user)]
+    _close(session, col(LinkPrompt.id).in_(ids), "dismissed")
