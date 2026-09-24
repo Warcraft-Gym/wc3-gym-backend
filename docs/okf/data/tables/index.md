@@ -4,7 +4,7 @@ The 44 tables, one concept each. A concept's `# Schema` lists every column; `tes
 
 # People and access
 
-* [users](users.md) - One person, made by the first way in that meets them and found by battle tag or Discord id, with the profile fields the forms write and three sync stamps.
+* [users](users.md) - One person, made by the first way in that meets them and found by any battle tag they hold or by Discord id, with the profile fields the forms write and three sync stamps.
 * [user_battle_tag](user_battle_tag.md) - One battle tag a person has played under; a tag names at most one person, and each person has at most one active tag.
 * [clerk_account](clerk_account.md) - The Discord account behind one Clerk user, written on the first guarded request of a login so no later request asks Clerk.
 * [admin_grant](admin_grant.md) - One Discord account that administers the site, granted on the Config page; the bootstrap ids in ADMIN_DISCORD_IDS need no row.

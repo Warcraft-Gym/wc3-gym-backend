@@ -1,11 +1,11 @@
 ---
 type: Data Model
 title: users
-description: One person, made by the first way in that meets them and found by battle tag or Discord id, with the profile fields the forms write and three sync stamps.
+description: One person, made by the first way in that meets them and found by any battle tag they hold or by Discord id, with the profile fields the forms write and three sync stamps.
 resource: ../../../../app/models/user.py
 tags: [auth, data]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-24T09:19:27Z }
-verified: { by: process:test_okf, at: 2026-09-24T09:20:16Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-24T09:42:05Z }
+verified: { by: process:test_okf, at: 2026-09-24T09:51:01Z }
 sources:
   - id: model
     resource: ../../../../app/models/user.py
@@ -16,6 +16,9 @@ sources:
   - id: signup
     resource: ../../../../app/api/routes/public.py
     title: The public signup form creates or updates the row
+  - id: tags
+    resource: ../../../../app/services/battle_tags.py
+    title: Finds a person by any tag and attaches a tag
 ---
 
 # Schema
@@ -24,7 +27,7 @@ sources:
 |---|---|---|---|
 | `id` | INTEGER | no | Primary key. |
 | `name` | VARCHAR | no | Display name. The career import matches `player_career_stats.player_name` on it. |
-| `battleTag` | VARCHAR | yes | A copy of the tag of the person's active [user_battle_tag](user_battle_tag.md) row. Unique, case-insensitive, after trimming. The workbook import and the W3Champions client key on it. Every way in writes a tag, and an importer stand-in holds a stand-in tag. |
+| `battleTag` | VARCHAR | yes | A copy of the tag of the person's active [user_battle_tag](user_battle_tag.md) row; `set_active_tag` writes both. Unique, case-insensitive, after trimming. The W3Champions stats sync reads it. An importer stand-in person holds its stand-in tag here and has no tag row. |
 | `discordTag` | VARCHAR | yes | Discord username. Unique among non-blank values. Null or blank means unknown. A person who never logged in may keep an old sheet handle here as a hint. |
 | `discordId` | VARCHAR | yes | Discord account id. Unique among non-blank values. A Clerk session finds its player through it. Null means the person never logged in; blank means unknown. |
 | `mmr` | INTEGER | yes | The MMR typed on the signup or profile form. The W3Champions sync writes `w3cstats`, not this column. |
@@ -50,18 +53,23 @@ A row is made by the first way in that meets the player, and each way in looks f
 
 | Way in | Looks for a row by | Makes a row with |
 |---|---|---|
-| The member signup, `POST /signup` | `discordId`, then `battleTag` without case, then `discordTag`, without case | the form's fields and the session's Discord id and tag |
-| An `anyone` entrant, the Twitch chat signup, an admin who types a battle tag | `battleTag`, without case | the tag, its name part as `name`, blank Discord fields |
-| The workbook import | `battleTag`, without case | the workbook row's fields |
+| The member signup, `POST /signup` | `discordId`, then any tag without case, then `discordTag`, without case | the form's fields and the session's Discord id and tag, and a tag row with source `signup` |
+| An `anyone` entrant, the Twitch chat signup, an admin who types a battle tag | any tag, without case | the tag, its name part as `name`, blank Discord fields, and a tag row with source `signup` |
+| The workbook import | any tag, without case; a stand-in tag by `battleTag` | the workbook row's fields, and a tag row with source `sheet` |
 | The fantasy import | `discordTag`, without case | a captain on no roster |
+| An admin, `POST /users` | none | the body's fields, and a tag row with source `admin` |
 
-The ways in write a blank or a stand-in where they know no value: a Players row of the workbook must name a Discord id, a Fantasy Users row with none carries a blank, a fantasy captain with no battle tag carries a tag that begins `Fantasy_User#`, and the review season's made-up players carry a tag that begins `Review#`. A person from an earlier season who never logged in has a null `discordId`. See [events module](../../concepts/events-module.md) and [KOTH](../../concepts/koth.md) for the entrant ways in.
+"Any tag" means a [user_battle_tag](user_battle_tag.md) row, so a person's second tag finds them at every door. A tag sent to `PUT /users/{id}`, `PUT /user-info` or a member signup that the person does not hold yet becomes a new tag row and the active one; the tag they held before stays theirs. A tag another person holds answers 409 with an `error` that names it.
 
-The member signup takes a row only when no other login holds it. A row has a login when its `discordId` is neither null, blank, nor a `gnl-` stand-in. The login's own row comes first. A row whose `battleTag` the member types, without case, and that has no login becomes the member's. A `battleTag` another login holds answers 409 with an `error` that names the tag. A row with no login that matches only on `discordTag` answers 409 with a `link` object of `player`, `discord_id` and `battle_tag`, the details an admin needs to set `discordId` on that row; so does a row with no login that holds the typed tag when the member already has a row. A `discordTag` that a row with another login holds is left blank on the member's row, because Discord names repeat and the column is unique.
+The ways in write a blank or a stand-in where they know no value: a Players row of the workbook must name a Discord id, a Fantasy Users row with none carries a blank, a fantasy captain with no battle tag carries a tag that begins `Fantasy_User#`, and the review season's made-up players carry a tag that begins `Review#`. A person from an earlier season who never logged in has a null `discordId`: the workbook import writes null where the sheet holds a `gnl-` stand-in id, and null for the stand-in Discord tag that came with it. See [events module](../../concepts/events-module.md) and [KOTH](../../concepts/koth.md) for the entrant ways in.
+
+The member signup takes a row only when no other login holds it. A row has a login when its `discordId` is neither null, blank, nor a `gnl-` stand-in. The login's own row comes first. A row that holds the tag the member types, without case, and that has no login becomes the member's; the tag becomes its active one. A `battleTag` another login holds answers 409 with an `error` that names the tag. A row with no login that matches only on `discordTag` answers 409 with a `link` object of `player`, `discord_id` and `battle_tag`, the details an admin needs to set `discordId` on that row; so does a row with no login that holds the typed tag when the member already has a row. A `discordTag` that a row with another login holds is left blank on the member's row, because Discord names repeat and the column is unique.
 
 # Rules
 
 - `race` is cosmetic. The race a player is scored on is `user_season_signup.race`. See [vocabulary](../../concepts/vocabulary.md).
 - Two sync pipelines, two stamps: `w3c_synced_at` belongs to the stats sync, `ladder_synced_at` to the match sync. See [ladder and achievements](../../concepts/ladder-and-achievements.md).
-- A person holds many battle tags in [user_battle_tag](user_battle_tag.md); `battleTag` is the active one, kept as a copy while the reads move to that table.
+- A person holds many battle tags in [user_battle_tag](user_battle_tag.md); `battleTag` is a copy of the active one. Every lookup by tag reads that table.
+- `GET /users/{key}` takes an id, or any tag the person holds, without case.
+- The user reads (`GET /users/{key}`, `GET /users`, `POST /users/search`) carry `tags`: every tag row as `{id, tag, verified, active, source, first_seen, last_seen}`, the active one first, loaded in one statement per page. `verified` is true when `bnet_account_id` is set. A user nested in another read carries `tags` empty.
 - A batch alter of this table on SQLite drops the three expression indexes; the migration writes them back. See [migrations](../migrations.md).

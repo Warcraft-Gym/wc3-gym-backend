@@ -68,6 +68,8 @@ def count_w3c(monkeypatch: pytest.MonkeyPatch, mmr: int | None = None) -> list[i
 
 def enrol(tag: str, mmr: int, race: Race = Race.HU, season: int = 20) -> int:
     """One player with a battle tag and one W3C rating the signup reads."""
+    from app.services.battle_tags import attach_tag
+
     with Session.begin() as session:
         user = User(
             name=tag.split("#")[0],
@@ -77,7 +79,7 @@ def enrol(tag: str, mmr: int, race: Race = Race.HU, season: int = 20) -> int:
             race=race,
         )
         session.add(user)
-        session.flush()
+        attach_tag(session, user, tag, "signup")
         session.add(
             W3CStats(
                 user_id=ident(user), race=race, wc3_season=season, games=50, mmr=mmr

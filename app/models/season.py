@@ -423,6 +423,8 @@ class SeasonPublic(SeasonBase):
     user_signup: Annotated[list[Any], NoneToList] = []
     # The race of the signup this season is nested under; null everywhere else
     signup_race: Annotated[str | None, EnumValue] = None
+    # The tag of that signup, null when it names none
+    played_as: str | None = None
 
     @classmethod
     def from_season(cls, season: Season) -> Self:
@@ -456,7 +458,10 @@ class SeasonPublic(SeasonBase):
 
     @classmethod
     def from_season_reduced(
-        cls, season: Season, signup_race: Race | None = None
+        cls,
+        season: Season,
+        signup_race: Race | None = None,
+        played_as: str | None = None,
     ) -> Self:
         """The name, the id, the map rules and the grind flag only. Used where
         a season is a label on another object rather than the subject."""
@@ -471,6 +476,7 @@ class SeasonPublic(SeasonBase):
             scheduling_enabled=season.scheduling_enabled,
             checkin_days=season.checkin_days,
             signup_race=signup_race,
+            played_as=played_as,
         )
 
     @classmethod

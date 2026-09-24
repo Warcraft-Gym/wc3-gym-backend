@@ -203,8 +203,16 @@ DEFAULT_ORDER = {
         "anon_1.playday, anon_1.series_id",
     ],
     "GET /events/{season_id}/teams/basic": ["teams.id", "anon_1.id"],
-    "GET /users": ["users.id", "anon_1.id"],
-    "POST /users/search?query=id > 0": ["users.id", "anon_1.id"],
+    "GET /users": [
+        "users.id",
+        "anon_1.id",
+        "user_battle_tag.is_active DESC, user_battle_tag.id",
+    ],
+    "POST /users/search?query=id > 0": [
+        "users.id",
+        "anon_1.id",
+        "user_battle_tag.is_active DESC, user_battle_tag.id",
+    ],
     "GET /maps": ["maps.id"],
     "POST /maps/search?query=id > 0": ["maps.id"],
     "GET /fantasy/teams": ["fantasy_teams.id", "anon_1.id"],
@@ -217,6 +225,7 @@ DEFAULT_ORDER = {
     "GET /player-series": [
         "users.id",
         "anon_1.id",
+        "user_battle_tag.is_active DESC, user_battle_tag.id",
         "series.id",
         "round_availability.user_id, round_availability.playday",
         "event_round.number",

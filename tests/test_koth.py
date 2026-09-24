@@ -30,14 +30,10 @@ SIGNUP = {
 
 def rate(tag: str, race: Race, mmr: int, season: int = 20) -> int:
     """Give the player behind a battle tag one W3C rating the signup reads."""
-    from sqlalchemy import func, select
-    from sqlmodel import col
+    from app.services.battle_tags import attach_tag, person_by_tag
 
     with Session.begin() as session:
-        folded = func.lower(func.trim(col(User.battleTag)))
-        user = session.scalars(
-            select(User).where(folded == tag.strip().lower())
-        ).first()
+        user = person_by_tag(session, tag)
         if user is None:
             user = User(
                 name=tag.split("#")[0],
@@ -47,7 +43,7 @@ def rate(tag: str, race: Race, mmr: int, season: int = 20) -> int:
                 race=race,
             )
             session.add(user)
-            session.flush()
+            attach_tag(session, user, tag, "signup")
         session.add(
             W3CStats(
                 user_id=ident(user), race=race, wc3_season=season, games=50, mmr=mmr
