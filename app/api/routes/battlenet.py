@@ -1,8 +1,9 @@
 """The Battle.net link: a proof that a member owns a tag, never a login.
 
 The member asks for the Blizzard authorize URL, Blizzard sends the browser
-back to the callback, and the callback records the account on the tag and
-sends the browser to the profile page with `bnet=linked` or `bnet=error`.
+back to the callback, and the callback sends the browser to the profile page
+with a signed link token. The profile page posts that token under the
+member's own login, and only that write records the account on the tag.
 """
 
 import os
@@ -11,20 +12,31 @@ from urllib.parse import urlencode
 
 import jwt
 import requests
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import RedirectResponse
 
-from app.api.deps import RequireLogin, UserServiceDep
+from app.api.deps import RequireLogin, UserServiceDep, require_login
 from app.api.routes.users import _discord_id
 from app.core.config import frontend_url
-from app.core.exceptions import ApiError, NotFoundError
+from app.core.exceptions import ApiError
 from app.core.security import create_access_token, decode_token
-from app.services.battle_tags import TagTakenError
+from app.models.user import UserPublic
+from app.models.user_battle_tag import BnetFinishWrite
 
 router = APIRouter(tags=["battlenet"])
 
 OAUTH_URL = "https://oauth.battle.net"
 STATE_KIND = "bnet_state"
+LINK_KIND = "bnet_link"
+
+
+def _read_token(token: str, kind: str) -> str | None:
+    """The subject of a signed token of this kind, or None."""
+    try:
+        claims = decode_token(token)
+    except jwt.InvalidTokenError:
+        return None
+    return str(claims["sub"]) if claims.get("type") == kind else None
 
 
 def _callback_url(request: Request) -> str:
@@ -66,9 +78,9 @@ def _profile(query: str) -> RedirectResponse:
     )
 
 
-@router.get("/users/me/bnet/start")
-def start_bnet_link(request: Request, claims: RequireLogin) -> dict[str, str]:
-    """The Blizzard authorize URL; its state is a signed token naming the member."""
+@router.get("/users/me/bnet/start", dependencies=[Depends(require_login)])
+def start_bnet_link(request: Request) -> dict[str, str]:
+    """The Blizzard authorize URL; its state is a signed token that names no one."""
     client_id = os.getenv("BNET_CLIENT_ID")
     if not client_id or not os.getenv("BNET_CLIENT_SECRET"):
         raise ApiError(503, {"error": "Battle.net login is not configured"})
@@ -78,7 +90,7 @@ def start_bnet_link(request: Request, claims: RequireLogin) -> dict[str, str]:
             "scope": "openid",
             "client_id": client_id,
             "redirect_uri": _callback_url(request),
-            "state": create_access_token(_discord_id(claims), 10, STATE_KIND),
+            "state": create_access_token("start", 10, STATE_KIND),
         }
     )
     return {"url": f"{OAUTH_URL}/authorize?{query}"}
@@ -86,30 +98,28 @@ def start_bnet_link(request: Request, claims: RequireLogin) -> dict[str, str]:
 
 @router.get("/auth/battlenet/callback", name="battlenet_callback")
 def battlenet_callback(
-    request: Request,
-    service: UserServiceDep,
-    code: str = "",
-    state: str = "",
-    error: str = "",
+    request: Request, code: str = "", state: str = "", error: str = ""
 ) -> RedirectResponse:
-    """Record the Blizzard account on its tag and send the browser to the profile."""
+    """Send the browser to the profile with a link token; writes nothing."""
     if error or not code:
         return _profile("bnet=error&reason=denied")
-    try:
-        claims = decode_token(state)
-    except jwt.InvalidTokenError:
-        return _profile("bnet=error&reason=state")
-    if claims.get("type") != STATE_KIND:
+    if _read_token(state, STATE_KIND) is None:
         return _profile("bnet=error&reason=state")
     try:
         account = _userinfo(_exchange_code(code, _callback_url(request)))
-        account_id, tag = str(account["sub"]), str(account["battletag"])
+        subject = f"{account['sub']}|{account['battletag']}"
     except (requests.RequestException, KeyError, ValueError):
         return _profile("bnet=error&reason=token")
-    try:
-        service.link_own_bnet(str(claims["sub"]), account_id, tag)
-    except TagTakenError:
-        return _profile("bnet=error&reason=taken")
-    except NotFoundError:
-        return _profile("bnet=error&reason=state")
-    return _profile("bnet=linked")
+    return _profile(urlencode({"bnet": create_access_token(subject, 10, LINK_KIND)}))
+
+
+@router.post("/users/me/bnet/finish")
+def finish_bnet_link(
+    data: BnetFinishWrite, claims: RequireLogin, service: UserServiceDep
+) -> UserPublic:
+    """Record the linked account on the caller's tag; taken answers 409."""
+    subject = _read_token(data.token, LINK_KIND)
+    if subject is None or "|" not in subject:
+        raise ApiError(400, {"error": "The Battle.net link expired. Try again."})
+    account_id, _, tag = subject.partition("|")
+    return service.link_own_bnet(_discord_id(claims), account_id, tag)

@@ -1,5 +1,6 @@
-"""The Battle.net link: the start URL, and the callback that records the
-Blizzard account on its tag and sends the browser back to the profile page.
+"""The Battle.net link: the start URL, the callback that sends the browser
+back to the profile page with a link token, and the finish that records the
+Blizzard account on the logged-in member's tag.
 
 The two Blizzard calls are stood in for; no test reaches Blizzard.
 """
@@ -43,13 +44,21 @@ def blizzard(monkeypatch: pytest.MonkeyPatch) -> Callable[[str, str], None]:
     return answer
 
 
-def callback(client: Client, discord_id: str = "1", **params: str) -> str:
-    state = create_access_token(discord_id, 10, "bnet_state")
+def callback(client: Client, **params: str) -> str:
+    state = create_access_token("start", 10, "bnet_state")
     resp = client.get(
         "/auth/battlenet/callback", params={"code": "c", "state": state} | params
     )
     assert resp.status_code in (302, 307), resp.text
     return resp.headers["location"]
+
+
+def finish(
+    client: Client, headers: dict[str, str], sub: str, tag: str
+) -> tuple[int, dict[str, Any]]:
+    token = create_access_token(f"{sub}|{tag}", 10, "bnet_link")
+    resp = client.post("/users/me/bnet/finish", json={"token": token}, headers=headers)
+    return resp.status_code, resp.json()
 
 
 def rows_of(user_id: int) -> list[tuple[str, str, bool, str | None]]:
@@ -60,9 +69,6 @@ def rows_of(user_id: int) -> list[tuple[str, str, bool, str | None]]:
             .order_by(col(UserBattleTag.id))
         ).all()
         return [(r.tag, r.source, r.is_active, r.bnet_account_id) for r in rows]
-
-
-LINKED = f"{FRONT}/profile?bnet=linked"
 
 
 def error(reason: str) -> str:
@@ -94,8 +100,7 @@ def test_start_answers_the_authorize_url_with_a_signed_state(
     assert query["scope"] == "openid"
     assert query["redirect_uri"] == "https://testserver/auth/battlenet/callback"
     assert "secret-1" not in resp.text
-    claims = decode_token(query["state"])
-    assert (claims["sub"], claims["type"]) == ("1", "bnet_state")
+    assert decode_token(query["state"])["type"] == "bnet_state"
 
 
 def test_start_answers_503_when_battle_net_is_not_configured(
@@ -126,106 +131,34 @@ def test_the_state_is_no_login(client: Client, seeded: dict[str, Any]) -> None:
 # GET /auth/battlenet/callback
 
 
-def test_a_tag_the_member_holds_becomes_verified_and_active(
-    client: Client,
-    seeded: dict[str, Any],
-    bnet_env: None,
-    blizzard: Callable[[str, str], None],
-) -> None:
-    blizzard("acc-1", "p1#1111")
-
-    assert callback(client) == LINKED
-    assert rows_of(seeded["player_ids"][0]) == [("P1#1111", "link", True, "acc-1")]
-
-
-def test_a_tag_new_to_the_app_is_added_verified_and_active(
-    client: Client,
-    seeded: dict[str, Any],
-    bnet_env: None,
-    blizzard: Callable[[str, str], None],
-) -> None:
-    blizzard("acc-1", "New#4242")
-
-    assert callback(client) == LINKED
-    assert rows_of(seeded["player_ids"][0]) == [
-        ("P1#1111", "signup", False, None),
-        ("New#4242", "link", True, "acc-1"),
-    ]
-
-
-def test_a_tag_a_person_with_no_login_holds_moves_to_the_member(
-    client: Client,
-    seeded: dict[str, Any],
-    bnet_env: None,
-    blizzard: Callable[[str, str], None],
-) -> None:
-    old = no_login_person()
-    blizzard("acc-1", "Old#5555")
-
-    assert callback(client) == LINKED
-    assert rows_of(old) == []
-    assert rows_of(seeded["player_ids"][0]) == [
-        ("P1#1111", "signup", False, None),
-        ("Old#5555", "link", True, "acc-1"),
-    ]
-
-
-def test_a_tag_another_login_holds_is_taken(
-    client: Client,
-    seeded: dict[str, Any],
-    bnet_env: None,
-    blizzard: Callable[[str, str], None],
-) -> None:
-    blizzard("acc-1", "P2#2222")
-
-    assert callback(client) == error("taken")
-    assert rows_of(seeded["player_ids"][1]) == [("P2#2222", "signup", True, None)]
-    assert rows_of(seeded["player_ids"][0]) == [("P1#1111", "signup", True, None)]
-
-
-def test_an_account_another_person_holds_is_taken(
-    client: Client,
-    seeded: dict[str, Any],
-    bnet_env: None,
-    blizzard: Callable[[str, str], None],
-) -> None:
-    blizzard("acc-2", "P2#2222")
-    assert callback(client, "2") == LINKED
-
-    blizzard("acc-2", "P1#1111")
-
-    assert callback(client) == error("taken")
-    assert rows_of(seeded["player_ids"][0]) == [("P1#1111", "signup", True, None)]
-
-
-def test_a_renamed_account_keeps_its_old_row(
+def test_the_callback_sends_a_link_token_and_writes_nothing(
     client: Client,
     seeded: dict[str, Any],
     bnet_env: None,
     blizzard: Callable[[str, str], None],
 ) -> None:
     blizzard("acc-1", "P1#1111")
-    assert callback(client) == LINKED
 
-    blizzard("acc-1", "Renamed#1111")
+    location = urlparse(callback(client))
 
-    assert callback(client) == LINKED
-    assert rows_of(seeded["player_ids"][0]) == [
-        ("P1#1111", "link", False, "acc-1"),
-        ("Renamed#1111", "link", True, "acc-1"),
-    ]
+    assert f"{location.scheme}://{location.netloc}{location.path}" == (
+        f"{FRONT}/profile"
+    )
+    claims = decode_token(parse_qs(location.query)["bnet"][0])
+    assert (claims["sub"], claims["type"]) == ("acc-1|P1#1111", "bnet_link")
+    assert rows_of(seeded["player_ids"][0]) == [("P1#1111", "signup", True, None)]
 
 
 @pytest.mark.parametrize(
     "state",
     [
         "not-a-token",
-        create_access_token("1", -1, "bnet_state"),
+        create_access_token("start", -1, "bnet_state"),
         create_access_token("1", 10),
     ],
     ids=["garbage", "expired", "login-token"],
 )
-def test_a_bad_state_changes_nothing(
+def test_a_bad_state_is_a_state_error(
     client: Client,
     seeded: dict[str, Any],
     bnet_env: None,
@@ -237,7 +170,6 @@ def test_a_bad_state_changes_nothing(
     resp = client.get("/auth/battlenet/callback", params={"code": "c", "state": state})
 
     assert resp.headers["location"] == error("state")
-    assert rows_of(seeded["player_ids"][0]) == [("P1#1111", "signup", True, None)]
 
 
 def test_a_member_who_cancels_on_battle_net_is_denied(
@@ -260,4 +192,100 @@ def test_a_refused_code_is_a_token_error(
     monkeypatch.setattr(battlenet, "_exchange_code", refuse)
 
     assert callback(client) == error("token")
+
+
+# POST /users/me/bnet/finish
+
+TAKEN = {
+    "error": "That Battle.net account or tag belongs to another player. Ask an admin."
+}
+
+
+def test_a_tag_the_member_holds_becomes_verified_and_active(
+    client: Client, seeded: dict[str, Any], member: Callable[..., dict[str, str]]
+) -> None:
+    status, body = finish(client, member(), "acc-1", "p1#1111")
+
+    assert status == 200, body
+    assert body["battleTag"] == "P1#1111"
+    assert [(t["tag"], t["verified"]) for t in body["tags"]] == [("P1#1111", True)]
+    assert rows_of(seeded["player_ids"][0]) == [("P1#1111", "link", True, "acc-1")]
+
+
+def test_a_tag_new_to_the_app_is_added_verified_and_active(
+    client: Client, seeded: dict[str, Any], member: Callable[..., dict[str, str]]
+) -> None:
+    status, body = finish(client, member(), "acc-1", "New#4242")
+
+    assert status == 200, body
+    assert rows_of(seeded["player_ids"][0]) == [
+        ("P1#1111", "signup", False, None),
+        ("New#4242", "link", True, "acc-1"),
+    ]
+
+
+def test_a_tag_a_person_with_no_login_holds_moves_to_the_member(
+    client: Client, seeded: dict[str, Any], member: Callable[..., dict[str, str]]
+) -> None:
+    old = no_login_person()
+
+    status, body = finish(client, member(), "acc-1", "Old#5555")
+
+    assert status == 200, body
+    assert rows_of(old) == []
+    assert rows_of(seeded["player_ids"][0]) == [
+        ("P1#1111", "signup", False, None),
+        ("Old#5555", "link", True, "acc-1"),
+    ]
+
+
+def test_a_tag_another_login_holds_answers_409(
+    client: Client, seeded: dict[str, Any], member: Callable[..., dict[str, str]]
+) -> None:
+    assert finish(client, member(), "acc-1", "P2#2222") == (409, TAKEN)
+    assert rows_of(seeded["player_ids"][1]) == [("P2#2222", "signup", True, None)]
+    assert rows_of(seeded["player_ids"][0]) == [("P1#1111", "signup", True, None)]
+
+
+def test_an_account_another_person_holds_answers_409(
+    client: Client, seeded: dict[str, Any], member: Callable[..., dict[str, str]]
+) -> None:
+    assert finish(client, member("2"), "acc-2", "P2#2222")[0] == 200
+
+    assert finish(client, member(), "acc-2", "P1#1111") == (409, TAKEN)
+    assert rows_of(seeded["player_ids"][0]) == [("P1#1111", "signup", True, None)]
+
+
+def test_a_renamed_account_keeps_its_old_row(
+    client: Client, seeded: dict[str, Any], member: Callable[..., dict[str, str]]
+) -> None:
+    assert finish(client, member(), "acc-1", "P1#1111")[0] == 200
+
+    assert finish(client, member(), "acc-1", "Renamed#1111")[0] == 200
+    assert rows_of(seeded["player_ids"][0]) == [
+        ("P1#1111", "link", False, "acc-1"),
+        ("Renamed#1111", "link", True, "acc-1"),
+    ]
+
+
+@pytest.mark.parametrize(
+    "token",
+    [
+        "not-a-token",
+        create_access_token("acc-1|P1#1111", -1, "bnet_link"),
+        create_access_token("acc-1|P1#1111", 10, "bnet_state"),
+        create_access_token("acc-1|P1#1111", 10),
+    ],
+    ids=["garbage", "expired", "state-token", "login-token"],
+)
+def test_a_bad_link_token_answers_400(
+    client: Client,
+    seeded: dict[str, Any],
+    member: Callable[..., dict[str, str]],
+    token: str,
+) -> None:
+    resp = client.post("/users/me/bnet/finish", json={"token": token}, headers=member())
+
+    assert resp.status_code == 400
+    assert resp.json() == {"error": "The Battle.net link expired. Try again."}
     assert rows_of(seeded["player_ids"][0]) == [("P1#1111", "signup", True, None)]

@@ -4,7 +4,7 @@ title: Authentication
 description: A bearer token is either the admin token's JWT or a Clerk session; the claims resolve the Discord id and the role once per request, and five guards build on them.
 resource: ../../../app/api/deps.py
 tags: [auth]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-24T11:14:37Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-24T11:21:07Z }
 sources:
   - id: deps
     resource: ../../../app/api/deps.py
@@ -50,13 +50,13 @@ Routes use them as `Annotated` types (`RequireAdmin`, `RequireMember`) or as `de
 
 # Battle.net link
 
-A member proves they own a battle tag with their Battle.net account. The link is no login and Clerk plays no part.
+A member proves they own a battle tag with their Battle.net account. The link is no login and Clerk plays no part. Only a request under the member's own login writes the link.
 
-1. `GET /users/me/bnet/start` (`require_login`) answers `{"url": ...}`, the Blizzard authorize URL with scope `openid`. Its `state` is a JWT signed with `JWT_SECRET_KEY` that names the Discord id, lasts 10 minutes and has type `bnet_state`, so `require_login` refuses it as a bearer. The `redirect_uri` is this backend's `/auth/battlenet/callback`, with the scheme from `x-forwarded-proto`. `BNET_CLIENT_ID` or `BNET_CLIENT_SECRET` unset answers 503 `{"error": "Battle.net login is not configured"}`.
-2. `GET /auth/battlenet/callback?code=&state=` takes no bearer. It checks the state, trades the code for a token with the client id and secret, reads `sub` and `battletag` from Blizzard's userinfo, and records the account on the tag; see [user_battle_tag](../data/tables/user_battle_tag.md).
-3. The callback answers 302 to `FRONTEND_URL` + `/profile?bnet=linked`, or `/profile?bnet=error&reason=<reason>`: `denied` (the member cancelled), `state` (a bad or expired state, or no profile), `token` (Blizzard refused the code) or `taken` (the tag or the account belongs to another person).
+1. `GET /users/me/bnet/start` (`require_login`) answers `{"url": ...}`, the Blizzard authorize URL with scope `openid`. Its `state` is a JWT signed with `JWT_SECRET_KEY`, type `bnet_state`, 10 minutes; it names no one. The `redirect_uri` is this backend's `/auth/battlenet/callback`, with the scheme from `x-forwarded-proto`. `BNET_CLIENT_ID` or `BNET_CLIENT_SECRET` unset answers 503 `{"error": "Battle.net login is not configured"}`.
+2. `GET /auth/battlenet/callback?code=&state=` takes no bearer and writes nothing. It checks the state, trades the code for a token with the client id and secret, and reads `sub` and `battletag` from Blizzard's userinfo. It answers 302 to `FRONTEND_URL` + `/profile?bnet=<token>`, a JWT of type `bnet_link` holding `sub|battletag` for 10 minutes. A failure answers `/profile?bnet=error&reason=<reason>`: `denied` (the member cancelled), `state` (a bad or expired state) or `token` (Blizzard refused the code).
+3. `POST /users/me/bnet/finish` `{token}` (`require_login`) records the account on the caller's tag and answers the caller's user read; see [user_battle_tag](../data/tables/user_battle_tag.md). A bad or expired token, or a token of another type, answers 400 `{"error": "The Battle.net link expired. Try again."}`. A tag or account another person holds answers 409.
 
-Register each backend's callback URL on the Blizzard client.
+A token of type `bnet_state` or `bnet_link` is no bearer: `require_login` admits only type `access`. Register each backend's callback URL on the Blizzard client.
 
 # /me
 

@@ -198,8 +198,7 @@ def drop_tag(session: OrmSession, row: UserBattleTag) -> None:
     session.flush()
 
 
-class TagTakenError(Exception):
-    """The tag or the Battle.net account belongs to another login."""
+TAKEN = "That Battle.net account or tag belongs to another player. Ask an admin."
 
 
 def link_bnet(
@@ -208,7 +207,7 @@ def link_bnet(
     """Mark the tag as proved by this Battle.net account and make it active.
 
     A tag a person with no login holds moves here first. A tag another login
-    holds, or an account another person holds, raises TagTakenError. A renamed
+    holds, or an account another person holds, answers 409. A renamed
     account keeps its old row and gets a new one.
     """
     elsewhere = select(UserBattleTag).where(
@@ -216,12 +215,12 @@ def link_bnet(
         col(UserBattleTag.user_id) != ident(user),
     )
     if session.scalars(elsewhere).first() is not None:
-        raise TagTakenError
+        raise ApiError(409, {"error": TAKEN})
     row = tag_row(session, tag)
     if row is not None and row.user_id != ident(user):
         holder = session.get(User, row.user_id)
         if holder is not None and has_login(holder.discordId):
-            raise TagTakenError
+            raise ApiError(409, {"error": TAKEN})
         move_tag(session, row, user, "link")
     row = attach_tag(session, user, tag, "link")
     if row is not None:
