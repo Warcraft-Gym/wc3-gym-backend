@@ -87,6 +87,23 @@ def test_a_dismissed_suggestion_never_comes_back(
         assert session.get(User, old) is not None
 
 
+def test_one_dismiss_closes_every_suggestion_of_the_player_to_the_login(
+    client: Client, seeded: dict[str, Any], member: Callable[..., dict[str, str]]
+) -> None:
+    old = no_login_person()
+    _suggest(old, "sheet", tag="P1#1111")
+    _suggest(old, "discord", user_id=seeded["player_ids"][0])
+    [prompt] = _prompts(client, member())
+    assert prompt["tag"] == "P1#1111"
+
+    resp = client.post(
+        f"/users/me/prompts/{prompt['id']}", json={"accept": False}, headers=member()
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert _prompts(client, member()) == []
+
+
 def test_a_player_two_logins_could_be_is_suggested_to_neither(
     client: Client, seeded: dict[str, Any], member: Callable[..., dict[str, str]]
 ) -> None:

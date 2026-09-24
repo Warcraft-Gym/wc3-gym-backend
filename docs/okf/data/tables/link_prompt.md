@@ -56,4 +56,4 @@ Primary key `id`. Foreign keys `person_id` and `user_id` to [users](users.md), d
 | Route | Does |
 |---|---|
 | `GET /users/me/prompts` | The member's open prompts: `{id, kind, tag, person_id, name, seasons}`, where `seasons` names the earlier player's season signups. |
-| `POST /users/me/prompts/{id}` `{accept}` | `true` accepts a suggestion; `false` dismisses it, or closes a notice. Answers the member's user read. A prompt that is not the member's is 404. |
+| `POST /users/me/prompts/{id}` `{accept}` | `true` accepts a suggestion; `false` dismisses it with every other open suggestion of that player to the member, or closes a notice. The suggestion that names a tag is the one shown. Answers the member's user read. A prompt that is not the member's is 404. |
