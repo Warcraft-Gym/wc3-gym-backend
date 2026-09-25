@@ -78,11 +78,11 @@ from app.services.w3c import THROTTLED_MESSAGE, W3CService
 
 # Per rule id, the numbers a scope's price rows override
 ParamSet = Mapping[str, Mapping[str, int]]
-# The oldest w3champions season the app stores. Season 11 opened in April
-# 2022, before GNL S10, so the seasons imported from the old league sheets
-# all sit inside it. A season already read to its end is never read again,
-# so reaching further back costs each player one pass, once.
-FIRST_W3C_SEASON = 11
+# The oldest w3champions season the app stores. Season 0 (April 2020) is the
+# oldest the API serves. GNL S1 to S3 ran before it; GNL S4 (August 2020, in
+# seasons 2 and 3) is the first inside it. A season read to its end is never
+# read again, so reaching further back costs each player one pass, once.
+FIRST_W3C_SEASON = 0
 # The window of a player's whole stored ladder history
 ALL_TIME = datetime.combine(date.min, time.min, UTC)
 # Rows per match insert; 14 columns keeps it under the 65,535 Postgres bind limit
