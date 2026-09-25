@@ -32,10 +32,9 @@ every player it carries, which costs two more statements: one groups the series
 of those players by season, one names the race of every opponent they met.
 Neither grows with the number of players.
 
-A career answer derives its nine totals from two more statements, and loads
-the players who hold no stored row from one. Neither part grows with the
-number of players or of rows in the answer, and a search over those rows
-adds none.
+A career list derives its totals, search, order and page in SQL. A single
+stored career row filters its tally to the linked user and matching name.
+Neither statement count grows with the number of players or career rows.
 
 The season list reads the phase of every season it answers in one grouped
 aggregate, so it does not grow with the number of seasons. Identifying the
@@ -339,9 +338,8 @@ def test_the_fantasy_team_search_costs_thirteen_statements(
     assert tally[0] == 13
 
 
-def test_career_stats_cost_four_statements(league: dict[str, Any]) -> None:
-    """One for the stored rows and their players, two for the derived totals,
-    one for the players who hold no row."""
+def test_career_stats_cost_two_statements(league: dict[str, Any]) -> None:
+    """One reads the league seasons; one computes and pages the career rows."""
     service = PlayerCareerStatsService()
     with count_statements() as tally:
         career, total = service.get_all()
@@ -349,25 +347,25 @@ def test_career_stats_cost_four_statements(league: dict[str, Any]) -> None:
     assert total == 3
     assert career[0].user is not None
     assert career[0].user.name
-    assert tally[0] == 4
+    assert tally[0] == 2
 
 
-def test_a_searched_career_answer_costs_the_same_four_statements(
+def test_a_searched_career_answer_costs_the_same_two_statements(
     league: dict[str, Any],
 ) -> None:
-    """The search runs on the rows already in hand, so it adds no statement."""
+    """The search filters the SQL result without another statement."""
     service = PlayerCareerStatsService()
     with count_statements() as tally:
         career, total = service.get_all(search="p1")
     assert [row.player_name for row in career] == ["P1"]
     assert total == 1
-    assert tally[0] == 4
+    assert tally[0] == 2
 
 
 def test_career_statement_count_holds_when_the_players_grow(
     league: dict[str, Any],
 ) -> None:
-    """Two more players in a played series and no row for either, the same four
+    """Two more players in a played series and no row for either, the same two
     statements."""
     with Session() as session:
         players = [
@@ -399,13 +397,13 @@ def test_career_statement_count_holds_when_the_players_grow(
         career, total = service.get_all()
     assert len(career) == 5
     assert total == 5
-    assert tally[0] == 4
+    assert tally[0] == 2
 
 
-def test_career_stats_cost_three_statements_when_every_player_holds_a_row(
+def test_career_stats_cost_two_statements_when_every_player_holds_a_row(
     league: dict[str, Any],
 ) -> None:
-    """No player is left without a row, so the players statement falls away."""
+    """Stored rows and played players share the paged query."""
     with Session() as session:
         for index, user_id in enumerate(league["player_ids"][2:]):
             session.add(
@@ -418,7 +416,7 @@ def test_career_stats_cost_three_statements_when_every_player_holds_a_row(
         career, total = service.get_all()
     assert len(career) == 4
     assert total == 4
-    assert tally[0] == 3
+    assert tally[0] == 2
 
 
 def test_one_career_row_costs_three_statements(league: dict[str, Any]) -> None:
@@ -447,8 +445,8 @@ def add_teams_to_the_season(season_id: int, count: int) -> None:
         session.commit()
 
 
-def test_the_teams_of_a_season_cost_nine_statements(league: dict[str, Any]) -> None:
-    """Three for the teams and their people, two for the standings, one for the
+def test_the_teams_of_a_season_cost_ten_statements(league: dict[str, Any]) -> None:
+    """Four for the teams and their people, two for the standings, one for the
     name and league of every season, one for the signup race of every player
     and two for his season record."""
     service = TeamService(UserService())
@@ -457,20 +455,20 @@ def test_the_teams_of_a_season_cost_nine_statements(league: dict[str, Any]) -> N
     assert len(teams) == 2
     assert teams[0].seasons_info[0].final_score is not None
     assert teams[0].seasons_info[0].name == "Season 1"
-    assert tally[0] == 9
+    assert tally[0] == 10
 
 
 def test_the_standings_count_holds_when_the_teams_grow(
     league: dict[str, Any],
 ) -> None:
-    """Four more teams in the season, the same nine statements."""
+    """Four more teams in the season, the same ten statements."""
     add_teams_to_the_season(league["season_id"], 4)
 
     service = TeamService(UserService())
     with count_statements() as tally:
         teams = service.get_teams_season(league["season_id"])
     assert len(teams) == 6
-    assert tally[0] == 9
+    assert tally[0] == 10
 
 
 def test_the_season_labels_cost_one_statement(league: dict[str, Any]) -> None:

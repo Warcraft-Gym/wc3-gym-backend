@@ -4,7 +4,7 @@ title: Consumers of the API
 description: Who calls the backend, which routes each one reads, which tests pin those shapes, and the rules a consumer follows to keep reads off the database.
 resource: ../../../tests/test_public_contract.py
 tags: [api]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-24T18:30:00Z }
+generated: { by: codex/gpt-6, at: 2026-09-25T08:58:00Z }
 sources:
   - id: public-contract
     resource: ../../../tests/test_public_contract.py
@@ -25,7 +25,7 @@ sources:
 | Consumer | Repository | Reads | Auth |
 |---|---|---|---|
 | the web app | `wc3-gym-frontend` | most routes | Clerk session or the admin token |
-| the GNL website | `wc3-gnl-website` | server-side, from Next.js: `GET /leagues`, `GET /events`, `GET /leagues/{league_id}/teams`, and for finished events `/events/{event_id}/teams`, `/series`, `/ladder` and `/fantasy/teams`; for a player `GET /users/{user_id}`, `GET /users/{user_id}/history` and `GET /stats/career` | none |
+| the GNL website | `wc3-gnl-website` | server-side, from Next.js: `GET /leagues`, `GET /events`, `GET /leagues/{league_id}/teams`, and for finished events `/events/{event_id}/teams`, `/series`, `/ladder` and `/fantasy/teams`; for a player `GET /users/{user_id}`, `GET /users/{user_id}/history` and `GET /stats/career/{user_id}` | none |
 | the WordPress site | `gym_website_scripts` | eight paths on every page view, no cache, against the older backend host: `GET /stats/career`, `GET /config/settings`, `GET /teams/season/{id}`, `GET /teams/{id}/image`, `GET /seasons/{id}`, `POST /matches/search`, `POST /series/season/{id}/playday/{n}/search`, `POST /fantasy/teams/search` | none |
 | the Discord adapter | `wc3-gym-discord-bot` | `POST /discord/interactions` | Discord's signature |
 | the cast-reminder worker | `wc3-gym-discord-bot`, `cron/` | `GET /jobs/cast-reminders` every five minutes | `CRON_SECRET` bearer |

@@ -12,7 +12,7 @@ from collections.abc import Iterable, Sequence
 from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 
-from sqlalchemy import delete, distinct, func, or_, select, update
+from sqlalchemy import delete, distinct, func, or_, select, tuple_, update
 from sqlalchemy.orm import Session as OrmSession
 from sqlalchemy.orm import joinedload, noload, selectinload
 from sqlmodel import col
@@ -1408,25 +1408,35 @@ def race_ratings(
     if not pairs:
         return {}
     season = _w3c_season(session)
-    rows = session.execute(
+    rated = (
         select(
-            col(W3CStats.user_id),
-            col(W3CStats.race),
-            col(W3CStats.wc3_season),
-            col(W3CStats.mmr),
-        ).where(
-            col(W3CStats.user_id).in_({user_id for user_id, _ in pairs}),
-            col(W3CStats.race).in_({Race.from_text(race) for _, race in pairs}),
+            col(W3CStats.user_id).label("user_id"),
+            col(W3CStats.race).label("race"),
+            col(W3CStats.mmr).label("mmr"),
+            func.row_number()
+            .over(
+                partition_by=(col(W3CStats.user_id), col(W3CStats.race)),
+                order_by=col(W3CStats.wc3_season).desc(),
+            )
+            .label("rank"),
+        )
+        .where(
+            tuple_(col(W3CStats.user_id), col(W3CStats.race)).in_(
+                [(user_id, Race.from_text(race)) for user_id, race in pairs]
+            ),
             col(W3CStats.mmr) > 0,
             col(W3CStats.wc3_season) > season - SEASONS,
         )
+        .subquery()
+    )
+    rows = session.execute(
+        select(rated.c.user_id, rated.c.race, rated.c.mmr).where(rated.c.rank == 1)
     ).all()
-    newest: dict[tuple[int, str], tuple[int, int]] = {}
-    for user_id, race, wc3_season, mmr in rows:
-        key = (user_id, race.value)
-        if key in pairs and wc3_season >= newest.get(key, (-1, 0))[0]:
-            newest[key] = (wc3_season, mmr)
-    return {key: mmr for key, (_, mmr) in newest.items()}
+    return {
+        (user_id, race.value): mmr
+        for user_id, race, mmr in rows
+        if (user_id, race.value) in pairs
+    }
 
 
 def race_games(

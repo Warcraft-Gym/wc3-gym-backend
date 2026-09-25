@@ -106,7 +106,7 @@ def _season_loads(season_id: int) -> list[Any]:
         ),
         joinedload(roster).noload(rel(DBUserTeamSeason.team)),
         joinedload(info),
-        joinedload(seats)
+        selectinload(seats)
         .joinedload(rel(DBTeamSeasonCaptain.user))
         .options(
             selectinload(rel(User.w3c_stats)),

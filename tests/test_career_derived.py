@@ -382,6 +382,9 @@ def test_the_derived_player_answers_the_same_row(
     resp = client.get(f"/stats/career/{league['Alpha']}")
     assert resp.status_code == 200
     assert resp.json() == EXPECTED[0]
+    assert resp.headers["cache-control"] == (
+        "public, s-maxage=3600, stale-while-revalidate=3600"
+    )
 
 
 def test_the_field_order_is_unchanged(client: Client, league: dict[str, int]) -> None:
