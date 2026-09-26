@@ -14,7 +14,7 @@ from sqlmodel import Field, Relationship, SQLModel
 from app.models.base import DBModel
 from app.models.enums import Race, SeedSource, SignupChannel
 from app.models.event_history import HistoricalParticipant
-from app.models.team_reduced import TeamReduced
+from app.models.team_summary import TeamSummaryPublic
 from app.models.types import (
     AwareUTC,
     EnumValue,
@@ -147,7 +147,7 @@ class EventEntrantPublic(SQLModel):
     id: int
     event_id: int
     user: UserSummaryPublic | None = None
-    team: TeamReduced | None = None
+    team: TeamSummaryPublic | None = None
     race: Annotated[str | None, EnumValue] = None
     note: str | None = None
     channel: Annotated[str | None, EnumValue] = None

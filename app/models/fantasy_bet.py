@@ -8,8 +8,7 @@ from sqlmodel import Field, Relationship, SQLModel
 from app.core.db import rel
 from app.models.base import DBModel, PublicModel, ident
 from app.models.match import Match
-from app.models.relationships import DBMapSeason
-from app.models.season import Season, SeasonPublic
+from app.models.season import Season, SeasonSummaryPublic
 from app.models.series import Series, SeriesPublic
 from app.models.series_cast import SeriesCast
 from app.models.series_veto_step import DBSeriesVetoStep
@@ -61,10 +60,7 @@ class FantasyBet(FantasyBetBase, DBModel, table=True):
             joinedload(rel(cls.series))
             .selectinload(rel(Series.veto_steps))
             .joinedload(rel(DBSeriesVetoStep.map)),
-            # Collections use selectinload; a joined collection multiplies the rows
-            joinedload(rel(cls.season))
-            .selectinload(rel(Season.maps))
-            .joinedload(rel(DBMapSeason.map)),
+            joinedload(rel(cls.season)),
             joinedload(rel(cls.series))
             .joinedload(rel(Series.match))
             .joinedload(rel(Match.team1)),
@@ -145,7 +141,7 @@ class FantasyBetPublic(FantasyBetBase, PublicModel):
     user_id: int | None = None
     winner_id: int | None = None
     bet_points: int | None = None
-    season: SeasonPublic | None = None
+    season: SeasonSummaryPublic | None = None
     series: SeriesPublic | None = None
     user: UserSummaryPublic | None = None
     winner: UserSummaryPublic | None = None
@@ -156,7 +152,9 @@ class FantasyBetPublic(FantasyBetBase, PublicModel):
             id=ident(fbet),
             series_id=fbet.series_id,
             season_id=fbet.season_id,
-            season=SeasonPublic.from_season(fbet.season) if fbet.season else None,
+            season=SeasonSummaryPublic.from_season(fbet.season)
+            if fbet.season
+            else None,
             series=SeriesPublic.from_series(fbet.series, fbet.season_id)
             if fbet.series
             else None,
@@ -173,12 +171,12 @@ class FantasyBetPublic(FantasyBetBase, PublicModel):
 
     @classmethod
     def from_fantasy_bet_reduced(cls, fbet: FantasyBet) -> Self:
-        """Every field of the bet, its season without the maps."""
+        """Every field of the bet, its players outside an event context."""
         return cls(
             id=ident(fbet),
             series_id=fbet.series_id,
             season_id=fbet.season_id,
-            season=SeasonPublic.from_season_without_maps(fbet.season)
+            season=SeasonSummaryPublic.from_season(fbet.season)
             if fbet.season
             else None,
             series=SeriesPublic.from_series(fbet.series) if fbet.series else None,

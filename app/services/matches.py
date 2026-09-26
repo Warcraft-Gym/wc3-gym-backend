@@ -58,7 +58,7 @@ class MatchService:
             if not match:
                 logger.error("Match could not be found!")
                 raise NotFoundError("Match not found")
-            public = MatchPublic.from_match_with_season(match)
+            public = MatchPublic.from_match(match)
             derived.fill_matches(session, [public])
             return public
 

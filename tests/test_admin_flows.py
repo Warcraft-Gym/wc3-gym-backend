@@ -288,18 +288,13 @@ def test_a_player_removed_from_a_team_leaves_its_roster(
 def test_a_team_on_its_own_carries_no_roster(
     client: Client, league: dict[str, Any]
 ) -> None:
-    """GET /leagues/{id}/teams/{id} answers an empty player_by_season.
+    """GET /leagues/{id}/teams/{id} answers the team and its seasons, no roster.
 
-    The query behind it loads Team.user_seasons with noload("*"), so the link rows
-    arrive without their user and the frontend reads the roster from
-    /events/{id}/teams/{id} instead.
+    The frontend reads the roster from /events/{id}/teams/{id} instead.
     """
-    assert (
-        get(client, f"/leagues/{league['league_id']}/teams/{league['team_a_id']}")[
-            "player_by_season"
-        ]
-        == {}
-    )
+    team = get(client, f"/leagues/{league['league_id']}/teams/{league['team_a_id']}")
+    assert "player_by_season" not in team
+    assert "captains_by_season" not in team
 
 
 def test_a_season_with_no_result_stands_at_zero(
@@ -1120,4 +1115,4 @@ def test_a_team_season_takes_any_number_of_captains(
 
     resp = client.put(path, json={"captain_ids": []}, headers=auth_headers)
     assert resp.status_code == 200, resp.text
-    assert resp.json()["captains_by_season"] == {}
+    assert resp.json()["captains_by_season"] == {str(league["season_id"]): []}

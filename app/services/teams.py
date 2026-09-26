@@ -1,24 +1,26 @@
 import logging
-from typing import Any
+from collections.abc import Sequence
 
 from sqlalchemy import select, true
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as OrmSession
 from sqlalchemy.orm import joinedload, noload, selectinload
+from sqlalchemy.orm.strategy_options import _AbstractLoad
 from sqlmodel import col
 
 from app.core.db import Session, rel
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.core.query import QueryElement, QueryUtil
+from app.models.base import ident
 from app.models.league import League
 from app.models.relationships import DBTeamSeasonCaptain
 from app.models.season import Season, progress_by_seasons
-from app.models.team import Team, TeamCreate, TeamPublic, TeamUpdate
+from app.models.team import Team, TeamCreate, TeamPublic, TeamRosterPublic, TeamUpdate
 from app.models.team_season import DBTeamSeason
-from app.models.user import User, UserPublic
+from app.models.user import User, UserSummaryPublic
 from app.models.user_team_season import DBUserTeamSeason
 from app.services import availability, blob, derived, discord_roles
-from app.services.users import UserService
+from app.services.users import UserService, summary_loads
 from app.services.w3c_stats import fill, w3c_season
 
 logger = logging.getLogger(__name__)
@@ -53,95 +55,66 @@ def _event_team(
     return team, event
 
 
-def _fill(session: OrmSession, teams: list[TeamPublic], entered: bool = False) -> None:
-    """The standings of every team, the name and league of every season it
-    played, and the signup race and the season record of every player; with
-    `entered`, the MMR each player entered a finished season with."""
+def roster_loads(event_id: int) -> tuple[_AbstractLoad, ...]:
+    """The loads of one event's roster, relative to a Team: its players and
+    captains of `event_id` with their summary rows, and its row of that event."""
+    players = rel(Team.user_seasons).and_(col(DBUserTeamSeason.season_id) == event_id)
+    seats = rel(Team.captain_seasons).and_(
+        col(DBTeamSeasonCaptain.season_id) == event_id
+    )
+    info = rel(Team.season_info).and_(col(DBTeamSeason.season_id) == event_id)
+    return (
+        joinedload(players)
+        .joinedload(rel(DBUserTeamSeason.user))
+        .options(*summary_loads(event_id)),
+        selectinload(seats)
+        .joinedload(rel(DBTeamSeasonCaptain.user))
+        .options(*summary_loads(event_id)),
+        joinedload(info),
+    )
+
+
+def _fill(session: OrmSession, teams: Sequence[TeamPublic]) -> None:
+    """The standings of every team and the name and league of every season it
+    played."""
     derived.fill_standings(session, teams)
     derived.fill_season_labels(session, teams)
-    roster = [
-        (player, season_id)
-        for team in teams
-        for season_id, players in team.player_by_season.items()
-        for player in players
+
+
+def _rosters(
+    session: OrmSession, teams: Sequence[Team], event_id: int
+) -> list[TeamRosterPublic]:
+    """The teams with their roster of the event, as roster_loads read them: the
+    standings, then for every player and captain the signup race, the MMR he
+    entered a finished event with, his event record and his ladder summary."""
+    result = [TeamRosterPublic.from_roster(team, event_id) for team in teams]
+    _fill(session, result)
+    people = [
+        user
+        for team in result
+        for seats in (team.player_by_season, team.captains_by_season)
+        for users in seats.values()
+        for user in users
     ]
-    derived.fill_user_signup_races(session, roster, entered)
-    derived.fill_gnl_stats(session, [player for player, _ in roster])
+    derived.fill_user_signup_races(
+        session, [(user, event_id) for user in people], entered=True
+    )
+    derived.fill_gnl_stats(session, people)
+    fill(session, people, w3c_season(session))
+    return result
 
 
 def _fill_out_rounds(
-    session: OrmSession, public: TeamPublic, team_id: int, season_id: int
+    session: OrmSession, public: TeamRosterPublic, team_id: int, season_id: int
 ) -> None:
-    """The rounds each roster player sits out of the event, on their season stats.
+    """The rounds each roster player sits out of the event, on their event record.
 
     A fixed number of statements answers the whole roster, never one per player.
     """
     out = availability.out_rounds(session, team_id, season_id)
     for player in public.player_by_season.get(season_id) or []:
-        for stat in player.gnl_stats:
-            if stat.season_id == season_id and stat.user_id in out:
-                stat.out_rounds = out[stat.user_id]
-
-
-def _public(session: OrmSession, team: Team, entered: bool = False) -> TeamPublic:
-    """One team, with its standings derived from the series it played."""
-    public = TeamPublic.from_team(team)
-    _fill(session, [public], entered)
-    return public
-
-
-def _season_loads(season_id: int) -> list[Any]:
-    """Loader options for one season of a team: roster, captains and stats.
-
-    The ladder summary is left to _fill_mmrs, which reads a player once
-    however many seats he holds.
-    """
-    roster = rel(Team.user_seasons).and_(col(DBUserTeamSeason.season_id) == season_id)
-    info = rel(Team.season_info).and_(col(DBTeamSeason.season_id) == season_id)
-    stats = rel(User.team_seasons).and_(col(DBUserTeamSeason.season_id) == season_id)
-    seats = rel(Team.captain_seasons).and_(
-        col(DBTeamSeasonCaptain.season_id) == season_id
-    )
-    return [
-        joinedload(roster)
-        .joinedload(rel(DBUserTeamSeason.user))
-        .options(
-            selectinload(stats),
-            noload(rel(User.signup_seasons)),
-        ),
-        joinedload(roster).noload(rel(DBUserTeamSeason.team)),
-        joinedload(info),
-        selectinload(seats)
-        .joinedload(rel(DBTeamSeasonCaptain.user))
-        .options(
-            noload(rel(User.team_seasons)),
-            noload(rel(User.signup_seasons)),
-        ),
-    ]
-
-
-def _fill_mmrs(session: OrmSession, teams: list[TeamPublic], current: int) -> None:
-    """The ladder summary of every roster player and captain."""
-    fill(
-        session,
-        [
-            user
-            for team in teams
-            for seats in (team.player_by_season, team.captains_by_season)
-            for users in seats.values()
-            for user in users
-        ],
-        current,
-    )
-
-
-# A team list reads the season rows and no people; noload alone, because a
-# joined link table multiplies the rows.
-_LIST_OPTIONS = (
-    noload(rel(Team.user_seasons)),
-    noload(rel(Team.captain_seasons)),
-    selectinload(rel(Team.season_info)),
-)
+        if player.record and player.id in out:
+            player.record.out_rounds = out[player.id]
 
 
 class TeamService:
@@ -152,7 +125,8 @@ class TeamService:
         with Session.begin() as session:
             _league(session, league_id)
             new_team = Team.add(session, team.model_dump() | {"league_id": league_id})
-            return _public(session, new_team)
+            team_id = ident(new_team)
+        return self.get(team_id, league_id)
 
     def update(
         self, team_id: int, team: TeamUpdate, league_id: int | None = None
@@ -160,8 +134,7 @@ class TeamService:
         with Session.begin() as session:
             row = _team(session, team_id, league_id)
             row.sqlmodel_update(team.model_dump(exclude_unset=True))
-            session.flush()
-            return _public(session, row)
+        return self.get(team_id, league_id)
 
     def update_icon(
         self, team_id: int, file: bytes, league_id: int | None = None
@@ -186,7 +159,7 @@ class TeamService:
 
     def add_players(
         self, team_id: int, season_id: int, player_ids: list[int]
-    ) -> TeamPublic:
+    ) -> TeamRosterPublic:
         with Session.begin() as session:
             team, season = _event_team(session, team_id, season_id)
             for user_id in player_ids:
@@ -201,17 +174,15 @@ class TeamService:
                         )
                 except IntegrityError:
                     logger.debug(f"User {user_id} is already in team {team_id}")
-            session.flush()
-            public = _public(session, team)
 
         discord_roles.sync(player_ids)
-        return public
+        return self.get_with_nested_users_by_season(team_id, season_id)
 
     def remove_players(
         self, team_id: int, season_id: int, player_ids: list[int]
-    ) -> TeamPublic:
+    ) -> TeamRosterPublic:
         with Session.begin() as session:
-            team, _ = _event_team(session, team_id, season_id)
+            _event_team(session, team_id, season_id)
             for user_id in player_ids:
                 user = session.get(User, user_id)
                 if not user:
@@ -225,15 +196,13 @@ class TeamService:
                         f"User not part of the team, user id: {user_id}"
                     )
                 session.delete(user_team)
-            session.flush()
-            public = _public(session, team)
 
         discord_roles.sync(player_ids)
-        return public
+        return self.get_with_nested_users_by_season(team_id, season_id)
 
     def set_captains(
         self, team_id: int, season_id: int, captain_ids: list[int]
-    ) -> TeamPublic:
+    ) -> TeamRosterPublic:
         """Replace the captains a team has in a season. Any number of them."""
         with Session.begin() as session:
             team, _ = _event_team(session, team_id, season_id)
@@ -272,13 +241,9 @@ class TeamService:
                     )
                 )
 
-            session.flush()
-            # The rows were written by id, so the team reads its captains again
-            session.expire(team, ["captain_seasons"])
-            public = _public(session, team)
-
         # Discord mirrors the database, and the chip says what the guild lacks
         discord_roles.sync(before | after)
+        public = self.get_with_nested_users_by_season(team_id, season_id)
         public.discord_role_missing = [
             account.discord_id
             for account in discord_roles.report(after)
@@ -334,37 +299,25 @@ class TeamService:
 
     def get(self, team_id: int, league_id: int | None = None) -> TeamPublic:
         with Session.begin() as session:
-            # Eager load related entities, disable nested loading
-            team = (
-                session.scalars(
-                    select(Team)
-                    .options(
-                        joinedload(rel(Team.user_seasons)).noload("*"),
-                        # The captains' ladder rows and signups stay unread
-                        joinedload(rel(Team.captain_seasons))
-                        .joinedload(rel(DBTeamSeasonCaptain.user))
-                        .options(
-                            noload(rel(User.w3c_stats)),
-                            noload(rel(User.signup_seasons)),
-                        ),
-                    )
-                    .where(
-                        col(Team.id) == team_id,
-                        col(Team.league_id) == league_id
-                        if league_id is not None
-                        else true(),
-                    )
+            team = session.scalars(
+                select(Team)
+                .options(selectinload(rel(Team.season_info)))
+                .where(
+                    col(Team.id) == team_id,
+                    col(Team.league_id) == league_id
+                    if league_id is not None
+                    else true(),
                 )
-                .unique()
-                .first()
-            )
+            ).first()
             if not team:
                 raise NotFoundError("Team not found")
-            return _public(session, team)
+            public = TeamPublic.from_team(team)
+            _fill(session, [public])
+            return public
 
     def get_with_nested_users_by_season(
         self, team_id: int, season_id: int
-    ) -> TeamPublic:
+    ) -> TeamRosterPublic:
         """One team with the season's roster, captains, stats and sat-out rounds."""
         with Session.begin() as session:
             _, event = _event_team(session, team_id, season_id)
@@ -372,16 +325,14 @@ class TeamService:
                 session.scalars(
                     select(Team)
                     .where(col(Team.id) == team_id)
-                    .options(*_season_loads(season_id))
+                    .options(*roster_loads(season_id))
                 )
                 .unique()
                 .first()
             )
             if not team:
                 raise NotFoundError("Team not found")
-            current = w3c_season(session)
-            public = _public(session, team, entered=True)
-            _fill_mmrs(session, [public], current)
+            [public] = _rosters(session, [team], season_id)
             # An event without scheduling asks nobody, so every list stays empty
             if event.scheduling_enabled:
                 _fill_out_rounds(session, public, team_id, season_id)
@@ -411,7 +362,7 @@ class TeamService:
             # Offset paging is deterministic only with a fixed order
             statement = (
                 select(Team)
-                .options(*_LIST_OPTIONS)
+                .options(selectinload(rel(Team.season_info)))
                 .where(
                     filter,
                     col(Team.league_id) == league_id
@@ -437,7 +388,7 @@ class TeamService:
             # Offset paging is deterministic only with a fixed order
             statement = (
                 select(Team)
-                .options(*_LIST_OPTIONS)
+                .options(selectinload(rel(Team.season_info)))
                 .where(
                     col(Team.league_id) == league_id
                     if league_id is not None
@@ -481,12 +432,10 @@ class TeamService:
 
     def get_teams_season(
         self, season_id: int, limit: int | None = None, offset: int = 0
-    ) -> list[TeamPublic]:
+    ) -> list[TeamRosterPublic]:
         """The season's teams with the season's rosters and captains.
 
-        The season sits in the query, so only that season's link rows
-        load. Roster and captain users answer empty signup_seasons, and
-        captains empty gnl_stats; no consumer reads them on this route.
+        The season sits in the loader, so only that season's link rows load.
         """
         with Session.begin() as session:
             # Offset paging is deterministic only with a fixed order
@@ -495,17 +444,13 @@ class TeamService:
                 .where(
                     col(Team.season_info).any(col(DBTeamSeason.season_id) == season_id)
                 )
-                .options(*_season_loads(season_id))
+                .options(*roster_loads(season_id))
                 .order_by(col(Team.id))
                 .offset(offset)
                 .limit(limit)
             )
             teams = session.scalars(statement).unique().all()
-            current = w3c_season(session)
-            result = [TeamPublic.from_team(team) for team in teams]
-            _fill(session, result, entered=True)
-            _fill_mmrs(session, result, current)
-            return result
+            return _rosters(session, teams, season_id)
 
     def get_teams_season_basic(
         self, season_id: int, limit: int | None = None, offset: int = 0
@@ -520,11 +465,7 @@ class TeamService:
             # Offset paging is deterministic only with a fixed order
             statement = (
                 select(Team)
-                .options(
-                    noload(rel(Team.user_seasons)),
-                    noload(rel(Team.captain_seasons)),
-                    joinedload(info).noload("*"),
-                )
+                .options(joinedload(info))
                 .where(col(Team.season_info).any(season_id=season_id))
                 .order_by(col(Team.id))
                 .offset(offset)
@@ -535,7 +476,7 @@ class TeamService:
             _fill(session, result)
             return result
 
-    def season_players(self, team_id: int, season_id: int) -> list[UserPublic]:
+    def season_players(self, team_id: int, season_id: int) -> list[UserSummaryPublic]:
         """The players this team fielded in this season."""
         team = self.get_with_nested_users_by_season(team_id, season_id)
         return team.player_by_season.get(season_id) or []

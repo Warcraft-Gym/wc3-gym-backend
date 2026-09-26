@@ -12,7 +12,7 @@ from typing import Self
 from app.models.base import PublicModel
 from app.models.series import SeriesPublic
 from app.models.series_cast import CastPublic
-from app.models.team_reduced import TeamReduced
+from app.models.team_summary import TeamSummaryPublic
 from app.models.user import UserSummaryPublic
 
 
@@ -39,7 +39,7 @@ class HomeTeam(PublicModel):
     icon_url: str | None = None
 
     @classmethod
-    def from_reduced(cls, team: TeamReduced | None) -> Self | None:
+    def from_reduced(cls, team: TeamSummaryPublic | None) -> Self | None:
         if team is None:
             return None
         return cls(id=team.id, name=team.name, icon_url=team.icon_url)

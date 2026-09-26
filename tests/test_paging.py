@@ -216,12 +216,13 @@ DEFAULT_ORDER = {
     "GET /leagues/{league_id}/teams": ["teams.id"],
     "GET /leagues/{league_id}/teams/basic": ["teams.id"],
     "POST /leagues/{league_id}/teams/search?query=id > 0": ["teams.id"],
-    # The last fragments order the matchup history of the season record and
+    # The players' tags, then the matchup history of the season record and
     # the MMR each roster player entered the season with
     "GET /events/{season_id}/teams": [
         "teams.id",
         "anon_1.id",
         "team_season_captain.user_id",
+        "user_battle_tag.is_active DESC, user_battle_tag.id",
         *MMR_AT,
         summary(4),
     ],

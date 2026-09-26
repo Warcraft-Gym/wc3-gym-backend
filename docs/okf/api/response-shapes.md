@@ -4,7 +4,7 @@ title: Response shapes
 description: An entity inside another answer is its summary shape, bounded by the read's event; the detail comes only from the entity's own read, and a write answers through that read.
 resource: ../../../app/models/user.py
 tags: [api, data]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-26T18:16:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-26T18:37:00Z }
 sources:
   - id: user
     resource: ../../../app/models/user.py
@@ -12,6 +12,18 @@ sources:
   - id: loads
     resource: ../../../app/services/users.py
     title: summary_loads and load_players
+  - id: team
+    resource: ../../../app/models/team.py
+    title: TeamPublic and TeamRosterPublic
+  - id: team-summary
+    resource: ../../../app/models/team_summary.py
+    title: TeamSummaryPublic
+  - id: season
+    resource: ../../../app/models/season.py
+    title: SeasonSummaryPublic
+  - id: roster-loads
+    resource: ../../../app/services/teams.py
+    title: roster_loads
   - id: nesting
     resource: ../../../tests/test_response_shapes.py
     title: The nesting test
@@ -23,7 +35,7 @@ sources:
 # The rules
 
 1. **Summary when embedded, detail only from its own read.** Every entity has a summary shape and a detail shape. An entity inside another object is its summary. The detail comes only from the entity's own single read.
-2. **A summary is bounded by the read's context.** It holds no all-time collection. Where a read is about one event, an embedded player's record is that event's record.
+2. **A summary is bounded by the read's context.** It holds no all-time collection. Where a read is about one event, an embedded player's record is that event's record, and a team's roster is that event's roster.
 3. **A write answers the entity's own GET, through the same function.** The write commits, then the service reads the row again by id with the read's own loads. No write builds its answer on a bare row.
 4. **Every read declares its loads.** A shape reads a collection only when the read loaded it; an unloaded collection serves its empty value and never loads on the spot.
 5. **Two tests hold the rule.** `tests/test_response_shapes.py` walks every schema a route answers with, from `/openapi.json`, and fails where a property embeds a shape of a registered entity other than its summary, or where a summary holds a list of entities. `tests/test_query_budget.py` pins the statements and rows of each read and write.
@@ -33,12 +45,12 @@ sources:
 | Entity | Summary, when embedded | List row | Detail, from its own read |
 |---|---|---|---|
 | User | `UserSummaryPublic` | `UserListPublic`: the summary plus `signup_seasons`, `fantasy_tier_pinned`, `draft_position`, `draft_excluded` | `UserPublic`: the list row plus `gnl_stats` for every season and `trophies` |
-| Team | none yet: a roster and a fantasy team embed `TeamPublic`; a match and an entrant embed `TeamReduced` | `TeamPublic` | `TeamPublic` |
-| Season | none yet: a match, a fantasy team and a bet embed `SeasonPublic` | `SeasonPublic` | `EventPublic` |
+| Team | `TeamSummaryPublic` | `TeamPublic`; `TeamRosterPublic` on an event's list | `TeamPublic` from its league; `TeamRosterPublic` from its event |
+| Season | `SeasonSummaryPublic` | `SeasonPublic` | `EventPublic` |
 | Series | `SeriesPublic`, the players as summaries | `SeriesPublic`, `StageSeriesRow` | `SeriesPublic` |
 | Fantasy team, bet | none | `FantasyTeamPublic`, `FantasyBetPublic` | the same classes |
 
-The member variants `UserMemberListPublic` and `UserMemberPublic` add `discordTag` and `discordId` (see [users](../data/tables/users.md)). The nesting test allows the sites that still embed a detail shape by name, with the reason: team rosters and captains, the fantasy captain, drafted players and drafted team, and the season of a match, a fantasy team and a bet.
+The member variants `UserMemberListPublic` and `UserMemberPublic` add `discordTag` and `discordId` (see [users](../data/tables/users.md)). The nesting test allows the sites that still embed a detail shape by name, with the reason: the fantasy captain and drafted players. `TeamPublic`, `TeamRosterPublic` and `SeasonPublic` answer only at the top level.
 
 # The player summary
 
@@ -53,10 +65,23 @@ The member variants `UserMemberListPublic` and `UserMemberPublic` add `discordTa
 | the same bets: `user` and `winner` | the bet's season | no |
 | `GET /draft-series/{id}`, `GET /draft-series/match/{id}` and the draft writes | the match's season | no |
 | `GET /events/{event_id}/entrants` | the event | no |
+| `GET /events/{event_id}/teams`, `GET /events/{event_id}/teams/{team_id}` and the three event team writes: the roster and the captains | the event | yes |
 | every series list, stage row, series side and bet list | none, `record` null | |
+
+# The team and season shapes
+
+`TeamSummaryPublic` (`app/models/team_summary.py`) holds `id`, `league_id`, `name`, `long_name` and `icon_url`. A match's teams, a stage row, an entrant's team, a captain fixture and a fantasy team's `drafted_team` embed it.
+
+`TeamPublic` is the summary plus `seasons_info` (the standings of each event the team entered) and `discord_role_missing`. It answers `GET /leagues/{league_id}/teams/{team_id}`, the league team list, search and `basic` read, `GET /events/{event_id}/teams/basic` (whose `seasons_info` holds that event alone), and `POST` and `PUT /leagues/{league_id}/teams`, which answer through the single read after the commit.
+
+`TeamRosterPublic` is `TeamPublic` plus `player_by_season` and `captains_by_season`, each with exactly one key, the event of the path, and a list of player summaries under it (empty when the team fields none). It answers `GET /events/{event_id}/teams`, `GET /events/{event_id}/teams/{team_id}`, and the three event team writes: `POST` and `DELETE /events/{event_id}/teams/{team_id}/players` and `PUT .../captains`, which answer through the event team read after the commit; the captains write adds `discord_role_missing`. `seasons_info` holds that event alone.
+
+`SeasonSummaryPublic` holds `id`, `name`, `league_short_name`, `league_name`, `round_count`, `phase`, `start_date`, `end_date`, `round_end_zone`, `map_rules`, and `signup_race` and `played_as` where a signup row carries them. A match's season, on every match read and every series that carries its match, a fantasy team's and a bet's season, and each `signup_seasons` entry embed it. It holds no maps and no rounds.
 
 # Loads
 
 `summary_loads(event_id)` in `app/services/users.py` is the one loader of a player summary, relative to a `User`: the tags, and the `user_team_season` row of `event_id` alone (none without one), with no signups and no `w3cstats` rows. `signups=True` adds the signups a list row names; `window=<season>` loads the `w3cstats` rows of that live window for an entrant's MMR. The user list and search, the signups read and the entrants read compose it.
 
 A single series, draft or bet read joins its players bare, then calls `load_players(session, ids, event_id)`, which reads those players again with `summary_loads(event_id)`: one statement for the players, one for their team rows and one for their tags. The event is known only once the row is read, so the reload comes after it.
+
+`roster_loads(event_id)` in `app/services/teams.py` is the one loader of an event roster, relative to a `Team`: the `user_team_season` and `team_season_captain` rows of `event_id` with their users under `summary_loads(event_id)`, and the `team_season` row of that event. The event team list and the single event team read compose it; no other team read loads a roster.

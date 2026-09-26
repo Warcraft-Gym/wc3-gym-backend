@@ -11,7 +11,9 @@ from sqlalchemy.orm import Session as OrmSession
 from app.core import fantasy
 from app.core.db import Session
 from app.core.query import QueryUtil
-from app.models.team import Team
+from app.models.season_info import SeasonInfoPublic
+from app.models.team import Team, TeamPublic
+from app.models.team_season import DBTeamSeason
 from app.services import derived
 from app.services.fantasy_bets import FantasyBetService
 from app.services.fantasy_teams import FantasyTeamService
@@ -23,24 +25,29 @@ if TYPE_CHECKING:
 
 
 def _drafted_standing(
-    fantasy_team: "FantasyTeamPublic", season: "SeasonPublic"
+    session: OrmSession, fantasy_team: "FantasyTeamPublic", season: "SeasonPublic"
 ) -> fantasy.Standing | None:
-    """What the drafted team stands at in the season, off its derived
-    seasons_info row. The list answer carries no team name; this one does."""
+    """What the drafted team stands at in the season, derived for that season
+    alone; none when the team did not enter it."""
     drafted_team = fantasy_team.drafted_team
-    if not drafted_team or not drafted_team.seasons_info:
+    if not drafted_team or not session.get(
+        DBTeamSeason, {"team_id": drafted_team.id, "season_id": season.id}
+    ):
         return None
-    for season_info in drafted_team.seasons_info:
-        if season_info.season_id == season.id:
-            return fantasy.Standing(
-                team_id=drafted_team.id,
-                team_name=drafted_team.name,
-                team_icon_url=drafted_team.icon_url,
-                final_score=season_info.final_score or 0,
-                points_against=season_info.points_against or 0,
-                points_available=season_info.points_available or 0,
-            )
-    return None
+    team = TeamPublic(
+        **drafted_team.model_dump(),
+        seasons_info=[SeasonInfoPublic(season_id=season.id)],
+    )
+    derived.fill_standings(session, [team])
+    info = team.seasons_info[0]
+    return fantasy.Standing(
+        team_id=drafted_team.id,
+        team_name=drafted_team.name,
+        team_icon_url=drafted_team.icon_url,
+        final_score=info.final_score or 0,
+        points_against=info.points_against or 0,
+        points_available=info.points_available or 0,
+    )
 
 
 def _grind(
@@ -79,6 +86,7 @@ def team_score_breakdown(
     with Session.begin() as session:
         series_by_week = derived.fantasy_series(session, {season.id}).get(season.id, {})
         grind = _grind(session, fantasy_team, season)
+        standing = _drafted_standing(session, fantasy_team, season)
     race_points, race_stats, race_weekly_details = fantasy.race_points(
         season.round_count, series_by_week, True
     )
@@ -93,7 +101,7 @@ def team_score_breakdown(
             for player in fantasy_team.drafted_players
         ],
         drafted_race=fantasy.race_value(fantasy_team.drafted_race),
-        standing=_drafted_standing(fantasy_team, season),
+        standing=standing,
         bets=[
             scored
             for bet in player_bets or []

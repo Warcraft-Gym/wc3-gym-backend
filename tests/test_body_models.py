@@ -40,4 +40,4 @@ def test_captains_left_out_of_the_body_clears_them(
     resp = client.put(path, json={}, headers=auth_headers)
 
     assert resp.status_code == 200, resp.text
-    assert resp.json()["captains_by_season"] == {}
+    assert resp.json()["captains_by_season"] == {str(seeded["season_id"]): []}

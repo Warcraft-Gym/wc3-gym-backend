@@ -27,7 +27,7 @@ from app.models.relationships import DBEventRound, EventRoundPublic
 from app.models.series_cast import CastPublic, SeriesCast
 from app.models.series_side import SeriesSidePublic
 from app.models.series_veto_step import DBSeriesVetoStep
-from app.models.team_reduced import TeamReduced
+from app.models.team_summary import TeamSummaryPublic
 from app.models.types import AwareUTC, EnumValue, SuggestRace, UTCDateTime
 from app.models.user import User, UserSummaryPublic
 
@@ -443,8 +443,8 @@ class StageSeriesRow(SeriesPublic):
     entrant1_id: int | None = None
     entrant2_id: int | None = None
     # The team behind a side, so the box prints its name; null for a player
-    team1: TeamReduced | None = None
-    team2: TeamReduced | None = None
+    team1: TeamSummaryPublic | None = None
+    team2: TeamSummaryPublic | None = None
     side_size: int = 1
     pick_rule: str | None = None
     result_kind: str = "played"

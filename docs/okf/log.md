@@ -2,6 +2,7 @@
 
 ## 2026-09-27
 
+* **Update**: [Response shapes](api/response-shapes.md) gains the team and season rows: a team inside another answer is `TeamSummaryPublic` and a season `SeasonSummaryPublic`; the event team reads and writes answer `TeamRosterPublic`, one event's roster, through `roster_loads`; the league team reads and writes answer `TeamPublic`.
 * **Add**: [Response shapes](api/response-shapes.md). A player inside another answer is `UserSummaryPublic`, whose `record` is the one of the read's event and whose `gnl_stats` holds that one entry; the series, draft and bet writes answer through their single read.
 
 ## 2026-09-26

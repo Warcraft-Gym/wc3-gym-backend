@@ -49,7 +49,7 @@ from app.models.series_side import (
     SideRoster,
 )
 from app.models.team import Team
-from app.models.team_reduced import TeamReduced
+from app.models.team_summary import TeamSummaryPublic
 from app.models.user import User, UserSummaryPublic
 from app.models.user_team_season import DBUserTeamSeason
 from app.services import derived, draft_series
@@ -969,7 +969,7 @@ def _fill_teams(session: OrmSession, rows: Sequence[StageSeriesRow]) -> None:
     if not wanted:
         return
     teams = {
-        ident(entrant): TeamReduced.from_team(team)
+        ident(entrant): TeamSummaryPublic.from_team(team)
         for entrant, team in session.execute(
             select(EventEntrant, Team)
             .join(Team, col(Team.id) == col(EventEntrant.team_id))
