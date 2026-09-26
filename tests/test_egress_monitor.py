@@ -223,7 +223,7 @@ def test_an_unavailable_run_alerts_once_and_a_good_run_says_it_runs_again(
     egress_monitor.report(failed, NOW - timedelta(hours=4))
     assert titles(sent) == ["Egress snapshot could not run"]
     assert sent[0]["embeds"][0]["description"].startswith(
-        "the pg_stat_statements extension is not installed."
+        "The pg_stat_statements extension is not installed."
     )
     sent.clear()
 
@@ -1031,3 +1031,14 @@ def test_a_digest_with_every_field_fits_discords_limits(
     names = [f["name"] for f in payload["embeds"][0]["fields"]]
     assert names[3:5] == ["Database size", "Vercel, 30 days"]
     assert size(payload) <= 6000
+
+
+def test_the_unavailable_alert_starts_its_reason_with_a_capital() -> None:
+    payload = egress_monitor.unavailable_alert(
+        "the pg_stat_statements extension is not installed",
+        datetime(2026, 9, 27, tzinfo=UTC),
+        None,
+    )
+    assert payload["embeds"][0]["description"].startswith(
+        "The pg_stat_statements extension"
+    )
