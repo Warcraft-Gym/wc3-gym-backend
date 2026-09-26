@@ -38,12 +38,12 @@ from app.models.koth_night import NightOpen
 from app.models.relationships import DBEventRound
 from app.models.season import EventUpdate, Season
 from app.models.series import Series, SeriesUpdate
-from app.models.types import utcnow
 from app.models.user import User
 from app.services import stage_engine
 from app.services.battle_tags import person_by_tag
 from app.services.events import EventService, _stats_for, _users_for
-from app.services.koth import carry, night, nightbot
+from app.services.koth import carry, live, night, nightbot
+from app.services.koth.signup import recut
 from app.services.series import SeriesService
 from app.services.w3c_stats import w3c_season
 
@@ -180,14 +180,14 @@ def create_signups(
 
 
 def withdraw(battle_tag: str, race: str | None = None) -> None:
-    """Withdraw the player from the night that takes signups.
+    """Withdraw the player from tonight, whether its signups stand open or not.
 
     A command that names a race withdraws that race alone; one that names none
-    withdraws every race the player entered.
+    withdraws every race the player entered. The rows forfeit what they owe.
     """
     named = _race(race)
     with Session.begin() as session:
-        event_id = ident(night.taking_signups(session))
+        event_id = ident(night.tonight(session))
         # Any tag the person holds withdraws them
         user = person_by_tag(session, battle_tag)
         if user is None:
@@ -202,9 +202,9 @@ def withdraw(battle_tag: str, race: str | None = None) -> None:
         rows = session.scalars(statement).all()
         if not rows:
             raise NotFoundError("No active signup to withdraw")
-        for row in rows:
-            row.withdrawn_at = utcnow()
-        stage_engine.uncrown(session, [ident(row) for row in rows])
+        players = live.leave(session, event_id, rows)
+    if players:
+        recut(event_id, only=players)
 
 
 def set_bracket(signup_id: int, bracket: int) -> KothSignupPublic:

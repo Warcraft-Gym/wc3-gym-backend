@@ -208,6 +208,7 @@ def _played(
                 winner_side=2 if stage_engine.won_slot(row) == 2 else 1,
                 throne=throne,
                 replay=ident(row) in replays,
+                forfeit=row.result_kind == "forfeit",
             )
         )
     return list(reversed(rows))

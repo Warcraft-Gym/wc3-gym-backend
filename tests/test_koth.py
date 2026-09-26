@@ -7,6 +7,7 @@ chains. The rating a signup cuts on is the W3C stats the app stored, so
 nothing here reaches w3champions.
 """
 
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
@@ -21,7 +22,9 @@ from app.models.w3c_stats import W3CStats
 from app.services.w3c import W3CService
 from tests.seed import active
 
-EVENT = {"name": "KOTH 1", "event_date": "2026-01-10T20:00:00Z"}
+# Tonight is a night that started less than a day ago, so the event is today
+TODAY = datetime.now(tz=UTC).date()
+EVENT = {"name": "KOTH 1", "event_date": f"{TODAY:%Y-%m-%d}T20:00:00Z"}
 SIGNUP = {
     "client_token": "test-nightbot-token",
     "twitch_username": "streamer",
@@ -310,7 +313,10 @@ def test_one_event_is_active_after_an_activation(
     second = client.post(
         "/koth/events",
         headers=auth_headers,
-        json={"name": "KOTH 2", "event_date": "2026-01-17T20:00:00Z"},
+        json={
+            "name": "KOTH 2",
+            "event_date": f"{TODAY + timedelta(days=7):%Y-%m-%d}T20:00:00Z",
+        },
     ).json()
 
     def active_ids() -> list[int]:
@@ -633,7 +639,10 @@ def test_the_admin_signup_lands_on_the_event_he_names(
     later = client.post(
         "/koth/events",
         headers=auth_headers,
-        json={"name": "KOTH 2", "event_date": "2026-02-10T20:00:00Z"},
+        json={
+            "name": "KOTH 2",
+            "event_date": f"{TODAY + timedelta(days=31):%Y-%m-%d}T20:00:00Z",
+        },
     ).json()
     rate("P3#3333", Race.HU, 1400)
 

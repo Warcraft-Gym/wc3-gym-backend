@@ -6,7 +6,7 @@ call an admin or Nightbot makes, so the assertions read the shapes the run
 page draws rather than the rows the module writes.
 """
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
@@ -30,10 +30,10 @@ from tests.test_koth import silent_w3c, unplaced
 from tests.test_stage_engine import open_chain, score, stage_series
 
 TOKEN = "test-nightbot-token"
-NIGHT = "2026-09-14T19:00:00Z"
-LATER = "2026-09-21T19:00:00Z"
-# The site door reads the event phase, which shuts on a night already over
+# Tonight is a night that started less than a day ago, so the tests open it today
 TONIGHT = f"{datetime.now(tz=UTC).date():%Y-%m-%d}T19:00:00Z"
+NIGHT = TONIGHT
+LATER = f"{datetime.now(tz=UTC).date() + timedelta(days=1):%Y-%m-%d}T19:00:00Z"
 
 
 def rate(tag: str, mmr: int, race: Race = Race.HU, season: int = 20) -> None:
@@ -131,7 +131,8 @@ def test_a_night_is_one_event_of_the_koth_league(
     assert night["league_short_name"] == "KOTH"
     assert night["signup_policy"] == "anyone"
     assert night["published"] is True
-    assert night["name"] == "14 September 2026"
+    today = datetime.now(tz=UTC).date()
+    assert night["name"] == f"{today.day} {today:%B %Y}"
     assert [(row["format"], row["best_of"]) for row in night["stages"]] == [("koth", 1)]
     assert [
         (row["position"], row["name"], row["lower_bound"]) for row in night["divisions"]

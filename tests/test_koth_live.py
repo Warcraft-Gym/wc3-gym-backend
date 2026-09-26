@@ -5,6 +5,7 @@ public dashboard draw. Each test pins one rule of the night: who wears the
 crown, who stands where in line, and what the night refuses.
 """
 
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
@@ -17,11 +18,10 @@ from app.models.series_game import DBSeriesGame
 from app.models.user import User
 from app.models.w3c_stats import W3CStats
 from app.services.koth import legacy
+from tests.test_awards import awarded
 from tests.test_koth import silent_w3c
-from tests.test_koth_night import enrol, entrants, open_night, sign_up
+from tests.test_koth_night import LATER, enrol, entrants, open_night, sign_up
 from tests.test_query_budget import count_statements
-
-LATER = "2026-10-05T19:00:00Z"
 
 
 def bracket_ids(night: dict[str, Any]) -> list[int]:
@@ -126,6 +126,12 @@ def _open_id(payload: dict[str, Any], entrant_id: int) -> int:
 def king_of(payload: dict[str, Any], division_id: int) -> int | None:
     seat = only(payload, division_id)["king"]
     return seat["user_id"] if seat else None
+
+
+def crowned(payload: dict[str, Any], division_id: int) -> int | None:
+    """The race row that wears the crown of the bracket."""
+    seat = only(payload, division_id)["king"]
+    return seat["rows"][0]["entrant_id"] if seat else None
 
 
 def line_of(payload: dict[str, Any], division_id: int) -> list[int]:
@@ -250,14 +256,14 @@ def test_a_king_who_was_removed_and_put_back_is_an_ordinary_row(
         f"/koth/nights/{night['id']}/entrants/{king}", headers=auth_headers
     )
     assert left.status_code == 200, left.text
-    assert king_of(left.json(), top) is None
+    assert crowned(left.json(), top) == beaten
 
     back = client.post(
         f"/koth/nights/{night['id']}/entrants/{king}/restore", headers=auth_headers
     )
 
     assert back.status_code == 200, back.text
-    assert king_of(back.json(), top) is None
+    assert crowned(back.json(), top) == beaten
     assert (
         line_of(back.json(), top)[-1] == only(back.json(), top)["queue"][-1]["user_id"]
     )
@@ -666,7 +672,7 @@ def test_the_king_loses_on_his_second_race_row_and_the_crown_moves(
 def test_a_king_who_withdraws_through_the_shared_route_frees_the_throne(
     client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
 ) -> None:
-    """A crown whose row left reads as an empty throne on every later result."""
+    """A king who leaves forfeits to the first in line, who keeps the crown."""
     night = open_night(client, auth_headers)
     top = bracket_ids(night)[0]
     king = place(client, auth_headers, night, "Away#1", 1700, top)
@@ -676,15 +682,14 @@ def test_a_king_who_withdraws_through_the_shared_route_frees_the_throne(
 
     legacy.withdraw("Away#1")
 
-    assert king_of(board(client, night["id"]), top) is None
-    payload = play(client, auth_headers, night["id"], first, second)
-    assert only(payload, top)["king"]["rows"][0]["entrant_id"] == first
+    # The beaten row went last, so the first in line is the other one
+    assert crowned(board(client, night["id"]), top) == second
 
     back = client.post(
         f"/koth/nights/{night['id']}/entrants/{king}/restore", headers=auth_headers
     )
     assert back.status_code == 200, back.text
-    assert only(back.json(), top)["king"]["rows"][0]["entrant_id"] == first
+    assert crowned(back.json(), top) == second
 
 
 def test_a_king_moved_to_another_bracket_frees_the_throne_he_left(
@@ -1032,3 +1037,124 @@ def test_game_one_follows_every_score_change(
     assert cleared.status_code == 200, cleared.text
     assert game_one() is None
     assert client.get(f"/events/{night['id']}").json()["archived"] is False
+
+
+def test_a_night_a_day_old_is_not_tonight_and_the_next_open_closes_it(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """A night nobody closed expires; opening the next one closes and pays it."""
+    started = datetime.now(tz=UTC) - timedelta(hours=25)
+    old = open_night(client, auth_headers, starts_at=started.isoformat())
+    top = bracket_ids(old)[0]
+    king = place(client, auth_headers, old, "Old#1", 1700, top)
+    rival = place(client, auth_headers, old, "Rival#2", 1700, top)
+    play(client, auth_headers, old["id"], king, rival)
+
+    assert client.get("/koth/board").json()["error"] == "No KOTH night is open"
+    assert awarded(old["id"]) == []
+
+    new = open_night(client, auth_headers)
+
+    assert client.get(f"/events/{old['id']}").json()["closed_at"] is not None
+    assert [(place, title) for _, place, title in awarded(old["id"])] == [
+        (1, "Champion"),
+        (2, "Runner-up"),
+    ]
+    assert client.get("/koth/board").json()["night_id"] == new["id"]
+
+
+def test_a_night_that_has_not_expired_refuses_the_next_open(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    started = datetime.now(tz=UTC) - timedelta(hours=23)
+    open_night(client, auth_headers, starts_at=started.isoformat())
+    resp = client.post("/koth/nights", json={"starts_at": LATER}, headers=auth_headers)
+    assert resp.status_code == 409
+    assert resp.json()["error"] == "Close the open night first."
+
+
+def test_a_withdraw_with_signups_off_goes_through(
+    client: Client,
+    auth_headers: dict[str, str],
+    seeded: dict[str, Any],
+    member: Any,  # noqa: ANN401
+) -> None:
+    night = open_night(client, auth_headers)
+    top = bracket_ids(night)[0]
+    row = place(client, auth_headers, night, "Leave#1", 1700, top)
+    with Session.begin() as session:
+        user = session.get(User, entrants(client, night["id"])[0]["user"]["id"])
+        assert user is not None
+        user.discordId = "9001"
+    shut = client.put(
+        f"/events/{night['id']}", json={"signups_open": False}, headers=auth_headers
+    )
+    assert shut.status_code == 200, shut.text
+
+    gone = client.delete(f"/events/{night['id']}/entrants/me", headers=member("9001"))
+
+    assert gone.status_code == 204, gone.text
+    assert [
+        one["entrant_id"] for one in only(board(client, night["id"]), top)["left"]
+    ] == [row]
+
+
+def test_a_withdraw_from_a_series_on_the_table_forfeits_it(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    night = open_night(client, auth_headers)
+    top = bracket_ids(night)[0]
+    first = place(client, auth_headers, night, "Quit#1", 1700, top)
+    second = place(client, auth_headers, night, "Wins#2", 1700, top)
+    assert start(client, auth_headers, night["id"], first, second).status_code == 201
+
+    legacy.withdraw("Quit#1")
+
+    payload = board(client, night["id"])
+    bracket = only(payload, top)
+    assert bracket["open_series"] is None
+    (played,) = bracket["played"]
+    assert played["forfeit"] is True
+    assert played["winner"]["entrant_id"] == second
+    assert played["loser"]["entrant_id"] == first
+    assert crowned(payload, top) == second
+
+
+def test_a_king_who_leaves_with_a_line_crowns_the_challenger_by_forfeit(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    night = open_night(client, auth_headers)
+    top = bracket_ids(night)[0]
+    king = place(client, auth_headers, night, "Crown#1", 1700, top)
+    beaten = place(client, auth_headers, night, "Lost#2", 1700, top)
+    waiting = place(client, auth_headers, night, "Next#3", 1700, top)
+    play(client, auth_headers, night["id"], king, beaten)
+
+    left = client.delete(
+        f"/koth/nights/{night['id']}/entrants/{king}", headers=auth_headers
+    )
+
+    assert left.status_code == 200, left.text
+    bracket = only(left.json(), top)
+    assert bracket["played"][0]["forfeit"] is True
+    assert bracket["played"][0]["winner"]["entrant_id"] == waiting
+    assert bracket["played"][0]["throne"] == "moved"
+    assert crowned(left.json(), top) == waiting
+    assert bracket["open_series"] is None
+
+
+def test_a_king_who_leaves_an_empty_line_leaves_the_throne_empty(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    night = open_night(client, auth_headers)
+    top = bracket_ids(night)[0]
+    king = place(client, auth_headers, night, "Solo#1", 1700, top)
+    beaten = place(client, auth_headers, night, "Gone#2", 1700, top)
+    play(client, auth_headers, night["id"], king, beaten)
+    legacy.withdraw("Gone#2")
+
+    legacy.withdraw("Solo#1")
+
+    bracket = only(board(client, night["id"]), top)
+    assert bracket["king"] is None
+    assert len(bracket["played"]) == 1

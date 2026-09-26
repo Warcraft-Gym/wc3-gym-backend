@@ -109,6 +109,7 @@ class KothPlayed(SQLModel):
     `held` left it with the king who played, `none` was a side game.
     `winner_side` is the side of the series the winner played, so a client
     turns the result around with the other side and needs no series read.
+    `forfeit` marks a series the loser gave up by leaving the night.
     """
 
     series_id: int
@@ -117,6 +118,7 @@ class KothPlayed(SQLModel):
     winner_side: Literal[1, 2]
     throne: Literal["moved", "held", "none"]
     replay: bool = False
+    forfeit: bool = False
 
 
 class KothHistoricalSeries(SQLModel):
