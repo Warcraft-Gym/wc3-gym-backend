@@ -4,7 +4,7 @@ title: W3Champions
 description: The ranked ladder service the app reads MMR, per-race stats and match history from, with a timeout, a throttle answer, and two separate sync pipelines.
 resource: ../../../app/services/w3c.py
 tags: [w3champions]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-20T18:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-26T14:40:00Z }
 sources:
   - id: client
     resource: ../../../app/services/w3c.py
@@ -21,7 +21,7 @@ sources:
 
 | Data | Endpoint family | Stored in | Trigger |
 |---|---|---|---|
-| MMR and wins and losses per race and season | player stats | `w3cstats`, `users.w3c_synced_at`, `users.mmr` | the Sync W3C buttons, `POST /users/{id}/w3c-sync`, `POST /events/{event_id}/teams/{team_id}/ladder-sync`, a KOTH signup of a tag with no fresh rating, the daily job |
+| MMR and wins and losses per race and season | player stats | `w3cstats`, `users.w3c_synced_at` | the Sync W3C buttons, `POST /users/{id}/w3c-sync`, `POST /events/{event_id}/teams/{team_id}/ladder-sync`, a KOTH signup of a tag with no fresh rating, the daily job |
 | ranked 1v1 matches | match search, 100 per page | `w3c_ladder_matches`, the `ladder_sync` ledger | the Sync Ladder button, `POST /events/{id}/ladder-sync` in chunks, the daily job |
 | the season list | ladder seasons | nothing; read when `current_w3c_season` is unset | on demand |
 | the 1v1 map pool | maps | `maps`, paired with warcraft3.info by name and version | the ladder map import |
@@ -38,7 +38,7 @@ The base URL is the `w3c_url` setting, else the `W3C_URL` variable, else the bui
 
 # The season pin
 
-`current_w3c_season` pins the season the MMR columns read. It is a hand edit, on purpose. See [settings](settings-and-current-season.md).
+`current_w3c_season` pins the season the ratings read: the live MMR window is that season and the one before it (see [w3cstats](../data/tables/w3cstats.md)). It is a hand edit, on purpose. See [settings](settings-and-current-season.md).
 
 # Load
 
