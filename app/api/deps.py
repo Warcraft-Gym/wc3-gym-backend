@@ -8,7 +8,7 @@ database; the engine work happens in create_app.
 import logging
 import os
 from functools import cache
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 import jwt
 from clerk_backend_api import AuthenticateRequestOptions, Clerk
@@ -20,7 +20,7 @@ from app.core.db import Session
 from app.core.exceptions import ApiError
 from app.core.security import decode_token, is_admin
 from app.models.clerk_account import ClerkAccount
-from app.models.season import Season
+from app.models.season import EventPhase, Season
 from app.services import admins, discord, discord_roles
 from app.services.availability import AvailabilityService
 from app.services.draft_series import DraftSeriesService
@@ -47,30 +47,38 @@ Credentials = Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)]
 logger = logging.getLogger(__name__)
 
 
-def edge_cache(response: Response, s_maxage: int, swr: int | None = None) -> None:
-    """Let the edge serve every caller one copy of an open read for `s_maxage` seconds.
+# The three edge-cache classes: timers only, nothing is purged.
+CacheClass = Literal["live", "running", "settled"]
+CACHE_CONTROL: dict[CacheClass, str] = {
+    "live": "public, s-maxage=15",  # a board a page polls
+    "running": "public, s-maxage=120, stale-while-revalidate=600",
+    "settled": "public, s-maxage=3600, stale-while-revalidate=86400",
+}
+
+
+def edge_cache(response: Response, cls: CacheClass) -> None:
+    """Let the edge serve every caller one copy of an open read for the class's time.
 
     Use it only on a route with no guard whose answer is the same for every caller.
     The edge keeps the headers of the request that filled it, and CORSMiddleware writes
     none for a request with no Origin, so the CORS header is written here beside it.
     """
-    value = f"public, s-maxage={s_maxage}"
-    if swr is not None:
-        value += f", stale-while-revalidate={swr}"
-    response.headers["Cache-Control"] = value
+    response.headers["Cache-Control"] = CACHE_CONTROL[cls]
     response.headers["Access-Control-Allow-Origin"] = "*"
 
 
+def phase_edge_cache(response: Response, phase: EventPhase | None) -> None:
+    """`edge_cache` sized to an event phase: settled once finished, else running."""
+    edge_cache(response, "settled" if phase == "finished" else "running")
+
+
 def event_edge_cache(response: Response, event_id: int) -> None:
-    """`edge_cache` sized to the event: a day's grace for a finished event, which
-    changes only when an admin corrects it, and two minutes while it runs."""
+    """`phase_edge_cache` for a route whose answer carries no phase: it reads the
+    event once, and a missing event is running."""
     with Session.begin() as session:
         event = Season.get_by_id(session, event_id)
-        finished = event is not None and phase_of(session, event) == "finished"
-    if finished:
-        edge_cache(response, 3600, 86400)
-    else:
-        edge_cache(response, 120, 600)
+        phase = phase_of(session, event) if event is not None else None
+    phase_edge_cache(response, phase)
 
 
 @cache

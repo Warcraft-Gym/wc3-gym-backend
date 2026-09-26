@@ -54,7 +54,7 @@ def get_w3c_config(service: SettingsServiceDep, response: Response) -> W3CConfig
     w3c = W3CService(settings_app_service=service)
     try:
         current_season = w3c.current_season()
-        edge_cache(response, 300, 3600)  # an outage answer is never cached
+        edge_cache(response, "settled")  # an outage answer is never cached
     except Exception as e:  # the page shows the URL even when w3champions is down
         logger.debug(f"w3champions gave no season: {e!s}")
         current_season = None
@@ -66,7 +66,7 @@ def get_setting(
     key: str, service: SettingsServiceDep, response: Response
 ) -> SettingsPublic:
     """Retrieve a specific setting by key."""
-    edge_cache(response, 300, 3600)
+    edge_cache(response, "settled")
     if key in SECRET_SETTINGS:
         raise NotFoundError(f"Setting with key '{key}' not found")
     # get_by_key raises NotFoundError for an unknown key.

@@ -164,7 +164,7 @@ def get_user(
     user = service.get(key)
     if login is not None:
         return UserMemberPublic.model_validate(dict(user))
-    edge_cache(response, 900, 3600)
+    edge_cache(response, "running")
     return user
 
 
@@ -232,14 +232,14 @@ def get_user_ladder(
     Without a season the answer covers every match the player has. The
     matches themselves stay on w3champions, which the client links to.
     """
-    edge_cache(response, 900, 3600)
+    edge_cache(response, "running")
     return service.user_ladder(user_id, season_id)
 
 
 @router.get("/users/{user_id}/history")
 def get_user_history(user_id: int, response: Response) -> PlayerHistory:
     """Every GNL season this player took part in, and every opponent they met."""
-    edge_cache(response, 120, 600)
+    edge_cache(response, "running")
     return player_history.history(user_id)
 
 

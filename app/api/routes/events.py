@@ -11,6 +11,8 @@ from app.api.deps import (
     RequireLogin,
     UserServiceDep,
     edge_cache,
+    event_edge_cache,
+    phase_edge_cache,
     require_admin,
 )
 from app.api.search import SearchQuery
@@ -66,7 +68,7 @@ def get_events(
     if claims is None:
         # An anonymous caller always sees the published-only page; an admin's
         # bearer never reaches the edge, so this never caches a draft.
-        edge_cache(response, 300, 3600)
+        edge_cache(response, "settled")
     return service.get_all(
         kind=kind,
         league_id=league_id,
@@ -103,13 +105,17 @@ def get_my_events(
 
 @router.get("/events/{event_id}")
 def get_event(
-    event_id: int, service: EventServiceDep, claims: OptionalLogin
+    event_id: int, service: EventServiceDep, claims: OptionalLogin, response: Response
 ) -> EventPublic:
     """Return one event with its stages, its divisions and its entrant count.
 
     A draft reads for an admin only; every other caller is answered not found.
     """
-    return service.get(event_id, claims=claims)
+    answer = service.get(event_id, claims=claims)
+    if claims is None:
+        # An admin's answer holds drafts, so only the anonymous answer is shared.
+        phase_edge_cache(response, answer.phase)
+    return answer
 
 
 @router.post("/events", status_code=201, dependencies=[Depends(require_admin)])
@@ -169,8 +175,11 @@ def post_event_card(event_id: int, data: EventDiscordPost) -> dict[str, str]:
 
 
 @router.get("/events/{event_id}/entrants")
-def get_entrants(event_id: int, service: EventServiceDep) -> list[EventEntrantPublic]:
+def get_entrants(
+    event_id: int, service: EventServiceDep, response: Response
+) -> list[EventEntrantPublic]:
     """Every entrant of the event, with its rating on the signup race and warnings."""
+    event_edge_cache(response, event_id)
     return service.get_entrants(event_id)
 
 
@@ -310,8 +319,11 @@ def draw_next_round(event_id: int, stage_id: int) -> StageSeriesPublic:
 
 
 @router.get("/events/{event_id}/stages/{stage_id}/series")
-def get_stage_series(event_id: int, stage_id: int) -> StageSeriesPublic:
+def get_stage_series(
+    event_id: int, stage_id: int, response: Response
+) -> StageSeriesPublic:
     """The rounds of the stage and every series it holds, for the run page."""
+    event_edge_cache(response, event_id)
     return stage_engine.series_of(event_id, stage_id)
 
 
@@ -344,8 +356,11 @@ def set_fixture_template(
 
 
 @router.get("/events/{event_id}/stages/{stage_id}/standings")
-def get_standings(event_id: int, stage_id: int) -> list[DivisionStandings]:
+def get_standings(
+    event_id: int, stage_id: int, response: Response
+) -> list[DivisionStandings]:
     """The table of every division of the stage, computed on the read."""
+    event_edge_cache(response, event_id)
     return stage_engine.standings_of(event_id, stage_id)
 
 

@@ -121,13 +121,9 @@ def get_board(night_id: int, response: Response) -> KothBoard:
 
 
 def _board(response: Response, night_id: int | None) -> KothBoard:
-    """The board, cached at the edge because the dashboard polls it. A closed night
-    changes only when an admin corrects it, so it takes the finished-event timer."""
+    """The board, live at the edge while the night runs, settled once it closes."""
     answer = board.read(night_id, public=True)
-    if answer.closed:
-        edge_cache(response, 3600, 86400)
-    else:
-        edge_cache(response, 15)  # the dashboard polls every 30 seconds
+    edge_cache(response, "settled" if answer.closed else "live")
     return answer
 
 

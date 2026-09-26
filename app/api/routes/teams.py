@@ -67,7 +67,7 @@ def get_all_teams_basic(
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[TeamPublic]:
     """One page of a league's teams without roster users."""
-    edge_cache(response, 120, 600)
+    edge_cache(response, "running")
     return service.get_all_basic(limit=limit, offset=offset, league_id=league_id)
 
 
@@ -92,7 +92,7 @@ def get_all_teams(
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[TeamPublic]:
     """Retrieve one page of a league's teams."""
-    edge_cache(response, 120, 600)
+    edge_cache(response, "running")
     return service.get_all(limit=limit, offset=offset, league_id=league_id)
 
 
@@ -265,7 +265,7 @@ def get_team(
     league_id: int,
 ) -> TeamPublic:
     """Retrieve one team from its league."""
-    edge_cache(response, 120, 600)
+    edge_cache(response, "running")
     return service.get(team_id, league_id=league_id)
 
 

@@ -2,6 +2,7 @@
 
 * [Derived scores](derived-scores.md) - Series points, fixture scores, standings, career ratings and fantasy scores are computed from the map scores on every read, in a constant number of statements.
 * [Discord integration](discord-integration.md) - Slash commands arrive through a separate adapter and are checked and answered here, cards are posted and edited under a rate limit, and season roles are mirrored to the guild on a button press.
+* [Edge cache](edge-cache.md) - Every open read the edge caches uses one of three timer classes, live, running or settled, and an event read picks running or settled from the event's phase; nothing is purged.
 * [Events module](events-module.md) - One data model for every kind of event, with GNL and KOTH behaviour in their own modules on top, a stage engine that never branches on kind, a phase derived on every read, and the admin's path from a new league to a finished event with awards.
 * [Fantasy league](fantasy.md) - A member drafts players, one team and one race for a season, places bets on series, and scores six derived parts.
 * [GNL season](gnl-season.md) - Six drafted teams, five weekly rounds, one fixture per team pairing with captain-drafted series, and a phase that is derived from the series.

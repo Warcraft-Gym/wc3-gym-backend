@@ -67,7 +67,7 @@ def get_all_maps(
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[MapPublic]:
     """Retrieve one page of maps, 100 a page and at most 500."""
-    edge_cache(response, 300, 3600)
+    edge_cache(response, "settled")
     return service.get_all(limit=limit, offset=offset)
 
 

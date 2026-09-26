@@ -11,7 +11,7 @@ router = APIRouter(tags=["leagues"])
 @router.get("/leagues")
 def get_leagues(service: EventServiceDep, response: Response) -> list[LeaguePublic]:
     """Return every league, without its events."""
-    edge_cache(response, 300, 3600)
+    edge_cache(response, "settled")
     return service.get_leagues()
 
 
