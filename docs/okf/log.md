@@ -2,6 +2,7 @@
 
 ## 2026-09-26
 
+* **Update**: `monitor_state` holds a `vercel` row. With `VERCEL_USAGE_TOKEN` and `VERCEL_TEAM_ID` set, the egress monitor reads the Vercel usage over a rolling 30 days, shows it in the digest, and alerts once when a meter reaches 80% or the token is rejected.
 * **Update**: `monitor_state` holds a `db_size` row. The egress monitor reads the database size on the server after each run, shows it in the digest, and alerts once when it passes 90% of the cap.
 * **Add**: `monitor_state`. The egress snapshot levels the billing cycle after each run and posts Discord embeds: an alert when the cycle is on track to pass the cap or the run fails, a silent recovery when it clears, and a silent daily digest, each linking to the usage dashboards.
 * **Add**: `egress_snapshot` and `egress_statement`. A daily job copies pg_stat_statements into the database and answers the rows and estimated egress since the run before, per statement, role and nesting level; `GET /jobs/egress-snapshots` lists the windows.

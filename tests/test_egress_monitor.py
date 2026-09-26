@@ -50,7 +50,12 @@ def sent(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
     # The database size is read only on Postgres: None keeps the posts the same on both
     monkeypatch.setattr(egress_monitor, "database_mb", lambda: None)
     monkeypatch.setenv("DEV_ALERTS_WEBHOOK_URL", "https://discord.test/webhook")
-    for name in ("DEV_ALERTS_MENTION_USER_ID", *egress_monitor.DASHBOARDS.values()):
+    for name in (
+        "DEV_ALERTS_MENTION_USER_ID",
+        "VERCEL_USAGE_TOKEN",
+        "VERCEL_TEAM_ID",
+        *egress_monitor.DASHBOARDS.values(),
+    ):
         monkeypatch.delenv(name, raising=False)
     return posts
 
@@ -728,3 +733,260 @@ def test_the_route_list_gives_way_before_the_dashboards() -> None:
             assert len(found["Busiest routes (rows)"]) < routes
         else:
             assert "Busiest routes (rows)" not in found and "f5" in found
+
+
+TOKEN = "vercel-test-token"
+
+
+def day(**counts: float) -> dict[str, Any]:
+    """One day of the usage answer: zero for each meter not given, plus a field we ignore."""
+    return {"date": "2026-09-28", "other_count": 7, **counts}
+
+
+@pytest.fixture
+def vercel(
+    monkeypatch: pytest.MonkeyPatch, sent: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """The GETs sent to the Vercel API; each test sets the answer with `answer`."""
+    monkeypatch.setenv("VERCEL_USAGE_TOKEN", TOKEN)
+    monkeypatch.setenv("VERCEL_TEAM_ID", "team_test")
+    return []
+
+
+def answer(
+    monkeypatch: pytest.MonkeyPatch,
+    calls: list[dict[str, Any]],
+    status: int = 200,
+    days: list[dict[str, Any]] | None = None,
+) -> None:
+    class Response:
+        status_code = status
+
+        def raise_for_status(self) -> None:
+            if status >= 400:
+                error = egress_monitor.requests.HTTPError(f"{status} for url")
+                error.response = self  # type: ignore[assignment]
+                raise error
+
+        def json(self) -> dict[str, Any]:
+            return {"data": days or []}
+
+    def get(url: str, **kwargs: object) -> Response:
+        calls.append({"url": url, **kwargs})
+        return Response()
+
+    monkeypatch.setattr(egress_monitor.requests, "get", get)
+
+
+# 214,531 invocations, 49.9 GB-hours, 364,870 requests half from the cache, 2.35 GB out
+USAGE = [
+    day(
+        function_invocation_successful_count=200_000,
+        function_invocation_error_count=14_000,
+        function_execution_successful_gb_hours=40.0,
+        function_execution_error_gb_hours=9.0,
+        request_hit_count=182_435,
+        request_miss_count=100_000,
+        bandwidth_outgoing_bytes=2_000_000_000,
+    ),
+    day(
+        function_invocation_timeout_count=500,
+        function_invocation_throttle_count=31,
+        function_execution_timeout_gb_hours=0.9,
+        request_miss_count=82_435,
+        bandwidth_outgoing_bytes=350_000_000,
+    ),
+]
+
+
+def vercel_field(payload: dict[str, Any]) -> str | None:
+    fields = {f["name"]: f for f in payload["embeds"][0]["fields"]}
+    found = fields.get("Vercel, 30 days")
+    if found is None:
+        return None
+    assert found["inline"] is False
+    return found["value"]
+
+
+def test_the_digest_sums_the_vercel_meters_over_a_rolling_30_days(
+    monkeypatch: pytest.MonkeyPatch,
+    sent: list[dict[str, Any]],
+    vercel: list[dict[str, Any]],
+) -> None:
+    answer(monkeypatch, vercel, days=USAGE)
+    run(monkeypatch, daily(20))
+    assert titles(sent) == ["Daily infrastructure digest · 28 Sep"]
+    assert vercel_field(sent[0]) == (
+        "Invocations 214,531 · 21%\n"
+        "GB-hours 49.9 · 14%\n"
+        "Requests 364,870 · 36%\n"
+        "Bandwidth 2.35 GB · 2%\n"
+        "Cache hits 50%"
+    )
+    (call,) = vercel
+    assert call["url"] == "https://api.vercel.com/v2/usage"
+    assert call["headers"] == {"Authorization": f"Bearer {TOKEN}"}
+    assert call["timeout"] == 10
+    # A minute before the run, back 30 days: never in the future, never over 31 days
+    assert call["params"] == {
+        "teamId": "team_test",
+        "type": "requests",
+        "from": "2026-08-30T00:29:00.000Z",
+        "to": "2026-09-29T00:29:00.000Z",
+    }
+    current = state(egress_monitor.VERCEL_KEY)
+    assert current is not None and current.level == "normal"
+
+
+@pytest.mark.parametrize("unset", ["VERCEL_USAGE_TOKEN", "VERCEL_TEAM_ID"])
+def test_without_both_variables_vercel_is_skipped(
+    monkeypatch: pytest.MonkeyPatch,
+    sent: list[dict[str, Any]],
+    vercel: list[dict[str, Any]],
+    unset: str,
+) -> None:
+    answer(monkeypatch, vercel, days=USAGE)
+    monkeypatch.setenv(unset, " ")
+    run(monkeypatch, daily(20))
+    assert vercel == []
+    assert vercel_field(sent[0]) is None
+    assert state(egress_monitor.VERCEL_KEY) is None
+
+
+def test_a_meter_at_80_percent_alerts_once_and_recovers_under_it(
+    monkeypatch: pytest.MonkeyPatch,
+    sent: list[dict[str, Any]],
+    vercel: list[dict[str, Any]],
+) -> None:
+    monkeypatch.setenv("DEV_ALERTS_MENTION_USER_ID", FAKE_ID)
+    high = [day(request_miss_count=800_000, function_execution_successful_gb_hours=300)]
+    answer(monkeypatch, vercel, days=high)
+    before = NOW - timedelta(days=1)
+    run(monkeypatch, daily(20, now=before), before)
+    assert titles(sent) == [
+        "Vercel usage: near the included limit",
+        "Daily infrastructure digest · 27 Sep",
+    ]
+    alert, digest = sent
+    assert alert["content"] == f"<@{FAKE_ID}> Vercel usage needs action today"
+    assert alert["embeds"][0]["description"] == (
+        "GB-hours at 83% and Requests at 80% of the included usage over the last 30 days. "
+        "Hobby pauses the feature for 30 days when a limit is hit."
+    )
+    assert digest["embeds"][0]["color"] == egress_monitor.RED
+    assert digest["embeds"][0]["description"] == (
+        "Vercel usage is near the included limit."
+    )
+    sent.clear()
+
+    run(monkeypatch, daily(20))
+    assert titles(sent) == ["Daily infrastructure digest · 28 Sep"]
+    sent.clear()
+
+    answer(monkeypatch, vercel, days=[day(request_miss_count=799_999)])
+    after = NOW + timedelta(days=1)
+    run(monkeypatch, daily(20, now=after), after)
+    assert titles(sent) == [
+        "Vercel usage: back under 80%",
+        "Daily infrastructure digest · 29 Sep",
+    ]
+    assert sent[0]["flags"] == egress_monitor.SILENT
+    assert sent[0]["embeds"][0]["fields"][1]["value"].startswith("2 days, since <t:")
+    current = state(egress_monitor.VERCEL_KEY)
+    assert current is not None and current.level == "normal"
+
+
+@pytest.mark.parametrize("status", [401, 403])
+def test_a_rejected_token_alerts_once_and_a_good_read_says_so(
+    monkeypatch: pytest.MonkeyPatch,
+    sent: list[dict[str, Any]],
+    vercel: list[dict[str, Any]],
+    caplog: pytest.LogCaptureFixture,
+    status: int,
+) -> None:
+    answer(monkeypatch, vercel, status=status)
+    before = NOW - timedelta(days=1)
+    run(monkeypatch, daily(20, now=before), before)
+    run(monkeypatch, daily(20))
+    assert titles(sent) == [
+        "Vercel usage could not be read: token rejected",
+        "Daily infrastructure digest · 27 Sep",
+        "Daily infrastructure digest · 28 Sep",
+    ]
+    assert vercel_field(sent[1]) is None
+    current = state(egress_monitor.VERCEL_KEY)
+    assert current is not None and current.level == "unavailable"
+    assert TOKEN not in caplog.text
+    sent.clear()
+
+    answer(monkeypatch, vercel, days=USAGE)
+    after = NOW + timedelta(days=1)
+    run(monkeypatch, daily(20, now=after), after)
+    assert titles(sent) == [
+        "Vercel usage: read again",
+        "Daily infrastructure digest · 29 Sep",
+    ]
+
+
+def test_an_undelivered_vercel_alert_posts_again_on_the_next_run(
+    monkeypatch: pytest.MonkeyPatch,
+    sent: list[dict[str, Any]],
+    vercel: list[dict[str, Any]],
+) -> None:
+    answer(monkeypatch, vercel, status=401)
+    monkeypatch.delenv("DEV_ALERTS_WEBHOOK_URL")
+    run(monkeypatch, daily(20))
+    assert state(egress_monitor.VERCEL_KEY) is None
+    monkeypatch.setenv("DEV_ALERTS_WEBHOOK_URL", "https://discord.test/webhook")
+    run(monkeypatch, daily(20))
+    assert titles(sent)[0] == "Vercel usage could not be read: token rejected"
+
+
+@pytest.mark.parametrize("status", [500, 503])
+def test_a_server_error_omits_the_field_and_keeps_the_level(
+    monkeypatch: pytest.MonkeyPatch,
+    sent: list[dict[str, Any]],
+    vercel: list[dict[str, Any]],
+    caplog: pytest.LogCaptureFixture,
+    status: int,
+) -> None:
+    answer(monkeypatch, vercel, days=USAGE)
+    before = NOW - timedelta(days=1)
+    run(monkeypatch, daily(20, now=before), before)
+    sent.clear()
+
+    answer(monkeypatch, vercel, status=status)
+    run(monkeypatch, daily(20))
+    assert titles(sent) == ["Daily infrastructure digest · 28 Sep"]
+    assert vercel_field(sent[0]) is None
+    assert f"HTTPError {status}" in caplog.text and TOKEN not in caplog.text
+    current = state(egress_monitor.VERCEL_KEY)
+    assert current is not None and current.updated_at == before
+
+
+def test_a_timeout_omits_the_field_and_logs_no_token(
+    monkeypatch: pytest.MonkeyPatch,
+    sent: list[dict[str, Any]],
+    vercel: list[dict[str, Any]],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    def slow(url: str, **kwargs: object) -> None:
+        raise egress_monitor.requests.Timeout(f"{url} {kwargs['headers']}")
+
+    monkeypatch.setattr(egress_monitor.requests, "get", slow)
+    run(monkeypatch, daily(20))
+    assert titles(sent) == ["Daily infrastructure digest · 28 Sep"]
+    assert vercel_field(sent[0]) is None
+    assert "Timeout None" in caplog.text and TOKEN not in caplog.text
+    assert state(egress_monitor.VERCEL_KEY) is None
+
+
+def test_a_digest_with_every_field_fits_discords_limits(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    usage = egress_monitor.Vercel(10**12, 10.0**9, 10**12, 10**11, 10**18)
+    m = egress_monitor.meters(daily(20_000), NOW)
+    payload = egress_monitor.digest(m, [], None, 499.0, None, usage)
+    names = [f["name"] for f in payload["embeds"][0]["fields"]]
+    assert names[3:5] == ["Database size", "Vercel, 30 days"]
+    assert size(payload) <= 6000
