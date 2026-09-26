@@ -4,7 +4,7 @@ title: Scheduled jobs
 description: Five job routes behind a shared secret, two called daily by Vercel, one every five minutes by a Cloudflare Worker because a Vercel cron runs at most once a day, and two an operator reads for egress.
 resource: ../../../app/api/routes/jobs.py
 tags: [deploy]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-26T10:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-26T04:13:41Z }
 sources:
   - id: jobs
     resource: ../../../app/api/routes/jobs.py
@@ -24,7 +24,7 @@ sources:
 | `GET /jobs/w3c-sync` | drains the stalest players' ladder matches and stats for 50 seconds, inside the 60 second function limit | Vercel cron at 04:00 UTC, shifted by up to 59 minutes |
 | `GET /jobs/cast-reminders` | posts the reminder card for series that start soon | the Cloudflare Worker in the Discord adapter repository, every five minutes |
 | `GET /jobs/egress?days=7` | the [egress ledger](../data/tables/egress_ledger.md) rows of the last `days` days (1 to 90), most rows first, with `Cache-Control: no-store` | an operator, with `just egress-routes` against a local server |
-| `GET /jobs/egress-snapshot` | copies pg_stat_statements into [egress_snapshot](../data/tables/egress_snapshot.md) on the server, deletes snapshots older than 35 days, and answers the window since the run before: rows, estimated MB, MB a day against the budget, and the ten statements that returned the most rows | Vercel cron at 00:00 UTC, shifted by up to 59 minutes |
+| `GET /jobs/egress-snapshot` | copies pg_stat_statements into [egress_snapshot](../data/tables/egress_snapshot.md) on the server, deletes snapshots older than 35 days, and answers the window since the run before: rows, estimated MB, MB a day against the budget, and the ten statements that returned the most rows; an over-budget or failed run posts to `DEV_ALERTS_WEBHOOK_URL` when it is set | Vercel cron at 00:00 UTC, shifted by up to 59 minutes |
 | `GET /jobs/egress-snapshots?days=7` | one window per snapshot of the last `days` days (1 to 35), oldest first, totals only, with `Cache-Control: no-store` | an operator, with `just egress-days` against a local server |
 
 All five check `Authorization: Bearer <CRON_SECRET>`. With `CRON_SECRET` unset every job route answers 503, so a deployment without the secret runs no job.
