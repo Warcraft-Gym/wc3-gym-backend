@@ -13,6 +13,7 @@ LADDER = "public, s-maxage=900, stale-while-revalidate=3600"
 SHORT = "public, s-maxage=120, stale-while-revalidate=600"
 
 ROUTES = [
+    ("/events", LONG),
     ("/leagues", LONG),
     ("/maps", LONG),
     ("/stats/career", CAREER),
@@ -91,6 +92,15 @@ def test_an_event_not_finished_is_cached_for_two_minutes(
     resp = client.get(path.format(id=event_id))
     assert resp.status_code == 200, resp.text
     assert resp.headers["cache-control"] == SHORT
+
+
+def test_events_is_not_cached_for_an_admin(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    # an admin's bearer sees drafts, so the edge must never store this answer
+    resp = client.get("/events", headers=auth_headers)
+    assert resp.status_code == 200
+    assert "public" not in resp.headers.get("cache-control", "")
 
 
 def test_a_not_found_on_a_cached_route_is_not_cached(
