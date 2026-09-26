@@ -53,7 +53,8 @@ BANS_ONLY = (("A", "ban", 3), ("B", "ban", 2))
 def two_seasons() -> dict[str, int]:
     """The league of the module docstring, the same on every run."""
     with Session() as session:
-        owner = League(name="Series Parity League")
+        # A fixed id: the migration seeds leagues only the first test sees
+        owner = League(id=10, name="Series Parity League")
         session.add(owner)
         session.flush()
         users = [
@@ -132,7 +133,7 @@ def two_seasons() -> dict[str, int]:
             two: int | None,
             score: tuple[int | None, int | None],
             veto: tuple[tuple[str, str, int], ...] = (),
-            **extra: Any,
+            **extra: Any,  # noqa: ANN401
         ) -> None:
             row = Series(
                 match_id=ident(match) if match else None,
@@ -165,14 +166,37 @@ def two_seasons() -> dict[str, int]:
 
         week2 = fixture(plain, 2)
         entrant1, entrant2 = (ident(entrant) for entrant in entrants)
-        add(week2, 0, 2, (3, 1), FULL_VETO, round_id=ident(stage_round),
-            entrant1_id=entrant1, entrant2_id=entrant2)
-        add(week2, None, None, (None, None), round_id=ident(stage_round),
-            entrant1_id=entrant1, entrant2_id=entrant2, side_size=2)
+        add(
+            week2,
+            0,
+            2,
+            (3, 1),
+            FULL_VETO,
+            round_id=ident(stage_round),
+            entrant1_id=entrant1,
+            entrant2_id=entrant2,
+        )
+        add(
+            week2,
+            None,
+            None,
+            (None, None),
+            round_id=ident(stage_round),
+            entrant1_id=entrant1,
+            entrant2_id=entrant2,
+            side_size=2,
+        )
         add(week2, 3, 5, (1, 2), ONE_PICK, round_id=ident(stage_round))
         # The stage's own series, with no fixture, is in no season list
-        add(None, 1, 4, (2, 0), round_id=ident(stage_round),
-            entrant1_id=entrant1, entrant2_id=entrant2)
+        add(
+            None,
+            1,
+            4,
+            (2, 0),
+            round_id=ident(stage_round),
+            entrant1_id=entrant1,
+            entrant2_id=entrant2,
+        )
 
         for playday in (1, 2):
             match = fixture(priced, playday)
