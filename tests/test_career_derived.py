@@ -52,8 +52,6 @@ def player_block(name: str) -> dict[str, Any]:
     return {
         "name": name,
         "battleTag": f"{name}#1000",
-        "discordTag": name.lower(),
-        "discordId": str(number),
         "mmr": 1500,
         "country": None,
         "timezone": None,

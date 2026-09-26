@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, Query, Response
 
 from app.api.deps import (
     LadderServiceDep,
+    OptionalLogin,
     RequireMember,
     SoftBlockServiceDep,
     UserServiceDep,
@@ -13,10 +14,18 @@ from app.api.deps import (
 )
 from app.api.search import SearchQuery
 from app.core.exceptions import ApiError
+from app.core.security import is_admin
 from app.models.draft_board import PairMeeting
 from app.models.link_prompt import LinkPromptPublic, PromptAnswer
 from app.models.player_history import PlayerHistory
-from app.models.user import UserCreate, UserListPublic, UserPublic, UserUpdate
+from app.models.user import (
+    UserCreate,
+    UserListPublic,
+    UserMemberListPublic,
+    UserMemberPublic,
+    UserPublic,
+    UserUpdate,
+)
 from app.models.user_battle_tag import MergePlan, MergeWrite, TagMoveWrite, TagWrite
 from app.models.user_block import SoftBlocksPublic
 from app.models.w3c_ladder_match import LadderPlayer
@@ -147,20 +156,37 @@ def get_user_blocks(user_id: int, service: SoftBlockServiceDep) -> SoftBlocksPub
 
 
 @router.get("/users/{key}")
-def get_user(key: str, service: UserServiceDep) -> UserPublic:
-    """Retrieve a user by id, or by battle tag: `/users/thanks%2311187`."""
-    return service.get(key)
+def get_user(
+    key: str, service: UserServiceDep, response: Response, login: OptionalLogin
+) -> UserPublic | UserMemberPublic:
+    """Retrieve a user by id, or by battle tag: `/users/thanks%2311187`.
+    A logged-in caller also gets the Discord account."""
+    user = service.get(key)
+    if login is not None:
+        return UserMemberPublic.model_validate(dict(user))
+    edge_cache(response, 900, 3600)
+    return user
+
+
+def for_caller(
+    users: list[UserListPublic], login: dict[str, Any] | None
+) -> list[UserListPublic] | list[UserMemberListPublic]:
+    """The rows as sent: an admin also gets the Discord account."""
+    if not is_admin(login):
+        return users
+    return [UserMemberListPublic.model_validate(dict(user)) for user in users]
 
 
 @router.get("/users")
 def get_all_users(
     service: UserServiceDep,
     response: Response,
+    login: OptionalLogin,
     limit: Annotated[int, Query(ge=1, le=500)] = 500,
     offset: Annotated[int, Query(ge=0)] = 0,
     no_discord: bool = False,
     tag_source: str | None = None,
-) -> list[UserListPublic]:
+) -> list[UserListPublic] | list[UserMemberListPublic]:
     """Retrieve one page of users, at most 500, ordered by id.
 
     no_discord keeps the people with no login; tag_source keeps the people
@@ -170,18 +196,19 @@ def get_all_users(
         limit=limit, offset=offset, no_discord=no_discord, tag_source=tag_source
     )
     response.headers["X-Total-Count"] = str(total)
-    return users
+    return for_caller(users, login)
 
 
 @router.post("/users/search")
 def search_users(
     service: UserServiceDep,
     query: SearchQuery,
+    login: OptionalLogin,
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
-) -> list[UserListPublic]:
+) -> list[UserListPublic] | list[UserMemberListPublic]:
     """Search users by criteria using a custom query format, 100 a page."""
-    return service.search(query, limit=limit, offset=offset)
+    return for_caller(service.search(query, limit=limit, offset=offset), login)
 
 
 @router.post("/users/{user_id}/w3c-sync", dependencies=[Depends(require_admin)])

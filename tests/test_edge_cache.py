@@ -20,6 +20,7 @@ ROUTES = [
     ("/config/w3c", LONG),
     ("/config/settings/score_system", LONG),
     ("/events/{season_id}/ladder/players", LADDER),
+    ("/users/{player}", LADDER),
     ("/users/{player}/ladder", LADDER),
     ("/users/{player}/ladder?season_id={season_id}", LADDER),
     ("/users/{player}/history", SHORT),

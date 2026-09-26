@@ -4,7 +4,7 @@ title: API overview
 description: Twenty-one route modules under one FastAPI app, one error envelope, paging with a total header, a search language, and OpenAPI at /docs.
 resource: ../../../app/api/main.py
 tags: [api]
-generated: { by: codex/gpt-6, at: 2026-09-25T08:58:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-26T05:10:24Z }
 sources:
   - id: router
     resource: ../../../app/api/main.py
@@ -79,6 +79,7 @@ CORS allows every origin, because clients send bearer tokens and never cookies. 
 | `GET /leagues`, `GET /maps`, `GET /config/w3c`, `GET /config/settings/{key}` | 300 | 3600 |
 | `GET /events`, for an anonymous caller only | 300 | 3600 |
 | `GET /users/{user_id}/history` | 120 | 600 |
+| `GET /users/{key}`, for an anonymous caller only | 900 | 3600 |
 | `GET /events/{event_id}/teams`, its `basic` twin, `GET /events/{event_id}/teams/{team_id}`, `GET /events/{event_id}/series` | 120, or 3600 once the event is finished | 600, or 86400 once the event is finished |
 | `GET /leagues/{league_id}/teams`, its `basic` twin, `GET /leagues/{league_id}/teams/{team_id}` | 120 | 600 |
 

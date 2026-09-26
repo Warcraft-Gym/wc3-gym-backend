@@ -4,7 +4,7 @@ title: series_cast
 description: One member's claim to cast one series, with the channel it streams on and the VOD pasted after; planned, live and VOD states derive at read time.
 resource: ../../../../app/models/series_cast.py
 tags: [events, data]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T15:15:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-26T05:10:24Z }
 verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
 sources:
   - id: model
@@ -33,4 +33,4 @@ Primary key `id`. Foreign keys: `series_id` to [series](series.md), cascade; `us
 
 # Rules
 
-A series with a result takes no claim. A channel link that is itself a video reads as the VOD once the series is over; nothing stores that. See [series reporting](../../concepts/series-reporting.md).
+The cast answer carries no Discord id; the reminder card tags the caster from the in-memory shape. A series with a result takes no claim. A channel link that is itself a video reads as the VOD once the series is over; nothing stores that. See [series reporting](../../concepts/series-reporting.md).

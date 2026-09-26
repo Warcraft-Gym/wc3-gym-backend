@@ -4,7 +4,7 @@ title: users
 description: One person, made by the first way in that meets them and found by any battle tag they hold or by Discord id, with the profile fields the forms write and three sync stamps.
 resource: ../../../../app/models/user.py
 tags: [auth, data]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-24T13:20:54Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-26T05:10:24Z }
 verified: { by: process:test_okf, at: 2026-09-24T10:21:07Z }
 sources:
   - id: model
@@ -73,6 +73,7 @@ The member signup takes a row only when no other login holds it. A row has a log
 - Two sync pipelines, two stamps: `w3c_synced_at` belongs to the stats sync, `ladder_synced_at` to the match sync. See [ladder and achievements](../../concepts/ladder-and-achievements.md).
 - A person holds many battle tags in [user_battle_tag](user_battle_tag.md). `User.battleTag` reads the active row's tag inside the same SELECT as the row, so a list costs no extra statement; the user reads send it as `battleTag`, null when the person has no active tag. Every lookup by tag reads that table. `UserCreate` and `UserUpdate` still take `battleTag` and pass it to `attach_tag`.
 - `GET /users/{key}` takes an id, or any tag the person holds, without case.
+- `GET /users/{key}` read by a logged-in caller serves `discordTag` and `discordId` (`UserMemberPublic`), and `GET /users` and `POST /users/search` serve them to an admin (`UserMemberListPublic`). Every other read, and those reads for any other caller, leaves them out, a user nested in another answer included; the Discord cards read them from the in-memory shape.
 - The user reads (`GET /users/{key}`, `GET /users`, `POST /users/search`) carry `tags`: every tag row as `{id, tag, verified, active, source, first_seen, last_seen}`, the active one first, loaded in one statement per page. `verified` is true when `bnet_account_id` is set. A user nested in another read carries `tags` empty.
 - A batch alter of this table on SQLite drops the two expression indexes; the migration writes them back. See [migrations](../migrations.md).
 - `GET /users` takes `no_discord=true`, the people with no login, and `tag_source=<source>`, the people who hold a tag row of that source. Both combine with `limit` and `offset`, and `X-Total-Count` counts the filtered rows.
