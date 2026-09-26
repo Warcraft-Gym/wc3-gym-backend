@@ -8,6 +8,7 @@ signup stands either way for an admin to place by hand.
 """
 
 import logging
+from collections.abc import Collection
 
 from app.core.db import Session
 from app.core.exceptions import ExternalServiceError
@@ -26,7 +27,7 @@ from app.services.events import (
     _live_entrants,
     _stats_for,
 )
-from app.services.koth.night import divisions_of
+from app.services.koth.night import divisions_of, series_of
 from app.services.settings import SettingsService
 from app.services.users import UserService
 from app.services.w3c_stats import w3c_season
@@ -79,20 +80,31 @@ def follow(
         return _entrant_publics(session, _event(session, event_id), [row])[0]
 
 
-def recut(event_id: int) -> None:
+def recut(event_id: int, only: Collection[int | None] | None = None) -> None:
     """Cut the rows no admin placed into the brackets as they now stand.
 
     A row the cut leaves where it is keeps its place in the line. A row the
     cut moves takes the end of its new line and leaves the throne it wore,
-    because a crown never travels between brackets.
+    because a crown never travels between brackets. A row in a series on the
+    table keeps its bracket until that series ends, and `only` limits the cut
+    to the rows it names.
     """
     with Session.begin() as session:
         before = {
             ident(one): one.division_id for one in _live_entrants(session, event_id)
         }
+        held = {
+            entrant_id
+            for row in series_of(session, event_id)
+            if not stage_engine.scored(row)
+            for entrant_id in (row.entrant1_id, row.entrant2_id)
+        }
     EventService().assign_divisions(event_id)
     with Session.begin() as session:
         rows = _live_entrants(session, event_id)
+        for one in rows:
+            if ident(one) in held or (only is not None and ident(one) not in only):
+                one.division_id = before.get(ident(one))
         moved = [one for one in rows if one.division_id != before.get(ident(one))]
         # Every row the cut moved into a bracket takes the end of that line
         for one in rows:

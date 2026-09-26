@@ -4,7 +4,7 @@ title: KOTH night
 description: A King of the Hill night is one event of the KOTH league with three MMR brackets as divisions, one signup rule at every door, and every series paired by hand while the night runs.
 resource: ../../../app/services/koth/night.py
 tags: [events, koth]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-26T12:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-26T18:00:00Z }
 sources:
   - id: night
     resource: ../../../app/services/koth/night.py
@@ -59,7 +59,7 @@ An admin makes every series by hand while the night runs. `POST /koth/nights/{id
 
 The line is `event_entrant.seed` inside the bracket, first in line first, one place per player whatever races he holds there. `PUT /koth/nights/{id}/brackets/{division_id}/queue` writes the order of one bracket and touches no other. `PUT /koth/nights/{id}/brackets/{division_id}/crown` passes the crown or empties the throne. `DELETE /koth/nights/{id}/entrants/{entrant_id}` takes a row out of the night, off the throne and off the table; `POST /koth/nights/{id}/entrants/{entrant_id}/restore` puts it back at the end of the line. Every one of these writes takes an admin and answers the board.
 
-`PUT /koth/nights/{id}/bounds` moves the MMR bounds of the brackets while the night runs. The body names every bracket of the night exactly once with its new `lower_bound`; the bounds keep the order of the brackets, no two are equal, and the weakest bracket opens at 0. A body that breaks one of those rules, or a closed night, answers 400, and the route answers 409 while any bracket of the night holds a series with no result. The bracket rows are written in place, so their ids, their names, their order, the crowns and every series keep their rows; only the bound changes. The night is then cut again by the new bounds, exactly as a signup cuts it: a row an admin placed by hand and a row no bound reaches stay where they are, a row the cut moves takes the end of its new bracket's line, and a king whose row moves leaves the throne he wore empty.
+`PUT /koth/nights/{id}/bounds` moves the MMR bounds of the brackets while the night runs. The body names every bracket of the night exactly once with its new `lower_bound`; the bounds keep the order of the brackets, no two are equal, and the weakest bracket opens at 0. A body that breaks one of those rules, or a closed night, answers 400; a series on the table does not stop the write. The bracket rows are written in place, so their ids, their names, their order, the crowns and every series keep their rows; only the bound changes. The night is then cut again by the new bounds, exactly as a signup cuts it: a row an admin placed by hand and a row no bound reaches stay where they are, a row the cut moves takes the end of its new bracket's line, and a king whose row moves leaves the throne he wore empty. Every cut of the night, a signup's among them, leaves the two rows of a series on the table in their bracket, at their place and with their crown; when that series is scored, cancelled or loses a row that left, its two rows are cut by the bounds as they then stand.
 
 # The board
 

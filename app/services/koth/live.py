@@ -86,7 +86,9 @@ def cancel_series(night_id: int, series_id: int) -> KothBoard:
         row = _series(session, night_id, series_id)
         if stage_engine.scored(row):
             raise BadRequestError("This series carries a result")
+        players = [row.entrant1_id, row.entrant2_id]
         session.delete(row)
+    recut(night_id, only=players)
     return board.read(night_id)
 
 
@@ -112,6 +114,10 @@ def set_result(night_id: int, series_id: int, data: SeriesResult) -> KothBoard:
             loser = session.get(EventEntrant, beaten) if beaten else None
             if loser is not None:
                 _to_the_end(session, loser)
+        players = [row.entrant1_id, row.entrant2_id]
+    # A series that just ended frees its two rows for the bounds as they stand
+    if not was_scored:
+        recut(night_id, only=players)
     return board.read(night_id)
 
 
@@ -164,13 +170,12 @@ def set_bounds(night_id: int, data: BoundsWrite) -> KothBoard:
 
     The bracket rows stay where they are, so their ids, their names, their
     order, the crowns and every series keep their place; only the bound moves.
-    The night is then cut again by the new bounds, exactly as a signup cuts it.
+    The night is then cut again by the new bounds, exactly as a signup cuts it,
+    and a row in a series on the table is cut when that series ends.
     """
     with Session.begin() as session:
         night = _open_night(session, night_id)
         event_id = ident(night)
-        if any(not stage_engine.scored(row) for row in series_of(session, event_id)):
-            raise ApiError(409, {"error": "Finish or cancel the open series first."})
         brackets = divisions_of(session, event_id)
         named = {row.division_id: row.lower_bound for row in data.bounds}
         if len(named) != len(data.bounds) or named.keys() != {
@@ -197,13 +202,17 @@ def remove_entrant(night_id: int, entrant_id: int) -> KothBoard:
         row = _entrant(session, ident(night), entrant_id)
         row.withdrawn_at = utcnow()
         stage_engine.uncrown(session, [entrant_id])
+        players: list[int | None] = []
         for series in series_of(session, ident(night)):
             if not stage_engine.scored(series) and entrant_id in (
                 series.entrant1_id,
                 series.entrant2_id,
             ):
+                players += [series.entrant1_id, series.entrant2_id]
                 session.delete(series)
         session.flush()
+    if players:
+        recut(night_id, only=players)
     return board.read(night_id)
 
 

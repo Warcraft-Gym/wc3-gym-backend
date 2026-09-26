@@ -861,21 +861,70 @@ def test_a_king_whose_row_falls_leaves_an_empty_throne(
     ]
 
 
-def test_a_new_bound_waits_for_the_series_on_the_table(
+def test_a_new_bound_holds_the_series_on_the_table_until_it_ends(
     client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
 ) -> None:
-    """A cut under a running series would move a player off the table."""
+    """A row in a running series keeps its bracket; the result then cuts it."""
     night = open_night(client, auth_headers)
-    top = bracket_ids(night)[0]
-    first = place(client, auth_headers, night, "Busy#1", 1700, top)
-    second = place(client, auth_headers, night, "Busy#2", 1700, top)
+    _, middle, low = bracket_ids(night)
+    king = chat(client, night, "Busy#1111", 1500)
+    rival = chat(client, night, "Busy#2222", 1500)
+    free = chat(client, night, "Free#3333", 1500)
+    opened = start(client, auth_headers, night["id"], king, rival)
+    assert opened.status_code == 201, opened.text
+    series_id = _open_id(opened.json(), king)
+
+    resp = set_bounds(client, auth_headers, night, [1600, 1550, 0])
+
+    assert resp.status_code == 200, resp.text
+    payload = resp.json()
+    assert only(payload, middle)["open_series"]["series_id"] == series_id
+    assert [row["rows"][0]["entrant_id"] for row in only(payload, low)["queue"]] == [
+        free
+    ]
+
+    done = client.put(
+        f"/koth/nights/{night['id']}/series/{series_id}/result",
+        json={"winner": 1},
+        headers=auth_headers,
+    )
+
+    assert done.status_code == 200, done.text
+    payload = done.json()
+    assert only(payload, middle)["queue"] == []
+    assert king_of(payload, middle) is None
+    assert king_of(payload, low) is None
+    assert [row["rows"][0]["entrant_id"] for row in only(payload, low)["queue"]] == [
+        free,
+        king,
+        rival,
+    ]
+
+
+def test_a_cancelled_series_frees_its_rows_for_the_new_bound(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """Taking the series off the table cuts its two rows as the bounds stand."""
+    night = open_night(client, auth_headers)
+    _, middle, low = bracket_ids(night)
+    first = chat(client, night, "Off#1111", 1500)
+    second = chat(client, night, "Off#2222", 1500)
     opened = start(client, auth_headers, night["id"], first, second)
     assert opened.status_code == 201, opened.text
+    series_id = _open_id(opened.json(), first)
+    assert set_bounds(client, auth_headers, night, [1600, 1550, 0]).status_code == 200
 
-    resp = set_bounds(client, auth_headers, night, [1800, 1500, 0])
+    resp = client.delete(
+        f"/koth/nights/{night['id']}/series/{series_id}", headers=auth_headers
+    )
 
-    assert resp.status_code == 409, resp.text
-    assert resp.json() == {"error": "Finish or cancel the open series first."}
+    assert resp.status_code == 200, resp.text
+    payload = resp.json()
+    assert only(payload, middle)["queue"] == []
+    assert [row["rows"][0]["entrant_id"] for row in only(payload, low)["queue"]] == [
+        first,
+        second,
+    ]
 
 
 def test_the_bounds_a_night_refuses(
