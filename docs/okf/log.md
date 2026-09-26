@@ -2,6 +2,7 @@
 
 ## 2026-09-26
 
+* **Add**: the local dev login, `GET /dev/players` and `POST /dev/login` behind `DEV_LOGIN=1`, signs in as any player with a Discord id as a member, guest or admin; the authentication page and the local runbook state it.
 * **Update**: an admin who captains carries the `seats` list, so `/me` names that admin's teams and each season's `captain` flag; a view-as request drops the admin's own seats.
 
 ## 2026-09-24

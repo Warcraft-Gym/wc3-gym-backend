@@ -4,7 +4,7 @@ title: Authentication
 description: A bearer token is either the admin token's JWT or a Clerk session; the claims resolve the Discord id and the role once per request, and five guards build on them.
 resource: ../../../app/api/deps.py
 tags: [auth]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-26T12:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-26T19:30:00Z }
 sources:
   - id: deps
     resource: ../../../app/api/deps.py
@@ -26,6 +26,10 @@ sources:
 2. **A Clerk session.** The frontend signs a member in with Clerk, Discord being the only social connection, and sends the session JWT as the bearer. `clerk-backend-api` verifies it locally against the instance's keys, with `CLERK_SECRET_KEY`; `CLERK_AUTHORIZED_PARTIES` lists the origins a session may come from.
 
 `require_login` tries the JWT first and falls back to Clerk. It admits a guest too.
+
+# Local dev login
+
+A local instance has no Discord server, so no Clerk session passes the guild check there. To test the app as a player, set `DEV_LOGIN=1` in the local backend's `.env`; never set it on a deployment. `GET /dev/players?search=` then lists up to 30 players that have a Discord id, each marked `captain` when it holds a seat in a running season, and `POST /dev/login {"user_id", "role"}` answers a token for one of them as `member`, `guest` or `admin`. The session is that player: `require_login` resolves its role the way it resolves a Clerk session's, so a member with a seat is a captain and an admin can view as a lower role. With `DEV_LOGIN` unset both routes answer 404 and such a token is refused.
 
 # From a session to claims
 
@@ -60,7 +64,7 @@ A token of type `bnet_state` or `bnet_link` is no bearer: `require_login` admits
 
 # /me
 
-`GET /me` answers the account: `discord_id`, `name`, `avatar`, `role`, `actual_role`, `user` (the linked players row or null), `superadmin`, `signed_up`, `season_id`, `team`, `seats`, and `seasons` (every season that is not complete, newest first, each with its phase, switches, dates, and this account's roster and captain facts). The frontend keeps this answer for the session and reads its role from it. It also refreshes the profile avatar from Discord.
+`GET /me` answers the account: `discord_id`, `name`, `avatar`, `role`, `actual_role`, `user` (the linked players row or null), `superadmin`, `signed_up`, `season_id`, `team`, `seats`, and `seasons` (every season that is not complete, newest first, each with its phase, switches, dates, and this account's roster and captain facts). The frontend keeps this answer for the session and reads its role from it. It also refreshes the profile avatar from Discord. A local dev login has no Clerk account, so its `name` is the player's and `superadmin` is false.
 
 # View as
 
