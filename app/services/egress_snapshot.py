@@ -217,4 +217,6 @@ def alert(result: EgressSnapshotResult) -> None:
             timeout=10,
         ).raise_for_status()
     except requests.RequestException as error:
-        log.warning("egress alert not posted: %s", error)
+        # The exception text carries the webhook URL and its token: log the type and status only
+        status = error.response.status_code if error.response is not None else None
+        log.warning("egress alert not posted: %s %s", type(error).__name__, status)

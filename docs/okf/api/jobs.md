@@ -4,7 +4,7 @@ title: Scheduled jobs
 description: Five job routes behind a shared secret, two called daily by Vercel, one every five minutes by a Cloudflare Worker because a Vercel cron runs at most once a day, and two an operator reads for egress.
 resource: ../../../app/api/routes/jobs.py
 tags: [deploy]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-26T10:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-26T04:13:41Z }
 sources:
   - id: jobs
     resource: ../../../app/api/routes/jobs.py

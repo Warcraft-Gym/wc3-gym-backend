@@ -110,7 +110,11 @@ def take_egress_snapshot(credentials: Credentials) -> EgressSnapshotResult:
     within an hour of the last snapshot it writes nothing and answers `skipped`.
     A failed or over-budget run posts to the DEV_ALERTS_WEBHOOK_URL channel."""
     only_the_scheduler(credentials)
-    result = egress_snapshot.take()
+    try:
+        result = egress_snapshot.take()
+    except Exception as error:
+        egress_snapshot.alert(egress_snapshot.unavailable(type(error).__name__))
+        raise
     egress_snapshot.alert(result)
     return result
 

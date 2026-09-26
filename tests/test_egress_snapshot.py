@@ -247,3 +247,33 @@ def test_the_alert_posts_only_when_the_webhook_is_set(
 
     monkeypatch.setattr(egress_snapshot.requests, "post", down)
     egress_snapshot.alert(result(140))
+
+
+def test_a_failed_post_logs_no_webhook_token(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    url = "https://discord.test/api/webhooks/1/SECRETTOKEN"
+    monkeypatch.setenv("DEV_ALERTS_WEBHOOK_URL", url)
+
+    def down(url: str, json: dict, timeout: float) -> None:
+        raise egress_snapshot.requests.ConnectionError(
+            f"Max retries exceeded with url: {url}"
+        )
+
+    monkeypatch.setattr(egress_snapshot.requests, "post", down)
+    egress_snapshot.alert(result(140))
+    assert "ConnectionError" in caplog.text and "SECRETTOKEN" not in caplog.text
+
+
+def test_a_crashed_run_posts_its_error_and_still_fails(
+    client: Client, scheduler: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sent: list[egress_snapshot.EgressSnapshotResult] = []
+
+    def crash() -> None:
+        raise RuntimeError("connection lost")
+
+    monkeypatch.setattr(egress_snapshot, "take", crash)
+    monkeypatch.setattr(egress_snapshot, "alert", sent.append)
+    assert client.get("/jobs/egress-snapshot", headers=scheduler).status_code == 500
+    assert [r.reason for r in sent] == ["RuntimeError"]
