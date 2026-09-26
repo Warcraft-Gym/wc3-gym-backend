@@ -288,8 +288,8 @@ def test_the_season_list_costs_a_constant_number_of_statements(
     # every row P1 plays, the seeded one and the eighteen grown ones
     assert sum(row["player1_mmr"] == 1500 for row in rows) == 19
     assert small[0] == large[0]
-    # twelve today; the guard is that it is a constant, not that it is low
-    assert large[0] <= 13, large[0]
+    # eleven today; the guard is that it is a constant, not that it is low
+    assert large[0] <= 12, large[0]
 
 
 def test_the_player_series_read_costs_a_constant_number_of_statements(
