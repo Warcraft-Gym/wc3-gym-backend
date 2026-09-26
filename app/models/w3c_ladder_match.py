@@ -33,7 +33,8 @@ class W3CLadderMatchBase(SQLModel):
 
 class W3CLadderMatch(W3CLadderMatchBase, DBModel, table=True):
     __tablename__ = "w3c_ladder_matches"
-    # One row per player per match, and the season read pages by player and date
+    # One row per player per match, the season read pages by player and date,
+    # and the MMR-at-instant read seeks by player, race and date
     __table_args__ = (
         Index(
             "uq_w3c_ladder_matches_match_user",
@@ -42,6 +43,12 @@ class W3CLadderMatch(W3CLadderMatchBase, DBModel, table=True):
             unique=True,
         ),
         Index("ix_w3c_ladder_matches_user_id_start_time", "user_id", "start_time"),
+        Index(
+            "ix_w3c_ladder_matches_user_id_race_start_time",
+            "user_id",
+            "race",
+            "start_time",
+        ),
     )
 
     id: int | None = Field(default=None, primary_key=True)
