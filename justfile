@@ -58,6 +58,22 @@ egress-routes days="7" api="http://localhost:5002":
         print("  ".join(cell.rjust(w) for cell, w in zip(row, widths)), row[-1])
     PY
 
+# The rows and estimated egress between the daily snapshots of the last days, oldest first.
+# Local only: reads GET /jobs/egress-snapshots from `just serve`, with CRON_SECRET from the shell or .env.
+egress-days days="7" api="http://localhost:5002":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    secret="${CRON_SECRET:-$(grep -s '^CRON_SECRET=' .env | cut -d= -f2- || true)}"
+    export WINDOWS=$(curl -fsS "{{ api }}/jobs/egress-snapshots?days={{ days }}" -H "Authorization: Bearer $secret")
+    uv run python - <<'PY'
+    import json, os
+    columns = ("start", "end", "hours", "calls", "rows", "estimated_mb", "mb_per_day", "over_budget")
+    rows = [columns] + [tuple(str(r[c])[:16] for c in columns) for r in json.loads(os.environ["WINDOWS"])]
+    widths = [max(len(row[i]) for row in rows) for i in range(len(columns))]
+    for row in rows:
+        print("  ".join(cell.rjust(w) for cell, w in zip(row, widths)))
+    PY
+
 # Replace the guild's slash commands with the backend's list. Reads DISCORD_APPLICATION_ID,
 # DISCORD_GUILD_ID and DISCORD_BOT_TOKEN from .env; guild commands update at once.
 discord-commands:

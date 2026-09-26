@@ -10,11 +10,12 @@ from app.api.deps import Credentials, LadderServiceDep
 from app.core.db import Session
 from app.core.exceptions import ApiError
 from app.models.egress_ledger import EgressLedger
+from app.models.egress_snapshot import EgressSnapshotResult, EgressWindow
 from app.models.relationships import DBUserSeasonSignup
 from app.models.types import utcnow
 from app.models.user import User, UserReduced
 from app.models.w3c_stats import W3CSyncResult
-from app.services import casts, discord_posts, egress
+from app.services import casts, discord_posts, egress, egress_snapshot
 from app.services.users import W3C_SYNC_WORKERS
 
 router = APIRouter(tags=["jobs"])
@@ -100,3 +101,24 @@ def egress_ledger(
     only_the_scheduler(credentials)
     response.headers["Cache-Control"] = "no-store"
     return egress.recent(days)
+
+
+@router.get("/jobs/egress-snapshot")
+def take_egress_snapshot(credentials: Credentials) -> EgressSnapshotResult:
+    """Copy pg_stat_statements into egress_snapshot and diff it with the copy before,
+    for Vercel Cron once a day. Without pg_stat_statements it answers available: false;
+    within an hour of the last snapshot it writes nothing and answers `skipped`."""
+    only_the_scheduler(credentials)
+    return egress_snapshot.take()
+
+
+@router.get("/jobs/egress-snapshots")
+def egress_snapshots(
+    credentials: Credentials,
+    response: Response,
+    days: Annotated[int, Query(ge=1, le=35)] = 7,
+) -> list[EgressWindow]:
+    """One window per snapshot of the last `days` days, oldest first, totals only."""
+    only_the_scheduler(credentials)
+    response.headers["Cache-Control"] = "no-store"
+    return egress_snapshot.recent(days)

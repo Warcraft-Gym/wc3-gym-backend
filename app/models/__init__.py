@@ -27,6 +27,7 @@ from app.models import (
     discord_role_binding,
     draft_series,
     egress_ledger,
+    egress_snapshot,
     enums,
     event_award,
     event_division,

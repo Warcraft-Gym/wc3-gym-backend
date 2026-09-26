@@ -1,6 +1,6 @@
 # Tables
 
-The 45 tables, one concept each. A concept's `# Schema` lists every column; `tests/test_okf.py` fails when the columns and the concept disagree.
+The 47 tables, one concept each. A concept's `# Schema` lists every column; `tests/test_okf.py` fails when the columns and the concept disagree.
 
 # People and access
 
@@ -64,6 +64,8 @@ The 45 tables, one concept each. A concept's `# Schema` lists every column; `tes
 # Operations
 
 * [egress_ledger](egress_ledger.md) - What each route cost the database, one row per day, route and method: calls, statements, rows and response bytes.
+* [egress_snapshot](egress_snapshot.md) - One daily copy of pg_stat_statements: the cumulative calls and rows of each statement, role and nesting level at the time of the copy, kept 35 days.
+* [egress_statement](egress_statement.md) - The text of each statement in egress_snapshot, stored once: the first 150 characters with whitespace collapsed.
 
 # Discord
 
