@@ -174,12 +174,9 @@ def series() -> HomeSeries:
             key: SeriesPublic.from_series_reduced(row.series)
             for key, row in seen.items()
         }
-        derived.fill_signup_races(
-            session,
-            list(public.values()),
-            {key: row.event_id for key, row in seen.items()},
-        )
-        derived.fill_mmrs(session, list(public.values()))
+        events = {key: row.event_id for key, row in seen.items()}
+        derived.fill_signup_races(session, list(public.values()), events)
+        derived.fill_mmrs(session, list(public.values()), events)
         rounds = _rounds(session, set(seen))
         made = {
             key: HomeSeriesRow.from_series(

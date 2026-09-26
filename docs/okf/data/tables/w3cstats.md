@@ -29,7 +29,7 @@ sources:
 | `wins` | INTEGER | yes | Wins that season on that race. |
 | `losses` | INTEGER | yes | Losses. |
 | `games` | INTEGER | yes | Games played. |
-| `mmr` | INTEGER | yes | The MMR. The entrant, card and draft reads take it from the row of the signup race and the pinned season. |
+| `mmr` | INTEGER | yes | The MMR. The entrant and draft board reads and the series rows of a running event take it from the row of the signup race and the pinned season. |
 | `winrate` | FLOAT | yes | Wins over games, as W3Champions reports it. |
 | `league` | INTEGER | yes | The W3Champions league order the player sits in, as the client reads `leagueOrder`. |
 

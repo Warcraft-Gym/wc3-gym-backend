@@ -46,7 +46,6 @@ from app.models.series import Series
 from app.models.user import User
 from app.models.user_block import UserBlock, UserBusy
 from app.models.user_team_season import DBUserTeamSeason
-from app.models.w3c_ladder_match import W3CLadderMatch
 from app.services import derived, events, ladder, soft_blocks
 
 # How many meetings the pair read answers, newest first
@@ -111,8 +110,8 @@ def meetings(user_a: int, user_b: int) -> list[PairMeeting]:
     `MEETINGS_LIMIT`, with the MMR each held at the time.
 
     One statement: the meetings carry the race each side played, and the two
-    ratings hang off them as ranked reads of the ladder rows before the
-    series, so the answer costs the same whoever the pair is.
+    ratings hang off them as `ladder.mmr_at` reads at the series time, so the
+    answer costs the same whoever the pair is.
     """
     if user_a == user_b:
         return []
@@ -345,10 +344,11 @@ def _meeting_rows(session: OrmSession, user_a: int, user_b: int) -> Sequence[Row
     """The finished series between the two, newest first, with the race each
     played and the MMR each held going into it.
 
-    One statement. The two ratings are ranked reads of the ladder rows that
-    close before the series, so neither the ladder rows nor an extra round
-    trip per meeting reach the caller. A series with no time reads the ladder
-    against the first day of its round, and sorts last where it has neither.
+    One statement. The two ratings are `ladder.mmr_at` reads inside the
+    w3champions seasons of the meeting's event, so neither the ladder rows nor
+    an extra round trip per meeting reach the caller. A series with no time
+    reads the ladder against the first day of its round, and sorts last where
+    it has neither.
     """
     signup_a, signup_b = aliased(DBUserSeasonSignup), aliased(DBUserSeasonSignup)
     first = col(Series.player1_id) == user_a
@@ -401,6 +401,9 @@ def _meeting_rows(session: OrmSession, user_a: int, user_b: int) -> Sequence[Row
         )
         .subquery()
     )
+    # each meeting reads the ladder inside the w3champions seasons of its own event
+    bound = ladder.w3c_seasons(session, select(met.c.event_id))
+    seasons = select(bound.c.wc3_season).where(bound.c.event_id == met.c.event_id)
     return session.execute(
         select(
             met.c.series_id,
@@ -411,32 +414,10 @@ def _meeting_rows(session: OrmSession, user_a: int, user_b: int) -> Sequence[Row
             met.c.race_b,
             col(Season.name).label("event_name"),
             LEAGUE_SHORT_NAME,
-            _mmr_at(user_a, met.c.race_a, met.c.instant).label("mmr_a"),
-            _mmr_at(user_b, met.c.race_b, met.c.instant).label("mmr_b"),
+            ladder.mmr_at(user_a, met.c.race_a, met.c.instant, seasons).label("mmr_a"),
+            ladder.mmr_at(user_b, met.c.race_b, met.c.instant, seasons).label("mmr_b"),
         )
         .join(Season, col(Season.id) == met.c.event_id, isouter=True)
         .order_by(met.c.instant.desc().nulls_last(), met.c.series_id.desc())
         .limit(MEETINGS_LIMIT)
     ).all()
-
-
-def _mmr_at(user_id: int, race: Any, instant: Any) -> Any:  # noqa: ANN401
-    """The MMR the player took into a series: `mmr_after` of his last rated
-    ladder game on the race he played, before the series started.
-
-    A ranked read that hangs off the meeting row, so the whole list costs no
-    statement of its own and no ladder row is sent.
-    """
-    game = aliased(W3CLadderMatch)
-    return (
-        select(col(game.mmr_after))
-        .where(
-            col(game.user_id) == user_id,
-            col(game.race) == race,
-            col(game.start_time) < instant,
-            col(game.mmr_after).is_not(None),
-        )
-        .order_by(col(game.start_time).desc(), col(game.id).desc())
-        .limit(1)
-        .scalar_subquery()
-    )

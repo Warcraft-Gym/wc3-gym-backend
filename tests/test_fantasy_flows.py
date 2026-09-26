@@ -209,11 +209,12 @@ def test_a_roster_of_derived_tiers_drafts(
     The draft page groups the pick list by the derived tier, and the write reads
     the same tier, so a season with no pin at all still drafts.
     """
-    from tests.test_ladder_read import add_match, sign_up
+    from tests.test_ladder_read import add_match, date_around_now, sign_up
 
     season = seeded["season_id"]
     p1, p2, p3 = seeded["player_ids"][:3]
     sign_up(season, [p1, p2, p3], race=Race.HU)
+    date_around_now(season)
     when = utcnow() + timedelta(minutes=5)
     for user_id, mmr in ((p1, 1400), (p2, 1200), (p3, 1000)):
         add_match(
@@ -435,11 +436,12 @@ def test_an_unpinned_tier_derives_from_the_mmr_on_the_apply_date(
     """A player takes the band his MMR on the Apply date falls in, read from his
     first rated match after it, else his last before it. A tier set by hand wins,
     a late signup needs no re-Apply, and a game on another race says nothing."""
-    from tests.test_ladder_read import add_match, sign_up
+    from tests.test_ladder_read import add_match, date_around_now, sign_up
 
     season = seeded["season_id"]
     p1, p2, p3, p4 = seeded["player_ids"][:4]
     sign_up(season, [p1, p2, p3], race=Race.HU)
+    date_around_now(season)
     before, after = utcnow() - timedelta(days=1), utcnow() + timedelta(minutes=5)
     add_match(p1, "p1-after", after, mmr_before=1000, mmr_after=1010, race=Race.HU)
     add_match(p2, "p2-before", before, mmr_before=1190, mmr_after=1200, race=Race.HU)
@@ -474,11 +476,12 @@ def test_a_w3c_season_opening_after_the_apply_date_keeps_the_mmr_before_it(
 ) -> None:
     """The first match of a new w3champions season carries a fresh MMR, not the
     one the admin cut from, so the last match of the old season counts instead."""
-    from tests.test_ladder_read import add_match, sign_up
+    from tests.test_ladder_read import add_match, date_around_now, sign_up
 
     season = seeded["season_id"]
     p1, p2 = seeded["player_ids"][:2]
     sign_up(season, [p1, p2], race=Race.HU)
+    date_around_now(season)
     before, after = utcnow() - timedelta(days=1), utcnow() + timedelta(minutes=5)
     # p1 crosses a season boundary; p2 opens the same season he closed
     add_match(

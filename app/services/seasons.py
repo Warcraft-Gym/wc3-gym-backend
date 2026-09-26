@@ -45,7 +45,8 @@ from app.models.team import Team
 from app.models.team_season import DBTeamSeason
 from app.models.user import User, UserListPublic
 from app.services import ladder_maps
-from app.services.ladder import mmr_on
+from app.services.events import _w3c_season
+from app.services.ladder import _w3c_seasons_for, mmr_on
 from app.services.maps import MapService
 from app.services.series_veto import check_order
 from app.services.users import UserService
@@ -150,7 +151,13 @@ def resolved_tiers(
     """Each signup's fantasy tier: the pin, else the band its MMR on the Apply date falls in."""
     cuts, applied = season.fantasy_tier_cuts, season.fantasy_tiers_applied_at
     mmrs = (
-        mmr_on(session, [signup.user_id for signup in signups], applied)
+        mmr_on(
+            session,
+            [signup.user_id for signup in signups],
+            applied,
+            # a season with no stored match yet reads the current w3champions season
+            _w3c_seasons_for(session, season) or [_w3c_season(session)],
+        )
         if cuts and applied
         else {}
     )

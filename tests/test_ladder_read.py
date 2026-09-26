@@ -54,6 +54,17 @@ def sign_up(season_id: int, user_ids: list[int], race: Race | None = None) -> No
         session.commit()
 
 
+def date_around_now(season_id: int) -> None:
+    """Date the season from two days back to two months ahead, so the matches
+    a test stores around now sit inside its window and name its W3C seasons."""
+    today = datetime.now(UTC).date()
+    with Session() as session:
+        season = session.get_one(Season, season_id)
+        season.start_date = today - timedelta(days=2)
+        season.end_date = today + timedelta(days=60)
+        session.commit()
+
+
 def set_signup_race(season_id: int, user_id: int, race: Race) -> None:
     """The race the player registered on for that one season."""
     with Session() as session:

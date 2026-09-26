@@ -152,6 +152,23 @@ def phase_of(
     return "seeded"
 
 
+def finished_ids(session: OrmSession, event_ids: set[int]) -> set[int]:
+    """The events among `event_ids` that read finished, in three reads."""
+    if not event_ids:
+        return set()
+    events = session.scalars(select(Season).where(col(Season.id).in_(event_ids)))
+    counts = series_counts_by_event(session, event_ids)
+    drawn = last_stage_drawn(session, list(event_ids))
+    return {
+        ident(event)
+        for event in events.all()
+        if phase_of(
+            session, event, counts.get(event.id, NO_SERIES), drawn.get(event.id, True)
+        )
+        == "finished"
+    }
+
+
 def _signups_open(event: Season, phase: EventPhase) -> bool:
     """The stored flag, shut once the event reads finished."""
     return event.signups_open and phase != "finished"

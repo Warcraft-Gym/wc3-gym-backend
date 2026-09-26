@@ -16,6 +16,7 @@ from app.models.relationships import round_row
 from app.models.season import Season
 from app.models.series import Series
 from app.models.series_cast import SeriesCast
+from app.models.settings import Settings
 from app.models.types import utcnow
 from app.models.user import User
 from app.models.w3c_ladder_match import W3CLadderMatch
@@ -47,22 +48,26 @@ def test_a_player_reads_flag_name_race_and_mmr(
 def test_ratings_take_the_latest_synced_mmr_on_each_race(
     seeded: dict[str, Any],
 ) -> None:
-    """Whatever the season: the card shows the last number the sync stored."""
-    p2 = seeded["player_ids"][1]
+    """The card shows the last number the sync stored in the current or the
+    previous W3C season; an older season shows none."""
+    p2, p4 = seeded["player_ids"][1], seeded["player_ids"][3]
     now = utcnow()
     with Session.begin() as session:
-        for number, (days, mmr) in enumerate(((30, 1400), (1, 1450))):
+        session.add(Settings(key="current_w3c_season", value="26"))
+        for number, (user_id, wc3_season, days, mmr) in enumerate(
+            ((p2, 25, 30, 1400), (p2, 25, 1, 1450), (p4, 24, 1, 1300))
+        ):
             session.add(
                 W3CLadderMatch(
                     w3c_match_id=f"m{number}",
-                    wc3_season=25,
+                    wc3_season=wc3_season,
                     start_time=now - timedelta(days=days),
                     duration_s=900,
                     race=Race.OC,
                     won=True,
                     mmr_before=mmr - 20,
                     mmr_after=mmr,
-                    user_id=p2,
+                    user_id=user_id,
                 )
             )
     marks = series_cards.ratings([SeriesService().get(seeded["series_open_id"])])

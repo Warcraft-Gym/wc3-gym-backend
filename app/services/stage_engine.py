@@ -282,9 +282,9 @@ def generate_next_round(
                 made.append(row)
         session.flush()
         rows = [StageSeriesRow.from_series_reduced(row) for row in made]
-        derived.fill_series(session, rows)
+        events = derived.fill_series(session, rows)
         _fill_teams(session, rows)
-        derived.fill_mmrs(session, rows)
+        derived.fill_mmrs(session, rows, events)
         _fill_sides(session, rows)
         return StageSeriesPublic(
             rounds=[EventRoundPublic.from_row(row) for row in drew.values()],
@@ -361,9 +361,9 @@ def add_challenger(event_id: int, stage_id: int, entrant_id: int) -> StageSeries
         public = StageSeriesRow.from_series_reduced(
             append_to_chain(session, stage, division, entrant)
         )
-        derived.fill_series(session, [public])
+        events = derived.fill_series(session, [public])
         _fill_teams(session, [public])
-        derived.fill_mmrs(session, [public])
+        derived.fill_mmrs(session, [public], events)
         _fill_sides(session, [public])
         return public
 
@@ -650,9 +650,9 @@ def set_fixture_template(
         session.add_all(rows)
         session.flush()
         public = [StageSeriesRow.from_series_reduced(row) for row in rows]
-        derived.fill_series(session, public)
+        events = derived.fill_series(session, public)
         _fill_teams(session, public)
-        derived.fill_mmrs(session, public)
+        derived.fill_mmrs(session, public, events)
         _fill_sides(session, public)
         return public
 
@@ -684,9 +684,9 @@ def series_of(event_id: int, stage_id: int) -> StageSeriesPublic:
             StageSeriesRow.from_series_reduced(row)
             for row in sorted(held, key=lambda row: _drawn(numbers, row))
         ]
-        derived.fill_series(session, rows)
+        events = derived.fill_series(session, rows)
         _fill_teams(session, rows)
-        derived.fill_mmrs(session, rows)
+        derived.fill_mmrs(session, rows, events)
         _fill_sides(session, rows)
         return StageSeriesPublic(
             rounds=[EventRoundPublic.from_row(row) for row in rounds], series=rows
@@ -864,9 +864,9 @@ def _entrants_by_id(
 def _lobby_read(session: OrmSession, row: Series) -> StageSeriesRow:
     """One lobby as its box reads it: the series, its seats and their places."""
     public = StageSeriesRow.from_series_reduced(row)
-    derived.fill_series(session, [public])
+    events = derived.fill_series(session, [public])
     _fill_teams(session, [public])
-    derived.fill_mmrs(session, [public])
+    derived.fill_mmrs(session, [public], events)
     _fill_sides(session, [public])
     return public
 
