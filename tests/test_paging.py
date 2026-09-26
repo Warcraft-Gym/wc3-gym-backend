@@ -175,10 +175,11 @@ def test_the_limit_reaches_the_statement(league: dict[str, Any]) -> None:
     assert any("LIMIT" in statement for statement in statements)
 
 
-# The ladder.mmr_at reads of both sides of the rows of a finished season
+# One ladder.mmr_at read; the rows of a finished season read one per side
 _AFTER = "w3c_ladder_matches.start_time, w3c_ladder_matches.id"
 _BEFORE = "w3c_ladder_matches.start_time DESC, w3c_ladder_matches.id DESC"
-MMR_OF_THE_TIME = [_AFTER, _AFTER, _AFTER, _BEFORE, _BEFORE] * 2
+MMR_AT = [_AFTER, _AFTER, _AFTER, _BEFORE, _BEFORE]
+MMR_OF_THE_TIME = MMR_AT * 2
 
 # The ORDER BY every route writes when no sort parameter is sent
 DEFAULT_ORDER = {
@@ -207,12 +208,14 @@ DEFAULT_ORDER = {
     "GET /leagues/{league_id}/teams": ["teams.id"],
     "GET /leagues/{league_id}/teams/basic": ["teams.id"],
     "POST /leagues/{league_id}/teams/search?query=id > 0": ["teams.id"],
-    # The last fragment orders the matchup history of the season record
+    # The last fragments order the matchup history of the season record and
+    # the MMR each roster player entered the season with
     "GET /events/{season_id}/teams": [
         "teams.id",
         "anon_1.id",
         "team_season_captain.user_id",
         "w3cstats.id",
+        *MMR_AT,
     ],
     "GET /events/{season_id}/teams/basic": ["teams.id", "anon_1.id"],
     "GET /users": [

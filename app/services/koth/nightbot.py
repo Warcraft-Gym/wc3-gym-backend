@@ -24,10 +24,10 @@ from app.services.events import (
     EventService,
     _by_battle_tag,
     _stats_for,
-    _w3c_season,
 )
 from app.services.koth.night import tonight
 from app.services.koth.signup import follow, sync_rating, unrated
+from app.services.w3c_stats import w3c_season
 
 if TYPE_CHECKING:
     from app.services.settings import SettingsService
@@ -59,7 +59,7 @@ def signup(
             else None
         )
         bracket = division.name if division is not None else None
-        mmr = _stats_for(user, chosen, _w3c_season(session))[0]
+        mmr = _stats_for(user, chosen, w3c_season(session))[0]
         tag = user.battleTag or battletag
     if bracket is None:
         return {
@@ -94,14 +94,14 @@ def enter(
         user = _by_battle_tag(session, battle_tag, named or Race.RANDOM)
         user_id = ident(user)
         tag = user.battleTag or battle_tag
-        ask = unrated(user, named, _w3c_season(session))
+        ask = unrated(user, named, w3c_season(session))
     if ask:
         sync_rating(user_id, tag)
 
     with Session.begin() as session:
         user = session.get(User, user_id)
         chosen = named or (
-            _best_race(user, _w3c_season(session)) if user is not None else Race.RANDOM
+            _best_race(user, w3c_season(session)) if user is not None else Race.RANDOM
         )
         night = session.get(Season, event_id)
         per_race = chosen if night is not None and night.multi_entry else None

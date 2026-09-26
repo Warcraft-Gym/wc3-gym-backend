@@ -67,9 +67,8 @@ class RaceMmr(SQLModel):
     games: int | None  # summed over the window rows of this race
     wins: int | None
     losses: int | None
-    stale: bool = (
-        False  # true when the row is older than the window (profile reads only)
-    )
+    # true when the row is older than the window (profile reads only)
+    stale: bool = False
 
 
 class W3CSyncFailure(SQLModel):

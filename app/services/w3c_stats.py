@@ -1,6 +1,6 @@
 """The live ladder summary of a player: one row per race over the W3C window.
 
-The window is the current W3C season (`_w3c_season`) and the one before it.
+The window is the current W3C season (`w3c_season`) and the one before it.
 Eligibility, ratings and fantasy read the window alone; a profile read may also
 show a race with no window row from its newest older row, flagged stale.
 """
@@ -22,7 +22,7 @@ W3C_SEASON_KEY = "current_w3c_season"
 MAIN_RACE_GAMES = 10
 
 
-def _w3c_season(session: OrmSession) -> int:
+def w3c_season(session: OrmSession) -> int:
     """The W3C season the app reads ratings against, or the newest one stored."""
     named = session.scalar(
         select(col(Settings.value)).where(col(Settings.key) == W3C_SEASON_KEY)
@@ -47,8 +47,9 @@ def summarize(
 ) -> tuple[list[RaceMmr], str | None]:
     """The races of one player, and his main race.
 
-    A race with window rows answers its newest window row's mmr and record and
-    the games of every window row; with `stale`, a race with none answers its
+    A race with window rows answers the mmr and record of its newest window
+    row with a rating, else its newest window row, and the games of every
+    window row; with `stale`, a race with none answers its
     newest older row, flagged. Window races come first by mmr, then stale races
     newest first. The main race is the window race with the top mmr among
     those with MAIN_RACE_GAMES games, else None.
@@ -62,7 +63,8 @@ def summarize(
         inside = [row for row in stats if row.wc3_season in window(current)]
         older = [row for row in stats if row.wc3_season < current - 1]
         if inside:
-            newest = max(inside, key=lambda row: row.wc3_season)
+            rated = [row for row in inside if row.mmr is not None] or inside
+            newest = max(rated, key=lambda row: row.wc3_season)
             games = sum(row.games or 0 for row in inside)
             live.append(_race_mmr(race, newest, games, stale=False))
         elif stale and older:

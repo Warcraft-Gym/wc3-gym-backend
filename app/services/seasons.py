@@ -49,7 +49,7 @@ from app.services.ladder import _w3c_seasons_for, mmr_on
 from app.services.maps import MapService
 from app.services.series_veto import check_order
 from app.services.users import UserService
-from app.services.w3c_stats import _w3c_season, fill, in_window
+from app.services.w3c_stats import fill, in_window, w3c_season
 
 logger = logging.getLogger(__name__)
 
@@ -157,7 +157,7 @@ def resolved_tiers(
             applied,
             # a running season with no stored match yet reads the current w3champions season
             _w3c_seasons_for(session, season)
-            or ([_w3c_season(session)] if season.running else []),
+            or ([w3c_season(session)] if season.running else []),
         )
         if cuts and applied
         else {}
@@ -615,7 +615,7 @@ class SeasonService:
             if season is None:
                 raise NotFoundError("Season not found")
 
-            current = _w3c_season(session)
+            current = w3c_season(session)
             # The signup row has no gnl_stats, so the link rows stay out; the
             # W3C rows are the live window
             statement = (

@@ -23,7 +23,7 @@ from app.models.series import (
 )
 from app.models.w3c_stats import W3CStats
 from app.services import derived, series_rules, stage_engine
-from app.services.w3c_stats import _w3c_season, fill, in_window
+from app.services.w3c_stats import fill, in_window, w3c_season
 
 
 def both_scores(row: Series, wins: int | None = None) -> None:
@@ -108,7 +108,7 @@ class SeriesService:
     def get(self, series_id: int) -> SeriesPublic:
         """One series; its players carry the live window W3C rows and summary."""
         with Session.begin() as session:
-            current = _w3c_season(session)
+            current = w3c_season(session)
             series = session.scalars(
                 select(Series)
                 .options(

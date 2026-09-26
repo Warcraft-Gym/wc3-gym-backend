@@ -1,9 +1,8 @@
 import logging
 from collections.abc import Iterable
-from datetime import UTC, datetime, time
 from typing import Any
 
-from sqlalchemy import FromClause, Integer, String, cast, column, select, true, values
+from sqlalchemy import select, true
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as OrmSession
 from sqlalchemy.orm import joinedload, noload, selectinload
@@ -21,11 +20,10 @@ from app.models.team import Team, TeamCreate, TeamPublic, TeamUpdate
 from app.models.team_season import DBTeamSeason
 from app.models.user import User, UserPublic
 from app.models.user_team_season import DBUserTeamSeason
-from app.models.w3c_ladder_match import W3CLadderMatch
 from app.models.w3c_stats import W3CStats
-from app.services import availability, blob, derived, discord_roles, ladder
+from app.services import availability, blob, derived, discord_roles
 from app.services.users import UserService
-from app.services.w3c_stats import _w3c_season, fill, in_window
+from app.services.w3c_stats import fill, in_window, w3c_season
 
 logger = logging.getLogger(__name__)
 
@@ -59,9 +57,10 @@ def _event_team(
     return team, event
 
 
-def _fill(session: OrmSession, teams: list[TeamPublic]) -> None:
+def _fill(session: OrmSession, teams: list[TeamPublic], entered: bool = False) -> None:
     """The standings of every team, the name and league of every season it
-    played, and the signup race and the season record of every player."""
+    played, and the signup race and the season record of every player; with
+    `entered`, the MMR each player entered a finished season with."""
     derived.fill_standings(session, teams)
     derived.fill_season_labels(session, teams)
     roster = [
@@ -70,7 +69,7 @@ def _fill(session: OrmSession, teams: list[TeamPublic]) -> None:
         for season_id, players in team.player_by_season.items()
         for player in players
     ]
-    derived.fill_user_signup_races(session, roster)
+    derived.fill_user_signup_races(session, roster, entered)
     derived.fill_gnl_stats(session, [player for player, _ in roster])
 
 
@@ -88,10 +87,10 @@ def _fill_out_rounds(
                 stat.out_rounds = out[stat.user_id]
 
 
-def _public(session: OrmSession, team: Team) -> TeamPublic:
+def _public(session: OrmSession, team: Team, entered: bool = False) -> TeamPublic:
     """One team, with its standings derived from the series it played."""
     public = TeamPublic.from_team(team)
-    _fill(session, [public])
+    _fill(session, [public], entered)
     return public
 
 
@@ -153,12 +152,8 @@ def _load_w3c_stats(session: OrmSession, teams: Iterable[Team], current: int) ->
         set_committed_value(user, "w3c_stats", rows[user_id])
 
 
-def _fill_mmrs(
-    session: OrmSession, teams: list[TeamPublic], season_id: int, current: int
-) -> None:
-    """The ladder summary of every roster player and captain, and once the
-    event is over (closed or past its end) the MMR each roster player entered
-    it with."""
+def _fill_mmrs(teams: list[TeamPublic], current: int) -> None:
+    """The ladder summary of every roster player and captain."""
     fill(
         [
             user
@@ -169,48 +164,6 @@ def _fill_mmrs(
         ],
         current,
     )
-    event = session.get(Season, season_id)
-    if event is not None and not event.running:
-        _fill_entered(session, teams, event)
-
-
-def _fill_entered(session: OrmSession, teams: list[TeamPublic], event: Season) -> None:
-    """Each roster player's MMR at the event's first day on his signup race,
-    inside the event's W3C seasons, in one statement that sends one integer
-    per player."""
-    season_id = ident(event)
-    roster = [
-        user
-        for team in teams
-        for user in team.player_by_season.get(season_id) or []
-        if user.signup_race
-    ]
-    if event.start_date is None or not roster:
-        return
-    seats = (
-        values(column("user_id", Integer), column("race", String), name="seats")
-        .data(list({(user.id, user.signup_race) for user in roster}))
-        .cte()
-    )
-    # a bound value reaches Postgres as text, which its race enum does not compare to
-    ladder_table: FromClause = getattr(W3CLadderMatch, "__table__")  # noqa: B009
-    race = cast(seats.c.race, ladder_table.c.race.type)
-    bound = ladder.w3c_seasons(session, [season_id])
-    instant = datetime.combine(event.start_date, time(), tzinfo=UTC)
-    entered = {
-        (user_id, race_name): mmr
-        for user_id, race_name, mmr in session.execute(
-            select(
-                seats.c.user_id,
-                seats.c.race,
-                ladder.mmr_at(
-                    seats.c.user_id, race, instant, select(bound.c.wc3_season)
-                ),
-            )
-        )
-    }
-    for user in roster:
-        user.mmr_entered = entered.get((user.id, user.signup_race))
 
 
 # A team list reads the season rows and no people; noload alone, because a
@@ -453,10 +406,10 @@ class TeamService:
             )
             if not team:
                 raise NotFoundError("Team not found")
-            current = _w3c_season(session)
+            current = w3c_season(session)
             _load_w3c_stats(session, [team], current)
-            public = _public(session, team)
-            _fill_mmrs(session, [public], season_id, current)
+            public = _public(session, team, entered=True)
+            _fill_mmrs([public], current)
             # An event without scheduling asks nobody, so every list stays empty
             if event.scheduling_enabled:
                 _fill_out_rounds(session, public, team_id, season_id)
@@ -576,11 +529,11 @@ class TeamService:
                 .limit(limit)
             )
             teams = session.scalars(statement).unique().all()
-            current = _w3c_season(session)
+            current = w3c_season(session)
             _load_w3c_stats(session, teams, current)
             result = [TeamPublic.from_team(team) for team in teams]
-            _fill(session, result)
-            _fill_mmrs(session, result, season_id, current)
+            _fill(session, result, entered=True)
+            _fill_mmrs(result, current)
             return result
 
     def get_teams_season_basic(

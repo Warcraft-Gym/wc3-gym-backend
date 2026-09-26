@@ -277,33 +277,56 @@ def clear_kept_off_race(session: Session, row: Series) -> None:
 
 
 def fill_user_signup_races(
-    session: Session, pairs: Iterable[tuple[UserListPublic, int | None]]
+    session: Session,
+    pairs: Iterable[tuple[UserListPublic, int | None]],
+    entered: bool = False,
 ) -> None:
     """Fill the signup race and the played-as tag of every player for the
-    season he is named with, in one statement."""
+    season he is named with, in one statement.
+
+    With `entered`, the same statement answers the MMR each player entered a
+    finished season with (closed, or its end date passed): the ladder rule at
+    the season's first day, midnight UTC, on his signup race, inside the
+    season's w3champions seasons. A running season answers None.
+    """
     named = [(player, season_id) for player, season_id in pairs if season_id]
     keys = {(player.id, season) for player, season in named}
-    rows = (
-        session.execute(
-            select(
-                col(DBUserSeasonSignup.user_id),
-                col(DBUserSeasonSignup.season_id),
-                col(DBUserSeasonSignup.race),
-                col(DBUserSeasonSignup.played_as),
-            ).where(
-                tuple_(
-                    col(DBUserSeasonSignup.user_id), col(DBUserSeasonSignup.season_id)
-                ).in_(keys)
-            )
-        ).all()
-        if keys
-        else []
+    signup = select(
+        col(DBUserSeasonSignup.user_id),
+        col(DBUserSeasonSignup.season_id),
+        col(DBUserSeasonSignup.race),
+        col(DBUserSeasonSignup.played_as),
+    ).where(
+        tuple_(col(DBUserSeasonSignup.user_id), col(DBUserSeasonSignup.season_id)).in_(
+            keys
+        )
     )
+    if entered:
+        bound = ladder.w3c_seasons(session, list({season for _, season in keys}))
+        signup = signup.add_columns(
+            case(
+                (
+                    ~Season.running,
+                    ladder.mmr_at(
+                        col(DBUserSeasonSignup.user_id),
+                        col(DBUserSeasonSignup.race),
+                        ladder.midnight_utc(session, col(Season.start_date)),
+                        select(bound.c.wc3_season).where(
+                            bound.c.event_id == col(DBUserSeasonSignup.season_id)
+                        ),
+                    ),
+                ),
+                else_=None,
+            )
+        ).join(Season, col(Season.id) == col(DBUserSeasonSignup.season_id))
+    rows = session.execute(signup).all() if keys else []
     signed = {(row[0], row[1]): row for row in rows}
     for player, season_id in named:
         row = signed.get((player.id, season_id))
         player.signup_race = row.race.value if row and row.race else None
         player.played_as = row.played_as if row else None
+        if entered:
+            player.mmr_entered = row[4] if row else None
 
 
 def fill_signup_races(
@@ -357,17 +380,28 @@ def fill_mmrs(
     `events` names the event of each row, as `fill_series` answers it, so call
     this after it. A row of a running event takes the current rating, two
     reads, three while the W3Champions season setting is unset. A row of a
-    finished event takes the MMR of the time: the ladder rule at the series
-    time, else its round's first day, inside the event's w3champions seasons,
-    one statement per finished event. Telling them apart costs three reads.
+    finished event (closed, or its end date passed) takes the MMR of the time:
+    the ladder rule at the series time, else its round's first day, inside the
+    event's w3champions seasons, one statement per finished event. Telling
+    them apart costs one read.
     """
     # app.services.events imports this module, so its rules come in on the call
-    from app.services.events import finished_ids, race_ratings
+    from app.services.events import race_ratings
 
     rows = [series for series in series_list if series is not None]
-    finished = finished_ids(
-        session, {events[row.id] for row in rows if row.id in events}
+    event_ids = {events[row.id] for row in rows if row.id in events}
+    running_ids = (
+        set(
+            session.scalars(
+                select(col(Season.id)).where(
+                    col(Season.id).in_(event_ids), Season.running
+                )
+            )
+        )
+        if event_ids
+        else set()
     )
+    finished = event_ids - running_ids
     by_event: dict[int, list[SeriesPublic]] = {}
     for row in rows:
         if events.get(row.id) in finished:

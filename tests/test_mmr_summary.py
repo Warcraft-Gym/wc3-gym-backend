@@ -15,10 +15,15 @@ from httpx2 import Client
 
 from app.core.db import Session
 from app.models.enums import Race
+from app.models.relationships import DBUserSeasonSignup
 from app.models.w3c_stats import W3CStats, W3CStatsPublic
 from app.services.events import race_ratings
 from app.services.w3c_stats import summarize
-from tests.test_series_row_mmr import finished, play  # noqa: F401  # a fixture
+from tests.test_series_row_mmr import (  # noqa: F401  # fixtures
+    finished,
+    play,
+    signed_up,
+)
 
 CURRENT = 25
 
@@ -80,6 +85,15 @@ def test_window_races_order_by_mmr_and_the_main_race_needs_ten_games() -> None:
     assert [row.race for row in races] == ["NE", "HU"]
     assert main == "HU"
     assert summarize(rows(("NE", 25, 1900, 9)), CURRENT)[1] is None
+
+
+def test_a_window_race_reads_its_newest_rated_row() -> None:
+    """An unrated newer row gives way to the newest rated one, as in
+    race_ratings; with no rated row the newest window row answers."""
+    races, _ = summarize(rows(("HU", 25, None, 5), ("HU", 24, 1750, 15)), CURRENT)
+    assert [(row.wc3_season, row.mmr, row.games) for row in races] == [(24, 1750, 20)]
+    races, _ = summarize(rows(("HU", 25, None, 5), ("HU", 24, None, 15)), CURRENT)
+    assert [(row.wc3_season, row.mmr, row.games) for row in races] == [(25, None, 20)]
 
 
 def test_stale_races_order_newest_first() -> None:
@@ -171,6 +185,24 @@ def test_list_reads_carry_the_window_alone(client: Client, stats: list[int]) -> 
     ]
 
 
+def test_the_signups_list_carries_the_window_alone(
+    client: Client, stats: list[int], seeded: dict[str, Any]
+) -> None:
+    with Session() as session:
+        for user_id in stats:
+            session.add(
+                DBUserSeasonSignup(
+                    user_id=user_id, season_id=seeded["season_id"], race=Race.HU
+                )
+            )
+        session.commit()
+    signed = client.get(f"/events/{seeded['season_id']}/signups").json()
+    assert {
+        stats.index(user["id"]): sorted(row["wc3_season"] for row in user["w3c_stats"])
+        for user in signed
+    } == {0: [24, 25], 1: [24, 24, 25], 2: [], 3: []}
+
+
 def test_ratings_read_the_window(stats: list[int]) -> None:
     """race_ratings answers the old pick inside the window and drops 0:NE."""
     pairs = [(user_id, race) for user_id in stats for race in ("HU", "NE", "OC", "UD")]
@@ -205,3 +237,21 @@ def test_a_finished_roster_carries_the_mmr_entered_with(
         for player in players
     }
     assert entered == {p1: 1420, p2: None, p3: 1505, finished["player_ids"][3]: None}
+
+
+def test_a_running_roster_carries_no_mmr_entered(
+    client: Client,
+    signed_up: dict[str, Any],  # noqa: F811
+) -> None:
+    """A running event reads the live window; nobody has an entered figure."""
+    p1 = signed_up["player_ids"][0]
+    play(p1, Race.HU, -60, 25, (1420, 1440))
+    teams = client.get(f"/events/{signed_up['season_id']}/teams").json()
+    entered = [
+        player["mmr_entered"]
+        for team in teams
+        for players in team["player_by_season"].values()
+        for player in players
+    ]
+    assert entered
+    assert set(entered) == {None}

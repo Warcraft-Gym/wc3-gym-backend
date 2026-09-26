@@ -22,7 +22,7 @@ from app.models.team_season import DBTeamSeason
 from app.models.user import User, UserPublic
 from app.services import derived, discord_roles
 from app.services.seasons import resolved_tiers
-from app.services.w3c_stats import _w3c_season, fill, in_window
+from app.services.w3c_stats import fill, in_window, w3c_season
 
 logger = logging.getLogger(__name__)
 
@@ -170,7 +170,7 @@ class FantasyTeamService:
                 raise NotFoundError("Fantasy Team not found")
             public = FantasyTeamPublic.from_fantasy_team(fteam)
             derived.fill_standings(session, [public.drafted_team])
-            _fill_mmrs(session, [public], _w3c_season(session))
+            _fill_mmrs(session, [public], w3c_season(session))
             return public
 
     def get_all(
@@ -179,7 +179,7 @@ class FantasyTeamService:
         """The teams, or one page of them, and the total row count."""
         with Session.begin() as session:
             total = session.scalar(select(func.count()).select_from(FantasyTeam)) or 0
-            current = _w3c_season(session)
+            current = w3c_season(session)
             # Offset paging is deterministic only with a fixed order
             statement = (
                 select(FantasyTeam)
@@ -210,7 +210,7 @@ class FantasyTeamService:
                 total = session.scalar(
                     select(func.count()).select_from(FantasyTeam).where(filter)
                 )
-            current = _w3c_season(session)
+            current = w3c_season(session)
             # Offset paging is deterministic only with a fixed order
             statement = (
                 select(FantasyTeam)

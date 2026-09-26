@@ -17,8 +17,8 @@ answer, one for the sum of the series on that system. Both are constant.
 It also names the race every player registered on for the season of its
 match, one more statement that does not grow with the answer.
 
-A reduced series list rates both sides on the race each row names. Three
-statements tell the running events of the answer from the finished ones.
+A reduced series list rates both sides on the race each row names. One
+statement tells the running events of the answer from the finished ones.
 The rows of the running events cost two more, three while the W3Champions
 season setting is unset; each finished event costs one. Neither part grows
 with the number of rows in the answer.
@@ -37,8 +37,8 @@ Neither grows with the number of players.
 A user, a user list, a team roster or a full series answer names the current
 W3C season, so it loads only the window rows and derives the ladder summary:
 one statement, two where no `current_w3c_season` setting is stored. A roster of
-an event that is over reads the event row and one statement more for the MMR
-every roster player entered it with.
+an event that is over carries the MMR every roster player entered it with on
+the signup race statement, at no statement more.
 
 A career list derives its totals, search, order and page in SQL. A single
 stored career row filters its tally to the linked user and matching name.
@@ -173,13 +173,13 @@ def test_get_series_costs_sixteen_statements(league: dict[str, Any]) -> None:
     assert tally[0] == 16
 
 
-def test_search_for_season_costs_nine_statements(league: dict[str, Any]) -> None:
+def test_search_for_season_costs_seven_statements(league: dict[str, Any]) -> None:
     """The season list is reduced: one statement for the casts, one for the pick
     steps, none per player and none per series. A GNL series reads its rules
     off the season its fixture loads, so the rules cost no statement.
 
     The reduced player carries no stats, so the list rates both sides of every
-    row itself. The seeded season is finished: three statements find that, and
+    row itself. The seeded season is finished: one statement finds that, and
     one reads the MMR of the time of every row.
     """
     service = SeriesService()
@@ -190,8 +190,8 @@ def test_search_for_season_costs_nine_statements(league: dict[str, Any]) -> None
     assert series_list[0].player1 is not None
     assert series_list[0].player1.name
     assert series_list[0].player1.w3c_stats == []
-    # three reads find the finished season, one reads the MMR of the time
-    assert tally[0] == 9
+    # one read finds the finished season, one reads the MMR of the time
+    assert tally[0] == 7
 
 
 def test_the_season_record_costs_two_statements(league: dict[str, Any]) -> None:
@@ -456,33 +456,33 @@ def add_teams_to_the_season(season_id: int, count: int) -> None:
         session.commit()
 
 
-def test_the_teams_of_a_season_cost_fourteen_statements(
+def test_the_teams_of_a_season_cost_twelve_statements(
     league: dict[str, Any],
 ) -> None:
     """Four for the teams and their people, two for the current W3C season,
     two for the standings, one for the name and league of every season, one
-    for the signup race of every player, two for his season record, and on
-    the finished season one for the event and one for the MMR entered with."""
+    for the signup race of every player and, on the finished season, the MMR
+    he entered it with, and two for his season record."""
     service = TeamService(UserService())
     with count_statements() as tally:
         teams = service.get_teams_season(league["season_id"])
     assert len(teams) == 2
     assert teams[0].seasons_info[0].final_score is not None
     assert teams[0].seasons_info[0].name == "Season 1"
-    assert tally[0] == 14
+    assert tally[0] == 12
 
 
 def test_the_standings_count_holds_when_the_teams_grow(
     league: dict[str, Any],
 ) -> None:
-    """Four more teams in the season, the same fourteen statements."""
+    """Four more teams in the season, the same twelve statements."""
     add_teams_to_the_season(league["season_id"], 4)
 
     service = TeamService(UserService())
     with count_statements() as tally:
         teams = service.get_teams_season(league["season_id"])
     assert len(teams) == 6
-    assert tally[0] == 14
+    assert tally[0] == 12
 
 
 def test_the_season_labels_cost_one_statement(league: dict[str, Any]) -> None:
@@ -593,13 +593,13 @@ def test_the_season_list_costs_the_same_when_seasons_grow(
 # Rows one call of each route reads on the league fixture, as X-DB-Rows reports it
 ROWS_PER_CALL = {
     "/series/{series_played_id}": 18,
-    "/events/{season_id}/series": 14,
+    "/events/{season_id}/series": 11,
     "/fantasy/bets": 10,
     "/fantasy/teams": 9,
     "/stats/career": 4,
     "/stats/career/{player_id}": 3,
-    "/events/{season_id}/teams": 39,
-    "/events/{season_id}/teams/{team_a_id}": 32,
+    "/events/{season_id}/teams": 34,
+    "/events/{season_id}/teams/{team_a_id}": 30,
     "/events/{season_id}/signups": 14,
     # One tag row per player
     "/users": 18,

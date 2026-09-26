@@ -85,7 +85,7 @@ from app.models.user_team_season import DBUserTeamSeason
 from app.models.w3c_stats import W3CStats
 from app.services import stage_engine
 from app.services.battle_tags import attach_tag, person_by_tag
-from app.services.w3c_stats import _w3c_season, fill, in_window, window
+from app.services.w3c_stats import fill, in_window, w3c_season, window
 
 # The shape of a battle tag: a name, then # and the player's number
 BATTLE_TAG = re.compile(r"[^\s#]+#\d{3,8}")
@@ -1372,7 +1372,7 @@ def _entrant_publics(
     and the rosters the rating of a team entrant is the mean of.
     """
     team_ids = {row.team_id for row in rows if row.team_id}
-    season = _w3c_season(session)
+    season = w3c_season(session)
     users = _users_for(session, rows, season)
     teams = {
         team.id: team
@@ -1402,20 +1402,23 @@ def _users_for(
 
 
 def race_ratings(
-    session: OrmSession, sides: Iterable[tuple[int | None, str | None]]
+    session: OrmSession,
+    sides: Iterable[tuple[int | None, str | None]],
+    current: int | None = None,
 ) -> dict[tuple[int, str], int]:
     """The current rating of every (player, race) pair named, keyed by the pair.
 
     The list form of the rule `_stats_for` states for one player: the newest
     window row that carries a rating on that race. Two reads whatever the
-    number of pairs, and the statement carries the rated seasons alone, so a
-    list payload rates each row without reading a stat it does not need. A
-    pair with no rating is left out.
+    number of pairs, one where the caller passes the `current` season, and the
+    statement carries the rated seasons alone, so a list payload rates each
+    row without reading a stat it does not need. A pair with no rating is left
+    out.
     """
     pairs = {(user_id, race) for user_id, race in sides if user_id and race}
     if not pairs:
         return {}
-    season = _w3c_season(session)
+    season = w3c_season(session) if current is None else current
     rated = (
         select(
             col(W3CStats.user_id).label("user_id"),
@@ -1451,19 +1454,19 @@ def race_games(
     session: OrmSession,
     sides: Iterable[tuple[int | None, str | None]],
     seasons: int | None,
+    current: int,
 ) -> dict[tuple[int, str], int]:
     """The ladder games every (player, race) pair named has on record, keyed
     by the pair.
 
     The list form of the games half of `_stats_for`: the window rows on that
     race, or the newest `seasons` of them where the event names a shorter
-    span. Two reads whatever the number of pairs. A pair with no window row is
-    left out.
+    span, in the `current` season's window. One read whatever the number of
+    pairs. A pair with no window row is left out.
     """
     pairs = {(user_id, race) for user_id, race in sides if user_id and race}
     if not pairs:
         return {}
-    current = _w3c_season(session)
     where = [
         col(W3CStats.user_id).in_({user_id for user_id, _ in pairs}),
         col(W3CStats.race).in_({Race.from_text(race) for _, race in pairs}),
@@ -1493,7 +1496,7 @@ def _mmrs(session: OrmSession, rows: Sequence[EventEntrant]) -> dict[int, int | 
     A team answers the mean of its roster, so a division cut and a seed order
     read one number for every entrant, whoever stands behind it.
     """
-    season = _w3c_season(session)
+    season = w3c_season(session)
     users = _users_for(session, rows, season)
     teams = _team_mmrs(session, rows, season)
     return {ident(row): _entrant_mmr(row, users, teams, season) for row in rows}

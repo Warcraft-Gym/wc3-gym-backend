@@ -46,7 +46,7 @@ from app.services.battle_tags import (
     set_active_tag,
 )
 from app.services.w3c import REQUEST_TIMEOUT, W3CService
-from app.services.w3c_stats import _w3c_season, fill, in_window
+from app.services.w3c_stats import fill, in_window, w3c_season
 
 if TYPE_CHECKING:
     from app.services.settings import SettingsService
@@ -88,7 +88,7 @@ def _public(session: OrmSession, user: User) -> UserPublic:
     public = UserPublic.from_user(user)
     derived.fill_gnl_stats(session, [public])
     derived.fill_trophies(session, [public])
-    fill([public], _w3c_season(session), stale=True)
+    fill([public], w3c_season(session), stale=True)
     return public
 
 
@@ -295,7 +295,7 @@ class UserService:
         if filter is None:
             return []
         with Session.begin() as session:
-            current = _w3c_season(session)
+            current = w3c_season(session)
             # Offset paging is deterministic only with a fixed order
             statement = (
                 select(User)
@@ -343,7 +343,7 @@ class UserService:
                 session.scalar(select(func.count()).select_from(User).where(*filters))
                 or 0
             )
-            current = _w3c_season(session)
+            current = w3c_season(session)
             # Offset paging is deterministic only with a fixed order
             statement = (
                 select(User)

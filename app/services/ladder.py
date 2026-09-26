@@ -16,18 +16,21 @@ from sqlalchemy import (
     CTE,
     ColumnElement,
     CompoundSelect,
+    DateTime,
     Row,
     Select,
     SQLColumnExpression,
     Subquery,
     and_,
     case,
+    cast,
     distinct,
     extract,
     func,
     or_,
     select,
     tuple_,
+    type_coerce,
     update,
 )
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -1138,6 +1141,15 @@ def _utc(
     if session.get_bind().dialect.name == "postgresql":
         return func.timezone("UTC", column)
     return column
+
+
+def midnight_utc(
+    session: OrmSession, day: SQLColumnExpression[date | None]
+) -> SQLColumnExpression[datetime | None]:
+    """A date column as its first instant in UTC; SQLite compares the stored text as is."""
+    if session.get_bind().dialect.name == "postgresql":
+        return func.timezone("UTC", cast(day, DateTime()))
+    return type_coerce(day, DateTime())
 
 
 def _per_day(
