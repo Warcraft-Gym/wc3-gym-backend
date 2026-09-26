@@ -9,6 +9,7 @@ from app.core.db import Session, rel
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.core.ordering import SortOrder, ordered
 from app.core.query import QueryElement, QueryUtil
+from app.models.base import ident
 from app.models.fantasy_bet import (
     FantasyBet,
     FantasyBetCreate,
@@ -18,6 +19,7 @@ from app.models.fantasy_bet import (
 from app.models.series import Series
 from app.models.user import User
 from app.services import derived
+from app.services.users import load_players
 
 if TYPE_CHECKING:
     from app.services.settings import SettingsService
@@ -86,11 +88,8 @@ class FantasyBetService:
 
     def add(self, fantasy_bet: FantasyBetCreate) -> FantasyBetPublic:
         with Session.begin() as session:
-            fbet = FantasyBet.add(session, fantasy_bet.model_dump())
-            public = FantasyBetPublic.from_fantasy_bet(fbet)
-            derived.fill_series(session, [public.series])
-            derived.fill_bet_results([public])
-            return public
+            bet_id = ident(FantasyBet.add(session, fantasy_bet.model_dump()))
+        return self.get(bet_id)
 
     def update(
         self, fantasy_bet_id: int, fantasy_bet: FantasyBetUpdate
@@ -103,22 +102,25 @@ class FantasyBetService:
             )
             if not row:
                 raise NotFoundError("Fantasy Bet not found")
-            public = FantasyBetPublic.from_fantasy_bet(row)
-            derived.fill_series(session, [public.series])
-            derived.fill_bet_results([public])
-            return public
+        return self.get(fantasy_bet_id)
 
     def delete(self, fantasy_bet_id: int) -> None:
         with Session.begin() as session:
             FantasyBet.delete(session, fantasy_bet_id)
 
     def get(self, fantasy_bet_id: int) -> FantasyBetPublic:
+        """One bet; its four players carry their record in the bet's season.
+        Every bet write answers through this read."""
         with Session.begin() as session:
             fbet = session.get(
                 FantasyBet, fantasy_bet_id, options=FantasyBet.eager_options()
             )
             if not fbet:
                 raise NotFoundError("Fantasy Bet not found")
+            players = (fbet.user_id, fbet.winner_id)
+            if fbet.series:
+                players += (fbet.series.player1_id, fbet.series.player2_id)
+            load_players(session, players, fbet.season_id)
             public = FantasyBetPublic.from_fantasy_bet(fbet)
             derived.fill_series(session, [public.series])
             derived.fill_bet_results([public])

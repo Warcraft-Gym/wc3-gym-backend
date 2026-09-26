@@ -19,7 +19,7 @@ from app.models.enums import Race
 from app.models.map import Map
 from app.models.relationships import round_row
 from app.models.series import SeriesPublic
-from app.models.user import User, UserPublic
+from app.models.user import User, UserSummaryPublic
 from app.services import discord, replays
 from app.services.commands.base import (
     cast_link,
@@ -65,11 +65,11 @@ def ratings(rows: Sequence[SeriesPublic]) -> Ratings:
     return Ratings(mmr, synced)
 
 
-def _name(user: UserPublic | None) -> str:
+def _name(user: UserSummaryPublic | None) -> str:
     return md((user.name if user else None) or "?")
 
 
-def player(user: UserPublic | None, race: str | None, marks: Ratings) -> str:
+def player(user: UserSummaryPublic | None, race: str | None, marks: Ratings) -> str:
     """{flag} {name} ({race} {mmr}). The name links to the GNL profile; "?" is
     an MMR the sync has not seen on that race. A link label keeps the name
     unescaped: Discord shows a backslash inside a label as typed."""

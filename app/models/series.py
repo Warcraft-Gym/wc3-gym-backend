@@ -29,7 +29,7 @@ from app.models.series_side import SeriesSidePublic
 from app.models.series_veto_step import DBSeriesVetoStep
 from app.models.team_reduced import TeamReduced
 from app.models.types import AwareUTC, EnumValue, SuggestRace, UTCDateTime
-from app.models.user import User, UserPublic
+from app.models.user import User, UserSummaryPublic
 
 SeriesSort = Literal["date_time", "week", "id"]
 
@@ -236,7 +236,8 @@ class Series(SeriesBase, DBModel, table=True):
 
     @classmethod
     def _eager_options(cls) -> tuple[ORMOption, ...]:
-        """The rows a season report reads off every series."""
+        """The rows the single series read takes off the series; the rows of
+        the player summaries load apart, with app.services.users.load_players."""
         return (
             joinedload(rel(cls.entrant1)).joinedload(
                 rel(EventEntrant.historical_participant)
@@ -247,12 +248,8 @@ class Series(SeriesBase, DBModel, table=True):
             joinedload(rel(cls.match)).joinedload(rel(Match.team1)),
             joinedload(rel(cls.match)).joinedload(rel(Match.team2)),
             joinedload(rel(cls.match)).joinedload(rel(Match.season)),
-            joinedload(rel(cls.player1)).noload(rel(User.w3c_stats)),
-            joinedload(rel(cls.player1)).selectinload(rel(User.team_seasons)),
-            joinedload(rel(cls.player1)).selectinload(rel(User.signup_seasons)),
-            joinedload(rel(cls.player2)).noload(rel(User.w3c_stats)),
-            joinedload(rel(cls.player2)).selectinload(rel(User.team_seasons)),
-            joinedload(rel(cls.player2)).selectinload(rel(User.signup_seasons)),
+            joinedload(rel(cls.player1)),
+            joinedload(rel(cls.player2)),
             selectinload(rel(cls.casts)).joinedload(rel(SeriesCast.user)),
             selectinload(rel(cls.veto_steps)).joinedload(rel(DBSeriesVetoStep.map)),
         )
@@ -366,8 +363,8 @@ class SeriesPublic(SeriesBase, PublicModel):
     host_player_id: int | None = None
     date_time: datetime | None = None
     match: MatchPublic | None = None
-    player1: UserPublic | None = None
-    player2: UserPublic | None = None
+    player1: UserSummaryPublic | None = None
+    player2: UserSummaryPublic | None = None
     # app.services.derived fills the points from the map scores
     player1_points: int | None = None
     player2_points: int | None = None
@@ -391,7 +388,8 @@ class SeriesPublic(SeriesBase, PublicModel):
     casts: list[CastPublic] = []
 
     @classmethod
-    def from_series(cls, series: Series) -> Self:
+    def from_series(cls, series: Series, event_id: int | None = None) -> Self:
+        """The series; its players carry their record in `event_id`."""
         return cls(
             id=ident(series),
             result_unavailable=series.result_unavailable,
@@ -412,47 +410,11 @@ class SeriesPublic(SeriesBase, PublicModel):
                 CastPublic.from_cast(cast, has_result(series)) for cast in series.casts
             ],
             player1_id=series.player1_id,
-            player1=UserPublic.from_user(series.player1) if series.player1 else None,
-            player2_id=series.player2_id,
-            player2=UserPublic.from_user(series.player2) if series.player2 else None,
-            player1_score=series.player1_score,
-            player2_score=series.player2_score,
-            host_player_id=series.host_player_id,
-            is_fantasy_match=series.is_fantasy_match,
-            player1_off_race=series.player1_off_race,
-            player2_off_race=series.player2_off_race,
-            player1_pick_map=_pick_map(series, "A"),
-            player2_pick_map=_pick_map(series, "B"),
-        )
-
-    @classmethod
-    def from_series_reduced(cls, series: Series) -> Self:
-        """The series with reduced players, so no player collection loads."""
-        return cls(
-            id=ident(series),
-            result_unavailable=series.result_unavailable,
-            entrant1_id=series.entrant1_id,
-            entrant2_id=series.entrant2_id,
-            division_id=series.division_id,
-            sequence=series.sequence,
-            player1_source_name=series.entrant1.historical_participant.source_name
-            if series.entrant1 and series.entrant1.historical_participant
-            else None,
-            player2_source_name=series.entrant2.historical_participant.source_name
-            if series.entrant2 and series.entrant2.historical_participant
-            else None,
-            match_id=series.match_id,
-            match=MatchPublic.from_match(series.match) if series.match else None,
-            date_time=series.date_time,
-            casts=[
-                CastPublic.from_cast(cast, has_result(series)) for cast in series.casts
-            ],
-            player1_id=series.player1_id,
-            player1=UserPublic.from_user_reduced(series.player1)
+            player1=UserSummaryPublic.from_user(series.player1, event_id)
             if series.player1
             else None,
             player2_id=series.player2_id,
-            player2=UserPublic.from_user_reduced(series.player2)
+            player2=UserSummaryPublic.from_user(series.player2, event_id)
             if series.player2
             else None,
             player1_score=series.player1_score,
@@ -494,8 +456,8 @@ class StageSeriesRow(SeriesPublic):
     slot2_takes_loser: bool = False
 
     @classmethod
-    def from_series_reduced(cls, series: Series) -> Self:
-        row = super().from_series_reduced(series)
+    def from_series(cls, series: Series, event_id: int | None = None) -> Self:
+        row = super().from_series(series, event_id)
         row.round_id = series.round_id
         row.sequence = series.sequence
         row.division_id = series.division_id

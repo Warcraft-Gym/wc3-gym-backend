@@ -14,7 +14,7 @@ from sqlalchemy.orm import aliased
 from sqlmodel import col
 
 from app.models.settings import Settings
-from app.models.user import UserListPublic
+from app.models.user import UserSummaryPublic
 from app.models.w3c_stats import RaceMmr, W3CStats, W3CStatsPublic
 
 # The setting that names the W3C season the app is on
@@ -183,7 +183,7 @@ def _newest_per_race(
 
 def fill(
     session: OrmSession,
-    users: Iterable[UserListPublic | None],
+    users: Iterable[UserSummaryPublic | None],
     current: int,
     stale: bool = False,
 ) -> None:

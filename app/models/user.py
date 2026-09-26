@@ -200,8 +200,9 @@ class UserReduced(UserBase, PublicModel):
         )
 
 
-class UserListPublic(UserReduced):
-    """The user of a list answer: the scalars, the ladder summary and the signups."""
+class UserSummaryPublic(UserReduced):
+    """A user inside another object: the scalars, the ladder summary and the
+    record of the read's event."""
 
     # The ladder summary per race, from app.services.w3c_stats.fill; `mmr` is the profile field
     race_mmrs: list[RaceMmr] = []
@@ -209,33 +210,63 @@ class UserListPublic(UserReduced):
     main_race: str | None = None
     # The MMR the player entered a finished event with; roster reads only
     mmr_entered: int | None = None
-    signup_seasons: Annotated[list[SeasonPublic], NoneToList] = []
     # The race and tier of one signup, filled by the signups answer of a single season
     signup_race: Annotated[str | None, EnumValue] = None
     # The tag of that signup, null when it names none
     played_as: str | None = None
     fantasy_tier: int | None = None
+    # Every tag the person holds, the active one first; empty where the read
+    # loads no tags
+    tags: Annotated[list[UserBattleTagPublic], NoneToList] = []
+    # The player's record in the read's event; null outside an event context
+    record: UserTeamSeasonStatsPublic | None = None
+    # The same record as a one-entry list, served until the consumers read `record`
+    gnl_stats: Annotated[list[UserTeamSeasonStatsPublic], NoneToList] = []
+
+    @classmethod
+    def from_user(cls, user: User, event_id: int | None = None) -> Self:
+        row = cls.from_user_reduced(user)
+        # A read that did not load a collection leaves it empty, never lazy loads
+        unloaded = instance_state(user).unloaded
+        if "battle_tags" not in unloaded:
+            row.tags = [UserBattleTagPublic.from_row(tag) for tag in user.battle_tags]
+        if event_id is not None and "team_seasons" not in unloaded:
+            row.record = next(
+                (
+                    UserTeamSeasonStatsPublic.from_user_team_season(stat)
+                    for stat in user.team_seasons
+                    if stat.season_id == event_id
+                ),
+                None,
+            )
+            row.gnl_stats = [row.record] if row.record else []
+        return row
+
+
+class UserListPublic(UserSummaryPublic):
+    """The user of a list answer: the summary plus the signups."""
+
+    # A list row names no event, so it serves no record
+    record: UserTeamSeasonStatsPublic | None = Field(default=None, exclude=True)
+    gnl_stats: Annotated[list[UserTeamSeasonStatsPublic], NoneToList] = Field(
+        default=[], exclude=True
+    )
+    signup_seasons: Annotated[list[SeasonPublic], NoneToList] = []
     # Set by hand on the signup row; an unpinned tier derives from the MMR
     fantasy_tier_pinned: bool = False
     draft_position: int | None = None
     # An admin took the player out of the pick list of the season
     draft_excluded: bool = False
-    # Every tag the person holds, the active one first; empty where the read
-    # loads no tags
-    tags: Annotated[list[UserBattleTagPublic], NoneToList] = []
 
     @classmethod
-    def from_user(cls, user: User) -> Self:
-        row = cls.from_user_reduced(user)
+    def from_user(cls, user: User, event_id: int | None = None) -> Self:
+        row = super().from_user(user, event_id)
         row.signup_seasons = [
             SeasonPublic.from_season_reduced(
                 signup.season, signup.race, signup.played_as
             )
             for signup in (user.signup_seasons or [])
         ]
-        # A read that did not load the tags leaves them empty, never lazy loads
-        if "battle_tags" not in instance_state(user).unloaded:
-            row.tags = [UserBattleTagPublic.from_row(tag) for tag in user.battle_tags]
         return row
 
 
@@ -265,13 +296,15 @@ class UserMemberListPublic(UserListPublic):
 
 
 class UserPublic(UserListPublic):
+    """One player from his own read: gnl_stats holds every season he played."""
+
     gnl_stats: Annotated[list[UserTeamSeasonStatsPublic], NoneToList] = []
     # Derived by app.services.derived.fill_trophies; empty until it runs
     trophies: Annotated[list[TrophyPublic], NoneToList] = []
 
     @classmethod
-    def from_user(cls, user: User) -> Self:
-        row = super().from_user(user)
+    def from_user(cls, user: User, event_id: int | None = None) -> Self:
+        row = super().from_user(user, event_id)
         row.gnl_stats = [
             UserTeamSeasonStatsPublic.from_user_team_season(stat)
             for stat in (user.team_seasons or [])

@@ -62,9 +62,12 @@ def update_series(
 
 
 @router.put("/series/{series_id}/result-kind", dependencies=[Depends(require_admin)])
-def set_result_kind(series_id: int, data: ResultKindWrite) -> SeriesPublic:
+def set_result_kind(
+    series_id: int, data: ResultKindWrite, service: SeriesServiceDep
+) -> SeriesPublic:
     """Score a series no game was played for: a walkover or a forfeit."""
-    return stage_engine.set_result_kind(series_id, data)
+    stage_engine.set_result_kind(series_id, data)
+    return service.get(series_id)
 
 
 @router.put("/series/{series_id}/places", dependencies=[Depends(require_admin)])

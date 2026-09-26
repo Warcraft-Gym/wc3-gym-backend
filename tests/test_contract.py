@@ -232,7 +232,9 @@ def test_fantasy_bets_list_keeps_every_key_with_empty_collections(
     ):
         assert "w3c_stats" not in user
         assert user["gnl_stats"] == []
-        assert user["signup_seasons"] == []
+        assert user["record"] is None
+        # An embedded player is the summary, which holds no signups
+        assert "signup_seasons" not in user
 
 
 def test_fantasy_bet_by_id_keeps_the_full_graph(
@@ -287,7 +289,9 @@ def test_series_season_list_keeps_every_key_with_empty_collections(
     for player in (series["player1"], series["player2"]):
         assert "w3c_stats" not in player
         assert player["gnl_stats"] == []
-        assert player["signup_seasons"] == []
+        assert player["record"] is None
+        # An embedded player is the summary, which holds no signups
+        assert "signup_seasons" not in player
 
 
 def test_series_by_id_keeps_the_full_graph(

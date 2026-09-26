@@ -171,8 +171,7 @@ def series() -> HomeSeries:
         # A series may sit in two lists, so the pass below names and rates it once
         seen = {ident(row.series): row for rows in lists for row in rows}
         public = {
-            key: SeriesPublic.from_series_reduced(row.series)
-            for key, row in seen.items()
+            key: SeriesPublic.from_series(row.series) for key, row in seen.items()
         }
         events = {key: row.event_id for key, row in seen.items()}
         derived.fill_signup_races(session, list(public.values()), events)

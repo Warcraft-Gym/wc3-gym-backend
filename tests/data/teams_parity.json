@@ -163,13 +163,9 @@
               ],
               "main_race": "HU",
               "mmr_entered": null,
-              "signup_seasons": [],
               "signup_race": "HU",
               "played_as": null,
               "fantasy_tier": null,
-              "fantasy_tier_pinned": false,
-              "draft_position": null,
-              "draft_excluded": false,
               "tags": [],
               "gnl_stats": [
                 {
@@ -187,6 +183,10 @@
                   "out_rounds": []
                 }
               ],
+              "signup_seasons": [],
+              "fantasy_tier_pinned": false,
+              "draft_position": null,
+              "draft_excluded": false,
               "trophies": []
             },
             {
@@ -224,13 +224,9 @@
               ],
               "main_race": "HU",
               "mmr_entered": null,
-              "signup_seasons": [],
               "signup_race": "OC",
               "played_as": null,
               "fantasy_tier": null,
-              "fantasy_tier_pinned": false,
-              "draft_position": null,
-              "draft_excluded": false,
               "tags": [],
               "gnl_stats": [
                 {
@@ -248,6 +244,10 @@
                   "out_rounds": []
                 }
               ],
+              "signup_seasons": [],
+              "fantasy_tier_pinned": false,
+              "draft_position": null,
+              "draft_excluded": false,
               "trophies": []
             }
           ]
@@ -289,13 +289,9 @@
               ],
               "main_race": "HU",
               "mmr_entered": null,
-              "signup_seasons": [],
               "signup_race": null,
               "played_as": null,
               "fantasy_tier": null,
-              "fantasy_tier_pinned": false,
-              "draft_position": null,
-              "draft_excluded": false,
               "tags": [],
               "gnl_stats": [
                 {
@@ -309,6 +305,10 @@
                   "out_rounds": []
                 }
               ],
+              "signup_seasons": [],
+              "fantasy_tier_pinned": false,
+              "draft_position": null,
+              "draft_excluded": false,
               "trophies": []
             }
           ]
@@ -370,13 +370,9 @@
               ],
               "main_race": "HU",
               "mmr_entered": null,
-              "signup_seasons": [],
               "signup_race": "NE",
               "played_as": null,
               "fantasy_tier": null,
-              "fantasy_tier_pinned": false,
-              "draft_position": null,
-              "draft_excluded": false,
               "tags": [],
               "gnl_stats": [
                 {
@@ -394,6 +390,10 @@
                   "out_rounds": []
                 }
               ],
+              "signup_seasons": [],
+              "fantasy_tier_pinned": false,
+              "draft_position": null,
+              "draft_excluded": false,
               "trophies": []
             },
             {
@@ -431,13 +431,9 @@
               ],
               "main_race": "HU",
               "mmr_entered": null,
-              "signup_seasons": [],
               "signup_race": null,
               "played_as": null,
               "fantasy_tier": null,
-              "fantasy_tier_pinned": false,
-              "draft_position": null,
-              "draft_excluded": false,
               "tags": [],
               "gnl_stats": [
                 {
@@ -455,6 +451,10 @@
                   "out_rounds": []
                 }
               ],
+              "signup_seasons": [],
+              "fantasy_tier_pinned": false,
+              "draft_position": null,
+              "draft_excluded": false,
               "trophies": []
             }
           ]
@@ -487,15 +487,15 @@
               ],
               "main_race": "HU",
               "mmr_entered": null,
-              "signup_seasons": [],
               "signup_race": null,
               "played_as": null,
               "fantasy_tier": null,
+              "tags": [],
+              "gnl_stats": [],
+              "signup_seasons": [],
               "fantasy_tier_pinned": false,
               "draft_position": null,
               "draft_excluded": false,
-              "tags": [],
-              "gnl_stats": [],
               "trophies": []
             }
           ]
@@ -562,13 +562,9 @@
               ],
               "main_race": "HU",
               "mmr_entered": null,
-              "signup_seasons": [],
               "signup_race": "HU",
               "played_as": null,
               "fantasy_tier": null,
-              "fantasy_tier_pinned": false,
-              "draft_position": null,
-              "draft_excluded": false,
               "tags": [],
               "gnl_stats": [
                 {
@@ -586,6 +582,10 @@
                   "out_rounds": []
                 }
               ],
+              "signup_seasons": [],
+              "fantasy_tier_pinned": false,
+              "draft_position": null,
+              "draft_excluded": false,
               "trophies": []
             },
             {
@@ -623,13 +623,9 @@
               ],
               "main_race": "HU",
               "mmr_entered": null,
-              "signup_seasons": [],
               "signup_race": "OC",
               "played_as": null,
               "fantasy_tier": null,
-              "fantasy_tier_pinned": false,
-              "draft_position": null,
-              "draft_excluded": false,
               "tags": [],
               "gnl_stats": [
                 {
@@ -647,6 +643,10 @@
                   "out_rounds": []
                 }
               ],
+              "signup_seasons": [],
+              "fantasy_tier_pinned": false,
+              "draft_position": null,
+              "draft_excluded": false,
               "trophies": []
             }
           ]
@@ -688,13 +688,9 @@
               ],
               "main_race": "HU",
               "mmr_entered": null,
-              "signup_seasons": [],
               "signup_race": null,
               "played_as": null,
               "fantasy_tier": null,
-              "fantasy_tier_pinned": false,
-              "draft_position": null,
-              "draft_excluded": false,
               "tags": [],
               "gnl_stats": [
                 {
@@ -708,6 +704,10 @@
                   "out_rounds": []
                 }
               ],
+              "signup_seasons": [],
+              "fantasy_tier_pinned": false,
+              "draft_position": null,
+              "draft_excluded": false,
               "trophies": []
             }
           ]
@@ -774,13 +774,9 @@
               ],
               "main_race": "HU",
               "mmr_entered": null,
-              "signup_seasons": [],
               "signup_race": "NE",
               "played_as": null,
               "fantasy_tier": null,
-              "fantasy_tier_pinned": false,
-              "draft_position": null,
-              "draft_excluded": false,
               "tags": [],
               "gnl_stats": [
                 {
@@ -798,6 +794,10 @@
                   "out_rounds": []
                 }
               ],
+              "signup_seasons": [],
+              "fantasy_tier_pinned": false,
+              "draft_position": null,
+              "draft_excluded": false,
               "trophies": []
             },
             {
@@ -835,13 +835,9 @@
               ],
               "main_race": "HU",
               "mmr_entered": null,
-              "signup_seasons": [],
               "signup_race": null,
               "played_as": null,
               "fantasy_tier": null,
-              "fantasy_tier_pinned": false,
-              "draft_position": null,
-              "draft_excluded": false,
               "tags": [],
               "gnl_stats": [
                 {
@@ -859,6 +855,10 @@
                   "out_rounds": []
                 }
               ],
+              "signup_seasons": [],
+              "fantasy_tier_pinned": false,
+              "draft_position": null,
+              "draft_excluded": false,
               "trophies": []
             }
           ]
@@ -891,15 +891,15 @@
               ],
               "main_race": "HU",
               "mmr_entered": null,
-              "signup_seasons": [],
               "signup_race": null,
               "played_as": null,
               "fantasy_tier": null,
+              "tags": [],
+              "gnl_stats": [],
+              "signup_seasons": [],
               "fantasy_tier_pinned": false,
               "draft_position": null,
               "draft_excluded": false,
-              "tags": [],
-              "gnl_stats": [],
               "trophies": []
             }
           ]
@@ -1018,13 +1018,9 @@
             ],
             "main_race": "HU",
             "mmr_entered": null,
-            "signup_seasons": [],
             "signup_race": "HU",
             "played_as": null,
             "fantasy_tier": null,
-            "fantasy_tier_pinned": false,
-            "draft_position": null,
-            "draft_excluded": false,
             "tags": [],
             "gnl_stats": [
               {
@@ -1042,6 +1038,10 @@
                 "out_rounds": []
               }
             ],
+            "signup_seasons": [],
+            "fantasy_tier_pinned": false,
+            "draft_position": null,
+            "draft_excluded": false,
             "trophies": []
           },
           {
@@ -1079,13 +1079,9 @@
             ],
             "main_race": "HU",
             "mmr_entered": null,
-            "signup_seasons": [],
             "signup_race": "OC",
             "played_as": null,
             "fantasy_tier": null,
-            "fantasy_tier_pinned": false,
-            "draft_position": null,
-            "draft_excluded": false,
             "tags": [],
             "gnl_stats": [
               {
@@ -1103,6 +1099,10 @@
                 "out_rounds": []
               }
             ],
+            "signup_seasons": [],
+            "fantasy_tier_pinned": false,
+            "draft_position": null,
+            "draft_excluded": false,
             "trophies": []
           }
         ]
@@ -1144,13 +1144,9 @@
             ],
             "main_race": "HU",
             "mmr_entered": null,
-            "signup_seasons": [],
             "signup_race": null,
             "played_as": null,
             "fantasy_tier": null,
-            "fantasy_tier_pinned": false,
-            "draft_position": null,
-            "draft_excluded": false,
             "tags": [],
             "gnl_stats": [
               {
@@ -1164,6 +1160,10 @@
                 "out_rounds": []
               }
             ],
+            "signup_seasons": [],
+            "fantasy_tier_pinned": false,
+            "draft_position": null,
+            "draft_excluded": false,
             "trophies": []
           }
         ]
@@ -1228,13 +1228,9 @@
             ],
             "main_race": "HU",
             "mmr_entered": null,
-            "signup_seasons": [],
             "signup_race": "NE",
             "played_as": null,
             "fantasy_tier": null,
-            "fantasy_tier_pinned": false,
-            "draft_position": null,
-            "draft_excluded": false,
             "tags": [],
             "gnl_stats": [
               {
@@ -1252,6 +1248,10 @@
                 "out_rounds": []
               }
             ],
+            "signup_seasons": [],
+            "fantasy_tier_pinned": false,
+            "draft_position": null,
+            "draft_excluded": false,
             "trophies": []
           },
           {
@@ -1289,13 +1289,9 @@
             ],
             "main_race": "HU",
             "mmr_entered": null,
-            "signup_seasons": [],
             "signup_race": null,
             "played_as": null,
             "fantasy_tier": null,
-            "fantasy_tier_pinned": false,
-            "draft_position": null,
-            "draft_excluded": false,
             "tags": [],
             "gnl_stats": [
               {
@@ -1313,6 +1309,10 @@
                 "out_rounds": []
               }
             ],
+            "signup_seasons": [],
+            "fantasy_tier_pinned": false,
+            "draft_position": null,
+            "draft_excluded": false,
             "trophies": []
           }
         ]
@@ -1345,15 +1345,15 @@
             ],
             "main_race": "HU",
             "mmr_entered": null,
-            "signup_seasons": [],
             "signup_race": null,
             "played_as": null,
             "fantasy_tier": null,
+            "tags": [],
+            "gnl_stats": [],
+            "signup_seasons": [],
             "fantasy_tier_pinned": false,
             "draft_position": null,
             "draft_excluded": false,
-            "tags": [],
-            "gnl_stats": [],
             "trophies": []
           }
         ]
@@ -1433,13 +1433,9 @@
               ],
               "main_race": "HU",
               "mmr_entered": null,
-              "signup_seasons": [],
               "signup_race": "UD",
               "played_as": null,
               "fantasy_tier": null,
-              "fantasy_tier_pinned": false,
-              "draft_position": null,
-              "draft_excluded": false,
               "tags": [],
               "gnl_stats": [
                 {
@@ -1455,6 +1451,10 @@
                   "out_rounds": []
                 }
               ],
+              "signup_seasons": [],
+              "fantasy_tier_pinned": false,
+              "draft_position": null,
+              "draft_excluded": false,
               "trophies": []
             },
             {
@@ -1492,13 +1492,9 @@
               ],
               "main_race": "HU",
               "mmr_entered": null,
-              "signup_seasons": [],
               "signup_race": "OC",
               "played_as": null,
               "fantasy_tier": null,
-              "fantasy_tier_pinned": false,
-              "draft_position": null,
-              "draft_excluded": false,
               "tags": [],
               "gnl_stats": [
                 {
@@ -1514,6 +1510,10 @@
                   "out_rounds": []
                 }
               ],
+              "signup_seasons": [],
+              "fantasy_tier_pinned": false,
+              "draft_position": null,
+              "draft_excluded": false,
               "trophies": []
             }
           ]
@@ -1555,13 +1555,9 @@
               ],
               "main_race": "HU",
               "mmr_entered": null,
-              "signup_seasons": [],
               "signup_race": null,
               "played_as": null,
               "fantasy_tier": null,
-              "fantasy_tier_pinned": false,
-              "draft_position": null,
-              "draft_excluded": false,
               "tags": [],
               "gnl_stats": [
                 {
@@ -1575,6 +1571,10 @@
                   "out_rounds": []
                 }
               ],
+              "signup_seasons": [],
+              "fantasy_tier_pinned": false,
+              "draft_position": null,
+              "draft_excluded": false,
               "trophies": []
             }
           ]
@@ -1636,13 +1636,9 @@
               ],
               "main_race": "HU",
               "mmr_entered": null,
-              "signup_seasons": [],
               "signup_race": "HU",
               "played_as": null,
               "fantasy_tier": null,
-              "fantasy_tier_pinned": false,
-              "draft_position": null,
-              "draft_excluded": false,
               "tags": [],
               "gnl_stats": [
                 {
@@ -1658,6 +1654,10 @@
                   "out_rounds": []
                 }
               ],
+              "signup_seasons": [],
+              "fantasy_tier_pinned": false,
+              "draft_position": null,
+              "draft_excluded": false,
               "trophies": []
             },
             {
@@ -1686,13 +1686,9 @@
               ],
               "main_race": "HU",
               "mmr_entered": null,
-              "signup_seasons": [],
               "signup_race": null,
               "played_as": null,
               "fantasy_tier": null,
-              "fantasy_tier_pinned": false,
-              "draft_position": null,
-              "draft_excluded": false,
               "tags": [],
               "gnl_stats": [
                 {
@@ -1708,6 +1704,10 @@
                   "out_rounds": []
                 }
               ],
+              "signup_seasons": [],
+              "fantasy_tier_pinned": false,
+              "draft_position": null,
+              "draft_excluded": false,
               "trophies": []
             }
           ]
@@ -1775,13 +1775,9 @@
               ],
               "main_race": "HU",
               "mmr_entered": null,
-              "signup_seasons": [],
               "signup_race": "UD",
               "played_as": null,
               "fantasy_tier": null,
-              "fantasy_tier_pinned": false,
-              "draft_position": null,
-              "draft_excluded": false,
               "tags": [],
               "gnl_stats": [
                 {
@@ -1797,6 +1793,10 @@
                   "out_rounds": []
                 }
               ],
+              "signup_seasons": [],
+              "fantasy_tier_pinned": false,
+              "draft_position": null,
+              "draft_excluded": false,
               "trophies": []
             },
             {
@@ -1834,13 +1834,9 @@
               ],
               "main_race": "HU",
               "mmr_entered": null,
-              "signup_seasons": [],
               "signup_race": "OC",
               "played_as": null,
               "fantasy_tier": null,
-              "fantasy_tier_pinned": false,
-              "draft_position": null,
-              "draft_excluded": false,
               "tags": [],
               "gnl_stats": [
                 {
@@ -1856,6 +1852,10 @@
                   "out_rounds": []
                 }
               ],
+              "signup_seasons": [],
+              "fantasy_tier_pinned": false,
+              "draft_position": null,
+              "draft_excluded": false,
               "trophies": []
             }
           ]
@@ -1897,13 +1897,9 @@
               ],
               "main_race": "HU",
               "mmr_entered": null,
-              "signup_seasons": [],
               "signup_race": null,
               "played_as": null,
               "fantasy_tier": null,
-              "fantasy_tier_pinned": false,
-              "draft_position": null,
-              "draft_excluded": false,
               "tags": [],
               "gnl_stats": [
                 {
@@ -1917,6 +1913,10 @@
                   "out_rounds": []
                 }
               ],
+              "signup_seasons": [],
+              "fantasy_tier_pinned": false,
+              "draft_position": null,
+              "draft_excluded": false,
               "trophies": []
             }
           ]
@@ -1983,13 +1983,9 @@
               ],
               "main_race": "HU",
               "mmr_entered": null,
-              "signup_seasons": [],
               "signup_race": "HU",
               "played_as": null,
               "fantasy_tier": null,
-              "fantasy_tier_pinned": false,
-              "draft_position": null,
-              "draft_excluded": false,
               "tags": [],
               "gnl_stats": [
                 {
@@ -2005,6 +2001,10 @@
                   "out_rounds": []
                 }
               ],
+              "signup_seasons": [],
+              "fantasy_tier_pinned": false,
+              "draft_position": null,
+              "draft_excluded": false,
               "trophies": []
             },
             {
@@ -2033,13 +2033,9 @@
               ],
               "main_race": "HU",
               "mmr_entered": null,
-              "signup_seasons": [],
               "signup_race": null,
               "played_as": null,
               "fantasy_tier": null,
-              "fantasy_tier_pinned": false,
-              "draft_position": null,
-              "draft_excluded": false,
               "tags": [],
               "gnl_stats": [
                 {
@@ -2055,6 +2051,10 @@
                   "out_rounds": []
                 }
               ],
+              "signup_seasons": [],
+              "fantasy_tier_pinned": false,
+              "draft_position": null,
+              "draft_excluded": false,
               "trophies": []
             }
           ]
@@ -2174,13 +2174,9 @@
             ],
             "main_race": "HU",
             "mmr_entered": null,
-            "signup_seasons": [],
             "signup_race": "UD",
             "played_as": null,
             "fantasy_tier": null,
-            "fantasy_tier_pinned": false,
-            "draft_position": null,
-            "draft_excluded": false,
             "tags": [],
             "gnl_stats": [
               {
@@ -2196,6 +2192,10 @@
                 "out_rounds": []
               }
             ],
+            "signup_seasons": [],
+            "fantasy_tier_pinned": false,
+            "draft_position": null,
+            "draft_excluded": false,
             "trophies": []
           },
           {
@@ -2233,13 +2233,9 @@
             ],
             "main_race": "HU",
             "mmr_entered": null,
-            "signup_seasons": [],
             "signup_race": "OC",
             "played_as": null,
             "fantasy_tier": null,
-            "fantasy_tier_pinned": false,
-            "draft_position": null,
-            "draft_excluded": false,
             "tags": [],
             "gnl_stats": [
               {
@@ -2255,6 +2251,10 @@
                 "out_rounds": []
               }
             ],
+            "signup_seasons": [],
+            "fantasy_tier_pinned": false,
+            "draft_position": null,
+            "draft_excluded": false,
             "trophies": []
           }
         ]
@@ -2296,13 +2296,9 @@
             ],
             "main_race": "HU",
             "mmr_entered": null,
-            "signup_seasons": [],
             "signup_race": null,
             "played_as": null,
             "fantasy_tier": null,
-            "fantasy_tier_pinned": false,
-            "draft_position": null,
-            "draft_excluded": false,
             "tags": [],
             "gnl_stats": [
               {
@@ -2316,6 +2312,10 @@
                 "out_rounds": []
               }
             ],
+            "signup_seasons": [],
+            "fantasy_tier_pinned": false,
+            "draft_position": null,
+            "draft_excluded": false,
             "trophies": []
           }
         ]
@@ -2380,13 +2380,9 @@
             ],
             "main_race": "HU",
             "mmr_entered": null,
-            "signup_seasons": [],
             "signup_race": "HU",
             "played_as": null,
             "fantasy_tier": null,
-            "fantasy_tier_pinned": false,
-            "draft_position": null,
-            "draft_excluded": false,
             "tags": [],
             "gnl_stats": [
               {
@@ -2402,6 +2398,10 @@
                 "out_rounds": []
               }
             ],
+            "signup_seasons": [],
+            "fantasy_tier_pinned": false,
+            "draft_position": null,
+            "draft_excluded": false,
             "trophies": []
           },
           {
@@ -2430,13 +2430,9 @@
             ],
             "main_race": "HU",
             "mmr_entered": null,
-            "signup_seasons": [],
             "signup_race": null,
             "played_as": null,
             "fantasy_tier": null,
-            "fantasy_tier_pinned": false,
-            "draft_position": null,
-            "draft_excluded": false,
             "tags": [],
             "gnl_stats": [
               {
@@ -2452,6 +2448,10 @@
                 "out_rounds": []
               }
             ],
+            "signup_seasons": [],
+            "fantasy_tier_pinned": false,
+            "draft_position": null,
+            "draft_excluded": false,
             "trophies": []
           }
         ]

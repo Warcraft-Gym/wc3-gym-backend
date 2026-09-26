@@ -9,7 +9,7 @@ from app.core.scoring import DEFAULT_WINS
 from app.models.base import DBModel, ident
 from app.models.match import MatchPublic
 from app.models.types import AwareUTC, EnumValue, UTCDateTime
-from app.models.user import UserPublic
+from app.models.user import UserSummaryPublic
 
 if TYPE_CHECKING:
     from app.models.match import Match
@@ -66,23 +66,18 @@ class DraftSeries(DraftSeriesBase, DBModel, table=True):
 
     @classmethod
     def _eager_options(cls) -> tuple[ORMOption, ...]:
-        """The rows a match draft reads off every draft series."""
+        """The rows a match draft reads off every draft series; the rows of
+        the player summaries load apart, with app.services.users.load_players."""
         from sqlalchemy.orm import joinedload
 
         from app.models.match import Match
-        from app.models.user import User
 
         return (
             joinedload(rel(cls.match)).joinedload(rel(Match.team1)),
             joinedload(rel(cls.match)).joinedload(rel(Match.team2)),
             joinedload(rel(cls.match)).joinedload(rel(Match.season)),
-            # A draft answer derives no ladder summary, so it reads no ladder rows
-            joinedload(rel(cls.player1)).noload(rel(User.w3c_stats)),
-            joinedload(rel(cls.player1)).selectinload(rel(User.team_seasons)),
-            joinedload(rel(cls.player1)).selectinload(rel(User.signup_seasons)),
-            joinedload(rel(cls.player2)).noload(rel(User.w3c_stats)),
-            joinedload(rel(cls.player2)).selectinload(rel(User.team_seasons)),
-            joinedload(rel(cls.player2)).selectinload(rel(User.signup_seasons)),
+            joinedload(rel(cls.player1)),
+            joinedload(rel(cls.player2)),
             # The two names ride the same statement; no query per row
             joinedload(rel(cls.created_by)).noload("*"),
             joinedload(rel(cls.updated_by)).noload("*"),
@@ -119,8 +114,8 @@ class DraftSeriesPublic(DraftSeriesBase):
     updated_by_user_id: int | None = None
     updated_by_name: str | None = None
     match: MatchPublic | None = None
-    player1: UserPublic | None = None
-    player2: UserPublic | None = None
+    player1: UserSummaryPublic | None = None
+    player2: UserSummaryPublic | None = None
     # The race each side plays, which app.services.derived resolves. A draft
     # has no result and so no off race: it is the race he signed the season up on.
     player1_race: Annotated[str | None, EnumValue] = None
@@ -128,6 +123,8 @@ class DraftSeriesPublic(DraftSeriesBase):
 
     @classmethod
     def from_draft_series(cls, draft_series: DraftSeries) -> Self:
+        """The draft; its players carry their record in the match's season."""
+        event_id = draft_series.match.season_id if draft_series.match else None
         return cls(
             id=ident(draft_series),
             match_id=draft_series.match_id,
@@ -136,11 +133,11 @@ class DraftSeriesPublic(DraftSeriesBase):
             else None,
             date_time=draft_series.date_time,
             player1_id=draft_series.player1_id,
-            player1=UserPublic.from_user(draft_series.player1)
+            player1=UserSummaryPublic.from_user(draft_series.player1, event_id)
             if draft_series.player1
             else None,
             player2_id=draft_series.player2_id,
-            player2=UserPublic.from_user(draft_series.player2)
+            player2=UserSummaryPublic.from_user(draft_series.player2, event_id)
             if draft_series.player2
             else None,
             player1_score=draft_series.player1_score,

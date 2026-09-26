@@ -92,9 +92,9 @@ from app.models.team import Team, TeamPublic
 from app.models.user import (
     TrophyPublic,
     User,
-    UserListPublic,
     UserPublic,
     UserReduced,
+    UserSummaryPublic,
 )
 from app.models.w3c_ladder_match import W3CLadderMatch
 from app.services import ladder, series_rules
@@ -278,7 +278,7 @@ def clear_kept_off_race(session: Session, row: Series) -> None:
 
 def fill_user_signup_races(
     session: Session,
-    pairs: Iterable[tuple[UserListPublic, int | None]],
+    pairs: Iterable[tuple[UserSummaryPublic, int | None]],
     entered: bool = False,
 ) -> None:
     """Fill the signup race and the played-as tag of every player for the
@@ -913,7 +913,7 @@ def _season_trophies(
     return shelves
 
 
-def fill_gnl_stats(session: Session, users: Iterable[UserPublic | None]) -> None:
+def fill_gnl_stats(session: Session, users: Iterable[UserSummaryPublic | None]) -> None:
     """Fill games, wins, losses and matchup_history on every gnl_stats row of
     every user."""
     rows = [
