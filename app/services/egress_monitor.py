@@ -1,18 +1,23 @@
-"""The egress monitor: after each daily snapshot, the cycle's level and its Discord posts.
+"""The egress monitor: after each daily snapshot, the cycle's level, the database size and their
+Discord posts.
 
 The builders are pure and return webhook payloads; `post` sends one and never fails the job.
-An alert posts once per change of level, so the state row is read and written on every run.
+An alert posts once per change of level, so each check's state row is read and written on every run.
 """
 
 import calendar
 import logging
 import os
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from enum import StrEnum
 from typing import Any
 
 import requests
+from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError
+from sqlmodel import col, select
 
 from app.core.db import Session
 from app.models.egress_ledger import EgressLedger
@@ -30,10 +35,19 @@ CAP_MB = 5000.0  # the organisation's egress cap per cycle; staging shares it
 RED_MB = 0.9 * CAP_MB  # a projected cycle total above this alerts
 AVERAGE_OVER = timedelta(hours=72)  # the recent rate the projection extends
 TOP_ROUTES = 3
+DB_KEY = "db_size"
+DB_CAP_MB = 500.0  # the Supabase Free database size
+DB_RED = 0.9  # a database over this share of DB_CAP_MB alerts
 
 RED, AMBER, GREEN, BLUE = 0xD63232, 0xF0A04B, 0x36A64F, 0x4F95D8
 SILENT = 1 << 12  # SUPPRESS_NOTIFICATIONS: the post shows without a notification
 FOOTER = "Egress monitor · pg_stat_statements × 100 B per row"
+DIGEST_FOOTER = (
+    "Infrastructure monitor · egress from pg_stat_statements × 100 B per row"
+)
+MONITOR_FOOTER = "Infrastructure monitor"
+# The fields that give way first when an embed is over the total: the long route lists
+ROUTE_FIELDS = ("Busiest routes (rows)", "Top routes (rows)")
 JOBS_DOC = (
     "https://github.com/Warcraft-Gym/wc3-gym-backend/blob/main/docs/okf/api/jobs.md"
 )
@@ -215,7 +229,18 @@ def fit(embed: dict[str, Any]) -> dict[str, Any]:
         + len(embed["footer"]["text"])
         + sum(len(f["name"]) + len(f["value"]) for f in embed["fields"])
     )
-    # Fields over the total on their own: drop trailing ones, always keeping the first
+    # Fields over the total on their own: the route list gives way first, cut or dropped
+    for f in [f for f in embed["fields"] if f["name"] in ROUTE_FIELDS]:
+        over = rest - (MAX_TOTAL - 1)
+        if over <= 0:
+            break
+        if len(f["value"]) - over > 1:
+            f["value"] = cut(f["value"], len(f["value"]) - over)
+            rest -= over
+        else:
+            embed["fields"].remove(f)
+            rest -= len(f["name"]) + len(f["value"])
+    # Then drop trailing fields, always keeping the first
     while rest > MAX_TOTAL - 1 and len(embed["fields"]) > 1:
         dropped = embed["fields"].pop()
         rest -= len(dropped["name"]) + len(dropped["value"])
@@ -233,6 +258,8 @@ def message(
     silent: bool = False,
     mention: str | None = None,
     links: dict[str, str] | None = None,
+    ask: str = "egress needs action today",
+    footer: str = FOOTER,
 ) -> dict[str, Any]:
     """One webhook payload with one embed; only an alert names `mention`, and pings no one else.
     `links` titles the embed with the Supabase usage page and lists every dashboard last."""
@@ -247,14 +274,14 @@ def message(
             "color": colour,
             "fields": fields,
             "timestamp": now.isoformat(),
-            "footer": {"text": FOOTER},
+            "footer": {"text": footer},
         }
     )
     if "Supabase usage" in links:
         embed["url"] = links["Supabase usage"]
     payload: dict[str, Any] = {"embeds": [embed]}
     if mention:
-        payload["content"] = f"<@{mention}> egress needs action today"
+        payload["content"] = f"<@{mention}> {ask}"
         payload["allowed_mentions"] = {"users": [mention]}
     else:
         payload["allowed_mentions"] = {"parse": []}
@@ -340,6 +367,62 @@ def recovery(m: Meters, was: str, since: datetime) -> dict[str, Any]:
     return message(m.now, GREEN, title, description, fields, silent=True)
 
 
+def db_alert(
+    mb: float, now: datetime, mention: str | None, links: dict[str, str] | None = None
+) -> dict[str, Any]:
+    """The red alert: the database is over DB_RED of its size cap."""
+    description = (
+        f"The database is at ~{mb:,.0f} MB, {mb / DB_CAP_MB * 100:,.0f}% of the "
+        f"{DB_CAP_MB:,.0f} MB cap."
+    )
+    fields = [
+        field("Database size", db_line(mb)),
+        field("Since", stamp(now)),
+        field(
+            "Next step",
+            "Check the largest tables in Supabase Studio and delete or archive rows "
+            f"before the cap. [Egress jobs]({JOBS_DOC})",
+            inline=False,
+        ),
+    ]
+    title = f"Supabase database size: near the {DB_CAP_MB:,.0f} MB cap"
+    return message(
+        now,
+        RED,
+        title,
+        description,
+        fields,
+        mention=mention,
+        links=links,
+        ask="the database needs action today",
+        footer=MONITOR_FOOTER,
+    )
+
+
+def db_recovery(mb: float, since: datetime, now: datetime) -> dict[str, Any]:
+    """The silent all-clear after the database was red."""
+    return message(
+        now,
+        GREEN,
+        f"Supabase database size: back under {DB_RED:.0%} of the cap",
+        f"The database is at ~{mb:,.0f} MB of {DB_CAP_MB:,.0f} MB.",
+        [
+            field("Database size", db_line(mb)),
+            field("Red for", f"{duration(now - since)}, since {stamp(since)}"),
+        ],
+        silent=True,
+        footer=MONITOR_FOOTER,
+    )
+
+
+def db_line(mb: float) -> str:
+    return f"~{mb:,.0f} MB of {DB_CAP_MB:,.0f} MB\n{meter(mb, DB_CAP_MB)}"
+
+
+def db_level(mb: float) -> Level:
+    return Level.RED if mb > DB_RED * DB_CAP_MB else Level.NORMAL
+
+
 STATUS = {
     Level.NORMAL: (BLUE, "All meters normal."),
     Level.AMBER: (AMBER, "Yesterday was over the daily budget."),
@@ -348,20 +431,37 @@ STATUS = {
 
 
 def digest(
-    m: Meters, routes: list[EgressLedger], links: dict[str, str] | None = None
+    m: Meters,
+    routes: list[EgressLedger],
+    links: dict[str, str] | None = None,
+    db_mb: float | None = None,
+    db_error: str | None = None,
 ) -> dict[str, Any]:
-    """The silent daily post with every meter; before the first window, the baseline note."""
+    """The silent daily post with every meter; before the first window, the baseline note.
+    The database size shows when it was read or its read failed, and a red one turns the
+    digest red."""
+    extra, alarms = [], []
+    if db_mb is not None:
+        extra.append(field("Database size", db_line(db_mb)))
+        if db_level(db_mb) == Level.RED:
+            alarms.append("The database is near its size cap.")
+    elif db_error is not None:
+        extra.append(field("Database size", f"not read ({db_error})"))
     if m.last is None:
         return message(
             m.now,
-            BLUE,
+            RED if alarms else BLUE,
             f"Daily infrastructure digest · {day_label(m.now.date())}",
-            "Baseline taken. First figures after the next run.",
-            [],
+            " ".join([*alarms, "Baseline taken. First figures after the next run."]),
+            extra,
             silent=True,
             links=links,
+            footer=DIGEST_FOOTER,
         )
     colour, status = STATUS[m.level]
+    if alarms:
+        lead = [] if m.level == Level.NORMAL else [status]
+        colour, status = RED, " ".join([*lead, *alarms])
     per_day = m.last.mb_per_day
     fields = [
         field(
@@ -374,6 +474,7 @@ def digest(
             f" · day {m.day} of {m.cycle.days}",
         ),
         field("Projected", f"~{size(m.projected_mb)}"),
+        *extra,
         field(
             "Busiest routes (rows)",
             route_lines(routes, m.covers),
@@ -381,36 +482,78 @@ def digest(
         ),
     ]
     title = f"Daily infrastructure digest · {day_label(m.last.start.date())}"
-    return message(m.now, colour, title, status, fields, silent=True, links=links)
-
-
-def posts(
-    state: MonitorState | None,
-    m: Meters,
-    routes: list[EgressLedger],
-    mention: str | None,
-    links: dict[str, str] | None = None,
-) -> list[dict[str, Any]]:
-    """An alert on a change to red, a recovery on a change out of red or unavailable, then the digest."""
-    was = state.level if state is not None else None
-    out = []
-    if m.level in ALERTING and m.level != was:
-        out.append(alert(m, routes, m.since, mention, links))
-    elif state is not None and was in ALERTING and m.level not in ALERTING:
-        out.append(recovery(m, state.level, state.since))
-    out.append(digest(m, routes, links))
-    return out
+    return message(
+        m.now,
+        colour,
+        title,
+        status,
+        fields,
+        silent=True,
+        links=links,
+        footer=DIGEST_FOOTER,
+    )
 
 
 # The run
 
 
-def save(level: Level, since: datetime, now: datetime) -> None:
+@dataclass(frozen=True)
+class Change:
+    """One check's run: the level it measured, since when, and its post when the level changed."""
+
+    key: str
+    level: Level
+    since: datetime
+    alerting: bool  # the level changed into ALERTING, so `post` is an alert
+    post: dict[str, Any] | None
+
+
+def change(
+    state: MonitorState | None,
+    key: str,
+    level: Level,
+    since: datetime,
+    alert: Callable[[], dict[str, Any]],
+    recover: Callable[[MonitorState], dict[str, Any]] | None = None,
+) -> Change:
+    """An alert on a change into red or unavailable, a recovery on a change out of them."""
+    was = state.level if state is not None else None
+    if level in ALERTING and level != was:
+        return Change(key, level, since, True, alert())
+    if recover and state is not None and was in ALERTING and level not in ALERTING:
+        return Change(key, level, since, False, recover(state))
+    return Change(key, level, since, False, None)
+
+
+def database_mb() -> float | None:
+    """The size in MB (MiB, as Supabase counts it) of every database on the server but the
+    templates, or of this one when the role may not read the others; None on SQLite."""
+    every = (
+        "SELECT sum(pg_database_size(datname)) FROM pg_database WHERE NOT datistemplate"
+    )
+    for query in (every, "SELECT pg_database_size(current_database())"):
+        try:
+            with Session() as session:
+                if session.get_bind().dialect.name != "postgresql":
+                    return None
+                total = session.execute(text(query)).scalar_one()
+            return None if total is None else int(total) / (1024 * 1024)
+        except DBAPIError as error:
+            # 42501, insufficient_privilege: one more try on the current database only
+            if getattr(error.orig, "sqlstate", None) != "42501" or query != every:
+                raise
+            log.warning(
+                "database size of every database not read: %s", type(error).__name__
+            )
+    return None
+
+
+def save(key: str, level: Level, since: datetime, now: datetime) -> None:
     """Store the level; `since` moves only when the level changes."""
     with Session.begin() as session:
-        state = session.get(MonitorState, KEY)
+        state = session.get(MonitorState, key)
         if state is None:
-            session.add(MonitorState(key=KEY, level=level, since=since, updated_at=now))
+            session.add(MonitorState(key=key, level=level, since=since, updated_at=now))
             return
         if state.level != level:
             state.level, state.since = level, since
@@ -418,33 +561,77 @@ def save(level: Level, since: datetime, now: datetime) -> None:
 
 
 def report(result: EgressSnapshotResult, now: datetime | None = None) -> None:
-    """Level the run, post what changed and store the level; a skipped run does nothing.
+    """Level each check, post what changed, then the digest, and store the levels; a skipped
+    run does nothing.
 
-    An alert that is not delivered leaves the stored level as it was, so the next run retries it.
+    An alert that is not delivered leaves its check's stored level as it was, so the next run
+    retries it. A database size that could not be read leaves its row alone.
     """
     if result.skipped:
         return
     now = now or utcnow()
     mention = mention_id()
+    links = dashboards()
+    db_error = None
+    try:
+        db_mb = database_mb()
+    except Exception as error:
+        # A read that keeps failing shows in the digest; the log line carries the type only
+        db_mb, db_error = None, type(error).__name__
+        log.warning("database size not read: %s", db_error)
+    changes: list[Change] = []
+    out: dict[str, Any] | None = None
     with Session() as session:
-        state = session.get(MonitorState, KEY)
-        was = state.level if state is not None else None
+        keys = [KEY, DB_KEY]
+        found = session.scalars(
+            select(MonitorState).where(col(MonitorState.key).in_(keys))
+        )
+        states = {s.key: s for s in found}
+        state = states.get(KEY)
         if not result.available:
-            level, since = Level.UNAVAILABLE, now
-            out = []
-            if was != level:
-                out = [unavailable_alert(result.reason or "unknown", now, mention)]
+            reason = result.reason or "unknown"
+            changes.append(
+                change(
+                    state,
+                    KEY,
+                    Level.UNAVAILABLE,
+                    now,
+                    lambda: unavailable_alert(reason, now, mention),
+                )
+            )
         else:
             start = min(cycle(now).start, now - AVERAGE_OVER)
             m = meters(windows(session, start), now)
-            level, since = m.level, m.since
             routes = egress.busiest(session, m.covers, TOP_ROUTES)
-            out = posts(state, m, routes, mention, dashboards())
-    alerting = level in ALERTING and level != was
-    delivered = [post(p) for p in out]
-    if alerting and not delivered[0]:
-        return
-    save(level, since, now)
+            changes.append(
+                change(
+                    state,
+                    KEY,
+                    m.level,
+                    m.since,
+                    lambda: alert(m, routes, m.since, mention, links),
+                    lambda s: recovery(m, s.level, s.since),
+                )
+            )
+            out = digest(m, routes, links, db_mb, db_error)
+        if db_mb is not None:
+            mb = db_mb
+            changes.append(
+                change(
+                    states.get(DB_KEY),
+                    DB_KEY,
+                    db_level(mb),
+                    now,
+                    lambda: db_alert(mb, now, mention, links),
+                    lambda s: db_recovery(mb, s.since, now),
+                )
+            )
+    for c in changes:
+        delivered = post(c.post) if c.post is not None else True
+        if delivered or not c.alerting:
+            save(c.key, c.level, c.since, now)
+    if out is not None:
+        post(out)
 
 
 def crashed(reason: str, now: datetime | None = None) -> None:

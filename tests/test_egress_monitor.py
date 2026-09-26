@@ -2,10 +2,13 @@
 
 import json
 from datetime import UTC, date, datetime, timedelta
-from typing import Any
+from types import SimpleNamespace
+from typing import Any, Self
 
 import pytest
 from httpx2 import Client
+from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError
 
 from app.core.db import Session
 from app.models.egress_ledger import EgressLedger
@@ -44,6 +47,8 @@ def sent(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
         return Sent()
 
     monkeypatch.setattr(egress_monitor.requests, "post", post)
+    # The database size is read only on Postgres: None keeps the posts the same on both
+    monkeypatch.setattr(egress_monitor, "database_mb", lambda: None)
     monkeypatch.setenv("DEV_ALERTS_WEBHOOK_URL", "https://discord.test/webhook")
     for name in ("DEV_ALERTS_MENTION_USER_ID", *egress_monitor.DASHBOARDS.values()):
         monkeypatch.delenv(name, raising=False)
@@ -63,9 +68,9 @@ def run(
     egress_monitor.report(result, now)
 
 
-def state() -> MonitorState | None:
+def state(key: str = egress_monitor.KEY) -> MonitorState | None:
     with Session() as session:
-        return session.get(MonitorState, egress_monitor.KEY)
+        return session.get(MonitorState, key)
 
 
 def titles(posts: list[dict[str, Any]]) -> list[str]:
@@ -317,18 +322,27 @@ def test_every_payload_fits_discords_limits() -> None:
     }
     alert = egress_monitor.alert(m, long, NOW, FAKE_ID, links)
     assert alert["embeds"][0]["title"] == "Supabase egress: over the 5 GB cap"
-    for payload in [
-        alert,
-        egress_monitor.digest(m, long, links),
-        egress_monitor.recovery(m, "red", NOW - timedelta(days=2)),
-        egress_monitor.unavailable_alert("x" * 5000, NOW, None),
+    digest = egress_monitor.digest(m, long, links, 499.0)
+    for payload, footer in [
+        (alert, egress_monitor.FOOTER),
+        (digest, egress_monitor.DIGEST_FOOTER),
+        (egress_monitor.recovery(m, "red", NOW), egress_monitor.FOOTER),
+        (
+            egress_monitor.unavailable_alert("x" * 5000, NOW, None),
+            egress_monitor.FOOTER,
+        ),
+        (
+            egress_monitor.db_alert(499.0, NOW, FAKE_ID, links),
+            egress_monitor.MONITOR_FOOTER,
+        ),
+        (egress_monitor.db_recovery(10.0, NOW, NOW), egress_monitor.MONITOR_FOOTER),
     ]:
         embed = payload["embeds"][0]
         assert size(payload) <= 6000
         assert len(embed["title"]) <= 256 and len(embed["description"]) <= 4096
         assert len(embed["fields"]) <= 25
         assert all(len(f["value"]) <= 1024 for f in embed["fields"])
-        assert embed["footer"]["text"] == egress_monitor.FOOTER
+        assert embed["footer"]["text"] == footer
         assert embed["timestamp"] == NOW.isoformat()
         assert FAKE_ID not in json.dumps(embed)
 
@@ -491,3 +505,226 @@ def test_the_posts_link_the_dashboards_that_are_set_to_https(
     embed = sent[0]["embeds"][0]
     assert "url" not in embed
     assert embed["fields"][-1]["value"] == "[Vercel usage](https://vercel.test/usage)"
+
+
+def sized(monkeypatch: pytest.MonkeyPatch, mb: float | None) -> None:
+    monkeypatch.setattr(egress_monitor, "database_mb", lambda: mb)
+
+
+def test_the_database_size_is_read_on_the_server_in_one_row(app: object) -> None:
+    with Session() as session:
+        if session.get_bind().dialect.name != "postgresql":
+            pytest.skip("pg_database_size is Postgres only")
+        total = session.execute(
+            text(
+                "SELECT sum(pg_database_size(datname)) FROM pg_database "
+                "WHERE NOT datistemplate"
+            )
+        ).scalar_one()
+    mb = egress_monitor.database_mb()
+    assert mb is not None and mb > 0
+    # The size moves as the test database is written; a MB either way is the same read
+    assert mb == pytest.approx(int(total) / (1024 * 1024), abs=1)
+
+
+def test_on_sqlite_the_size_is_skipped(app: object) -> None:
+    with Session() as session:
+        if session.get_bind().dialect.name != "sqlite":
+            pytest.skip("the SQLite path")
+    assert egress_monitor.database_mb() is None
+
+
+def test_the_digest_shows_the_database_size_when_it_was_read(
+    monkeypatch: pytest.MonkeyPatch, sent: list[dict[str, Any]]
+) -> None:
+    sized(monkeypatch, 123.4)
+    run(monkeypatch, daily(20))
+    fields = {f["name"]: f for f in sent[0]["embeds"][0]["fields"]}
+    assert fields["Database size"] == {
+        "name": "Database size",
+        "value": "~123 MB of 500 MB\n`▰▰▱▱▱▱▱▱▱▱` 25%",
+        "inline": True,
+    }
+    assert sent[0]["embeds"][0]["description"] == "All meters normal."
+    assert state(egress_monitor.DB_KEY) is not None
+    sent.clear()
+
+    sized(monkeypatch, None)
+    run(monkeypatch, daily(20))
+    assert "Database size" not in [f["name"] for f in sent[0]["embeds"][0]["fields"]]
+
+
+def test_the_database_size_alerts_and_recovers_on_its_own_row(
+    monkeypatch: pytest.MonkeyPatch, sent: list[dict[str, Any]]
+) -> None:
+    monkeypatch.setenv("DEV_ALERTS_MENTION_USER_ID", FAKE_ID)
+    sized(monkeypatch, 460)
+    two_before, before = NOW - timedelta(days=2), NOW - timedelta(days=1)
+    run(monkeypatch, daily(20, now=two_before), two_before)
+    assert titles(sent) == [
+        "Supabase database size: near the 500 MB cap",
+        "Daily infrastructure digest · 26 Sep",
+    ]
+    alert, digest = sent
+    assert "flags" not in alert
+    assert alert["content"] == f"<@{FAKE_ID}> the database needs action today"
+    assert alert["embeds"][0]["color"] == egress_monitor.RED
+    assert alert["embeds"][0]["description"] == (
+        "The database is at ~460 MB, 92% of the 500 MB cap."
+    )
+    assert digest["embeds"][0]["color"] == egress_monitor.RED
+    assert digest["embeds"][0]["description"] == "The database is near its size cap."
+    db, egress = state(egress_monitor.DB_KEY), state()
+    assert db is not None and db.level == "red"
+    assert egress is not None and egress.level == "normal"
+    sent.clear()
+
+    run(monkeypatch, daily(20, now=before), before)
+    assert titles(sent) == ["Daily infrastructure digest · 27 Sep"]
+    sent.clear()
+
+    # Egress turns red on the day the database recovers: each check posts its own change
+    sized(monkeypatch, 300)
+    run(monkeypatch, daily(200))
+    assert titles(sent) == [
+        "Supabase egress: on track to pass the 5 GB cap",
+        "Supabase database size: back under 90% of the cap",
+        "Daily infrastructure digest · 28 Sep",
+    ]
+    recovery = sent[1]
+    assert recovery["flags"] == egress_monitor.SILENT
+    assert recovery["embeds"][0]["fields"][1]["value"].startswith("2 days, since <t:")
+    db, egress = state(egress_monitor.DB_KEY), state()
+    assert db is not None and db.level == "normal"
+    assert egress is not None and egress.level == "red"
+
+
+def test_an_undelivered_database_alert_posts_again_on_the_next_run(
+    monkeypatch: pytest.MonkeyPatch, sent: list[dict[str, Any]]
+) -> None:
+    sized(monkeypatch, 480)
+    monkeypatch.delenv("DEV_ALERTS_WEBHOOK_URL")
+    run(monkeypatch, daily(20))
+    assert state(egress_monitor.DB_KEY) is None
+    current = state()
+    assert current is not None and current.level == "normal"
+
+    monkeypatch.setenv("DEV_ALERTS_WEBHOOK_URL", "https://discord.test/webhook")
+    run(monkeypatch, daily(20))
+    assert titles(sent)[0] == "Supabase database size: near the 500 MB cap"
+    db = state(egress_monitor.DB_KEY)
+    assert db is not None and db.level == "red"
+
+
+def test_an_unavailable_snapshot_still_checks_the_database_size(
+    monkeypatch: pytest.MonkeyPatch, sent: list[dict[str, Any]]
+) -> None:
+    sized(monkeypatch, 470)
+    egress_monitor.report(egress_snapshot.unavailable("down"), NOW)
+    assert titles(sent) == [
+        "Egress snapshot could not run",
+        "Supabase database size: near the 500 MB cap",
+    ]
+
+
+def test_a_failed_size_read_shows_in_the_digest_and_the_run_goes_on(
+    monkeypatch: pytest.MonkeyPatch,
+    sent: list[dict[str, Any]],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    def broken() -> None:
+        raise RuntimeError("connection to host secret-host failed")
+
+    monkeypatch.setattr(egress_monitor, "database_mb", broken)
+    run(monkeypatch, daily(20))
+    fields = {f["name"]: f["value"] for f in sent[0]["embeds"][0]["fields"]}
+    assert fields["Database size"] == "not read (RuntimeError)"
+    assert state(egress_monitor.DB_KEY) is None
+    current = state()
+    assert current is not None and current.level == "normal"
+    assert "RuntimeError" in caplog.text and "secret-host" not in caplog.text
+
+
+class DeniedError(Exception):
+    sqlstate = "42501"
+
+
+def fake_sessions(
+    monkeypatch: pytest.MonkeyPatch, first: Exception, total: int
+) -> list[str]:
+    """A Postgres session whose first query raises `first` and whose next answers `total`."""
+    queries: list[str] = []
+
+    class Fake:
+        def __enter__(self) -> Self:
+            return self
+
+        def __exit__(self, *args: object) -> None: ...
+
+        def get_bind(self) -> SimpleNamespace:
+            return SimpleNamespace(dialect=SimpleNamespace(name="postgresql"))
+
+        def execute(self, query: object) -> SimpleNamespace:
+            queries.append(str(query))
+            if len(queries) == 1:
+                raise first
+            return SimpleNamespace(scalar_one=lambda: total)
+
+    monkeypatch.setattr(egress_monitor, "Session", Fake)
+    return queries
+
+
+def test_without_the_right_to_read_every_database_the_size_is_this_one(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    denied = DBAPIError("SELECT", {}, DeniedError("permission denied"))
+    queries = fake_sessions(monkeypatch, denied, 300 * 1024 * 1024)
+    assert egress_monitor.database_mb() == 300
+    assert queries[1] == "SELECT pg_database_size(current_database())"
+    assert "DBAPIError" in caplog.text and "permission denied" not in caplog.text
+
+
+def test_any_other_failed_size_read_raises_to_the_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_sessions(monkeypatch, DBAPIError("SELECT", {}, Exception("gone")), 1)
+    with pytest.raises(DBAPIError):
+        egress_monitor.database_mb()
+
+
+def test_a_baseline_digest_is_red_when_the_database_is(
+    sent: list[dict[str, Any]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    sized(monkeypatch, 480)
+    run(monkeypatch, [])
+    digest = sent[-1]["embeds"][0]
+    assert digest["color"] == egress_monitor.RED
+    assert digest["description"] == (
+        "The database is near its size cap. "
+        "Baseline taken. First figures after the next run."
+    )
+
+
+def test_the_route_list_gives_way_before_the_dashboards() -> None:
+    links = {"Supabase usage": "https://supabase.test/usage"}
+    # Over by 164 with a long list: cut. Over by more than a 100-character list: dropped
+    for routes, last, kept in [(1024, 1000, "cut"), (100, 870, "dropped")]:
+        many = [
+            *[egress_monitor.field(f"f{i}", "x" * 1000) for i in range(4)],
+            egress_monitor.field("Busiest routes (rows)", "r" * routes, inline=False),
+            egress_monitor.field("f4", "x" * 1000),
+            egress_monitor.field("f5", "x" * last),
+        ]
+        if kept == "cut":
+            many.pop()
+        payload = egress_monitor.message(NOW, 0, "t", "d", many, links=links)
+        embed = payload["embeds"][0]
+        found = {f["name"]: f["value"] for f in embed["fields"]}
+        assert size(payload) <= 6000
+        assert embed["fields"][-1]["name"] == "Dashboards"
+        assert "f4" in found
+        if kept == "cut":
+            assert found["Busiest routes (rows)"].endswith("r…")
+            assert len(found["Busiest routes (rows)"]) < routes
+        else:
+            assert "Busiest routes (rows)" not in found and "f5" in found

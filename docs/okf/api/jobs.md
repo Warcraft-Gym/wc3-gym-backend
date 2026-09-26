@@ -4,7 +4,7 @@ title: Scheduled jobs
 description: Five job routes behind a shared secret, two called daily by Vercel, one every five minutes by a Cloudflare Worker because a Vercel cron runs at most once a day, and two an operator reads for egress.
 resource: ../../../app/api/routes/jobs.py
 tags: [deploy]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-26T18:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-26T21:00:00Z }
 sources:
   - id: jobs
     resource: ../../../app/api/routes/jobs.py
@@ -27,7 +27,7 @@ sources:
 | `GET /jobs/w3c-sync` | drains the stalest players' ladder matches and stats for 50 seconds, inside the 60 second function limit | Vercel cron at 04:00 UTC, shifted by up to 59 minutes |
 | `GET /jobs/cast-reminders` | posts the reminder card for series that start soon | the Cloudflare Worker in the Discord adapter repository, every five minutes |
 | `GET /jobs/egress?days=7` | the [egress ledger](../data/tables/egress_ledger.md) rows of the last `days` days (1 to 90), most rows first, with `Cache-Control: no-store` | an operator, with `just egress-routes` against a local server |
-| `GET /jobs/egress-snapshot` | copies pg_stat_statements into [egress_snapshot](../data/tables/egress_snapshot.md) on the server, deletes snapshots older than 35 days, and answers the window since the run before: rows, estimated MB, MB a day against the budget, and the ten statements that returned the most rows; then [the egress monitor](#the-egress-monitor) levels the cycle and posts to `DEV_ALERTS_WEBHOOK_URL` when it is set | Vercel cron at 00:00 UTC, shifted by up to 59 minutes |
+| `GET /jobs/egress-snapshot` | copies pg_stat_statements into [egress_snapshot](../data/tables/egress_snapshot.md) on the server, deletes snapshots older than 35 days, and answers the window since the run before: rows, estimated MB, MB a day against the budget, and the ten statements that returned the most rows; then [the egress monitor](#the-egress-monitor) levels the cycle and the database size and posts to `DEV_ALERTS_WEBHOOK_URL` when it is set | Vercel cron at 00:00 UTC, shifted by up to 59 minutes |
 | `GET /jobs/egress-snapshots?days=7` | one window per snapshot of the last `days` days (1 to 35), oldest first, totals only, with `Cache-Control: no-store` | an operator, with `just egress-days` against a local server |
 
 All five check `Authorization: Bearer <CRON_SECRET>`. With `CRON_SECRET` unset every job route answers 503, so a deployment without the secret runs no job.
@@ -38,20 +38,21 @@ The snapshot job fetches no statistics row to the function: the copy is an `INSE
 
 # The egress monitor
 
-After each run that writes a snapshot, `app/services/egress_monitor.py` levels the billing cycle, stores the level in [monitor_state](../data/tables/monitor_state.md) and posts Discord embeds to `DEV_ALERTS_WEBHOOK_URL`. Unset, it posts nothing. A skipped run posts nothing and keeps the level.
+After each run that writes a snapshot, `app/services/egress_monitor.py` levels the billing cycle and the database size, stores each level in its [monitor_state](../data/tables/monitor_state.md) row and posts Discord embeds to `DEV_ALERTS_WEBHOOK_URL`. Unset, it posts nothing. A skipped run posts nothing and keeps the levels.
 
 - The cycle starts on day `CYCLE_START_DAY` of each month, UTC. A window counts toward the cycle its start falls in, so the run just after midnight on the first day bills the day before to the cycle before.
 - The 3-day average is the MB of the windows that ended in the last 72 hours over their hours, times 24; with none, the last window. The projection is the cycle so far plus that average times the days left.
 - `red` when the projection is over `RED_MB`, 90% of `CAP_MB`, the egress cap per cycle. `amber` when the last window is over `BUDGET_MB_PER_DAY`; amber only colours the digest. `unavailable` when the run could not read the statistics or raised. Otherwise `normal`.
 - An alert posts when the level changes to `red` or to `unavailable`, never twice in a row. An alert Discord does not take, or one with the webhook unset, leaves the stored level as it was, so the next run posts it again. It tags `DEV_ALERTS_MENTION_USER_ID` when that is set to digits, and nobody otherwise.
 - A recovery posts, silent, when the level changes from `red` or `unavailable` to `normal` or `amber`.
-- The digest posts, silent, after every run that writes a snapshot, after any alert or recovery. Before the first window it says the baseline is taken.
+- The database size is the sum of `pg_database_size` over every database on the server but the templates, read on the server in one row, in MiB; when the role may not read the others, it is the size of the current database. It is `red` over `DB_RED`, 90% of `DB_CAP_MB`, the database size cap, and `normal` otherwise. It keeps its own row, `db_size`, and posts its own alert and recovery by the rules above, also after a run whose snapshot was unavailable. On SQLite it is skipped. A read that fails logs its error type, leaves the row as it was, and shows in the digest as `not read` with that type.
+- The digest posts, silent, after every run that writes a snapshot, after any alert or recovery. Before the first window it says the baseline is taken. It shows the database size when it was read, and a red database size colours it red.
 - The red alert and the digest link to the usage dashboards set in `DEV_ALERTS_SUPABASE_USAGE_URL` and `DEV_ALERTS_VERCEL_USAGE_URL`: the title opens the Supabase one, and a last Dashboards field lists each one set. A value that is not an https URL is ignored. The posts carry figures and links, and the dashboards draw the charts.
 - The alert and the digest list the three routes of the [egress ledger](../data/tables/egress_ledger.md) with the most rows on the day the last window covers, and the digest is titled with that day.
 - A run that raises posts its error type through the same state row. When the state cannot be read either, the alert posts without it.
 - A failed post is logged with its error type and HTTP status and never fails the job. A monitor that raises is logged with its error type, and the route still answers the snapshot, which is already stored.
 
-A run reads the state row, at most one window per day since the cycle start or the last 72 hours, whichever is earlier, and three ledger rows.
+A run reads the database size, the two state rows, at most one window per day since the cycle start or the last 72 hours, whichever is earlier, and three ledger rows.
 
 # Request cost headers
 
