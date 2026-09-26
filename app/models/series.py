@@ -186,6 +186,8 @@ class Series(SeriesBase, DBModel, table=True):
         """
         steps = rel(cls.veto_steps)
         if picks_only:
+            # A collection loaded this way holds only the picks, never the
+            # full veto, so no caller may write through it.
             steps = steps.and_(col(DBSeriesVetoStep.action) == "pick")
         return (
             joinedload(rel(cls.match)).joinedload(rel(Match.team1)),
