@@ -106,7 +106,8 @@ def egress_ledger(
 @router.get("/jobs/egress-snapshot")
 def take_egress_snapshot(credentials: Credentials) -> EgressSnapshotResult:
     """Copy pg_stat_statements into egress_snapshot and diff it with the copy before,
-    for Vercel Cron once a day. Without pg_stat_statements it answers available: false."""
+    for Vercel Cron once a day. Without pg_stat_statements it answers available: false;
+    within an hour of the last snapshot it writes nothing and answers `skipped`."""
     only_the_scheduler(credentials)
     return egress_snapshot.take()
 

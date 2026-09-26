@@ -1,6 +1,7 @@
 """Add the egress snapshots
 
-A daily job copies each statement's cumulative calls and rows from
+A daily job copies each statement's cumulative calls and rows, per role
+and nesting level, from
 pg_stat_statements into egress_snapshot, with the statement text stored once
 in egress_statement. New tables only, so the running code is unaffected.
 
@@ -35,10 +36,17 @@ def upgrade() -> None:
         sa.Column("taken_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("queryid", sa.BigInteger(), nullable=False),
         sa.Column("dbid", sa.BigInteger(), nullable=False),
+        sa.Column("userid", sa.BigInteger(), nullable=False),
+        sa.Column("toplevel", sa.Boolean(), nullable=False),
         sa.Column("calls", sa.BigInteger(), nullable=False),
         sa.Column("rows", sa.BigInteger(), nullable=False),
         sa.PrimaryKeyConstraint(
-            "taken_at", "queryid", "dbid", name=op.f("pk_egress_snapshot")
+            "taken_at",
+            "queryid",
+            "dbid",
+            "userid",
+            "toplevel",
+            name=op.f("pk_egress_snapshot"),
         ),
     )
 

@@ -31,7 +31,7 @@ All five check `Authorization: Bearer <CRON_SECRET>`. With `CRON_SECRET` unset e
 
 # The egress snapshot
 
-The snapshot job fetches no statistics row to the function: the copy is an `INSERT ... SELECT`, and only the summary leaves the database. Without pg_stat_statements, on SQLite or on a Postgres where the view is not on the search path or cannot be read, the job answers 200 with `available: false` and a reason. The estimate is rows times the bytes-per-row rate in `app/core/egress_stats.py`, and `over_budget` compares the day rate with `BUDGET_MB_PER_DAY` in `app/services/egress_snapshot.py`, the default of `just db check`.
+The snapshot job fetches no statistics row to the function: the copy is an `INSERT ... SELECT`, and only the summary leaves the database. Without pg_stat_statements, on SQLite or on a Postgres where the view is not on the search path or cannot be read, the job answers 200 with `available: false` and a reason. Within an hour of the last snapshot it writes nothing and answers `available: true` with `skipped`, so a retry never turns a short window into a day rate. The estimate is rows times the bytes-per-row rate in `app/core/egress_stats.py`, and `over_budget` compares the day rate with `BUDGET_MB_PER_DAY` in `app/services/egress_snapshot.py`, the default of `just db check`.
 
 # Request cost headers
 

@@ -20,17 +20,24 @@ def scheduler(monkeypatch: pytest.MonkeyPatch) -> dict[str, str]:
     return {"Authorization": f"Bearer {SECRET}"}
 
 
-def store(taken: datetime, counters: dict[int, tuple[int, int]]) -> None:
-    """One snapshot: queryid -> (calls, rows), with a statement text per queryid."""
+def store(taken: datetime, counters: dict[tuple[int, int], tuple[int, int]]) -> None:
+    """One snapshot: (queryid, userid) -> (calls, rows), with a statement text per queryid."""
     with Session() as session:
-        for queryid, (calls, rows) in counters.items():
+        for (queryid, userid), (calls, rows) in counters.items():
             if session.get(EgressStatement, (queryid, 1)) is None:
                 session.add(
                     EgressStatement(queryid=queryid, dbid=1, query=f"q{queryid}")
                 )
+            session.flush()
             session.add(
                 EgressSnapshot(
-                    taken_at=taken, queryid=queryid, dbid=1, calls=calls, rows=rows
+                    taken_at=taken,
+                    queryid=queryid,
+                    dbid=1,
+                    userid=userid,
+                    toplevel=True,
+                    calls=calls,
+                    rows=rows,
                 )
             )
         session.commit()
@@ -65,27 +72,38 @@ def test_a_window_counts_growth_resets_and_new_statements(
 ) -> None:
     now = utcnow().replace(microsecond=0)
     t0, t1, t2 = now - timedelta(days=2), now - timedelta(days=1), now
-    store(t0, {1: (10, 1_000_000), 2: (5, 500_000)})
-    # 1 grew by 2 M rows; 2 went down, so it was reset and counts 200 k; 3 is new, 700 k in full
-    store(t1, {1: (20, 3_000_000), 2: (2, 200_000), 3: (7, 700_000)})
-    store(t2, {1: (21, 3_000_100), 3: (7, 700_000)})
+    store(
+        t0, {(1, 10): (10, 1_000_000), (1, 20): (50, 5_000_000), (2, 10): (5, 500_000)}
+    )
+    # 1 grew by 2 M rows for role 10 and was reset for role 20, which counts its 100 alone;
+    # 2 went down, so it was reset and counts 200 k; 3 is new, 700 k in full
+    store(
+        t1,
+        {
+            (1, 10): (20, 3_000_000),
+            (1, 20): (1, 100),
+            (2, 10): (2, 200_000),
+            (3, 10): (7, 700_000),
+        },
+    )
+    store(t2, {(1, 10): (21, 3_000_100), (3, 10): (7, 700_000)})
 
     with Session() as session:
         first = egress_snapshot.summary(session, t0)
         found = egress_snapshot.summary(session, t1)
     assert first.window is None
-    assert first.statements == 2
+    assert first.statements == 3
 
     window = found.window
     assert window is not None
     assert (window.start, window.end, window.hours) == (t0, t1, 24)
-    assert (window.rows, window.calls) == (2_900_000, 19)
+    assert (window.rows, window.calls) == (2_900_100, 20)
     # 2.9 M rows at 100 bytes a row over one day
     assert (window.estimated_mb, window.mb_per_day) == (290, 290)
     assert window.over_budget is True
-    assert found.statements == 3
+    assert found.statements == 4
     assert [(s.query, s.rows) for s in found.top] == [
-        ("q1", 2_000_000),
+        ("q1", 2_000_100),
         ("q3", 700_000),
         ("q2", 200_000),
     ]
@@ -95,7 +113,7 @@ def test_a_window_counts_growth_resets_and_new_statements(
     assert response.headers["Cache-Control"] == "no-store"
     days = response.json()
     assert [(d["rows"], d["calls"], d["over_budget"]) for d in days] == [
-        (2_900_000, 19, True),
+        (2_900_100, 20, True),
         (100, 1, False),
     ]
 
@@ -109,21 +127,22 @@ def test_the_capture_skips_its_own_statements_and_drops_old_snapshots(
             pytest.skip("the capture is an INSERT ... SELECT on Postgres")
         session.execute(
             text(
-                "CREATE TABLE pg_stat_statements (queryid bigint, dbid oid, "
-                "query text, calls bigint, rows bigint)"
+                "CREATE TABLE pg_stat_statements (queryid bigint, dbid oid, userid oid, "
+                "toplevel bool, query text, calls bigint, rows bigint)"
             )
         )
         session.execute(
             text(
                 "INSERT INTO pg_stat_statements VALUES "
-                "(1, 5, 'SELECT   *\n FROM users', 3, 30), "
-                "(1, 5, 'SELECT * FROM users', 1, 10), "
-                "(2, 5, 'INSERT INTO egress_snapshot SELECT 1', 1, 4000), "
-                "(NULL, 5, '<insufficient privilege>', 9, 90)"
+                "(1, 5, 10, true, 'SELECT   *\n FROM users', 3, 30), "
+                "(1, 5, 11, true, 'SELECT * FROM users', 1, 10), "
+                "(2, 5, 10, true, 'INSERT INTO egress_snapshot SELECT 1', 1, 4000), "
+                "(3, 5, 10, true, 'INSERT INTO egress_ledger VALUES (1)', 9, 9), "
+                "(NULL, 5, 10, true, '<insufficient privilege>', 9, 90)"
             )
         )
         session.commit()
-    store(utcnow() - timedelta(days=40), {7: (1, 1)})
+    store(utcnow() - timedelta(days=40), {(7, 10): (1, 1)})
     try:
         result = egress_snapshot.take()
         with Session() as session:
@@ -131,14 +150,36 @@ def test_the_capture_skips_its_own_statements_and_drops_old_snapshots(
                 text("SELECT queryid, query FROM egress_statement")
             ).all()
             kept = session.execute(
-                text("SELECT queryid, calls, rows FROM egress_snapshot")
+                text(
+                    "SELECT queryid, userid, calls, rows FROM egress_snapshot "
+                    "ORDER BY userid"
+                )
             ).all()
     finally:
         with Session() as session:
             session.execute(text("DROP TABLE pg_stat_statements"))
             session.commit()
     assert result.available is True
-    assert result.statements == 1
+    assert result.statements == 2
     assert result.window is None
     assert [tuple(r) for r in texts] == [(1, "SELECT * FROM users")]
-    assert [tuple(r) for r in kept] == [(1, 4, 40)]
+    # One row per role: no role's counter is summed into another's
+    assert [tuple(r) for r in kept] == [(1, 10, 3, 30), (1, 11, 1, 10)]
+
+
+def test_a_run_within_an_hour_of_the_last_writes_nothing(
+    client: Client, scheduler: dict[str, str]
+) -> None:
+    """A retry or a manual call would divide a short window into a false day rate."""
+    store(utcnow() - timedelta(minutes=10), {(1, 10): (1, 1)})
+    response = client.get("/jobs/egress-snapshot", headers=scheduler)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["available"] is True
+    assert body["skipped"] == "last snapshot 10 min ago"
+    assert body["window"] is None
+    with Session() as session:
+        assert (
+            session.execute(text("SELECT count(*) FROM egress_snapshot")).scalar_one()
+            == 1
+        )

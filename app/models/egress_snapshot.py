@@ -27,6 +27,10 @@ class EgressSnapshot(SQLModel, table=True):
     taken_at: datetime = Field(sa_type=UTCDateTime, primary_key=True)
     queryid: int = Field(sa_type=BigInteger, primary_key=True)
     dbid: int = Field(sa_type=BigInteger, primary_key=True)
+    # The oid of the role that ran the statement
+    userid: int = Field(sa_type=BigInteger, primary_key=True)
+    # False for a statement nested inside a function
+    toplevel: bool = Field(primary_key=True)
     # Cumulative since the statistics were last reset
     calls: int = Field(sa_type=BigInteger)
     rows: int = Field(sa_type=BigInteger)
@@ -54,10 +58,12 @@ class EgressWindow(SQLModel):
 
 
 class EgressSnapshotResult(SQLModel):
-    """What one run recorded; `window` is None on the first run."""
+    """What one run recorded; `window` is None on the first run and on a skipped run."""
 
     available: bool
     reason: str | None = None
+    # Set when the run wrote nothing because the last snapshot is under an hour old
+    skipped: str | None = None
     taken_at: datetime | None = None
     statements: int = 0
     budget_mb_per_day: float

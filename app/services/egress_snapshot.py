@@ -23,8 +23,10 @@ BUDGET_MB_PER_DAY = 80.0
 KEEP = timedelta(days=35)
 TOP = 10
 
-# The job's own statements and any pg_stat_statements scan return no client egress worth counting
-OWN = r"query !~ 'egress_snapshot|egress_statement|pg_stat_statements'"
+# The job's own statements, the ledger's per-request upsert and any statistics scan are not client egress
+OWN = r"query !~ 'egress_snapshot|egress_statement|egress_ledger|pg_stat_statements'"
+# A run this soon after the last would extrapolate a short window into a false day rate
+MIN_GAP = timedelta(hours=1)
 
 SAVE_STATEMENTS = text(
     "INSERT INTO egress_statement (queryid, dbid, query) "
@@ -33,9 +35,9 @@ SAVE_STATEMENTS = text(
     "GROUP BY queryid, dbid ON CONFLICT DO NOTHING"
 )
 SAVE_SNAPSHOT = text(
-    "INSERT INTO egress_snapshot (taken_at, queryid, dbid, calls, rows) "
-    "SELECT :taken, queryid, dbid::bigint, sum(calls)::bigint, sum(rows)::bigint "
-    f"FROM pg_stat_statements WHERE queryid IS NOT NULL AND {OWN} GROUP BY queryid, dbid"
+    "INSERT INTO egress_snapshot (taken_at, queryid, dbid, userid, toplevel, calls, rows) "
+    "SELECT :taken, queryid, dbid::bigint, userid::bigint, toplevel, calls, rows "
+    f"FROM pg_stat_statements WHERE queryid IS NOT NULL AND {OWN}"
 ).bindparams(bindparam("taken", type_=UTCDateTime()))
 PRUNE_SNAPSHOTS = text(
     "DELETE FROM egress_snapshot WHERE taken_at < :cutoff"
@@ -45,8 +47,8 @@ PRUNE_STATEMENTS = text(
     "WHERE e.queryid = egress_statement.queryid AND e.dbid = egress_statement.dbid)"
 )
 
-# Each statement's calls and rows since the snapshot before; a counter that went down was
-# reset, and a statement new since then counts in full.
+# Each counter's calls and rows since the snapshot before, one counter per statement, role and
+# nesting level; a counter that went down was reset, and one new since then counts in full.
 DELTA = """
 WITH times AS (
     SELECT taken_at, lag(taken_at) OVER (ORDER BY taken_at) AS prev_at
@@ -59,6 +61,7 @@ WITH times AS (
     JOIN egress_snapshot c ON c.taken_at = t.taken_at
     LEFT JOIN egress_snapshot p
         ON p.taken_at = t.prev_at AND p.queryid = c.queryid AND p.dbid = c.dbid
+        AND p.userid = c.userid AND p.toplevel = c.toplevel
     WHERE t.prev_at IS NOT NULL AND t.taken_at >= :since
 )
 """
@@ -75,14 +78,19 @@ WINDOWS = (
 )
 TOP_STATEMENTS = (
     text(
-        DELTA + "SELECT coalesce(s.query, '') AS query, d.calls, d.rows FROM delta d "
-        "LEFT JOIN egress_statement s ON s.queryid = d.queryid AND s.dbid = d.dbid "
-        "WHERE d.taken_at = :since AND d.rows > 0 ORDER BY d.rows DESC LIMIT :top"
+        DELTA + "SELECT coalesce(min(s.query), '') AS query, "
+        "CAST(sum(d.calls) AS BIGINT) AS calls, CAST(sum(d.rows) AS BIGINT) AS rows "
+        "FROM delta d LEFT JOIN egress_statement s ON s.queryid = d.queryid AND s.dbid = d.dbid "
+        "WHERE d.taken_at = :since GROUP BY d.queryid, d.dbid HAVING sum(d.rows) > 0 "
+        "ORDER BY rows DESC LIMIT :top"
     )
     .bindparams(
         bindparam("since", type_=UTCDateTime()), bindparam("top", type_=Integer)
     )
     .columns(query=Text, calls=BigInteger, rows=BigInteger)
+)
+LAST = text("SELECT max(taken_at) AS taken_at FROM egress_snapshot").columns(
+    taken_at=UTCDateTime()
 )
 COUNT = text("SELECT count(*) FROM egress_snapshot WHERE taken_at = :taken").bindparams(
     bindparam("taken", type_=UTCDateTime())
@@ -134,9 +142,19 @@ def unavailable(reason: str) -> EgressSnapshotResult:
 
 
 def take() -> EgressSnapshotResult:
-    """Copy pg_stat_statements, drop what is older than 35 days, and diff with the last copy."""
+    """Copy pg_stat_statements, drop what is older than 35 days, and diff with the last copy;
+    within an hour of the last copy, write nothing."""
     taken = utcnow()
     with Session() as session:
+        last = session.scalar(LAST)
+        if last is not None and taken - last < MIN_GAP:
+            minutes = int((taken - last).total_seconds() // 60)
+            return EgressSnapshotResult(
+                available=True,
+                skipped=f"last snapshot {minutes} min ago",
+                taken_at=last,
+                budget_mb_per_day=BUDGET_MB_PER_DAY,
+            )
         if session.get_bind().dialect.name != "postgresql":
             return unavailable("pg_stat_statements needs Postgres")
         if session.scalar(text("SELECT to_regclass('pg_stat_statements')")) is None:
