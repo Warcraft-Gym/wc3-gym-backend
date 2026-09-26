@@ -56,4 +56,4 @@ Each route's deprecated aliases carry the same header.
 | `GET /events`, for an anonymous caller only | settled |
 | `GET /leagues`, `GET /maps`, `GET /config/w3c`, `GET /config/settings/{key}` | settled |
 
-`GET /config/w3c` sets the header only when w3champions answered, so an outage answer is never cached. Every other read is uncached. A route added here is cached once the frontend's `EDGE_CACHED` pattern lists it too. `tests/test_edge_cache.py` and the route tests pin every row.
+`GET /config/w3c` sets the header only when w3champions answered, so an outage answer is never cached. The frontend keeps the bearer on the entrants read, so a member who signs up sees their own name at once, while anonymous readers share the cached copy. Every other read is uncached. A route added here is cached once the frontend's `EDGE_CACHED` pattern lists it too. `tests/test_edge_cache.py` and the route tests pin every row.
