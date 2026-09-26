@@ -3,7 +3,7 @@ type: Decision
 title: Vercel and Supabase
 description: The backend runs as one Vercel function on a Supabase Postgres, and the self-hosted Azure line is frozen.
 tags: [deploy]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-26T10:00:00Z }
 sources:
   - id: source
     resource: Maintainers' decisions, 2026-08-25 to 2026-09-03
@@ -21,7 +21,7 @@ The self-hosted line was deployed by hand on a shared machine. Vercel builds eve
 # Consequences
 
 - One function serves every route; a second Python file in `api/` is not built. A separate small service is a separate project, which is why the Discord adapter is its own repository.
-- The function limit is 60 seconds and the Hobby plan runs one cron a day. See [jobs](../api/jobs.md).
+- The function limit is 60 seconds and the Hobby plan runs each cron at most once a day. See [jobs](../api/jobs.md).
 - The database is reached through the transaction pooler on port 6543. See [the pitfall](../pitfalls/transaction-pooler.md).
 - The Supabase free plan meters egress across every service; bytes leaving the database are the cost to watch. See [the pitfall](../pitfalls/blob-egress.md).
 - Vercel and Supabase sit in the same US East region on purpose; the first project sat in Europe and cost about 80 ms per statement.
