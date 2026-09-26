@@ -47,6 +47,7 @@ from app.models.user import User
 from app.models.user_block import UserBlock, UserBusy
 from app.models.user_team_season import DBUserTeamSeason
 from app.services import derived, events, ladder, soft_blocks
+from app.services.w3c_stats import w3c_season
 
 # How many meetings the pair read answers, newest first
 MEETINGS_LIMIT = 20
@@ -66,8 +67,9 @@ def board(match_id: int) -> DraftBoard:
         user_ids = [row.user_id for row in roster]
         sides = [(row.user_id, race_value(row.race)) for row in roster]
 
-        ratings = events.race_ratings(session, sides)
-        games = events.race_games(session, sides, event.min_games_seasons)
+        current = w3c_season(session)
+        ratings = events.race_ratings(session, sides, current)
+        games = events.race_games(session, sides, event.min_games_seasons, current)
         vs_race = ladder.season_vs_race(session, user_ids, event)
         form = ladder.recent_form(session, user_ids, event_id)
 
@@ -416,7 +418,7 @@ def _meeting_rows(session: OrmSession, user_a: int, user_b: int) -> Sequence[Row
     )
     seasons = union(
         select(bound.c.wc3_season).where(bound.c.event_id == met.c.event_id),
-        select(literal(events._w3c_season(session))).where(running),
+        select(literal(w3c_season(session))).where(running),
     )
     return session.execute(
         select(

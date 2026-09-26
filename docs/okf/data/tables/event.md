@@ -4,7 +4,7 @@ title: event
 description: "One run of a league that people sign up for: a GNL season, a KOTH night, a cup or a sign-up list; the class is still named Season."
 resource: ../../../../app/models/season.py
 tags: [events, data]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-26T04:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-26T10:02:14Z }
 verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
 sources:
   - id: model
@@ -57,7 +57,7 @@ The first block is the fields introduced for GNL, on `SeasonBase`. The second bl
 | `description` | VARCHAR | yes | Free text shown on the event page. |
 | `starts_at` | TIMESTAMP | yes | When a cup or a KOTH night starts. A GNL season leaves it null and keeps its dates. |
 | `min_games` | INTEGER | yes | The ladder games an entrant should have on its signup race. Warns on the entrant row; never refuses. |
-| `min_games_seasons` | INTEGER | yes | How many of the newest W3C seasons `min_games` counts over, 1 or more. Null counts every synced season. |
+| `min_games_seasons` | INTEGER | yes | Narrows the live W3C window `min_games` counts over (the current season and the one before it), 1 or more: 1 counts the current season alone; null, 2 and more count the window. |
 | `mmr_max` | INTEGER | yes | The MMR an entrant should be under. Warns on the entrant row; never refuses. |
 | `entrant_cap` | INTEGER | yes | The most live entrants the event takes. A signup past it is refused; no waiting list is kept. Null means no cap. |
 | `region` | VARCHAR | yes | Where the event is played, as free text. Set by the admin form; answered on the event payload; no service reads it. |

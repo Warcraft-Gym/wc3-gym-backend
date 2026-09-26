@@ -76,7 +76,6 @@ from app.models.season import (
     tier_count,
 )
 from app.models.series import Series
-from app.models.settings import Settings
 from app.models.team import Team
 from app.models.team_reduced import TeamReduced
 from app.models.team_season import DBTeamSeason
@@ -86,12 +85,7 @@ from app.models.user_team_season import DBUserTeamSeason
 from app.models.w3c_stats import W3CStats
 from app.services import stage_engine
 from app.services.battle_tags import attach_tag, person_by_tag
-
-# How many W3C seasons back a rating is still the player's current one
-SEASONS = 3
-
-# The setting that names the W3C season the app is on
-W3C_SEASON_KEY = "current_w3c_season"
+from app.services.w3c_stats import fill, in_window, w3c_season, window
 
 # The shape of a battle tag: a name, then # and the player's number
 BATTLE_TAG = re.compile(r"[^\s#]+#\d{3,8}")
@@ -1330,30 +1324,22 @@ def _by_battle_tag(session: OrmSession, battle_tag: str, race: Race) -> User:
     return user
 
 
-def _w3c_season(session: OrmSession) -> int:
-    """The W3C season the app reads ratings against, or the newest one stored."""
-    named = session.scalar(
-        select(col(Settings.value)).where(col(Settings.key) == W3C_SEASON_KEY)
-    )
-    if named:
-        return int(named)
-    return session.scalar(select(func.max(col(W3CStats.wc3_season)))) or 0
-
-
 def _stats_for(
     user: User, race: Race | None, season: int, games_seasons: int | None = None
 ) -> tuple[int | None, int]:
     """The player's current W3C rating on that race, and the games behind it.
 
-    A season the player did not play on that race carries no rating, so the
-    rating is the newest stored season that carries one, three seasons back
-    from the season the app is on and no further: an older rating is not the
-    player's current one. The games are every season the app has synced for
-    that race, or the newest `games_seasons` of them where the event names a
-    window, because a min-games rule asks how much the player has played.
+    Both read the live window, `season` and the one before it: the rating is
+    the newest window row that carries one, the games are the sum of the
+    window rows, or of the newest `games_seasons` of them where the event
+    names a shorter span.
     """
-    rows = [stat for stat in (user.w3c_stats or []) if stat.race == race]
-    played = [stat for stat in rows if stat.mmr and stat.wc3_season > season - SEASONS]
+    rows = [
+        stat
+        for stat in (user.w3c_stats or [])
+        if stat.race == race and stat.wc3_season in window(season)
+    ]
+    played = [stat for stat in rows if stat.mmr]
     rating = max(played, key=lambda stat: stat.wc3_season).mmr if played else None
     counted = [
         stat
@@ -1386,27 +1372,27 @@ def _entrant_publics(
     and the rosters the rating of a team entrant is the mean of.
     """
     team_ids = {row.team_id for row in rows if row.team_id}
-    users = _users_for(session, rows)
+    season = w3c_season(session)
+    users = _users_for(session, rows, season)
     teams = {
         team.id: team
         for team in session.scalars(select(Team).where(col(Team.id).in_(team_ids)))
     }
-    season = _w3c_season(session)
     means = _team_mmrs(session, rows, season)
     return [_entrant_public(event, row, users, teams, means, season) for row in rows]
 
 
 def _users_for(
-    session: OrmSession, rows: Sequence[EventEntrant]
+    session: OrmSession, rows: Sequence[EventEntrant], current: int
 ) -> dict[int | None, User]:
-    """The players behind those entrant rows, with the W3C stats their MMR reads."""
+    """The players behind those entrant rows, with the window W3C stats their MMR reads."""
     user_ids = {row.user_id for row in rows if row.user_id}
     return {
         user.id: user
         for user in session.scalars(
             select(User)
             .options(
-                selectinload(rel(User.w3c_stats)),
+                selectinload(rel(User.w3c_stats).and_(in_window(current))),
                 noload(rel(User.team_seasons)),
                 noload(rel(User.signup_seasons)),
             )
@@ -1416,21 +1402,23 @@ def _users_for(
 
 
 def race_ratings(
-    session: OrmSession, sides: Iterable[tuple[int | None, str | None]]
+    session: OrmSession,
+    sides: Iterable[tuple[int | None, str | None]],
+    current: int | None = None,
 ) -> dict[tuple[int, str], int]:
     """The current rating of every (player, race) pair named, keyed by the pair.
 
     The list form of the rule `_stats_for` states for one player: the newest
-    stored season that carries a rating on that race, three seasons back from
-    the season the app is on and no further. Two reads whatever the number of
-    pairs, and the statement carries the rated seasons alone, so a list
-    payload rates each row without reading a stat it does not need. A pair
-    with no rating is left out.
+    window row that carries a rating on that race. Two reads whatever the
+    number of pairs, one where the caller passes the `current` season, and the
+    statement carries the rated seasons alone, so a list payload rates each
+    row without reading a stat it does not need. A pair with no rating is left
+    out.
     """
     pairs = {(user_id, race) for user_id, race in sides if user_id and race}
     if not pairs:
         return {}
-    season = _w3c_season(session)
+    season = w3c_season(session) if current is None else current
     rated = (
         select(
             col(W3CStats.user_id).label("user_id"),
@@ -1448,7 +1436,7 @@ def race_ratings(
                 [(user_id, Race.from_text(race)) for user_id, race in pairs]
             ),
             col(W3CStats.mmr) > 0,
-            col(W3CStats.wc3_season) > season - SEASONS,
+            in_window(season),
         )
         .subquery()
     )
@@ -1466,14 +1454,15 @@ def race_games(
     session: OrmSession,
     sides: Iterable[tuple[int | None, str | None]],
     seasons: int | None,
+    current: int,
 ) -> dict[tuple[int, str], int]:
     """The ladder games every (player, race) pair named has on record, keyed
     by the pair.
 
-    The list form of the games half of `_stats_for`: every synced season on
-    that race, or the newest `seasons` of them where the event names a window.
-    One read, two where the window is named, whatever the number of pairs. A
-    pair with no stored row is left out.
+    The list form of the games half of `_stats_for`: the window rows on that
+    race, or the newest `seasons` of them where the event names a shorter
+    span, in the `current` season's window. One read whatever the number of
+    pairs. A pair with no window row is left out.
     """
     pairs = {(user_id, race) for user_id, race in sides if user_id and race}
     if not pairs:
@@ -1481,9 +1470,10 @@ def race_games(
     where = [
         col(W3CStats.user_id).in_({user_id for user_id, _ in pairs}),
         col(W3CStats.race).in_({Race.from_text(race) for _, race in pairs}),
+        in_window(current),
     ]
     if seasons is not None:
-        where.append(col(W3CStats.wc3_season) > _w3c_season(session) - seasons)
+        where.append(col(W3CStats.wc3_season) > current - seasons)
     rows = session.execute(
         select(
             col(W3CStats.user_id),
@@ -1506,8 +1496,8 @@ def _mmrs(session: OrmSession, rows: Sequence[EventEntrant]) -> dict[int, int | 
     A team answers the mean of its roster, so a division cut and a seed order
     read one number for every entrant, whoever stands behind it.
     """
-    users = _users_for(session, rows)
-    season = _w3c_season(session)
+    season = w3c_season(session)
+    users = _users_for(session, rows, season)
     teams = _team_mmrs(session, rows, season)
     return {ident(row): _entrant_mmr(row, users, teams, season) for row in rows}
 
@@ -1544,7 +1534,9 @@ def _team_mmrs(
     members = session.scalars(
         select(DBUserTeamSeason)
         .options(
-            selectinload(rel(DBUserTeamSeason.user)).selectinload(rel(User.w3c_stats))
+            selectinload(rel(DBUserTeamSeason.user)).selectinload(
+                rel(User.w3c_stats).and_(in_window(season))
+            )
         )
         .where(
             col(DBUserTeamSeason.team_id).in_(teams),
@@ -1640,6 +1632,13 @@ def _from_previous_stage(
     ]
 
 
+def _summarized(user: User | None, current: int) -> UserPublic | None:
+    """The user of an entrant row, with his ladder summary."""
+    public = UserPublic.from_user(user) if user else None
+    fill([public], current)
+    return public
+
+
 def _entrant_public(
     event: Season,
     row: EventEntrant,
@@ -1661,7 +1660,7 @@ def _entrant_public(
     return EventEntrantPublic(
         id=ident(row),
         event_id=row.event_id,
-        user=UserPublic.from_user(user) if user else None,
+        user=_summarized(user, season),
         team=TeamReduced.from_team(team) if team else None,
         race=row.race,
         note=row.note,

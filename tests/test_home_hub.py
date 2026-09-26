@@ -452,8 +452,8 @@ def test_the_hub_costs_a_fixed_number_of_statements(
     with count_statements() as tally:
         answer = home.series()
     assert len(answer.next) == 3
-    # three of them tell the running events from the finished ones
-    assert tally[0] == 18
+    # one of them tells the running events from the finished ones
+    assert tally[0] == 16
 
 
 def test_the_worst_case_answer_stays_under_the_egress_ceiling(

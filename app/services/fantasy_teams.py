@@ -19,25 +19,24 @@ from app.models.fantasy_team import (
 from app.models.relationships import DBFantasyTeamPlayer, DBUserSeasonSignup
 from app.models.season import Season, tier_count
 from app.models.team_season import DBTeamSeason
-from app.models.user import User
-from app.models.w3c_stats import W3CStats
+from app.models.user import User, UserPublic
 from app.services import derived, discord_roles
-from app.services.events import SEASONS, _w3c_season
 from app.services.seasons import resolved_tiers
+from app.services.w3c_stats import fill, in_window, w3c_season
 
 logger = logging.getLogger(__name__)
 
 
-def _reduced_options(session: OrmSession) -> list[Any]:
+def _reduced_options(current: int) -> list[Any]:
     """Every relation the list answer reads; the other sub-collections stay
     empty. The drafted players carry their stats so the leaderboard shows MMR
     and GNL record without one request per player.
 
-    The stats stop at the W3C seasons the app rates against, the same window
-    app.services.events.race_ratings reads: an older season carries no current
-    rating, so a stored history reaching back to W3C season 0 would multiply
-    this read for rows no client draws. The single-team read carries every
-    stored season, because it loads no options of its own.
+    The stats stop at the live W3C window, `current` and the one before it,
+    the window app.services.events.race_ratings reads: a stored history
+    reaching back to W3C season 0 would multiply this read for rows no client
+    draws. The single-team read carries every stored season, because it loads
+    no options of its own.
 
     A player's own collections use selectinload: joining both of them under one
     player multiplies every team row by both. The season is one row every team
@@ -45,9 +44,7 @@ def _reduced_options(session: OrmSession) -> list[Any]:
     players stay joined, because the captain of a team is often drafted by
     another one, and a later statement leaves that shared player without stats.
     """
-    stats = rel(User.w3c_stats).and_(
-        col(W3CStats.wc3_season) > _w3c_season(session) - SEASONS
-    )
+    stats = rel(User.w3c_stats).and_(in_window(current))
     return [
         selectinload(rel(FantasyTeam.season)).noload("*"),
         joinedload(rel(FantasyTeam.drafted_team)).noload("*"),
@@ -60,6 +57,29 @@ def _reduced_options(session: OrmSession) -> list[Any]:
             noload("*"),
         ),
     ]
+
+
+def _members(team: FantasyTeamPublic) -> list[UserPublic | None]:
+    """The captain, the drafted players and the drafted team's seats of one team."""
+    drafted = team.drafted_team
+    seats = (
+        [*drafted.player_by_season.values(), *drafted.captains_by_season.values()]
+        if drafted
+        else []
+    )
+    return [
+        team.captain,
+        *team.drafted_players,
+        *(user for users in seats for user in users),
+    ]
+
+
+def _fill_mmrs(
+    session: OrmSession, teams: list[FantasyTeamPublic], current: int
+) -> None:
+    """The scores of every team and the ladder summary of every person on it."""
+    derived.fill_fantasy_teams(session, teams)
+    fill([user for team in teams for user in _members(team)], current)
 
 
 def _check_grind(
@@ -150,7 +170,7 @@ class FantasyTeamService:
                 raise NotFoundError("Fantasy Team not found")
             public = FantasyTeamPublic.from_fantasy_team(fteam)
             derived.fill_standings(session, [public.drafted_team])
-            derived.fill_fantasy_teams(session, [public])
+            _fill_mmrs(session, [public], w3c_season(session))
             return public
 
     def get_all(
@@ -159,17 +179,18 @@ class FantasyTeamService:
         """The teams, or one page of them, and the total row count."""
         with Session.begin() as session:
             total = session.scalar(select(func.count()).select_from(FantasyTeam)) or 0
+            current = w3c_season(session)
             # Offset paging is deterministic only with a fixed order
             statement = (
                 select(FantasyTeam)
-                .options(*_reduced_options(session))
+                .options(*_reduced_options(current))
                 .order_by(col(FantasyTeam.id))
                 .offset(offset)
                 .limit(limit)
             )
             fteams = session.scalars(statement).unique().all()
             result = [FantasyTeamPublic.from_fantasy_team(fteam) for fteam in fteams]
-            derived.fill_fantasy_teams(session, result)
+            _fill_mmrs(session, result, current)
             derived.fill_gnl_stats(
                 session, [player for team in result for player in team.drafted_players]
             )
@@ -189,10 +210,11 @@ class FantasyTeamService:
                 total = session.scalar(
                     select(func.count()).select_from(FantasyTeam).where(filter)
                 )
+            current = w3c_season(session)
             # Offset paging is deterministic only with a fixed order
             statement = (
                 select(FantasyTeam)
-                .options(*_reduced_options(session))
+                .options(*_reduced_options(current))
                 .where(filter)
                 .order_by(col(FantasyTeam.id))
                 .offset(offset)
@@ -200,7 +222,7 @@ class FantasyTeamService:
             )
             fteams = session.scalars(statement).unique().all()
             result = [FantasyTeamPublic.from_fantasy_team(fteam) for fteam in fteams]
-            derived.fill_fantasy_teams(session, result)
+            _fill_mmrs(session, result, current)
             derived.fill_gnl_stats(
                 session, [player for team in result for player in team.drafted_players]
             )

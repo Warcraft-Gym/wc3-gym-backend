@@ -21,7 +21,7 @@ from app.models.types import (
 )
 from app.models.user_battle_tag import UserBattleTag, UserBattleTagPublic
 from app.models.user_team_season import UserTeamSeasonStatsPublic
-from app.models.w3c_stats import W3CStats, W3CStatsPublic
+from app.models.w3c_stats import RaceMmr, W3CStats, W3CStatsPublic
 
 if TYPE_CHECKING:
     from app.models.player_career_stats import PlayerCareerStats
@@ -204,6 +204,12 @@ class UserListPublic(UserReduced):
     """The user of a list answer: the scalars, the w3c stats and the signups."""
 
     w3c_stats: Annotated[list[W3CStatsPublic], NoneToList] = []
+    # The ladder summary per race, from app.services.w3c_stats.fill; `mmr` is the profile field
+    race_mmrs: list[RaceMmr] = []
+    # The race with the top window MMR and 10 or more window games, else null
+    main_race: str | None = None
+    # The MMR the player entered a finished event with; roster reads only
+    mmr_entered: int | None = None
     signup_seasons: Annotated[list[SeasonPublic], NoneToList] = []
     # The race and tier of one signup, filled by the signups answer of a single season
     signup_race: Annotated[str | None, EnumValue] = None

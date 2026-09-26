@@ -58,6 +58,19 @@ class W3CStatsPublic(W3CStatsBase):
     user_id: int
 
 
+class RaceMmr(SQLModel):
+    """One race of a player's ladder summary: the newest window row's rating, the window's games."""
+
+    race: str | None
+    wc3_season: int  # the season the mmr comes from
+    mmr: int | None
+    games: int | None  # summed over the window rows of this race
+    wins: int | None
+    losses: int | None
+    # true when the row is older than the window (profile reads only)
+    stale: bool = False
+
+
 class W3CSyncFailure(SQLModel):
     """One player the sync could not update, and the reason it gives the admin."""
 

@@ -25,11 +25,11 @@ from app.services.events import (
     _event,
     _live_entrants,
     _stats_for,
-    _w3c_season,
 )
 from app.services.koth.night import divisions_of
 from app.services.settings import SettingsService
 from app.services.users import UserService
+from app.services.w3c_stats import w3c_season
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +65,7 @@ def follow(
         ask = (
             not synced
             and user is not None
-            and unrated(user, row.race, _w3c_season(session))
+            and unrated(user, row.race, w3c_season(session))
         )
         tag = (user.battleTag or "") if user is not None else ""
         user_id = ident(user) if user is not None else 0

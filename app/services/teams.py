@@ -23,6 +23,7 @@ from app.models.user_team_season import DBUserTeamSeason
 from app.models.w3c_stats import W3CStats
 from app.services import availability, blob, derived, discord_roles
 from app.services.users import UserService
+from app.services.w3c_stats import fill, in_window, w3c_season
 
 logger = logging.getLogger(__name__)
 
@@ -56,9 +57,10 @@ def _event_team(
     return team, event
 
 
-def _fill(session: OrmSession, teams: list[TeamPublic]) -> None:
+def _fill(session: OrmSession, teams: list[TeamPublic], entered: bool = False) -> None:
     """The standings of every team, the name and league of every season it
-    played, and the signup race and the season record of every player."""
+    played, and the signup race and the season record of every player; with
+    `entered`, the MMR each player entered a finished season with."""
     derived.fill_standings(session, teams)
     derived.fill_season_labels(session, teams)
     roster = [
@@ -67,7 +69,7 @@ def _fill(session: OrmSession, teams: list[TeamPublic]) -> None:
         for season_id, players in team.player_by_season.items()
         for player in players
     ]
-    derived.fill_user_signup_races(session, roster)
+    derived.fill_user_signup_races(session, roster, entered)
     derived.fill_gnl_stats(session, [player for player, _ in roster])
 
 
@@ -85,10 +87,10 @@ def _fill_out_rounds(
                 stat.out_rounds = out[stat.user_id]
 
 
-def _public(session: OrmSession, team: Team) -> TeamPublic:
+def _public(session: OrmSession, team: Team, entered: bool = False) -> TeamPublic:
     """One team, with its standings derived from the series it played."""
     public = TeamPublic.from_team(team)
-    _fill(session, [public])
+    _fill(session, [public], entered)
     return public
 
 
@@ -122,8 +124,9 @@ def _season_loads(season_id: int) -> list[Any]:
     ]
 
 
-def _load_w3c_stats(session: OrmSession, teams: Iterable[Team]) -> None:
-    """The W3C rows of every roster player and captain, in one statement.
+def _load_w3c_stats(session: OrmSession, teams: Iterable[Team], current: int) -> None:
+    """The live window W3C rows of every roster player and captain, in one
+    statement.
 
     Each user is read once, however many seats he holds across the teams.
     """
@@ -141,12 +144,26 @@ def _load_w3c_stats(session: OrmSession, teams: Iterable[Team]) -> None:
     rows: dict[int, list[W3CStats]] = {user_id: [] for user_id in users}
     for stat in session.scalars(
         select(W3CStats)
-        .where(col(W3CStats.user_id).in_(users))
+        .where(col(W3CStats.user_id).in_(users), in_window(current))
         .order_by(col(W3CStats.id))
     ):
         rows[stat.user_id].append(stat)
     for user_id, user in users.items():
         set_committed_value(user, "w3c_stats", rows[user_id])
+
+
+def _fill_mmrs(teams: list[TeamPublic], current: int) -> None:
+    """The ladder summary of every roster player and captain."""
+    fill(
+        [
+            user
+            for team in teams
+            for seats in (team.player_by_season, team.captains_by_season)
+            for users in seats.values()
+            for user in users
+        ],
+        current,
+    )
 
 
 # A team list reads the season rows and no people; noload alone, because a
@@ -389,8 +406,10 @@ class TeamService:
             )
             if not team:
                 raise NotFoundError("Team not found")
-            _load_w3c_stats(session, [team])
-            public = _public(session, team)
+            current = w3c_season(session)
+            _load_w3c_stats(session, [team], current)
+            public = _public(session, team, entered=True)
+            _fill_mmrs([public], current)
             # An event without scheduling asks nobody, so every list stays empty
             if event.scheduling_enabled:
                 _fill_out_rounds(session, public, team_id, season_id)
@@ -510,9 +529,11 @@ class TeamService:
                 .limit(limit)
             )
             teams = session.scalars(statement).unique().all()
-            _load_w3c_stats(session, teams)
+            current = w3c_season(session)
+            _load_w3c_stats(session, teams, current)
             result = [TeamPublic.from_team(team) for team in teams]
-            _fill(session, result)
+            _fill(session, result, entered=True)
+            _fill_mmrs(result, current)
             return result
 
     def get_teams_season_basic(

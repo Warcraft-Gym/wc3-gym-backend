@@ -2,6 +2,7 @@
 
 ## 2026-09-26
 
+* **Update**: the live MMR window is the current and the previous W3Champions season; user payloads carry the ladder summary (`race_mmrs`, `main_race`), list reads load only the window's `w3cstats` rows, a roster of an event that is over carries `mmr_entered`, and the Discord series card reads the summary.
 * **Add**: [Edge cache](concepts/edge-cache.md). Every cached open read uses one of three timer classes, live, running or settled; an event read is settled once the event is finished; the entrants, stage series, stage standings, achievements and an anonymous event read are cached; a player read is running.
 * **Update**: a series row of a finished event carries the MMR of the time from the ladder, bounded to the event's W3Champions seasons; the MMR on a date takes a season bound; only a running event reads the current W3Champions season.
 * **Update**: `monitor_state` holds a `vercel` row. With `VERCEL_USAGE_TOKEN` and `VERCEL_TEAM_ID` set, the egress monitor reads the Vercel usage over a rolling 30 days, shows it in the digest, and alerts once when a meter reaches 80% or the token is rejected.

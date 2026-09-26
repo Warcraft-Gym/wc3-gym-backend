@@ -42,9 +42,10 @@ from app.models.types import utcnow
 from app.models.user import User
 from app.services import stage_engine
 from app.services.battle_tags import person_by_tag
-from app.services.events import EventService, _stats_for, _users_for, _w3c_season
+from app.services.events import EventService, _stats_for, _users_for
 from app.services.koth import carry, night, nightbot
 from app.services.series import SeriesService
+from app.services.w3c_stats import w3c_season
 
 # A KOTH series is one player against one player, so every match reads this way
 GAME_MODE = "1v1"
@@ -530,8 +531,8 @@ def _payloads(
             .order_by(col(EventEntrant.id))
         )
     )
-    users = _users_for(session, rows)
-    season = _w3c_season(session)
+    season = w3c_season(session)
+    users = _users_for(session, rows, season)
     chains: dict[int | None, list[Series]] = {}
     for row in night.series_of(session, event_id):
         chains.setdefault(row.division_id, []).append(row)

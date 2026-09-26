@@ -186,8 +186,8 @@ def test_the_rating_walks_back_to_the_newest_season_the_race_played(
 ) -> None:
     """A season the player sat out carries no rating, so the read walks back.
 
-    Three seasons back and no further: a rating older than that is not the
-    player's current one.
+    One season back and no further: a rating older than the current W3C season
+    and the one before it is not the player's current one.
     """
     event = add_event(kind=EventKind.cup)
     player = seeded["player_ids"][0]
@@ -195,7 +195,7 @@ def test_the_rating_walks_back_to_the_newest_season_the_race_played(
         session.add_all(
             [
                 W3CStats(
-                    user_id=player, race=Race.HU, wc3_season=20, games=80, mmr=1700
+                    user_id=player, race=Race.HU, wc3_season=21, games=80, mmr=1700
                 ),
                 W3CStats(
                     user_id=player, race=Race.NE, wc3_season=22, games=40, mmr=1500
@@ -212,7 +212,7 @@ def test_the_rating_walks_back_to_the_newest_season_the_race_played(
         session.add(
             W3CStats(user_id=player, race=Race.NE, wc3_season=23, games=40, mmr=1500)
         )
-    # Season 20 now sits four seasons behind the season the app is on
+    # Season 21 now sits two seasons behind the season the app is on
     assert entrants(client, event)[0]["mmr"] is None
 
 
@@ -401,19 +401,20 @@ def test_a_withdraw_names_one_race_and_the_count_is_of_players(
 def test_the_games_warning_counts_only_the_seasons_the_window_names(
     client: Client, seeded: dict[str, Any], member: Member
 ) -> None:
-    """min_games alone counts every synced season; min_games_seasons windows it
-    to the newest M W3C seasons, so the same player falls under the rule."""
+    """min_games alone counts the live window, the current W3C season and the
+    one before it; min_games_seasons=1 narrows it to the current season, so the
+    same player falls under the rule. A longer span still reads the window."""
     player = seeded["player_ids"][0]
     with Session.begin() as session:
         session.add_all(
             W3CStats(user_id=player, race=Race.HU, wc3_season=wc3, games=10, mmr=1500)
             for wc3 in (20, 21, 22)
         )
-    event = add_event(kind=EventKind.cup, min_games=25)
+    event = add_event(kind=EventKind.cup, min_games=15)
     assert sign_up(client, event, member("1")).status_code == 201
     assert entrants(client, event)[0]["warnings"] == []
 
-    set_fields(event, min_games_seasons=2)
+    set_fields(event, min_games_seasons=1)
     assert entrants(client, event)[0]["warnings"] == ["under_min_games"]
 
     set_fields(event, min_games_seasons=3)
