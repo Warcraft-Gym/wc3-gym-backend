@@ -201,7 +201,6 @@ DEFAULT_ORDER = {
         "teams.id",
         "anon_1.id",
         "team_season_captain.user_id",
-        "anon_1.playday, anon_1.series_id",
     ],
     "GET /events/{season_id}/teams/basic": ["teams.id", "anon_1.id"],
     "GET /users": [

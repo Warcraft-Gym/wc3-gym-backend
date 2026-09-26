@@ -179,3 +179,21 @@ def test_every_team_answer_matches_the_snapshot(
     # The dump keeps key order, so a field that moves fails too
     assert json.dumps(payloads) == json.dumps(json.loads(SNAPSHOT.read_text()))
 
+
+# Rows one call reads on this league, as X-DB-Rows reports it: a captain's W3C
+# rows read once, and one matchup row per player and season
+ROWS_PER_CALL = {
+    "/events/{season_id}/teams": 61,
+    "/events/{season_two_id}/teams": 50,
+    "/events/{season_id}/teams/{team_a_id}": 43,
+    "/events/{season_id}/teams/{team_b_id}": 44,
+}
+
+
+@pytest.mark.parametrize("route", sorted(ROWS_PER_CALL))
+def test_team_rows_stay_under_the_ceiling(
+    client: Client, teams_league: dict[str, Any], route: str
+) -> None:
+    response = client.get(route.format(**teams_league))
+    assert response.status_code == 200
+    assert int(response.headers["X-DB-Rows"]) <= ROWS_PER_CALL[route]
