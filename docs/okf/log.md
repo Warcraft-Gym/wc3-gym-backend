@@ -2,7 +2,7 @@
 
 ## 2026-09-25
 
-* **Update**: the career list derives and pages in SQL; the career player read carries a public cache header, and the consumer uses that narrow route.
+* **Update**: the career list derives and pages in SQL; the career player read carries a public cache header.
 * **Update**: the career rating uses one integer weighted sum before truncation.
 
 ## 2026-09-24

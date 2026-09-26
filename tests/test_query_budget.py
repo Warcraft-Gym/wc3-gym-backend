@@ -579,11 +579,11 @@ def test_the_season_list_costs_the_same_when_seasons_grow(
 # Rows one call of each route reads on the league fixture, as X-DB-Rows reports it
 ROWS_PER_CALL = {
     "/series/{series_played_id}": 29,
-    "/events/{season_id}/series": 22,
+    "/events/{season_id}/series": 16,
     "/fantasy/bets": 10,
     "/fantasy/teams": 9,
-    "/stats/career": 8,
-    "/stats/career/{player_id}": 6,
+    "/stats/career": 4,
+    "/stats/career/{player_id}": 3,
     "/events/{season_id}/teams": 55,
     # One tag row per player
     "/users": 41,
