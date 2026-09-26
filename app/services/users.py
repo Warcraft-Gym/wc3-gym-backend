@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import ColumnElement, Select, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as OrmSession
-from sqlalchemy.orm import joinedload, noload, selectinload
+from sqlalchemy.orm import noload, selectinload
 from sqlalchemy.orm.interfaces import ORMOption
 from sqlmodel import col
 
@@ -46,7 +46,7 @@ from app.services.battle_tags import (
     set_active_tag,
 )
 from app.services.w3c import REQUEST_TIMEOUT, W3CService
-from app.services.w3c_stats import fill, in_window, w3c_season
+from app.services.w3c_stats import fill, w3c_season
 
 if TYPE_CHECKING:
     from app.services.settings import SettingsService
@@ -62,12 +62,12 @@ W3C_SYNC_WORKERS = 4
 SYNC_MAX_AGE = timedelta(minutes=10)
 
 
-def _list_options(current: int) -> tuple[ORMOption, ...]:
-    """The list row has no gnl_stats, so the link rows stay out; the W3C rows
-    are the live window of `current`."""
+def _list_options() -> tuple[ORMOption, ...]:
+    """The list row has no gnl_stats, so the link rows stay out; the ladder
+    summary is read on its own."""
     return (
         noload(rel(User.team_seasons)),
-        joinedload(rel(User.w3c_stats).and_(in_window(current))),
+        noload(rel(User.w3c_stats)),
         selectinload(rel(User.signup_seasons)).joinedload(
             rel(DBUserSeasonSignup.season)
         ),
@@ -75,10 +75,12 @@ def _list_options(current: int) -> tuple[ORMOption, ...]:
     )
 
 
-def _list_publics(users: Iterable[User], current: int) -> list[UserListPublic]:
+def _list_publics(
+    session: OrmSession, users: Iterable[User], current: int
+) -> list[UserListPublic]:
     """The list rows of those users, with their ladder summary."""
     publics = [UserListPublic.from_user(user) for user in users]
-    fill(publics, current)
+    fill(session, publics, current)
     return publics
 
 
@@ -88,7 +90,7 @@ def _public(session: OrmSession, user: User) -> UserPublic:
     public = UserPublic.from_user(user)
     derived.fill_gnl_stats(session, [public])
     derived.fill_trophies(session, [public])
-    fill([public], w3c_season(session), stale=True)
+    fill(session, [public], w3c_season(session), stale=True)
     return public
 
 
@@ -194,7 +196,7 @@ class UserService:
                     select(User)
                     .options(
                         selectinload(rel(User.team_seasons)).noload("*"),
-                        selectinload(rel(User.w3c_stats)),
+                        noload(rel(User.w3c_stats)),
                         selectinload(rel(User.signup_seasons)).joinedload(
                             rel(DBUserSeasonSignup.season)
                         ),
@@ -299,14 +301,14 @@ class UserService:
             # Offset paging is deterministic only with a fixed order
             statement = (
                 select(User)
-                .options(*_list_options(current))
+                .options(*_list_options())
                 .where(filter)
                 .order_by(col(User.id))
                 .offset(offset)
                 .limit(limit)
             )
             users = session.scalars(statement).unique().all()
-            return _list_publics(users, current)
+            return _list_publics(session, users, current)
 
     def get_all(
         self,
@@ -347,14 +349,14 @@ class UserService:
             # Offset paging is deterministic only with a fixed order
             statement = (
                 select(User)
-                .options(*_list_options(current))
+                .options(*_list_options())
                 .where(*filters)
                 .order_by(col(User.id))
                 .offset(offset)
                 .limit(limit)
             )
             users = session.scalars(statement).unique().all()
-            return _list_publics(users, current), total
+            return _list_publics(session, users, current), total
 
     def _own(self, session: OrmSession, discord_id: str) -> User:
         user = session.scalars(

@@ -35,8 +35,10 @@ of those players by season, one names the race of every opponent they met.
 Neither grows with the number of players.
 
 A user, a user list, a team roster or a full series answer names the current
-W3C season, so it loads only the window rows and derives the ladder summary:
-one statement, two where no `current_w3c_season` setting is stored. A roster of
+W3C season and reads the ladder summary of all its players in one more
+statement, one row per race; the season costs one statement, two where no
+`current_w3c_season` setting is stored. A profile reads the stale races in one
+more. A roster of
 an event that is over carries the MMR every roster player entered it with on
 the signup race statement, at no statement more.
 
@@ -59,12 +61,12 @@ with the number of teams.
 A relation a list answer reads with selectinload is one more statement, and it
 is the trade these budgets pay for: a joined collection sends each parent row
 once per child row, while a selectin statement reads every distinct row once.
-The fantasy team list adds one for the season of the answer and two for the
-drafted players' stats; the bet list adds four, for the season, the series,
-the match and the match's season. None of the seven grows with the answer.
-Naming the W3C season the drafted players' stats window reads costs one
-statement more, and a second one where no `current_w3c_season` setting is
-stored.
+The fantasy team list adds one for the season of the answer, one for the
+drafted players' season stats and one for the ladder summary of every person
+on it; the bet list adds four, for the season, the series, the match and the
+match's season. None of the seven grows with the answer. Naming the W3C season
+the summary reads costs one statement more, and a second one where no
+`current_w3c_season` setting is stored.
 """
 
 from collections.abc import Iterator
@@ -164,13 +166,13 @@ def league(app: FastAPI, seeded: dict[str, Any]) -> dict[str, Any]:
     return seeded
 
 
-def test_get_series_costs_sixteen_statements(league: dict[str, Any]) -> None:
+def test_get_series_costs_fifteen_statements(league: dict[str, Any]) -> None:
     service = SeriesService()
     with count_statements() as tally:
         series = service.get(league["series_played_id"])
     assert series.player1 is not None
-    assert series.player1.w3c_stats
-    assert tally[0] == 16
+    assert series.player1.race_mmrs
+    assert tally[0] == 15
 
 
 def test_search_for_season_costs_seven_statements(league: dict[str, Any]) -> None:
@@ -189,7 +191,7 @@ def test_search_for_season_costs_seven_statements(league: dict[str, Any]) -> Non
     assert len(series_list) == 2
     assert series_list[0].player1 is not None
     assert series_list[0].player1.name
-    assert series_list[0].player1.w3c_stats == []
+    assert series_list[0].player1.race_mmrs == []
     # one read finds the finished season, one reads the MMR of the time
     assert tally[0] == 7
 
@@ -233,9 +235,9 @@ def test_statement_count_holds_when_the_collections_grow(
     with count_statements() as tally:
         series = service.get(league["series_played_id"])
     assert series.player1 is not None
-    # the newest two W3C seasons ride, whatever the history holds
-    assert len(series.player1.w3c_stats) == 2
-    assert tally[0] == 16
+    # one summary row per race, whatever the history holds
+    assert len(series.player1.race_mmrs) == 1
+    assert tally[0] == 15
 
 
 def test_options_cover_the_player_graph(league: dict[str, Any]) -> None:
@@ -259,7 +261,7 @@ def test_options_cover_the_player_graph(league: dict[str, Any]) -> None:
         public = SeriesPublic.from_series(series)
 
     assert public.player1 is not None
-    assert len(public.player1.w3c_stats) == STATS_PER_PLAYER
+    assert not hasattr(public.player1, "w3c_stats")
     assert len(public.player1.gnl_stats) == 1
     assert len(public.player1.signup_seasons) == 1
 
@@ -278,7 +280,7 @@ def test_fantasy_bets_list_costs_ten_statements(league: dict[str, Any]) -> None:
     assert total is None
     assert bets[0].bet_result == 10
     assert bets[0].user is not None
-    assert bets[0].user.w3c_stats == []
+    assert bets[0].user.race_mmrs == []
     assert tally[0] == 10
 
 
@@ -308,17 +310,17 @@ from sqlmodel import col
 from tests.seed import active, add_fantasy_teams
 
 
-def test_the_fantasy_team_list_costs_nine_statements(league: dict[str, Any]) -> None:
+def test_the_fantasy_team_list_costs_ten_statements(league: dict[str, Any]) -> None:
     """One count, one for the teams, one for their season, two for the standings,
-    one for the season's series, one for the captains' bets and two for the W3C
-    season the stats window reads."""
+    one for the season's series, one for the captains' bets, two for the current
+    W3C season and one for the ladder summary of the captain."""
     service = FantasyTeamService()
     with count_statements() as tally:
         teams, total = service.get_all()
     assert len(teams) == 1
     assert total == 1
     assert teams[0].total_points == 30
-    assert tally[0] == 9
+    assert tally[0] == 10
 
 
 def test_the_fantasy_count_holds_when_the_teams_grow(league: dict[str, Any]) -> None:
@@ -570,17 +572,18 @@ def test_career_options_cover_the_player_graph(league: dict[str, Any]) -> None:
     assert not hasattr(public.user, "w3c_stats")
 
 
-def test_the_user_list_costs_six_statements(league: dict[str, Any]) -> None:
-    """The count, two for the current W3C season, the users with their window
-    W3C rows, one statement for every signup on the page and one for every
-    tag. A signup read per user cost one round trip each."""
+def test_the_user_list_costs_seven_statements(league: dict[str, Any]) -> None:
+    """The count, two for the current W3C season, the users, one statement for
+    every signup on the page, one for every tag and one for the ladder summary
+    of the page. A signup read per user cost one round trip each."""
     service = UserService()
     with count_statements() as tally:
         users, total = service.get_all(limit=50)
     assert total == len(users) == len(league["player_ids"])
     assert all(len(user.signup_seasons) == 1 for user in users)
     assert all(len(user.tags) == 1 for user in users)
-    assert tally[0] == 6
+    assert all(len(user.race_mmrs) == 1 for user in users)
+    assert tally[0] == 7
 
 
 def test_the_caller_lookup_costs_one_statement(league: dict[str, Any]) -> None:
@@ -617,19 +620,19 @@ def test_the_season_list_costs_the_same_when_seasons_grow(
 
 # Rows one call of each route reads on the league fixture, as X-DB-Rows reports it
 ROWS_PER_CALL = {
-    "/series/{series_played_id}": 18,
+    "/series/{series_played_id}": 16,
     "/events/{season_id}/series": 11,
     "/fantasy/bets": 10,
-    "/fantasy/teams": 9,
+    "/fantasy/teams": 10,
     "/stats/career": 4,
     "/stats/career/{player_id}": 3,
-    "/events/{season_id}/teams": 34,
-    "/events/{season_id}/teams/{team_a_id}": 30,
+    "/events/{season_id}/teams": 30,
+    "/events/{season_id}/teams/{team_a_id}": 28,
     "/events/{season_id}/signups": 14,
     # One tag row per player
     "/users": 18,
-    # Every stored W3C season of the player, and one row naming the current one
-    "/users/{player_id}": 17,
+    # One summary row per race, and one row naming the current W3C season
+    "/users/{player_id}": 10,
     "/events": 8,
 }
 # Room for a row or two of drift before the ceiling fails
@@ -647,10 +650,11 @@ def test_rows_per_call_stay_under_the_ceiling(
     assert int(response.headers["X-DB-Rows"]) <= ROWS_PER_CALL[route] + ROWS_MARGIN
 
 
-def test_the_signups_read_costs_five_statements(league: dict[str, Any]) -> None:
-    """The season, two for the current W3C season, the signups with their users
-    and window W3C rows, and one statement for the signups of those users with
-    their seasons. The count does not grow with the number of signups or seasons."""
+def test_the_signups_read_costs_six_statements(league: dict[str, Any]) -> None:
+    """The season, two for the current W3C season, the signups with their users,
+    one statement for the signups of those users with their seasons and one for
+    their ladder summary. The count does not grow with the number of signups or
+    seasons."""
     service = SeasonService(
         user_app_service=UserService(), map_app_service=MapService()
     )
@@ -670,4 +674,4 @@ def test_the_signups_read_costs_five_statements(league: dict[str, Any]) -> None:
     seasons = {row.id: len(row.signup_seasons) for row in rows}
     assert seasons.pop(league["player_ids"][0]) == 2
     assert set(seasons.values()) == {1}
-    assert tally[0] == 5
+    assert tally[0] == 6

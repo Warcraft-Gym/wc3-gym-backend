@@ -22,29 +22,23 @@ from app.models.team_season import DBTeamSeason
 from app.models.user import User, UserPublic
 from app.services import derived, discord_roles
 from app.services.seasons import resolved_tiers
-from app.services.w3c_stats import fill, in_window, w3c_season
+from app.services.w3c_stats import fill, w3c_season
 
 logger = logging.getLogger(__name__)
 
 
-def _reduced_options(current: int) -> list[Any]:
+def _reduced_options() -> list[Any]:
     """Every relation the list answer reads; the other sub-collections stay
-    empty. The drafted players carry their stats so the leaderboard shows MMR
-    and GNL record without one request per player.
+    empty. The drafted players carry their season stats so the leaderboard
+    shows the GNL record without one request per player; their MMR is the
+    ladder summary _fill_mmrs reads.
 
-    The stats stop at the live W3C window, `current` and the one before it,
-    the window app.services.events.race_ratings reads: a stored history
-    reaching back to W3C season 0 would multiply this read for rows no client
-    draws. The single-team read carries every stored season, because it loads
-    no options of its own.
-
-    A player's own collections use selectinload: joining both of them under one
-    player multiplies every team row by both. The season is one row every team
+    A player's season stats use selectinload: a joined collection repeats
+    every team row once per stat row. The season is one row every team
     of it shares, so selectin reads it once instead of once per team. The
     players stay joined, because the captain of a team is often drafted by
     another one, and a later statement leaves that shared player without stats.
     """
-    stats = rel(User.w3c_stats).and_(in_window(current))
     return [
         selectinload(rel(FantasyTeam.season)).noload("*"),
         joinedload(rel(FantasyTeam.drafted_team)).noload("*"),
@@ -53,7 +47,6 @@ def _reduced_options(current: int) -> list[Any]:
         .joinedload(rel(DBFantasyTeamPlayer.users))
         .options(
             selectinload(rel(User.team_seasons)).noload("*"),
-            selectinload(stats),
             noload("*"),
         ),
     ]
@@ -79,7 +72,7 @@ def _fill_mmrs(
 ) -> None:
     """The scores of every team and the ladder summary of every person on it."""
     derived.fill_fantasy_teams(session, teams)
-    fill([user for team in teams for user in _members(team)], current)
+    fill(session, [user for team in teams for user in _members(team)], current)
 
 
 def _check_grind(
@@ -183,7 +176,7 @@ class FantasyTeamService:
             # Offset paging is deterministic only with a fixed order
             statement = (
                 select(FantasyTeam)
-                .options(*_reduced_options(current))
+                .options(*_reduced_options())
                 .order_by(col(FantasyTeam.id))
                 .offset(offset)
                 .limit(limit)
@@ -214,7 +207,7 @@ class FantasyTeamService:
             # Offset paging is deterministic only with a fixed order
             statement = (
                 select(FantasyTeam)
-                .options(*_reduced_options(current))
+                .options(*_reduced_options())
                 .where(filter)
                 .order_by(col(FantasyTeam.id))
                 .offset(offset)

@@ -49,7 +49,7 @@ from app.services.ladder import _w3c_seasons_for, mmr_on
 from app.services.maps import MapService
 from app.services.series_veto import check_order
 from app.services.users import UserService
-from app.services.w3c_stats import fill, in_window, w3c_season
+from app.services.w3c_stats import fill, w3c_season
 
 logger = logging.getLogger(__name__)
 
@@ -616,16 +616,16 @@ class SeasonService:
                 raise NotFoundError("Season not found")
 
             current = w3c_season(session)
-            # The signup row has no gnl_stats, so the link rows stay out; the
-            # W3C rows are the live window
+            # The signup row has no gnl_stats and reads its ladder summary on
+            # its own, so the link rows and W3C rows stay out
             statement = (
                 select(DBUserSeasonSignup)
                 .options(
-                    joinedload(rel(DBUserSeasonSignup.user))
-                    .joinedload(rel(User.w3c_stats).and_(in_window(current)))
-                    .noload("*"),
                     joinedload(rel(DBUserSeasonSignup.user)).noload(
                         rel(User.team_seasons)
+                    ),
+                    joinedload(rel(DBUserSeasonSignup.user)).noload(
+                        rel(User.w3c_stats)
                     ),
                     # The edit dialog of the assign page lists every season of the player
                     joinedload(rel(DBUserSeasonSignup.user))
@@ -661,5 +661,5 @@ class SeasonService:
                         user_public.draft_excluded = signup.draft_excluded
                         user_public.fantasy_tier = tiers.get(signup.user_id)
                         result.append(user_public)
-            fill(result, current)
+            fill(session, result, current)
             return result

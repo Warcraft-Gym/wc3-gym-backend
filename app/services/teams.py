@@ -1,18 +1,15 @@
 import logging
-from collections.abc import Iterable
 from typing import Any
 
 from sqlalchemy import select, true
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as OrmSession
 from sqlalchemy.orm import joinedload, noload, selectinload
-from sqlalchemy.orm.attributes import instance_state, set_committed_value
 from sqlmodel import col
 
 from app.core.db import Session, rel
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.core.query import QueryElement, QueryUtil
-from app.models.base import ident
 from app.models.league import League
 from app.models.relationships import DBTeamSeasonCaptain
 from app.models.season import Season, progress_by_seasons
@@ -20,10 +17,9 @@ from app.models.team import Team, TeamCreate, TeamPublic, TeamUpdate
 from app.models.team_season import DBTeamSeason
 from app.models.user import User, UserPublic
 from app.models.user_team_season import DBUserTeamSeason
-from app.models.w3c_stats import W3CStats
 from app.services import availability, blob, derived, discord_roles
 from app.services.users import UserService
-from app.services.w3c_stats import fill, in_window, w3c_season
+from app.services.w3c_stats import fill, w3c_season
 
 logger = logging.getLogger(__name__)
 
@@ -97,8 +93,8 @@ def _public(session: OrmSession, team: Team, entered: bool = False) -> TeamPubli
 def _season_loads(season_id: int) -> list[Any]:
     """Loader options for one season of a team: roster, captains and stats.
 
-    The W3C rows are left to _load_w3c_stats, since a captain is often a
-    roster player too and a loader on each path reads his rows twice.
+    The ladder summary is left to _fill_mmrs, which reads a player once
+    however many seats he holds.
     """
     roster = rel(Team.user_seasons).and_(col(DBUserTeamSeason.season_id) == season_id)
     info = rel(Team.season_info).and_(col(DBTeamSeason.season_id) == season_id)
@@ -124,37 +120,10 @@ def _season_loads(season_id: int) -> list[Any]:
     ]
 
 
-def _load_w3c_stats(session: OrmSession, teams: Iterable[Team], current: int) -> None:
-    """The live window W3C rows of every roster player and captain, in one
-    statement.
-
-    Each user is read once, however many seats he holds across the teams.
-    """
-    users = {
-        ident(user): user
-        for team in teams
-        for user in (
-            *(seat.user for seat in team.user_seasons),
-            *(seat.user for seat in team.captain_seasons),
-        )
-        if user is not None and "w3c_stats" in instance_state(user).unloaded
-    }
-    if not users:
-        return
-    rows: dict[int, list[W3CStats]] = {user_id: [] for user_id in users}
-    for stat in session.scalars(
-        select(W3CStats)
-        .where(col(W3CStats.user_id).in_(users), in_window(current))
-        .order_by(col(W3CStats.id))
-    ):
-        rows[stat.user_id].append(stat)
-    for user_id, user in users.items():
-        set_committed_value(user, "w3c_stats", rows[user_id])
-
-
-def _fill_mmrs(teams: list[TeamPublic], current: int) -> None:
+def _fill_mmrs(session: OrmSession, teams: list[TeamPublic], current: int) -> None:
     """The ladder summary of every roster player and captain."""
     fill(
+        session,
         [
             user
             for team in teams
@@ -411,9 +380,8 @@ class TeamService:
             if not team:
                 raise NotFoundError("Team not found")
             current = w3c_season(session)
-            _load_w3c_stats(session, [team], current)
             public = _public(session, team, entered=True)
-            _fill_mmrs([public], current)
+            _fill_mmrs(session, [public], current)
             # An event without scheduling asks nobody, so every list stays empty
             if event.scheduling_enabled:
                 _fill_out_rounds(session, public, team_id, season_id)
@@ -534,10 +502,9 @@ class TeamService:
             )
             teams = session.scalars(statement).unique().all()
             current = w3c_season(session)
-            _load_w3c_stats(session, teams, current)
             result = [TeamPublic.from_team(team) for team in teams]
             _fill(session, result, entered=True)
-            _fill_mmrs(result, current)
+            _fill_mmrs(session, result, current)
             return result
 
     def get_teams_season_basic(

@@ -91,10 +91,10 @@ from app.models.team_season import DBTeamSeason
 from app.models.types import utcnow
 from app.models.user import User, UserPublic
 from app.models.user_team_season import DBUserTeamSeason
-from app.models.w3c_stats import W3CStats
+from app.models.w3c_stats import W3CStats, W3CStatsPublic
 from app.services import stage_engine
 from app.services.battle_tags import attach_tag, person_by_tag
-from app.services.w3c_stats import fill, in_window, w3c_season, window
+from app.services.w3c_stats import in_window, summarize, w3c_season, window
 
 # The shape of a battle tag: a name, then # and the player's number
 BATTLE_TAG = re.compile(r"[^\s#]+#\d{3,8}")
@@ -1672,9 +1672,13 @@ def _from_previous_stage(
 
 
 def _summarized(user: User | None, current: int) -> UserPublic | None:
-    """The user of an entrant row, with his ladder summary."""
-    public = UserPublic.from_user(user) if user else None
-    fill([public], current)
+    """The user of an entrant row, with his ladder summary from the window rows
+    _users_for loaded for his rating."""
+    if user is None:
+        return None
+    public = UserPublic.from_user(user)
+    rows = [W3CStatsPublic.model_validate(stat) for stat in user.w3c_stats]
+    public.race_mmrs, public.main_race = summarize(rows, current)
     return public
 
 

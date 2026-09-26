@@ -5,10 +5,12 @@ Eligibility, ratings and fantasy read the window alone; a profile read may also
 show a race with no window row from its newest older row, flagged stale.
 """
 
-from collections.abc import Iterable
+from collections.abc import Collection, Iterable
+from typing import Any
 
-from sqlalchemy import ColumnElement, func, select
+from sqlalchemy import ColumnElement, ColumnExpressionArgument, func, select
 from sqlalchemy.orm import Session as OrmSession
+from sqlalchemy.orm import aliased
 from sqlmodel import col
 
 from app.models.settings import Settings
@@ -51,7 +53,7 @@ def summarize(
     row with a rating, else its newest window row, and the games of every
     window row; with `stale`, a race with none answers its
     newest older row, flagged. Window races come first by mmr, then stale races
-    newest first. The main race is the window race with the top mmr among
+    newest first, ties by race name. The main race is the window race with the top mmr among
     those with MAIN_RACE_GAMES games, else None.
     """
     by_race: dict[str | None, list[W3CStatsPublic]] = {}
@@ -70,8 +72,10 @@ def summarize(
         elif stale and older:
             newest = max(older, key=lambda row: row.wc3_season)
             old.append(_race_mmr(race, newest, newest.games, stale=True))
-    live.sort(key=lambda row: row.mmr if row.mmr is not None else -1, reverse=True)
-    old.sort(key=lambda row: row.wc3_season, reverse=True)
+    live.sort(
+        key=lambda row: (-(row.mmr if row.mmr is not None else -1), row.race or "")
+    )
+    old.sort(key=lambda row: (-row.wc3_season, row.race or ""))
     main = next(
         (
             row.race
@@ -97,10 +101,94 @@ def _race_mmr(
     )
 
 
+def summaries(
+    session: OrmSession, user_ids: Collection[int], current: int, stale: bool = False
+) -> dict[int, tuple[list[RaceMmr], str | None]]:
+    """The summary of each user, from one row per race the database reduces.
+
+    One statement reads the window; `stale` adds one for the races with no
+    window row. A user with no row is left out.
+    """
+    if not user_ids:
+        return {}
+    season = col(W3CStats.wc3_season)
+    by_race = (col(W3CStats.user_id), col(W3CStats.race))
+    rows = _newest_per_race(
+        session,
+        in_window(current),
+        func.sum(func.coalesce(col(W3CStats.games), 0))
+        .over(partition_by=by_race)
+        .label("games"),
+        (col(W3CStats.mmr).is_not(None).desc(), season.desc()),
+        user_ids,
+    )
+    if stale:
+        live = aliased(W3CStats)
+        rows += _newest_per_race(
+            session,
+            (season < current - 1)
+            & ~select(col(live.id))
+            .where(
+                col(live.user_id) == col(W3CStats.user_id),
+                col(live.race).is_not_distinct_from(col(W3CStats.race)),
+                col(live.wc3_season).in_(window(current)),
+            )
+            .exists(),
+            col(W3CStats.games).label("games"),
+            (season.desc(),),
+            user_ids,
+        )
+    by_user: dict[int, list[W3CStatsPublic]] = {}
+    for row in rows:
+        by_user.setdefault(row.user_id, []).append(row)
+    return {
+        user_id: summarize(stats, current, stale) for user_id, stats in by_user.items()
+    }
+
+
+def _newest_per_race(
+    session: OrmSession,
+    where: ColumnElement[bool],
+    games: ColumnElement[Any],
+    order: tuple[ColumnExpressionArgument[Any], ...],
+    user_ids: Collection[int],
+) -> list[W3CStatsPublic]:
+    """The first row by `order` of each user and race, carrying `games` as its games."""
+    ranked = (
+        select(
+            col(W3CStats.id),
+            col(W3CStats.user_id),
+            col(W3CStats.race),
+            col(W3CStats.wc3_season),
+            col(W3CStats.mmr),
+            col(W3CStats.wins),
+            col(W3CStats.losses),
+            games,
+            func.row_number()
+            .over(
+                partition_by=(col(W3CStats.user_id), col(W3CStats.race)),
+                order_by=order,
+            )
+            .label("rank"),
+        )
+        .where(col(W3CStats.user_id).in_(user_ids), where)
+        .subquery()
+    )
+    statement = select(ranked).where(ranked.c.rank == 1)
+    return [
+        W3CStatsPublic.model_validate(row)
+        for row in session.execute(statement).mappings()
+    ]
+
+
 def fill(
-    users: Iterable[UserListPublic | None], current: int, stale: bool = False
+    session: OrmSession,
+    users: Iterable[UserListPublic | None],
+    current: int,
+    stale: bool = False,
 ) -> None:
-    """The summary of every user, from the w3c_stats rows the read loaded."""
-    for user in users:
-        if user is not None:
-            user.race_mmrs, user.main_race = summarize(user.w3c_stats, current, stale)
+    """The summary of every user, read in one statement, two with `stale`."""
+    present = [user for user in users if user is not None]
+    found = summaries(session, {user.id for user in present}, current, stale)
+    for user in present:
+        user.race_mmrs, user.main_race = found.get(user.id) or ([], None)
