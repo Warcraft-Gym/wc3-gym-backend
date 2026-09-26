@@ -20,7 +20,6 @@ from app.models.map import Map
 from app.models.relationships import round_row
 from app.models.series import SeriesPublic
 from app.models.user import User, UserPublic
-from app.models.w3c_stats import W3CStats, W3CStatsPublic
 from app.services import discord, replays
 from app.services.commands.base import (
     cast_link,
@@ -32,7 +31,7 @@ from app.services.commands.base import (
 )
 from app.services.commands.veto import board_link, ping
 from app.services.series_veto import SeriesVetoService
-from app.services.w3c_stats import in_window, summarize, w3c_season
+from app.services.w3c_stats import summaries, w3c_season
 
 COLOR = 0x4A4DB8
 # Discord takes 6000 characters over a message's embeds and 4096 in one description
@@ -51,21 +50,14 @@ def ratings(rows: Sequence[SeriesPublic]) -> Ratings:
     if not ids:
         return Ratings({}, None)
     with Session() as session:
-        current = w3c_season(session)
-        stats: dict[int, list[W3CStatsPublic]] = {}
-        for stat in session.scalars(
-            select(W3CStats).where(col(W3CStats.user_id).in_(ids), in_window(current))
-        ):
-            stats.setdefault(stat.user_id, []).append(
-                W3CStatsPublic.model_validate(stat)
-            )
+        found = summaries(session, ids, w3c_season(session))
         synced = session.scalar(
             select(func.min(col(User.w3c_synced_at))).where(col(User.id).in_(ids))
         )
     mmr: dict[tuple[int, Race | None], int] = {
         (user_id, Race(row.race)): row.mmr
-        for user_id, rows_of in stats.items()
-        for row in summarize(rows_of, current)[0]
+        for user_id, (race_mmrs, _) in found.items()
+        for row in race_mmrs
         if row.race and row.mmr is not None
     }
     if synced and synced.tzinfo is None:

@@ -21,7 +21,7 @@ from app.models.types import (
 )
 from app.models.user_battle_tag import UserBattleTag, UserBattleTagPublic
 from app.models.user_team_season import UserTeamSeasonStatsPublic
-from app.models.w3c_stats import RaceMmr, W3CStats, W3CStatsPublic
+from app.models.w3c_stats import RaceMmr, W3CStats
 
 if TYPE_CHECKING:
     from app.models.player_career_stats import PlayerCareerStats
@@ -203,10 +203,6 @@ class UserReduced(UserBase, PublicModel):
 class UserListPublic(UserReduced):
     """The user of a list answer: the scalars, the ladder summary and the signups."""
 
-    # The window rows the summary is built from, never served: race_mmrs serves them
-    w3c_stats: Annotated[list[W3CStatsPublic], NoneToList] = Field(
-        default=[], exclude=True
-    )
     # The ladder summary per race, from app.services.w3c_stats.fill; `mmr` is the profile field
     race_mmrs: list[RaceMmr] = []
     # The race with the top window MMR and 10 or more window games, else null
@@ -231,9 +227,6 @@ class UserListPublic(UserReduced):
     @classmethod
     def from_user(cls, user: User) -> Self:
         row = cls.from_user_reduced(user)
-        row.w3c_stats = [
-            W3CStatsPublic.model_validate(stat) for stat in (user.w3c_stats or [])
-        ]
         row.signup_seasons = [
             SeasonPublic.from_season_reduced(
                 signup.season, signup.race, signup.played_as

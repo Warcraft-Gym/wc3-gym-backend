@@ -4,7 +4,8 @@
 the current W3C season and the one before it: per race the newest window row's
 mmr and the window's games, and on a profile a race with no window row from its
 newest older row, flagged stale. The main race is the window race with the top
-mmr among those with 10 or more games. A list read loads the window rows only.
+mmr among those with 10 or more games. `w3c_stats.summaries` answers the same
+from one row per race the database reduces, so no read loads the raw rows.
 A roster of an event that is over carries the MMR each player entered it with.
 """
 
@@ -12,13 +13,14 @@ from typing import Any
 
 import pytest
 from httpx2 import Client
+from sqlmodel import select
 
 from app.core.db import Session
 from app.models.enums import Race
 from app.models.relationships import DBUserSeasonSignup
 from app.models.w3c_stats import W3CStats, W3CStatsPublic
 from app.services.events import race_ratings
-from app.services.w3c_stats import summarize
+from app.services.w3c_stats import summaries, summarize
 from tests.test_series_row_mmr import (  # noqa: F401  # fixtures
     finished,
     play,
@@ -130,6 +132,63 @@ def stats(seeded: dict[str, Any]) -> list[int]:
                 )
         session.commit()
     return ids
+
+
+def store(user_id: int, *stats: tuple[str, int, int | None, int]) -> None:
+    with Session.begin() as session:
+        for race, season, mmr, games in stats:
+            session.add(
+                W3CStats(
+                    user_id=user_id,
+                    race=Race(race),
+                    wc3_season=season,
+                    mmr=mmr,
+                    games=games,
+                )
+            )
+
+
+def test_the_sql_summary_matches_the_row_summary(stats: list[int]) -> None:
+    """The rows the database reduces answer what the full rows answer."""
+    with Session() as session:
+        stored = [
+            W3CStatsPublic.model_validate(row)
+            for row in session.scalars(select(W3CStats))
+        ]
+        for stale in (False, True):
+            found = summaries(session, stats, CURRENT, stale)
+            for user_id in stats:
+                full = [row for row in stored if row.user_id == user_id]
+                assert found.get(user_id, ([], None)) == summarize(full, CURRENT, stale)
+
+
+def test_the_sql_summary_takes_the_rated_row_of_an_older_window_season(
+    seeded: dict[str, Any],
+) -> None:
+    user_id = seeded["player_ids"][0]
+    store(user_id, ("HU", 25, None, 5), ("HU", 24, 1750, 15))
+    with Session() as session:
+        races, main = summaries(session, [user_id], CURRENT)[user_id]
+    assert [(row.race, row.wc3_season, row.mmr, row.games) for row in races] == [
+        ("HU", 24, 1750, 20)
+    ]
+    assert main == "HU"
+
+
+def test_the_sql_summary_sums_the_games_of_both_window_seasons(
+    seeded: dict[str, Any],
+) -> None:
+    user_id = seeded["player_ids"][0]
+    store(user_id, ("OC", 25, 1600, 7), ("OC", 24, 1500, 8), ("OC", 23, 1400, 90))
+    with Session() as session:
+        races, main = summaries(session, [user_id], CURRENT)[user_id]
+    assert [(row.race, row.wc3_season, row.mmr, row.games) for row in races] == [
+        ("OC", 25, 1600, 15)
+    ]
+    assert main == "OC"
+    # a live race carries no stale row from its older seasons
+    with Session() as session:
+        assert summaries(session, [user_id], CURRENT, stale=True)[user_id][0] == races
 
 
 def by_key(ids: list[int], races: dict[int, list[dict[str, Any]]]) -> dict[str, Any]:

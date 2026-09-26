@@ -181,6 +181,17 @@ _BEFORE = "w3c_ladder_matches.start_time DESC, w3c_ladder_matches.id DESC"
 MMR_AT = [_AFTER, _AFTER, _AFTER, _BEFORE, _BEFORE]
 MMR_OF_THE_TIME = MMR_AT * 2
 
+
+def summary(players: int) -> str:
+    """The window ORDER BY of the ladder summary read, up to the statement end."""
+    ids = ", ".join("?" * players)
+    return (
+        "w3cstats.mmr IS NOT NULL DESC, w3cstats.wc3_season DESC) AS rank"
+        f" FROM w3cstats WHERE w3cstats.user_id IN ({ids})"
+        " AND w3cstats.wc3_season IN (?, ?)) AS anon_1 WHERE anon_1.rank = ?"
+    )
+
+
 # The ORDER BY every route writes when no sort parameter is sent
 DEFAULT_ORDER = {
     # Newest first; the collection statements order the rounds and the map pool
@@ -190,10 +201,7 @@ DEFAULT_ORDER = {
         "event_round.number",
         "map_season.position",
     ],
-    "GET /events/{season_id}/signups": [
-        "user_season_signup.user_id",
-        "anon_1.user_id",
-    ],
+    "GET /events/{season_id}/signups": ["user_season_signup.user_id"],
     "POST /matches/search?query=id > 0": ["matches.id"],
     "POST /series/search?query=id > 0": ["series.id", *MMR_OF_THE_TIME],
     "GET /events/{season_id}/series": ["series.id", *MMR_OF_THE_TIME],
@@ -214,33 +222,38 @@ DEFAULT_ORDER = {
         "teams.id",
         "anon_1.id",
         "team_season_captain.user_id",
-        "w3cstats.id",
         *MMR_AT,
+        summary(4),
     ],
     "GET /events/{season_id}/teams/basic": ["teams.id", "anon_1.id"],
     "GET /users": [
         "users.id",
-        "anon_1.id",
         "user_battle_tag.is_active DESC, user_battle_tag.id",
+        summary(4),
     ],
     "POST /users/search?query=id > 0": [
         "users.id",
-        "anon_1.id",
         "user_battle_tag.is_active DESC, user_battle_tag.id",
+        summary(4),
     ],
     "GET /maps": ["maps.id"],
     "POST /maps/search?query=id > 0": ["maps.id"],
-    "GET /fantasy/teams": ["fantasy_teams.id", "anon_1.id"],
-    "POST /fantasy/teams/search?query=id > 0": ["fantasy_teams.id", "anon_1.id"],
+    "GET /fantasy/teams": ["fantasy_teams.id", "anon_1.id", summary(1)],
+    "POST /fantasy/teams/search?query=id > 0": [
+        "fantasy_teams.id",
+        "anon_1.id",
+        summary(1),
+    ],
     "GET /fantasy/bets": ["fantasy_bets.id"],
     "POST /fantasy/bets/search?query=id > 0": ["fantasy_bets.id"],
     "GET /draft-series/match/{match_id}": ["draft_series.id"],
-    # The first two order the user lookup the route resolves the session with;
-    # then the answers and the rounds, which the availability derive reads again
+    # The first three order the user lookup the route resolves the session with
+    # and its ladder summary; then the answers and the rounds, which the
+    # availability derive reads again
     "GET /player-series": [
         "users.id",
-        "anon_1.id",
         "user_battle_tag.is_active DESC, user_battle_tag.id",
+        summary(1),
         "series.id",
         *MMR_OF_THE_TIME,
         "round_availability.user_id, round_availability.playday",
