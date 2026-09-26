@@ -19,7 +19,7 @@ from app.models.fantasy_team import (
 from app.models.relationships import DBFantasyTeamPlayer, DBUserSeasonSignup
 from app.models.season import Season, tier_count
 from app.models.team_season import DBTeamSeason
-from app.models.user import User, UserPublic
+from app.models.user import User
 from app.services import derived, discord_roles
 from app.services.seasons import resolved_tiers
 from app.services.w3c_stats import fill, w3c_season
@@ -52,27 +52,16 @@ def _reduced_options() -> list[Any]:
     ]
 
 
-def _members(team: FantasyTeamPublic) -> list[UserPublic | None]:
-    """The captain, the drafted players and the drafted team's seats of one team."""
-    drafted = team.drafted_team
-    seats = (
-        [*drafted.player_by_season.values(), *drafted.captains_by_season.values()]
-        if drafted
-        else []
-    )
-    return [
-        team.captain,
-        *team.drafted_players,
-        *(user for users in seats for user in users),
-    ]
-
-
 def _fill_mmrs(
     session: OrmSession, teams: list[FantasyTeamPublic], current: int
 ) -> None:
     """The scores of every team and the ladder summary of every person on it."""
     derived.fill_fantasy_teams(session, teams)
-    fill(session, [user for team in teams for user in _members(team)], current)
+    fill(
+        session,
+        [user for team in teams for user in (team.captain, *team.drafted_players)],
+        current,
+    )
 
 
 def _check_grind(
@@ -162,7 +151,6 @@ class FantasyTeamService:
             if not fteam:
                 raise NotFoundError("Fantasy Team not found")
             public = FantasyTeamPublic.from_fantasy_team(fteam)
-            derived.fill_standings(session, [public.drafted_team])
             _fill_mmrs(session, [public], w3c_season(session))
             return public
 

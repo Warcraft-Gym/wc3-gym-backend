@@ -8,7 +8,7 @@ from sqlmodel import Field, Relationship, SQLModel, col
 
 from app.models.base import DBModel, PublicModel, ident
 from app.models.enums import Race
-from app.models.season import SeasonPublic
+from app.models.season import SeasonSummaryPublic
 from app.models.types import (
     EnumValue,
     KnownTimeZone,
@@ -251,7 +251,7 @@ class UserListPublic(UserSummaryPublic):
     gnl_stats: Annotated[list[UserTeamSeasonStatsPublic], NoneToList] = Field(
         default=[], exclude=True
     )
-    signup_seasons: Annotated[list[SeasonPublic], NoneToList] = []
+    signup_seasons: Annotated[list[SeasonSummaryPublic], NoneToList] = []
     # Set by hand on the signup row; an unpinned tier derives from the MMR
     fantasy_tier_pinned: bool = False
     draft_position: int | None = None
@@ -262,7 +262,7 @@ class UserListPublic(UserSummaryPublic):
     def from_user(cls, user: User, event_id: int | None = None) -> Self:
         row = super().from_user(user, event_id)
         row.signup_seasons = [
-            SeasonPublic.from_season_reduced(
+            SeasonSummaryPublic.from_season(
                 signup.season, signup.race, signup.played_as
             )
             for signup in (user.signup_seasons or [])

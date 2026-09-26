@@ -33,6 +33,11 @@ names the event and the league of every season the answer holds, and one more
 the race every player on a roster registered on for the season of that roster.
 Neither grows with the answer.
 
+A team roster reads one event: app.services.teams.roster_loads bounds its
+players, its captains and its row of the event, and the players and the
+captains each pay two statements more, their team row in the event and their
+tags. A roster write answers through the event team read after its commit.
+
 A user, a team roster or a full series answer also derives the season record of
 every player it carries, which costs two more statements: one groups the series
 of those players by season, one names the race of every opponent they met.
@@ -104,6 +109,7 @@ from app.services.draft_series import DraftSeriesService
 from app.services.fantasy_bets import FantasyBetService
 from app.services.fantasy_teams import FantasyTeamService
 from app.services.maps import MapService
+from app.services.matches import MatchService
 from app.services.player_career_stats import PlayerCareerStatsService
 from app.services.seasons import SeasonService
 from app.services.series import SeriesService
@@ -295,10 +301,11 @@ def test_a_draft_write_answers_through_the_read(league: dict[str, Any]) -> None:
     assert tally[0] == 7
 
 
-def test_one_bet_costs_thirteen_statements(league: dict[str, Any]) -> None:
+def test_one_bet_costs_eleven_statements(league: dict[str, Any]) -> None:
     """The bet with its series, match and season, the casts, the veto steps,
-    the season maps, three for the four player summaries, and the derived
-    points, signup races and season record of the series players."""
+    three for the four player summaries, and the derived points, signup races
+    and season record of the series players. The season is its summary, so
+    its maps stay unread."""
     service = FantasyBetService()
     bets, _ = service.get_all()
     with count_statements() as tally:
@@ -309,11 +316,11 @@ def test_one_bet_costs_thirteen_statements(league: dict[str, Any]) -> None:
     assert bet.series.player1 is not None
     assert bet.series.player1.record is not None
     assert bet.series.player1.record.games == 1
-    assert tally[0] == 13
+    assert tally[0] == 11
 
 
 def test_a_bet_write_answers_through_the_read(league: dict[str, Any]) -> None:
-    """The settings, the write, then the thirteen of the single read."""
+    """The settings, the write, then the eleven of the single read."""
     players = league["player_ids"]
     create = FantasyBetCreate(
         season_id=league["season_id"],
@@ -326,7 +333,7 @@ def test_a_bet_write_answers_through_the_read(league: dict[str, Any]) -> None:
         bet = FantasyBetService().add(create)
     assert bet.winner is not None
     assert bet.winner.record is not None
-    assert tally[0] == 14
+    assert tally[0] == 12
 
 
 def test_the_entrants_read_costs_twelve_statements(
@@ -578,58 +585,144 @@ def add_teams_to_the_season(season_id: int, count: int) -> None:
         session.commit()
 
 
-def test_the_teams_of_a_season_cost_twelve_statements(
+def test_the_teams_of_a_season_cost_thirteen_statements(
     league: dict[str, Any],
 ) -> None:
-    """Four for the teams and their people, two for the current W3C season,
-    two for the standings, one for the name and league of every season, one
-    for the signup race of every player and, on the finished season, the MMR
-    he entered it with, and two for his season record."""
+    """One for the teams with their roster, one for the captains, one for the
+    players' team row in the event, one for their tags, two for the current
+    W3C season, two for the standings, one for the name and league of every
+    season, one for the signup race of every player and, on the finished
+    season, the MMR he entered it with, and two for his season record."""
     service = TeamService(UserService())
     with count_statements() as tally:
         teams = service.get_teams_season(league["season_id"])
     assert len(teams) == 2
     assert teams[0].seasons_info[0].final_score is not None
     assert teams[0].seasons_info[0].name == "Season 1"
-    assert tally[0] == 12
+    assert tally[0] == 13
 
 
 def test_the_standings_count_holds_when_the_teams_grow(
     league: dict[str, Any],
 ) -> None:
-    """Four more teams in the season, the same twelve statements."""
+    """Four more teams in the season, the same thirteen statements."""
     add_teams_to_the_season(league["season_id"], 4)
 
     service = TeamService(UserService())
     with count_statements() as tally:
         teams = service.get_teams_season(league["season_id"])
     assert len(teams) == 6
-    assert tally[0] == 12
+    assert tally[0] == 13
 
 
-def test_a_team_with_two_captains_costs_seven_statements(
-    league: dict[str, Any],
-) -> None:
-    """One for the team and its captains, one for its seasons, one per captain
-    for his season stats, two for the standings and one for the season labels;
-    the captains' ladder rows and signups are never read."""
+def add_captains_and_a_second_season(league: dict[str, Any]) -> int:
+    """Two captains of team A in the season, and a second season of the league
+    in which team A fields two players and a captain. Returns that season's id."""
     from app.models.relationships import DBTeamSeasonCaptain
+    from app.models.team_season import DBTeamSeason
+    from app.models.user_team_season import DBUserTeamSeason
 
-    team_id = league["team_a_id"]
+    team_id, players = league["team_a_id"], league["player_ids"]
     with Session.begin() as session:
-        for user_id in league["player_ids"][:2]:
+        for user_id in players[:2]:
             session.add(
                 DBTeamSeasonCaptain(
                     team_id=team_id, season_id=league["season_id"], user_id=user_id
                 )
             )
+        other = Season(
+            name="Season 2", series_per_round=1, league_id=league["league_id"]
+        )
+        session.add(other)
+        session.flush()
+        other_id = ident(other)
+        session.add(DBTeamSeason(team_id=team_id, season_id=other_id))
+        for user_id in players[:2]:
+            session.add(
+                DBUserTeamSeason(user_id=user_id, team_id=team_id, season_id=other_id)
+            )
+        session.add(
+            DBTeamSeasonCaptain(team_id=team_id, season_id=other_id, user_id=players[0])
+        )
+    return other_id
+
+
+def test_an_event_team_costs_twenty_one_statements(league: dict[str, Any]) -> None:
+    """Two for the event and the team, the thirteen of the season list, two for
+    the captains' team row and tags, and four for the rounds its players sit
+    out. The other season's rows stay unread: the roster, the captains and the
+    records hold this event alone."""
+    add_captains_and_a_second_season(league)
     service = TeamService(UserService())
     with count_statements() as tally:
-        team = service.get(team_id)
+        team = service.get_with_nested_users_by_season(
+            league["team_a_id"], league["season_id"]
+        )
+    assert list(team.player_by_season) == [league["season_id"]]
+    assert list(team.captains_by_season) == [league["season_id"]]
+    assert [info.season_id for info in team.seasons_info] == [league["season_id"]]
     captains = team.captains_by_season[league["season_id"]]
     assert len(captains) == 2
-    assert all(not c.race_mmrs and not c.signup_seasons for c in captains)
-    assert tally[0] == 7
+    assert all(c.record and c.gnl_stats == [c.record] for c in captains)
+    assert tally[0] == 21
+
+
+def test_a_league_team_costs_five_statements(league: dict[str, Any]) -> None:
+    """One for the team, one for its seasons, two for the standings and one for
+    the season labels; no roster, captain or player is read."""
+    add_captains_and_a_second_season(league)
+    service = TeamService(UserService())
+    with count_statements() as tally:
+        team = service.get(league["team_a_id"], league["league_id"])
+    assert len(team.seasons_info) == 2
+    assert not hasattr(team, "player_by_season")
+    assert tally[0] == 5
+
+
+def test_a_roster_write_answers_through_the_event_read(
+    client: Client, league: dict[str, Any], auth_headers: dict[str, str]
+) -> None:
+    """The players and the captains writes pay their own statements and the
+    Discord role sync, then the twenty-one of the event team read after the
+    commit: one event's roster, never every season's."""
+    add_captains_and_a_second_season(league)
+    path = f"/events/{league['season_id']}/teams/{league['team_a_id']}"
+    with count_statements() as tally:
+        response = client.post(
+            f"{path}/players",
+            json={"player_ids": [league["player_ids"][2]]},
+            headers=auth_headers,
+        )
+    assert response.status_code == 200
+    body = response.json()
+    assert list(body["player_by_season"]) == [str(league["season_id"])]
+    assert len(body["player_by_season"][str(league["season_id"])]) == 3
+    assert tally[0] == 36
+    assert int(response.headers["X-DB-Rows"]) <= 53 + ROWS_MARGIN
+
+    with count_statements() as tally:
+        response = client.put(
+            f"{path}/captains",
+            json={"captain_ids": [league["player_ids"][0]]},
+            headers=auth_headers,
+        )
+    assert response.status_code == 200
+    body = response.json()
+    assert list(body["captains_by_season"]) == [str(league["season_id"])]
+    assert body["discord_role_missing"] == []
+    assert tally[0] == 45
+    assert int(response.headers["X-DB-Rows"]) <= 69 + ROWS_MARGIN
+
+
+def test_a_match_costs_three_statements(league: dict[str, Any]) -> None:
+    """The match with its teams, season and map, and two for its score; the
+    season is its summary, so neither its maps nor its rounds are read."""
+    service = MatchService()
+    with count_statements() as tally:
+        match = service.get(league["match_id"])
+    assert match.season is not None
+    assert match.season.round_count == 4
+    assert tally[0] == 3
 
 
 def test_the_season_labels_cost_one_statement(league: dict[str, Any]) -> None:
@@ -747,8 +840,13 @@ ROWS_PER_CALL = {
     "/fantasy/teams": 10,
     "/stats/career": 4,
     "/stats/career/{player_id}": 3,
-    "/events/{season_id}/teams": 30,
-    "/events/{season_id}/teams/{team_a_id}": 28,
+    # One tag row per player
+    "/events/{season_id}/teams": 34,
+    "/events/{season_id}/teams/{team_a_id}": 30,
+    "/leagues/{league_id}/teams/{team_a_id}": 8,
+    "/matches/{match_id}": 3,
+    # The drafted team is its summary, so no roster row is read
+    "/fantasy/teams/{fantasy_team_id}": 14,
     # One tag row per player
     "/events/{season_id}/signups": 18,
     # One tag row per player

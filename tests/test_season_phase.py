@@ -142,17 +142,7 @@ def test_the_season_signups_open_flag_gates_the_season_not_the_profile(
         assert session.get(DBUserSeasonSignup, key) is not None
 
 
-@pytest.mark.parametrize(
-    "build",
-    [
-        SeasonPublic.from_season,
-        SeasonPublic.from_season_reduced,
-        SeasonPublic.from_season_without_maps,
-    ],
-)
-def test_every_season_answer_carries_the_flags_and_the_window(
-    build: Callable[..., Any],
-) -> None:
+def test_the_season_answer_carries_the_flags_and_the_window() -> None:
     season = Season(
         id=1,
         name="Cup",
@@ -161,6 +151,6 @@ def test_every_season_answer_carries_the_flags_and_the_window(
         scheduling_enabled=False,
         checkin_days=5,
     )
-    public = build(season)
+    public = SeasonPublic.from_season(season)
     assert (public.signups_open, public.scheduling_enabled) == (False, False)
     assert public.checkin_days == 5

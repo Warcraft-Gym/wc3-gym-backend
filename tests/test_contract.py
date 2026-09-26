@@ -118,7 +118,6 @@ def test_match_by_id_carries_the_season_length(
     match = get_json(client, f"/matches/{seeded['match_id']}")
     assert match["season"]["id"] == seeded["season_id"]
     assert match["season"]["round_count"] == 4
-    assert match["season"]["series_per_round"] == 2
 
 
 def test_seasons_list(client: Client, seeded: dict[str, Any]) -> None:
@@ -221,9 +220,9 @@ def test_fantasy_bets_list_keeps_every_key_with_empty_collections(
     assert bet["series"]["match"]["playday"] == 1
     assert bet["series"]["match"]["team1"]["name"] == "Alpha"
 
-    # The collections inside the embedded models are empty.
-    assert bet["season"]["maps"] == []
-    assert bet["season"]["user_signup"] == []
+    # The season is its summary, which holds no collections.
+    assert "maps" not in bet["season"]
+    assert "user_signup" not in bet["season"]
     for user in (
         bet["user"],
         bet["winner"],
@@ -240,7 +239,7 @@ def test_fantasy_bets_list_keeps_every_key_with_empty_collections(
 def test_fantasy_bet_by_id_keeps_the_full_graph(
     client: Client, seeded: dict[str, Any]
 ) -> None:
-    """The single-bet route still answers the nested collections."""
+    """The single-bet route answers the players' summaries with their record."""
     with Session() as session:
         session.add(
             W3CStats(
@@ -254,7 +253,7 @@ def test_fantasy_bet_by_id_keeps_the_full_graph(
     assert set(bet) == BET_KEYS
     assert "w3c_stats" not in bet["user"]
     assert len(bet["user"]["gnl_stats"]) == 1
-    assert [m["shortname"] for m in bet["season"]["maps"]] == ["CH"]
+    assert "maps" not in bet["season"]
 
 
 def test_fantasy_teams(client: Client, seeded: dict[str, Any]) -> None:
@@ -314,15 +313,16 @@ def test_series_by_id_keeps_the_full_graph(
 def test_fantasy_teams_list_keeps_every_key_with_empty_collections(
     client: Client, seeded: dict[str, Any]
 ) -> None:
-    """The list keeps the nested objects; their sub-collections are empty."""
+    """The list keeps the nested objects; the season and the drafted team are
+    their summaries, which hold no collections."""
     team = get_json(client, "/fantasy/teams")[0]
     assert team["captain"]["name"]
     assert team["season"]["name"]
     assert team["drafted_team"]["name"]
     assert team["captain"]["signup_seasons"] == []
-    assert team["season"]["maps"] == []
-    assert team["drafted_team"]["player_by_season"] == {}
-    assert team["drafted_team"]["seasons_info"] == []
+    assert "maps" not in team["season"]
+    assert "player_by_season" not in team["drafted_team"]
+    assert "seasons_info" not in team["drafted_team"]
 
 
 def test_teams_list_keeps_scalars_and_standings(
@@ -334,5 +334,5 @@ def test_teams_list_keeps_scalars_and_standings(
     assert "long_name" in team
     assert isinstance(team["seasons_info"], list) and team["seasons_info"]
     assert "final_score" in team["seasons_info"][0]
-    assert team["player_by_season"] == {}
-    assert team["captains_by_season"] == {}
+    assert "player_by_season" not in team
+    assert "captains_by_season" not in team

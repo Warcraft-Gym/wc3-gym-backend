@@ -58,7 +58,7 @@ The number of rounds is not stored; the round rows are the count.
 
 A season's phase is derived on every read from its series and never stored: `open` while no series has started, `commenced` once one is scored or past its time, `overdue` when the end date passed with a result missing, `complete` when every series has a result. Every gate reads `phase`; nothing adds a date rule beside it. A `complete` season takes no signup. A `commenced` season takes a signup as a request an admin may grant.
 
-The event payload answers the common phase word (`draft`, `signups_open`, `checkin`, `seeded`, `running`, `finished`) from `app/services/events.py`; [the events module](events-module.md) lists the rungs. `SeasonPublic`, which the GNL management writes answer and a match nests as `season`, keeps the four GNL phase words.
+The event payload answers the common phase word (`draft`, `signups_open`, `checkin`, `seeded`, `running`, `finished`) from `app/services/events.py`; [the events module](events-module.md) lists the rungs. `SeasonPublic`, which the season reads and the GNL management writes answer, keeps the four GNL phase words. A match, a fantasy team and a fantasy bet nest `SeasonSummaryPublic` as `season`, with `phase` null; see [response shapes](../api/response-shapes.md).
 
 # Best of
 

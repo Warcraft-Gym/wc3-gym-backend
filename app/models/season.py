@@ -32,7 +32,7 @@ from app.models.relationships import (
     EventRoundPublic,
     SeasonRoundPublic,
 )
-from app.models.team_reduced import TeamReduced
+from app.models.team_summary import TeamSummaryPublic
 from app.models.types import (
     AwareUTC,
     EnumValue,
@@ -416,6 +416,52 @@ class SeasonSignupUpdate(SQLModel):
     race: str | None = None
 
 
+class SeasonSummaryPublic(SQLModel):
+    """A season inside another object: its name, league, dates and phase."""
+
+    id: int
+    name: str
+    # The short name of the season's league; null when the event has no league
+    league_short_name: str | None = None
+    # The full name of that league; null when the event has no league
+    league_name: str | None = None
+    # How many rounds the season has, counted from its round rows
+    round_count: int | None = None
+    # Derived from the series where a read fills it; null otherwise
+    phase: SeasonPhase | None = None
+    start_date: date | None = None
+    end_date: date | None = None
+    # IANA name; a round of this season ends at midnight in this zone
+    round_end_zone: str | None = None
+    # One rule per game; the fantasy score reads the best-of of a bet's series off it
+    map_rules: str | None = None
+    # The race of the signup this season is nested under; null everywhere else
+    signup_race: Annotated[str | None, EnumValue] = None
+    # The tag of that signup, null when it names none
+    played_as: str | None = None
+
+    @classmethod
+    def from_season(
+        cls,
+        season: Season,
+        signup_race: Race | None = None,
+        played_as: str | None = None,
+    ) -> Self:
+        return cls(
+            id=ident(season),
+            name=season.name,
+            league_short_name=season.league_short_name,
+            league_name=season.league_name,
+            round_count=season.round_count,
+            start_date=season.start_date,
+            end_date=season.end_date,
+            round_end_zone=season.round_end_zone,
+            map_rules=season.map_rules,
+            signup_race=signup_race,
+            played_as=played_as,
+        )
+
+
 class SeasonPublic(SeasonBase):
     id: int
     # The short name of the season's league; null when the event has no league
@@ -424,7 +470,6 @@ class SeasonPublic(SeasonBase):
     league_name: str | None = None
     # How many rounds the season has, counted from its round rows
     round_count: int | None = None
-    # The short form of a season carries only the name, so these read null
     series_per_round: int | None = None
     score_system: str | None = None
     fantasy_grind: bool | None = None
@@ -432,7 +477,7 @@ class SeasonPublic(SeasonBase):
     fantasy_tiers: int | None = None
     fantasy_tier_cuts: Annotated[list[int], NoneToList] = []
     fantasy_tiers_applied_at: Annotated[datetime | None, AwareUTC] = None
-    # Derived from the series when the season is the subject; null when nested
+    # Derived from the series; null until the read fills it
     phase: SeasonPhase | None = None
     unscored_series: int | None = None
     start_date: date | None = None
@@ -441,9 +486,8 @@ class SeasonPublic(SeasonBase):
     rounds: Annotated[list[SeasonRoundPublic], NoneToList] = []
     # Always empty; the public pages read this field
     user_signup: Annotated[list[Any], NoneToList] = []
-    # The race of the signup this season is nested under; null everywhere else
+    # Always null on a season answer; a signup's season summary carries them
     signup_race: Annotated[str | None, EnumValue] = None
-    # The tag of that signup, null when it names none
     played_as: str | None = None
 
     @classmethod
@@ -464,54 +508,6 @@ class SeasonPublic(SeasonBase):
                 if map_season and map_season.map
             ],
             rounds=[SeasonRoundPublic.from_row(row) for row in (season.rounds or [])],
-            discordRole=season.discordRole,
-            map_rules=season.map_rules,
-            score_system=season.score_system,
-            fantasy_grind=season.fantasy_grind,
-            signups_open=season.signups_open,
-            scheduling_enabled=season.scheduling_enabled,
-            checkin_days=season.checkin_days,
-            fantasy_tiers=tier_count(season.fantasy_tier_cuts),
-            fantasy_tier_cuts=season.fantasy_tier_cuts or [],
-            fantasy_tiers_applied_at=season.fantasy_tiers_applied_at,
-        )
-
-    @classmethod
-    def from_season_reduced(
-        cls,
-        season: Season,
-        signup_race: Race | None = None,
-        played_as: str | None = None,
-    ) -> Self:
-        """The name, the id, the map rules and the grind flag only. Used where
-        a season is a label on another object rather than the subject."""
-        return cls(
-            id=ident(season),
-            name=season.name,
-            league_short_name=season.league_short_name,
-            league_name=season.league_name,
-            map_rules=season.map_rules,
-            fantasy_grind=season.fantasy_grind,
-            signups_open=season.signups_open,
-            scheduling_enabled=season.scheduling_enabled,
-            checkin_days=season.checkin_days,
-            signup_race=signup_race,
-            played_as=played_as,
-        )
-
-    @classmethod
-    def from_season_without_maps(cls, season: Season) -> Self:
-        """Every scalar field of the season, without the map pool."""
-        return cls(
-            id=ident(season),
-            name=season.name,
-            league_short_name=season.league_short_name,
-            league_name=season.league_name,
-            round_count=season.round_count,
-            series_per_round=season.series_per_round,
-            pick_ban=season.pick_ban,
-            start_date=season.start_date,
-            end_date=season.end_date,
             discordRole=season.discordRole,
             map_rules=season.map_rules,
             score_system=season.score_system,
@@ -728,8 +724,8 @@ class CaptainFixture(SQLModel):
     playday: int
     round_start: date | None = None
     round_end: date | None = None
-    team1: TeamReduced
-    team2: TeamReduced
+    team1: TeamSummaryPublic
+    team2: TeamSummaryPublic
     series_per_round: int
     # Series the fixture already published, and drafts still open on it
     published: int = 0

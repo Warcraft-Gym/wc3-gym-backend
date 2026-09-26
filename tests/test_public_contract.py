@@ -437,10 +437,11 @@ def test_fantasy_teams_search_carries_the_draft_fields(
     assert empty["drafted_players"] == []
 
 
-def test_teams_season_roster_users_carry_no_signup_seasons(
+def test_teams_season_roster_users_are_summaries(
     client: Client, public_seed: dict[str, Any]
 ) -> None:
-    """The season roster keeps its ladder summary; the free collections answer empty."""
+    """The season roster and its captains are player summaries: the ladder
+    summary and the record of this season, no signups."""
     season_id = public_seed["season_id"]
     teams = get_json(client, f"/events/{season_id}/teams")
     players = [
@@ -453,10 +454,13 @@ def test_teams_season_roster_users_carry_no_signup_seasons(
         # The site person row reads these
         assert "race_mmrs" in player
         assert "name" in player
-        # No consumer reads these on this route
-        assert player["signup_seasons"] == []
+        assert "signup_seasons" not in player
+        assert player["record"]["season_id"] == season_id
+        assert player["gnl_stats"] == [player["record"]]
     for team in teams:
-        for captains in team["captains_by_season"].values():
-            for captain in captains:
-                assert captain["gnl_stats"] == []
-                assert captain["signup_seasons"] == []
+        assert set(team["captains_by_season"]) == {str(season_id)}
+        for captain in team["captains_by_season"][str(season_id)]:
+            assert "signup_seasons" not in captain
+            assert captain["gnl_stats"] == (
+                [captain["record"]] if captain["record"] else []
+            )

@@ -5,8 +5,8 @@ from sqlmodel import Field, Relationship, SQLModel
 
 from app.models.base import DBModel, ident
 from app.models.map import Map, MapPublic
-from app.models.season import SeasonPublic
-from app.models.team_reduced import TeamReduced
+from app.models.season import SeasonSummaryPublic
+from app.models.team_summary import TeamSummaryPublic
 
 if TYPE_CHECKING:
     from app.models.season import Season
@@ -77,9 +77,9 @@ class MatchPublic(MatchBase):
     team2_id: int | None = None
     season_id: int | None = None
     playday: int | None = None
-    team1: TeamReduced | None = None
-    team2: TeamReduced | None = None
-    season: SeasonPublic | None = None
+    team1: TeamSummaryPublic | None = None
+    team2: TeamSummaryPublic | None = None
+    season: SeasonSummaryPublic | None = None
     fixed_map: MapPublic | None = None
     # app.services.derived sums the two team scores from the series
     team1_score: int | None = None
@@ -90,11 +90,11 @@ class MatchPublic(MatchBase):
         return cls(
             id=ident(match),
             team1_id=match.team1_id,
-            team1=TeamReduced.from_team(match.team1) if match.team1 else None,
+            team1=TeamSummaryPublic.from_team(match.team1) if match.team1 else None,
             team2_id=match.team2_id,
-            team2=TeamReduced.from_team(match.team2) if match.team2 else None,
+            team2=TeamSummaryPublic.from_team(match.team2) if match.team2 else None,
             season_id=match.season_id,
-            season=SeasonPublic.from_season_reduced(match.season)
+            season=SeasonSummaryPublic.from_season(match.season)
             if match.season
             else None,
             playday=match.playday,
@@ -103,11 +103,3 @@ class MatchPublic(MatchBase):
             if match.fixed_map
             else None,
         )
-
-    @classmethod
-    def from_match_with_season(cls, match: Match) -> Self:
-        """The match with every scalar of its season, without the map pool."""
-        public = cls.from_match(match)
-        if match.season:
-            public.season = SeasonPublic.from_season_without_maps(match.season)
-        return public

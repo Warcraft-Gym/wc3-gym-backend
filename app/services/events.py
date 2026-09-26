@@ -86,8 +86,8 @@ from app.models.season import (
 )
 from app.models.series import Series
 from app.models.team import Team
-from app.models.team_reduced import TeamReduced
 from app.models.team_season import DBTeamSeason
+from app.models.team_summary import TeamSummaryPublic
 from app.models.types import utcnow
 from app.models.user import User, UserSummaryPublic
 from app.models.user_team_season import DBUserTeamSeason
@@ -1118,8 +1118,8 @@ def _captain_fixtures(
                 playday=fixture.playday,
                 round_start=round_.start_date,
                 round_end=round_.end_date,
-                team1=TeamReduced.from_team(fixture.team1),
-                team2=TeamReduced.from_team(fixture.team2),
+                team1=TeamSummaryPublic.from_team(fixture.team1),
+                team2=TeamSummaryPublic.from_team(fixture.team2),
                 series_per_round=event.series_per_round,
                 published=held,
                 drafted=drafted.get(ident(fixture), 0),
@@ -1707,7 +1707,7 @@ def _entrant_public(
         id=ident(row),
         event_id=row.event_id,
         user=_summarized(user, season, event.id),
-        team=TeamReduced.from_team(team) if team else None,
+        team=TeamSummaryPublic.from_team(team) if team else None,
         race=row.race,
         note=row.note,
         channel=row.channel,

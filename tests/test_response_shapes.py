@@ -11,24 +11,24 @@ from typing import Any
 from httpx2 import Client
 from pydantic import BaseModel
 
+from app.models.season import Season, SeasonBase, SeasonSummaryPublic
+from app.models.team import Team
+from app.models.team_summary import TeamSummaryPublic
 from app.models.user import User, UserReduced, UserSummaryPublic
 
-# Each entity: the root every one of its response shapes extends, and its summary
+# Each entity: the root every one of its response shapes extends, and its
+# summary. The other shapes, TeamPublic and TeamRosterPublic among them, answer
+# only at the top level.
 EMBEDS: dict[type, tuple[type[BaseModel], type[BaseModel]]] = {
     User: (UserReduced, UserSummaryPublic),
+    Team: (TeamSummaryPublic, TeamSummaryPublic),
+    Season: (SeasonBase, SeasonSummaryPublic),
 }
 
-# Sites that still embed a detail shape; the team, season and fantasy shapes
-# are not summaries yet
+# Sites that still embed a detail shape; the fantasy players are not summaries yet
 ALLOWED = {
-    ("TeamPublic", "player_by_season"): "the roster embeds UserPublic",
-    ("TeamPublic", "captains_by_season"): "the roster embeds UserPublic",
     ("FantasyTeamPublic", "captain"): "the fantasy team embeds UserPublic",
     ("FantasyTeamPublic", "drafted_players"): "the fantasy team embeds UserPublic",
-    ("FantasyTeamPublic", "drafted_team"): "the fantasy team embeds TeamPublic",
-    ("FantasyTeamPublic", "season"): "the fantasy team embeds SeasonPublic",
-    ("FantasyBetPublic", "season"): "the bet embeds SeasonPublic",
-    ("MatchPublic", "season"): "the match embeds SeasonPublic",
 }
 
 # Schema names of entities, which a summary may not hold a list of

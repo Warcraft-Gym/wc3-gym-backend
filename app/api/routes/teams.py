@@ -28,6 +28,7 @@ from app.models.team import (
     TeamCreate,
     TeamPlayerIds,
     TeamPublic,
+    TeamRosterPublic,
     TeamUpdate,
 )
 from app.models.w3c_stats import W3CSyncResult
@@ -117,7 +118,7 @@ def get_all_event_teams(
     response: Response,
     limit: Annotated[int, Query(ge=1, le=500)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
-) -> list[TeamPublic]:
+) -> list[TeamRosterPublic]:
     """One page of event teams with that event's roster and captains, 50 a page."""
     event_edge_cache(response, event_id)
     return service.get_teams_season(event_id, limit=limit, offset=offset)
@@ -126,7 +127,7 @@ def get_all_event_teams(
 @router.get("/events/{event_id}/teams/{team_id}", tags=["events"])
 def get_event_team(
     event_id: int, team_id: int, service: TeamServiceDep, response: Response
-) -> TeamPublic:
+) -> TeamRosterPublic:
     """Retrieve one event team with that event's roster, captains and stats."""
     event_edge_cache(response, event_id)
     return service.get_with_nested_users_by_season(team_id, event_id)
@@ -210,7 +211,7 @@ def set_team_availability_all(
 )
 def add_players(
     event_id: int, team_id: int, data: TeamPlayerIds, service: TeamServiceDep
-) -> TeamPublic:
+) -> TeamRosterPublic:
     """Add players to an event team."""
     return service.add_players(team_id, event_id, data.player_ids)
 
@@ -222,7 +223,7 @@ def add_players(
 )
 def remove_players(
     event_id: int, team_id: int, data: TeamPlayerIds, service: TeamServiceDep
-) -> TeamPublic:
+) -> TeamRosterPublic:
     """Remove players from an event team."""
     return service.remove_players(team_id, event_id, data.player_ids)
 
@@ -234,7 +235,7 @@ def remove_players(
 )
 def set_captains(
     event_id: int, team_id: int, data: TeamCaptainIds, service: TeamServiceDep
-) -> TeamPublic:
+) -> TeamRosterPublic:
     """Replace the captains of an event team."""
     return service.set_captains(team_id, event_id, data.captain_ids)
 

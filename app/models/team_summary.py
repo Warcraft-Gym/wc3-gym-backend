@@ -1,4 +1,4 @@
-"""The short form of a team.
+"""The summary of a team: what another object embeds of it.
 
 It lives in its own module because three model families embed it - the
 team itself, a match, and the per-season stats of a player - and it
@@ -15,7 +15,9 @@ if TYPE_CHECKING:
     from app.models.team import Team
 
 
-class TeamReduced(SQLModel):
+class TeamSummaryPublic(SQLModel):
+    """A team inside another object: its name, league and logo."""
+
     id: int
     league_id: int
     # name and long_name also receive numeric cells from the xlsx import.
