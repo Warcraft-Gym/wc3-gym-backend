@@ -533,6 +533,50 @@ def test_a_w3c_season_opening_after_the_apply_date_keeps_the_mmr_before_it(
     assert (rows[p1], rows[p2]) == (2, 1)
 
 
+def test_a_finished_season_never_reads_the_current_w3c_season(
+    client: Client, seeded: dict[str, Any], auth_headers: dict[str, str]
+) -> None:
+    """A finished season with no stored match in its window derives no tier
+    from the current w3champions season; the same season running does."""
+    from app.core.db import Session
+    from app.models.season import Season
+    from app.models.settings import Settings
+    from app.services.events import W3C_SEASON_KEY
+    from tests.test_ladder_read import add_match, sign_up
+
+    season = seeded["season_id"]
+    p1 = seeded["player_ids"][0]
+    sign_up(season, [p1], race=Race.HU)
+    today = utcnow().date()
+    with Session() as session:
+        event = session.get_one(Season, season)
+        event.start_date = today - timedelta(days=90)
+        event.end_date = today - timedelta(days=30)
+        session.add(Settings(key=W3C_SEASON_KEY, value="26"))
+        session.commit()
+    add_match(
+        p1,
+        "p1-now",
+        utcnow() + timedelta(minutes=5),
+        wc3_season=26,
+        mmr_before=1400,
+        mmr_after=1410,
+        race=Race.HU,
+    )
+    resp = client.put(
+        f"/events/{season}/fantasy/tiers",
+        json={"cuts": [1100, 1300], "tiers": {}},
+        headers=auth_headers,
+    )
+    assert resp.status_code == 204, resp.text
+    assert _tier_of(client, season, p1) is None
+
+    with Session() as session:
+        session.get_one(Season, season).end_date = None
+        session.commit()
+    assert _tier_of(client, season, p1) == 1
+
+
 def test_a_tier_stored_before_any_apply_date_is_not_a_pin(
     client: Client, seeded: dict[str, Any], auth_headers: dict[str, str]
 ) -> None:

@@ -43,7 +43,6 @@ from app.models.relationships import (
 )
 from app.models.season import LEAGUE_SHORT_NAME, Season
 from app.models.series import Series
-from app.models.types import utcnow
 from app.models.user import User
 from app.models.user_block import UserBlock, UserBusy
 from app.models.user_team_season import DBUserTeamSeason
@@ -411,8 +410,7 @@ def _meeting_rows(session: OrmSession, user_a: int, user_b: int) -> Sequence[Row
         select(col(event.id))
         .where(
             col(event.id) == met.c.event_id,
-            col(event.closed_at).is_(None),
-            or_(col(event.end_date).is_(None), col(event.end_date) >= utcnow().date()),
+            event.running,
         )
         .exists()
     )

@@ -155,8 +155,9 @@ def resolved_tiers(
             session,
             [signup.user_id for signup in signups],
             applied,
-            # a season with no stored match yet reads the current w3champions season
-            _w3c_seasons_for(session, season) or [_w3c_season(session)],
+            # a running season with no stored match yet reads the current w3champions season
+            _w3c_seasons_for(session, season)
+            or ([_w3c_season(session)] if season.running else []),
         )
         if cuts and applied
         else {}
