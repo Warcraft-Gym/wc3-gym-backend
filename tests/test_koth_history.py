@@ -410,3 +410,15 @@ def test_an_inferred_winner_shows_on_the_board_and_stays_out_of_records(
     assert [r["forfeit"] for r in history] == [False, True, False]
     assert [r["review_note"] for r in history] == [None, None, None]
     assert [r["winner_side"] for r in history] == [None, None, None]
+
+
+def test_admin_delete_removes_an_archived_night(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    event_id = import_capture(capture(), apply=True)["event_ids"]["capture-first"]
+    gone = client.delete(f"/events/{event_id}", headers=auth_headers)
+    assert gone.status_code == 204
+    assert counts() == (0, 0, 0, 0)
+    with Session() as session:
+        for model in (EventAward, EventEntrant, HistoricalParticipant):
+            assert session.scalar(select(func.count()).select_from(model)) == 0
