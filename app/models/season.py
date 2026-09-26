@@ -241,6 +241,7 @@ def series_counts_by_event(
         col(Series.player1_score).is_not(None),
         col(Series.player2_score).is_not(None),
     )
+    scored = or_(scored, col(Series.result_unavailable).is_(True))
     started = or_(scored, col(Series.date_time) <= utcnow())
     rows = session.execute(
         select(

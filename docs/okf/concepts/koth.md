@@ -4,7 +4,7 @@ title: KOTH night
 description: A King of the Hill night is one event of the KOTH league with three MMR brackets as divisions, one signup rule at every door, and every series paired by hand while the night runs.
 resource: ../../../app/services/koth/night.py
 tags: [events, koth]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-24T09:42:05Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-26T04:00:00Z }
 sources:
   - id: night
     resource: ../../../app/services/koth/night.py
@@ -78,3 +78,15 @@ The shape it answers, as `app/models/koth_night.py` states it:
 `mmr` null on a race row of a bracket says W3Champions found no rating for that player on that race; no second field carries that. Every row of `unplaced` reads `mmr` null, because a row no bracket holds is not asked for a rating.
 
 The night routes are `POST /koth/nights` (open, with the start time and the three bounds), `POST /koth/nights/{id}/close`, and the event routes for everything else. The close deletes the series on every bracket's table and leaves the crowns readable, so the next night can name each bracket's defender.
+
+# Historical imports
+
+An offline capture imports into real events, source divisions, entrants, ordered BO1 series and one game per series. The importer verifies capture checksums, validates the whole batch, and commits each event atomically. Source keys and digests make reruns idempotent and refuse changed evidence. A target with unmapped KOTH events requires reconciliation before import.
+
+Source names identify archival participants within one event and section. No shorthand creates an account or implies a race. Missing dates, maps, winners and award instants remain null. Random games and placeholders stay in private source evidence and create no competitive series. Reported crowns do not imply BO1 winners.
+
+The historical board returns `historical`, `date_label` and event `videos`. Each bracket retains its literal name and explicit numeric bounds, `historical_king`, and ordered `history` rows with two sides and a nullable winner. Categorical and approximate labels remain authoritative; neighbouring divisions never define a missing bound. No historical board reads ladder ratings or opens a queue. Live latest-night and defender reads exclude imported history.
+
+The board retains its fifteen-second edge cache. Imported events are limited to five hundred series, twenty divisions and one hundred videos; larger inputs require a paged reader. The board selects source labels and never returns raw source records. Event series reads retain their page limit and include standalone series through rounds.
+
+The import command requires an explicit loopback PostgreSQL URL, defaults to dry-run, and reads only offline files. Account claims, race corrections and reviewed source reconciliation are separate workflows.

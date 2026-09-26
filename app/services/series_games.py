@@ -99,6 +99,7 @@ def _offers(session: OrmSession, series: Series) -> dict[int, int | None]:
         for game in session.scalars(
             select(DBSeriesGame).where(col(DBSeriesGame.series_id) == series.id)
         )
+        if game.winner_side is not None
     }
     return map_order.maps_by_game(season.map_rules, fixed_map_id, picks, winners)
 

@@ -151,9 +151,7 @@ class SeriesService:
                 return 0
             statement = select(func.count()).select_from(Series)
             if season_id is not None:
-                statement = statement.where(
-                    col(Series.match).has(col(Match.season_id) == season_id)
-                )
+                statement = statement.where(Series.in_event(season_id))
             if filter is not None:
                 statement = statement.where(filter)
             return session.scalar(statement) or 0
