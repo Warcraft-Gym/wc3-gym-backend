@@ -84,7 +84,8 @@ class FantasyBet(FantasyBetBase, DBModel, table=True):
                 option
                 for player in players
                 for option in (
-                    player.selectinload(rel(User.w3c_stats)),
+                    # The bet answer derives no ladder summary, so it reads no ladder rows
+                    player.noload(rel(User.w3c_stats)),
                     player.selectinload(rel(User.team_seasons)),
                     player.selectinload(rel(User.signup_seasons)).joinedload(
                         rel(DBUserSeasonSignup.season)

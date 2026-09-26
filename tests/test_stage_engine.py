@@ -1563,7 +1563,7 @@ def test_a_stage_series_rates_both_sides_on_the_race_it_names(
     row = stage_series(client, event, stage)["series"][0]
     assert (row["player1_race"], row["player2_race"]) == ("HU", "HU")
     assert (row["player1_mmr"], row["player2_mmr"]) == (1500, 1400)
-    assert row["player1"]["w3c_stats"] == []
+    assert "w3c_stats" not in row["player1"]
 
 
 def test_a_stage_row_reads_the_newest_rated_season_of_the_race(

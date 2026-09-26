@@ -201,9 +201,12 @@ class UserReduced(UserBase, PublicModel):
 
 
 class UserListPublic(UserReduced):
-    """The user of a list answer: the scalars, the w3c stats and the signups."""
+    """The user of a list answer: the scalars, the ladder summary and the signups."""
 
-    w3c_stats: Annotated[list[W3CStatsPublic], NoneToList] = []
+    # The window rows the summary is built from, never served: race_mmrs serves them
+    w3c_stats: Annotated[list[W3CStatsPublic], NoneToList] = Field(
+        default=[], exclude=True
+    )
     # The ladder summary per race, from app.services.w3c_stats.fill; `mmr` is the profile field
     race_mmrs: list[RaceMmr] = []
     # The race with the top window MMR and 10 or more window games, else null

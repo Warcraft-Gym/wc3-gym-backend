@@ -95,7 +95,7 @@ def test_the_list_answers_the_drafted_players_stats(
     resp = client.post("/fantasy/teams/search?query=season_id > 0")
     assert resp.status_code == 200
     player = resp.json()[0]["drafted_players"][0]
-    assert player["w3c_stats"] == []
+    assert "w3c_stats" not in player
     # P1 won the one played series, and the derived fill counts it
     gnl = player["gnl_stats"][0]
     assert (gnl["wins"], gnl["losses"], gnl["games"]) == (1, 0, 1)
