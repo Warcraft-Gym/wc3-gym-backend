@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from app.api.routes import (
     battlenet,
     config,
+    dev_login,
     discord,
     draft_series,
     events,
@@ -27,6 +28,7 @@ from app.api.routes import (
 
 api_router = APIRouter()
 api_router.include_router(login.router)
+api_router.include_router(dev_login.router)
 api_router.include_router(users.router)
 api_router.include_router(battlenet.router)
 api_router.include_router(teams.router)

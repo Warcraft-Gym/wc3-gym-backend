@@ -112,8 +112,14 @@ Identity = Annotated[dict[str, Any], Depends(_identity)]
 
 
 def _entry(claims: dict[str, Any]) -> dict[str, Any]:
-    """The Discord account behind a set of claims, and the season it acts in."""
-    account = discord.identify(discord_token(claims["clerk_user_id"]).token)
+    """The Discord account behind a set of claims, and the season it acts in.
+
+    A local dev login has no Clerk account, so its name stands in for the tag."""
+    account = (
+        discord.identify(discord_token(claims["clerk_user_id"]).token)
+        if "clerk_user_id" in claims
+        else {"global_name": claims.get("name")}
+    )
     return {
         "discord_id": str(claims["sub"]),
         "discord_tag": account.get("global_name")

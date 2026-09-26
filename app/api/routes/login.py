@@ -50,10 +50,11 @@ def me(
 ) -> dict[str, Any]:
     """The logged-in account, the users row linked to its Discord id, and every
     season that is still running, with this account's place in each."""
-    # The admin token carries no Discord account, so it reads no name.
-    superadmin = "clerk_user_id" not in claims
+    # The admin token carries no Discord account, so it reads no name. A local
+    # dev login names a player but has no Clerk account to read Discord through.
+    superadmin = claims.get("sub") == "admin"
     account: dict[str, Any] = {}
-    if not superadmin:
+    if "clerk_user_id" in claims:
         token = discord_token(claims["clerk_user_id"])
         if token.provider_user_id != claims["sub"]:
             # the frontend keeps this answer all session, so a Discord account
@@ -89,7 +90,10 @@ def me(
         "discord_id": claims["sub"],
         "name": "Super Admin"
         if superadmin
-        else account.get("global_name") or account.get("username"),
+        else account.get("global_name")
+        or account.get("username")
+        or claims.get("name")
+        or (user.name if user else None),
         "avatar": avatar,
         "role": claims.get("role", "admin"),
         # the role behind an X-View-As switch, so the frontend keeps the switch visible
