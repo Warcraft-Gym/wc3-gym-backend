@@ -44,7 +44,7 @@ from app.services.battle_tags import person_by_tag
 from app.services.events import EventService, _stats_for, _users_for
 from app.services.koth import carry, live, night, nightbot
 from app.services.koth.signup import recut
-from app.services.series import SeriesService
+from app.services.series import SeriesService, update_in
 from app.services.w3c_stats import w3c_season
 
 # A KOTH series is one player against one player, so every match reads this way
@@ -343,12 +343,14 @@ def match_result(match_id: int, winner_team_number: int) -> KothMatchPublic:
         row = _series(session, match_id)
         event_id = _event_of(session, row)
         wins = stage_engine.series_wins(session, row)
-    first, second = (wins, 0) if winner_team_number == 1 else (0, wins)
-    SeriesService().update(
-        match_id,
-        SeriesUpdate(player1_score=first, player2_score=second),
-        force=True,
-    )
+        first, second = (wins, 0) if winner_team_number == 1 else (0, wins)
+        # The write moves the bracket; the answer is the night's match row
+        update_in(
+            session,
+            match_id,
+            SeriesUpdate(player1_score=first, player2_score=second),
+            force=True,
+        )
     return _one_match(event_id, match_id)
 
 

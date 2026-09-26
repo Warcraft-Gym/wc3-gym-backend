@@ -9,7 +9,7 @@ from app.models.season import SeasonSummaryPublic
 from app.models.team import Team
 from app.models.team_summary import TeamSummaryPublic
 from app.models.types import EnumValue, NoneToList, NumToStr, SuggestRace
-from app.models.user import UserPublic
+from app.models.user import UserSummaryPublic
 
 if TYPE_CHECKING:
     from app.models.relationships import DBFantasyTeamPlayer
@@ -115,19 +115,15 @@ class FantasyTeamPublic(FantasyTeamBase, PublicModel):
     captain_id: int | None = None
     drafted_race: Annotated[str | None, EnumValue] = None
     season: SeasonSummaryPublic | None = None
-    captain: UserPublic | None = None
+    captain: UserSummaryPublic | None = None
     drafted_team: TeamSummaryPublic | None = None
-    drafted_players: Annotated[list[UserPublic], NoneToList] = []
+    drafted_players: Annotated[list[UserSummaryPublic], NoneToList] = []
 
     @classmethod
     def from_fantasy_team(cls, fteam: FantasyTeam) -> Self:
-        drafted_players = []
-        if fteam.drafted_players:
-            for dp in fteam.drafted_players:
-                user = UserPublic.from_user(dp.users)
-                if user:
-                    drafted_players.append(user)
-
+        """The team; its members carry their record in its season where the
+        read loaded it."""
+        season_id = fteam.season_id
         return cls(
             id=ident(fteam),
             name=fteam.name,
@@ -136,12 +132,17 @@ class FantasyTeamPublic(FantasyTeamBase, PublicModel):
             if fteam.season
             else None,
             captain_id=fteam.captain_id,
-            captain=UserPublic.from_user(fteam.captain) if fteam.captain else None,
+            captain=UserSummaryPublic.from_user(fteam.captain, season_id)
+            if fteam.captain
+            else None,
             drafted_team_id=fteam.drafted_team_id,
             grind_team_id=fteam.grind_team_id,
             drafted_team=TeamSummaryPublic.from_team(fteam.drafted_team)
             if fteam.drafted_team
             else None,
             drafted_race=fteam.drafted_race,
-            drafted_players=drafted_players,
+            drafted_players=[
+                UserSummaryPublic.from_user(dp.users, season_id)
+                for dp in fteam.drafted_players or []
+            ],
         )

@@ -50,12 +50,11 @@ def require_admin_or_owner(
     """
     if is_admin(claims):
         return True
-    rows = users.find_by_discord_id(claims["sub"])
-    if claims.get("role") != "guest" and rows:
-        team = service.get(team_id)
-        if team.captain_id == rows[0].id:
-            if team.season_id is not None:
-                seasons.refuse_unless_open(team.season_id)
+    user_id = users.id_by_discord_id(claims["sub"])
+    if claims.get("role") != "guest" and user_id is not None:
+        captain_id, season_id = service.owner(team_id)
+        if captain_id == user_id:
+            seasons.refuse_unless_open(season_id)
             return False
     raise ApiError(403, {"error": "Admins or the fantasy team's owner only"})
 
@@ -101,13 +100,13 @@ def update_team(
 ) -> FantasyTeamPublic:
     """Update an existing fantasy team. The owner edits it, an admin reseats it."""
     if not is_admin:
-        current = service.get(team_id)
+        captain_id, season_id = service.owner(team_id)
         changed = data.model_dump(exclude_unset=True)
-        for field in ("captain_id", "season_id"):
-            if field in changed and changed[field] != getattr(current, field):
-                raise ApiError(
-                    403, {"error": "Only admins reassign the owner or season"}
-                )
+        if (
+            changed.get("captain_id", captain_id) != captain_id
+            or changed.get("season_id", season_id) != season_id
+        ):
+            raise ApiError(403, {"error": "Only admins reassign the owner or season"})
     return service.update(team_id, data)
 
 
@@ -276,7 +275,6 @@ def get_fantasy_team_breakdown(
     team_id: int,
     event_id: int,
     season_service: SeasonServiceDep,
-    fantasy_team_service: FantasyTeamServiceDep,
     fantasy_bet_service: FantasyBetServiceDep,
 ) -> dict[str, Any]:
     """Get detailed score breakdown for a fantasy team.
@@ -286,6 +284,4 @@ def get_fantasy_team_breakdown(
     """
     # get raises NotFoundError, which answers 404
     season = season_service.get(event_id)
-    return team_score_breakdown(
-        fantasy_team_service, fantasy_bet_service, team_id, season
-    )
+    return team_score_breakdown(fantasy_bet_service, team_id, season)
