@@ -4,7 +4,7 @@ title: Scheduled jobs
 description: Five job routes behind a shared secret, two called daily by Vercel, one every five minutes by a Cloudflare Worker because a Vercel cron runs at most once a day, and two an operator reads for egress.
 resource: ../../../app/api/routes/jobs.py
 tags: [deploy]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-26T20:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-26T21:00:00Z }
 sources:
   - id: jobs
     resource: ../../../app/api/routes/jobs.py
@@ -45,7 +45,7 @@ After each run that writes a snapshot, `app/services/egress_monitor.py` levels t
 - `red` when the projection is over `RED_MB`, 90% of `CAP_MB`, the egress cap per cycle. `amber` when the last window is over `BUDGET_MB_PER_DAY`; amber only colours the digest. `unavailable` when the run could not read the statistics or raised. Otherwise `normal`.
 - An alert posts when the level changes to `red` or to `unavailable`, never twice in a row. An alert Discord does not take, or one with the webhook unset, leaves the stored level as it was, so the next run posts it again. It tags `DEV_ALERTS_MENTION_USER_ID` when that is set to digits, and nobody otherwise.
 - A recovery posts, silent, when the level changes from `red` or `unavailable` to `normal` or `amber`.
-- The database size is the sum of `pg_database_size` over every database on the server but the templates, read on the server in one row. It is `red` over `DB_RED`, 90% of `DB_CAP_MB`, the database size cap, and `normal` otherwise. It keeps its own row, `db_size`, and posts its own alert and recovery by the rules above, also after a run whose snapshot was unavailable. On SQLite, or when the read fails, it is skipped: no field, no post, and the row stays as it was.
+- The database size is the sum of `pg_database_size` over every database on the server but the templates, read on the server in one row, in MiB; when the role may not read the others, it is the size of the current database. It is `red` over `DB_RED`, 90% of `DB_CAP_MB`, the database size cap, and `normal` otherwise. It keeps its own row, `db_size`, and posts its own alert and recovery by the rules above, also after a run whose snapshot was unavailable. On SQLite it is skipped. A read that fails logs its error type, leaves the row as it was, and shows in the digest as `not read` with that type.
 - The digest posts, silent, after every run that writes a snapshot, after any alert or recovery. Before the first window it says the baseline is taken. It shows the database size when it was read, and a red database size colours it red.
 - The red alert and the digest link to the usage dashboards set in `DEV_ALERTS_SUPABASE_USAGE_URL` and `DEV_ALERTS_VERCEL_USAGE_URL`: the title opens the Supabase one, and a last Dashboards field lists each one set. A value that is not an https URL is ignored. The posts carry figures and links, and the dashboards draw the charts.
 - The alert and the digest list the three routes of the [egress ledger](../data/tables/egress_ledger.md) with the most rows on the day the last window covers, and the digest is titled with that day.

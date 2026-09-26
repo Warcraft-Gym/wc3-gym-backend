@@ -16,7 +16,7 @@ from typing import Any
 
 import requests
 from sqlalchemy import text
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import DBAPIError
 from sqlmodel import col, select
 
 from app.core.db import Session
@@ -42,6 +42,12 @@ DB_RED = 0.9  # a database over this share of DB_CAP_MB alerts
 RED, AMBER, GREEN, BLUE = 0xD63232, 0xF0A04B, 0x36A64F, 0x4F95D8
 SILENT = 1 << 12  # SUPPRESS_NOTIFICATIONS: the post shows without a notification
 FOOTER = "Egress monitor · pg_stat_statements × 100 B per row"
+DIGEST_FOOTER = (
+    "Infrastructure monitor · egress from pg_stat_statements × 100 B per row"
+)
+MONITOR_FOOTER = "Infrastructure monitor"
+# The fields that give way first when an embed is over the total: the long route lists
+ROUTE_FIELDS = ("Busiest routes (rows)", "Top routes (rows)")
 JOBS_DOC = (
     "https://github.com/Warcraft-Gym/wc3-gym-backend/blob/main/docs/okf/api/jobs.md"
 )
@@ -223,7 +229,18 @@ def fit(embed: dict[str, Any]) -> dict[str, Any]:
         + len(embed["footer"]["text"])
         + sum(len(f["name"]) + len(f["value"]) for f in embed["fields"])
     )
-    # Fields over the total on their own: drop trailing ones, always keeping the first
+    # Fields over the total on their own: the route list gives way first, cut or dropped
+    for f in [f for f in embed["fields"] if f["name"] in ROUTE_FIELDS]:
+        over = rest - (MAX_TOTAL - 1)
+        if over <= 0:
+            break
+        if len(f["value"]) - over > 1:
+            f["value"] = cut(f["value"], len(f["value"]) - over)
+            rest -= over
+        else:
+            embed["fields"].remove(f)
+            rest -= len(f["name"]) + len(f["value"])
+    # Then drop trailing fields, always keeping the first
     while rest > MAX_TOTAL - 1 and len(embed["fields"]) > 1:
         dropped = embed["fields"].pop()
         rest -= len(dropped["name"]) + len(dropped["value"])
@@ -242,6 +259,7 @@ def message(
     mention: str | None = None,
     links: dict[str, str] | None = None,
     ask: str = "egress needs action today",
+    footer: str = FOOTER,
 ) -> dict[str, Any]:
     """One webhook payload with one embed; only an alert names `mention`, and pings no one else.
     `links` titles the embed with the Supabase usage page and lists every dashboard last."""
@@ -256,7 +274,7 @@ def message(
             "color": colour,
             "fields": fields,
             "timestamp": now.isoformat(),
-            "footer": {"text": FOOTER},
+            "footer": {"text": footer},
         }
     )
     if "Supabase usage" in links:
@@ -377,6 +395,7 @@ def db_alert(
         mention=mention,
         links=links,
         ask="the database needs action today",
+        footer=MONITOR_FOOTER,
     )
 
 
@@ -392,6 +411,7 @@ def db_recovery(mb: float, since: datetime, now: datetime) -> dict[str, Any]:
             field("Red for", f"{duration(now - since)}, since {stamp(since)}"),
         ],
         silent=True,
+        footer=MONITOR_FOOTER,
     )
 
 
@@ -415,24 +435,33 @@ def digest(
     routes: list[EgressLedger],
     links: dict[str, str] | None = None,
     db_mb: float | None = None,
+    db_error: str | None = None,
 ) -> dict[str, Any]:
     """The silent daily post with every meter; before the first window, the baseline note.
-    The database size shows when it was read, and a red one turns the digest red."""
-    extra = [] if db_mb is None else [field("Database size", db_line(db_mb))]
+    The database size shows when it was read or its read failed, and a red one turns the
+    digest red."""
+    extra, alarms = [], []
+    if db_mb is not None:
+        extra.append(field("Database size", db_line(db_mb)))
+        if db_level(db_mb) == Level.RED:
+            alarms.append("The database is near its size cap.")
+    elif db_error is not None:
+        extra.append(field("Database size", f"not read ({db_error})"))
     if m.last is None:
         return message(
             m.now,
-            BLUE,
+            RED if alarms else BLUE,
             f"Daily infrastructure digest · {day_label(m.now.date())}",
-            "Baseline taken. First figures after the next run.",
+            " ".join([*alarms, "Baseline taken. First figures after the next run."]),
             extra,
             silent=True,
             links=links,
+            footer=DIGEST_FOOTER,
         )
     colour, status = STATUS[m.level]
-    if db_mb is not None and db_level(db_mb) == Level.RED:
+    if alarms:
         lead = [] if m.level == Level.NORMAL else [status]
-        colour, status = RED, " ".join([*lead, "The database is near its size cap."])
+        colour, status = RED, " ".join([*lead, *alarms])
     per_day = m.last.mb_per_day
     fields = [
         field(
@@ -453,7 +482,16 @@ def digest(
         ),
     ]
     title = f"Daily infrastructure digest · {day_label(m.last.start.date())}"
-    return message(m.now, colour, title, status, fields, silent=True, links=links)
+    return message(
+        m.now,
+        colour,
+        title,
+        status,
+        fields,
+        silent=True,
+        links=links,
+        footer=DIGEST_FOOTER,
+    )
 
 
 # The run
@@ -488,22 +526,26 @@ def change(
 
 
 def database_mb() -> float | None:
-    """The size in MB of every database on the server but the templates; None on SQLite or
-    when the read fails."""
-    try:
-        with Session() as session:
-            if session.get_bind().dialect.name != "postgresql":
-                return None
-            total = session.execute(
-                text(
-                    "SELECT sum(pg_database_size(datname)) FROM pg_database "
-                    "WHERE NOT datistemplate"
-                )
-            ).scalar_one()
-    except SQLAlchemyError as error:
-        log.warning("database size not read: %s", type(error).__name__)
-        return None
-    return None if total is None else int(total) / 1e6
+    """The size in MB (MiB, as Supabase counts it) of every database on the server but the
+    templates, or of this one when the role may not read the others; None on SQLite."""
+    every = (
+        "SELECT sum(pg_database_size(datname)) FROM pg_database WHERE NOT datistemplate"
+    )
+    for query in (every, "SELECT pg_database_size(current_database())"):
+        try:
+            with Session() as session:
+                if session.get_bind().dialect.name != "postgresql":
+                    return None
+                total = session.execute(text(query)).scalar_one()
+            return None if total is None else int(total) / (1024 * 1024)
+        except DBAPIError as error:
+            # 42501, insufficient_privilege: one more try on the current database only
+            if getattr(error.orig, "sqlstate", None) != "42501" or query != every:
+                raise
+            log.warning(
+                "database size of every database not read: %s", type(error).__name__
+            )
+    return None
 
 
 def save(key: str, level: Level, since: datetime, now: datetime) -> None:
@@ -530,7 +572,13 @@ def report(result: EgressSnapshotResult, now: datetime | None = None) -> None:
     now = now or utcnow()
     mention = mention_id()
     links = dashboards()
-    db_mb = database_mb()
+    db_error = None
+    try:
+        db_mb = database_mb()
+    except Exception as error:
+        # A read that keeps failing shows in the digest; the log line carries the type only
+        db_mb, db_error = None, type(error).__name__
+        log.warning("database size not read: %s", db_error)
     changes: list[Change] = []
     out: dict[str, Any] | None = None
     with Session() as session:
@@ -565,7 +613,7 @@ def report(result: EgressSnapshotResult, now: datetime | None = None) -> None:
                     lambda s: recovery(m, s.level, s.since),
                 )
             )
-            out = digest(m, routes, links, db_mb)
+            out = digest(m, routes, links, db_mb, db_error)
         if db_mb is not None:
             mb = db_mb
             changes.append(
