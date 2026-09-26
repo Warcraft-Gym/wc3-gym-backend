@@ -309,10 +309,10 @@ def alert(
     """The red alert: the cycle is on track to pass the cap, or has passed it."""
     over = m.cycle_mb > CAP_MB
     title = f"Supabase egress: {'over' if over else 'on track to pass'} the 5 GB cap"
-    budget = f"{BUDGET_MB_PER_DAY:,.0f} MB a day"
+    budget = f"{BUDGET_MB_PER_DAY:,.0f} MB"
     lead = (
         f"Prod returned ~{m.last.mb_per_day:,.0f} MB a day in the last window, "
-        f"{m.last.mb_per_day / BUDGET_MB_PER_DAY:,.1f}× the budget of {budget}. "
+        f"{m.last.mb_per_day / BUDGET_MB_PER_DAY:,.1f}× the daily budget of {budget}. "
         if m.last is not None
         else ""
     )
@@ -323,7 +323,7 @@ def alert(
     fields = [
         field("Last window", rate(m.last)),
         field("3-day average", f"~{m.average_mb_per_day:,.0f} MB/day"),
-        field("Budget", f"{BUDGET_MB_PER_DAY:,.0f} MB/day"),
+        field("Daily budget", f"{BUDGET_MB_PER_DAY:,.0f} MB/day"),
         field(
             "Cycle so far",
             f"{meter(m.cycle_mb, CAP_MB)}\n{m.cycle_mb / 1000:,.1f} GB of 5 GB",
@@ -357,7 +357,7 @@ def unavailable_alert(
 def recovery(m: Meters, was: str, since: datetime) -> dict[str, Any]:
     """The silent all-clear after a red or unavailable run."""
     title = (
-        "Supabase egress: back under budget"
+        "Supabase egress: back on track for the 5 GB cap"
         if was == Level.RED
         else "Egress snapshot: running again"
     )
@@ -425,7 +425,7 @@ def db_recovery(mb: float, since: datetime, now: datetime) -> dict[str, Any]:
 
 
 def db_line(mb: float) -> str:
-    return f"~{mb:,.0f} MB of {DB_CAP_MB:,.0f} MB\n{meter(mb, DB_CAP_MB)}"
+    return f"~{mb:,.0f} MB of the {DB_CAP_MB:,.0f} MB cap\n{meter(mb, DB_CAP_MB)}"
 
 
 def db_level(mb: float) -> Level:
@@ -476,7 +476,10 @@ class Vercel:
 
 
 def vercel_lines(v: Vercel) -> str:
-    lines = [f"{label} {figure} · {share:.0%}" for label, figure, share in v.meters]
+    lines = [
+        f"{label} {figure} · {share:.0%} of the Hobby limit"
+        for label, figure, share in v.meters
+    ]
     if v.requests:
         lines.append(f"Cache hits {v.hits / v.requests:.0%}")
     return "\n".join(lines)
@@ -491,7 +494,7 @@ def vercel_alert(
         "Hobby pauses the feature for 30 days when a limit is hit."
     )
     fields = [
-        field("Vercel, 30 days", vercel_lines(v), inline=False),
+        field("Vercel, last 30 days", vercel_lines(v), inline=False),
         field("Since", stamp(now)),
         field(
             "Next step",
@@ -544,7 +547,7 @@ def vercel_recovery(
         f"Vercel usage: {f'back under {VERCEL_RED:.0%}' if red else 'read again'}",
         f"Every meter is under {VERCEL_RED:.0%} of its included usage.",
         [
-            field("Vercel, 30 days", vercel_lines(v), inline=False),
+            field("Vercel, last 30 days", vercel_lines(v), inline=False),
             field(
                 f"{'Red' if red else 'Unavailable'} for",
                 f"{duration(now - since)}, since {stamp(since)}",
@@ -583,12 +586,12 @@ def digest(
     elif db_error is not None:
         extra.append(field("Database size", f"not read ({db_error})"))
     if vercel is not None:
-        extra.append(field("Vercel, 30 days", vercel_lines(vercel), inline=False))
+        extra.append(field("Vercel, last 30 days", vercel_lines(vercel), inline=False))
         if vercel.level == Level.RED:
             alarms.append("Vercel usage is near the included limit.")
     elif vercel_error is not None:
         extra.append(
-            field("Vercel, 30 days", f"not read ({vercel_error})", inline=False)
+            field("Vercel, last 30 days", f"not read ({vercel_error})", inline=False)
         )
     if m.last is None:
         return message(
@@ -609,11 +612,12 @@ def digest(
     fields = [
         field(
             "Supabase egress, prod",
-            f"~{per_day:,.0f} MB/day\n{meter(per_day, BUDGET_MB_PER_DAY)} of budget",
+            f"~{per_day:,.0f} MB/day\n{meter(per_day, BUDGET_MB_PER_DAY)} of the "
+            f"{BUDGET_MB_PER_DAY:,.0f} MB daily budget",
         ),
         field(
             "Cycle so far",
-            f"~{size(m.cycle_mb)} of 5 GB\n{meter(m.cycle_mb, CAP_MB)}"
+            f"~{size(m.cycle_mb)} of the 5 GB cap\n{meter(m.cycle_mb, CAP_MB)}"
             f" · day {m.day} of {m.cycle.days}",
         ),
         field("Projected", f"~{size(m.projected_mb)}"),
