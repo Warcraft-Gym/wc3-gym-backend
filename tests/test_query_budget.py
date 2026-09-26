@@ -485,6 +485,31 @@ def test_the_standings_count_holds_when_the_teams_grow(
     assert tally[0] == 12
 
 
+def test_a_team_with_two_captains_costs_seven_statements(
+    league: dict[str, Any],
+) -> None:
+    """One for the team and its captains, one for its seasons, one per captain
+    for his season stats, two for the standings and one for the season labels;
+    the captains' ladder rows and signups are never read."""
+    from app.models.relationships import DBTeamSeasonCaptain
+
+    team_id = league["team_a_id"]
+    with Session.begin() as session:
+        for user_id in league["player_ids"][:2]:
+            session.add(
+                DBTeamSeasonCaptain(
+                    team_id=team_id, season_id=league["season_id"], user_id=user_id
+                )
+            )
+    service = TeamService(UserService())
+    with count_statements() as tally:
+        team = service.get(team_id)
+    captains = team.captains_by_season[league["season_id"]]
+    assert len(captains) == 2
+    assert all(not c.race_mmrs and not c.signup_seasons for c in captains)
+    assert tally[0] == 7
+
+
 def test_the_season_labels_cost_one_statement(league: dict[str, Any]) -> None:
     """One season or five, the tabs of a team page cost one read.
 
