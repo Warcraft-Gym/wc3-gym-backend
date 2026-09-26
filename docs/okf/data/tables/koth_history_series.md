@@ -20,4 +20,4 @@ sources:
 | `source_key` | Section and row ordinal, unique within the event. |
 | `source_record` | Private original pairing and annotations; independent of inferred identity. |
 | `inferred_winner` | Side 1 or 2 inferred from winner-stays-on order; shown on the board, never written to the series score. |
-| `review_note` | Why the bracket was not inferred, on the series where the doubt starts. |
+| `review_note` | A forfeit that restarts the order, or why the bracket was not inferred, on the series where it starts. |

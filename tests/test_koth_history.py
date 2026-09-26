@@ -324,6 +324,16 @@ def bo1(
     }
 
 
+def test_a_break_reads_as_a_forfeit_and_the_order_restarts() -> None:
+    rows = [bo1("Ann", "Bo"), bo1("Ann", "Cy"), bo1("Di", "Ed"), bo1("Di", "Fay")]
+    assert infer_winners(rows, "Fay") == [
+        (1, None),
+        (None, "Neither side plays on; read as a forfeit"),
+        (1, None),
+        (2, None),
+    ]
+
+
 def test_winner_stays_on_infers_a_whole_bracket() -> None:
     rows = [bo1("Ann", "Bo"), bo1("ann", "Cy", "(HU)"), bo1("Cy", "Di")]
     assert infer_winners(rows, "Di") == [(1, None), (2, None), (2, None)]
@@ -336,11 +346,6 @@ def test_winner_stays_on_infers_a_whole_bracket() -> None:
 @pytest.mark.parametrize(
     ("rows", "king", "note"),
     [
-        (
-            [bo1("Ann", "Bo"), bo1("Cy", "Di")],
-            "Di",
-            "Neither side plays the next series",
-        ),
         (
             [bo1("Ann", "Bo"), bo1("Bo", "Ann")],
             "Ann",
@@ -363,9 +368,9 @@ def test_winner_stays_on_infers_a_whole_bracket() -> None:
             "The source result differs from the order",
         ),
         (
-            [bo1("Anne", "Bo"), bo1("Ann", "Cy")],
+            [bo1("Regitheth", "Bo"), bo1("Regitheht", "Cy")],
             "Cy",
-            "Neither side plays the next series",
+            "A name only nearly matches the next series",
         ),
     ],
 )

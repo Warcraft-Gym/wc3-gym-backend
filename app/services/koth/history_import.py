@@ -7,6 +7,7 @@ import os
 import re
 from collections import Counter
 from datetime import date
+from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Any
 
@@ -84,15 +85,31 @@ def _note(raw: str) -> bool:
     return any(_name(tag) not in RACE_TAGS for tag in re.findall(r"\(([^)]*)\)", raw))
 
 
+FORFEIT = "Neither side plays on; read as a forfeit"
+
+
+def _near(pair: tuple[str, ...], following: tuple[str, ...]) -> bool:
+    """Whether a name of the pair nearly matches one that plays next, a likely typo."""
+    return any(
+        SequenceMatcher(None, name, other).ratio() >= 0.8
+        for name in pair
+        for other in following
+        if min(len(name), len(other)) >= 4
+    )
+
+
 def infer_winners(
     rows: list[dict[str, Any]], king: str | None
 ) -> list[tuple[int | None, str | None]]:
-    """(inferred winner side, review note) per BO1 of one bracket, in source order.
+    """(inferred winner side, note) per BO1 of one bracket, in source order.
 
     Winner stays on: the side that plays the next series won this one, and the
-    last series was won by the reported king. A bracket is inferred whole or
-    not at all, so a single break, a source note, a name that only nearly
-    matches, or a disagreeing source result leaves every winner to a human.
+    last series was won by the reported king. When neither side plays on, a
+    player left or two others played instead; the organisers read that as a
+    forfeit, so that result stays unknown and the order restarts with the next
+    pair. Any other doubt (a source note, a rematch, a name that only nearly
+    matches, a missing king, a disagreeing source result) leaves every winner
+    of the bracket to a human.
     """
     if not rows:
         return []
@@ -100,6 +117,7 @@ def infer_winners(
     after = [*pairs[1:], ((_name(king),) if king else ())]
     winners: list[int | None] = []
     notes: list[str | None] = []
+    doubt = False
     for index, (row, pair, following) in enumerate(
         zip(rows, pairs, after, strict=True)
     ):
@@ -113,17 +131,20 @@ def infer_winners(
             note = "No king is recorded"
         elif last and not stays:
             note = "The reported king is not in the last series"
+        elif not stays and _near(pair, following):
+            note = "A name only nearly matches the next series"
         elif not stays:
-            note = "Neither side plays the next series"
+            note = FORFEIT
         elif winner is None:
             note = "Both sides play the next series"
         elif explicit and _name(explicit) != pair[winner - 1]:
             note = "The source result differs from the order"
         else:
             note = None
+        doubt = doubt or note not in (None, FORFEIT)
         winners.append(None if explicit else winner)
         notes.append(note)
-    if any(notes):
+    if doubt:
         return [(None, note) for note in notes]
     return list(zip(winners, notes, strict=True))
 
