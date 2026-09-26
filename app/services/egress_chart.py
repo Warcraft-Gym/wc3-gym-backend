@@ -12,6 +12,13 @@ SURFACE, GRID, INK, MUTED = "#1e1f22", "#3a3c42", "#dbdee1", "#9aa0a8"
 BAR, OVER = "#7FB0DA", "#DE6E52"
 RADIUS = 8  # the rounded data end, 4 px at 1x
 MAX_POINTS = 14
+TICKS = 4  # about this many gridline steps up to the tallest value
+
+
+def nice(raw: float) -> float:
+    """The smallest 1, 2 or 5 times a power of ten at or above `raw`."""
+    power = 10 ** math.floor(math.log10(raw))
+    return next(m * power for m in (1, 2, 5, 10) if m * power >= raw)
 
 
 def render(points: list[tuple[str, float]], budget: float) -> bytes:
@@ -22,14 +29,16 @@ def render(points: list[tuple[str, float]], budget: float) -> bytes:
     image = Image.new("RGB", (W, H), SURFACE)
     draw = ImageDraw.Draw(image)
     font = ImageFont.load_default(size=18)
-    top = max([v for _, v in points] + [budget]) * 1.1
+    highest = max([v for _, v in points] + [budget, 1.0])
+    step_v = nice(highest / TICKS)
+    top = math.ceil(highest / step_v) * step_v
     plot = H - TOP - BOTTOM
 
     def y(v: float) -> float:
         return TOP + plot * (1 - v / top)
 
-    for f in (0, 0.5, 1):
-        v = top / 1.1 * f
+    for k in range(round(top / step_v) + 1):
+        v = k * step_v
         draw.line([(LEFT, y(v)), (W - RIGHT, y(v))], fill=GRID, width=2)
         draw.text((LEFT - 10, y(v)), f"{v:,.0f}", fill=MUTED, font=font, anchor="rm")
     step = (W - LEFT - RIGHT) / max(len(points), 1)

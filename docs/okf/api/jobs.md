@@ -4,7 +4,7 @@ title: Scheduled jobs
 description: Five job routes behind a shared secret, two called daily by Vercel, one every five minutes by a Cloudflare Worker because a Vercel cron runs at most once a day, and two an operator reads for egress.
 resource: ../../../app/api/routes/jobs.py
 tags: [deploy]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-26T14:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-26T16:00:00Z }
 sources:
   - id: jobs
     resource: ../../../app/api/routes/jobs.py
@@ -40,15 +40,15 @@ The snapshot job fetches no statistics row to the function: the copy is an `INSE
 
 After each run that writes a snapshot, `app/services/egress_monitor.py` levels the billing cycle, stores the level in [monitor_state](../data/tables/monitor_state.md) and posts Discord embeds to `DEV_ALERTS_WEBHOOK_URL`. Unset, it posts nothing. A skipped run posts nothing and keeps the level.
 
-- The cycle starts on day `CYCLE_START_DAY` of each month, UTC. A window counts toward the cycle its end falls in.
+- The cycle starts on day `CYCLE_START_DAY` of each month, UTC. A window counts toward the cycle its start falls in, so the run just after midnight on the first day bills the day before to the cycle before.
 - The 3-day average is the MB of the windows that ended in the last 72 hours over their hours, times 24; with none, the last window. The projection is the cycle so far plus that average times the days left.
 - `red` when the projection is over `RED_MB`, 90% of `CAP_MB`, the egress cap per cycle. `amber` when the last window is over `BUDGET_MB_PER_DAY`; amber only colours the digest. `unavailable` when the run could not read the statistics or raised. Otherwise `normal`.
-- An alert posts when the level changes to `red` or to `unavailable`, never twice in a row. It tags `DEV_ALERTS_MENTION_USER_ID` when that is set to digits, and nobody otherwise.
+- An alert posts when the level changes to `red` or to `unavailable`, never twice in a row. An alert Discord does not take, or one with the webhook unset, leaves the stored level as it was, so the next run posts it again. It tags `DEV_ALERTS_MENTION_USER_ID` when that is set to digits, and nobody otherwise.
 - A recovery posts, silent, when the level changes from `red` or `unavailable` to `normal` or `amber`.
 - The digest posts, silent, after every run that writes a snapshot, after any alert or recovery. Before the first window it says the baseline is taken. From two windows on it carries a chart, drawn in `app/services/egress_chart.py` and attached to the post: MB a day per window for the last 14 windows against the budget line. A chart that fails to draw is logged, and the digest posts without it.
-- The alert and the digest list the three routes of the [egress ledger](../data/tables/egress_ledger.md) with the most rows on the last complete UTC day.
+- The alert and the digest list the three routes of the [egress ledger](../data/tables/egress_ledger.md) with the most rows on the day the last window covers, and the digest is titled with that day.
 - A run that raises posts its error type through the same state row. When the state cannot be read either, the alert posts without it.
-- A failed post is logged with its error type and HTTP status and never fails the job.
+- A failed post is logged with its error type and HTTP status and never fails the job. A monitor that raises is logged with its error type, and the route still answers the snapshot, which is already stored.
 
 A run reads the state row, at most one window per day since the cycle start or the last 14 days, whichever is earlier, and three ledger rows.
 

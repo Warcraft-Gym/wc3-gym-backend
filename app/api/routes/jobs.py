@@ -1,3 +1,4 @@
+import logging
 import os
 from datetime import timedelta
 from time import monotonic
@@ -17,6 +18,8 @@ from app.models.user import User, UserReduced
 from app.models.w3c_stats import W3CSyncResult
 from app.services import casts, discord_posts, egress, egress_monitor, egress_snapshot
 from app.services.users import W3C_SYNC_WORKERS
+
+log = logging.getLogger(__name__)
 
 router = APIRouter(tags=["jobs"])
 
@@ -116,7 +119,11 @@ def take_egress_snapshot(credentials: Credentials) -> EgressSnapshotResult:
     except Exception as error:
         egress_monitor.crashed(type(error).__name__)
         raise
-    egress_monitor.report(result)
+    try:
+        egress_monitor.report(result)
+    except Exception as error:
+        # The snapshot is committed: a monitor failure is logged and the run still answers
+        log.warning("egress monitor failed: %s", type(error).__name__)
     return result
 
 

@@ -14,7 +14,6 @@ from enum import StrEnum
 from typing import Any
 
 import requests
-from sqlalchemy.orm import Session as OrmSession
 
 from app.core.db import Session
 from app.models.egress_ledger import EgressLedger
@@ -95,6 +94,18 @@ class Meters:
         return Level.NORMAL
 
     @property
+    def covers(self) -> date:
+        """The UTC day the last window covers; the ledger day the posts list."""
+        if self.last is None:
+            return (self.now - timedelta(days=1)).date()
+        return self.last.start.date()
+
+    @property
+    def since(self) -> datetime:
+        """When the current level began: the start of the window that set it."""
+        return self.last.start if self.last is not None else self.now
+
+    @property
     def day(self) -> int:
         return (self.now - self.cycle.start).days + 1
 
@@ -102,7 +113,8 @@ class Meters:
 def meters(found: list[EgressWindow], now: datetime) -> Meters:
     """The cycle's figures from the windows read, oldest first; `history` keeps them all."""
     c = cycle(now)
-    so_far = sum(w.estimated_mb for w in found if w.end >= c.start)
+    # The 00:00 run's window covers the day before, so a window counts in the cycle it starts in
+    so_far = sum(w.estimated_mb for w in found if w.start >= c.start)
     recent = [w for w in found if w.end >= now - AVERAGE_OVER] or found[-1:]
     hours = sum(w.hours for w in recent)
     average = sum(w.estimated_mb for w in recent) / hours * 24 if hours else 0.0
@@ -195,6 +207,10 @@ def fit(embed: dict[str, Any]) -> dict[str, Any]:
         + len(embed["footer"]["text"])
         + sum(len(f["name"]) + len(f["value"]) for f in embed["fields"])
     )
+    # Fields over the total on their own: drop trailing ones, always keeping the first
+    while rest > MAX_TOTAL - 1 and len(embed["fields"]) > 1:
+        dropped = embed["fields"].pop()
+        rest -= len(dropped["name"]) + len(dropped["value"])
     room = min(LIMITS["description"], MAX_TOTAL - rest)
     embed["description"] = cut(embed.get("description", ""), max(room, 1))
     return embed
@@ -251,7 +267,6 @@ def alert(
         f"{lead}The cycle is at {size(m.cycle_mb)} of 5 GB and is projected at "
         f"{size(m.projected_mb)} when it ends {stamp(m.cycle.end, 'R')}."
     )
-    day = (m.now - timedelta(days=1)).date()
     fields = [
         field("Last window", rate(m.last)),
         field("3-day average", f"~{m.average_mb_per_day:,.0f} MB/day"),
@@ -262,7 +277,7 @@ def alert(
         ),
         field("Projected at cycle end", f"~{size(m.projected_mb)}"),
         field("Since", stamp(since)),
-        field("Top routes (rows)", route_lines(routes, day), inline=False),
+        field("Top routes (rows)", route_lines(routes, m.covers), inline=False),
         field(
             "Next step",
             "Check who calls these routes with `just egress-routes 1`. "
@@ -341,11 +356,11 @@ def digest(m: Meters, routes: list[EgressLedger]) -> dict[str, Any]:
         field("Projected", f"~{size(m.projected_mb)}"),
         field(
             "Busiest routes (rows)",
-            route_lines(routes, (m.now - timedelta(days=1)).date()),
+            route_lines(routes, m.covers),
             inline=False,
         ),
     ]
-    title = f"Daily infrastructure digest · {day_label(m.last.end.date())}"
+    title = f"Daily infrastructure digest · {day_label(m.last.start.date())}"
     image = f"attachment://{CHART}" if len(m.history) >= 2 else None
     return message(m.now, colour, title, status, fields, silent=True, image=image)
 
@@ -360,7 +375,7 @@ def posts(
     was = state.level if state is not None else None
     out = []
     if m.level in ALERTING and m.level != was:
-        out.append(alert(m, routes, m.now, mention))
+        out.append(alert(m, routes, m.since, mention))
     elif state is not None and was in ALERTING and m.level not in ALERTING:
         out.append(recovery(m, state.level, state.since))
     out.append(digest(m, routes))
@@ -370,44 +385,47 @@ def posts(
 # The run
 
 
-def save(
-    session: OrmSession, state: MonitorState | None, level: Level, now: datetime
-) -> None:
-    if state is None:
-        session.add(MonitorState(key=KEY, level=level, since=now, updated_at=now))
-        return
-    if state.level != level:
-        state.level, state.since = level, now
-    state.updated_at = now
+def save(level: Level, since: datetime, now: datetime) -> None:
+    """Store the level; `since` moves only when the level changes."""
+    with Session.begin() as session:
+        state = session.get(MonitorState, KEY)
+        if state is None:
+            session.add(MonitorState(key=KEY, level=level, since=since, updated_at=now))
+            return
+        if state.level != level:
+            state.level, state.since = level, since
+        state.updated_at = now
 
 
 def report(result: EgressSnapshotResult, now: datetime | None = None) -> None:
-    """Level the run, store the level and post what changed; a skipped run does nothing."""
+    """Level the run, post what changed and store the level; a skipped run does nothing.
+
+    An alert that is not delivered leaves the stored level as it was, so the next run retries it.
+    """
     if result.skipped:
         return
     now = now or utcnow()
     mention = mention_id()
     history: tuple[EgressWindow, ...] = ()
-    with Session.begin() as session:
+    with Session() as session:
         state = session.get(MonitorState, KEY)
+        was = state.level if state is not None else None
         if not result.available:
-            level = Level.UNAVAILABLE
+            level, since = Level.UNAVAILABLE, now
             out = []
-            if state is None or state.level != level:
+            if was != level:
                 out = [unavailable_alert(result.reason or "unknown", now, mention)]
         else:
-            since = min(cycle(now).start, now - timedelta(days=CHART_DAYS))
-            m = meters(windows(session, since), now)
-            level, history = m.level, m.history
-            routes = egress.busiest(
-                session, (now - timedelta(days=1)).date(), TOP_ROUTES
-            )
+            start = min(cycle(now).start, now - timedelta(days=CHART_DAYS))
+            m = meters(windows(session, start), now)
+            level, since, history = m.level, m.since, m.history
+            routes = egress.busiest(session, m.covers, TOP_ROUTES)
             out = posts(state, m, routes, mention)
-        save(session, state, level, now)
-    if not os.getenv("DEV_ALERTS_WEBHOOK_URL"):
-        return  # no channel: draw no chart
-    for payload in out:
-        post(*with_chart(payload, history))
+    alerting = level in ALERTING and level != was
+    delivered = [post(*with_chart(p, history)) for p in out]
+    if alerting and not delivered[0]:
+        return
+    save(level, since, now)
 
 
 def with_chart(
@@ -415,9 +433,9 @@ def with_chart(
 ) -> tuple[dict[str, Any], bytes | None]:
     """The payload and its chart when its embed shows one; on a render error, without the image."""
     embed = payload["embeds"][0]
-    if "image" not in embed:
+    if "image" not in embed or not os.getenv("DEV_ALERTS_WEBHOOK_URL"):
         return payload, None
-    points = [(day_label(w.end.date()), w.mb_per_day) for w in history[-CHART_DAYS:]]
+    points = [(day_label(w.start.date()), w.mb_per_day) for w in history[-CHART_DAYS:]]
     try:
         return payload, egress_chart.render(points, BUDGET_MB_PER_DAY)
     except Exception as error:
@@ -436,12 +454,12 @@ def crashed(reason: str, now: datetime | None = None) -> None:
         post(unavailable_alert(reason, now, mention_id()))
 
 
-def post(payload: dict[str, Any], png: bytes | None = None) -> None:
+def post(payload: dict[str, Any], png: bytes | None = None) -> bool:
     """Send one payload to the DEV_ALERTS_WEBHOOK_URL channel webhook, with the chart as an
-    attachment when there is one; unset sends nothing."""
+    attachment when there is one; True when Discord took it, False when unset or failed."""
     url = os.getenv("DEV_ALERTS_WEBHOOK_URL")
     if not url:
-        return
+        return False
     try:
         if png is None:
             sent = requests.post(url, json=payload, timeout=10)
@@ -453,7 +471,9 @@ def post(payload: dict[str, Any], png: bytes | None = None) -> None:
                 timeout=10,
             )
         sent.raise_for_status()
+        return True
     except requests.RequestException as error:
         # The exception text carries the webhook URL and its token: log the type and status only
         status = error.response.status_code if error.response is not None else None
         log.warning("egress post not sent: %s %s", type(error).__name__, status)
+        return False

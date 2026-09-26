@@ -123,15 +123,15 @@ def test_the_projection_extends_the_3_day_average_over_the_days_left() -> None:
     assert m.level == Level.RED
 
 
-def test_a_window_counts_toward_the_cycle_it_ends_in_but_every_recent_window_sets_the_rate() -> (
-    None
-):
-    now = datetime(2026, 9, 27, 6, tzinfo=UTC)
-    found = [w(datetime(2026, 9, 25, 23, tzinfo=UTC), 900), w(now, 60, hours=31)]
+def test_the_run_after_day_26_counts_the_day_before_in_the_old_cycle() -> None:
+    """The 00:00 run on the 26th covers the 25th, which the cycle before pays for."""
+    now = datetime(2026, 9, 27, 0, 10, tzinfo=UTC)
+    found = [w(datetime(2026, 9, 26, 0, 10, tzinfo=UTC), 900), w(now, 60)]
     m = egress_monitor.meters(found, now)
     assert m.cycle_mb == 60
-    # 960 MB over 55 hours
-    assert m.average_mb_per_day == pytest.approx(960 / 55 * 24)
+    # Both windows ended in the last 72 hours: 960 MB over 48 hours
+    assert m.average_mb_per_day == pytest.approx(480)
+    assert m.covers == date(2026, 9, 26)
 
 
 def test_with_no_window_in_the_last_72_hours_the_last_window_sets_the_rate() -> None:
@@ -158,7 +158,7 @@ def test_normal_to_red_alerts_then_red_again_posts_only_the_digest(
 ) -> None:
     before = NOW - timedelta(days=1)
     run(monkeypatch, daily(50, now=before), before)
-    assert titles(sent) == ["Daily infrastructure digest · 28 Sep"]
+    assert titles(sent) == ["Daily infrastructure digest · 27 Sep"]
     assert sent[0]["flags"] == egress_monitor.SILENT
     assert sent[0]["embeds"][0]["color"] == egress_monitor.BLUE
     sent.clear()
@@ -166,21 +166,24 @@ def test_normal_to_red_alerts_then_red_again_posts_only_the_digest(
     run(monkeypatch, daily(200))
     assert titles(sent) == [
         "Supabase egress: on track to pass the 5 GB cap",
-        "Daily infrastructure digest · 29 Sep",
+        "Daily infrastructure digest · 28 Sep",
     ]
     alert, digest = sent
     assert "flags" not in alert
     assert digest["flags"] == egress_monitor.SILENT
     assert digest["embeds"][0]["color"] == egress_monitor.RED
     current = state()
-    assert current is not None and (current.level, current.since) == ("red", NOW)
+    assert current is not None and (current.level, current.since) == (
+        "red",
+        NOW - timedelta(days=1),
+    )
     sent.clear()
 
     after = NOW + timedelta(days=1)
     run(monkeypatch, daily(200, now=after), after)
-    assert titles(sent) == ["Daily infrastructure digest · 30 Sep"]
+    assert titles(sent) == ["Daily infrastructure digest · 29 Sep"]
     current = state()
-    assert current is not None and current.since == NOW
+    assert current is not None and current.since == NOW - timedelta(days=1)
 
 
 def test_red_to_normal_posts_a_silent_recovery_then_the_digest(
@@ -192,20 +195,20 @@ def test_red_to_normal_posts_a_silent_recovery_then_the_digest(
     run(monkeypatch, daily(20))
     assert titles(sent) == [
         "Supabase egress: back under budget",
-        "Daily infrastructure digest · 29 Sep",
+        "Daily infrastructure digest · 28 Sep",
     ]
     recovery = sent[0]
     assert recovery["flags"] == egress_monitor.SILENT
     assert recovery["embeds"][0]["color"] == egress_monitor.GREEN
     assert recovery["embeds"][0]["fields"][2]["name"] == "Red for"
-    assert recovery["embeds"][0]["fields"][2]["value"].startswith("3 days, since <t:")
+    assert recovery["embeds"][0]["fields"][2]["value"].startswith("4 days, since <t:")
 
 
 def test_amber_colours_the_digest_and_never_alerts(
     monkeypatch: pytest.MonkeyPatch, sent: list[dict[str, Any]]
 ) -> None:
     run(monkeypatch, daily(50, 2) + [w(NOW, 120)])
-    assert titles(sent) == ["Daily infrastructure digest · 29 Sep"]
+    assert titles(sent) == ["Daily infrastructure digest · 28 Sep"]
     embed = sent[0]["embeds"][0]
     assert embed["color"] == egress_monitor.AMBER
     assert embed["description"] == "Yesterday was over the daily budget."
@@ -428,7 +431,7 @@ def test_a_chart_that_fails_to_draw_leaves_the_digest_without_it(
 
     monkeypatch.setattr(egress_chart, "render", broken)
     run(monkeypatch, daily(50))
-    assert titles(sent) == ["Daily infrastructure digest · 29 Sep"]
+    assert titles(sent) == ["Daily infrastructure digest · 28 Sep"]
     assert "image" not in sent[0]["embeds"][0] and "_file" not in sent[0]
     assert "OSError" in caplog.text
 
@@ -440,3 +443,71 @@ def test_alerts_and_recoveries_carry_no_chart(
     alert, digest = sent
     assert "image" not in alert["embeds"][0] and "_file" not in alert
     assert "_file" in digest
+
+
+def test_an_undelivered_alert_keeps_the_level_so_the_next_run_retries(
+    monkeypatch: pytest.MonkeyPatch, sent: list[dict[str, Any]]
+) -> None:
+    before = NOW - timedelta(days=1)
+    run(monkeypatch, daily(50, now=before), before)
+    sent.clear()
+
+    def down(url: str, timeout: float, **kwargs: object) -> None:
+        raise egress_monitor.requests.ConnectionError("down")
+
+    with monkeypatch.context() as broken:
+        broken.setattr(egress_monitor.requests, "post", down)
+        run(monkeypatch, daily(200))
+    current = state()
+    assert current is not None and current.level == "normal"
+
+    monkeypatch.delenv("DEV_ALERTS_WEBHOOK_URL")
+    run(monkeypatch, daily(200))
+    current = state()
+    assert current is not None and current.level == "normal"
+
+    monkeypatch.setenv("DEV_ALERTS_WEBHOOK_URL", "https://discord.test/webhook")
+    run(monkeypatch, daily(200))
+    assert titles(sent)[0] == "Supabase egress: on track to pass the 5 GB cap"
+    current = state()
+    assert current is not None and current.level == "red"
+
+
+def test_the_alert_shows_when_the_window_that_turned_it_red_began(
+    monkeypatch: pytest.MonkeyPatch, sent: list[dict[str, Any]]
+) -> None:
+    run(monkeypatch, daily(200))
+    fields = {f["name"]: f["value"] for f in sent[0]["embeds"][0]["fields"]}
+    start = NOW - timedelta(days=1)
+    assert fields["Since"] == f"<t:{int(start.timestamp())}:f>"
+
+
+def test_fields_over_the_total_lose_the_trailing_ones() -> None:
+    fields = [egress_monitor.field(f"f{i}", "x" * 1024) for i in range(10)]
+    payload = egress_monitor.message(NOW, egress_monitor.BLUE, "t", "d", fields)
+    embed = payload["embeds"][0]
+    assert size(payload) <= 6000
+    assert 1 <= len(embed["fields"]) < 10
+    assert [f["name"] for f in embed["fields"]] == [
+        f"f{i}" for i in range(len(embed["fields"]))
+    ]
+
+
+def test_a_monitor_failure_still_answers_the_snapshot(
+    client: Client, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    monkeypatch.setenv("CRON_SECRET", SECRET)
+
+    def broken(result: object) -> None:
+        raise RuntimeError("monitor down")
+
+    monkeypatch.setattr(egress_monitor, "report", broken)
+    response = client.get(
+        "/jobs/egress-snapshot", headers={"Authorization": f"Bearer {SECRET}"}
+    )
+    assert response.status_code == 200
+    assert "RuntimeError" in caplog.text
+
+
+def test_the_chart_ticks_are_round_numbers() -> None:
+    assert [egress_chart.nice(x) for x in (282, 23.75, 20, 0.3)] == [500, 50, 20, 0.5]
