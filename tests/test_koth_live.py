@@ -13,6 +13,7 @@ from httpx2 import Client
 from app.core.db import Session
 from app.models.base import ident
 from app.models.enums import Race
+from app.models.series_game import DBSeriesGame
 from app.models.user import User
 from app.models.w3c_stats import W3CStats
 from app.services.koth import legacy
@@ -945,3 +946,38 @@ def _by_tag(tag: str) -> Any:  # noqa: ANN401
     from sqlmodel import col, select
 
     return select(User).where(col(User.battleTag) == tag)
+
+
+def test_game_one_follows_every_score_change(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """The board, the series route and a clear all keep game 1 on the series score."""
+    night = open_night(client, auth_headers)
+    top = bracket_ids(night)[0]
+    first = place(client, auth_headers, night, "Game#1", 1700, top)
+    second = place(client, auth_headers, night, "Game#2", 1700, top)
+    played = play(client, auth_headers, night["id"], first, second)
+    series_id = only(played, top)["played"][0]["series_id"]
+
+    def game_one() -> str | None:
+        with Session() as session:
+            game = session.get(DBSeriesGame, (series_id, 1))
+            assert game is not None
+            return game.winner_side
+
+    assert game_one() == "A"
+    turned = client.put(
+        f"/series/{series_id}",
+        json={"player1_score": 0, "player2_score": 1},
+        headers=auth_headers,
+    )
+    assert turned.status_code == 200, turned.text
+    assert game_one() == "B"
+    cleared = client.put(
+        f"/series/{series_id}?force=true",
+        json={"player1_score": None, "player2_score": None},
+        headers=auth_headers,
+    )
+    assert cleared.status_code == 200, cleared.text
+    assert game_one() is None
+    assert client.get(f"/events/{night['id']}").json()["archived"] is False

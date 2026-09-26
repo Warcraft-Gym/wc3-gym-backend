@@ -593,6 +593,8 @@ class EventPublic(SQLModel):
     checkin_open: bool | None = None
     # The entrants who have not withdrawn; null on a list read
     entrant_count: int | None = None
+    # Imported from the KOTH archive: its board is the source record; null on a list read
+    archived: bool | None = None
     stages: list[EventStagePublic] = []
     divisions: list[EventDivisionPublic] = []
     # The events this one is the parent of, newest first; empty on a list read

@@ -173,7 +173,14 @@ def test_archive_cannot_be_reclosed_or_run_live(
         headers=auth_headers,
     )
     assert changed.status_code == 400
+    patched = client.put(
+        f"/series/{series_id}",
+        json={"player1_score": 1, "player2_score": 0},
+        headers=auth_headers,
+    )
+    assert patched.status_code == 400
     assert counts() == before
+    assert client.get(f"/events/{event_id}").json()["archived"] is True
     with Session() as session:
         assert len(list(session.scalars(select(EventAward)))) == 1
 
@@ -208,9 +215,18 @@ def test_source_bounds(label: str, expected: tuple[int | None, int | None]) -> N
         "postgresql+psycopg://remote.invalid/db",
         "postgresql+psycopg://localhost/db?host=remote.invalid",
         "sqlite:///file",
+        "postgresql+psycopg://localhost/db",
     ],
 )
 def test_cli_refuses_nonlocal_targets(url: str) -> None:
+    with pytest.raises(ValueError, match="loopback"):
+        local_url(url)
+
+
+def test_cli_refuses_a_libpq_host_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    url = "postgresql+psycopg://127.0.0.1/db"
+    assert local_url(url) == url
+    monkeypatch.setenv("PGHOSTADDR", "192.0.2.1")
     with pytest.raises(ValueError, match="loopback"):
         local_url(url)
 

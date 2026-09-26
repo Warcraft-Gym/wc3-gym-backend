@@ -85,6 +85,8 @@ An offline capture imports into real events, source divisions, entrants, ordered
 
 Source names identify archival participants within one event and section. No shorthand creates an account or implies a race. Missing dates, maps, winners and award instants remain null. Random games and placeholders stay in private source evidence and create no competitive series. Reported crowns do not imply BO1 winners.
 
+`GET /events/{id}` reads `archived` true for an imported event, and a client reads the board only then. An imported series refuses a score change. On a live night, game 1 follows the series score through the board, the series route and a reopen.
+
 The historical board returns `historical`, `date_label` and event `videos`. Each bracket retains its literal name and explicit numeric bounds, `historical_king`, and ordered `history` rows with two sides and a nullable winner. Categorical and approximate labels remain authoritative; neighbouring divisions never define a missing bound. No historical board reads ladder ratings or opens a queue. Live latest-night and defender reads exclude imported history.
 
 The board retains its fifteen-second edge cache. Imported events are limited to five hundred series, twenty divisions and one hundred videos; larger inputs require a paged reader. The board selects source labels and never returns raw source records. Event series reads retain their page limit and include standalone series through rounds.

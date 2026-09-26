@@ -32,7 +32,6 @@ from app.models.koth_night import (
 from app.models.relationships import DBEventRound
 from app.models.season import Season
 from app.models.series import Series
-from app.models.series_game import DBSeriesGame
 from app.models.types import utcnow
 from app.services import stage_engine
 from app.services.koth import board
@@ -104,11 +103,7 @@ def set_result(night_id: int, series_id: int, data: SeriesResult) -> KothBoard:
         was_slot = stage_engine.won_slot(row)
         row.player1_score = 1 if data.winner == 1 else 0
         row.player2_score = 0 if data.winner == 1 else 1
-        game = session.get(DBSeriesGame, (series_id, 1))
-        if game is None:
-            game = DBSeriesGame(series_id=series_id, game_no=1)
-            session.add(game)
-        game.winner_side = "A" if data.winner == 1 else "B"
+        stage_engine.game_one(session, row)
         session.flush()
         # The same result sent again moves neither the crown nor the line
         if not was_scored or was_slot != data.winner:

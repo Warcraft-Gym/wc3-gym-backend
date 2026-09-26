@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import json
+import os
 import re
 from collections import Counter
 from datetime import date
@@ -68,7 +69,7 @@ def load_capture(directory: Path) -> list[dict[str, Any]]:
             raise ValueError("Capture checksum path leaves its directory")
         if hashlib.sha256(path.read_bytes()).hexdigest() != expected:
             raise ValueError(f"Capture checksum mismatch: {path.name}")
-        checked.add(path.name)
+        checked.add(path.relative_to(directory).as_posix())
     if not {"events.json", "manifest.json"} <= checked:
         raise ValueError("Capture manifest must cover events.json and manifest.json")
     records = json.loads((directory / "events.json").read_text())
@@ -332,15 +333,20 @@ def _insert_event(session: OrmSession, record: dict[str, Any]) -> int:
 
 
 def local_url(value: str) -> str:
-    """The import command accepts only an explicit loopback Postgres URL, without overrides."""
+    """The import command accepts only an explicit loopback Postgres URL, without overrides.
+
+    A name like localhost can resolve anywhere, and libpq takes PGHOSTADDR or a
+    PGSERVICE entry over the host, so each of those is refused too.
+    """
     url = make_url(value)
     if (
         url.drivername != "postgresql+psycopg"
-        or url.host not in {"localhost", "127.0.0.1", "::1"}
+        or url.host not in {"127.0.0.1", "::1"}
         or url.query
+        or os.environ.keys() & {"PGHOSTADDR", "PGSERVICE"}
     ):
         raise ValueError(
-            "Use an explicit loopback PostgreSQL URL without query parameters"
+            "Use a loopback 127.0.0.1 or ::1 URL, no query, PGHOSTADDR or PGSERVICE"
         )
     return value
 
