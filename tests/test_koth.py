@@ -500,22 +500,22 @@ def test_the_brackets_cut_at_the_event_thresholds(
         assert resp.json()["bracket"] == bracket
 
 
-def test_a_quiet_player_falls_back_two_seasons(
+def test_a_quiet_player_falls_back_one_season(
     client: Client, koth: dict[str, Any]
 ) -> None:
-    """The rating window is three seasons, as every message says."""
-    rate("S#1234", Race.NE, 1700, season=18)
+    """The rating window is the current W3C season and the one before it."""
+    rate("S#1234", Race.NE, 1700, season=19)
     resp = sign_up(client, "S#1234")
     assert resp.status_code == 201, resp.text
     assert (resp.json()["race"], resp.json()["mmr"]) == ("NE", 1700)
 
 
-def test_no_stats_in_three_seasons_signs_up_unplaced(
+def test_no_stats_in_the_window_signs_up_unplaced(
     client: Client, koth: dict[str, Any], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A rating nobody can read is no refusal: the row stands for the admin."""
     silent_w3c(monkeypatch)
-    rate("S#1234", Race.HU, 1500, season=17)  # one season too old
+    rate("S#1234", Race.HU, 1500, season=18)  # one season too old
     resp = sign_up(client, "S#1234")
 
     assert resp.status_code == 201, resp.text

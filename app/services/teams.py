@@ -1,8 +1,9 @@
 import logging
 from collections.abc import Iterable
+from datetime import UTC, datetime, time
 from typing import Any
 
-from sqlalchemy import select, true
+from sqlalchemy import FromClause, Integer, String, cast, column, select, true, values
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as OrmSession
 from sqlalchemy.orm import joinedload, noload, selectinload
@@ -20,9 +21,11 @@ from app.models.team import Team, TeamCreate, TeamPublic, TeamUpdate
 from app.models.team_season import DBTeamSeason
 from app.models.user import User, UserPublic
 from app.models.user_team_season import DBUserTeamSeason
+from app.models.w3c_ladder_match import W3CLadderMatch
 from app.models.w3c_stats import W3CStats
-from app.services import availability, blob, derived, discord_roles
+from app.services import availability, blob, derived, discord_roles, ladder
 from app.services.users import UserService
+from app.services.w3c_stats import _w3c_season, fill, in_window
 
 logger = logging.getLogger(__name__)
 
@@ -122,8 +125,9 @@ def _season_loads(season_id: int) -> list[Any]:
     ]
 
 
-def _load_w3c_stats(session: OrmSession, teams: Iterable[Team]) -> None:
-    """The W3C rows of every roster player and captain, in one statement.
+def _load_w3c_stats(session: OrmSession, teams: Iterable[Team], current: int) -> None:
+    """The live window W3C rows of every roster player and captain, in one
+    statement.
 
     Each user is read once, however many seats he holds across the teams.
     """
@@ -141,12 +145,72 @@ def _load_w3c_stats(session: OrmSession, teams: Iterable[Team]) -> None:
     rows: dict[int, list[W3CStats]] = {user_id: [] for user_id in users}
     for stat in session.scalars(
         select(W3CStats)
-        .where(col(W3CStats.user_id).in_(users))
+        .where(col(W3CStats.user_id).in_(users), in_window(current))
         .order_by(col(W3CStats.id))
     ):
         rows[stat.user_id].append(stat)
     for user_id, user in users.items():
         set_committed_value(user, "w3c_stats", rows[user_id])
+
+
+def _fill_mmrs(
+    session: OrmSession, teams: list[TeamPublic], season_id: int, current: int
+) -> None:
+    """The ladder summary of every roster player and captain, and once the
+    event is over (closed or past its end) the MMR each roster player entered
+    it with."""
+    fill(
+        [
+            user
+            for team in teams
+            for seats in (team.player_by_season, team.captains_by_season)
+            for users in seats.values()
+            for user in users
+        ],
+        current,
+    )
+    event = session.get(Season, season_id)
+    if event is not None and not event.running:
+        _fill_entered(session, teams, event)
+
+
+def _fill_entered(session: OrmSession, teams: list[TeamPublic], event: Season) -> None:
+    """Each roster player's MMR at the event's first day on his signup race,
+    inside the event's W3C seasons, in one statement that sends one integer
+    per player."""
+    season_id = ident(event)
+    roster = [
+        user
+        for team in teams
+        for user in team.player_by_season.get(season_id) or []
+        if user.signup_race
+    ]
+    if event.start_date is None or not roster:
+        return
+    seats = (
+        values(column("user_id", Integer), column("race", String), name="seats")
+        .data(list({(user.id, user.signup_race) for user in roster}))
+        .cte()
+    )
+    # a bound value reaches Postgres as text, which its race enum does not compare to
+    ladder_table: FromClause = getattr(W3CLadderMatch, "__table__")  # noqa: B009
+    race = cast(seats.c.race, ladder_table.c.race.type)
+    bound = ladder.w3c_seasons(session, [season_id])
+    instant = datetime.combine(event.start_date, time(), tzinfo=UTC)
+    entered = {
+        (user_id, race_name): mmr
+        for user_id, race_name, mmr in session.execute(
+            select(
+                seats.c.user_id,
+                seats.c.race,
+                ladder.mmr_at(
+                    seats.c.user_id, race, instant, select(bound.c.wc3_season)
+                ),
+            )
+        )
+    }
+    for user in roster:
+        user.mmr_entered = entered.get((user.id, user.signup_race))
 
 
 # A team list reads the season rows and no people; noload alone, because a
@@ -389,8 +453,10 @@ class TeamService:
             )
             if not team:
                 raise NotFoundError("Team not found")
-            _load_w3c_stats(session, [team])
+            current = _w3c_season(session)
+            _load_w3c_stats(session, [team], current)
             public = _public(session, team)
+            _fill_mmrs(session, [public], season_id, current)
             # An event without scheduling asks nobody, so every list stays empty
             if event.scheduling_enabled:
                 _fill_out_rounds(session, public, team_id, season_id)
@@ -510,9 +576,11 @@ class TeamService:
                 .limit(limit)
             )
             teams = session.scalars(statement).unique().all()
-            _load_w3c_stats(session, teams)
+            current = _w3c_season(session)
+            _load_w3c_stats(session, teams, current)
             result = [TeamPublic.from_team(team) for team in teams]
             _fill(session, result)
+            _fill_mmrs(session, result, season_id, current)
             return result
 
     def get_teams_season_basic(

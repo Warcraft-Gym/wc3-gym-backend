@@ -541,7 +541,7 @@ def test_a_finished_season_never_reads_the_current_w3c_season(
     from app.core.db import Session
     from app.models.season import Season
     from app.models.settings import Settings
-    from app.services.events import W3C_SEASON_KEY
+    from app.services.w3c_stats import W3C_SEASON_KEY
     from tests.test_ladder_read import add_match, sign_up
 
     season = seeded["season_id"]

@@ -2,6 +2,7 @@ from datetime import timedelta
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session as OrmSession
+from sqlalchemy.orm import with_loader_criteria
 from sqlmodel import col
 
 from app.core import fantasy
@@ -20,7 +21,9 @@ from app.models.series import (
     SeriesSort,
     SeriesUpdate,
 )
+from app.models.w3c_stats import W3CStats
 from app.services import derived, series_rules, stage_engine
+from app.services.w3c_stats import _w3c_season, fill, in_window
 
 
 def both_scores(row: Series, wins: int | None = None) -> None:
@@ -103,16 +106,22 @@ class SeriesService:
             Series.delete(session, series_id)
 
     def get(self, series_id: int) -> SeriesPublic:
+        """One series; its players carry the live window W3C rows and summary."""
         with Session.begin() as session:
+            current = _w3c_season(session)
             series = session.scalars(
                 select(Series)
-                .options(*Series._eager_options())
+                .options(
+                    *Series._eager_options(),
+                    with_loader_criteria(W3CStats, in_window(current)),
+                )
                 .where(col(Series.id) == series_id)
             ).first()
             if not series:
                 raise NotFoundError("Series not found")
             public = SeriesPublic.from_series(series)
             derived.fill_series(session, [public])
+            fill([public.player1, public.player2], current)
             return public
 
     def search(

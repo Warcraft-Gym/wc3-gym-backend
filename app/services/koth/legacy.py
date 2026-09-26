@@ -530,8 +530,8 @@ def _payloads(
             .order_by(col(EventEntrant.id))
         )
     )
-    users = _users_for(session, rows)
     season = _w3c_season(session)
+    users = _users_for(session, rows, season)
     chains: dict[int | None, list[Series]] = {}
     for row in night.series_of(session, event_id):
         chains.setdefault(row.division_id, []).append(row)

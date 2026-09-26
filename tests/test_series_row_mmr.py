@@ -3,9 +3,9 @@
 `SeriesPublic.from_series_reduced` leaves `w3c_stats` empty, so the season
 list (the upcoming page) and `GET /player-series` (the round cards of the
 player page) hold the rating on the row itself. On a running event the rule
-is the one the stage rows and the entrant lists use: the newest stored W3C
-season that carries a rating above 0 on the race the row names, three seasons
-back and no further, null otherwise. On a finished event the row carries the
+is the one the stage rows and the entrant lists use: the newest row of the live
+W3C window (the current season and the one before it) that carries a rating
+above 0 on the race the row names, null otherwise. On a finished event the row carries the
 MMR of the time: `ladder.mmr_at` at the series time, inside the event's W3C
 seasons.
 """
@@ -163,14 +163,13 @@ def test_the_player_series_read_rates_both_sides(
 def test_a_row_reads_the_newest_rated_season_of_the_race(
     client: Client, signed_up: dict[str, Any]
 ) -> None:
-    """The newest stored season that carries a rating wins, and a season that
-    carries none, null or zero, is walked back over."""
+    """The newest window season that carries a rating wins, and a season that
+    carries none is walked back over, inside the window."""
     first, _, third, _ = signed_up["player_ids"]
     rate(
-        (first, Race.HU, 19, 1600),
-        (first, Race.HU, 20, 1700),
-        (third, Race.NE, 19, 1400),
-        (third, Race.NE, 20, 0),
+        (first, Race.HU, 20, 1600),
+        (first, Race.HU, 21, 1700),
+        (third, Race.NE, 20, 1400),
         (third, Race.NE, 21, None),
     )
 
@@ -184,9 +183,9 @@ def test_a_row_reads_the_newest_rated_season_of_the_race(
 def test_a_row_reads_no_rating_older_than_the_window(
     client: Client, signed_up: dict[str, Any]
 ) -> None:
-    """The window hangs on the season the app is on, three seasons back."""
+    """The window hangs on the season the app is on and the one before it."""
     first, _, third, _ = signed_up["player_ids"]
-    rate((first, Race.HU, 15, 1900), (third, Race.NE, 23, 1500))
+    rate((first, Race.HU, 21, 1900), (third, Race.NE, 23, 1500))
 
     row = played(
         season_rows(client, signed_up["season_id"]), signed_up["series_played_id"]

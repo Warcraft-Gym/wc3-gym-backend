@@ -19,7 +19,7 @@ from app.models.series_cast import SeriesCast
 from app.models.settings import Settings
 from app.models.types import utcnow
 from app.models.user import User
-from app.models.w3c_ladder_match import W3CLadderMatch
+from app.models.w3c_stats import W3CStats
 from app.services import discord, series_cards
 from app.services.series import SeriesService
 from tests.seed import add_bets
@@ -45,30 +45,21 @@ def test_a_player_reads_flag_name_race_and_mmr(
     )
 
 
-def test_ratings_take_the_latest_synced_mmr_on_each_race(
+def test_ratings_take_the_live_summary_on_each_race(
     seeded: dict[str, Any],
 ) -> None:
-    """The card shows the last number the sync stored in the current or the
+    """The card shows the ladder summary: the newest row in the current or the
     previous W3C season; an older season shows none."""
     p2, p4 = seeded["player_ids"][1], seeded["player_ids"][3]
-    now = utcnow()
     with Session.begin() as session:
         session.add(Settings(key="current_w3c_season", value="26"))
-        for number, (user_id, wc3_season, days, mmr) in enumerate(
-            ((p2, 25, 30, 1400), (p2, 25, 1, 1450), (p4, 24, 1, 1300))
+        for user_id, wc3_season, mmr in (
+            (p2, 25, 1400),
+            (p2, 26, 1450),
+            (p4, 24, 1300),
         ):
             session.add(
-                W3CLadderMatch(
-                    w3c_match_id=f"m{number}",
-                    wc3_season=wc3_season,
-                    start_time=now - timedelta(days=days),
-                    duration_s=900,
-                    race=Race.OC,
-                    won=True,
-                    mmr_before=mmr - 20,
-                    mmr_after=mmr,
-                    user_id=user_id,
-                )
+                W3CStats(user_id=user_id, wc3_season=wc3_season, race=Race.OC, mmr=mmr)
             )
     marks = series_cards.ratings([SeriesService().get(seeded["series_open_id"])])
     assert marks.mmr == {(p2, Race.OC): 1450}
@@ -120,7 +111,7 @@ def test_the_footer_carries_the_w3c_logo_and_the_oldest_sync(
         for user_id, hours in ((p2, 1), (p4, 0)):
             user = session.get(User, user_id)
             assert user
-            user.ladder_synced_at = oldest + timedelta(hours=hours)
+            user.w3c_synced_at = oldest + timedelta(hours=hours)
     card = series_cards.claim_card(SeriesService().get(seeded["series_open_id"]))
     embed = card["embeds"][0]
     assert embed["footer"] == {

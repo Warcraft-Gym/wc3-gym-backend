@@ -415,8 +415,8 @@ def test_the_board_costs_a_constant_number_of_statements(
     assert len(body["players"]) == 16
     assert len(body["pairs"]) == 64
     assert small[0] == large[0]
-    # seventeen today; the guard is that it is a constant, not that it is low
-    assert large[0] <= 18, large[0]
+    # nineteen today; the guard is that it is a constant, not that it is low
+    assert large[0] <= 20, large[0]
     # a full 8 by 8 board measures about 9.7 kB of figures
     assert len(json.dumps(body)) < 12_000, len(json.dumps(body))
 

@@ -4,7 +4,7 @@ title: Events module
 description: One data model for every kind of event, with GNL and KOTH behaviour in their own modules on top, a stage engine that never branches on kind, a phase derived on every read, and the admin's path from a new league to a finished event with awards.
 resource: ../../../app/services/events.py
 tags: [events]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-20T18:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-26T10:02:14Z }
 sources:
   - id: events
     resource: ../../../app/services/events.py
@@ -54,7 +54,7 @@ An event's phase is derived on every read and never stored. The rungs, read from
 
 # Entrants, seeds, divisions
 
-An entrant is a player or a pre-made team in one event, with a race, a seed, a division, and eligibility warnings (`min_games`, `mmr_max`, a ban). Warnings show on the row and never refuse a signup. The games rule is one rule: `min_games` ladder games on the signup race, counted over the newest `min_games_seasons` W3C seasons where the event names a window and over every synced season where it does not. Seeds come from MMR, a shuffle, a hand order, the previous stage, a qualifier or an invitation. Seeding from a qualifier is not built: an event names the event it feeds through `parent_id`, and the seed write answers `not_built` until the parent reads its qualifiers' tables. An admin locks the seeds of a stage; a locked stage refuses a seed write. A seed from the previous stage and the advance to the next stage read one order, and both refuse with a 400 while any series of that stage has no result.
+An entrant is a player or a pre-made team in one event, with a race, a seed, a division, and eligibility warnings (`min_games`, `mmr_max`, a ban). Warnings show on the row and never refuse a signup. The games rule is one rule: `min_games` ladder games on the signup race, counted over the live W3C window, the current season and the one before it, or over the current season alone where `min_games_seasons` is 1. Seeds come from MMR, a shuffle, a hand order, the previous stage, a qualifier or an invitation. Seeding from a qualifier is not built: an event names the event it feeds through `parent_id`, and the seed write answers `not_built` until the parent reads its qualifiers' tables. An admin locks the seeds of a stage; a locked stage refuses a seed write. A seed from the previous stage and the advance to the next stage read one order, and both refuse with a 400 while any series of that stage has no result.
 
 Divisions cut the entrant pool by MMR (`app/core/divisions.py`). A band list that names a lower bound for every band takes no entrant without a rating: that entrant stays unplaced until an admin places it. Every division runs the same stage list on its own; a merged playoff across divisions is never a rule in the app.
 
