@@ -605,7 +605,7 @@ ROWS_PER_CALL = {
     "/users": 18,
     # Every stored W3C season of the player, and one row naming the current one
     "/users/{player_id}": 17,
-    "/events": 7,
+    "/events": 8,
 }
 # Room for a row or two of drift before the ceiling fails
 ROWS_MARGIN = 2

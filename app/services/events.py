@@ -12,7 +12,16 @@ from collections.abc import Iterable, Sequence
 from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 
-from sqlalchemy import delete, distinct, func, or_, select, tuple_, update
+from sqlalchemy import (
+    ColumnElement,
+    delete,
+    distinct,
+    func,
+    or_,
+    select,
+    tuple_,
+    update,
+)
 from sqlalchemy.orm import Session as OrmSession
 from sqlalchemy.orm import joinedload, noload, selectinload
 from sqlmodel import col
@@ -271,26 +280,35 @@ class EventService:
         limit: int | None = None,
         offset: int = 0,
         claims: dict[str, Any] | None = None,
-    ) -> list[EventPublic]:
-        """One page of events, newest first, each with its computed phase.
+    ) -> tuple[list[EventPublic], int]:
+        """One page of events, newest first, each with its computed phase, and
+        the count of every event the filter keeps.
 
         An unpublished event is a draft only an admin reads, so a caller who
         is not one sees the published rows whatever the filter asks for.
         """
-        statement = (
-            select(Season).options(*_EVENT_OPTIONS).order_by(col(Season.id).desc())
-        )
+        filters: list[ColumnElement[bool]] = []
         if kind is not None:
-            statement = statement.where(col(Season.kind) == kind)
+            filters.append(col(Season.kind) == kind)
         if league_id is not None:
-            statement = statement.where(col(Season.league_id) == league_id)
+            filters.append(col(Season.league_id) == league_id)
         if published is not None:
-            statement = statement.where(col(Season.published).is_(published))
+            filters.append(col(Season.published).is_(published))
         if not is_admin(claims):
-            statement = statement.where(col(Season.published).is_(True))
+            filters.append(col(Season.published).is_(True))
+        statement = (
+            select(Season)
+            .options(*_EVENT_OPTIONS)
+            .where(*filters)
+            .order_by(col(Season.id).desc())
+        )
         with Session.begin() as session:
+            total = (
+                session.scalar(select(func.count()).select_from(Season).where(*filters))
+                or 0
+            )
             events = session.scalars(statement.offset(offset).limit(limit)).all()
-            return _publics(session, events)
+            return _publics(session, events), total
 
     def search(
         self,

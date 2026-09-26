@@ -21,9 +21,9 @@ def test_two_sync_requests_run_at_the_same_time(
 
     meet = threading.Barrier(2, timeout=5)
 
-    def wait_for_the_other(**kwargs: object) -> list[object]:
+    def wait_for_the_other(**kwargs: object) -> tuple[list[object], int]:
         meet.wait()  # raises BrokenBarrierError when the second request never arrives
-        return []
+        return [], 0
 
     monkeypatch.setattr(deps.event_service, "get_all", wait_for_the_other)
 
