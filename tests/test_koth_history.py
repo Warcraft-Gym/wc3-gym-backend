@@ -390,8 +390,8 @@ def test_an_inferred_winner_shows_on_the_board_and_stays_out_of_records(
         {
             "kind": "bracket",
             "title": "Gold and below",
-            "matches": [bo1("Ann", "Bo"), bo1("Ann", "Cy")],
-            "crowns": [{"player": "Cy", "raw_text": "Cy is crowned King"}],
+            "matches": [bo1("Ann", "Bo"), bo1("Ann", "Cy"), bo1("Di", "Ed")],
+            "crowns": [{"player": "Ed", "raw_text": "Ed is crowned King"}],
         }
     ]
     event_id = import_capture([record], apply=True)["event_ids"]["capture-first"]
@@ -403,5 +403,7 @@ def test_an_inferred_winner_shows_on_the_board_and_stays_out_of_records(
     history = client.get(f"/koth/nights/{event_id}/board").json()["brackets"][0][
         "history"
     ]
-    assert [r["inferred_winner_side"] for r in history] == [1, 2]
-    assert [r["winner_side"] for r in history] == [None, None]
+    assert [r["inferred_winner_side"] for r in history] == [1, None, 2]
+    assert [r["forfeit"] for r in history] == [False, True, False]
+    assert [r["review_note"] for r in history] == [None, None, None]
+    assert [r["winner_side"] for r in history] == [None, None, None]

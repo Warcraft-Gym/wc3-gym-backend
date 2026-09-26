@@ -128,6 +128,8 @@ class KothHistoricalSeries(SQLModel):
     result_unavailable: bool
     # From winner-stays-on order: shown on the board, left out of every record
     inferred_winner_side: Literal[1, 2] | None = None
+    # Neither side played on, which the organisers read as a forfeit
+    forfeit: bool = False
     review_note: str | None = None
 
 

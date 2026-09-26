@@ -19,8 +19,37 @@ from app.models.koth_night import (
     KothPlayer,
 )
 from app.models.season import Season
-from app.services.koth.history_import import bounds
+from app.models.series import Series
+from app.services.koth.history_import import FORFEIT, bounds
 from app.services.koth.night import divisions_of, series_of
+
+
+def _history_row(
+    row: Series,
+    people: dict[int, KothPlayer],
+    inferred_winner: int | None,
+    note: str | None,
+) -> KothHistoricalSeries:
+    """One pairing: the source result, else the one the play order infers."""
+    return KothHistoricalSeries(
+        series_id=ident(row),
+        sequence=row.sequence or 0,
+        side1=people[row.entrant1_id or 0],
+        side2=people[row.entrant2_id or 0],
+        result_unavailable=row.result_unavailable,
+        winner_side=None
+        if row.result_unavailable
+        else 1
+        if (row.player1_score or 0) > (row.player2_score or 0)
+        else 2,
+        inferred_winner_side=1
+        if inferred_winner == 1
+        else 2
+        if inferred_winner
+        else None,
+        forfeit=note == FORFEIT,
+        review_note=None if note == FORFEIT else note,
+    )
 
 
 def read_archive(session: Session, night: Season, date_label: str) -> KothBoard:
@@ -59,20 +88,7 @@ def read_archive(session: Session, night: Season, date_label: str) -> KothBoard:
                 historical=True,
                 historical_king=people.get(division.king_entrant_id or 0),
                 history=[
-                    KothHistoricalSeries(
-                        series_id=ident(row),
-                        sequence=row.sequence or 0,
-                        side1=people[row.entrant1_id],
-                        side2=people[row.entrant2_id],
-                        result_unavailable=row.result_unavailable,
-                        winner_side=None
-                        if row.result_unavailable
-                        else 1
-                        if (row.player1_score or 0) > (row.player2_score or 0)
-                        else 2,
-                        inferred_winner_side=inferred.get(ident(row), (None, None))[0],
-                        review_note=inferred.get(ident(row), (None, None))[1],
-                    )
+                    _history_row(row, people, *inferred.get(ident(row), (None, None)))
                     for row in series
                     if row.division_id == ident(division)
                 ],
