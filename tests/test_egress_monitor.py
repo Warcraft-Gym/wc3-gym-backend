@@ -193,7 +193,7 @@ def test_red_to_normal_posts_a_silent_recovery_then_the_digest(
     sent.clear()
     run(monkeypatch, daily(20))
     assert titles(sent) == [
-        "Supabase egress: back under budget",
+        "Supabase egress: back on track for the 5 GB cap",
         "Daily infrastructure digest · 28 Sep",
     ]
     recovery = sent[0]
@@ -547,7 +547,7 @@ def test_the_digest_shows_the_database_size_when_it_was_read(
     fields = {f["name"]: f for f in sent[0]["embeds"][0]["fields"]}
     assert fields["Database size"] == {
         "name": "Database size",
-        "value": "~123 MB of 500 MB\n`▰▰▱▱▱▱▱▱▱▱` 25%",
+        "value": "~123 MB of the 500 MB cap\n`▰▰▱▱▱▱▱▱▱▱` 25%",
         "inline": True,
     }
     assert sent[0]["embeds"][0]["description"] == "All meters normal."
@@ -802,7 +802,7 @@ USAGE = [
 
 def vercel_field(payload: dict[str, Any]) -> str | None:
     fields = {f["name"]: f for f in payload["embeds"][0]["fields"]}
-    found = fields.get("Vercel, 30 days")
+    found = fields.get("Vercel, last 30 days")
     if found is None:
         return None
     assert found["inline"] is False
@@ -818,10 +818,10 @@ def test_the_digest_sums_the_vercel_meters_over_a_rolling_30_days(
     run(monkeypatch, daily(20))
     assert titles(sent) == ["Daily infrastructure digest · 28 Sep"]
     assert vercel_field(sent[0]) == (
-        "Invocations 214,531 · 21%\n"
-        "Function GB-hours 49.9 · 14%\n"
-        "Requests 364,870 · 36%\n"
-        "Bandwidth 2.35 GB · 2%\n"
+        "Invocations 214,531 · 21% of the Hobby limit\n"
+        "Function GB-hours 49.9 · 14% of the Hobby limit\n"
+        "Requests 364,870 · 36% of the Hobby limit\n"
+        "Bandwidth 2.35 GB · 2% of the Hobby limit\n"
         "Cache hits 50%"
     )
     (call,) = vercel
@@ -1029,7 +1029,7 @@ def test_a_digest_with_every_field_fits_discords_limits(
     m = egress_monitor.meters(daily(20_000), NOW)
     payload = egress_monitor.digest(m, [], None, 499.0, None, usage)
     names = [f["name"] for f in payload["embeds"][0]["fields"]]
-    assert names[3:5] == ["Database size", "Vercel, 30 days"]
+    assert names[3:5] == ["Database size", "Vercel, last 30 days"]
     assert size(payload) <= 6000
 
 
