@@ -4,7 +4,7 @@ title: Consumers of the API
 description: Who calls the backend, which routes each one reads, which tests pin those shapes, and the rules a consumer follows to keep reads off the database.
 resource: ../../../tests/test_public_contract.py
 tags: [api]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-24T18:30:00Z }
+generated: { by: codex/gpt-6, at: 2026-09-25T08:58:00Z }
 sources:
   - id: public-contract
     resource: ../../../tests/test_public_contract.py

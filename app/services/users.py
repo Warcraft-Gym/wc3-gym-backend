@@ -178,8 +178,8 @@ class UserService:
                 session.scalars(
                     select(User)
                     .options(
-                        joinedload(rel(User.team_seasons)).noload("*"),
-                        joinedload(rel(User.w3c_stats)),
+                        selectinload(rel(User.team_seasons)).noload("*"),
+                        selectinload(rel(User.w3c_stats)),
                         selectinload(rel(User.signup_seasons)).joinedload(
                             rel(DBUserSeasonSignup.season)
                         ),

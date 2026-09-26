@@ -1,0 +1,2304 @@
+{
+  "by_id": {
+    "1": {
+      "avg_series_per_season": 3.29,
+      "games_lost": 28,
+      "games_winrate": 59.42,
+      "games_won": 41,
+      "historical_games_lost": 15,
+      "historical_games_won": 25,
+      "historical_rating": 500,
+      "historical_seasons_played": 3,
+      "historical_series_lost": 5,
+      "historical_series_won": 10,
+      "id": 1,
+      "player_name": "Alpha",
+      "rating": 1251,
+      "seasons_played": 7,
+      "series_lost": 8,
+      "series_winrate": 65.22,
+      "series_won": 15,
+      "user": {
+        "avatar_url": null,
+        "battleTag": "Alpha#1000",
+        "country": null,
+        "discordId": "100",
+        "discordTag": "alpha",
+        "id": 1,
+        "ladder_synced_at": null,
+        "mmr": 1500,
+        "name": "Alpha",
+        "race": "HU",
+        "timezone": null,
+        "twitch_url": null,
+        "w3c_synced_at": null,
+        "youtube_url": null
+      },
+      "user_id": 1
+    },
+    "10": {
+      "avg_series_per_season": 1.0,
+      "games_lost": 2,
+      "games_winrate": 33.33,
+      "games_won": 1,
+      "historical_games_lost": 2,
+      "historical_games_won": 1,
+      "historical_rating": 50,
+      "historical_seasons_played": 1,
+      "historical_series_lost": 1,
+      "historical_series_won": 0,
+      "id": 10,
+      "player_name": "kilo",
+      "rating": 26,
+      "seasons_played": 1,
+      "series_lost": 1,
+      "series_winrate": 0.0,
+      "series_won": 0,
+      "user": null,
+      "user_id": null
+    },
+    "11": {
+      "avg_series_per_season": 0.67,
+      "games_lost": 3,
+      "games_winrate": 50.0,
+      "games_won": 3,
+      "historical_games_lost": 3,
+      "historical_games_won": 3,
+      "historical_rating": 75,
+      "historical_seasons_played": 1,
+      "historical_series_lost": 1,
+      "historical_series_won": 1,
+      "id": 11,
+      "player_name": "Kilo",
+      "rating": 39,
+      "seasons_played": 3,
+      "series_lost": 1,
+      "series_winrate": 50.0,
+      "series_won": 1,
+      "user": null,
+      "user_id": null
+    },
+    "12": {
+      "avg_series_per_season": 2.25,
+      "games_lost": 8,
+      "games_winrate": 66.67,
+      "games_won": 16,
+      "historical_games_lost": 6,
+      "historical_games_won": 11,
+      "historical_rating": 250,
+      "historical_seasons_played": 2,
+      "historical_series_lost": 2,
+      "historical_series_won": 5,
+      "id": 12,
+      "player_name": "Hotel",
+      "rating": 484,
+      "seasons_played": 4,
+      "series_lost": 2,
+      "series_winrate": 77.78,
+      "series_won": 7,
+      "user": null,
+      "user_id": null
+    },
+    "2": {
+      "avg_series_per_season": 3.4,
+      "games_lost": 25,
+      "games_winrate": 48.98,
+      "games_won": 24,
+      "historical_games_lost": 15,
+      "historical_games_won": 15,
+      "historical_rating": 300,
+      "historical_seasons_played": 2,
+      "historical_series_lost": 6,
+      "historical_series_won": 6,
+      "id": 2,
+      "player_name": "Bravo",
+      "rating": 807,
+      "seasons_played": 5,
+      "series_lost": 9,
+      "series_winrate": 47.06,
+      "series_won": 8,
+      "user": null,
+      "user_id": null
+    },
+    "3": {
+      "avg_series_per_season": 5.5,
+      "games_lost": 10,
+      "games_winrate": 81.82,
+      "games_won": 45,
+      "historical_games_lost": 10,
+      "historical_games_won": 45,
+      "historical_rating": 1000,
+      "historical_seasons_played": 4,
+      "historical_series_lost": 2,
+      "historical_series_won": 20,
+      "id": 3,
+      "player_name": "Echo",
+      "rating": 522,
+      "seasons_played": 4,
+      "series_lost": 2,
+      "series_winrate": 90.91,
+      "series_won": 20,
+      "user": {
+        "avatar_url": null,
+        "battleTag": "Echo#1004",
+        "country": null,
+        "discordId": "104",
+        "discordTag": "echo",
+        "id": 5,
+        "ladder_synced_at": null,
+        "mmr": 1504,
+        "name": "Echo",
+        "race": "HU",
+        "timezone": null,
+        "twitch_url": null,
+        "w3c_synced_at": null,
+        "youtube_url": null
+      },
+      "user_id": 5
+    },
+    "4": {
+      "avg_series_per_season": 3.25,
+      "games_lost": 19,
+      "games_winrate": 44.12,
+      "games_won": 15,
+      "historical_games_lost": 7,
+      "historical_games_won": 7,
+      "historical_rating": 200,
+      "historical_seasons_played": 1,
+      "historical_series_lost": 3,
+      "historical_series_won": 3,
+      "id": 4,
+      "player_name": "Charlie old",
+      "rating": 705,
+      "seasons_played": 4,
+      "series_lost": 8,
+      "series_winrate": 38.46,
+      "series_won": 5,
+      "user": {
+        "avatar_url": null,
+        "battleTag": "Charlie#1002",
+        "country": null,
+        "discordId": "102",
+        "discordTag": "charlie",
+        "id": 3,
+        "ladder_synced_at": null,
+        "mmr": 1502,
+        "name": "Charlie",
+        "race": "HU",
+        "timezone": null,
+        "twitch_url": null,
+        "w3c_synced_at": null,
+        "youtube_url": null
+      },
+      "user_id": 3
+    },
+    "5": {
+      "avg_series_per_season": 2.5,
+      "games_lost": 15,
+      "games_winrate": 44.44,
+      "games_won": 12,
+      "historical_games_lost": 3,
+      "historical_games_won": 4,
+      "historical_rating": 150,
+      "historical_seasons_played": 1,
+      "historical_series_lost": 1,
+      "historical_series_won": 2,
+      "id": 5,
+      "player_name": "Charlie",
+      "rating": 679,
+      "seasons_played": 4,
+      "series_lost": 6,
+      "series_winrate": 40.0,
+      "series_won": 4,
+      "user": null,
+      "user_id": null
+    },
+    "6": {
+      "avg_series_per_season": 1.5,
+      "games_lost": 12,
+      "games_winrate": 45.45,
+      "games_won": 10,
+      "historical_games_lost": 2,
+      "historical_games_won": 2,
+      "historical_rating": 0,
+      "historical_seasons_played": 1,
+      "historical_series_lost": 1,
+      "historical_series_won": 1,
+      "id": 6,
+      "player_name": "Delta",
+      "rating": 617,
+      "seasons_played": 4,
+      "series_lost": 4,
+      "series_winrate": 33.33,
+      "series_won": 2,
+      "user": {
+        "avatar_url": null,
+        "battleTag": "Lima#1011",
+        "country": null,
+        "discordId": "111",
+        "discordTag": "lima",
+        "id": 12,
+        "ladder_synced_at": null,
+        "mmr": 1511,
+        "name": "Lima",
+        "race": "HU",
+        "timezone": null,
+        "twitch_url": null,
+        "w3c_synced_at": null,
+        "youtube_url": null
+      },
+      "user_id": 12
+    },
+    "7": {
+      "avg_series_per_season": 4.0,
+      "games_lost": 9,
+      "games_winrate": 50.0,
+      "games_won": 9,
+      "historical_games_lost": 9,
+      "historical_games_won": 9,
+      "historical_rating": -50,
+      "historical_seasons_played": 2,
+      "historical_series_lost": 4,
+      "historical_series_won": 4,
+      "id": 7,
+      "player_name": "Nobody",
+      "rating": 0,
+      "seasons_played": 2,
+      "series_lost": 4,
+      "series_winrate": 50.0,
+      "series_won": 4,
+      "user": null,
+      "user_id": null
+    },
+    "8": {
+      "avg_series_per_season": 3.0,
+      "games_lost": 11,
+      "games_winrate": 35.29,
+      "games_won": 6,
+      "historical_games_lost": 0,
+      "historical_games_won": 0,
+      "historical_rating": 0,
+      "historical_seasons_played": 0,
+      "historical_series_lost": 0,
+      "historical_series_won": 0,
+      "id": 8,
+      "player_name": "Foxtrot",
+      "rating": 556,
+      "seasons_played": 2,
+      "series_lost": 4,
+      "series_winrate": 33.33,
+      "series_won": 2,
+      "user": {
+        "avatar_url": null,
+        "battleTag": "Foxtrot#1005",
+        "country": null,
+        "discordId": "105",
+        "discordTag": "foxtrot",
+        "id": 6,
+        "ladder_synced_at": null,
+        "mmr": 1505,
+        "name": "Foxtrot",
+        "race": "HU",
+        "timezone": null,
+        "twitch_url": null,
+        "w3c_synced_at": null,
+        "youtube_url": null
+      },
+      "user_id": 6
+    },
+    "9": {
+      "avg_series_per_season": 2.33,
+      "games_lost": 11,
+      "games_winrate": 42.11,
+      "games_won": 8,
+      "historical_games_lost": 0,
+      "historical_games_won": 2,
+      "historical_rating": 100,
+      "historical_seasons_played": 1,
+      "historical_series_lost": 0,
+      "historical_series_won": 1,
+      "id": 9,
+      "player_name": "Foxtrot alt",
+      "rating": 608,
+      "seasons_played": 3,
+      "series_lost": 4,
+      "series_winrate": 42.86,
+      "series_won": 3,
+      "user": {
+        "avatar_url": null,
+        "battleTag": "Foxtrot#1005",
+        "country": null,
+        "discordId": "105",
+        "discordTag": "foxtrot",
+        "id": 6,
+        "ladder_synced_at": null,
+        "mmr": 1505,
+        "name": "Foxtrot",
+        "race": "HU",
+        "timezone": null,
+        "twitch_url": null,
+        "w3c_synced_at": null,
+        "youtube_url": null
+      },
+      "user_id": 6
+    }
+  },
+  "by_user": {
+    "Alpha": {
+      "avg_series_per_season": 3.29,
+      "games_lost": 28,
+      "games_winrate": 59.42,
+      "games_won": 41,
+      "historical_games_lost": 15,
+      "historical_games_won": 25,
+      "historical_rating": 500,
+      "historical_seasons_played": 3,
+      "historical_series_lost": 5,
+      "historical_series_won": 10,
+      "id": 1,
+      "player_name": "Alpha",
+      "rating": 1251,
+      "seasons_played": 7,
+      "series_lost": 8,
+      "series_winrate": 65.22,
+      "series_won": 15,
+      "user": {
+        "avatar_url": null,
+        "battleTag": "Alpha#1000",
+        "country": null,
+        "discordId": "100",
+        "discordTag": "alpha",
+        "id": 1,
+        "ladder_synced_at": null,
+        "mmr": 1500,
+        "name": "Alpha",
+        "race": "HU",
+        "timezone": null,
+        "twitch_url": null,
+        "w3c_synced_at": null,
+        "youtube_url": null
+      },
+      "user_id": 1
+    },
+    "Bravo": null,
+    "Charlie": {
+      "avg_series_per_season": 3.25,
+      "games_lost": 19,
+      "games_winrate": 44.12,
+      "games_won": 15,
+      "historical_games_lost": 7,
+      "historical_games_won": 7,
+      "historical_rating": 200,
+      "historical_seasons_played": 1,
+      "historical_series_lost": 3,
+      "historical_series_won": 3,
+      "id": 4,
+      "player_name": "Charlie old",
+      "rating": 705,
+      "seasons_played": 4,
+      "series_lost": 8,
+      "series_winrate": 38.46,
+      "series_won": 5,
+      "user": {
+        "avatar_url": null,
+        "battleTag": "Charlie#1002",
+        "country": null,
+        "discordId": "102",
+        "discordTag": "charlie",
+        "id": 3,
+        "ladder_synced_at": null,
+        "mmr": 1502,
+        "name": "Charlie",
+        "race": "HU",
+        "timezone": null,
+        "twitch_url": null,
+        "w3c_synced_at": null,
+        "youtube_url": null
+      },
+      "user_id": 3
+    },
+    "Delta": null,
+    "Echo": {
+      "avg_series_per_season": 5.5,
+      "games_lost": 10,
+      "games_winrate": 81.82,
+      "games_won": 45,
+      "historical_games_lost": 10,
+      "historical_games_won": 45,
+      "historical_rating": 1000,
+      "historical_seasons_played": 4,
+      "historical_series_lost": 2,
+      "historical_series_won": 20,
+      "id": 3,
+      "player_name": "Echo",
+      "rating": 522,
+      "seasons_played": 4,
+      "series_lost": 2,
+      "series_winrate": 90.91,
+      "series_won": 20,
+      "user": {
+        "avatar_url": null,
+        "battleTag": "Echo#1004",
+        "country": null,
+        "discordId": "104",
+        "discordTag": "echo",
+        "id": 5,
+        "ladder_synced_at": null,
+        "mmr": 1504,
+        "name": "Echo",
+        "race": "HU",
+        "timezone": null,
+        "twitch_url": null,
+        "w3c_synced_at": null,
+        "youtube_url": null
+      },
+      "user_id": 5
+    },
+    "Golf": null,
+    "Hotel": null,
+    "India": null,
+    "Kilo": null,
+    "Lima": {
+      "avg_series_per_season": 1.5,
+      "games_lost": 12,
+      "games_winrate": 45.45,
+      "games_won": 10,
+      "historical_games_lost": 2,
+      "historical_games_won": 2,
+      "historical_rating": 0,
+      "historical_seasons_played": 1,
+      "historical_series_lost": 1,
+      "historical_series_won": 1,
+      "id": 6,
+      "player_name": "Delta",
+      "rating": 617,
+      "seasons_played": 4,
+      "series_lost": 4,
+      "series_winrate": 33.33,
+      "series_won": 2,
+      "user": {
+        "avatar_url": null,
+        "battleTag": "Lima#1011",
+        "country": null,
+        "discordId": "111",
+        "discordTag": "lima",
+        "id": 12,
+        "ladder_synced_at": null,
+        "mmr": 1511,
+        "name": "Lima",
+        "race": "HU",
+        "timezone": null,
+        "twitch_url": null,
+        "w3c_synced_at": null,
+        "youtube_url": null
+      },
+      "user_id": 12
+    },
+    "Mike_2": null,
+    "Oscar%": null,
+    "Papa": null,
+    "juliet": null
+  },
+  "orders": {
+    "None asc '%'": {
+      "keys": [
+        "user 14"
+      ],
+      "total": "1"
+    },
+    "None asc ''": {
+      "keys": [
+        "1",
+        "2",
+        "4",
+        "6",
+        "9",
+        "user 10",
+        "8",
+        "user 14",
+        "3",
+        "12",
+        "user 9",
+        "user 13",
+        "user 7",
+        "5",
+        "11",
+        "10",
+        "7"
+      ],
+      "total": "17"
+    },
+    "None asc 'CHAR'": {
+      "keys": [
+        "4",
+        "5"
+      ],
+      "total": "2"
+    },
+    "None asc '_'": {
+      "keys": [
+        "user 13"
+      ],
+      "total": "1"
+    },
+    "None asc 'a'": {
+      "keys": [
+        "1",
+        "2",
+        "4",
+        "6",
+        "9",
+        "user 14",
+        "user 9",
+        "5"
+      ],
+      "total": "8"
+    },
+    "None asc 'zzz'": {
+      "keys": [],
+      "total": "0"
+    },
+    "None desc '%'": {
+      "keys": [
+        "user 14"
+      ],
+      "total": "1"
+    },
+    "None desc ''": {
+      "keys": [
+        "1",
+        "2",
+        "4",
+        "6",
+        "9",
+        "user 10",
+        "8",
+        "user 14",
+        "3",
+        "12",
+        "user 9",
+        "user 13",
+        "user 7",
+        "5",
+        "11",
+        "10",
+        "7"
+      ],
+      "total": "17"
+    },
+    "None desc 'CHAR'": {
+      "keys": [
+        "4",
+        "5"
+      ],
+      "total": "2"
+    },
+    "None desc '_'": {
+      "keys": [
+        "user 13"
+      ],
+      "total": "1"
+    },
+    "None desc 'a'": {
+      "keys": [
+        "1",
+        "2",
+        "4",
+        "6",
+        "9",
+        "user 14",
+        "user 9",
+        "5"
+      ],
+      "total": "8"
+    },
+    "None desc 'zzz'": {
+      "keys": [],
+      "total": "0"
+    },
+    "games_lost asc '%'": {
+      "keys": [
+        "user 14"
+      ],
+      "total": "1"
+    },
+    "games_lost asc ''": {
+      "keys": [
+        "user 13",
+        "10",
+        "5",
+        "11",
+        "user 9",
+        "user 10",
+        "user 7",
+        "12",
+        "user 14",
+        "7",
+        "3",
+        "8",
+        "9",
+        "6",
+        "4",
+        "2",
+        "1"
+      ],
+      "total": "17"
+    },
+    "games_lost asc 'CHAR'": {
+      "keys": [
+        "5",
+        "4"
+      ],
+      "total": "2"
+    },
+    "games_lost asc '_'": {
+      "keys": [
+        "user 13"
+      ],
+      "total": "1"
+    },
+    "games_lost asc 'a'": {
+      "keys": [
+        "5",
+        "user 9",
+        "user 14",
+        "9",
+        "6",
+        "4",
+        "2",
+        "1"
+      ],
+      "total": "8"
+    },
+    "games_lost asc 'zzz'": {
+      "keys": [],
+      "total": "0"
+    },
+    "games_lost desc '%'": {
+      "keys": [
+        "user 14"
+      ],
+      "total": "1"
+    },
+    "games_lost desc ''": {
+      "keys": [
+        "1",
+        "2",
+        "4",
+        "6",
+        "8",
+        "9",
+        "3",
+        "7",
+        "12",
+        "user 14",
+        "user 7",
+        "user 9",
+        "user 10",
+        "5",
+        "11",
+        "10",
+        "user 13"
+      ],
+      "total": "17"
+    },
+    "games_lost desc 'CHAR'": {
+      "keys": [
+        "4",
+        "5"
+      ],
+      "total": "2"
+    },
+    "games_lost desc '_'": {
+      "keys": [
+        "user 13"
+      ],
+      "total": "1"
+    },
+    "games_lost desc 'a'": {
+      "keys": [
+        "1",
+        "2",
+        "4",
+        "6",
+        "9",
+        "user 14",
+        "user 9",
+        "5"
+      ],
+      "total": "8"
+    },
+    "games_lost desc 'zzz'": {
+      "keys": [],
+      "total": "0"
+    },
+    "games_winrate asc '%'": {
+      "keys": [
+        "user 14"
+      ],
+      "total": "1"
+    },
+    "games_winrate asc ''": {
+      "keys": [
+        "10",
+        "8",
+        "9",
+        "user 14",
+        "4",
+        "6",
+        "user 7",
+        "2",
+        "7",
+        "11",
+        "user 9",
+        "5",
+        "1",
+        "12",
+        "user 10",
+        "3",
+        "user 13"
+      ],
+      "total": "17"
+    },
+    "games_winrate asc 'CHAR'": {
+      "keys": [
+        "4",
+        "5"
+      ],
+      "total": "2"
+    },
+    "games_winrate asc '_'": {
+      "keys": [
+        "user 13"
+      ],
+      "total": "1"
+    },
+    "games_winrate asc 'a'": {
+      "keys": [
+        "9",
+        "user 14",
+        "4",
+        "6",
+        "2",
+        "user 9",
+        "5",
+        "1"
+      ],
+      "total": "8"
+    },
+    "games_winrate asc 'zzz'": {
+      "keys": [],
+      "total": "0"
+    },
+    "games_winrate desc '%'": {
+      "keys": [
+        "user 14"
+      ],
+      "total": "1"
+    },
+    "games_winrate desc ''": {
+      "keys": [
+        "user 13",
+        "3",
+        "12",
+        "user 10",
+        "1",
+        "5",
+        "7",
+        "11",
+        "user 9",
+        "2",
+        "6",
+        "user 7",
+        "4",
+        "user 14",
+        "9",
+        "8",
+        "10"
+      ],
+      "total": "17"
+    },
+    "games_winrate desc 'CHAR'": {
+      "keys": [
+        "5",
+        "4"
+      ],
+      "total": "2"
+    },
+    "games_winrate desc '_'": {
+      "keys": [
+        "user 13"
+      ],
+      "total": "1"
+    },
+    "games_winrate desc 'a'": {
+      "keys": [
+        "1",
+        "5",
+        "user 9",
+        "2",
+        "6",
+        "4",
+        "user 14",
+        "9"
+      ],
+      "total": "8"
+    },
+    "games_winrate desc 'zzz'": {
+      "keys": [],
+      "total": "0"
+    },
+    "games_won asc '%'": {
+      "keys": [
+        "user 14"
+      ],
+      "total": "1"
+    },
+    "games_won asc ''": {
+      "keys": [
+        "10",
+        "11",
+        "5",
+        "user 13",
+        "user 7",
+        "user 9",
+        "8",
+        "user 14",
+        "9",
+        "7",
+        "6",
+        "user 10",
+        "4",
+        "12",
+        "2",
+        "1",
+        "3"
+      ],
+      "total": "17"
+    },
+    "games_won asc 'CHAR'": {
+      "keys": [
+        "5",
+        "4"
+      ],
+      "total": "2"
+    },
+    "games_won asc '_'": {
+      "keys": [
+        "user 13"
+      ],
+      "total": "1"
+    },
+    "games_won asc 'a'": {
+      "keys": [
+        "5",
+        "user 9",
+        "user 14",
+        "9",
+        "6",
+        "4",
+        "2",
+        "1"
+      ],
+      "total": "8"
+    },
+    "games_won asc 'zzz'": {
+      "keys": [],
+      "total": "0"
+    },
+    "games_won desc '%'": {
+      "keys": [
+        "user 14"
+      ],
+      "total": "1"
+    },
+    "games_won desc ''": {
+      "keys": [
+        "3",
+        "1",
+        "2",
+        "12",
+        "4",
+        "6",
+        "user 10",
+        "7",
+        "9",
+        "8",
+        "user 14",
+        "user 7",
+        "user 9",
+        "5",
+        "user 13",
+        "11",
+        "10"
+      ],
+      "total": "17"
+    },
+    "games_won desc 'CHAR'": {
+      "keys": [
+        "4",
+        "5"
+      ],
+      "total": "2"
+    },
+    "games_won desc '_'": {
+      "keys": [
+        "user 13"
+      ],
+      "total": "1"
+    },
+    "games_won desc 'a'": {
+      "keys": [
+        "1",
+        "2",
+        "4",
+        "6",
+        "9",
+        "user 14",
+        "user 9",
+        "5"
+      ],
+      "total": "8"
+    },
+    "games_won desc 'zzz'": {
+      "keys": [],
+      "total": "0"
+    },
+    "mapped asc '%'": {
+      "keys": [
+        "user 14"
+      ],
+      "total": "1"
+    },
+    "mapped asc ''": {
+      "keys": [
+        "2",
+        "5",
+        "7",
+        "10",
+        "11",
+        "12",
+        "1",
+        "3",
+        "4",
+        "6",
+        "8",
+        "9",
+        "user 7",
+        "user 9",
+        "user 10",
+        "user 13",
+        "user 14"
+      ],
+      "total": "17"
+    },
+    "mapped asc 'CHAR'": {
+      "keys": [
+        "5",
+        "4"
+      ],
+      "total": "2"
+    },
+    "mapped asc '_'": {
+      "keys": [
+        "user 13"
+      ],
+      "total": "1"
+    },
+    "mapped asc 'a'": {
+      "keys": [
+        "2",
+        "5",
+        "1",
+        "4",
+        "6",
+        "9",
+        "user 9",
+        "user 14"
+      ],
+      "total": "8"
+    },
+    "mapped asc 'zzz'": {
+      "keys": [],
+      "total": "0"
+    },
+    "mapped desc '%'": {
+      "keys": [
+        "user 14"
+      ],
+      "total": "1"
+    },
+    "mapped desc ''": {
+      "keys": [
+        "1",
+        "3",
+        "4",
+        "6",
+        "8",
+        "9",
+        "user 7",
+        "user 9",
+        "user 10",
+        "user 13",
+        "user 14",
+        "2",
+        "5",
+        "7",
+        "10",
+        "11",
+        "12"
+      ],
+      "total": "17"
+    },
+    "mapped desc 'CHAR'": {
+      "keys": [
+        "4",
+        "5"
+      ],
+      "total": "2"
+    },
+    "mapped desc '_'": {
+      "keys": [
+        "user 13"
+      ],
+      "total": "1"
+    },
+    "mapped desc 'a'": {
+      "keys": [
+        "1",
+        "4",
+        "6",
+        "9",
+        "user 9",
+        "user 14",
+        "2",
+        "5"
+      ],
+      "total": "8"
+    },
+    "mapped desc 'zzz'": {
+      "keys": [],
+      "total": "0"
+    },
+    "name asc '%'": {
+      "keys": [
+        "user 14"
+      ],
+      "total": "1"
+    },
+    "name asc ''": {
+      "keys": [
+        "1",
+        "2",
+        "4",
+        "5",
+        "3",
+        "8",
+        "9",
+        "user 7",
+        "12",
+        "user 9",
+        "user 10",
+        "10",
+        "11",
+        "6",
+        "user 13",
+        "7",
+        "user 14"
+      ],
+      "total": "17"
+    },
+    "name asc 'CHAR'": {
+      "keys": [
+        "4",
+        "5"
+      ],
+      "total": "2"
+    },
+    "name asc '_'": {
+      "keys": [
+        "user 13"
+      ],
+      "total": "1"
+    },
+    "name asc 'a'": {
+      "keys": [
+        "1",
+        "2",
+        "4",
+        "5",
+        "9",
+        "user 9",
+        "6",
+        "user 14"
+      ],
+      "total": "8"
+    },
+    "name asc 'zzz'": {
+      "keys": [],
+      "total": "0"
+    },
+    "name desc '%'": {
+      "keys": [
+        "user 14"
+      ],
+      "total": "1"
+    },
+    "name desc ''": {
+      "keys": [
+        "user 14",
+        "7",
+        "user 13",
+        "6",
+        "10",
+        "11",
+        "user 10",
+        "user 9",
+        "12",
+        "user 7",
+        "8",
+        "9",
+        "3",
+        "4",
+        "5",
+        "2",
+        "1"
+      ],
+      "total": "17"
+    },
+    "name desc 'CHAR'": {
+      "keys": [
+        "4",
+        "5"
+      ],
+      "total": "2"
+    },
+    "name desc '_'": {
+      "keys": [
+        "user 13"
+      ],
+      "total": "1"
+    },
+    "name desc 'a'": {
+      "keys": [
+        "user 14",
+        "6",
+        "user 9",
+        "9",
+        "4",
+        "5",
+        "2",
+        "1"
+      ],
+      "total": "8"
+    },
+    "name desc 'zzz'": {
+      "keys": [],
+      "total": "0"
+    },
+    "rating asc '%'": {
+      "keys": [
+        "user 14"
+      ],
+      "total": "1"
+    },
+    "rating asc ''": {
+      "keys": [
+        "7",
+        "10",
+        "11",
+        "5",
+        "user 7",
+        "user 13",
+        "user 9",
+        "12",
+        "3",
+        "user 14",
+        "8",
+        "user 10",
+        "9",
+        "6",
+        "4",
+        "2",
+        "1"
+      ],
+      "total": "17"
+    },
+    "rating asc 'CHAR'": {
+      "keys": [
+        "5",
+        "4"
+      ],
+      "total": "2"
+    },
+    "rating asc '_'": {
+      "keys": [
+        "user 13"
+      ],
+      "total": "1"
+    },
+    "rating asc 'a'": {
+      "keys": [
+        "5",
+        "user 9",
+        "user 14",
+        "9",
+        "6",
+        "4",
+        "2",
+        "1"
+      ],
+      "total": "8"
+    },
+    "rating asc 'zzz'": {
+      "keys": [],
+      "total": "0"
+    },
+    "rating desc '%'": {
+      "keys": [
+        "user 14"
+      ],
+      "total": "1"
+    },
+    "rating desc ''": {
+      "keys": [
+        "1",
+        "2",
+        "4",
+        "6",
+        "9",
+        "user 10",
+        "8",
+        "user 14",
+        "3",
+        "12",
+        "user 9",
+        "user 13",
+        "user 7",
+        "5",
+        "11",
+        "10",
+        "7"
+      ],
+      "total": "17"
+    },
+    "rating desc 'CHAR'": {
+      "keys": [
+        "4",
+        "5"
+      ],
+      "total": "2"
+    },
+    "rating desc '_'": {
+      "keys": [
+        "user 13"
+      ],
+      "total": "1"
+    },
+    "rating desc 'a'": {
+      "keys": [
+        "1",
+        "2",
+        "4",
+        "6",
+        "9",
+        "user 14",
+        "user 9",
+        "5"
+      ],
+      "total": "8"
+    },
+    "rating desc 'zzz'": {
+      "keys": [],
+      "total": "0"
+    },
+    "seasons_played asc '%'": {
+      "keys": [
+        "user 14"
+      ],
+      "total": "1"
+    },
+    "seasons_played asc ''": {
+      "keys": [
+        "5",
+        "10",
+        "7",
+        "8",
+        "user 7",
+        "user 9",
+        "user 10",
+        "user 13",
+        "user 14",
+        "9",
+        "11",
+        "3",
+        "4",
+        "6",
+        "12",
+        "2",
+        "1"
+      ],
+      "total": "17"
+    },
+    "seasons_played asc 'CHAR'": {
+      "keys": [
+        "5",
+        "4"
+      ],
+      "total": "2"
+    },
+    "seasons_played asc '_'": {
+      "keys": [
+        "user 13"
+      ],
+      "total": "1"
+    },
+    "seasons_played asc 'a'": {
+      "keys": [
+        "5",
+        "user 9",
+        "user 14",
+        "9",
+        "4",
+        "6",
+        "2",
+        "1"
+      ],
+      "total": "8"
+    },
+    "seasons_played asc 'zzz'": {
+      "keys": [],
+      "total": "0"
+    },
+    "seasons_played desc '%'": {
+      "keys": [
+        "user 14"
+      ],
+      "total": "1"
+    },
+    "seasons_played desc ''": {
+      "keys": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "6",
+        "12",
+        "9",
+        "11",
+        "7",
+        "8",
+        "user 7",
+        "user 9",
+        "user 10",
+        "user 13",
+        "user 14",
+        "5",
+        "10"
+      ],
+      "total": "17"
+    },
+    "seasons_played desc 'CHAR'": {
+      "keys": [
+        "4",
+        "5"
+      ],
+      "total": "2"
+    },
+    "seasons_played desc '_'": {
+      "keys": [
+        "user 13"
+      ],
+      "total": "1"
+    },
+    "seasons_played desc 'a'": {
+      "keys": [
+        "1",
+        "2",
+        "4",
+        "6",
+        "9",
+        "user 9",
+        "user 14",
+        "5"
+      ],
+      "total": "8"
+    },
+    "seasons_played desc 'zzz'": {
+      "keys": [],
+      "total": "0"
+    },
+    "series_lost asc '%'": {
+      "keys": [
+        "user 14"
+      ],
+      "total": "1"
+    },
+    "series_lost asc ''": {
+      "keys": [
+        "user 13",
+        "5",
+        "10",
+        "11",
+        "user 7",
+        "user 10",
+        "3",
+        "12",
+        "user 9",
+        "user 14",
+        "6",
+        "7",
+        "8",
+        "9",
+        "1",
+        "4",
+        "2"
+      ],
+      "total": "17"
+    },
+    "series_lost asc 'CHAR'": {
+      "keys": [
+        "5",
+        "4"
+      ],
+      "total": "2"
+    },
+    "series_lost asc '_'": {
+      "keys": [
+        "user 13"
+      ],
+      "total": "1"
+    },
+    "series_lost asc 'a'": {
+      "keys": [
+        "5",
+        "user 9",
+        "user 14",
+        "6",
+        "9",
+        "1",
+        "4",
+        "2"
+      ],
+      "total": "8"
+    },
+    "series_lost asc 'zzz'": {
+      "keys": [],
+      "total": "0"
+    },
+    "series_lost desc '%'": {
+      "keys": [
+        "user 14"
+      ],
+      "total": "1"
+    },
+    "series_lost desc ''": {
+      "keys": [
+        "2",
+        "1",
+        "4",
+        "6",
+        "7",
+        "8",
+        "9",
+        "user 14",
+        "3",
+        "12",
+        "user 9",
+        "5",
+        "10",
+        "11",
+        "user 7",
+        "user 10",
+        "user 13"
+      ],
+      "total": "17"
+    },
+    "series_lost desc 'CHAR'": {
+      "keys": [
+        "4",
+        "5"
+      ],
+      "total": "2"
+    },
+    "series_lost desc '_'": {
+      "keys": [
+        "user 13"
+      ],
+      "total": "1"
+    },
+    "series_lost desc 'a'": {
+      "keys": [
+        "2",
+        "1",
+        "4",
+        "6",
+        "9",
+        "user 14",
+        "user 9",
+        "5"
+      ],
+      "total": "8"
+    },
+    "series_lost desc 'zzz'": {
+      "keys": [],
+      "total": "0"
+    },
+    "series_winrate asc '%'": {
+      "keys": [
+        "user 14"
+      ],
+      "total": "1"
+    },
+    "series_winrate asc ''": {
+      "keys": [
+        "10",
+        "user 7",
+        "6",
+        "8",
+        "4",
+        "user 14",
+        "9",
+        "2",
+        "7",
+        "11",
+        "user 9",
+        "1",
+        "5",
+        "12",
+        "user 10",
+        "3",
+        "user 13"
+      ],
+      "total": "17"
+    },
+    "series_winrate asc 'CHAR'": {
+      "keys": [
+        "4",
+        "5"
+      ],
+      "total": "2"
+    },
+    "series_winrate asc '_'": {
+      "keys": [
+        "user 13"
+      ],
+      "total": "1"
+    },
+    "series_winrate asc 'a'": {
+      "keys": [
+        "6",
+        "4",
+        "user 14",
+        "9",
+        "2",
+        "user 9",
+        "1",
+        "5"
+      ],
+      "total": "8"
+    },
+    "series_winrate asc 'zzz'": {
+      "keys": [],
+      "total": "0"
+    },
+    "series_winrate desc '%'": {
+      "keys": [
+        "user 14"
+      ],
+      "total": "1"
+    },
+    "series_winrate desc ''": {
+      "keys": [
+        "user 13",
+        "3",
+        "user 10",
+        "12",
+        "5",
+        "1",
+        "7",
+        "11",
+        "user 9",
+        "2",
+        "9",
+        "user 14",
+        "4",
+        "6",
+        "8",
+        "10",
+        "user 7"
+      ],
+      "total": "17"
+    },
+    "series_winrate desc 'CHAR'": {
+      "keys": [
+        "5",
+        "4"
+      ],
+      "total": "2"
+    },
+    "series_winrate desc '_'": {
+      "keys": [
+        "user 13"
+      ],
+      "total": "1"
+    },
+    "series_winrate desc 'a'": {
+      "keys": [
+        "5",
+        "1",
+        "user 9",
+        "2",
+        "9",
+        "user 14",
+        "4",
+        "6"
+      ],
+      "total": "8"
+    },
+    "series_winrate desc 'zzz'": {
+      "keys": [],
+      "total": "0"
+    },
+    "series_won asc '%'": {
+      "keys": [
+        "user 14"
+      ],
+      "total": "1"
+    },
+    "series_won asc ''": {
+      "keys": [
+        "10",
+        "user 7",
+        "11",
+        "5",
+        "6",
+        "8",
+        "user 9",
+        "user 13",
+        "user 14",
+        "9",
+        "7",
+        "4",
+        "user 10",
+        "12",
+        "2",
+        "1",
+        "3"
+      ],
+      "total": "17"
+    },
+    "series_won asc 'CHAR'": {
+      "keys": [
+        "5",
+        "4"
+      ],
+      "total": "2"
+    },
+    "series_won asc '_'": {
+      "keys": [
+        "user 13"
+      ],
+      "total": "1"
+    },
+    "series_won asc 'a'": {
+      "keys": [
+        "5",
+        "6",
+        "user 9",
+        "user 14",
+        "9",
+        "4",
+        "2",
+        "1"
+      ],
+      "total": "8"
+    },
+    "series_won asc 'zzz'": {
+      "keys": [],
+      "total": "0"
+    },
+    "series_won desc '%'": {
+      "keys": [
+        "user 14"
+      ],
+      "total": "1"
+    },
+    "series_won desc ''": {
+      "keys": [
+        "3",
+        "1",
+        "2",
+        "12",
+        "4",
+        "user 10",
+        "7",
+        "9",
+        "5",
+        "6",
+        "8",
+        "user 9",
+        "user 13",
+        "user 14",
+        "11",
+        "10",
+        "user 7"
+      ],
+      "total": "17"
+    },
+    "series_won desc 'CHAR'": {
+      "keys": [
+        "4",
+        "5"
+      ],
+      "total": "2"
+    },
+    "series_won desc '_'": {
+      "keys": [
+        "user 13"
+      ],
+      "total": "1"
+    },
+    "series_won desc 'a'": {
+      "keys": [
+        "1",
+        "2",
+        "4",
+        "9",
+        "5",
+        "6",
+        "user 9",
+        "user 14"
+      ],
+      "total": "8"
+    },
+    "series_won desc 'zzz'": {
+      "keys": [],
+      "total": "0"
+    }
+  },
+  "rows": {
+    "1": {
+      "avg_series_per_season": 3.29,
+      "games_lost": 28,
+      "games_winrate": 59.42,
+      "games_won": 41,
+      "historical_games_lost": 15,
+      "historical_games_won": 25,
+      "historical_rating": 500,
+      "historical_seasons_played": 3,
+      "historical_series_lost": 5,
+      "historical_series_won": 10,
+      "id": 1,
+      "player_name": "Alpha",
+      "rating": 1251,
+      "seasons_played": 7,
+      "series_lost": 8,
+      "series_winrate": 65.22,
+      "series_won": 15,
+      "user": {
+        "avatar_url": null,
+        "battleTag": "Alpha#1000",
+        "country": null,
+        "discordId": "100",
+        "discordTag": "alpha",
+        "id": 1,
+        "ladder_synced_at": null,
+        "mmr": 1500,
+        "name": "Alpha",
+        "race": "HU",
+        "timezone": null,
+        "twitch_url": null,
+        "w3c_synced_at": null,
+        "youtube_url": null
+      },
+      "user_id": 1
+    },
+    "10": {
+      "avg_series_per_season": 1.0,
+      "games_lost": 2,
+      "games_winrate": 33.33,
+      "games_won": 1,
+      "historical_games_lost": 2,
+      "historical_games_won": 1,
+      "historical_rating": 50,
+      "historical_seasons_played": 1,
+      "historical_series_lost": 1,
+      "historical_series_won": 0,
+      "id": 10,
+      "player_name": "kilo",
+      "rating": 26,
+      "seasons_played": 1,
+      "series_lost": 1,
+      "series_winrate": 0.0,
+      "series_won": 0,
+      "user": null,
+      "user_id": null
+    },
+    "11": {
+      "avg_series_per_season": 0.67,
+      "games_lost": 3,
+      "games_winrate": 50.0,
+      "games_won": 3,
+      "historical_games_lost": 3,
+      "historical_games_won": 3,
+      "historical_rating": 75,
+      "historical_seasons_played": 1,
+      "historical_series_lost": 1,
+      "historical_series_won": 1,
+      "id": 11,
+      "player_name": "Kilo",
+      "rating": 39,
+      "seasons_played": 3,
+      "series_lost": 1,
+      "series_winrate": 50.0,
+      "series_won": 1,
+      "user": null,
+      "user_id": null
+    },
+    "12": {
+      "avg_series_per_season": 2.25,
+      "games_lost": 8,
+      "games_winrate": 66.67,
+      "games_won": 16,
+      "historical_games_lost": 6,
+      "historical_games_won": 11,
+      "historical_rating": 250,
+      "historical_seasons_played": 2,
+      "historical_series_lost": 2,
+      "historical_series_won": 5,
+      "id": 12,
+      "player_name": "Hotel",
+      "rating": 484,
+      "seasons_played": 4,
+      "series_lost": 2,
+      "series_winrate": 77.78,
+      "series_won": 7,
+      "user": null,
+      "user_id": null
+    },
+    "2": {
+      "avg_series_per_season": 3.4,
+      "games_lost": 25,
+      "games_winrate": 48.98,
+      "games_won": 24,
+      "historical_games_lost": 15,
+      "historical_games_won": 15,
+      "historical_rating": 300,
+      "historical_seasons_played": 2,
+      "historical_series_lost": 6,
+      "historical_series_won": 6,
+      "id": 2,
+      "player_name": "Bravo",
+      "rating": 807,
+      "seasons_played": 5,
+      "series_lost": 9,
+      "series_winrate": 47.06,
+      "series_won": 8,
+      "user": null,
+      "user_id": null
+    },
+    "3": {
+      "avg_series_per_season": 5.5,
+      "games_lost": 10,
+      "games_winrate": 81.82,
+      "games_won": 45,
+      "historical_games_lost": 10,
+      "historical_games_won": 45,
+      "historical_rating": 1000,
+      "historical_seasons_played": 4,
+      "historical_series_lost": 2,
+      "historical_series_won": 20,
+      "id": 3,
+      "player_name": "Echo",
+      "rating": 522,
+      "seasons_played": 4,
+      "series_lost": 2,
+      "series_winrate": 90.91,
+      "series_won": 20,
+      "user": {
+        "avatar_url": null,
+        "battleTag": "Echo#1004",
+        "country": null,
+        "discordId": "104",
+        "discordTag": "echo",
+        "id": 5,
+        "ladder_synced_at": null,
+        "mmr": 1504,
+        "name": "Echo",
+        "race": "HU",
+        "timezone": null,
+        "twitch_url": null,
+        "w3c_synced_at": null,
+        "youtube_url": null
+      },
+      "user_id": 5
+    },
+    "4": {
+      "avg_series_per_season": 3.25,
+      "games_lost": 19,
+      "games_winrate": 44.12,
+      "games_won": 15,
+      "historical_games_lost": 7,
+      "historical_games_won": 7,
+      "historical_rating": 200,
+      "historical_seasons_played": 1,
+      "historical_series_lost": 3,
+      "historical_series_won": 3,
+      "id": 4,
+      "player_name": "Charlie old",
+      "rating": 705,
+      "seasons_played": 4,
+      "series_lost": 8,
+      "series_winrate": 38.46,
+      "series_won": 5,
+      "user": {
+        "avatar_url": null,
+        "battleTag": "Charlie#1002",
+        "country": null,
+        "discordId": "102",
+        "discordTag": "charlie",
+        "id": 3,
+        "ladder_synced_at": null,
+        "mmr": 1502,
+        "name": "Charlie",
+        "race": "HU",
+        "timezone": null,
+        "twitch_url": null,
+        "w3c_synced_at": null,
+        "youtube_url": null
+      },
+      "user_id": 3
+    },
+    "5": {
+      "avg_series_per_season": 3.0,
+      "games_lost": 3,
+      "games_winrate": 57.14,
+      "games_won": 4,
+      "historical_games_lost": 3,
+      "historical_games_won": 4,
+      "historical_rating": 150,
+      "historical_seasons_played": 1,
+      "historical_series_lost": 1,
+      "historical_series_won": 2,
+      "id": 5,
+      "player_name": "Charlie",
+      "rating": 78,
+      "seasons_played": 1,
+      "series_lost": 1,
+      "series_winrate": 66.67,
+      "series_won": 2,
+      "user": null,
+      "user_id": null
+    },
+    "6": {
+      "avg_series_per_season": 1.5,
+      "games_lost": 12,
+      "games_winrate": 45.45,
+      "games_won": 10,
+      "historical_games_lost": 2,
+      "historical_games_won": 2,
+      "historical_rating": 0,
+      "historical_seasons_played": 1,
+      "historical_series_lost": 1,
+      "historical_series_won": 1,
+      "id": 6,
+      "player_name": "Delta",
+      "rating": 617,
+      "seasons_played": 4,
+      "series_lost": 4,
+      "series_winrate": 33.33,
+      "series_won": 2,
+      "user": {
+        "avatar_url": null,
+        "battleTag": "Lima#1011",
+        "country": null,
+        "discordId": "111",
+        "discordTag": "lima",
+        "id": 12,
+        "ladder_synced_at": null,
+        "mmr": 1511,
+        "name": "Lima",
+        "race": "HU",
+        "timezone": null,
+        "twitch_url": null,
+        "w3c_synced_at": null,
+        "youtube_url": null
+      },
+      "user_id": 12
+    },
+    "7": {
+      "avg_series_per_season": 4.0,
+      "games_lost": 9,
+      "games_winrate": 50.0,
+      "games_won": 9,
+      "historical_games_lost": 9,
+      "historical_games_won": 9,
+      "historical_rating": -50,
+      "historical_seasons_played": 2,
+      "historical_series_lost": 4,
+      "historical_series_won": 4,
+      "id": 7,
+      "player_name": "Nobody",
+      "rating": 0,
+      "seasons_played": 2,
+      "series_lost": 4,
+      "series_winrate": 50.0,
+      "series_won": 4,
+      "user": null,
+      "user_id": null
+    },
+    "8": {
+      "avg_series_per_season": 3.0,
+      "games_lost": 11,
+      "games_winrate": 35.29,
+      "games_won": 6,
+      "historical_games_lost": 0,
+      "historical_games_won": 0,
+      "historical_rating": 0,
+      "historical_seasons_played": 0,
+      "historical_series_lost": 0,
+      "historical_series_won": 0,
+      "id": 8,
+      "player_name": "Foxtrot",
+      "rating": 556,
+      "seasons_played": 2,
+      "series_lost": 4,
+      "series_winrate": 33.33,
+      "series_won": 2,
+      "user": {
+        "avatar_url": null,
+        "battleTag": "Foxtrot#1005",
+        "country": null,
+        "discordId": "105",
+        "discordTag": "foxtrot",
+        "id": 6,
+        "ladder_synced_at": null,
+        "mmr": 1505,
+        "name": "Foxtrot",
+        "race": "HU",
+        "timezone": null,
+        "twitch_url": null,
+        "w3c_synced_at": null,
+        "youtube_url": null
+      },
+      "user_id": 6
+    },
+    "9": {
+      "avg_series_per_season": 2.33,
+      "games_lost": 11,
+      "games_winrate": 42.11,
+      "games_won": 8,
+      "historical_games_lost": 0,
+      "historical_games_won": 2,
+      "historical_rating": 100,
+      "historical_seasons_played": 1,
+      "historical_series_lost": 0,
+      "historical_series_won": 1,
+      "id": 9,
+      "player_name": "Foxtrot alt",
+      "rating": 608,
+      "seasons_played": 3,
+      "series_lost": 4,
+      "series_winrate": 42.86,
+      "series_won": 3,
+      "user": {
+        "avatar_url": null,
+        "battleTag": "Foxtrot#1005",
+        "country": null,
+        "discordId": "105",
+        "discordTag": "foxtrot",
+        "id": 6,
+        "ladder_synced_at": null,
+        "mmr": 1505,
+        "name": "Foxtrot",
+        "race": "HU",
+        "timezone": null,
+        "twitch_url": null,
+        "w3c_synced_at": null,
+        "youtube_url": null
+      },
+      "user_id": 6
+    },
+    "user 10": {
+      "avg_series_per_season": 3.0,
+      "games_lost": 5,
+      "games_winrate": 66.67,
+      "games_won": 10,
+      "historical_games_lost": null,
+      "historical_games_won": null,
+      "historical_rating": null,
+      "historical_seasons_played": null,
+      "historical_series_lost": null,
+      "historical_series_won": null,
+      "id": null,
+      "player_name": "juliet",
+      "rating": 573,
+      "seasons_played": 2,
+      "series_lost": 1,
+      "series_winrate": 83.33,
+      "series_won": 5,
+      "user": {
+        "avatar_url": null,
+        "battleTag": "juliet#1009",
+        "country": null,
+        "discordId": "109",
+        "discordTag": "juliet",
+        "id": 10,
+        "ladder_synced_at": null,
+        "mmr": 1509,
+        "name": "juliet",
+        "race": "HU",
+        "timezone": null,
+        "twitch_url": null,
+        "w3c_synced_at": null,
+        "youtube_url": null
+      },
+      "user_id": 10
+    },
+    "user 13": {
+      "avg_series_per_season": 1.0,
+      "games_lost": 0,
+      "games_winrate": 100.0,
+      "games_won": 4,
+      "historical_games_lost": null,
+      "historical_games_won": null,
+      "historical_rating": null,
+      "historical_seasons_played": null,
+      "historical_series_lost": null,
+      "historical_series_won": null,
+      "id": null,
+      "player_name": "Mike_2",
+      "rating": 370,
+      "seasons_played": 2,
+      "series_lost": 0,
+      "series_winrate": 100.0,
+      "series_won": 2,
+      "user": {
+        "avatar_url": null,
+        "battleTag": "Mike_2#1012",
+        "country": null,
+        "discordId": "112",
+        "discordTag": "mike_2",
+        "id": 13,
+        "ladder_synced_at": null,
+        "mmr": 1512,
+        "name": "Mike_2",
+        "race": "HU",
+        "timezone": null,
+        "twitch_url": null,
+        "w3c_synced_at": null,
+        "youtube_url": null
+      },
+      "user_id": 13
+    },
+    "user 14": {
+      "avg_series_per_season": 2.5,
+      "games_lost": 8,
+      "games_winrate": 42.86,
+      "games_won": 6,
+      "historical_games_lost": null,
+      "historical_games_won": null,
+      "historical_rating": null,
+      "historical_seasons_played": null,
+      "historical_series_lost": null,
+      "historical_series_won": null,
+      "id": null,
+      "player_name": "Oscar%",
+      "rating": 555,
+      "seasons_played": 2,
+      "series_lost": 3,
+      "series_winrate": 40.0,
+      "series_won": 2,
+      "user": {
+        "avatar_url": null,
+        "battleTag": "Oscar%#1013",
+        "country": null,
+        "discordId": "113",
+        "discordTag": "oscar%",
+        "id": 14,
+        "ladder_synced_at": null,
+        "mmr": 1513,
+        "name": "Oscar%",
+        "race": "HU",
+        "timezone": null,
+        "twitch_url": null,
+        "w3c_synced_at": null,
+        "youtube_url": null
+      },
+      "user_id": 14
+    },
+    "user 7": {
+      "avg_series_per_season": 0.5,
+      "games_lost": 6,
+      "games_winrate": 45.45,
+      "games_won": 5,
+      "historical_games_lost": null,
+      "historical_games_won": null,
+      "historical_rating": null,
+      "historical_seasons_played": null,
+      "historical_series_lost": null,
+      "historical_series_won": null,
+      "id": null,
+      "player_name": "Golf",
+      "rating": 308,
+      "seasons_played": 2,
+      "series_lost": 1,
+      "series_winrate": 0.0,
+      "series_won": 0,
+      "user": {
+        "avatar_url": null,
+        "battleTag": "Golf#1006",
+        "country": null,
+        "discordId": "106",
+        "discordTag": "golf",
+        "id": 7,
+        "ladder_synced_at": null,
+        "mmr": 1506,
+        "name": "Golf",
+        "race": "HU",
+        "timezone": null,
+        "twitch_url": null,
+        "w3c_synced_at": null,
+        "youtube_url": null
+      },
+      "user_id": 7
+    },
+    "user 9": {
+      "avg_series_per_season": 2.0,
+      "games_lost": 5,
+      "games_winrate": 50.0,
+      "games_won": 5,
+      "historical_games_lost": null,
+      "historical_games_won": null,
+      "historical_rating": null,
+      "historical_seasons_played": null,
+      "historical_series_lost": null,
+      "historical_series_won": null,
+      "id": null,
+      "player_name": "India",
+      "rating": 442,
+      "seasons_played": 2,
+      "series_lost": 2,
+      "series_winrate": 50.0,
+      "series_won": 2,
+      "user": {
+        "avatar_url": null,
+        "battleTag": "India#1008",
+        "country": null,
+        "discordId": "108",
+        "discordTag": "india",
+        "id": 9,
+        "ladder_synced_at": null,
+        "mmr": 1508,
+        "name": "India",
+        "race": "HU",
+        "timezone": null,
+        "twitch_url": null,
+        "w3c_synced_at": null,
+        "youtube_url": null
+      },
+      "user_id": 9
+    }
+  }
+}

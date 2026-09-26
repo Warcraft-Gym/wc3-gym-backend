@@ -199,7 +199,8 @@ DEFAULT_ORDER = {
     # The last fragment orders the matchup history of the season record
     "GET /events/{season_id}/teams": [
         "teams.id",
-        "anon_1.id, team_season_captain_1.user_id",
+        "anon_1.id",
+        "team_season_captain.user_id",
         "anon_1.playday, anon_1.series_id",
     ],
     "GET /events/{season_id}/teams/basic": ["teams.id", "anon_1.id"],

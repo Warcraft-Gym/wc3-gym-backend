@@ -1,5 +1,10 @@
 # Bundle history
 
+## 2026-09-25
+
+* **Update**: the career list derives and pages in SQL; the career player read carries a public cache header.
+* **Update**: the career rating uses one integer weighted sum before truncation.
+
 ## 2026-09-24
 
 * **Add**: `link_prompt`. Only a tag Battle.net verified joins an earlier player to a login unasked; a weaker hint is a suggestion the login answers once. A claim joins at once, unverified, and a verify takes a tag another login holds unverified.

@@ -44,11 +44,14 @@ def get_all_career_stats(
 
 
 @router.get("/stats/career/{stat_id}")
-def get_career_stats_by_user(stat_id: int, service: StatsServiceDep) -> dict[str, Any]:
+def get_career_stats_by_user(
+    stat_id: int, service: StatsServiceDep, response: Response
+) -> dict[str, Any]:
     """Retrieve career statistics for a single player by user ID."""
     stat = service.get_by_user_id(stat_id)
     if not stat:
         raise NotFoundError("Stats not found")
+    edge_cache(response, 3600, 3600)
     return stat.to_dict()
 
 

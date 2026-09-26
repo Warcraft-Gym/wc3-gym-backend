@@ -4,7 +4,7 @@ title: API overview
 description: Twenty-one route modules under one FastAPI app, one error envelope, paging with a total header, a search language, and OpenAPI at /docs.
 resource: ../../../app/api/main.py
 tags: [api]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-24T17:00:00Z }
+generated: { by: codex/gpt-6, at: 2026-09-25T08:58:00Z }
 sources:
   - id: router
     resource: ../../../app/api/main.py
@@ -55,7 +55,7 @@ Every error answers `{"error": "<text>"}` with the status: 404 `NotFoundError`, 
 
 # Paging and sorting
 
-List routes take `limit` (1 to 500) and `offset`. The default page is 500, except on the routes whose set a season's structure bounds, which page smaller (`GET /events/{event_id}/teams` and its `basic` twin and `GET /fantasy/bets` at 50; `GET /events/{event_id}/fantasy/teams`, `POST /users/search`, `POST /matches/search`, `GET /maps`, `GET /draft-series/match/{match_id}` and `GET /player-series` at 100). Seven routes carry the total row count in `X-Total-Count`, which CORS exposes. Three routes take `sort` and `order`; a name outside their table answers 422. Without `sort` a route keeps its default order, pinned per route by `tests/test_paging.py`. List answers are reduced: every key stays and nested collections answer `[]`; the single-row routes keep the full graph. A row of a series list (the season, round, global and player series reads, and the stage series read) carries no W3Champions stats, so it names the rating of each side on the race it plays in `player1_mmr` and `player2_mmr`: the newest stored W3Champions season that carries a rating above 0 on that race, three seasons back and no further, null otherwise; on every other series payload the two keys read null. A whole list is rated in two statements, three while the W3Champions season setting is unset, and none per row. The fantasy team lists (the global list, the search and the per-event list) carry the same window on their drafted players: each player's `w3c_stats` holds the seasons within three of the W3Champions season the app rates against, and nothing older. The single fantasy team read carries every stored season.
+List routes take `limit` (1 to 500) and `offset`. The default page is 500, except on the routes whose set a season's structure bounds, which page smaller (`GET /events/{event_id}/teams` and its `basic` twin and `GET /fantasy/bets` at 50; `GET /events/{event_id}/fantasy/teams`, `POST /users/search`, `POST /matches/search`, `GET /maps`, `GET /draft-series/match/{match_id}` and `GET /player-series` at 100). Seven routes carry the total row count in `X-Total-Count`, which CORS exposes. Three routes take `sort` and `order`; a name outside their table answers 422. Without `sort` a route keeps its default order, pinned per route by `tests/test_paging.py`. The career list derives its rating, filters, sorts and pages in SQL, then sends only the selected page. List answers are reduced: every key stays and nested collections answer `[]`; the single-row routes keep the full graph. A row of a series list (the season, round, global and player series reads, and the stage series read) carries no W3Champions stats, so it names the rating of each side on the race it plays in `player1_mmr` and `player2_mmr`: the newest stored W3Champions season that carries a rating above 0 on that race, three seasons back and no further, null otherwise; on every other series payload the two keys read null. A whole list is rated in two statements, three while the W3Champions season setting is unset, and none per row. The fantasy team lists (the global list, the search and the per-event list) carry the same window on their drafted players: each player's `w3c_stats` holds the seasons within three of the W3Champions season the app rates against, and nothing older. The single fantasy team read carries every stored season.
 
 # The search language
 
@@ -75,7 +75,7 @@ CORS allows every origin, because clients send bearer tokens and never cookies. 
 | `GET /home/series` | 120 | none |
 | `GET /events/{event_id}/ladder` | 3600 | none |
 | `GET /events/{event_id}/ladder/players`, `GET /users/{user_id}/ladder` | 900 | 3600 |
-| `GET /stats/career` | 3600 | 3600 |
+| `GET /stats/career`, `GET /stats/career/{user_id}` | 3600 | 3600 |
 | `GET /leagues`, `GET /maps`, `GET /config/w3c`, `GET /config/settings/{key}` | 300 | 3600 |
 | `GET /users/{user_id}/history` | 120 | 600 |
 | `GET /events/{event_id}/teams`, its `basic` twin, `GET /events/{event_id}/teams/{team_id}`, `GET /events/{event_id}/series` | 120, or 3600 once the event is finished | 600, or 86400 once the event is finished |
