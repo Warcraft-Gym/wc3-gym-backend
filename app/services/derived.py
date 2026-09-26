@@ -373,14 +373,19 @@ def fill_mmrs(session: Session, series_list: Iterable[SeriesPublic | None]) -> N
             row.player2_mmr = rated.get((row.player2.id, row.player2_race))
 
 
-def fill_series(session: Session, series_list: Iterable[SeriesPublic | None]) -> None:
+def fill_series(
+    session: Session,
+    series_list: Iterable[SeriesPublic | None],
+    known: dict[int, series_rules.Rules] | None = None,
+) -> None:
     """Fill the points of every series, the score of the match it carries, the
-    signup race and the season record of its two players."""
+    signup race and the season record of its two players. `known` holds the
+    rules series_rules.from_loaded_season already answered."""
     rows = [series for series in series_list if series is not None]
     if not rows:
         return
 
-    resolved = series_rules.fill_rules(session, rows)
+    resolved = series_rules.fill_rules(session, rows, known)
     scales: dict[int, Scale] = {}
     events: dict[int, int] = {}
     for series in rows:

@@ -19,7 +19,7 @@ from app.models.series import (
     SeriesSort,
     SeriesUpdate,
 )
-from app.services import derived, stage_engine
+from app.services import derived, series_rules, stage_engine
 
 
 def both_scores(row: Series, wins: int | None = None) -> None:
@@ -209,6 +209,7 @@ class SeriesService:
                 order=order,
             )
             result = [SeriesPublic.from_series_reduced(s) for s in series_list]
-            derived.fill_series(session, result)
+            known = series_rules.from_loaded_season(series_list)
+            derived.fill_series(session, result, known)
             derived.fill_mmrs(session, result)
             return result

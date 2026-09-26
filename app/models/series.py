@@ -163,7 +163,7 @@ class Series(SeriesBase, DBModel, table=True):
         sort: SeriesSort | None = None,
         order: SortOrder = "asc",
     ) -> Sequence[Self]:
-        stmt = select(cls).options(*cls._list_eager_options())
+        stmt = select(cls).options(*cls._list_eager_options(picks_only=True))
         stmt = stmt.where(col(cls.match).has(col(Match.season_id) == season_id))
         if filters is not None:
             stmt = stmt.where(filters)
@@ -178,8 +178,15 @@ class Series(SeriesBase, DBModel, table=True):
         return session.scalars(stmt).all()
 
     @classmethod
-    def _list_eager_options(cls) -> tuple[ORMOption, ...]:
-        """The to-one relations the reduced public series reads."""
+    def _list_eager_options(cls, *, picks_only: bool = False) -> tuple[ORMOption, ...]:
+        """The to-one relations the reduced public series reads.
+
+        picks_only loads the two pick steps alone, which is all the reduced
+        series names; a caller that walks the whole veto leaves it off.
+        """
+        steps = rel(cls.veto_steps)
+        if picks_only:
+            steps = steps.and_(col(DBSeriesVetoStep.action) == "pick")
         return (
             joinedload(rel(cls.match)).joinedload(rel(Match.team1)),
             joinedload(rel(cls.match)).joinedload(rel(Match.team2)),
@@ -188,7 +195,7 @@ class Series(SeriesBase, DBModel, table=True):
             joinedload(rel(cls.player1)),
             joinedload(rel(cls.player2)),
             selectinload(rel(cls.casts)).joinedload(rel(SeriesCast.user)),
-            selectinload(rel(cls.veto_steps)).joinedload(rel(DBSeriesVetoStep.map)),
+            selectinload(steps).joinedload(rel(DBSeriesVetoStep.map)),
         )
 
     @classmethod

@@ -175,19 +175,49 @@ class Resolved(NamedTuple):
     wins: int
 
 
+# The event, the map rules, the best-of and the score system of one series
+Rules = tuple[int | None, str, int, str | None]
+
+
+def from_loaded_season(series_list: Iterable[Series]) -> dict[int, Rules]:
+    """The rules of every series that prices on the season its loaded fixture
+    names, as _resolve answers them; a series that names an entrant is left
+    out, because its round's stage may price it."""
+    found: dict[int, Rules] = {}
+    for series in series_list:
+        match = series.match
+        if match is None or match.season is None:
+            continue
+        if reads_its_stage(series.match_id, series.entrant1_id, series.entrant2_id):
+            continue
+        rules = match.season.map_rules
+        found[ident(series)] = (
+            match.season_id,
+            rules or DEFAULT_RULES,
+            len(rules_of(rules)),
+            match.season.score_system,
+        )
+    return found
+
+
 def fill_rules(
-    session: OrmSession, rows: Iterable[SeriesPublic | None]
+    session: OrmSession,
+    rows: Iterable[SeriesPublic | None],
+    known: dict[int, Rules] | None = None,
 ) -> dict[int, Resolved]:
     """Fill the rules of every series and answer the event and the scale of
     each one, which the points and the race fill then key on.
 
     A fixture cannot answer the rules on its own, because the stage its round
-    names holds them, so one statement resolves every row.
+    names holds them, so one statement resolves every row that `known` (from
+    from_loaded_season) does not already answer.
     """
     filled = [row for row in rows if row is not None]
     if not filled:
         return {}
-    resolved = _resolve(session, {row.id for row in filled})
+    known = known or {}
+    resolved = {row.id: known[row.id] for row in filled if row.id in known}
+    resolved |= _resolve(session, {row.id for row in filled} - resolved.keys())
     found: dict[int, Resolved] = {}
     for row in filled:
         if row.id not in resolved:
@@ -198,9 +228,7 @@ def fill_rules(
     return found
 
 
-def _resolve(
-    session: OrmSession, series_ids: set[int]
-) -> dict[int, tuple[int | None, str, int, str | None]]:
+def _resolve(session: OrmSession, series_ids: set[int]) -> dict[int, Rules]:
     """The event, the map rules, the best-of and the score system of every
     named series, in one statement: through the stage its round names when the
     row was generated, else through its season."""
@@ -228,7 +256,7 @@ def _resolve(
         .outerjoin(Season, col(Season.id) == event_id)
         .where(col(Series.id).in_(series_ids))
     ).all()
-    found: dict[int, tuple[int | None, str, int, str | None]] = {}
+    found: dict[int, Rules] = {}
     for (
         row_id,
         stage_id,
