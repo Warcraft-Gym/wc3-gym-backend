@@ -454,6 +454,8 @@ def test_closing_the_night_deletes_the_series_on_the_table(
     assert closed.status_code == 200, closed.text
     payload = board(client, night["id"])
     assert payload["closed"] is True
+    settled = client.get(f"/koth/nights/{night['id']}/board").headers["Cache-Control"]
+    assert settled == "public, s-maxage=3600, stale-while-revalidate=86400"
     assert only(payload, top)["open_series"] is None
     assert only(payload, top)["king"]["rows"][0]["entrant_id"] == first
     assert len(only(payload, top)["played"]) == 1
@@ -496,7 +498,7 @@ def test_the_board_carries_the_night_and_its_edge_headers(
     resp = client.get(f"/koth/nights/{night['id']}/board")
 
     assert resp.status_code == 200, resp.text
-    assert resp.headers["Cache-Control"] == "public, s-maxage=15"
+    assert resp.headers["Cache-Control"] == "public, s-maxage=15"  # live
     assert resp.headers["Access-Control-Allow-Origin"] == "*"
     payload = resp.json()
     assert payload["night_id"] == night["id"]

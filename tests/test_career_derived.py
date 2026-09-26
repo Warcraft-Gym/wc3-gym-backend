@@ -381,7 +381,7 @@ def test_the_derived_player_answers_the_same_row(
     assert resp.status_code == 200
     assert resp.json() == EXPECTED[0]
     assert resp.headers["cache-control"] == (
-        "public, s-maxage=3600, stale-while-revalidate=3600"
+        "public, s-maxage=3600, stale-while-revalidate=86400"
     )
 
 

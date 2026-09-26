@@ -805,7 +805,10 @@ def test_the_season_ladder_is_cacheable_at_the_edge(
     client: Client, league: dict[str, Any]
 ) -> None:
     ladder = client.get(f"/events/{league['season_id']}/ladder")
-    assert ladder.headers["cache-control"] == "public, s-maxage=3600"
+    # the seeded season reads finished, so the ladder is settled
+    assert ladder.headers["cache-control"] == (
+        "public, s-maxage=3600, stale-while-revalidate=86400"
+    )
     # this client sends no Origin, the shape of a fill by curl or a bot. The copy the
     # edge stores must still let a browser read it.
     assert ladder.headers["access-control-allow-origin"] == "*"

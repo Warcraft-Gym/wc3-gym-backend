@@ -413,7 +413,9 @@ def test_the_hub_read_is_cacheable_at_the_edge(
     client: Client, hub: dict[str, Any]
 ) -> None:
     resp = client.get("/home/series")
-    assert resp.headers["cache-control"] == "public, s-maxage=120"
+    assert resp.headers["cache-control"] == (
+        "public, s-maxage=120, stale-while-revalidate=600"
+    )
     # this client sends no Origin, and the copy the edge stores must still read in a browser
     assert resp.headers["access-control-allow-origin"] == "*"
 

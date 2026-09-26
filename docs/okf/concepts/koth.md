@@ -4,7 +4,7 @@ title: KOTH night
 description: A King of the Hill night is one event of the KOTH league with three MMR brackets as divisions, one signup rule at every door, and every series paired by hand while the night runs.
 resource: ../../../app/services/koth/night.py
 tags: [events, koth]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-26T04:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-26T12:00:00Z }
 sources:
   - id: night
     resource: ../../../app/services/koth/night.py
@@ -63,7 +63,7 @@ The line is `event_entrant.seed` inside the bracket, first in line first, one pl
 
 # The board
 
-`GET /koth/nights/{id}/board`, and `GET /koth/board` for the night that takes signups, is the one read the run page and the public dashboard both draw. It takes no token and carries `Cache-Control: public, s-maxage=15` and `Access-Control-Allow-Origin: *`, because the dashboard polls it while the night runs. A night that is not published is an admin's own, so the public read answers not found. It answers the night and its counts, the rows no bracket holds yet, and per bracket its name and bound, the king with the race rows he holds there, the king of the last closed night while the throne is still empty, the series on the table, the line in order with one item per player and a mark on a player who plays in another bracket, the rows that left, and the series played, newest first, each saying whether the throne moved, was held, or never applied. A player on the table holds no seat in the line, whatever other race rows he has there. Every player line carries one rating integer and no W3Champions stats: the read asks for the rating of each (player, race) pair and four columns of each player, never a stored stats row. Thirty rows and one played series read 3989 bytes over ten statements, none of them per row.
+`GET /koth/nights/{id}/board`, and `GET /koth/board` for the night that takes signups, is the one read the run page and the public dashboard both draw. It takes no token and carries the live [edge-cache class](edge-cache.md) while the night is open, because the dashboard polls it, and the settled class once the night is closed. A night that is not published is an admin's own, so the public read answers not found. It answers the night and its counts, the rows no bracket holds yet, and per bracket its name and bound, the king with the race rows he holds there, the king of the last closed night while the throne is still empty, the series on the table, the line in order with one item per player and a mark on a player who plays in another bracket, the rows that left, and the series played, newest first, each saying whether the throne moved, was held, or never applied. A player on the table holds no seat in the line, whatever other race rows he has there. Every player line carries one rating integer and no W3Champions stats: the read asks for the rating of each (player, race) pair and four columns of each player, never a stored stats row. Thirty rows and one played series read 3989 bytes over ten statements, none of them per row.
 
 The shape it answers, as `app/models/koth_night.py` states it:
 
@@ -89,6 +89,6 @@ Source names identify archival participants within one event and section. No sho
 
 The historical board returns `historical`, `date_label` and event `videos`. Each bracket retains its literal name and explicit numeric bounds, `historical_king`, and ordered `history` rows with two sides, a nullable winner, a nullable `inferred_winner_side`, a `forfeit` flag for a break the organisers read as a forfeit, and a nullable `review_note` for any other doubt. Categorical and approximate labels remain authoritative; neighbouring divisions never define a missing bound. No historical board reads ladder ratings or opens a queue. Live latest-night and defender reads exclude imported history.
 
-The board retains its fifteen-second edge cache. Imported events are limited to five hundred series, twenty divisions and one hundred videos; larger inputs require a paged reader. The board selects source labels and never returns raw source records. Event series reads retain their page limit and include standalone series through rounds.
+An archived night is closed, so its board carries the settled edge timer (see [Edge cache](edge-cache.md)). Imported events are limited to five hundred series, twenty divisions and one hundred videos; larger inputs require a paged reader. The board selects source labels and never returns raw source records. Event series reads retain their page limit and include standalone series through rounds.
 
 The import command requires an explicit loopback PostgreSQL URL, defaults to dry-run, and reads only offline files. Account claims, race corrections and reviewed source reconciliation are separate workflows.

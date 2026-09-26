@@ -67,36 +67,15 @@ List routes take `limit` (1 to 500) and `offset`. The default page is 500, excep
 
 CORS allows every origin, because clients send bearer tokens and never cookies. A route that sets `Cache-Control: public` must write `Access-Control-Allow-Origin: *` itself, next to it. See [the pitfall](../pitfalls/edge-cache-cors.md). A route whose answer belongs to one caller sets `Cache-Control: private` and `Vary: Authorization` instead, so no shared cache stores a copy and the browser's own copy is keyed on the bearer that names the caller.
 
-`edge_cache(response, s_maxage, swr)` in `app/api/deps.py` writes both headers: `Cache-Control: public, s-maxage=<s_maxage>`, with `stale-while-revalidate=<swr>` when given, and `Access-Control-Allow-Origin: *`. Only a route with no guard whose answer is the same for every caller uses it. `event_edge_cache(response, event_id)` beside it picks the timing by the event's phase: a finished event changes only when an admin corrects it. An error answer carries neither header, because the error handlers build a fresh response. These routes use it, and their deprecated aliases with them:
+`edge_cache(response, cls)` in `app/api/deps.py` writes both headers for one of three timer classes: live, running or settled. An event read picks running or settled from the event's phase. Only a route with no guard whose answer is the same for every caller uses it. [Edge cache](../concepts/edge-cache.md) states the classes, the phase rule and every cached route.
 
-| Route | s-maxage | stale-while-revalidate |
-|---|---|---|
-| `GET /koth/board`, `GET /koth/nights/{night_id}/board` | 15 | none |
-| `GET /home/series` | 120 | none |
-| `GET /events/{event_id}/ladder` | 3600 | none |
-| `GET /events/{event_id}/ladder/players`, `GET /users/{user_id}/ladder` | 900 | 3600 |
-| `GET /stats/career`, `GET /stats/career/{user_id}` | 3600 | 3600 |
-| `GET /leagues`, `GET /maps`, `GET /config/w3c`, `GET /config/settings/{key}` | 300 | 3600 |
-| `GET /events`, for an anonymous caller only | 300 | 3600 |
-| `GET /users/{user_id}/history` | 120 | 600 |
-| `GET /users/{key}`, for an anonymous caller only | 900 | 3600 |
-| `GET /events/{event_id}/teams`, its `basic` twin, `GET /events/{event_id}/teams/{team_id}`, `GET /events/{event_id}/series` | 120, or 3600 once the event is finished | 600, or 86400 once the event is finished |
-| `GET /leagues/{league_id}/teams`, its `basic` twin, `GET /leagues/{league_id}/teams/{team_id}` | 120 | 600 |
-
-The edge serves a cached copy only to a request with no Authorization header. The frontend sends a route without its bearer only when its `EDGE_CACHED` pattern lists the route, and an admin's requests always carry the bearer, so an admin reads past the cache. A route added here is cached once the frontend pattern lists it too. `tests/test_edge_cache.py` pins every row.
+The edge serves a cached copy only to a request with no Authorization header. The frontend sends a route without its bearer only when its `EDGE_CACHED` pattern lists the route, and an admin's requests always carry the bearer, so an admin reads past the cache. A route added here is cached once the frontend pattern lists it too.
 
 ## What a read costs
 
 A cache hit is served by the Vercel edge: the function does not run and the database is not read. A miss runs the route once and fills the entry for that region. So the database cost of an open read is the rows one miss reads times the number of misses, and the number of page views does not enter it. A route with no `edge_cache` has a miss on every call.
 
-A write does not clear the edge. A reader sees a change up to `s-maxage` plus `stale-while-revalidate` seconds late, unless the reader sends a bearer, which skips the edge. Pick `s-maxage` by how often the answer changes and how late a reader may see it:
-
-| Answer | `s-maxage` |
-|---|---|
-| a live board during a night | seconds |
-| a running event: fixtures, results, teams | minutes |
-| a finished event, which changes only when an admin corrects it | an hour or more, with a long `stale-while-revalidate` |
-| the list of leagues, maps, settings | minutes, with an hour of `stale-while-revalidate` |
+A write does not clear the edge. A reader sees a change up to `s-maxage` plus `stale-while-revalidate` seconds late, unless the reader sends a bearer, which skips the edge. Pick the [class](../concepts/edge-cache.md#the-three-classes) by how often the answer changes and how late a reader may see it.
 
 ## Rules for a route a consumer reads
 

@@ -7,26 +7,23 @@ import pytest
 from app.services.w3c import W3CService
 from tests.conftest import Client
 
-LONG = "public, s-maxage=300, stale-while-revalidate=3600"
-CAREER = "public, s-maxage=3600, stale-while-revalidate=3600"
-LADDER = "public, s-maxage=900, stale-while-revalidate=3600"
-SHORT = "public, s-maxage=120, stale-while-revalidate=600"
+SETTLED = "public, s-maxage=3600, stale-while-revalidate=86400"
+RUNNING = "public, s-maxage=120, stale-while-revalidate=600"
 
 ROUTES = [
-    ("/events", LONG),
-    ("/leagues", LONG),
-    ("/maps", LONG),
-    ("/stats/career", CAREER),
-    ("/config/w3c", LONG),
-    ("/config/settings/score_system", LONG),
-    ("/events/{season_id}/ladder/players", LADDER),
-    ("/users/{player}", LADDER),
-    ("/users/{player}/ladder", LADDER),
-    ("/users/{player}/ladder?season_id={season_id}", LADDER),
-    ("/users/{player}/history", SHORT),
-    ("/leagues/{league_id}/teams", SHORT),
-    ("/leagues/{league_id}/teams/basic", SHORT),
-    ("/leagues/{league_id}/teams/{team_a_id}", SHORT),
+    ("/events", SETTLED),
+    ("/leagues", SETTLED),
+    ("/maps", SETTLED),
+    ("/stats/career", SETTLED),
+    ("/config/w3c", SETTLED),
+    ("/config/settings/score_system", SETTLED),
+    ("/users/{player}", RUNNING),
+    ("/users/{player}/ladder", RUNNING),
+    ("/users/{player}/ladder?season_id={season_id}", RUNNING),
+    ("/users/{player}/history", RUNNING),
+    ("/leagues/{league_id}/teams", RUNNING),
+    ("/leagues/{league_id}/teams/basic", RUNNING),
+    ("/leagues/{league_id}/teams/{team_a_id}", RUNNING),
 ]
 
 
@@ -45,9 +42,6 @@ def test_an_open_read_is_cacheable_at_the_edge(
     assert resp.status_code == 200, resp.text
     assert resp.headers["cache-control"] == cache_control
     assert resp.headers["access-control-allow-origin"] == "*"
-
-
-FINISHED = "public, s-maxage=3600, stale-while-revalidate=86400"
 
 
 @pytest.mark.parametrize(
@@ -72,7 +66,7 @@ def test_a_finished_event_is_cached_for_an_hour(
         event.closed_at = utcnow()
     resp = client.get(path.format(**seeded))
     assert resp.status_code == 200, resp.text
-    assert resp.headers["cache-control"] == FINISHED
+    assert resp.headers["cache-control"] == SETTLED
     assert resp.headers["access-control-allow-origin"] == "*"
 
 
@@ -92,7 +86,64 @@ def test_an_event_not_finished_is_cached_for_two_minutes(
     )
     resp = client.get(path.format(id=event_id))
     assert resp.status_code == 200, resp.text
-    assert resp.headers["cache-control"] == SHORT
+    assert resp.headers["cache-control"] == RUNNING
+
+
+EVENT_READS = [
+    "/events/{id}",
+    "/events/{id}/entrants",
+    "/events/{id}/achievements",
+    "/events/{id}/ladder",
+    "/events/{id}/ladder/players",
+    "/events/{id}/stages/{stage}/series",
+    "/events/{id}/stages/{stage}/standings",
+]
+
+
+def staged_event(**fields: Any) -> tuple[int, int]:  # noqa: ANN401
+    """A published event a month out with one empty stage."""
+    from datetime import timedelta
+
+    from app.models.types import utcnow
+    from tests.test_event_divisions import add_stage
+    from tests.test_events import add_event
+
+    start = (utcnow() + timedelta(days=30)).date()
+    event_id = add_event(published=True, start_date=start, **fields)
+    return event_id, add_stage(event_id)
+
+
+@pytest.mark.parametrize("path", EVENT_READS)
+def test_an_event_read_is_running_until_the_event_finishes(
+    client: Client, path: str
+) -> None:
+    event_id, stage_id = staged_event()
+    resp = client.get(path.format(id=event_id, stage=stage_id))
+    assert resp.status_code == 200, resp.text
+    assert resp.headers["cache-control"] == RUNNING
+    assert resp.headers["access-control-allow-origin"] == "*"
+
+
+@pytest.mark.parametrize("path", EVENT_READS)
+def test_an_event_read_is_settled_once_the_event_finishes(
+    client: Client, path: str
+) -> None:
+    from app.models.types import utcnow
+
+    event_id, stage_id = staged_event(closed_at=utcnow())
+    resp = client.get(path.format(id=event_id, stage=stage_id))
+    assert resp.status_code == 200, resp.text
+    assert resp.headers["cache-control"] == SETTLED
+
+
+def test_an_event_is_not_cached_for_a_signed_in_caller(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    # an admin's answer holds drafts, so only the anonymous answer is shared
+    event_id, _ = staged_event()
+    resp = client.get(f"/events/{event_id}", headers=auth_headers)
+    assert resp.status_code == 200
+    assert "public" not in resp.headers.get("cache-control", "")
 
 
 def test_events_is_not_cached_for_an_admin(

@@ -28,7 +28,7 @@ def test_an_anonymous_player_read_has_no_discord_account(
     assert resp.status_code == 200
     assert bare(resp.json())
     assert resp.headers["cache-control"] == (
-        "public, s-maxage=900, stale-while-revalidate=3600"
+        "public, s-maxage=120, stale-while-revalidate=600"
     )
 
 
