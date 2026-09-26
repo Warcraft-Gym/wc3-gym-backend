@@ -30,6 +30,7 @@ from app.services.commands.base import (
     team_name,
 )
 from app.services.commands.veto import board_link, ping
+from app.services.events import _w3c_season
 from app.services.ladder import mmr_on
 from app.services.series_veto import SeriesVetoService
 
@@ -50,7 +51,8 @@ def ratings(rows: Sequence[SeriesPublic]) -> Ratings:
     if not ids:
         return Ratings({}, None)
     with Session() as session:
-        mmr = mmr_on(session, ids, utcnow())
+        current = _w3c_season(session)
+        mmr = mmr_on(session, ids, utcnow(), [current, current - 1])
         synced = session.scalar(
             select(func.min(col(User.ladder_synced_at))).where(col(User.id).in_(ids))
         )

@@ -145,8 +145,8 @@ class SeriesService:
             )
             series_list = session.scalars(statement).all()
             result = [SeriesPublic.from_series_reduced(s) for s in series_list]
-            derived.fill_series(session, result)
-            derived.fill_mmrs(session, result)
+            events = derived.fill_series(session, result)
+            derived.fill_mmrs(session, result, events)
             return result
 
     def count(self, query: QueryElement | None, season_id: int | None = None) -> int:
@@ -183,8 +183,8 @@ class SeriesService:
                 session, season_id, playday, filter, limit=limit, offset=offset
             )
             result = [SeriesPublic.from_series_reduced(s) for s in series_list]
-            derived.fill_series(session, result)
-            derived.fill_mmrs(session, result)
+            events = derived.fill_series(session, result)
+            derived.fill_mmrs(session, result, events)
             return result
 
     def search_for_season(
@@ -214,6 +214,6 @@ class SeriesService:
             )
             result = [SeriesPublic.from_series_reduced(s) for s in series_list]
             known = series_rules.from_loaded_season(series_list)
-            derived.fill_series(session, result, known)
-            derived.fill_mmrs(session, result)
+            events = derived.fill_series(session, result, known)
+            derived.fill_mmrs(session, result, events)
             return result

@@ -24,12 +24,13 @@ def open_season(
     """The seed's one played series decides the phase; unplayed and set later,
     the season is open. Its four players sign up and take a tier from their MMR:
     P1 tier 1, P2 and P4 tier 2, P3 tier 3."""
-    from tests.test_ladder_read import add_match, sign_up
+    from tests.test_ladder_read import add_match, date_around_now, sign_up
 
     score(seeded["series_played_id"], None, None)
     schedule(seeded["series_played_id"], utcnow() + timedelta(days=1))
     p1, p2, p3, p4 = seeded["player_ids"][:4]
     sign_up(seeded["season_id"], [p1, p2, p3, p4], race=Race.HU)
+    date_around_now(seeded["season_id"])
     when = utcnow() + timedelta(minutes=5)
     for user_id, mmr in ((p1, 1400), (p2, 1200), (p3, 1000), (p4, 1250)):
         add_match(

@@ -44,12 +44,14 @@ from sqlalchemy import (
     and_,
     case,
     cast,
+    column,
     func,
     null,
     or_,
     select,
     tuple_,
     union_all,
+    values,
 )
 from sqlalchemy.orm import Mapped, Session, aliased
 from sqlalchemy.sql.selectable import CTE, FromClause, Subquery
@@ -94,7 +96,8 @@ from app.models.user import (
     UserPublic,
     UserReduced,
 )
-from app.services import series_rules
+from app.models.w3c_ladder_match import W3CLadderMatch
+from app.services import ladder, series_rules
 
 type MatchScores = dict[int, tuple[int, int]]
 # score system and maps to win, the two arguments of the scoring rule
@@ -344,21 +347,38 @@ def fill_signup_races(
         row.player2_race = off2 or (row.player2.signup_race if row.player2 else None)
 
 
-def fill_mmrs(session: Session, series_list: Iterable[SeriesPublic | None]) -> None:
-    """Rate both sides of every series on the race the row names, in two reads.
+def fill_mmrs(
+    session: Session,
+    series_list: Iterable[SeriesPublic | None],
+    events: dict[int, int],
+) -> None:
+    """Rate both sides of every series on the race the row names.
 
-    The reduced player of a list answer carries no W3C stats, so the row holds
-    the rating itself. Call it after `fill_series`, which names the races. The
-    reads are three while the W3Champions season setting is unset, because the
-    rule then asks the stats table for the newest stored season.
+    `events` names the event of each row, as `fill_series` answers it, so call
+    this after it. A row of a running event takes the current rating, two
+    reads, three while the W3Champions season setting is unset. A row of a
+    finished event takes the MMR of the time: the ladder rule at the series
+    time, else its round's first day, inside the event's w3champions seasons,
+    one statement per finished event. Telling them apart costs three reads.
     """
-    # app.services.events imports this module, so its rule comes in on the call
-    from app.services.events import race_ratings
+    # app.services.events imports this module, so its rules come in on the call
+    from app.services.events import finished_ids, race_ratings
 
     rows = [series for series in series_list if series is not None]
+    finished = finished_ids(
+        session, {events[row.id] for row in rows if row.id in events}
+    )
+    by_event: dict[int, list[SeriesPublic]] = {}
+    for row in rows:
+        if events.get(row.id) in finished:
+            by_event.setdefault(events[row.id], []).append(row)
+    for event_id, played in by_event.items():
+        _fill_mmrs_of_the_time(session, event_id, played)
+
+    running = [row for row in rows if events.get(row.id) not in finished]
     sides = [
         (player.id, race)
-        for row in rows
+        for row in running
         for player, race in (
             (row.player1, row.player1_race),
             (row.player2, row.player2_race),
@@ -366,24 +386,66 @@ def fill_mmrs(session: Session, series_list: Iterable[SeriesPublic | None]) -> N
         if player
     ]
     rated = race_ratings(session, sides)
-    for row in rows:
+    for row in running:
         if row.player1 and row.player1_race:
             row.player1_mmr = rated.get((row.player1.id, row.player1_race))
         if row.player2 and row.player2_race:
             row.player2_mmr = rated.get((row.player2.id, row.player2_race))
 
 
+def _fill_mmrs_of_the_time(
+    session: Session, event_id: int, rows: list[SeriesPublic]
+) -> None:
+    """Both sides of every row of one finished event at the time it was
+    played, in one statement that sends two integers per row."""
+    sides = (
+        values(
+            column("id", Integer),
+            column("race1", String),
+            column("race2", String),
+            name="sides",
+        )
+        .data([(row.id, row.player1_race, row.player2_race) for row in rows])
+        .cte()
+    )
+    # a bound value reaches Postgres as text, which its race enum does not compare to
+    ladder_table: FromClause = getattr(W3CLadderMatch, "__table__")  # noqa: B009
+    race1, race2 = (
+        cast(race, ladder_table.c.race.type) for race in (sides.c.race1, sides.c.race2)
+    )
+    bound = ladder.w3c_seasons(session, [event_id])
+    seasons = select(bound.c.wc3_season)
+    instant = func.coalesce(col(Series.date_time), col(DBEventRound.start_date))
+    rated = {
+        series_id: (mmr1, mmr2)
+        for series_id, mmr1, mmr2 in session.execute(
+            select(
+                sides.c.id,
+                ladder.mmr_at(col(Series.player1_id), race1, instant, seasons),
+                ladder.mmr_at(col(Series.player2_id), race2, instant, seasons),
+            )
+            .join(Series, col(Series.id) == sides.c.id)
+            .join(
+                DBEventRound, col(DBEventRound.id) == col(Series.round_id), isouter=True
+            )
+        )
+    }
+    for row in rows:
+        row.player1_mmr, row.player2_mmr = rated.get(row.id, (None, None))
+
+
 def fill_series(
     session: Session,
     series_list: Iterable[SeriesPublic | None],
     known: dict[int, series_rules.Rules] | None = None,
-) -> None:
+) -> dict[int, int]:
     """Fill the points of every series, the score of the match it carries, the
-    signup race and the season record of its two players. `known` holds the
-    rules series_rules.from_loaded_season already answered."""
+    signup race and the season record of its two players, and answer the event
+    of each row. `known` holds the rules series_rules.from_loaded_season
+    already answered."""
     rows = [series for series in series_list if series is not None]
     if not rows:
-        return
+        return {}
 
     resolved = series_rules.fill_rules(session, rows, known)
     scales: dict[int, Scale] = {}
@@ -412,6 +474,7 @@ def fill_series(
         session,
         [player for series in rows for player in (series.player1, series.player2)],
     )
+    return events
 
 
 def fill_matches(session: Session, matches: Iterable[MatchPublic | None]) -> None:

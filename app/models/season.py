@@ -2,7 +2,7 @@ from collections.abc import Iterable
 from datetime import date, datetime
 from typing import TYPE_CHECKING, Annotated, Any, Literal, NamedTuple, Self
 
-from pydantic import NonNegativeInt, PositiveInt
+from pydantic import ConfigDict, NonNegativeInt, PositiveInt
 from sqlalchemy import (
     JSON,
     Index,
@@ -17,7 +17,9 @@ from sqlalchemy import (
     text,
     true,
 )
+from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import Session, column_property
+from sqlalchemy.sql.elements import ColumnElement
 from sqlmodel import Field, Relationship, SQLModel, col
 
 from app.models.base import DBModel, ident
@@ -112,6 +114,8 @@ class SeasonProgress(NamedTuple):
 class Season(SeasonBase, DBModel, table=True):
     # A GNL season is one event of the GNL league; "season" stays its name in the payloads
     __tablename__ = "event"
+    # lets pydantic pass over the running hybrid below
+    model_config = ConfigDict(ignored_types=(hybrid_property,))
     if TYPE_CHECKING:
         # Mapped below the class, where Season.id exists; declared here so a
         # type checker sees it
@@ -209,6 +213,21 @@ class Season(SeasonBase, DBModel, table=True):
     def progress(self, session: Session) -> SeasonProgress:
         """The season's phase from its series; a season with no series is open."""
         return progress_by_seasons(session, [self])[self.id]
+
+    @hybrid_property
+    def running(self) -> bool:
+        """Not closed and its end date not passed; only a running event reads the current W3C season."""
+        return self.closed_at is None and (
+            self.end_date is None or self.end_date >= utcnow().date()
+        )
+
+    @running.inplace.expression
+    @classmethod
+    def _running_expression(cls) -> ColumnElement[bool]:
+        return and_(
+            col(cls.closed_at).is_(None),
+            or_(col(cls.end_date).is_(None), col(cls.end_date) >= utcnow().date()),
+        )
 
     signup_users: list["DBUserSeasonSignup"] = Relationship(
         back_populates="season", sa_relationship_kwargs={"cascade": "all, delete"}

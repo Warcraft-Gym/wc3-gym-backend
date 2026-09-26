@@ -175,6 +175,11 @@ def test_the_limit_reaches_the_statement(league: dict[str, Any]) -> None:
     assert any("LIMIT" in statement for statement in statements)
 
 
+# The ladder.mmr_at reads of both sides of the rows of a finished season
+_AFTER = "w3c_ladder_matches.start_time, w3c_ladder_matches.id"
+_BEFORE = "w3c_ladder_matches.start_time DESC, w3c_ladder_matches.id DESC"
+MMR_OF_THE_TIME = [_AFTER, _AFTER, _AFTER, _BEFORE, _BEFORE] * 2
+
 # The ORDER BY every route writes when no sort parameter is sent
 DEFAULT_ORDER = {
     # Newest first; the collection statements order the rounds and the map pool
@@ -189,10 +194,16 @@ DEFAULT_ORDER = {
         "anon_1.user_id",
     ],
     "POST /matches/search?query=id > 0": ["matches.id"],
-    "POST /series/search?query=id > 0": ["series.id"],
-    "GET /events/{season_id}/series": ["series.id"],
-    "POST /events/{season_id}/series/search?query=id > 0": ["series.id"],
-    "POST /events/{season_id}/rounds/1/series/search?query=id > 0": ["series.id"],
+    "POST /series/search?query=id > 0": ["series.id", *MMR_OF_THE_TIME],
+    "GET /events/{season_id}/series": ["series.id", *MMR_OF_THE_TIME],
+    "POST /events/{season_id}/series/search?query=id > 0": [
+        "series.id",
+        *MMR_OF_THE_TIME,
+    ],
+    "POST /events/{season_id}/rounds/1/series/search?query=id > 0": [
+        "series.id",
+        *MMR_OF_THE_TIME,
+    ],
     "GET /leagues/{league_id}/teams": ["teams.id"],
     "GET /leagues/{league_id}/teams/basic": ["teams.id"],
     "POST /leagues/{league_id}/teams/search?query=id > 0": ["teams.id"],
@@ -228,6 +239,7 @@ DEFAULT_ORDER = {
         "anon_1.id",
         "user_battle_tag.is_active DESC, user_battle_tag.id",
         "series.id",
+        *MMR_OF_THE_TIME,
         "round_availability.user_id, round_availability.playday",
         "event_round.number",
         "event_round.number",

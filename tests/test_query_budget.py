@@ -17,9 +17,11 @@ answer, one for the sum of the series on that system. Both are constant.
 It also names the race every player registered on for the season of its
 match, one more statement that does not grow with the answer.
 
-A reduced series list rates both sides on the race each row names, which
-costs two more statements, three while the W3Champions season setting is
-unset. Neither part grows with the number of rows in the answer.
+A reduced series list rates both sides on the race each row names. Three
+statements tell the running events of the answer from the finished ones.
+The rows of the running events cost two more, three while the W3Champions
+season setting is unset; each finished event costs one. Neither part grows
+with the number of rows in the answer.
 
 A team answer derives its standings the same way, and the two statements it
 adds do not grow with the number of teams in the answer. One more statement
@@ -165,14 +167,14 @@ def test_get_series_costs_fourteen_statements(league: dict[str, Any]) -> None:
     assert tally[0] == 14
 
 
-def test_search_for_season_costs_eight_statements(league: dict[str, Any]) -> None:
+def test_search_for_season_costs_nine_statements(league: dict[str, Any]) -> None:
     """The season list is reduced: one statement for the casts, one for the pick
     steps, none per player and none per series. A GNL series reads its rules
     off the season its fixture loads, so the rules cost no statement.
 
     The reduced player carries no stats, so the list rates both sides of every
-    row itself: three statements while the W3Champions season setting is unset,
-    two once it names a season, and none per row.
+    row itself. The seeded season is finished: three statements find that, and
+    one reads the MMR of the time of every row.
     """
     service = SeriesService()
     query = QueryUtil.parse_query("player1_id > 0")
@@ -182,7 +184,8 @@ def test_search_for_season_costs_eight_statements(league: dict[str, Any]) -> Non
     assert series_list[0].player1 is not None
     assert series_list[0].player1.name
     assert series_list[0].player1.w3c_stats == []
-    assert tally[0] == 8
+    # three reads find the finished season, one reads the MMR of the time
+    assert tally[0] == 9
 
 
 def test_the_season_record_costs_two_statements(league: dict[str, Any]) -> None:

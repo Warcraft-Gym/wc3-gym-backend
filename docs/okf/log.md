@@ -3,6 +3,7 @@
 ## 2026-09-26
 
 * **Add**: [Edge cache](concepts/edge-cache.md). Every cached open read uses one of three timer classes, live, running or settled; an event read is settled once the event is finished; the entrants, stage series, stage standings, achievements and an anonymous event read are cached; a player read is running.
+* **Update**: a series row of a finished event carries the MMR of the time from the ladder, bounded to the event's W3Champions seasons; the MMR on a date takes a season bound; only a running event reads the current W3Champions season.
 * **Update**: `monitor_state` holds a `vercel` row. With `VERCEL_USAGE_TOKEN` and `VERCEL_TEAM_ID` set, the egress monitor reads the Vercel usage over a rolling 30 days, shows it in the digest, and alerts once when a meter reaches 80% or the token is rejected.
 * **Update**: `monitor_state` holds a `db_size` row. The egress monitor reads the database size on the server after each run, shows it in the digest, and alerts once when it passes 90% of the cap.
 * **Add**: `monitor_state`. The egress snapshot levels the billing cycle after each run and posts Discord embeds: an alert when the cycle is on track to pass the cap or the run fails, a silent recovery when it clears, and a silent daily digest, each linking to the usage dashboards.

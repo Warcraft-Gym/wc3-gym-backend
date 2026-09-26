@@ -2,24 +2,33 @@
 
 `SeriesPublic.from_series_reduced` leaves `w3c_stats` empty, so the season
 list (the upcoming page) and `GET /player-series` (the round cards of the
-player page) hold the rating on the row itself. The rule is the one the
-stage rows and the entrant lists use: the newest stored W3C season that
-carries a rating above 0 on the race the row names, three seasons back and
-no further, null otherwise.
+player page) hold the rating on the row itself. On a running event the rule
+is the one the stage rows and the entrant lists use: the newest stored W3C
+season that carries a rating above 0 on the race the row names, three seasons
+back and no further, null otherwise. On a finished event the row carries the
+MMR of the time: `ladder.mmr_at` at the series time, inside the event's W3C
+seasons.
 """
 
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
 from httpx2 import Client
+from sqlalchemy import select
 
 from app.core.db import Session
 from app.models.base import ident
 from app.models.enums import Race
 from app.models.relationships import DBUserSeasonSignup
+from app.models.season import Season
 from app.models.series import Series
+from app.models.types import utcnow
 from app.models.user import User
+from app.models.user_battle_tag import UserBattleTag
+from app.models.w3c_ladder_match import W3CLadderMatch
 from app.models.w3c_stats import W3CStats
+from app.services import ladder
 from tests.seed import active
 from tests.test_player_session import member_session
 from tests.test_query_budget import count_statements
@@ -30,7 +39,28 @@ SIGNUP_RACES = [Race.HU, Race.OC, Race.NE, Race.UD]
 
 @pytest.fixture
 def signed_up(seeded: dict[str, Any]) -> dict[str, Any]:
-    """The seeded league with one season signup per player, so a row names a race."""
+    """The seeded league, running, with one season signup per player, so a row
+    names a race."""
+    with Session() as session:
+        for user_id, race in zip(seeded["player_ids"], SIGNUP_RACES, strict=True):
+            session.add(
+                DBUserSeasonSignup(
+                    user_id=user_id, season_id=seeded["season_id"], race=race
+                )
+            )
+        season = session.get(Season, seeded["season_id"])
+        assert season is not None
+        season.end_date = utcnow().date() + timedelta(days=30)
+        session.commit()
+    return seeded
+
+
+@pytest.fixture
+def finished(seeded: dict[str, Any]) -> dict[str, Any]:
+    """The seeded league as seeded, finished on 2026-02-27, with the signups.
+
+    The played series is P1 (HU) against P3 (NE) on 2026-01-07 19:00 UTC.
+    """
     with Session() as session:
         for user_id, race in zip(seeded["player_ids"], SIGNUP_RACES, strict=True):
             session.add(
@@ -40,6 +70,37 @@ def signed_up(seeded: dict[str, Any]) -> dict[str, Any]:
             )
         session.commit()
     return seeded
+
+
+# The played series' time; the ladder rows sit around it
+SERIES_TIME = datetime(2026, 1, 7, 19, 0, tzinfo=UTC)
+
+
+def play(
+    user_id: int,
+    race: Race,
+    hours: int,
+    wc3_season: int,
+    mmr: tuple[int, int],
+    battle_tag_id: int | None = None,
+) -> None:
+    """Store one rated ladder match `hours` from the series time."""
+    with Session() as session:
+        session.add(
+            W3CLadderMatch(
+                user_id=user_id,
+                w3c_match_id=f"m{user_id}-{hours}-{wc3_season}-{battle_tag_id}",
+                wc3_season=wc3_season,
+                start_time=SERIES_TIME + timedelta(hours=hours),
+                duration_s=900,
+                race=race,
+                won=True,
+                mmr_before=mmr[0],
+                mmr_after=mmr[1],
+                battle_tag_id=battle_tag_id,
+            )
+        )
+        session.commit()
 
 
 def rate(*rows: tuple[int, Race, int, int | None]) -> None:
@@ -227,8 +288,8 @@ def test_the_season_list_costs_a_constant_number_of_statements(
     # every row P1 plays, the seeded one and the eighteen grown ones
     assert sum(row["player1_mmr"] == 1500 for row in rows) == 19
     assert small[0] == large[0]
-    # nine today; the guard is that it is a constant, not that it is low
-    assert large[0] <= 10, large[0]
+    # eleven today; the guard is that it is a constant, not that it is low
+    assert large[0] <= 12, large[0]
 
 
 def test_the_player_series_read_costs_a_constant_number_of_statements(
@@ -249,3 +310,101 @@ def test_the_player_series_read_costs_a_constant_number_of_statements(
     assert len(body["series"]) == 19
     assert all(row["player1_mmr"] == 1500 for row in body["series"])
     assert small[0] == large[0]
+
+
+def test_a_finished_row_reads_the_first_match_after_the_series_time(
+    client: Client, finished: dict[str, Any]
+) -> None:
+    """P1 played before and after the series: what he took into the match
+    after it counts. P3 played only before: what that match left him with."""
+    first, _, third, _ = finished["player_ids"]
+    # a snapshot rating the finished row never reads
+    rate((first, Race.HU, 9, 2000), (third, Race.NE, 9, 2000))
+    play(first, Race.HU, -20, 9, (1490, 1510))
+    play(first, Race.HU, 20, 9, (1520, 1530))
+    play(third, Race.NE, -2, 9, (1390, 1400))
+
+    row = played(
+        season_rows(client, finished["season_id"]), finished["series_played_id"]
+    )
+
+    assert (row["player1_mmr"], row["player2_mmr"]) == (1520, 1400)
+
+
+def test_a_season_opened_between_the_two_matches_keeps_the_one_before(
+    client: Client, finished: dict[str, Any]
+) -> None:
+    first, _, _, _ = finished["player_ids"]
+    play(first, Race.HU, -20, 9, (1490, 1510))
+    play(first, Race.HU, 20, 10, (1000, 1010))
+
+    row = played(
+        season_rows(client, finished["season_id"]), finished["series_played_id"]
+    )
+
+    assert row["player1_mmr"] == 1510
+
+
+def test_a_match_outside_the_event_seasons_or_tag_is_not_read(
+    client: Client, finished: dict[str, Any]
+) -> None:
+    """The event's window holds W3C season 9 only, so P3's season 8 match does
+    not rate him; P1's match on a tag he no longer uses does not rate him."""
+    first, _, third, _ = finished["player_ids"]
+    with Session() as session:
+        old_tag = UserBattleTag(
+            user_id=first,
+            tag="P1old#1111",
+            source="signup",
+            is_active=False,
+            first_seen=SERIES_TIME,
+            last_seen=SERIES_TIME,
+        )
+        session.add(old_tag)
+        session.commit()
+        old_tag_id = ident(old_tag)
+    play(first, Race.HU, -20, 9, (1490, 1510))
+    play(first, Race.HU, -1, 9, (1890, 1900), battle_tag_id=old_tag_id)
+    play(third, Race.NE, -24 * 40, 8, (1690, 1700))
+
+    row = played(
+        season_rows(client, finished["season_id"]), finished["series_played_id"]
+    )
+
+    assert (row["player1_mmr"], row["player2_mmr"]) == (1510, None)
+
+
+def test_a_finished_event_with_no_stored_match_rates_no_row(
+    client: Client, finished: dict[str, Any]
+) -> None:
+    """No match in the window names no W3C season, so no row takes today's figure."""
+    first, _, third, _ = finished["player_ids"]
+    rate((first, Race.HU, 20, 1500), (third, Race.NE, 20, 1400))
+    # season 20 is the current one, so a fallback to it would rate the first row
+    play(first, Race.HU, 24 * 60, 20, (1490, 1510))
+
+    rows = season_rows(client, finished["season_id"])
+
+    assert [(row["player1_mmr"], row["player2_mmr"]) for row in rows] == [
+        (None, None)
+    ] * len(rows)
+
+
+def test_mmr_at_picks_what_mmr_on_picks_inside_the_bound(
+    finished: dict[str, Any],
+) -> None:
+    """The subquery and the Python pick agree at every instant around the
+    matches, and a bound that leaves the season out reads nothing."""
+    first = finished["player_ids"][0]
+    play(first, Race.HU, -20, 9, (1490, 1510))
+    play(first, Race.HU, 0, 9, (1510, 1525))
+    play(first, Race.HU, 20, 10, (1000, 1010))
+    with Session() as session:
+        for hours in (-30, -20, -10, 0, 10, 20, 30):
+            instant = SERIES_TIME + timedelta(hours=hours)
+            for bound in ([9, 10], [10], [8]):
+                subquery = session.scalar(
+                    select(ladder.mmr_at(first, Race.HU, instant, bound))
+                )
+                picked = ladder.mmr_on(session, [first], instant, bound)
+                assert subquery == picked.get((first, Race.HU)), (hours, bound)

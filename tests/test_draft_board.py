@@ -429,7 +429,7 @@ def test_the_meetings_read_answers_the_series_time_mmr(
         resp = client.get(
             f"/users/{players[0]}/meetings/{players[2]}", headers=auth_headers
         )
-    # one statement for the meetings and both ratings, the rest is the guard
+    # two reads find the current W3C season, one reads the meetings and ratings
     assert tally[0] <= 3, tally[0]
     assert resp.status_code == 200, resp.text
     rows = resp.json()
@@ -476,6 +476,32 @@ def test_a_meeting_with_no_time_is_rated_against_its_round(
     # the row carries no date, and the round's first day rates it at 1511
     assert rows[0]["date_time"] is None
     assert rows[0]["player1_mmr"] == 1511
+
+
+def test_a_meeting_of_a_running_event_reads_the_current_season(
+    client: Client, board_league: dict[str, Any], auth_headers: dict[str, str]
+) -> None:
+    """An event that stores no match in its window reads the current
+    w3champions season while its end has not passed, and nothing once it has."""
+    players = board_league["player_ids"]
+    url = f"/users/{players[0]}/meetings/{players[2]}"
+    with Session() as session:
+        event = session.get(Season, board_league["season_id"])
+        assert event is not None
+        # the window opens the day after the twelve season 9 ladder rows
+        event.start_date = date(2026, 1, 7)
+        session.add(event)
+        session.commit()
+    assert client.get(url, headers=auth_headers).json()[0]["player1_mmr"] is None
+
+    with Session() as session:
+        event = session.get(Season, board_league["season_id"])
+        assert event is not None
+        event.end_date = None
+        session.add(event)
+        session.commit()
+    # season 9 is the newest stored W3C season, and its last game closed at 1511
+    assert client.get(url, headers=auth_headers).json()[0]["player1_mmr"] == 1511
 
 
 def test_the_meetings_read_needs_a_signed_in_member(
