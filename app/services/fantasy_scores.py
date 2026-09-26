@@ -19,7 +19,6 @@ from app.models.season_info import SeasonInfoPublic
 from app.models.team import Team, TeamPublic
 from app.models.team_season import DBTeamSeason
 from app.models.team_summary import TeamSummaryPublic
-from app.models.user import UserSummaryPublic
 from app.services import derived
 from app.services.fantasy_bets import FantasyBetService
 from app.services.ladder import team_achievement_points
@@ -97,13 +96,7 @@ def team_score_breakdown(
         )
         if not fantasy_team:
             raise NotFoundError("Fantasy Team not found")
-        drafted_players = [
-            UserSummaryPublic.from_user(dp.users) for dp in fantasy_team.drafted_players
-        ]
-        # A drafted player scores on the race he registered on for the season
-        derived.fill_user_signup_races(
-            session, [(player, fantasy_team.season_id) for player in drafted_players]
-        )
+        drafted_players = [dp.users for dp in fantasy_team.drafted_players]
         series_by_week = derived.fantasy_series(session, {season.id}).get(season.id, {})
         grind = _grind(session, fantasy_team, season)
         standing = _drafted_standing(session, fantasy_team, season)

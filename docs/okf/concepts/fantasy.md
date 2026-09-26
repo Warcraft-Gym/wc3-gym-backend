@@ -37,7 +37,7 @@ Players are grouped into fantasy tiers by MMR. The season stores the ascending M
 | grind pick | with N teams the rank r pays N - r + 1 |
 | total | the sum |
 
-`app/core/fantasy.py` holds the rule and reads no database. `app/services/derived.py` fills the list answer in a constant number of statements; `fantasy_scores.py` builds the same numbers for one team, from its `fantasy_teams` row and the signup races of its drafted players, with the breakdown the page shows. A bet result costs no statement, because the series scores already ride in the response. No column stores a fantasy total, and there is no recalculate route. See [derived scores](derived-scores.md).
+`app/core/fantasy.py` holds the rule and reads no database. `app/services/derived.py` fills the list answer in a constant number of statements; `fantasy_scores.py` builds the same numbers for one team, from its `fantasy_teams` row, with the breakdown the page shows. A bet result costs no statement, because the series scores already ride in the response. No column stores a fantasy total, and there is no recalculate route. See [derived scores](derived-scores.md).
 
 # Routes
 
