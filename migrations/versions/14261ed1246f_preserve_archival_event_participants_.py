@@ -1,7 +1,7 @@
 """Preserve archival event participants results and videos
 
 Revision ID: 14261ed1246f
-Revises: a7d2e5c81f94
+Revises: e4b8c2f6a913
 Create Date: 2026-09-26 11:17:17.904594
 
 """
@@ -14,7 +14,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "14261ed1246f"
-down_revision: str | Sequence[str] | None = "a7d2e5c81f94"
+down_revision: str | Sequence[str] | None = "e4b8c2f6a913"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
