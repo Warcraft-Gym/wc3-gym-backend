@@ -513,11 +513,12 @@ A route whose set is bounded by the structure of a season pages smaller by defau
 
 Every other list route keeps the default of 500, because its client reads the whole set in one request: the season reads of `/events/{event_id}/series`, the assign screen's `/events/{event_id}/signups`, the league-wide team routes, and the routes the page-walking clients call with `limit=500` of their own (`GET /users`, `GET /fantasy/teams`, `POST /fantasy/teams/search`, `POST /fantasy/bets/search`, `GET /stats/career`).
 
-Seven routes carry the total row count in an `X-Total-Count` response header, which CORS exposes to browsers. A client reads the header, then walks the pages with `limit` and `offset`. The count holds for the whole set the route answers, not for the page.
+Eight routes carry the total row count in an `X-Total-Count` response header, which CORS exposes to browsers. A client reads the header, then walks the pages with `limit` and `offset`. The count holds for the whole set the route answers, not for the page.
 
 | Route | Default page size |
 | --- | --- |
 | `GET /users` | 500 |
+| `GET /events` | 500 |
 | `GET /fantasy/teams` | 500 |
 | `POST /fantasy/teams/search` | 500 |
 | `GET /fantasy/bets` | 50 |

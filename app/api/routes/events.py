@@ -60,7 +60,8 @@ def get_events(
     limit: Annotated[int, Query(ge=1, le=500)] = 500,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> list[EventPublic]:
-    """Return one page of events, at most 500, each with its computed phase.
+    """Return one page of events, at most 500, newest first, each with its
+    computed phase. The header counts every event the filter keeps.
 
     A draft reads for an admin only; every other caller sees the published
     events whatever the filter asks for.
@@ -69,7 +70,7 @@ def get_events(
         # An anonymous caller always sees the published-only page; an admin's
         # bearer never reaches the edge, so this never caches a draft.
         edge_cache(response, "settled")
-    return service.get_all(
+    events, total = service.get_all(
         kind=kind,
         league_id=league_id,
         published=published,
@@ -77,6 +78,8 @@ def get_events(
         offset=offset,
         claims=claims,
     )
+    response.headers["X-Total-Count"] = str(total)
+    return events
 
 
 @router.post("/events/search")
