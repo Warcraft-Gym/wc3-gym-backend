@@ -256,9 +256,12 @@ def clear_kept_off_race(session: Session, row: Series) -> None:
     back, so a stored value has to mean a real exception and nothing else.
     A write that names no off race pays no statement.
     """
-    season_id = row.match.season_id if row.match else None
-    if season_id is None or not (row.player1_off_race or row.player2_off_race):
+    if not (row.player1_off_race or row.player2_off_race):
         return
+    match = series_rules.fixture(session, row)
+    if match is None:
+        return
+    season_id = match.season_id
     signed = _signup_races(
         session,
         {
@@ -914,13 +917,19 @@ def _season_trophies(
 
 
 def fill_gnl_stats(session: Session, users: Iterable[UserSummaryPublic | None]) -> None:
-    """Fill games, wins, losses and matchup_history on every gnl_stats row of
-    every user."""
+    """Fill games, wins, losses and matchup_history on every season record of
+    every user: each gnl_stats row of a player's own read, else his record."""
     rows = [
         stat
         for user in users
         if user is not None
-        for stat in user.gnl_stats
+        for stat in (
+            user.gnl_stats
+            if isinstance(user, UserPublic)
+            else [user.record]
+            if user.record
+            else []
+        )
         if stat.user_id is not None and stat.season_id is not None
     ]
     if not rows:

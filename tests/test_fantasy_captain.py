@@ -97,7 +97,7 @@ def test_the_list_answers_the_drafted_players_stats(
     player = resp.json()[0]["drafted_players"][0]
     assert "w3c_stats" not in player
     # P1 won the one played series, and the derived fill counts it
-    gnl = player["gnl_stats"][0]
+    gnl = player["record"]
     assert (gnl["wins"], gnl["losses"], gnl["games"]) == (1, 0, 1)
 
 

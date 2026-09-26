@@ -30,16 +30,28 @@ class FantasyBet(FantasyBetBase, DBModel, table=True):
     bet_points: int
 
     season: "Season" = Relationship(
-        sa_relationship_kwargs={"foreign_keys": "[FantasyBet.season_id]"}
+        sa_relationship_kwargs={
+            "lazy": "raise_on_sql",
+            "foreign_keys": "[FantasyBet.season_id]",
+        }
     )
     series: "Series" = Relationship(
-        sa_relationship_kwargs={"foreign_keys": "[FantasyBet.series_id]"}
+        sa_relationship_kwargs={
+            "lazy": "raise_on_sql",
+            "foreign_keys": "[FantasyBet.series_id]",
+        }
     )
     user: "User" = Relationship(
-        sa_relationship_kwargs={"foreign_keys": "[FantasyBet.user_id]"}
+        sa_relationship_kwargs={
+            "lazy": "raise_on_sql",
+            "foreign_keys": "[FantasyBet.user_id]",
+        }
     )
     winner: "User" = Relationship(
-        sa_relationship_kwargs={"foreign_keys": "[FantasyBet.winner_id]"}
+        sa_relationship_kwargs={
+            "lazy": "raise_on_sql",
+            "foreign_keys": "[FantasyBet.winner_id]",
+        }
     )
 
     @classmethod

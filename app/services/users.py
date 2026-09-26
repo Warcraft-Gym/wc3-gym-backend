@@ -20,6 +20,7 @@ from app.core.exceptions import (
     W3CThrottledError,
 )
 from app.core.query import QueryElement, QueryUtil
+from app.models.base import ident
 from app.models.link_prompt import LinkPromptPublic
 from app.models.relationships import DBUserSeasonSignup
 from app.models.season import Season
@@ -47,7 +48,7 @@ from app.services.battle_tags import (
     set_active_tag,
 )
 from app.services.w3c import REQUEST_TIMEOUT, W3CService
-from app.services.w3c_stats import fill, in_window, w3c_season
+from app.services.w3c_stats import fill, w3c_season, window_rows
 
 if TYPE_CHECKING:
     from app.services.settings import SettingsService
@@ -80,9 +81,7 @@ def summary_loads(
         selectinload(signup_seasons).joinedload(rel(DBUserSeasonSignup.season))
         if signups
         else noload(signup_seasons),
-        selectinload(w3c_stats.and_(in_window(window)))
-        if window is not None
-        else noload(w3c_stats),
+        window_rows(window) if window is not None else noload(w3c_stats),
     )
 
 
@@ -121,6 +120,31 @@ def _public(session: OrmSession, user: User) -> UserPublic:
     return public
 
 
+def _user(session: OrmSession, user_id: int) -> User:
+    """The user with the rows of his own read, read again even when the session
+    holds him, so a write answers what the read answers."""
+    user = (
+        session.scalars(
+            select(User)
+            .options(
+                selectinload(rel(User.team_seasons)).noload("*"),
+                noload(rel(User.w3c_stats)),
+                selectinload(rel(User.signup_seasons)).joinedload(
+                    rel(DBUserSeasonSignup.season)
+                ),
+                selectinload(rel(User.battle_tags)),
+            )
+            .where(col(User.id) == user_id)
+            .execution_options(populate_existing=True)
+        )
+        .unique()
+        .first()
+    )
+    if not user:
+        raise NotFoundError(f"User not found: {user_id}")
+    return user
+
+
 class UserService:
     def __init__(self, settings_app_service: "SettingsService | None" = None) -> None:
         self.settings_app_service = settings_app_service
@@ -130,7 +154,7 @@ class UserService:
         with Session.begin() as session:
             row = User.add(session, user.model_dump())
             attach_tag(session, row, user.battleTag, source)
-            return _public(session, row)
+            return _public(session, _user(session, ident(row)))
 
     def update(
         self, user_id: int, user: UserUpdate, source: str = "admin"
@@ -145,7 +169,7 @@ class UserService:
                 raise NotFoundError("User not found")
             if tag:
                 attach_tag(session, row, tag, source)
-            return _public(session, row)
+            return _public(session, _user(session, user_id))
 
     def set_avatar(self, user_id: int, avatar_url: str | None) -> None:
         """The Discord avatar the login just read: one UPDATE, nothing derived."""
@@ -217,26 +241,9 @@ class UserService:
             else:
                 held = person_by_tag(session, key)
                 user_id = held.id if held is not None else None
-            # Eager load related entities, disable nested loading
-            user = (
-                session.scalars(
-                    select(User)
-                    .options(
-                        selectinload(rel(User.team_seasons)).noload("*"),
-                        noload(rel(User.w3c_stats)),
-                        selectinload(rel(User.signup_seasons)).joinedload(
-                            rel(DBUserSeasonSignup.season)
-                        ),
-                        selectinload(rel(User.battle_tags)),
-                    )
-                    .where(col(User.id) == user_id)
-                )
-                .unique()
-                .first()
-            )
-            if not user:
+            if user_id is None:
                 raise NotFoundError(f"User not found: {key}")
-            return _public(session, user)
+            return _public(session, _user(session, user_id))
 
     def search(
         self, query: QueryElement | None, limit: int | None = None, offset: int = 0

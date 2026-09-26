@@ -15,10 +15,11 @@ import openpyxl
 from pydantic import ValidationError
 from sqlalchemy import func, insert, select
 from sqlalchemy.orm import Session as OrmSession
+from sqlalchemy.orm import selectinload
 from sqlmodel import col
 
 from app.core.battle_tags import has_login, is_real_tag
-from app.core.db import Session
+from app.core.db import Session, rel
 from app.core.exceptions import BadRequestError
 from app.core.scoring import DEFAULT_SYSTEM, SYSTEMS
 from app.models.base import ident
@@ -618,7 +619,9 @@ def _series(
                 series.side_size,
             ): series
             for series in session.scalars(
-                select(Series).where(col(Series.match_id).in_(match_ids))
+                select(Series)
+                .options(selectinload(rel(Series.casts)))
+                .where(col(Series.match_id).in_(match_ids))
             )
         }
 
@@ -650,7 +653,8 @@ def _series(
         if series:
             series.sqlmodel_update(values.model_dump(exclude_unset=True))
         else:
-            series = Series(**values.model_dump())
+            # A new series holds no casts, so the caster check reads no row
+            series = Series(**values.model_dump(), casts=[])
             written.append(series)
             stored[key] = series
         touched.append(series)
@@ -666,8 +670,8 @@ def _series(
     session.flush()
     # The rules SeriesService applies; a refused row rolls the import back
     for series in touched:
-        both_scores(series)
-        in_season(series)
+        both_scores(session, series)
+        in_season(session, series)
     # A Caster cell is a channel link or a Twitch login; the cast has no account
     for series, caster in casters:
         url = _cast_url(caster)

@@ -280,7 +280,7 @@ def generate_next_round(
                 row.sequence = sequence
                 made.append(row)
         session.flush()
-        rows = [StageSeriesRow.from_series(row) for row in made]
+        rows = [StageSeriesRow.from_series(row) for row in _stage_rows(session, made)]
         events = derived.fill_series(session, rows)
         _fill_teams(session, rows)
         derived.fill_mmrs(session, rows, events)
@@ -357,9 +357,8 @@ def add_challenger(event_id: int, stage_id: int, entrant_id: int) -> StageSeries
             if entrant.division_id
             else None
         )
-        public = StageSeriesRow.from_series(
-            append_to_chain(session, stage, division, entrant)
-        )
+        added = append_to_chain(session, stage, division, entrant)
+        public = StageSeriesRow.from_series(_stage_rows(session, [added])[0])
         events = derived.fill_series(session, [public])
         _fill_teams(session, [public])
         derived.fill_mmrs(session, [public], events)
@@ -645,7 +644,7 @@ def set_fixture_template(
         ]
         session.add_all(rows)
         session.flush()
-        public = [StageSeriesRow.from_series(row) for row in rows]
+        public = [StageSeriesRow.from_series(row) for row in _stage_rows(session, rows)]
         events = derived.fill_series(session, public)
         _fill_teams(session, public)
         derived.fill_mmrs(session, public, events)
@@ -857,9 +856,25 @@ def _entrants_by_id(
     }
 
 
+def _stage_rows(session: OrmSession, rows: Sequence[Series]) -> list[Series]:
+    """Those series read again with the loads of a stage row, in the order
+    given: a write answers what the stage read answers."""
+    ids = [ident(row) for row in rows]
+    read = {
+        ident(row): row
+        for row in session.scalars(
+            select(Series)
+            .options(*Series._list_eager_options())
+            .where(col(Series.id).in_(ids))
+            .execution_options(populate_existing=True)
+        )
+    }
+    return [read[series_id] for series_id in ids]
+
+
 def _lobby_read(session: OrmSession, row: Series) -> StageSeriesRow:
     """One lobby as its box reads it: the series, its seats and their places."""
-    public = StageSeriesRow.from_series(row)
+    public = StageSeriesRow.from_series(_stage_rows(session, [row])[0])
     events = derived.fill_series(session, [public])
     _fill_teams(session, [public])
     derived.fill_mmrs(session, [public], events)

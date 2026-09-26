@@ -230,7 +230,7 @@ def test_fantasy_bets_list_keeps_every_key_with_empty_collections(
         bet["series"]["player2"],
     ):
         assert "w3c_stats" not in user
-        assert user["gnl_stats"] == []
+        assert "gnl_stats" not in user
         assert user["record"] is None
         # An embedded player is the summary, which holds no signups
         assert "signup_seasons" not in user
@@ -252,7 +252,7 @@ def test_fantasy_bet_by_id_keeps_the_full_graph(
     bet = get_json(client, f"/fantasy/bets/{bet_id}")
     assert set(bet) == BET_KEYS
     assert "w3c_stats" not in bet["user"]
-    assert len(bet["user"]["gnl_stats"]) == 1
+    assert bet["user"]["record"] is not None
     assert "maps" not in bet["season"]
 
 
@@ -287,7 +287,7 @@ def test_series_season_list_keeps_every_key_with_empty_collections(
     assert series["match"]["team1"]["name"]
     for player in (series["player1"], series["player2"]):
         assert "w3c_stats" not in player
-        assert player["gnl_stats"] == []
+        assert "gnl_stats" not in player
         assert player["record"] is None
         # An embedded player is the summary, which holds no signups
         assert "signup_seasons" not in player

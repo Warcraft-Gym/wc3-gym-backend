@@ -27,7 +27,7 @@ from app.services.events import (
 )
 from app.services.koth.night import taking_signups
 from app.services.koth.signup import follow, sync_rating, unrated
-from app.services.w3c_stats import w3c_season
+from app.services.w3c_stats import w3c_season, window_rows
 
 if TYPE_CHECKING:
     from app.services.settings import SettingsService
@@ -99,9 +99,10 @@ def enter(
         sync_rating(user_id, tag)
 
     with Session.begin() as session:
-        user = session.get(User, user_id)
+        season = w3c_season(session)
+        user = session.get(User, user_id, options=[window_rows(season)])
         chosen = named or (
-            _best_race(user, w3c_season(session)) if user is not None else Race.RANDOM
+            _best_race(user, season) if user is not None else Race.RANDOM
         )
         night = session.get(Season, event_id)
         per_race = chosen if night is not None and night.multi_entry else None

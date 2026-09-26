@@ -78,23 +78,34 @@ class User(UserBase, DBModel, table=True):
     # An admin banned this player; the entrant row warns and never refuses
     banned_at: datetime | None = Field(default=None, sa_type=UTCDateTime)
     team_seasons: list["DBUserTeamSeason"] = Relationship(
-        back_populates="user", sa_relationship_kwargs={"cascade": "all, delete"}
+        back_populates="user",
+        sa_relationship_kwargs={"lazy": "raise_on_sql", "cascade": "all, delete"},
     )
     w3c_stats: list[W3CStats] = Relationship(
         back_populates="user",
-        sa_relationship_kwargs={"cascade": "all, delete-orphan"},
+        sa_relationship_kwargs={
+            "lazy": "raise_on_sql",
+            "cascade": "all, delete-orphan",
+        },
     )
     fantasy_teams: list["DBFantasyTeamPlayer"] = Relationship(
         back_populates="users",
-        sa_relationship_kwargs={"cascade": "all, delete-orphan"},
+        sa_relationship_kwargs={
+            "lazy": "raise_on_sql",
+            "cascade": "all, delete-orphan",
+        },
     )
     signup_seasons: list["DBUserSeasonSignup"] = Relationship(
-        back_populates="user", sa_relationship_kwargs={"cascade": "all, delete"}
+        back_populates="user",
+        sa_relationship_kwargs={"lazy": "raise_on_sql", "cascade": "all, delete"},
     )
-    career_stats: list["PlayerCareerStats"] = Relationship(back_populates="user")
+    career_stats: list["PlayerCareerStats"] = Relationship(
+        back_populates="user", sa_relationship_kwargs={"lazy": "raise_on_sql"}
+    )
     # Every tag the person played under, the active one first
     battle_tags: list[UserBattleTag] = Relationship(
         sa_relationship_kwargs={
+            "lazy": "raise_on_sql",
             "cascade": "all, delete",
             "order_by": "(UserBattleTag.is_active.desc(), UserBattleTag.id)",
         }
@@ -220,8 +231,6 @@ class UserSummaryPublic(UserReduced):
     tags: Annotated[list[UserBattleTagPublic], NoneToList] = []
     # The player's record in the read's event; null outside an event context
     record: UserTeamSeasonStatsPublic | None = None
-    # The same record as a one-entry list, served until the consumers read `record`
-    gnl_stats: Annotated[list[UserTeamSeasonStatsPublic], NoneToList] = []
 
     @classmethod
     def from_user(cls, user: User, event_id: int | None = None) -> Self:
@@ -239,7 +248,6 @@ class UserSummaryPublic(UserReduced):
                 ),
                 None,
             )
-            row.gnl_stats = [row.record] if row.record else []
         return row
 
 
@@ -248,9 +256,6 @@ class UserListPublic(UserSummaryPublic):
 
     # A list row names no event, so it serves no record
     record: UserTeamSeasonStatsPublic | None = Field(default=None, exclude=True)
-    gnl_stats: Annotated[list[UserTeamSeasonStatsPublic], NoneToList] = Field(
-        default=[], exclude=True
-    )
     signup_seasons: Annotated[list[SeasonSummaryPublic], NoneToList] = []
     # Set by hand on the signup row; an unpinned tier derives from the MMR
     fantasy_tier_pinned: bool = False

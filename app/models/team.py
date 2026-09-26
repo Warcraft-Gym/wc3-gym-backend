@@ -30,14 +30,17 @@ class Team(TeamBase, DBModel, table=True):
     # the public blob the logo is served from
     icon_url: str | None = Field(default=None, max_length=500)
     user_seasons: list["DBUserTeamSeason"] = Relationship(
-        back_populates="team", sa_relationship_kwargs={"cascade": "all, delete"}
+        back_populates="team",
+        sa_relationship_kwargs={"lazy": "raise_on_sql", "cascade": "all, delete"},
     )
     season_info: list["DBTeamSeason"] = Relationship(
-        back_populates="team", sa_relationship_kwargs={"cascade": "all, delete"}
+        back_populates="team",
+        sa_relationship_kwargs={"lazy": "raise_on_sql", "cascade": "all, delete"},
     )
     captain_seasons: list["DBTeamSeasonCaptain"] = Relationship(
         back_populates="team",
         sa_relationship_kwargs={
+            "lazy": "raise_on_sql",
             "cascade": "all, delete",
             "order_by": "DBTeamSeasonCaptain.user_id",
         },

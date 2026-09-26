@@ -820,10 +820,9 @@ def out_rounds(client: Client, team_id: int, season_id: int) -> list[list[int]]:
     assert resp.status_code == 200, resp.text
     players = resp.json()["player_by_season"][str(season_id)]
     return [
-        stat["out_rounds"]
+        player["record"]["out_rounds"]
         for player in players
-        for stat in player["gnl_stats"]
-        if stat["season_id"] == season_id
+        if player["record"] and player["record"]["season_id"] == season_id
     ]
 
 
@@ -860,7 +859,7 @@ def test_the_roster_read_says_nothing_about_why_a_player_is_out(
 
     stats = client.get(f"/events/{season_id}/teams/{team_id}").json()[
         "player_by_season"
-    ][str(season_id)][0]["gnl_stats"][0]
+    ][str(season_id)][0]["record"]
 
     assert stats["out_rounds"] == [2]
     assert set(stats) == {

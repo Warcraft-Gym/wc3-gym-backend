@@ -1,10 +1,10 @@
 ---
 type: API Area
 title: Response shapes
-description: An entity inside another answer is its summary shape, bounded by the read's event; the detail comes only from the entity's own read, and a write answers through that read.
+description: An entity inside another answer is its summary shape, bounded by the read's event; the detail comes only from the entity's own read, a write answers through that read, and every relationship refuses an on-the-spot load.
 resource: ../../../app/models/user.py
 tags: [api, data]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-26T18:37:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-26T20:17:19Z }
 sources:
   - id: user
     resource: ../../../app/models/user.py
@@ -44,13 +44,14 @@ sources:
 2. **A summary is bounded by the read's context.** It holds no all-time collection. Where a read is about one event, an embedded player's record is that event's record, and a team's roster is that event's roster.
 3. **A write answers the entity's own GET, through the same function.** The write commits, then the service reads the row again by id with the read's own loads. No write builds its answer on a bare row.
 4. **Every read declares its loads.** A shape reads a collection only when the read loaded it; an unloaded collection serves its empty value and never loads on the spot.
-5. **Two tests hold the rule.** `tests/test_response_shapes.py` walks every schema a route answers with, from `/openapi.json`, and fails where a property embeds a shape of a registered entity other than its summary, or where a summary holds a list of entities. `tests/test_query_budget.py` pins the statements and rows of each read and write.
+5. **Every relationship refuses an on-the-spot load.** Every `Relationship` of `User`, `Team`, `Series`, `DraftSeries`, `FantasyTeam`, `FantasyBet`, `Season` and the link rows in `app/models/relationships.py` carries `lazy="raise_on_sql"`: reading one the read did not load raises instead of sending a statement. A to-one relation already in the session answers without SQL. Code that needs a relation declares it in the read's loader (`summary_loads`, `roster_loads`, `_list_eager_options`, the entity's own read), reads the rows with its own statement (`event_rounds`, the pool's `map_season` rows), or reads a fixture once with `series_rules.fixture`, which keeps it on the series. A write reads the entity again with the read's loads (`populate_existing`) before it answers. A new row starts an empty collection itself (`maps=[]`, `casts=[]`), so the check that reads it sends no statement.
+6. **Two tests and the lock hold the rules.** `tests/test_response_shapes.py` walks every schema a route answers with, from `/openapi.json`, and fails where a property embeds a shape of a registered entity other than its summary, or where a summary holds a list of entities. `tests/test_query_budget.py` pins the statements and rows of each read and of the write routes. The lock itself raises in any test that reads an undeclared relation.
 
 # Shapes per entity
 
 | Entity | Summary, when embedded | List row | Detail, from its own read |
 |---|---|---|---|
-| User | `UserSummaryPublic` | `UserListPublic`: the summary plus `signup_seasons`, `fantasy_tier_pinned`, `draft_position`, `draft_excluded` | `UserPublic`: the list row plus `gnl_stats` for every season and `trophies` |
+| User | `UserSummaryPublic` | `UserListPublic`: the summary, less `record`, plus `signup_seasons`, `fantasy_tier_pinned`, `draft_position`, `draft_excluded` | `UserPublic`: the list row plus `gnl_stats` for every season and `trophies` |
 | Team | `TeamSummaryPublic` | `TeamPublic`; `TeamRosterPublic` on an event's list | `TeamPublic` from its league; `TeamRosterPublic` from its event |
 | Season | `SeasonSummaryPublic` | `SeasonPublic` | `EventPublic` |
 | Series | `SeriesPublic`, the players as summaries | `SeriesPublic`, `StageSeriesRow` | `SeriesPublic` |
@@ -63,7 +64,7 @@ The member variants `UserMemberListPublic` and `UserMemberPublic` add `discordTa
 
 `UserSummaryPublic` holds the scalars of `UserReduced` (`id`, `name`, `battleTag`, `country`, `timezone`, `race`, `mmr`, the profile links, `w3c_synced_at`, `ladder_synced_at`), the ladder summary `race_mmrs` and `main_race`, `mmr_entered`, `signup_race`, `played_as`, `fantasy_tier`, `tags`, and `record`.
 
-`record` is the player's `user_team_season` row in the read's event, as `UserTeamSeasonStatsPublic`: null outside an event context and null when the player holds no row there. `gnl_stats` holds that same record as a one-entry list, or `[]`, for the consumers that read the list. A list row and `UserPublic` serve no `record`; `UserPublic.gnl_stats` holds every season.
+`record` is the player's `user_team_season` row in the read's event, as `UserTeamSeasonStatsPublic`: null outside an event context and null when the player holds no row there. The summary holds no `gnl_stats`. A list row and `UserPublic` serve no `record`; `UserPublic.gnl_stats` holds every season. `derived.fill_gnl_stats` fills the counts on the `record` of a summary and on every `gnl_stats` row of `UserPublic`.
 
 | Embedded at | Event of the record | Record counts filled |
 |---|---|---|
