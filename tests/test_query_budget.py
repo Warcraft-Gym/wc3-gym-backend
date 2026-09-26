@@ -81,7 +81,7 @@ import pytest
 from fastapi import FastAPI
 from httpx2 import Client
 from sqlalchemy import event, select
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import joinedload, raiseload
 
 from app.core.db import Session, rel
 from app.core.query import QueryUtil
@@ -108,7 +108,7 @@ from app.services.player_career_stats import PlayerCareerStatsService
 from app.services.seasons import SeasonService
 from app.services.series import SeriesService
 from app.services.teams import TeamService
-from app.services.users import UserService, load_players
+from app.services.users import UserService, summary_loads
 
 STATS_PER_PLAYER = 8
 
@@ -353,10 +353,11 @@ def test_the_entrants_read_costs_twelve_statements(
 
 
 def test_summary_loads_cover_the_player_graph(league: dict[str, Any]) -> None:
-    """raiseload on both players, then their summary rows through load_players.
+    """raiseload on both players, then their summary rows with raiseload again.
 
-    The wildcard covers the relationships of a player summary_loads does not
-    name, so a summary that reads one fails this test.
+    The reload resets the loaders of each player, so it carries the wildcard
+    too: a summary that reads a relationship summary_loads does not name
+    fails this test.
     """
     options = (
         *Series._eager_options(),
@@ -370,9 +371,12 @@ def test_summary_loads_cover_the_player_graph(league: dict[str, Any]) -> None:
             .where(col(Series.id) == league["series_played_id"])
         ).first()
         assert series is not None
-        load_players(
-            session, (series.player1_id, series.player2_id), league["season_id"]
-        )
+        session.scalars(
+            select(User)
+            .options(*summary_loads(league["season_id"]), raiseload("*"))
+            .where(col(User.id).in_((series.player1_id, series.player2_id)))
+            .execution_options(populate_existing=True)
+        ).all()
         public = SeriesPublic.from_series(series, league["season_id"])
 
     assert public.player1 is not None
