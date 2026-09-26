@@ -5,7 +5,6 @@ An alert posts once per change of level, so the state row is read and written on
 """
 
 import calendar
-import json
 import logging
 import os
 from dataclasses import dataclass
@@ -20,7 +19,7 @@ from app.models.egress_ledger import EgressLedger
 from app.models.egress_snapshot import EgressSnapshotResult, EgressWindow
 from app.models.monitor_state import MonitorState
 from app.models.types import utcnow
-from app.services import egress, egress_chart
+from app.services import egress
 from app.services.egress_snapshot import BUDGET_MB_PER_DAY, unavailable, windows
 
 log = logging.getLogger(__name__)
@@ -31,8 +30,6 @@ CAP_MB = 5000.0  # the organisation's egress cap per cycle; staging shares it
 RED_MB = 0.9 * CAP_MB  # a projected cycle total above this alerts
 AVERAGE_OVER = timedelta(hours=72)  # the recent rate the projection extends
 TOP_ROUTES = 3
-CHART_DAYS = 14  # the digest chart shows the windows of the last two weeks
-CHART = "egress.png"
 
 RED, AMBER, GREEN, BLUE = 0xD63232, 0xF0A04B, 0x36A64F, 0x4F95D8
 SILENT = 1 << 12  # SUPPRESS_NOTIFICATIONS: the post shows without a notification
@@ -83,7 +80,6 @@ class Meters:
     average_mb_per_day: float
     cycle_mb: float
     projected_mb: float
-    history: tuple[EgressWindow, ...] = ()  # the windows read, oldest first
 
     @property
     def level(self) -> Level:
@@ -111,7 +107,7 @@ class Meters:
 
 
 def meters(found: list[EgressWindow], now: datetime) -> Meters:
-    """The cycle's figures from the windows read, oldest first; `history` keeps them all."""
+    """The cycle's figures from the windows read, oldest first."""
     c = cycle(now)
     # The 00:00 run's window covers the day before, so a window counts in the cycle it starts in
     so_far = sum(w.estimated_mb for w in found if w.start >= c.start)
@@ -126,8 +122,20 @@ def meters(found: list[EgressWindow], now: datetime) -> Meters:
         average_mb_per_day=average,
         cycle_mb=so_far,
         projected_mb=so_far + average * left,
-        history=tuple(found),
     )
+
+
+# The dashboards a post links to, by label, from their optional variables
+DASHBOARDS = {
+    "Supabase usage": "DEV_ALERTS_SUPABASE_USAGE_URL",
+    "Vercel usage": "DEV_ALERTS_VERCEL_USAGE_URL",
+}
+
+
+def dashboards() -> dict[str, str]:
+    """The dashboard links that are set to an https URL; anything else is ignored."""
+    links = {label: os.getenv(name, "").strip() for label, name in DASHBOARDS.items()}
+    return {label: url for label, url in links.items() if url.startswith("https://")}
 
 
 def mention_id() -> str | None:
@@ -224,9 +232,14 @@ def message(
     fields: list[dict[str, Any]],
     silent: bool = False,
     mention: str | None = None,
-    image: str | None = None,
+    links: dict[str, str] | None = None,
 ) -> dict[str, Any]:
-    """One webhook payload with one embed; only an alert names `mention`, and pings no one else."""
+    """One webhook payload with one embed; only an alert names `mention`, and pings no one else.
+    `links` titles the embed with the Supabase usage page and lists every dashboard last."""
+    links = links or {}
+    if links:
+        listed = " · ".join(f"[{label}]({url})" for label, url in links.items())
+        fields = [*fields, field("Dashboards", listed, inline=False)]
     embed = fit(
         {
             "title": title,
@@ -237,8 +250,8 @@ def message(
             "footer": {"text": FOOTER},
         }
     )
-    if image:
-        embed["image"] = {"url": image}
+    if "Supabase usage" in links:
+        embed["url"] = links["Supabase usage"]
     payload: dict[str, Any] = {"embeds": [embed]}
     if mention:
         payload["content"] = f"<@{mention}> egress needs action today"
@@ -251,7 +264,11 @@ def message(
 
 
 def alert(
-    m: Meters, routes: list[EgressLedger], since: datetime, mention: str | None
+    m: Meters,
+    routes: list[EgressLedger],
+    since: datetime,
+    mention: str | None,
+    links: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """The red alert: the cycle is on track to pass the cap, or has passed it."""
     over = m.cycle_mb > CAP_MB
@@ -285,7 +302,7 @@ def alert(
             inline=False,
         ),
     ]
-    return message(m.now, RED, title, description, fields, mention=mention)
+    return message(m.now, RED, title, description, fields, mention=mention, links=links)
 
 
 def unavailable_alert(
@@ -330,7 +347,9 @@ STATUS = {
 }
 
 
-def digest(m: Meters, routes: list[EgressLedger]) -> dict[str, Any]:
+def digest(
+    m: Meters, routes: list[EgressLedger], links: dict[str, str] | None = None
+) -> dict[str, Any]:
     """The silent daily post with every meter; before the first window, the baseline note."""
     if m.last is None:
         return message(
@@ -340,6 +359,7 @@ def digest(m: Meters, routes: list[EgressLedger]) -> dict[str, Any]:
             "Baseline taken. First figures after the next run.",
             [],
             silent=True,
+            links=links,
         )
     colour, status = STATUS[m.level]
     per_day = m.last.mb_per_day
@@ -361,8 +381,7 @@ def digest(m: Meters, routes: list[EgressLedger]) -> dict[str, Any]:
         ),
     ]
     title = f"Daily infrastructure digest · {day_label(m.last.start.date())}"
-    image = f"attachment://{CHART}" if len(m.history) >= 2 else None
-    return message(m.now, colour, title, status, fields, silent=True, image=image)
+    return message(m.now, colour, title, status, fields, silent=True, links=links)
 
 
 def posts(
@@ -370,15 +389,16 @@ def posts(
     m: Meters,
     routes: list[EgressLedger],
     mention: str | None,
+    links: dict[str, str] | None = None,
 ) -> list[dict[str, Any]]:
     """An alert on a change to red, a recovery on a change out of red or unavailable, then the digest."""
     was = state.level if state is not None else None
     out = []
     if m.level in ALERTING and m.level != was:
-        out.append(alert(m, routes, m.since, mention))
+        out.append(alert(m, routes, m.since, mention, links))
     elif state is not None and was in ALERTING and m.level not in ALERTING:
         out.append(recovery(m, state.level, state.since))
-    out.append(digest(m, routes))
+    out.append(digest(m, routes, links))
     return out
 
 
@@ -406,7 +426,6 @@ def report(result: EgressSnapshotResult, now: datetime | None = None) -> None:
         return
     now = now or utcnow()
     mention = mention_id()
-    history: tuple[EgressWindow, ...] = ()
     with Session() as session:
         state = session.get(MonitorState, KEY)
         was = state.level if state is not None else None
@@ -416,32 +435,16 @@ def report(result: EgressSnapshotResult, now: datetime | None = None) -> None:
             if was != level:
                 out = [unavailable_alert(result.reason or "unknown", now, mention)]
         else:
-            start = min(cycle(now).start, now - timedelta(days=CHART_DAYS))
+            start = min(cycle(now).start, now - AVERAGE_OVER)
             m = meters(windows(session, start), now)
-            level, since, history = m.level, m.since, m.history
+            level, since = m.level, m.since
             routes = egress.busiest(session, m.covers, TOP_ROUTES)
-            out = posts(state, m, routes, mention)
+            out = posts(state, m, routes, mention, dashboards())
     alerting = level in ALERTING and level != was
-    delivered = [post(*with_chart(p, history)) for p in out]
+    delivered = [post(p) for p in out]
     if alerting and not delivered[0]:
         return
     save(level, since, now)
-
-
-def with_chart(
-    payload: dict[str, Any], history: tuple[EgressWindow, ...]
-) -> tuple[dict[str, Any], bytes | None]:
-    """The payload and its chart when its embed shows one; on a render error, without the image."""
-    embed = payload["embeds"][0]
-    if "image" not in embed or not os.getenv("DEV_ALERTS_WEBHOOK_URL"):
-        return payload, None
-    points = [(day_label(w.start.date()), w.mb_per_day) for w in history[-CHART_DAYS:]]
-    try:
-        return payload, egress_chart.render(points, BUDGET_MB_PER_DAY)
-    except Exception as error:
-        log.warning("egress chart not drawn: %s", type(error).__name__)
-        rest = {k: v for k, v in embed.items() if k != "image"}
-        return {**payload, "embeds": [rest]}, None
 
 
 def crashed(reason: str, now: datetime | None = None) -> None:
@@ -454,23 +457,14 @@ def crashed(reason: str, now: datetime | None = None) -> None:
         post(unavailable_alert(reason, now, mention_id()))
 
 
-def post(payload: dict[str, Any], png: bytes | None = None) -> bool:
-    """Send one payload to the DEV_ALERTS_WEBHOOK_URL channel webhook, with the chart as an
-    attachment when there is one; True when Discord took it, False when unset or failed."""
+def post(payload: dict[str, Any]) -> bool:
+    """Send one payload to the DEV_ALERTS_WEBHOOK_URL channel webhook; True when Discord
+    took it, False when the webhook is unset or the post failed."""
     url = os.getenv("DEV_ALERTS_WEBHOOK_URL")
     if not url:
         return False
     try:
-        if png is None:
-            sent = requests.post(url, json=payload, timeout=10)
-        else:
-            sent = requests.post(
-                url,
-                data={"payload_json": json.dumps(payload)},
-                files={"files[0]": (CHART, png, "image/png")},
-                timeout=10,
-            )
-        sent.raise_for_status()
+        requests.post(url, json=payload, timeout=10).raise_for_status()
         return True
     except requests.RequestException as error:
         # The exception text carries the webhook URL and its token: log the type and status only

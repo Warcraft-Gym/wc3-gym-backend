@@ -2,7 +2,6 @@
 
 import json
 from datetime import UTC, date, datetime, timedelta
-from json import loads
 from typing import Any
 
 import pytest
@@ -12,7 +11,7 @@ from app.core.db import Session
 from app.models.egress_ledger import EgressLedger
 from app.models.egress_snapshot import EgressWindow
 from app.models.monitor_state import MonitorState
-from app.services import egress_chart, egress_monitor, egress_snapshot
+from app.services import egress_monitor, egress_snapshot
 from app.services.egress_monitor import Level
 from tests.test_egress_snapshot import store
 
@@ -40,24 +39,14 @@ def sent(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
     class Sent:
         def raise_for_status(self) -> None: ...
 
-    def post(
-        url: str,
-        timeout: float,
-        json: dict[str, Any] | None = None,
-        data: dict[str, str] | None = None,
-        files: dict[str, tuple[str, bytes, str]] | None = None,
-    ) -> Sent:
-        if json is not None:
-            posts.append(json)
-        else:
-            # A multipart post: the payload as payload_json and the chart as files[0]
-            assert data is not None and files is not None
-            posts.append({**loads(data["payload_json"]), "_file": files["files[0]"]})
+    def post(url: str, json: dict[str, Any], timeout: float) -> Sent:
+        posts.append(json)
         return Sent()
 
     monkeypatch.setattr(egress_monitor.requests, "post", post)
     monkeypatch.setenv("DEV_ALERTS_WEBHOOK_URL", "https://discord.test/webhook")
-    monkeypatch.delenv("DEV_ALERTS_MENTION_USER_ID", raising=False)
+    for name in ("DEV_ALERTS_MENTION_USER_ID", *egress_monitor.DASHBOARDS.values()):
+        monkeypatch.delenv(name, raising=False)
     return posts
 
 
@@ -322,11 +311,15 @@ def test_every_payload_fits_discords_limits() -> None:
         )
     ] * 3
     m = egress_monitor.meters(daily(20_000), NOW)
-    alert = egress_monitor.alert(m, long, NOW, FAKE_ID)
+    links = {
+        "Supabase usage": "https://supabase.test/usage",
+        "Vercel usage": "https://vercel.test/usage",
+    }
+    alert = egress_monitor.alert(m, long, NOW, FAKE_ID, links)
     assert alert["embeds"][0]["title"] == "Supabase egress: over the 5 GB cap"
     for payload in [
         alert,
-        egress_monitor.digest(m, long),
+        egress_monitor.digest(m, long, links),
         egress_monitor.recovery(m, "red", NOW - timedelta(days=2)),
         egress_monitor.unavailable_alert("x" * 5000, NOW, None),
     ]:
@@ -398,53 +391,6 @@ def test_a_run_reads_its_windows_from_the_stored_snapshots(
     assert fields["Cycle so far"].endswith("0.2 GB of 5 GB")
 
 
-PNG = b"\x89PNG\r\n\x1a\n"
-
-
-@pytest.mark.parametrize("n", [1, 2, 14, 20])
-def test_the_chart_is_a_png_for_any_number_of_points(n: int) -> None:
-    points = [(f"{d} Sep", [0.0, 52.0, 1128.0][d % 3]) for d in range(1, n + 1)]
-    assert egress_chart.render(points, 80).startswith(PNG)
-
-
-def test_the_digest_attaches_the_chart_from_two_windows(
-    monkeypatch: pytest.MonkeyPatch, sent: list[dict[str, Any]]
-) -> None:
-    run(monkeypatch, [w(NOW, 50)])
-    assert "image" not in sent[0]["embeds"][0] and "_file" not in sent[0]
-    sent.clear()
-
-    run(monkeypatch, daily(50, days=20))
-    embed = sent[0]["embeds"][0]
-    assert embed["image"] == {"url": "attachment://egress.png"}
-    name, png, kind = sent[0]["_file"]
-    assert (name, kind) == ("egress.png", "image/png") and png.startswith(PNG)
-
-
-def test_a_chart_that_fails_to_draw_leaves_the_digest_without_it(
-    monkeypatch: pytest.MonkeyPatch,
-    sent: list[dict[str, Any]],
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    def broken(points: object, budget: float) -> bytes:
-        raise OSError("no font")
-
-    monkeypatch.setattr(egress_chart, "render", broken)
-    run(monkeypatch, daily(50))
-    assert titles(sent) == ["Daily infrastructure digest · 28 Sep"]
-    assert "image" not in sent[0]["embeds"][0] and "_file" not in sent[0]
-    assert "OSError" in caplog.text
-
-
-def test_alerts_and_recoveries_carry_no_chart(
-    monkeypatch: pytest.MonkeyPatch, sent: list[dict[str, Any]]
-) -> None:
-    run(monkeypatch, daily(200))
-    alert, digest = sent
-    assert "image" not in alert["embeds"][0] and "_file" not in alert
-    assert "_file" in digest
-
-
 def test_an_undelivered_alert_keeps_the_level_so_the_next_run_retries(
     monkeypatch: pytest.MonkeyPatch, sent: list[dict[str, Any]]
 ) -> None:
@@ -509,5 +455,39 @@ def test_a_monitor_failure_still_answers_the_snapshot(
     assert "RuntimeError" in caplog.text
 
 
-def test_the_chart_ticks_are_round_numbers() -> None:
-    assert [egress_chart.nice(x) for x in (282, 23.75, 20, 0.3)] == [500, 50, 20, 0.5]
+def test_the_posts_link_the_dashboards_that_are_set_to_https(
+    monkeypatch: pytest.MonkeyPatch, sent: list[dict[str, Any]]
+) -> None:
+    before = NOW - timedelta(days=1)
+    run(monkeypatch, daily(20, now=before), before)
+    for payload in sent:
+        embed = payload["embeds"][0]
+        assert "url" not in embed
+        assert "Dashboards" not in [f["name"] for f in embed["fields"]]
+    sent.clear()
+
+    monkeypatch.setenv("DEV_ALERTS_SUPABASE_USAGE_URL", "https://supabase.test/usage")
+    monkeypatch.setenv("DEV_ALERTS_VERCEL_USAGE_URL", "http://vercel.test/usage")
+    run(monkeypatch, daily(200))
+    assert titles(sent) == [
+        "Supabase egress: on track to pass the 5 GB cap",
+        "Daily infrastructure digest · 28 Sep",
+    ]
+    for payload in sent:
+        embed = payload["embeds"][0]
+        assert embed["url"] == "https://supabase.test/usage"
+        assert embed["fields"][-1] == {
+            "name": "Dashboards",
+            "value": "[Supabase usage](https://supabase.test/usage)",
+            "inline": False,
+        }
+    alert_fields = [f["name"] for f in sent[0]["embeds"][0]["fields"]]
+    assert alert_fields[-2:] == ["Next step", "Dashboards"]
+    sent.clear()
+
+    monkeypatch.setenv("DEV_ALERTS_VERCEL_USAGE_URL", "https://vercel.test/usage")
+    monkeypatch.setenv("DEV_ALERTS_SUPABASE_USAGE_URL", "supabase.test/usage")
+    run(monkeypatch, daily(200))
+    embed = sent[0]["embeds"][0]
+    assert "url" not in embed
+    assert embed["fields"][-1]["value"] == "[Vercel usage](https://vercel.test/usage)"

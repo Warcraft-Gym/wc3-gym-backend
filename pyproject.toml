@@ -19,8 +19,6 @@ dependencies = [
     "clerk-backend-api>=7.0.0",
     # team logos live in Vercel Blob; imported inside the upload path only
     "vercel>=0.10.0",
-    # the egress digest chart; imported inside egress_chart.render only
-    "pillow>=12.3.0",
 ]
 
 [build-system]
