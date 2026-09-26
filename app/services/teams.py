@@ -371,8 +371,12 @@ class TeamService:
                     select(Team)
                     .options(
                         joinedload(rel(Team.user_seasons)).noload("*"),
-                        joinedload(rel(Team.captain_seasons)).joinedload(
-                            rel(DBTeamSeasonCaptain.user)
+                        # The captains' ladder rows and signups stay unread
+                        joinedload(rel(Team.captain_seasons))
+                        .joinedload(rel(DBTeamSeasonCaptain.user))
+                        .options(
+                            noload(rel(User.w3c_stats)),
+                            noload(rel(User.signup_seasons)),
                         ),
                     )
                     .where(

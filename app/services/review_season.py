@@ -42,6 +42,7 @@ from app.models.user_team_season import DBUserTeamSeason
 from app.models.w3c_stats import W3CStats
 from app.services import discord
 from app.services.seasons import gnl_league
+from app.services.w3c_stats import in_window, w3c_season
 
 NAME = "GNL Review Season"
 START = date(2026, 9, 1)
@@ -100,12 +101,13 @@ def build(discord_a: str, discord_b: str) -> str:
         a, b = player(session, discord_a), player(session, discord_b)
         testers = guild_players(session, [a, b])
         tester_ids = [user.id for user in testers]
-        # Real players with a ladder MMR, so the tier strip and the MMR chips draw something
+        # Real players rated in the live window, so the tier strip and the MMR chips draw something
         rostered = session.scalars(
             select(User)
             .join(DBUserTeamSeason, col(DBUserTeamSeason.user_id) == col(User.id))
             .join(W3CStats, col(W3CStats.user_id) == col(User.id))
             .where(col(DBUserTeamSeason.season_id) == source.id, col(W3CStats.mmr) > 0)
+            .where(in_window(w3c_season(session)))
             .where(col(User.id).notin_(tester_ids))
             .group_by(col(User.id))
             .order_by(func.max(col(W3CStats.mmr)).desc())
