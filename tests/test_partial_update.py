@@ -13,11 +13,11 @@ def test_a_user_update_keeps_the_fields_it_was_not_given(
     client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
 ) -> None:
     user_id = seeded["player_ids"][0]
-    before = client.get(f"/users/{user_id}").json()
+    before = client.get(f"/users/{user_id}", headers=auth_headers).json()
 
     resp = client.put(f"/users/{user_id}", headers=auth_headers, json={"mmr": 2500})
     assert resp.status_code == 200, resp.text
-    after = resp.json()
+    after = client.get(f"/users/{user_id}", headers=auth_headers).json()
 
     assert after["mmr"] == 2500
     for field in ("name", "battleTag", "discordTag", "discordId", "race", "country"):

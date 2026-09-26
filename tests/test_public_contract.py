@@ -271,7 +271,7 @@ def test_teams_season_carries_the_person_row_fields(
     for person in people:
         assert person["name"]
         assert person["battleTag"]
-        assert person["discordTag"]
+        assert "discordTag" not in person and "discordId" not in person
         assert person["race"]
         assert person["country"]
         assert person["mmr"] is not None
@@ -404,7 +404,7 @@ def test_fantasy_teams_search_carries_the_leaderboard_fields(
     for team in teams:
         assert team["name"]
         assert team["captain"]["name"]
-        assert team["captain"]["discordTag"]
+        assert "discordTag" not in team["captain"]
         for column in (
             "total_points",
             "player_points",
@@ -427,7 +427,7 @@ def test_fantasy_teams_search_carries_the_draft_fields(
         assert isinstance(team["drafted_players"], list)
         for player in team["drafted_players"]:
             assert player["name"]
-            assert player["discordTag"]
+            assert "discordTag" not in player
         assert team["drafted_team"]["name"]
         assert team["drafted_race"]
     drafted = next(t for t in teams if t["id"] == public_seed["fantasy_team_id"])

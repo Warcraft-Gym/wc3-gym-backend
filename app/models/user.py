@@ -172,8 +172,9 @@ class UserReduced(UserBase, PublicModel):
     # A user reached through another object may hold only some of these
     name: str | None = None
     battleTag: str | None = None
-    discordTag: str | None = None
-    discordId: str | None = None
+    # Kept for the Discord cards, never served: UserMemberPublic serves them
+    discordTag: str | None = Field(default=None, exclude=True)
+    discordId: str | None = Field(default=None, exclude=True)
     race: Annotated[str | None, EnumValue] = None
     w3c_synced_at: datetime | None = None
     ladder_synced_at: datetime | None = None
@@ -267,3 +268,10 @@ class UserPublic(UserListPublic):
             for stat in (user.team_seasons or [])
         ]
         return row
+
+
+class UserMemberPublic(UserPublic):
+    """A player read by a logged-in caller: the Discord account is served."""
+
+    discordTag: str | None = None
+    discordId: str | None = None
