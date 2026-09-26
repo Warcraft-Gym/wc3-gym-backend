@@ -15,7 +15,7 @@ from app.models.relationships import DBUserSeasonSignup
 from app.models.types import utcnow
 from app.models.user import User, UserReduced
 from app.models.w3c_stats import W3CSyncResult
-from app.services import casts, discord_posts, egress, egress_snapshot
+from app.services import casts, discord_posts, egress, egress_monitor, egress_snapshot
 from app.services.users import W3C_SYNC_WORKERS
 
 router = APIRouter(tags=["jobs"])
@@ -108,14 +108,15 @@ def take_egress_snapshot(credentials: Credentials) -> EgressSnapshotResult:
     """Copy pg_stat_statements into egress_snapshot and diff it with the copy before,
     for Vercel Cron once a day. Without pg_stat_statements it answers available: false;
     within an hour of the last snapshot it writes nothing and answers `skipped`.
-    A failed or over-budget run posts to the DEV_ALERTS_WEBHOOK_URL channel."""
+    Each run that writes posts to the DEV_ALERTS_WEBHOOK_URL channel: an alert when the level
+    turns red or unavailable, a recovery when it clears, and the daily digest."""
     only_the_scheduler(credentials)
     try:
         result = egress_snapshot.take()
     except Exception as error:
-        egress_snapshot.alert(egress_snapshot.unavailable(type(error).__name__))
+        egress_monitor.crashed(type(error).__name__)
         raise
-    egress_snapshot.alert(result)
+    egress_monitor.report(result)
     return result
 
 
