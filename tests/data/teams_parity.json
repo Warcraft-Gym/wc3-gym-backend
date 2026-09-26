@@ -1,0 +1,4685 @@
+{
+  "/leagues/1/teams": {
+    "status": 200,
+    "body": [
+      {
+        "id": 1,
+        "league_id": 1,
+        "name": "Alpha",
+        "long_name": "Team Alpha",
+        "icon_url": null,
+        "player_by_season": {},
+        "captains_by_season": {},
+        "seasons_info": [
+          {
+            "season_id": 1,
+            "name": "Season 1",
+            "league_short_name": "SL",
+            "final_score": 6,
+            "points_available": 12,
+            "points_against": 6,
+            "series_won": 3,
+            "series_lost": 1
+          },
+          {
+            "season_id": 2,
+            "name": "Season 2",
+            "league_short_name": "SL",
+            "final_score": 3,
+            "points_available": -6,
+            "points_against": 3,
+            "series_won": 1,
+            "series_lost": 1
+          }
+        ],
+        "discord_role_missing": []
+      },
+      {
+        "id": 2,
+        "league_id": 1,
+        "name": "Beta",
+        "long_name": "Team Beta",
+        "icon_url": null,
+        "player_by_season": {},
+        "captains_by_season": {},
+        "seasons_info": [
+          {
+            "season_id": 1,
+            "name": "Season 1",
+            "league_short_name": "SL",
+            "final_score": 6,
+            "points_available": 12,
+            "points_against": 6,
+            "series_won": 1,
+            "series_lost": 3
+          },
+          {
+            "season_id": 2,
+            "name": "Season 2",
+            "league_short_name": "SL",
+            "final_score": 3,
+            "points_available": -6,
+            "points_against": 3,
+            "series_won": 1,
+            "series_lost": 1
+          }
+        ],
+        "discord_role_missing": []
+      },
+      {
+        "id": 3,
+        "league_id": 1,
+        "name": "Gamma",
+        "long_name": null,
+        "icon_url": null,
+        "player_by_season": {},
+        "captains_by_season": {},
+        "seasons_info": [],
+        "discord_role_missing": []
+      }
+    ]
+  },
+  "/leagues/1/teams/basic": {
+    "status": 200,
+    "body": [
+      {
+        "id": 1,
+        "league_id": 1,
+        "name": "Alpha",
+        "long_name": "Team Alpha",
+        "icon_url": null,
+        "player_by_season": {},
+        "captains_by_season": {},
+        "seasons_info": [],
+        "discord_role_missing": []
+      },
+      {
+        "id": 2,
+        "league_id": 1,
+        "name": "Beta",
+        "long_name": "Team Beta",
+        "icon_url": null,
+        "player_by_season": {},
+        "captains_by_season": {},
+        "seasons_info": [],
+        "discord_role_missing": []
+      },
+      {
+        "id": 3,
+        "league_id": 1,
+        "name": "Gamma",
+        "long_name": null,
+        "icon_url": null,
+        "player_by_season": {},
+        "captains_by_season": {},
+        "seasons_info": [],
+        "discord_role_missing": []
+      }
+    ]
+  },
+  "/events/1/teams": {
+    "status": 200,
+    "body": [
+      {
+        "id": 1,
+        "league_id": 1,
+        "name": "Alpha",
+        "long_name": "Team Alpha",
+        "icon_url": null,
+        "player_by_season": {
+          "1": [
+            {
+              "name": "P1",
+              "discordTag": "p1",
+              "discordId": "1",
+              "mmr": 1500,
+              "country": "DE",
+              "timezone": null,
+              "twitch_url": null,
+              "youtube_url": null,
+              "avatar_url": null,
+              "id": 1,
+              "battleTag": "P1#1111",
+              "race": "HU",
+              "w3c_synced_at": null,
+              "ladder_synced_at": null,
+              "w3c_stats": [
+                {
+                  "wc3_season": 1,
+                  "wins": 1,
+                  "losses": 2,
+                  "games": 3,
+                  "mmr": 1511,
+                  "winrate": null,
+                  "league": null,
+                  "id": 2,
+                  "race": "HU",
+                  "user_id": 1
+                },
+                {
+                  "wc3_season": 3,
+                  "wins": 3,
+                  "losses": 4,
+                  "games": 7,
+                  "mmr": 1531,
+                  "winrate": null,
+                  "league": null,
+                  "id": 4,
+                  "race": "HU",
+                  "user_id": 1
+                },
+                {
+                  "wc3_season": 5,
+                  "wins": 5,
+                  "losses": 6,
+                  "games": 11,
+                  "mmr": 1551,
+                  "winrate": null,
+                  "league": null,
+                  "id": 6,
+                  "race": "HU",
+                  "user_id": 1
+                },
+                {
+                  "wc3_season": 7,
+                  "wins": 7,
+                  "losses": 8,
+                  "games": 15,
+                  "mmr": 1571,
+                  "winrate": null,
+                  "league": null,
+                  "id": 8,
+                  "race": "HU",
+                  "user_id": 1
+                },
+                {
+                  "wc3_season": 0,
+                  "wins": 0,
+                  "losses": 1,
+                  "games": 1,
+                  "mmr": 1501,
+                  "winrate": null,
+                  "league": null,
+                  "id": 1,
+                  "race": "NE",
+                  "user_id": 1
+                },
+                {
+                  "wc3_season": 2,
+                  "wins": 2,
+                  "losses": 3,
+                  "games": 5,
+                  "mmr": 1521,
+                  "winrate": null,
+                  "league": null,
+                  "id": 3,
+                  "race": "NE",
+                  "user_id": 1
+                },
+                {
+                  "wc3_season": 4,
+                  "wins": 4,
+                  "losses": 5,
+                  "games": 9,
+                  "mmr": 1541,
+                  "winrate": null,
+                  "league": null,
+                  "id": 5,
+                  "race": "NE",
+                  "user_id": 1
+                },
+                {
+                  "wc3_season": 6,
+                  "wins": 6,
+                  "losses": 7,
+                  "games": 13,
+                  "mmr": 1561,
+                  "winrate": null,
+                  "league": null,
+                  "id": 7,
+                  "race": "NE",
+                  "user_id": 1
+                }
+              ],
+              "signup_seasons": [],
+              "signup_race": "HU",
+              "played_as": null,
+              "fantasy_tier": null,
+              "fantasy_tier_pinned": false,
+              "draft_position": null,
+              "draft_excluded": false,
+              "tags": [],
+              "gnl_stats": [
+                {
+                  "user_id": 1,
+                  "team_id": 1,
+                  "games": 3,
+                  "wins": 2,
+                  "losses": 1,
+                  "season_id": 1,
+                  "matchup_history": [
+                    "NE",
+                    null,
+                    "NE"
+                  ],
+                  "out_rounds": []
+                }
+              ],
+              "trophies": []
+            },
+            {
+              "name": "P2",
+              "discordTag": "p2",
+              "discordId": "2",
+              "mmr": 1400,
+              "country": "US",
+              "timezone": null,
+              "twitch_url": null,
+              "youtube_url": null,
+              "avatar_url": null,
+              "id": 2,
+              "battleTag": "P2#2222",
+              "race": "OC",
+              "w3c_synced_at": null,
+              "ladder_synced_at": null,
+              "w3c_stats": [
+                {
+                  "wc3_season": 1,
+                  "wins": 1,
+                  "losses": 2,
+                  "games": 3,
+                  "mmr": 1512,
+                  "winrate": null,
+                  "league": null,
+                  "id": 10,
+                  "race": "HU",
+                  "user_id": 2
+                },
+                {
+                  "wc3_season": 3,
+                  "wins": 3,
+                  "losses": 4,
+                  "games": 7,
+                  "mmr": 1532,
+                  "winrate": null,
+                  "league": null,
+                  "id": 12,
+                  "race": "HU",
+                  "user_id": 2
+                },
+                {
+                  "wc3_season": 5,
+                  "wins": 5,
+                  "losses": 6,
+                  "games": 11,
+                  "mmr": 1552,
+                  "winrate": null,
+                  "league": null,
+                  "id": 14,
+                  "race": "HU",
+                  "user_id": 2
+                },
+                {
+                  "wc3_season": 7,
+                  "wins": 7,
+                  "losses": 8,
+                  "games": 15,
+                  "mmr": 1572,
+                  "winrate": null,
+                  "league": null,
+                  "id": 16,
+                  "race": "HU",
+                  "user_id": 2
+                },
+                {
+                  "wc3_season": 0,
+                  "wins": 0,
+                  "losses": 1,
+                  "games": 1,
+                  "mmr": 1502,
+                  "winrate": null,
+                  "league": null,
+                  "id": 9,
+                  "race": "NE",
+                  "user_id": 2
+                },
+                {
+                  "wc3_season": 2,
+                  "wins": 2,
+                  "losses": 3,
+                  "games": 5,
+                  "mmr": 1522,
+                  "winrate": null,
+                  "league": null,
+                  "id": 11,
+                  "race": "NE",
+                  "user_id": 2
+                },
+                {
+                  "wc3_season": 4,
+                  "wins": 4,
+                  "losses": 5,
+                  "games": 9,
+                  "mmr": 1542,
+                  "winrate": null,
+                  "league": null,
+                  "id": 13,
+                  "race": "NE",
+                  "user_id": 2
+                },
+                {
+                  "wc3_season": 6,
+                  "wins": 6,
+                  "losses": 7,
+                  "games": 13,
+                  "mmr": 1562,
+                  "winrate": null,
+                  "league": null,
+                  "id": 15,
+                  "race": "NE",
+                  "user_id": 2
+                }
+              ],
+              "signup_seasons": [],
+              "signup_race": "OC",
+              "played_as": null,
+              "fantasy_tier": null,
+              "fantasy_tier_pinned": false,
+              "draft_position": null,
+              "draft_excluded": false,
+              "tags": [],
+              "gnl_stats": [
+                {
+                  "user_id": 2,
+                  "team_id": 1,
+                  "games": 3,
+                  "wins": 1,
+                  "losses": 0,
+                  "season_id": 1,
+                  "matchup_history": [
+                    null,
+                    "UD",
+                    "HU"
+                  ],
+                  "out_rounds": []
+                }
+              ],
+              "trophies": []
+            }
+          ]
+        },
+        "captains_by_season": {
+          "1": [
+            {
+              "name": "P1",
+              "discordTag": "p1",
+              "discordId": "1",
+              "mmr": 1500,
+              "country": "DE",
+              "timezone": null,
+              "twitch_url": null,
+              "youtube_url": null,
+              "avatar_url": null,
+              "id": 1,
+              "battleTag": "P1#1111",
+              "race": "HU",
+              "w3c_synced_at": null,
+              "ladder_synced_at": null,
+              "w3c_stats": [
+                {
+                  "wc3_season": 1,
+                  "wins": 1,
+                  "losses": 2,
+                  "games": 3,
+                  "mmr": 1511,
+                  "winrate": null,
+                  "league": null,
+                  "id": 2,
+                  "race": "HU",
+                  "user_id": 1
+                },
+                {
+                  "wc3_season": 3,
+                  "wins": 3,
+                  "losses": 4,
+                  "games": 7,
+                  "mmr": 1531,
+                  "winrate": null,
+                  "league": null,
+                  "id": 4,
+                  "race": "HU",
+                  "user_id": 1
+                },
+                {
+                  "wc3_season": 5,
+                  "wins": 5,
+                  "losses": 6,
+                  "games": 11,
+                  "mmr": 1551,
+                  "winrate": null,
+                  "league": null,
+                  "id": 6,
+                  "race": "HU",
+                  "user_id": 1
+                },
+                {
+                  "wc3_season": 7,
+                  "wins": 7,
+                  "losses": 8,
+                  "games": 15,
+                  "mmr": 1571,
+                  "winrate": null,
+                  "league": null,
+                  "id": 8,
+                  "race": "HU",
+                  "user_id": 1
+                },
+                {
+                  "wc3_season": 0,
+                  "wins": 0,
+                  "losses": 1,
+                  "games": 1,
+                  "mmr": 1501,
+                  "winrate": null,
+                  "league": null,
+                  "id": 1,
+                  "race": "NE",
+                  "user_id": 1
+                },
+                {
+                  "wc3_season": 2,
+                  "wins": 2,
+                  "losses": 3,
+                  "games": 5,
+                  "mmr": 1521,
+                  "winrate": null,
+                  "league": null,
+                  "id": 3,
+                  "race": "NE",
+                  "user_id": 1
+                },
+                {
+                  "wc3_season": 4,
+                  "wins": 4,
+                  "losses": 5,
+                  "games": 9,
+                  "mmr": 1541,
+                  "winrate": null,
+                  "league": null,
+                  "id": 5,
+                  "race": "NE",
+                  "user_id": 1
+                },
+                {
+                  "wc3_season": 6,
+                  "wins": 6,
+                  "losses": 7,
+                  "games": 13,
+                  "mmr": 1561,
+                  "winrate": null,
+                  "league": null,
+                  "id": 7,
+                  "race": "NE",
+                  "user_id": 1
+                }
+              ],
+              "signup_seasons": [],
+              "signup_race": null,
+              "played_as": null,
+              "fantasy_tier": null,
+              "fantasy_tier_pinned": false,
+              "draft_position": null,
+              "draft_excluded": false,
+              "tags": [],
+              "gnl_stats": [
+                {
+                  "user_id": 1,
+                  "team_id": 1,
+                  "games": null,
+                  "wins": null,
+                  "losses": null,
+                  "season_id": 1,
+                  "matchup_history": [],
+                  "out_rounds": []
+                }
+              ],
+              "trophies": []
+            }
+          ]
+        },
+        "seasons_info": [
+          {
+            "season_id": 1,
+            "name": "Season 1",
+            "league_short_name": "SL",
+            "final_score": 6,
+            "points_available": 12,
+            "points_against": 6,
+            "series_won": 3,
+            "series_lost": 1
+          }
+        ],
+        "discord_role_missing": []
+      },
+      {
+        "id": 2,
+        "league_id": 1,
+        "name": "Beta",
+        "long_name": "Team Beta",
+        "icon_url": null,
+        "player_by_season": {
+          "1": [
+            {
+              "name": "P3",
+              "discordTag": "p3",
+              "discordId": "3",
+              "mmr": 1600,
+              "country": "FR",
+              "timezone": null,
+              "twitch_url": null,
+              "youtube_url": null,
+              "avatar_url": null,
+              "id": 3,
+              "battleTag": "P3#3333",
+              "race": "NE",
+              "w3c_synced_at": null,
+              "ladder_synced_at": null,
+              "w3c_stats": [
+                {
+                  "wc3_season": 1,
+                  "wins": 1,
+                  "losses": 2,
+                  "games": 3,
+                  "mmr": 1513,
+                  "winrate": null,
+                  "league": null,
+                  "id": 18,
+                  "race": "HU",
+                  "user_id": 3
+                },
+                {
+                  "wc3_season": 3,
+                  "wins": 3,
+                  "losses": 4,
+                  "games": 7,
+                  "mmr": 1533,
+                  "winrate": null,
+                  "league": null,
+                  "id": 20,
+                  "race": "HU",
+                  "user_id": 3
+                },
+                {
+                  "wc3_season": 5,
+                  "wins": 5,
+                  "losses": 6,
+                  "games": 11,
+                  "mmr": 1553,
+                  "winrate": null,
+                  "league": null,
+                  "id": 22,
+                  "race": "HU",
+                  "user_id": 3
+                },
+                {
+                  "wc3_season": 7,
+                  "wins": 7,
+                  "losses": 8,
+                  "games": 15,
+                  "mmr": 1573,
+                  "winrate": null,
+                  "league": null,
+                  "id": 24,
+                  "race": "HU",
+                  "user_id": 3
+                },
+                {
+                  "wc3_season": 0,
+                  "wins": 0,
+                  "losses": 1,
+                  "games": 1,
+                  "mmr": 1503,
+                  "winrate": null,
+                  "league": null,
+                  "id": 17,
+                  "race": "NE",
+                  "user_id": 3
+                },
+                {
+                  "wc3_season": 2,
+                  "wins": 2,
+                  "losses": 3,
+                  "games": 5,
+                  "mmr": 1523,
+                  "winrate": null,
+                  "league": null,
+                  "id": 19,
+                  "race": "NE",
+                  "user_id": 3
+                },
+                {
+                  "wc3_season": 4,
+                  "wins": 4,
+                  "losses": 5,
+                  "games": 9,
+                  "mmr": 1543,
+                  "winrate": null,
+                  "league": null,
+                  "id": 21,
+                  "race": "NE",
+                  "user_id": 3
+                },
+                {
+                  "wc3_season": 6,
+                  "wins": 6,
+                  "losses": 7,
+                  "games": 13,
+                  "mmr": 1563,
+                  "winrate": null,
+                  "league": null,
+                  "id": 23,
+                  "race": "NE",
+                  "user_id": 3
+                }
+              ],
+              "signup_seasons": [],
+              "signup_race": "NE",
+              "played_as": null,
+              "fantasy_tier": null,
+              "fantasy_tier_pinned": false,
+              "draft_position": null,
+              "draft_excluded": false,
+              "tags": [],
+              "gnl_stats": [
+                {
+                  "user_id": 3,
+                  "team_id": 2,
+                  "games": 3,
+                  "wins": 1,
+                  "losses": 1,
+                  "season_id": 1,
+                  "matchup_history": [
+                    "HU",
+                    "OC",
+                    "HU"
+                  ],
+                  "out_rounds": []
+                }
+              ],
+              "trophies": []
+            },
+            {
+              "name": "P4",
+              "discordTag": "p4",
+              "discordId": "4",
+              "mmr": 1300,
+              "country": "SE",
+              "timezone": null,
+              "twitch_url": null,
+              "youtube_url": null,
+              "avatar_url": null,
+              "id": 4,
+              "battleTag": "P4#4444",
+              "race": "UD",
+              "w3c_synced_at": null,
+              "ladder_synced_at": null,
+              "w3c_stats": [
+                {
+                  "wc3_season": 1,
+                  "wins": 1,
+                  "losses": 2,
+                  "games": 3,
+                  "mmr": 1514,
+                  "winrate": null,
+                  "league": null,
+                  "id": 26,
+                  "race": "HU",
+                  "user_id": 4
+                },
+                {
+                  "wc3_season": 3,
+                  "wins": 3,
+                  "losses": 4,
+                  "games": 7,
+                  "mmr": 1534,
+                  "winrate": null,
+                  "league": null,
+                  "id": 28,
+                  "race": "HU",
+                  "user_id": 4
+                },
+                {
+                  "wc3_season": 5,
+                  "wins": 5,
+                  "losses": 6,
+                  "games": 11,
+                  "mmr": 1554,
+                  "winrate": null,
+                  "league": null,
+                  "id": 30,
+                  "race": "HU",
+                  "user_id": 4
+                },
+                {
+                  "wc3_season": 7,
+                  "wins": 7,
+                  "losses": 8,
+                  "games": 15,
+                  "mmr": 1574,
+                  "winrate": null,
+                  "league": null,
+                  "id": 32,
+                  "race": "HU",
+                  "user_id": 4
+                },
+                {
+                  "wc3_season": 0,
+                  "wins": 0,
+                  "losses": 1,
+                  "games": 1,
+                  "mmr": 1504,
+                  "winrate": null,
+                  "league": null,
+                  "id": 25,
+                  "race": "NE",
+                  "user_id": 4
+                },
+                {
+                  "wc3_season": 2,
+                  "wins": 2,
+                  "losses": 3,
+                  "games": 5,
+                  "mmr": 1524,
+                  "winrate": null,
+                  "league": null,
+                  "id": 27,
+                  "race": "NE",
+                  "user_id": 4
+                },
+                {
+                  "wc3_season": 4,
+                  "wins": 4,
+                  "losses": 5,
+                  "games": 9,
+                  "mmr": 1544,
+                  "winrate": null,
+                  "league": null,
+                  "id": 29,
+                  "race": "NE",
+                  "user_id": 4
+                },
+                {
+                  "wc3_season": 6,
+                  "wins": 6,
+                  "losses": 7,
+                  "games": 13,
+                  "mmr": 1564,
+                  "winrate": null,
+                  "league": null,
+                  "id": 31,
+                  "race": "NE",
+                  "user_id": 4
+                }
+              ],
+              "signup_seasons": [],
+              "signup_race": null,
+              "played_as": null,
+              "fantasy_tier": null,
+              "fantasy_tier_pinned": false,
+              "draft_position": null,
+              "draft_excluded": false,
+              "tags": [],
+              "gnl_stats": [
+                {
+                  "user_id": 4,
+                  "team_id": 2,
+                  "games": 3,
+                  "wins": 0,
+                  "losses": 2,
+                  "season_id": 1,
+                  "matchup_history": [
+                    "OC",
+                    "NE",
+                    "OC"
+                  ],
+                  "out_rounds": []
+                }
+              ],
+              "trophies": []
+            }
+          ]
+        },
+        "captains_by_season": {
+          "1": [
+            {
+              "name": "P5",
+              "discordTag": "p5",
+              "discordId": "5",
+              "mmr": 1700,
+              "country": "NO",
+              "timezone": null,
+              "twitch_url": null,
+              "youtube_url": null,
+              "avatar_url": null,
+              "id": 5,
+              "battleTag": "P5#5555",
+              "race": "RANDOM",
+              "w3c_synced_at": null,
+              "ladder_synced_at": null,
+              "w3c_stats": [
+                {
+                  "wc3_season": 7,
+                  "wins": 7,
+                  "losses": 8,
+                  "games": 15,
+                  "mmr": 1575,
+                  "winrate": null,
+                  "league": null,
+                  "id": 34,
+                  "race": "HU",
+                  "user_id": 5
+                },
+                {
+                  "wc3_season": 2,
+                  "wins": 2,
+                  "losses": 3,
+                  "games": 5,
+                  "mmr": 1525,
+                  "winrate": null,
+                  "league": null,
+                  "id": 33,
+                  "race": "NE",
+                  "user_id": 5
+                }
+              ],
+              "signup_seasons": [],
+              "signup_race": null,
+              "played_as": null,
+              "fantasy_tier": null,
+              "fantasy_tier_pinned": false,
+              "draft_position": null,
+              "draft_excluded": false,
+              "tags": [],
+              "gnl_stats": [],
+              "trophies": []
+            }
+          ]
+        },
+        "seasons_info": [
+          {
+            "season_id": 1,
+            "name": "Season 1",
+            "league_short_name": "SL",
+            "final_score": 6,
+            "points_available": 12,
+            "points_against": 6,
+            "series_won": 1,
+            "series_lost": 3
+          }
+        ],
+        "discord_role_missing": []
+      }
+    ]
+  },
+  "/events/1/teams?limit=1": {
+    "status": 200,
+    "body": [
+      {
+        "id": 1,
+        "league_id": 1,
+        "name": "Alpha",
+        "long_name": "Team Alpha",
+        "icon_url": null,
+        "player_by_season": {
+          "1": [
+            {
+              "name": "P1",
+              "discordTag": "p1",
+              "discordId": "1",
+              "mmr": 1500,
+              "country": "DE",
+              "timezone": null,
+              "twitch_url": null,
+              "youtube_url": null,
+              "avatar_url": null,
+              "id": 1,
+              "battleTag": "P1#1111",
+              "race": "HU",
+              "w3c_synced_at": null,
+              "ladder_synced_at": null,
+              "w3c_stats": [
+                {
+                  "wc3_season": 1,
+                  "wins": 1,
+                  "losses": 2,
+                  "games": 3,
+                  "mmr": 1511,
+                  "winrate": null,
+                  "league": null,
+                  "id": 2,
+                  "race": "HU",
+                  "user_id": 1
+                },
+                {
+                  "wc3_season": 3,
+                  "wins": 3,
+                  "losses": 4,
+                  "games": 7,
+                  "mmr": 1531,
+                  "winrate": null,
+                  "league": null,
+                  "id": 4,
+                  "race": "HU",
+                  "user_id": 1
+                },
+                {
+                  "wc3_season": 5,
+                  "wins": 5,
+                  "losses": 6,
+                  "games": 11,
+                  "mmr": 1551,
+                  "winrate": null,
+                  "league": null,
+                  "id": 6,
+                  "race": "HU",
+                  "user_id": 1
+                },
+                {
+                  "wc3_season": 7,
+                  "wins": 7,
+                  "losses": 8,
+                  "games": 15,
+                  "mmr": 1571,
+                  "winrate": null,
+                  "league": null,
+                  "id": 8,
+                  "race": "HU",
+                  "user_id": 1
+                },
+                {
+                  "wc3_season": 0,
+                  "wins": 0,
+                  "losses": 1,
+                  "games": 1,
+                  "mmr": 1501,
+                  "winrate": null,
+                  "league": null,
+                  "id": 1,
+                  "race": "NE",
+                  "user_id": 1
+                },
+                {
+                  "wc3_season": 2,
+                  "wins": 2,
+                  "losses": 3,
+                  "games": 5,
+                  "mmr": 1521,
+                  "winrate": null,
+                  "league": null,
+                  "id": 3,
+                  "race": "NE",
+                  "user_id": 1
+                },
+                {
+                  "wc3_season": 4,
+                  "wins": 4,
+                  "losses": 5,
+                  "games": 9,
+                  "mmr": 1541,
+                  "winrate": null,
+                  "league": null,
+                  "id": 5,
+                  "race": "NE",
+                  "user_id": 1
+                },
+                {
+                  "wc3_season": 6,
+                  "wins": 6,
+                  "losses": 7,
+                  "games": 13,
+                  "mmr": 1561,
+                  "winrate": null,
+                  "league": null,
+                  "id": 7,
+                  "race": "NE",
+                  "user_id": 1
+                }
+              ],
+              "signup_seasons": [],
+              "signup_race": "HU",
+              "played_as": null,
+              "fantasy_tier": null,
+              "fantasy_tier_pinned": false,
+              "draft_position": null,
+              "draft_excluded": false,
+              "tags": [],
+              "gnl_stats": [
+                {
+                  "user_id": 1,
+                  "team_id": 1,
+                  "games": 3,
+                  "wins": 2,
+                  "losses": 1,
+                  "season_id": 1,
+                  "matchup_history": [
+                    "NE",
+                    null,
+                    "NE"
+                  ],
+                  "out_rounds": []
+                }
+              ],
+              "trophies": []
+            },
+            {
+              "name": "P2",
+              "discordTag": "p2",
+              "discordId": "2",
+              "mmr": 1400,
+              "country": "US",
+              "timezone": null,
+              "twitch_url": null,
+              "youtube_url": null,
+              "avatar_url": null,
+              "id": 2,
+              "battleTag": "P2#2222",
+              "race": "OC",
+              "w3c_synced_at": null,
+              "ladder_synced_at": null,
+              "w3c_stats": [
+                {
+                  "wc3_season": 1,
+                  "wins": 1,
+                  "losses": 2,
+                  "games": 3,
+                  "mmr": 1512,
+                  "winrate": null,
+                  "league": null,
+                  "id": 10,
+                  "race": "HU",
+                  "user_id": 2
+                },
+                {
+                  "wc3_season": 3,
+                  "wins": 3,
+                  "losses": 4,
+                  "games": 7,
+                  "mmr": 1532,
+                  "winrate": null,
+                  "league": null,
+                  "id": 12,
+                  "race": "HU",
+                  "user_id": 2
+                },
+                {
+                  "wc3_season": 5,
+                  "wins": 5,
+                  "losses": 6,
+                  "games": 11,
+                  "mmr": 1552,
+                  "winrate": null,
+                  "league": null,
+                  "id": 14,
+                  "race": "HU",
+                  "user_id": 2
+                },
+                {
+                  "wc3_season": 7,
+                  "wins": 7,
+                  "losses": 8,
+                  "games": 15,
+                  "mmr": 1572,
+                  "winrate": null,
+                  "league": null,
+                  "id": 16,
+                  "race": "HU",
+                  "user_id": 2
+                },
+                {
+                  "wc3_season": 0,
+                  "wins": 0,
+                  "losses": 1,
+                  "games": 1,
+                  "mmr": 1502,
+                  "winrate": null,
+                  "league": null,
+                  "id": 9,
+                  "race": "NE",
+                  "user_id": 2
+                },
+                {
+                  "wc3_season": 2,
+                  "wins": 2,
+                  "losses": 3,
+                  "games": 5,
+                  "mmr": 1522,
+                  "winrate": null,
+                  "league": null,
+                  "id": 11,
+                  "race": "NE",
+                  "user_id": 2
+                },
+                {
+                  "wc3_season": 4,
+                  "wins": 4,
+                  "losses": 5,
+                  "games": 9,
+                  "mmr": 1542,
+                  "winrate": null,
+                  "league": null,
+                  "id": 13,
+                  "race": "NE",
+                  "user_id": 2
+                },
+                {
+                  "wc3_season": 6,
+                  "wins": 6,
+                  "losses": 7,
+                  "games": 13,
+                  "mmr": 1562,
+                  "winrate": null,
+                  "league": null,
+                  "id": 15,
+                  "race": "NE",
+                  "user_id": 2
+                }
+              ],
+              "signup_seasons": [],
+              "signup_race": "OC",
+              "played_as": null,
+              "fantasy_tier": null,
+              "fantasy_tier_pinned": false,
+              "draft_position": null,
+              "draft_excluded": false,
+              "tags": [],
+              "gnl_stats": [
+                {
+                  "user_id": 2,
+                  "team_id": 1,
+                  "games": 3,
+                  "wins": 1,
+                  "losses": 0,
+                  "season_id": 1,
+                  "matchup_history": [
+                    null,
+                    "UD",
+                    "HU"
+                  ],
+                  "out_rounds": []
+                }
+              ],
+              "trophies": []
+            }
+          ]
+        },
+        "captains_by_season": {
+          "1": [
+            {
+              "name": "P1",
+              "discordTag": "p1",
+              "discordId": "1",
+              "mmr": 1500,
+              "country": "DE",
+              "timezone": null,
+              "twitch_url": null,
+              "youtube_url": null,
+              "avatar_url": null,
+              "id": 1,
+              "battleTag": "P1#1111",
+              "race": "HU",
+              "w3c_synced_at": null,
+              "ladder_synced_at": null,
+              "w3c_stats": [
+                {
+                  "wc3_season": 1,
+                  "wins": 1,
+                  "losses": 2,
+                  "games": 3,
+                  "mmr": 1511,
+                  "winrate": null,
+                  "league": null,
+                  "id": 2,
+                  "race": "HU",
+                  "user_id": 1
+                },
+                {
+                  "wc3_season": 3,
+                  "wins": 3,
+                  "losses": 4,
+                  "games": 7,
+                  "mmr": 1531,
+                  "winrate": null,
+                  "league": null,
+                  "id": 4,
+                  "race": "HU",
+                  "user_id": 1
+                },
+                {
+                  "wc3_season": 5,
+                  "wins": 5,
+                  "losses": 6,
+                  "games": 11,
+                  "mmr": 1551,
+                  "winrate": null,
+                  "league": null,
+                  "id": 6,
+                  "race": "HU",
+                  "user_id": 1
+                },
+                {
+                  "wc3_season": 7,
+                  "wins": 7,
+                  "losses": 8,
+                  "games": 15,
+                  "mmr": 1571,
+                  "winrate": null,
+                  "league": null,
+                  "id": 8,
+                  "race": "HU",
+                  "user_id": 1
+                },
+                {
+                  "wc3_season": 0,
+                  "wins": 0,
+                  "losses": 1,
+                  "games": 1,
+                  "mmr": 1501,
+                  "winrate": null,
+                  "league": null,
+                  "id": 1,
+                  "race": "NE",
+                  "user_id": 1
+                },
+                {
+                  "wc3_season": 2,
+                  "wins": 2,
+                  "losses": 3,
+                  "games": 5,
+                  "mmr": 1521,
+                  "winrate": null,
+                  "league": null,
+                  "id": 3,
+                  "race": "NE",
+                  "user_id": 1
+                },
+                {
+                  "wc3_season": 4,
+                  "wins": 4,
+                  "losses": 5,
+                  "games": 9,
+                  "mmr": 1541,
+                  "winrate": null,
+                  "league": null,
+                  "id": 5,
+                  "race": "NE",
+                  "user_id": 1
+                },
+                {
+                  "wc3_season": 6,
+                  "wins": 6,
+                  "losses": 7,
+                  "games": 13,
+                  "mmr": 1561,
+                  "winrate": null,
+                  "league": null,
+                  "id": 7,
+                  "race": "NE",
+                  "user_id": 1
+                }
+              ],
+              "signup_seasons": [],
+              "signup_race": null,
+              "played_as": null,
+              "fantasy_tier": null,
+              "fantasy_tier_pinned": false,
+              "draft_position": null,
+              "draft_excluded": false,
+              "tags": [],
+              "gnl_stats": [
+                {
+                  "user_id": 1,
+                  "team_id": 1,
+                  "games": null,
+                  "wins": null,
+                  "losses": null,
+                  "season_id": 1,
+                  "matchup_history": [],
+                  "out_rounds": []
+                }
+              ],
+              "trophies": []
+            }
+          ]
+        },
+        "seasons_info": [
+          {
+            "season_id": 1,
+            "name": "Season 1",
+            "league_short_name": "SL",
+            "final_score": 6,
+            "points_available": 12,
+            "points_against": 6,
+            "series_won": 3,
+            "series_lost": 1
+          }
+        ],
+        "discord_role_missing": []
+      }
+    ]
+  },
+  "/events/1/teams?limit=1&offset=1": {
+    "status": 200,
+    "body": [
+      {
+        "id": 2,
+        "league_id": 1,
+        "name": "Beta",
+        "long_name": "Team Beta",
+        "icon_url": null,
+        "player_by_season": {
+          "1": [
+            {
+              "name": "P3",
+              "discordTag": "p3",
+              "discordId": "3",
+              "mmr": 1600,
+              "country": "FR",
+              "timezone": null,
+              "twitch_url": null,
+              "youtube_url": null,
+              "avatar_url": null,
+              "id": 3,
+              "battleTag": "P3#3333",
+              "race": "NE",
+              "w3c_synced_at": null,
+              "ladder_synced_at": null,
+              "w3c_stats": [
+                {
+                  "wc3_season": 1,
+                  "wins": 1,
+                  "losses": 2,
+                  "games": 3,
+                  "mmr": 1513,
+                  "winrate": null,
+                  "league": null,
+                  "id": 18,
+                  "race": "HU",
+                  "user_id": 3
+                },
+                {
+                  "wc3_season": 3,
+                  "wins": 3,
+                  "losses": 4,
+                  "games": 7,
+                  "mmr": 1533,
+                  "winrate": null,
+                  "league": null,
+                  "id": 20,
+                  "race": "HU",
+                  "user_id": 3
+                },
+                {
+                  "wc3_season": 5,
+                  "wins": 5,
+                  "losses": 6,
+                  "games": 11,
+                  "mmr": 1553,
+                  "winrate": null,
+                  "league": null,
+                  "id": 22,
+                  "race": "HU",
+                  "user_id": 3
+                },
+                {
+                  "wc3_season": 7,
+                  "wins": 7,
+                  "losses": 8,
+                  "games": 15,
+                  "mmr": 1573,
+                  "winrate": null,
+                  "league": null,
+                  "id": 24,
+                  "race": "HU",
+                  "user_id": 3
+                },
+                {
+                  "wc3_season": 0,
+                  "wins": 0,
+                  "losses": 1,
+                  "games": 1,
+                  "mmr": 1503,
+                  "winrate": null,
+                  "league": null,
+                  "id": 17,
+                  "race": "NE",
+                  "user_id": 3
+                },
+                {
+                  "wc3_season": 2,
+                  "wins": 2,
+                  "losses": 3,
+                  "games": 5,
+                  "mmr": 1523,
+                  "winrate": null,
+                  "league": null,
+                  "id": 19,
+                  "race": "NE",
+                  "user_id": 3
+                },
+                {
+                  "wc3_season": 4,
+                  "wins": 4,
+                  "losses": 5,
+                  "games": 9,
+                  "mmr": 1543,
+                  "winrate": null,
+                  "league": null,
+                  "id": 21,
+                  "race": "NE",
+                  "user_id": 3
+                },
+                {
+                  "wc3_season": 6,
+                  "wins": 6,
+                  "losses": 7,
+                  "games": 13,
+                  "mmr": 1563,
+                  "winrate": null,
+                  "league": null,
+                  "id": 23,
+                  "race": "NE",
+                  "user_id": 3
+                }
+              ],
+              "signup_seasons": [],
+              "signup_race": "NE",
+              "played_as": null,
+              "fantasy_tier": null,
+              "fantasy_tier_pinned": false,
+              "draft_position": null,
+              "draft_excluded": false,
+              "tags": [],
+              "gnl_stats": [
+                {
+                  "user_id": 3,
+                  "team_id": 2,
+                  "games": 3,
+                  "wins": 1,
+                  "losses": 1,
+                  "season_id": 1,
+                  "matchup_history": [
+                    "HU",
+                    "OC",
+                    "HU"
+                  ],
+                  "out_rounds": []
+                }
+              ],
+              "trophies": []
+            },
+            {
+              "name": "P4",
+              "discordTag": "p4",
+              "discordId": "4",
+              "mmr": 1300,
+              "country": "SE",
+              "timezone": null,
+              "twitch_url": null,
+              "youtube_url": null,
+              "avatar_url": null,
+              "id": 4,
+              "battleTag": "P4#4444",
+              "race": "UD",
+              "w3c_synced_at": null,
+              "ladder_synced_at": null,
+              "w3c_stats": [
+                {
+                  "wc3_season": 1,
+                  "wins": 1,
+                  "losses": 2,
+                  "games": 3,
+                  "mmr": 1514,
+                  "winrate": null,
+                  "league": null,
+                  "id": 26,
+                  "race": "HU",
+                  "user_id": 4
+                },
+                {
+                  "wc3_season": 3,
+                  "wins": 3,
+                  "losses": 4,
+                  "games": 7,
+                  "mmr": 1534,
+                  "winrate": null,
+                  "league": null,
+                  "id": 28,
+                  "race": "HU",
+                  "user_id": 4
+                },
+                {
+                  "wc3_season": 5,
+                  "wins": 5,
+                  "losses": 6,
+                  "games": 11,
+                  "mmr": 1554,
+                  "winrate": null,
+                  "league": null,
+                  "id": 30,
+                  "race": "HU",
+                  "user_id": 4
+                },
+                {
+                  "wc3_season": 7,
+                  "wins": 7,
+                  "losses": 8,
+                  "games": 15,
+                  "mmr": 1574,
+                  "winrate": null,
+                  "league": null,
+                  "id": 32,
+                  "race": "HU",
+                  "user_id": 4
+                },
+                {
+                  "wc3_season": 0,
+                  "wins": 0,
+                  "losses": 1,
+                  "games": 1,
+                  "mmr": 1504,
+                  "winrate": null,
+                  "league": null,
+                  "id": 25,
+                  "race": "NE",
+                  "user_id": 4
+                },
+                {
+                  "wc3_season": 2,
+                  "wins": 2,
+                  "losses": 3,
+                  "games": 5,
+                  "mmr": 1524,
+                  "winrate": null,
+                  "league": null,
+                  "id": 27,
+                  "race": "NE",
+                  "user_id": 4
+                },
+                {
+                  "wc3_season": 4,
+                  "wins": 4,
+                  "losses": 5,
+                  "games": 9,
+                  "mmr": 1544,
+                  "winrate": null,
+                  "league": null,
+                  "id": 29,
+                  "race": "NE",
+                  "user_id": 4
+                },
+                {
+                  "wc3_season": 6,
+                  "wins": 6,
+                  "losses": 7,
+                  "games": 13,
+                  "mmr": 1564,
+                  "winrate": null,
+                  "league": null,
+                  "id": 31,
+                  "race": "NE",
+                  "user_id": 4
+                }
+              ],
+              "signup_seasons": [],
+              "signup_race": null,
+              "played_as": null,
+              "fantasy_tier": null,
+              "fantasy_tier_pinned": false,
+              "draft_position": null,
+              "draft_excluded": false,
+              "tags": [],
+              "gnl_stats": [
+                {
+                  "user_id": 4,
+                  "team_id": 2,
+                  "games": 3,
+                  "wins": 0,
+                  "losses": 2,
+                  "season_id": 1,
+                  "matchup_history": [
+                    "OC",
+                    "NE",
+                    "OC"
+                  ],
+                  "out_rounds": []
+                }
+              ],
+              "trophies": []
+            }
+          ]
+        },
+        "captains_by_season": {
+          "1": [
+            {
+              "name": "P5",
+              "discordTag": "p5",
+              "discordId": "5",
+              "mmr": 1700,
+              "country": "NO",
+              "timezone": null,
+              "twitch_url": null,
+              "youtube_url": null,
+              "avatar_url": null,
+              "id": 5,
+              "battleTag": "P5#5555",
+              "race": "RANDOM",
+              "w3c_synced_at": null,
+              "ladder_synced_at": null,
+              "w3c_stats": [
+                {
+                  "wc3_season": 7,
+                  "wins": 7,
+                  "losses": 8,
+                  "games": 15,
+                  "mmr": 1575,
+                  "winrate": null,
+                  "league": null,
+                  "id": 34,
+                  "race": "HU",
+                  "user_id": 5
+                },
+                {
+                  "wc3_season": 2,
+                  "wins": 2,
+                  "losses": 3,
+                  "games": 5,
+                  "mmr": 1525,
+                  "winrate": null,
+                  "league": null,
+                  "id": 33,
+                  "race": "NE",
+                  "user_id": 5
+                }
+              ],
+              "signup_seasons": [],
+              "signup_race": null,
+              "played_as": null,
+              "fantasy_tier": null,
+              "fantasy_tier_pinned": false,
+              "draft_position": null,
+              "draft_excluded": false,
+              "tags": [],
+              "gnl_stats": [],
+              "trophies": []
+            }
+          ]
+        },
+        "seasons_info": [
+          {
+            "season_id": 1,
+            "name": "Season 1",
+            "league_short_name": "SL",
+            "final_score": 6,
+            "points_available": 12,
+            "points_against": 6,
+            "series_won": 1,
+            "series_lost": 3
+          }
+        ],
+        "discord_role_missing": []
+      }
+    ]
+  },
+  "/events/1/teams?offset=5": {
+    "status": 200,
+    "body": []
+  },
+  "/events/1/teams/basic": {
+    "status": 200,
+    "body": [
+      {
+        "id": 1,
+        "league_id": 1,
+        "name": "Alpha",
+        "long_name": "Team Alpha",
+        "icon_url": null,
+        "player_by_season": {},
+        "captains_by_season": {},
+        "seasons_info": [
+          {
+            "season_id": 1,
+            "name": "Season 1",
+            "league_short_name": "SL",
+            "final_score": 6,
+            "points_available": 12,
+            "points_against": 6,
+            "series_won": 3,
+            "series_lost": 1
+          }
+        ],
+        "discord_role_missing": []
+      },
+      {
+        "id": 2,
+        "league_id": 1,
+        "name": "Beta",
+        "long_name": "Team Beta",
+        "icon_url": null,
+        "player_by_season": {},
+        "captains_by_season": {},
+        "seasons_info": [
+          {
+            "season_id": 1,
+            "name": "Season 1",
+            "league_short_name": "SL",
+            "final_score": 6,
+            "points_available": 12,
+            "points_against": 6,
+            "series_won": 1,
+            "series_lost": 3
+          }
+        ],
+        "discord_role_missing": []
+      }
+    ]
+  },
+  "/events/1/teams/1": {
+    "status": 200,
+    "body": {
+      "id": 1,
+      "league_id": 1,
+      "name": "Alpha",
+      "long_name": "Team Alpha",
+      "icon_url": null,
+      "player_by_season": {
+        "1": [
+          {
+            "name": "P1",
+            "discordTag": "p1",
+            "discordId": "1",
+            "mmr": 1500,
+            "country": "DE",
+            "timezone": null,
+            "twitch_url": null,
+            "youtube_url": null,
+            "avatar_url": null,
+            "id": 1,
+            "battleTag": "P1#1111",
+            "race": "HU",
+            "w3c_synced_at": null,
+            "ladder_synced_at": null,
+            "w3c_stats": [
+              {
+                "wc3_season": 1,
+                "wins": 1,
+                "losses": 2,
+                "games": 3,
+                "mmr": 1511,
+                "winrate": null,
+                "league": null,
+                "id": 2,
+                "race": "HU",
+                "user_id": 1
+              },
+              {
+                "wc3_season": 3,
+                "wins": 3,
+                "losses": 4,
+                "games": 7,
+                "mmr": 1531,
+                "winrate": null,
+                "league": null,
+                "id": 4,
+                "race": "HU",
+                "user_id": 1
+              },
+              {
+                "wc3_season": 5,
+                "wins": 5,
+                "losses": 6,
+                "games": 11,
+                "mmr": 1551,
+                "winrate": null,
+                "league": null,
+                "id": 6,
+                "race": "HU",
+                "user_id": 1
+              },
+              {
+                "wc3_season": 7,
+                "wins": 7,
+                "losses": 8,
+                "games": 15,
+                "mmr": 1571,
+                "winrate": null,
+                "league": null,
+                "id": 8,
+                "race": "HU",
+                "user_id": 1
+              },
+              {
+                "wc3_season": 0,
+                "wins": 0,
+                "losses": 1,
+                "games": 1,
+                "mmr": 1501,
+                "winrate": null,
+                "league": null,
+                "id": 1,
+                "race": "NE",
+                "user_id": 1
+              },
+              {
+                "wc3_season": 2,
+                "wins": 2,
+                "losses": 3,
+                "games": 5,
+                "mmr": 1521,
+                "winrate": null,
+                "league": null,
+                "id": 3,
+                "race": "NE",
+                "user_id": 1
+              },
+              {
+                "wc3_season": 4,
+                "wins": 4,
+                "losses": 5,
+                "games": 9,
+                "mmr": 1541,
+                "winrate": null,
+                "league": null,
+                "id": 5,
+                "race": "NE",
+                "user_id": 1
+              },
+              {
+                "wc3_season": 6,
+                "wins": 6,
+                "losses": 7,
+                "games": 13,
+                "mmr": 1561,
+                "winrate": null,
+                "league": null,
+                "id": 7,
+                "race": "NE",
+                "user_id": 1
+              }
+            ],
+            "signup_seasons": [],
+            "signup_race": "HU",
+            "played_as": null,
+            "fantasy_tier": null,
+            "fantasy_tier_pinned": false,
+            "draft_position": null,
+            "draft_excluded": false,
+            "tags": [],
+            "gnl_stats": [
+              {
+                "user_id": 1,
+                "team_id": 1,
+                "games": 3,
+                "wins": 2,
+                "losses": 1,
+                "season_id": 1,
+                "matchup_history": [
+                  "NE",
+                  null,
+                  "NE"
+                ],
+                "out_rounds": []
+              }
+            ],
+            "trophies": []
+          },
+          {
+            "name": "P2",
+            "discordTag": "p2",
+            "discordId": "2",
+            "mmr": 1400,
+            "country": "US",
+            "timezone": null,
+            "twitch_url": null,
+            "youtube_url": null,
+            "avatar_url": null,
+            "id": 2,
+            "battleTag": "P2#2222",
+            "race": "OC",
+            "w3c_synced_at": null,
+            "ladder_synced_at": null,
+            "w3c_stats": [
+              {
+                "wc3_season": 1,
+                "wins": 1,
+                "losses": 2,
+                "games": 3,
+                "mmr": 1512,
+                "winrate": null,
+                "league": null,
+                "id": 10,
+                "race": "HU",
+                "user_id": 2
+              },
+              {
+                "wc3_season": 3,
+                "wins": 3,
+                "losses": 4,
+                "games": 7,
+                "mmr": 1532,
+                "winrate": null,
+                "league": null,
+                "id": 12,
+                "race": "HU",
+                "user_id": 2
+              },
+              {
+                "wc3_season": 5,
+                "wins": 5,
+                "losses": 6,
+                "games": 11,
+                "mmr": 1552,
+                "winrate": null,
+                "league": null,
+                "id": 14,
+                "race": "HU",
+                "user_id": 2
+              },
+              {
+                "wc3_season": 7,
+                "wins": 7,
+                "losses": 8,
+                "games": 15,
+                "mmr": 1572,
+                "winrate": null,
+                "league": null,
+                "id": 16,
+                "race": "HU",
+                "user_id": 2
+              },
+              {
+                "wc3_season": 0,
+                "wins": 0,
+                "losses": 1,
+                "games": 1,
+                "mmr": 1502,
+                "winrate": null,
+                "league": null,
+                "id": 9,
+                "race": "NE",
+                "user_id": 2
+              },
+              {
+                "wc3_season": 2,
+                "wins": 2,
+                "losses": 3,
+                "games": 5,
+                "mmr": 1522,
+                "winrate": null,
+                "league": null,
+                "id": 11,
+                "race": "NE",
+                "user_id": 2
+              },
+              {
+                "wc3_season": 4,
+                "wins": 4,
+                "losses": 5,
+                "games": 9,
+                "mmr": 1542,
+                "winrate": null,
+                "league": null,
+                "id": 13,
+                "race": "NE",
+                "user_id": 2
+              },
+              {
+                "wc3_season": 6,
+                "wins": 6,
+                "losses": 7,
+                "games": 13,
+                "mmr": 1562,
+                "winrate": null,
+                "league": null,
+                "id": 15,
+                "race": "NE",
+                "user_id": 2
+              }
+            ],
+            "signup_seasons": [],
+            "signup_race": "OC",
+            "played_as": null,
+            "fantasy_tier": null,
+            "fantasy_tier_pinned": false,
+            "draft_position": null,
+            "draft_excluded": false,
+            "tags": [],
+            "gnl_stats": [
+              {
+                "user_id": 2,
+                "team_id": 1,
+                "games": 3,
+                "wins": 1,
+                "losses": 0,
+                "season_id": 1,
+                "matchup_history": [
+                  null,
+                  "UD",
+                  "HU"
+                ],
+                "out_rounds": []
+              }
+            ],
+            "trophies": []
+          }
+        ]
+      },
+      "captains_by_season": {
+        "1": [
+          {
+            "name": "P1",
+            "discordTag": "p1",
+            "discordId": "1",
+            "mmr": 1500,
+            "country": "DE",
+            "timezone": null,
+            "twitch_url": null,
+            "youtube_url": null,
+            "avatar_url": null,
+            "id": 1,
+            "battleTag": "P1#1111",
+            "race": "HU",
+            "w3c_synced_at": null,
+            "ladder_synced_at": null,
+            "w3c_stats": [
+              {
+                "wc3_season": 1,
+                "wins": 1,
+                "losses": 2,
+                "games": 3,
+                "mmr": 1511,
+                "winrate": null,
+                "league": null,
+                "id": 2,
+                "race": "HU",
+                "user_id": 1
+              },
+              {
+                "wc3_season": 3,
+                "wins": 3,
+                "losses": 4,
+                "games": 7,
+                "mmr": 1531,
+                "winrate": null,
+                "league": null,
+                "id": 4,
+                "race": "HU",
+                "user_id": 1
+              },
+              {
+                "wc3_season": 5,
+                "wins": 5,
+                "losses": 6,
+                "games": 11,
+                "mmr": 1551,
+                "winrate": null,
+                "league": null,
+                "id": 6,
+                "race": "HU",
+                "user_id": 1
+              },
+              {
+                "wc3_season": 7,
+                "wins": 7,
+                "losses": 8,
+                "games": 15,
+                "mmr": 1571,
+                "winrate": null,
+                "league": null,
+                "id": 8,
+                "race": "HU",
+                "user_id": 1
+              },
+              {
+                "wc3_season": 0,
+                "wins": 0,
+                "losses": 1,
+                "games": 1,
+                "mmr": 1501,
+                "winrate": null,
+                "league": null,
+                "id": 1,
+                "race": "NE",
+                "user_id": 1
+              },
+              {
+                "wc3_season": 2,
+                "wins": 2,
+                "losses": 3,
+                "games": 5,
+                "mmr": 1521,
+                "winrate": null,
+                "league": null,
+                "id": 3,
+                "race": "NE",
+                "user_id": 1
+              },
+              {
+                "wc3_season": 4,
+                "wins": 4,
+                "losses": 5,
+                "games": 9,
+                "mmr": 1541,
+                "winrate": null,
+                "league": null,
+                "id": 5,
+                "race": "NE",
+                "user_id": 1
+              },
+              {
+                "wc3_season": 6,
+                "wins": 6,
+                "losses": 7,
+                "games": 13,
+                "mmr": 1561,
+                "winrate": null,
+                "league": null,
+                "id": 7,
+                "race": "NE",
+                "user_id": 1
+              }
+            ],
+            "signup_seasons": [],
+            "signup_race": null,
+            "played_as": null,
+            "fantasy_tier": null,
+            "fantasy_tier_pinned": false,
+            "draft_position": null,
+            "draft_excluded": false,
+            "tags": [],
+            "gnl_stats": [
+              {
+                "user_id": 1,
+                "team_id": 1,
+                "games": null,
+                "wins": null,
+                "losses": null,
+                "season_id": 1,
+                "matchup_history": [],
+                "out_rounds": []
+              }
+            ],
+            "trophies": []
+          }
+        ]
+      },
+      "seasons_info": [
+        {
+          "season_id": 1,
+          "name": "Season 1",
+          "league_short_name": "SL",
+          "final_score": 6,
+          "points_available": 12,
+          "points_against": 6,
+          "series_won": 3,
+          "series_lost": 1
+        }
+      ],
+      "discord_role_missing": []
+    }
+  },
+  "/events/1/teams/2": {
+    "status": 200,
+    "body": {
+      "id": 2,
+      "league_id": 1,
+      "name": "Beta",
+      "long_name": "Team Beta",
+      "icon_url": null,
+      "player_by_season": {
+        "1": [
+          {
+            "name": "P3",
+            "discordTag": "p3",
+            "discordId": "3",
+            "mmr": 1600,
+            "country": "FR",
+            "timezone": null,
+            "twitch_url": null,
+            "youtube_url": null,
+            "avatar_url": null,
+            "id": 3,
+            "battleTag": "P3#3333",
+            "race": "NE",
+            "w3c_synced_at": null,
+            "ladder_synced_at": null,
+            "w3c_stats": [
+              {
+                "wc3_season": 1,
+                "wins": 1,
+                "losses": 2,
+                "games": 3,
+                "mmr": 1513,
+                "winrate": null,
+                "league": null,
+                "id": 18,
+                "race": "HU",
+                "user_id": 3
+              },
+              {
+                "wc3_season": 3,
+                "wins": 3,
+                "losses": 4,
+                "games": 7,
+                "mmr": 1533,
+                "winrate": null,
+                "league": null,
+                "id": 20,
+                "race": "HU",
+                "user_id": 3
+              },
+              {
+                "wc3_season": 5,
+                "wins": 5,
+                "losses": 6,
+                "games": 11,
+                "mmr": 1553,
+                "winrate": null,
+                "league": null,
+                "id": 22,
+                "race": "HU",
+                "user_id": 3
+              },
+              {
+                "wc3_season": 7,
+                "wins": 7,
+                "losses": 8,
+                "games": 15,
+                "mmr": 1573,
+                "winrate": null,
+                "league": null,
+                "id": 24,
+                "race": "HU",
+                "user_id": 3
+              },
+              {
+                "wc3_season": 0,
+                "wins": 0,
+                "losses": 1,
+                "games": 1,
+                "mmr": 1503,
+                "winrate": null,
+                "league": null,
+                "id": 17,
+                "race": "NE",
+                "user_id": 3
+              },
+              {
+                "wc3_season": 2,
+                "wins": 2,
+                "losses": 3,
+                "games": 5,
+                "mmr": 1523,
+                "winrate": null,
+                "league": null,
+                "id": 19,
+                "race": "NE",
+                "user_id": 3
+              },
+              {
+                "wc3_season": 4,
+                "wins": 4,
+                "losses": 5,
+                "games": 9,
+                "mmr": 1543,
+                "winrate": null,
+                "league": null,
+                "id": 21,
+                "race": "NE",
+                "user_id": 3
+              },
+              {
+                "wc3_season": 6,
+                "wins": 6,
+                "losses": 7,
+                "games": 13,
+                "mmr": 1563,
+                "winrate": null,
+                "league": null,
+                "id": 23,
+                "race": "NE",
+                "user_id": 3
+              }
+            ],
+            "signup_seasons": [],
+            "signup_race": "NE",
+            "played_as": null,
+            "fantasy_tier": null,
+            "fantasy_tier_pinned": false,
+            "draft_position": null,
+            "draft_excluded": false,
+            "tags": [],
+            "gnl_stats": [
+              {
+                "user_id": 3,
+                "team_id": 2,
+                "games": 3,
+                "wins": 1,
+                "losses": 1,
+                "season_id": 1,
+                "matchup_history": [
+                  "HU",
+                  "OC",
+                  "HU"
+                ],
+                "out_rounds": []
+              }
+            ],
+            "trophies": []
+          },
+          {
+            "name": "P4",
+            "discordTag": "p4",
+            "discordId": "4",
+            "mmr": 1300,
+            "country": "SE",
+            "timezone": null,
+            "twitch_url": null,
+            "youtube_url": null,
+            "avatar_url": null,
+            "id": 4,
+            "battleTag": "P4#4444",
+            "race": "UD",
+            "w3c_synced_at": null,
+            "ladder_synced_at": null,
+            "w3c_stats": [
+              {
+                "wc3_season": 1,
+                "wins": 1,
+                "losses": 2,
+                "games": 3,
+                "mmr": 1514,
+                "winrate": null,
+                "league": null,
+                "id": 26,
+                "race": "HU",
+                "user_id": 4
+              },
+              {
+                "wc3_season": 3,
+                "wins": 3,
+                "losses": 4,
+                "games": 7,
+                "mmr": 1534,
+                "winrate": null,
+                "league": null,
+                "id": 28,
+                "race": "HU",
+                "user_id": 4
+              },
+              {
+                "wc3_season": 5,
+                "wins": 5,
+                "losses": 6,
+                "games": 11,
+                "mmr": 1554,
+                "winrate": null,
+                "league": null,
+                "id": 30,
+                "race": "HU",
+                "user_id": 4
+              },
+              {
+                "wc3_season": 7,
+                "wins": 7,
+                "losses": 8,
+                "games": 15,
+                "mmr": 1574,
+                "winrate": null,
+                "league": null,
+                "id": 32,
+                "race": "HU",
+                "user_id": 4
+              },
+              {
+                "wc3_season": 0,
+                "wins": 0,
+                "losses": 1,
+                "games": 1,
+                "mmr": 1504,
+                "winrate": null,
+                "league": null,
+                "id": 25,
+                "race": "NE",
+                "user_id": 4
+              },
+              {
+                "wc3_season": 2,
+                "wins": 2,
+                "losses": 3,
+                "games": 5,
+                "mmr": 1524,
+                "winrate": null,
+                "league": null,
+                "id": 27,
+                "race": "NE",
+                "user_id": 4
+              },
+              {
+                "wc3_season": 4,
+                "wins": 4,
+                "losses": 5,
+                "games": 9,
+                "mmr": 1544,
+                "winrate": null,
+                "league": null,
+                "id": 29,
+                "race": "NE",
+                "user_id": 4
+              },
+              {
+                "wc3_season": 6,
+                "wins": 6,
+                "losses": 7,
+                "games": 13,
+                "mmr": 1564,
+                "winrate": null,
+                "league": null,
+                "id": 31,
+                "race": "NE",
+                "user_id": 4
+              }
+            ],
+            "signup_seasons": [],
+            "signup_race": null,
+            "played_as": null,
+            "fantasy_tier": null,
+            "fantasy_tier_pinned": false,
+            "draft_position": null,
+            "draft_excluded": false,
+            "tags": [],
+            "gnl_stats": [
+              {
+                "user_id": 4,
+                "team_id": 2,
+                "games": 3,
+                "wins": 0,
+                "losses": 2,
+                "season_id": 1,
+                "matchup_history": [
+                  "OC",
+                  "NE",
+                  "OC"
+                ],
+                "out_rounds": []
+              }
+            ],
+            "trophies": []
+          }
+        ]
+      },
+      "captains_by_season": {
+        "1": [
+          {
+            "name": "P5",
+            "discordTag": "p5",
+            "discordId": "5",
+            "mmr": 1700,
+            "country": "NO",
+            "timezone": null,
+            "twitch_url": null,
+            "youtube_url": null,
+            "avatar_url": null,
+            "id": 5,
+            "battleTag": "P5#5555",
+            "race": "RANDOM",
+            "w3c_synced_at": null,
+            "ladder_synced_at": null,
+            "w3c_stats": [
+              {
+                "wc3_season": 7,
+                "wins": 7,
+                "losses": 8,
+                "games": 15,
+                "mmr": 1575,
+                "winrate": null,
+                "league": null,
+                "id": 34,
+                "race": "HU",
+                "user_id": 5
+              },
+              {
+                "wc3_season": 2,
+                "wins": 2,
+                "losses": 3,
+                "games": 5,
+                "mmr": 1525,
+                "winrate": null,
+                "league": null,
+                "id": 33,
+                "race": "NE",
+                "user_id": 5
+              }
+            ],
+            "signup_seasons": [],
+            "signup_race": null,
+            "played_as": null,
+            "fantasy_tier": null,
+            "fantasy_tier_pinned": false,
+            "draft_position": null,
+            "draft_excluded": false,
+            "tags": [],
+            "gnl_stats": [],
+            "trophies": []
+          }
+        ]
+      },
+      "seasons_info": [
+        {
+          "season_id": 1,
+          "name": "Season 1",
+          "league_short_name": "SL",
+          "final_score": 6,
+          "points_available": 12,
+          "points_against": 6,
+          "series_won": 1,
+          "series_lost": 3
+        }
+      ],
+      "discord_role_missing": []
+    }
+  },
+  "/events/1/teams/3": {
+    "status": 200,
+    "body": {
+      "id": 3,
+      "league_id": 1,
+      "name": "Gamma",
+      "long_name": null,
+      "icon_url": null,
+      "player_by_season": {},
+      "captains_by_season": {},
+      "seasons_info": [],
+      "discord_role_missing": []
+    }
+  },
+  "/events/2/teams": {
+    "status": 200,
+    "body": [
+      {
+        "id": 1,
+        "league_id": 1,
+        "name": "Alpha",
+        "long_name": "Team Alpha",
+        "icon_url": null,
+        "player_by_season": {
+          "2": [
+            {
+              "name": "P1",
+              "discordTag": "p1",
+              "discordId": "1",
+              "mmr": 1500,
+              "country": "DE",
+              "timezone": null,
+              "twitch_url": null,
+              "youtube_url": null,
+              "avatar_url": null,
+              "id": 1,
+              "battleTag": "P1#1111",
+              "race": "HU",
+              "w3c_synced_at": null,
+              "ladder_synced_at": null,
+              "w3c_stats": [
+                {
+                  "wc3_season": 1,
+                  "wins": 1,
+                  "losses": 2,
+                  "games": 3,
+                  "mmr": 1511,
+                  "winrate": null,
+                  "league": null,
+                  "id": 2,
+                  "race": "HU",
+                  "user_id": 1
+                },
+                {
+                  "wc3_season": 3,
+                  "wins": 3,
+                  "losses": 4,
+                  "games": 7,
+                  "mmr": 1531,
+                  "winrate": null,
+                  "league": null,
+                  "id": 4,
+                  "race": "HU",
+                  "user_id": 1
+                },
+                {
+                  "wc3_season": 5,
+                  "wins": 5,
+                  "losses": 6,
+                  "games": 11,
+                  "mmr": 1551,
+                  "winrate": null,
+                  "league": null,
+                  "id": 6,
+                  "race": "HU",
+                  "user_id": 1
+                },
+                {
+                  "wc3_season": 7,
+                  "wins": 7,
+                  "losses": 8,
+                  "games": 15,
+                  "mmr": 1571,
+                  "winrate": null,
+                  "league": null,
+                  "id": 8,
+                  "race": "HU",
+                  "user_id": 1
+                },
+                {
+                  "wc3_season": 0,
+                  "wins": 0,
+                  "losses": 1,
+                  "games": 1,
+                  "mmr": 1501,
+                  "winrate": null,
+                  "league": null,
+                  "id": 1,
+                  "race": "NE",
+                  "user_id": 1
+                },
+                {
+                  "wc3_season": 2,
+                  "wins": 2,
+                  "losses": 3,
+                  "games": 5,
+                  "mmr": 1521,
+                  "winrate": null,
+                  "league": null,
+                  "id": 3,
+                  "race": "NE",
+                  "user_id": 1
+                },
+                {
+                  "wc3_season": 4,
+                  "wins": 4,
+                  "losses": 5,
+                  "games": 9,
+                  "mmr": 1541,
+                  "winrate": null,
+                  "league": null,
+                  "id": 5,
+                  "race": "NE",
+                  "user_id": 1
+                },
+                {
+                  "wc3_season": 6,
+                  "wins": 6,
+                  "losses": 7,
+                  "games": 13,
+                  "mmr": 1561,
+                  "winrate": null,
+                  "league": null,
+                  "id": 7,
+                  "race": "NE",
+                  "user_id": 1
+                }
+              ],
+              "signup_seasons": [],
+              "signup_race": "UD",
+              "played_as": null,
+              "fantasy_tier": null,
+              "fantasy_tier_pinned": false,
+              "draft_position": null,
+              "draft_excluded": false,
+              "tags": [],
+              "gnl_stats": [
+                {
+                  "user_id": 1,
+                  "team_id": 1,
+                  "games": 1,
+                  "wins": 0,
+                  "losses": 1,
+                  "season_id": 2,
+                  "matchup_history": [
+                    "HU"
+                  ],
+                  "out_rounds": []
+                }
+              ],
+              "trophies": []
+            },
+            {
+              "name": "P2",
+              "discordTag": "p2",
+              "discordId": "2",
+              "mmr": 1400,
+              "country": "US",
+              "timezone": null,
+              "twitch_url": null,
+              "youtube_url": null,
+              "avatar_url": null,
+              "id": 2,
+              "battleTag": "P2#2222",
+              "race": "OC",
+              "w3c_synced_at": null,
+              "ladder_synced_at": null,
+              "w3c_stats": [
+                {
+                  "wc3_season": 1,
+                  "wins": 1,
+                  "losses": 2,
+                  "games": 3,
+                  "mmr": 1512,
+                  "winrate": null,
+                  "league": null,
+                  "id": 10,
+                  "race": "HU",
+                  "user_id": 2
+                },
+                {
+                  "wc3_season": 3,
+                  "wins": 3,
+                  "losses": 4,
+                  "games": 7,
+                  "mmr": 1532,
+                  "winrate": null,
+                  "league": null,
+                  "id": 12,
+                  "race": "HU",
+                  "user_id": 2
+                },
+                {
+                  "wc3_season": 5,
+                  "wins": 5,
+                  "losses": 6,
+                  "games": 11,
+                  "mmr": 1552,
+                  "winrate": null,
+                  "league": null,
+                  "id": 14,
+                  "race": "HU",
+                  "user_id": 2
+                },
+                {
+                  "wc3_season": 7,
+                  "wins": 7,
+                  "losses": 8,
+                  "games": 15,
+                  "mmr": 1572,
+                  "winrate": null,
+                  "league": null,
+                  "id": 16,
+                  "race": "HU",
+                  "user_id": 2
+                },
+                {
+                  "wc3_season": 0,
+                  "wins": 0,
+                  "losses": 1,
+                  "games": 1,
+                  "mmr": 1502,
+                  "winrate": null,
+                  "league": null,
+                  "id": 9,
+                  "race": "NE",
+                  "user_id": 2
+                },
+                {
+                  "wc3_season": 2,
+                  "wins": 2,
+                  "losses": 3,
+                  "games": 5,
+                  "mmr": 1522,
+                  "winrate": null,
+                  "league": null,
+                  "id": 11,
+                  "race": "NE",
+                  "user_id": 2
+                },
+                {
+                  "wc3_season": 4,
+                  "wins": 4,
+                  "losses": 5,
+                  "games": 9,
+                  "mmr": 1542,
+                  "winrate": null,
+                  "league": null,
+                  "id": 13,
+                  "race": "NE",
+                  "user_id": 2
+                },
+                {
+                  "wc3_season": 6,
+                  "wins": 6,
+                  "losses": 7,
+                  "games": 13,
+                  "mmr": 1562,
+                  "winrate": null,
+                  "league": null,
+                  "id": 15,
+                  "race": "NE",
+                  "user_id": 2
+                }
+              ],
+              "signup_seasons": [],
+              "signup_race": "OC",
+              "played_as": null,
+              "fantasy_tier": null,
+              "fantasy_tier_pinned": false,
+              "draft_position": null,
+              "draft_excluded": false,
+              "tags": [],
+              "gnl_stats": [
+                {
+                  "user_id": 2,
+                  "team_id": 1,
+                  "games": 1,
+                  "wins": 1,
+                  "losses": 0,
+                  "season_id": 2,
+                  "matchup_history": [
+                    "OC"
+                  ],
+                  "out_rounds": []
+                }
+              ],
+              "trophies": []
+            }
+          ]
+        },
+        "captains_by_season": {
+          "2": [
+            {
+              "name": "P2",
+              "discordTag": "p2",
+              "discordId": "2",
+              "mmr": 1400,
+              "country": "US",
+              "timezone": null,
+              "twitch_url": null,
+              "youtube_url": null,
+              "avatar_url": null,
+              "id": 2,
+              "battleTag": "P2#2222",
+              "race": "OC",
+              "w3c_synced_at": null,
+              "ladder_synced_at": null,
+              "w3c_stats": [
+                {
+                  "wc3_season": 1,
+                  "wins": 1,
+                  "losses": 2,
+                  "games": 3,
+                  "mmr": 1512,
+                  "winrate": null,
+                  "league": null,
+                  "id": 10,
+                  "race": "HU",
+                  "user_id": 2
+                },
+                {
+                  "wc3_season": 3,
+                  "wins": 3,
+                  "losses": 4,
+                  "games": 7,
+                  "mmr": 1532,
+                  "winrate": null,
+                  "league": null,
+                  "id": 12,
+                  "race": "HU",
+                  "user_id": 2
+                },
+                {
+                  "wc3_season": 5,
+                  "wins": 5,
+                  "losses": 6,
+                  "games": 11,
+                  "mmr": 1552,
+                  "winrate": null,
+                  "league": null,
+                  "id": 14,
+                  "race": "HU",
+                  "user_id": 2
+                },
+                {
+                  "wc3_season": 7,
+                  "wins": 7,
+                  "losses": 8,
+                  "games": 15,
+                  "mmr": 1572,
+                  "winrate": null,
+                  "league": null,
+                  "id": 16,
+                  "race": "HU",
+                  "user_id": 2
+                },
+                {
+                  "wc3_season": 0,
+                  "wins": 0,
+                  "losses": 1,
+                  "games": 1,
+                  "mmr": 1502,
+                  "winrate": null,
+                  "league": null,
+                  "id": 9,
+                  "race": "NE",
+                  "user_id": 2
+                },
+                {
+                  "wc3_season": 2,
+                  "wins": 2,
+                  "losses": 3,
+                  "games": 5,
+                  "mmr": 1522,
+                  "winrate": null,
+                  "league": null,
+                  "id": 11,
+                  "race": "NE",
+                  "user_id": 2
+                },
+                {
+                  "wc3_season": 4,
+                  "wins": 4,
+                  "losses": 5,
+                  "games": 9,
+                  "mmr": 1542,
+                  "winrate": null,
+                  "league": null,
+                  "id": 13,
+                  "race": "NE",
+                  "user_id": 2
+                },
+                {
+                  "wc3_season": 6,
+                  "wins": 6,
+                  "losses": 7,
+                  "games": 13,
+                  "mmr": 1562,
+                  "winrate": null,
+                  "league": null,
+                  "id": 15,
+                  "race": "NE",
+                  "user_id": 2
+                }
+              ],
+              "signup_seasons": [],
+              "signup_race": null,
+              "played_as": null,
+              "fantasy_tier": null,
+              "fantasy_tier_pinned": false,
+              "draft_position": null,
+              "draft_excluded": false,
+              "tags": [],
+              "gnl_stats": [
+                {
+                  "user_id": 2,
+                  "team_id": 1,
+                  "games": null,
+                  "wins": null,
+                  "losses": null,
+                  "season_id": 2,
+                  "matchup_history": [],
+                  "out_rounds": []
+                }
+              ],
+              "trophies": []
+            }
+          ]
+        },
+        "seasons_info": [
+          {
+            "season_id": 2,
+            "name": "Season 2",
+            "league_short_name": "SL",
+            "final_score": 3,
+            "points_available": -6,
+            "points_against": 3,
+            "series_won": 1,
+            "series_lost": 1
+          }
+        ],
+        "discord_role_missing": []
+      },
+      {
+        "id": 2,
+        "league_id": 1,
+        "name": "Beta",
+        "long_name": "Team Beta",
+        "icon_url": null,
+        "player_by_season": {
+          "2": [
+            {
+              "name": "P3",
+              "discordTag": "p3",
+              "discordId": "3",
+              "mmr": 1600,
+              "country": "FR",
+              "timezone": null,
+              "twitch_url": null,
+              "youtube_url": null,
+              "avatar_url": null,
+              "id": 3,
+              "battleTag": "P3#3333",
+              "race": "NE",
+              "w3c_synced_at": null,
+              "ladder_synced_at": null,
+              "w3c_stats": [
+                {
+                  "wc3_season": 1,
+                  "wins": 1,
+                  "losses": 2,
+                  "games": 3,
+                  "mmr": 1513,
+                  "winrate": null,
+                  "league": null,
+                  "id": 18,
+                  "race": "HU",
+                  "user_id": 3
+                },
+                {
+                  "wc3_season": 3,
+                  "wins": 3,
+                  "losses": 4,
+                  "games": 7,
+                  "mmr": 1533,
+                  "winrate": null,
+                  "league": null,
+                  "id": 20,
+                  "race": "HU",
+                  "user_id": 3
+                },
+                {
+                  "wc3_season": 5,
+                  "wins": 5,
+                  "losses": 6,
+                  "games": 11,
+                  "mmr": 1553,
+                  "winrate": null,
+                  "league": null,
+                  "id": 22,
+                  "race": "HU",
+                  "user_id": 3
+                },
+                {
+                  "wc3_season": 7,
+                  "wins": 7,
+                  "losses": 8,
+                  "games": 15,
+                  "mmr": 1573,
+                  "winrate": null,
+                  "league": null,
+                  "id": 24,
+                  "race": "HU",
+                  "user_id": 3
+                },
+                {
+                  "wc3_season": 0,
+                  "wins": 0,
+                  "losses": 1,
+                  "games": 1,
+                  "mmr": 1503,
+                  "winrate": null,
+                  "league": null,
+                  "id": 17,
+                  "race": "NE",
+                  "user_id": 3
+                },
+                {
+                  "wc3_season": 2,
+                  "wins": 2,
+                  "losses": 3,
+                  "games": 5,
+                  "mmr": 1523,
+                  "winrate": null,
+                  "league": null,
+                  "id": 19,
+                  "race": "NE",
+                  "user_id": 3
+                },
+                {
+                  "wc3_season": 4,
+                  "wins": 4,
+                  "losses": 5,
+                  "games": 9,
+                  "mmr": 1543,
+                  "winrate": null,
+                  "league": null,
+                  "id": 21,
+                  "race": "NE",
+                  "user_id": 3
+                },
+                {
+                  "wc3_season": 6,
+                  "wins": 6,
+                  "losses": 7,
+                  "games": 13,
+                  "mmr": 1563,
+                  "winrate": null,
+                  "league": null,
+                  "id": 23,
+                  "race": "NE",
+                  "user_id": 3
+                }
+              ],
+              "signup_seasons": [],
+              "signup_race": "HU",
+              "played_as": null,
+              "fantasy_tier": null,
+              "fantasy_tier_pinned": false,
+              "draft_position": null,
+              "draft_excluded": false,
+              "tags": [],
+              "gnl_stats": [
+                {
+                  "user_id": 3,
+                  "team_id": 2,
+                  "games": 1,
+                  "wins": 1,
+                  "losses": 0,
+                  "season_id": 2,
+                  "matchup_history": [
+                    "UD"
+                  ],
+                  "out_rounds": []
+                }
+              ],
+              "trophies": []
+            },
+            {
+              "name": "P5",
+              "discordTag": "p5",
+              "discordId": "5",
+              "mmr": 1700,
+              "country": "NO",
+              "timezone": null,
+              "twitch_url": null,
+              "youtube_url": null,
+              "avatar_url": null,
+              "id": 5,
+              "battleTag": "P5#5555",
+              "race": "RANDOM",
+              "w3c_synced_at": null,
+              "ladder_synced_at": null,
+              "w3c_stats": [
+                {
+                  "wc3_season": 7,
+                  "wins": 7,
+                  "losses": 8,
+                  "games": 15,
+                  "mmr": 1575,
+                  "winrate": null,
+                  "league": null,
+                  "id": 34,
+                  "race": "HU",
+                  "user_id": 5
+                },
+                {
+                  "wc3_season": 2,
+                  "wins": 2,
+                  "losses": 3,
+                  "games": 5,
+                  "mmr": 1525,
+                  "winrate": null,
+                  "league": null,
+                  "id": 33,
+                  "race": "NE",
+                  "user_id": 5
+                }
+              ],
+              "signup_seasons": [],
+              "signup_race": null,
+              "played_as": null,
+              "fantasy_tier": null,
+              "fantasy_tier_pinned": false,
+              "draft_position": null,
+              "draft_excluded": false,
+              "tags": [],
+              "gnl_stats": [
+                {
+                  "user_id": 5,
+                  "team_id": 2,
+                  "games": 1,
+                  "wins": 0,
+                  "losses": 1,
+                  "season_id": 2,
+                  "matchup_history": [
+                    "OC"
+                  ],
+                  "out_rounds": []
+                }
+              ],
+              "trophies": []
+            }
+          ]
+        },
+        "captains_by_season": {},
+        "seasons_info": [
+          {
+            "season_id": 2,
+            "name": "Season 2",
+            "league_short_name": "SL",
+            "final_score": 3,
+            "points_available": -6,
+            "points_against": 3,
+            "series_won": 1,
+            "series_lost": 1
+          }
+        ],
+        "discord_role_missing": []
+      }
+    ]
+  },
+  "/events/2/teams?limit=1": {
+    "status": 200,
+    "body": [
+      {
+        "id": 1,
+        "league_id": 1,
+        "name": "Alpha",
+        "long_name": "Team Alpha",
+        "icon_url": null,
+        "player_by_season": {
+          "2": [
+            {
+              "name": "P1",
+              "discordTag": "p1",
+              "discordId": "1",
+              "mmr": 1500,
+              "country": "DE",
+              "timezone": null,
+              "twitch_url": null,
+              "youtube_url": null,
+              "avatar_url": null,
+              "id": 1,
+              "battleTag": "P1#1111",
+              "race": "HU",
+              "w3c_synced_at": null,
+              "ladder_synced_at": null,
+              "w3c_stats": [
+                {
+                  "wc3_season": 1,
+                  "wins": 1,
+                  "losses": 2,
+                  "games": 3,
+                  "mmr": 1511,
+                  "winrate": null,
+                  "league": null,
+                  "id": 2,
+                  "race": "HU",
+                  "user_id": 1
+                },
+                {
+                  "wc3_season": 3,
+                  "wins": 3,
+                  "losses": 4,
+                  "games": 7,
+                  "mmr": 1531,
+                  "winrate": null,
+                  "league": null,
+                  "id": 4,
+                  "race": "HU",
+                  "user_id": 1
+                },
+                {
+                  "wc3_season": 5,
+                  "wins": 5,
+                  "losses": 6,
+                  "games": 11,
+                  "mmr": 1551,
+                  "winrate": null,
+                  "league": null,
+                  "id": 6,
+                  "race": "HU",
+                  "user_id": 1
+                },
+                {
+                  "wc3_season": 7,
+                  "wins": 7,
+                  "losses": 8,
+                  "games": 15,
+                  "mmr": 1571,
+                  "winrate": null,
+                  "league": null,
+                  "id": 8,
+                  "race": "HU",
+                  "user_id": 1
+                },
+                {
+                  "wc3_season": 0,
+                  "wins": 0,
+                  "losses": 1,
+                  "games": 1,
+                  "mmr": 1501,
+                  "winrate": null,
+                  "league": null,
+                  "id": 1,
+                  "race": "NE",
+                  "user_id": 1
+                },
+                {
+                  "wc3_season": 2,
+                  "wins": 2,
+                  "losses": 3,
+                  "games": 5,
+                  "mmr": 1521,
+                  "winrate": null,
+                  "league": null,
+                  "id": 3,
+                  "race": "NE",
+                  "user_id": 1
+                },
+                {
+                  "wc3_season": 4,
+                  "wins": 4,
+                  "losses": 5,
+                  "games": 9,
+                  "mmr": 1541,
+                  "winrate": null,
+                  "league": null,
+                  "id": 5,
+                  "race": "NE",
+                  "user_id": 1
+                },
+                {
+                  "wc3_season": 6,
+                  "wins": 6,
+                  "losses": 7,
+                  "games": 13,
+                  "mmr": 1561,
+                  "winrate": null,
+                  "league": null,
+                  "id": 7,
+                  "race": "NE",
+                  "user_id": 1
+                }
+              ],
+              "signup_seasons": [],
+              "signup_race": "UD",
+              "played_as": null,
+              "fantasy_tier": null,
+              "fantasy_tier_pinned": false,
+              "draft_position": null,
+              "draft_excluded": false,
+              "tags": [],
+              "gnl_stats": [
+                {
+                  "user_id": 1,
+                  "team_id": 1,
+                  "games": 1,
+                  "wins": 0,
+                  "losses": 1,
+                  "season_id": 2,
+                  "matchup_history": [
+                    "HU"
+                  ],
+                  "out_rounds": []
+                }
+              ],
+              "trophies": []
+            },
+            {
+              "name": "P2",
+              "discordTag": "p2",
+              "discordId": "2",
+              "mmr": 1400,
+              "country": "US",
+              "timezone": null,
+              "twitch_url": null,
+              "youtube_url": null,
+              "avatar_url": null,
+              "id": 2,
+              "battleTag": "P2#2222",
+              "race": "OC",
+              "w3c_synced_at": null,
+              "ladder_synced_at": null,
+              "w3c_stats": [
+                {
+                  "wc3_season": 1,
+                  "wins": 1,
+                  "losses": 2,
+                  "games": 3,
+                  "mmr": 1512,
+                  "winrate": null,
+                  "league": null,
+                  "id": 10,
+                  "race": "HU",
+                  "user_id": 2
+                },
+                {
+                  "wc3_season": 3,
+                  "wins": 3,
+                  "losses": 4,
+                  "games": 7,
+                  "mmr": 1532,
+                  "winrate": null,
+                  "league": null,
+                  "id": 12,
+                  "race": "HU",
+                  "user_id": 2
+                },
+                {
+                  "wc3_season": 5,
+                  "wins": 5,
+                  "losses": 6,
+                  "games": 11,
+                  "mmr": 1552,
+                  "winrate": null,
+                  "league": null,
+                  "id": 14,
+                  "race": "HU",
+                  "user_id": 2
+                },
+                {
+                  "wc3_season": 7,
+                  "wins": 7,
+                  "losses": 8,
+                  "games": 15,
+                  "mmr": 1572,
+                  "winrate": null,
+                  "league": null,
+                  "id": 16,
+                  "race": "HU",
+                  "user_id": 2
+                },
+                {
+                  "wc3_season": 0,
+                  "wins": 0,
+                  "losses": 1,
+                  "games": 1,
+                  "mmr": 1502,
+                  "winrate": null,
+                  "league": null,
+                  "id": 9,
+                  "race": "NE",
+                  "user_id": 2
+                },
+                {
+                  "wc3_season": 2,
+                  "wins": 2,
+                  "losses": 3,
+                  "games": 5,
+                  "mmr": 1522,
+                  "winrate": null,
+                  "league": null,
+                  "id": 11,
+                  "race": "NE",
+                  "user_id": 2
+                },
+                {
+                  "wc3_season": 4,
+                  "wins": 4,
+                  "losses": 5,
+                  "games": 9,
+                  "mmr": 1542,
+                  "winrate": null,
+                  "league": null,
+                  "id": 13,
+                  "race": "NE",
+                  "user_id": 2
+                },
+                {
+                  "wc3_season": 6,
+                  "wins": 6,
+                  "losses": 7,
+                  "games": 13,
+                  "mmr": 1562,
+                  "winrate": null,
+                  "league": null,
+                  "id": 15,
+                  "race": "NE",
+                  "user_id": 2
+                }
+              ],
+              "signup_seasons": [],
+              "signup_race": "OC",
+              "played_as": null,
+              "fantasy_tier": null,
+              "fantasy_tier_pinned": false,
+              "draft_position": null,
+              "draft_excluded": false,
+              "tags": [],
+              "gnl_stats": [
+                {
+                  "user_id": 2,
+                  "team_id": 1,
+                  "games": 1,
+                  "wins": 1,
+                  "losses": 0,
+                  "season_id": 2,
+                  "matchup_history": [
+                    "OC"
+                  ],
+                  "out_rounds": []
+                }
+              ],
+              "trophies": []
+            }
+          ]
+        },
+        "captains_by_season": {
+          "2": [
+            {
+              "name": "P2",
+              "discordTag": "p2",
+              "discordId": "2",
+              "mmr": 1400,
+              "country": "US",
+              "timezone": null,
+              "twitch_url": null,
+              "youtube_url": null,
+              "avatar_url": null,
+              "id": 2,
+              "battleTag": "P2#2222",
+              "race": "OC",
+              "w3c_synced_at": null,
+              "ladder_synced_at": null,
+              "w3c_stats": [
+                {
+                  "wc3_season": 1,
+                  "wins": 1,
+                  "losses": 2,
+                  "games": 3,
+                  "mmr": 1512,
+                  "winrate": null,
+                  "league": null,
+                  "id": 10,
+                  "race": "HU",
+                  "user_id": 2
+                },
+                {
+                  "wc3_season": 3,
+                  "wins": 3,
+                  "losses": 4,
+                  "games": 7,
+                  "mmr": 1532,
+                  "winrate": null,
+                  "league": null,
+                  "id": 12,
+                  "race": "HU",
+                  "user_id": 2
+                },
+                {
+                  "wc3_season": 5,
+                  "wins": 5,
+                  "losses": 6,
+                  "games": 11,
+                  "mmr": 1552,
+                  "winrate": null,
+                  "league": null,
+                  "id": 14,
+                  "race": "HU",
+                  "user_id": 2
+                },
+                {
+                  "wc3_season": 7,
+                  "wins": 7,
+                  "losses": 8,
+                  "games": 15,
+                  "mmr": 1572,
+                  "winrate": null,
+                  "league": null,
+                  "id": 16,
+                  "race": "HU",
+                  "user_id": 2
+                },
+                {
+                  "wc3_season": 0,
+                  "wins": 0,
+                  "losses": 1,
+                  "games": 1,
+                  "mmr": 1502,
+                  "winrate": null,
+                  "league": null,
+                  "id": 9,
+                  "race": "NE",
+                  "user_id": 2
+                },
+                {
+                  "wc3_season": 2,
+                  "wins": 2,
+                  "losses": 3,
+                  "games": 5,
+                  "mmr": 1522,
+                  "winrate": null,
+                  "league": null,
+                  "id": 11,
+                  "race": "NE",
+                  "user_id": 2
+                },
+                {
+                  "wc3_season": 4,
+                  "wins": 4,
+                  "losses": 5,
+                  "games": 9,
+                  "mmr": 1542,
+                  "winrate": null,
+                  "league": null,
+                  "id": 13,
+                  "race": "NE",
+                  "user_id": 2
+                },
+                {
+                  "wc3_season": 6,
+                  "wins": 6,
+                  "losses": 7,
+                  "games": 13,
+                  "mmr": 1562,
+                  "winrate": null,
+                  "league": null,
+                  "id": 15,
+                  "race": "NE",
+                  "user_id": 2
+                }
+              ],
+              "signup_seasons": [],
+              "signup_race": null,
+              "played_as": null,
+              "fantasy_tier": null,
+              "fantasy_tier_pinned": false,
+              "draft_position": null,
+              "draft_excluded": false,
+              "tags": [],
+              "gnl_stats": [
+                {
+                  "user_id": 2,
+                  "team_id": 1,
+                  "games": null,
+                  "wins": null,
+                  "losses": null,
+                  "season_id": 2,
+                  "matchup_history": [],
+                  "out_rounds": []
+                }
+              ],
+              "trophies": []
+            }
+          ]
+        },
+        "seasons_info": [
+          {
+            "season_id": 2,
+            "name": "Season 2",
+            "league_short_name": "SL",
+            "final_score": 3,
+            "points_available": -6,
+            "points_against": 3,
+            "series_won": 1,
+            "series_lost": 1
+          }
+        ],
+        "discord_role_missing": []
+      }
+    ]
+  },
+  "/events/2/teams?limit=1&offset=1": {
+    "status": 200,
+    "body": [
+      {
+        "id": 2,
+        "league_id": 1,
+        "name": "Beta",
+        "long_name": "Team Beta",
+        "icon_url": null,
+        "player_by_season": {
+          "2": [
+            {
+              "name": "P3",
+              "discordTag": "p3",
+              "discordId": "3",
+              "mmr": 1600,
+              "country": "FR",
+              "timezone": null,
+              "twitch_url": null,
+              "youtube_url": null,
+              "avatar_url": null,
+              "id": 3,
+              "battleTag": "P3#3333",
+              "race": "NE",
+              "w3c_synced_at": null,
+              "ladder_synced_at": null,
+              "w3c_stats": [
+                {
+                  "wc3_season": 1,
+                  "wins": 1,
+                  "losses": 2,
+                  "games": 3,
+                  "mmr": 1513,
+                  "winrate": null,
+                  "league": null,
+                  "id": 18,
+                  "race": "HU",
+                  "user_id": 3
+                },
+                {
+                  "wc3_season": 3,
+                  "wins": 3,
+                  "losses": 4,
+                  "games": 7,
+                  "mmr": 1533,
+                  "winrate": null,
+                  "league": null,
+                  "id": 20,
+                  "race": "HU",
+                  "user_id": 3
+                },
+                {
+                  "wc3_season": 5,
+                  "wins": 5,
+                  "losses": 6,
+                  "games": 11,
+                  "mmr": 1553,
+                  "winrate": null,
+                  "league": null,
+                  "id": 22,
+                  "race": "HU",
+                  "user_id": 3
+                },
+                {
+                  "wc3_season": 7,
+                  "wins": 7,
+                  "losses": 8,
+                  "games": 15,
+                  "mmr": 1573,
+                  "winrate": null,
+                  "league": null,
+                  "id": 24,
+                  "race": "HU",
+                  "user_id": 3
+                },
+                {
+                  "wc3_season": 0,
+                  "wins": 0,
+                  "losses": 1,
+                  "games": 1,
+                  "mmr": 1503,
+                  "winrate": null,
+                  "league": null,
+                  "id": 17,
+                  "race": "NE",
+                  "user_id": 3
+                },
+                {
+                  "wc3_season": 2,
+                  "wins": 2,
+                  "losses": 3,
+                  "games": 5,
+                  "mmr": 1523,
+                  "winrate": null,
+                  "league": null,
+                  "id": 19,
+                  "race": "NE",
+                  "user_id": 3
+                },
+                {
+                  "wc3_season": 4,
+                  "wins": 4,
+                  "losses": 5,
+                  "games": 9,
+                  "mmr": 1543,
+                  "winrate": null,
+                  "league": null,
+                  "id": 21,
+                  "race": "NE",
+                  "user_id": 3
+                },
+                {
+                  "wc3_season": 6,
+                  "wins": 6,
+                  "losses": 7,
+                  "games": 13,
+                  "mmr": 1563,
+                  "winrate": null,
+                  "league": null,
+                  "id": 23,
+                  "race": "NE",
+                  "user_id": 3
+                }
+              ],
+              "signup_seasons": [],
+              "signup_race": "HU",
+              "played_as": null,
+              "fantasy_tier": null,
+              "fantasy_tier_pinned": false,
+              "draft_position": null,
+              "draft_excluded": false,
+              "tags": [],
+              "gnl_stats": [
+                {
+                  "user_id": 3,
+                  "team_id": 2,
+                  "games": 1,
+                  "wins": 1,
+                  "losses": 0,
+                  "season_id": 2,
+                  "matchup_history": [
+                    "UD"
+                  ],
+                  "out_rounds": []
+                }
+              ],
+              "trophies": []
+            },
+            {
+              "name": "P5",
+              "discordTag": "p5",
+              "discordId": "5",
+              "mmr": 1700,
+              "country": "NO",
+              "timezone": null,
+              "twitch_url": null,
+              "youtube_url": null,
+              "avatar_url": null,
+              "id": 5,
+              "battleTag": "P5#5555",
+              "race": "RANDOM",
+              "w3c_synced_at": null,
+              "ladder_synced_at": null,
+              "w3c_stats": [
+                {
+                  "wc3_season": 7,
+                  "wins": 7,
+                  "losses": 8,
+                  "games": 15,
+                  "mmr": 1575,
+                  "winrate": null,
+                  "league": null,
+                  "id": 34,
+                  "race": "HU",
+                  "user_id": 5
+                },
+                {
+                  "wc3_season": 2,
+                  "wins": 2,
+                  "losses": 3,
+                  "games": 5,
+                  "mmr": 1525,
+                  "winrate": null,
+                  "league": null,
+                  "id": 33,
+                  "race": "NE",
+                  "user_id": 5
+                }
+              ],
+              "signup_seasons": [],
+              "signup_race": null,
+              "played_as": null,
+              "fantasy_tier": null,
+              "fantasy_tier_pinned": false,
+              "draft_position": null,
+              "draft_excluded": false,
+              "tags": [],
+              "gnl_stats": [
+                {
+                  "user_id": 5,
+                  "team_id": 2,
+                  "games": 1,
+                  "wins": 0,
+                  "losses": 1,
+                  "season_id": 2,
+                  "matchup_history": [
+                    "OC"
+                  ],
+                  "out_rounds": []
+                }
+              ],
+              "trophies": []
+            }
+          ]
+        },
+        "captains_by_season": {},
+        "seasons_info": [
+          {
+            "season_id": 2,
+            "name": "Season 2",
+            "league_short_name": "SL",
+            "final_score": 3,
+            "points_available": -6,
+            "points_against": 3,
+            "series_won": 1,
+            "series_lost": 1
+          }
+        ],
+        "discord_role_missing": []
+      }
+    ]
+  },
+  "/events/2/teams?offset=5": {
+    "status": 200,
+    "body": []
+  },
+  "/events/2/teams/basic": {
+    "status": 200,
+    "body": [
+      {
+        "id": 1,
+        "league_id": 1,
+        "name": "Alpha",
+        "long_name": "Team Alpha",
+        "icon_url": null,
+        "player_by_season": {},
+        "captains_by_season": {},
+        "seasons_info": [
+          {
+            "season_id": 2,
+            "name": "Season 2",
+            "league_short_name": "SL",
+            "final_score": 3,
+            "points_available": -6,
+            "points_against": 3,
+            "series_won": 1,
+            "series_lost": 1
+          }
+        ],
+        "discord_role_missing": []
+      },
+      {
+        "id": 2,
+        "league_id": 1,
+        "name": "Beta",
+        "long_name": "Team Beta",
+        "icon_url": null,
+        "player_by_season": {},
+        "captains_by_season": {},
+        "seasons_info": [
+          {
+            "season_id": 2,
+            "name": "Season 2",
+            "league_short_name": "SL",
+            "final_score": 3,
+            "points_available": -6,
+            "points_against": 3,
+            "series_won": 1,
+            "series_lost": 1
+          }
+        ],
+        "discord_role_missing": []
+      }
+    ]
+  },
+  "/events/2/teams/1": {
+    "status": 200,
+    "body": {
+      "id": 1,
+      "league_id": 1,
+      "name": "Alpha",
+      "long_name": "Team Alpha",
+      "icon_url": null,
+      "player_by_season": {
+        "2": [
+          {
+            "name": "P1",
+            "discordTag": "p1",
+            "discordId": "1",
+            "mmr": 1500,
+            "country": "DE",
+            "timezone": null,
+            "twitch_url": null,
+            "youtube_url": null,
+            "avatar_url": null,
+            "id": 1,
+            "battleTag": "P1#1111",
+            "race": "HU",
+            "w3c_synced_at": null,
+            "ladder_synced_at": null,
+            "w3c_stats": [
+              {
+                "wc3_season": 1,
+                "wins": 1,
+                "losses": 2,
+                "games": 3,
+                "mmr": 1511,
+                "winrate": null,
+                "league": null,
+                "id": 2,
+                "race": "HU",
+                "user_id": 1
+              },
+              {
+                "wc3_season": 3,
+                "wins": 3,
+                "losses": 4,
+                "games": 7,
+                "mmr": 1531,
+                "winrate": null,
+                "league": null,
+                "id": 4,
+                "race": "HU",
+                "user_id": 1
+              },
+              {
+                "wc3_season": 5,
+                "wins": 5,
+                "losses": 6,
+                "games": 11,
+                "mmr": 1551,
+                "winrate": null,
+                "league": null,
+                "id": 6,
+                "race": "HU",
+                "user_id": 1
+              },
+              {
+                "wc3_season": 7,
+                "wins": 7,
+                "losses": 8,
+                "games": 15,
+                "mmr": 1571,
+                "winrate": null,
+                "league": null,
+                "id": 8,
+                "race": "HU",
+                "user_id": 1
+              },
+              {
+                "wc3_season": 0,
+                "wins": 0,
+                "losses": 1,
+                "games": 1,
+                "mmr": 1501,
+                "winrate": null,
+                "league": null,
+                "id": 1,
+                "race": "NE",
+                "user_id": 1
+              },
+              {
+                "wc3_season": 2,
+                "wins": 2,
+                "losses": 3,
+                "games": 5,
+                "mmr": 1521,
+                "winrate": null,
+                "league": null,
+                "id": 3,
+                "race": "NE",
+                "user_id": 1
+              },
+              {
+                "wc3_season": 4,
+                "wins": 4,
+                "losses": 5,
+                "games": 9,
+                "mmr": 1541,
+                "winrate": null,
+                "league": null,
+                "id": 5,
+                "race": "NE",
+                "user_id": 1
+              },
+              {
+                "wc3_season": 6,
+                "wins": 6,
+                "losses": 7,
+                "games": 13,
+                "mmr": 1561,
+                "winrate": null,
+                "league": null,
+                "id": 7,
+                "race": "NE",
+                "user_id": 1
+              }
+            ],
+            "signup_seasons": [],
+            "signup_race": "UD",
+            "played_as": null,
+            "fantasy_tier": null,
+            "fantasy_tier_pinned": false,
+            "draft_position": null,
+            "draft_excluded": false,
+            "tags": [],
+            "gnl_stats": [
+              {
+                "user_id": 1,
+                "team_id": 1,
+                "games": 1,
+                "wins": 0,
+                "losses": 1,
+                "season_id": 2,
+                "matchup_history": [
+                  "HU"
+                ],
+                "out_rounds": []
+              }
+            ],
+            "trophies": []
+          },
+          {
+            "name": "P2",
+            "discordTag": "p2",
+            "discordId": "2",
+            "mmr": 1400,
+            "country": "US",
+            "timezone": null,
+            "twitch_url": null,
+            "youtube_url": null,
+            "avatar_url": null,
+            "id": 2,
+            "battleTag": "P2#2222",
+            "race": "OC",
+            "w3c_synced_at": null,
+            "ladder_synced_at": null,
+            "w3c_stats": [
+              {
+                "wc3_season": 1,
+                "wins": 1,
+                "losses": 2,
+                "games": 3,
+                "mmr": 1512,
+                "winrate": null,
+                "league": null,
+                "id": 10,
+                "race": "HU",
+                "user_id": 2
+              },
+              {
+                "wc3_season": 3,
+                "wins": 3,
+                "losses": 4,
+                "games": 7,
+                "mmr": 1532,
+                "winrate": null,
+                "league": null,
+                "id": 12,
+                "race": "HU",
+                "user_id": 2
+              },
+              {
+                "wc3_season": 5,
+                "wins": 5,
+                "losses": 6,
+                "games": 11,
+                "mmr": 1552,
+                "winrate": null,
+                "league": null,
+                "id": 14,
+                "race": "HU",
+                "user_id": 2
+              },
+              {
+                "wc3_season": 7,
+                "wins": 7,
+                "losses": 8,
+                "games": 15,
+                "mmr": 1572,
+                "winrate": null,
+                "league": null,
+                "id": 16,
+                "race": "HU",
+                "user_id": 2
+              },
+              {
+                "wc3_season": 0,
+                "wins": 0,
+                "losses": 1,
+                "games": 1,
+                "mmr": 1502,
+                "winrate": null,
+                "league": null,
+                "id": 9,
+                "race": "NE",
+                "user_id": 2
+              },
+              {
+                "wc3_season": 2,
+                "wins": 2,
+                "losses": 3,
+                "games": 5,
+                "mmr": 1522,
+                "winrate": null,
+                "league": null,
+                "id": 11,
+                "race": "NE",
+                "user_id": 2
+              },
+              {
+                "wc3_season": 4,
+                "wins": 4,
+                "losses": 5,
+                "games": 9,
+                "mmr": 1542,
+                "winrate": null,
+                "league": null,
+                "id": 13,
+                "race": "NE",
+                "user_id": 2
+              },
+              {
+                "wc3_season": 6,
+                "wins": 6,
+                "losses": 7,
+                "games": 13,
+                "mmr": 1562,
+                "winrate": null,
+                "league": null,
+                "id": 15,
+                "race": "NE",
+                "user_id": 2
+              }
+            ],
+            "signup_seasons": [],
+            "signup_race": "OC",
+            "played_as": null,
+            "fantasy_tier": null,
+            "fantasy_tier_pinned": false,
+            "draft_position": null,
+            "draft_excluded": false,
+            "tags": [],
+            "gnl_stats": [
+              {
+                "user_id": 2,
+                "team_id": 1,
+                "games": 1,
+                "wins": 1,
+                "losses": 0,
+                "season_id": 2,
+                "matchup_history": [
+                  "OC"
+                ],
+                "out_rounds": []
+              }
+            ],
+            "trophies": []
+          }
+        ]
+      },
+      "captains_by_season": {
+        "2": [
+          {
+            "name": "P2",
+            "discordTag": "p2",
+            "discordId": "2",
+            "mmr": 1400,
+            "country": "US",
+            "timezone": null,
+            "twitch_url": null,
+            "youtube_url": null,
+            "avatar_url": null,
+            "id": 2,
+            "battleTag": "P2#2222",
+            "race": "OC",
+            "w3c_synced_at": null,
+            "ladder_synced_at": null,
+            "w3c_stats": [
+              {
+                "wc3_season": 1,
+                "wins": 1,
+                "losses": 2,
+                "games": 3,
+                "mmr": 1512,
+                "winrate": null,
+                "league": null,
+                "id": 10,
+                "race": "HU",
+                "user_id": 2
+              },
+              {
+                "wc3_season": 3,
+                "wins": 3,
+                "losses": 4,
+                "games": 7,
+                "mmr": 1532,
+                "winrate": null,
+                "league": null,
+                "id": 12,
+                "race": "HU",
+                "user_id": 2
+              },
+              {
+                "wc3_season": 5,
+                "wins": 5,
+                "losses": 6,
+                "games": 11,
+                "mmr": 1552,
+                "winrate": null,
+                "league": null,
+                "id": 14,
+                "race": "HU",
+                "user_id": 2
+              },
+              {
+                "wc3_season": 7,
+                "wins": 7,
+                "losses": 8,
+                "games": 15,
+                "mmr": 1572,
+                "winrate": null,
+                "league": null,
+                "id": 16,
+                "race": "HU",
+                "user_id": 2
+              },
+              {
+                "wc3_season": 0,
+                "wins": 0,
+                "losses": 1,
+                "games": 1,
+                "mmr": 1502,
+                "winrate": null,
+                "league": null,
+                "id": 9,
+                "race": "NE",
+                "user_id": 2
+              },
+              {
+                "wc3_season": 2,
+                "wins": 2,
+                "losses": 3,
+                "games": 5,
+                "mmr": 1522,
+                "winrate": null,
+                "league": null,
+                "id": 11,
+                "race": "NE",
+                "user_id": 2
+              },
+              {
+                "wc3_season": 4,
+                "wins": 4,
+                "losses": 5,
+                "games": 9,
+                "mmr": 1542,
+                "winrate": null,
+                "league": null,
+                "id": 13,
+                "race": "NE",
+                "user_id": 2
+              },
+              {
+                "wc3_season": 6,
+                "wins": 6,
+                "losses": 7,
+                "games": 13,
+                "mmr": 1562,
+                "winrate": null,
+                "league": null,
+                "id": 15,
+                "race": "NE",
+                "user_id": 2
+              }
+            ],
+            "signup_seasons": [],
+            "signup_race": null,
+            "played_as": null,
+            "fantasy_tier": null,
+            "fantasy_tier_pinned": false,
+            "draft_position": null,
+            "draft_excluded": false,
+            "tags": [],
+            "gnl_stats": [
+              {
+                "user_id": 2,
+                "team_id": 1,
+                "games": null,
+                "wins": null,
+                "losses": null,
+                "season_id": 2,
+                "matchup_history": [],
+                "out_rounds": []
+              }
+            ],
+            "trophies": []
+          }
+        ]
+      },
+      "seasons_info": [
+        {
+          "season_id": 2,
+          "name": "Season 2",
+          "league_short_name": "SL",
+          "final_score": 3,
+          "points_available": -6,
+          "points_against": 3,
+          "series_won": 1,
+          "series_lost": 1
+        }
+      ],
+      "discord_role_missing": []
+    }
+  },
+  "/events/2/teams/2": {
+    "status": 200,
+    "body": {
+      "id": 2,
+      "league_id": 1,
+      "name": "Beta",
+      "long_name": "Team Beta",
+      "icon_url": null,
+      "player_by_season": {
+        "2": [
+          {
+            "name": "P3",
+            "discordTag": "p3",
+            "discordId": "3",
+            "mmr": 1600,
+            "country": "FR",
+            "timezone": null,
+            "twitch_url": null,
+            "youtube_url": null,
+            "avatar_url": null,
+            "id": 3,
+            "battleTag": "P3#3333",
+            "race": "NE",
+            "w3c_synced_at": null,
+            "ladder_synced_at": null,
+            "w3c_stats": [
+              {
+                "wc3_season": 1,
+                "wins": 1,
+                "losses": 2,
+                "games": 3,
+                "mmr": 1513,
+                "winrate": null,
+                "league": null,
+                "id": 18,
+                "race": "HU",
+                "user_id": 3
+              },
+              {
+                "wc3_season": 3,
+                "wins": 3,
+                "losses": 4,
+                "games": 7,
+                "mmr": 1533,
+                "winrate": null,
+                "league": null,
+                "id": 20,
+                "race": "HU",
+                "user_id": 3
+              },
+              {
+                "wc3_season": 5,
+                "wins": 5,
+                "losses": 6,
+                "games": 11,
+                "mmr": 1553,
+                "winrate": null,
+                "league": null,
+                "id": 22,
+                "race": "HU",
+                "user_id": 3
+              },
+              {
+                "wc3_season": 7,
+                "wins": 7,
+                "losses": 8,
+                "games": 15,
+                "mmr": 1573,
+                "winrate": null,
+                "league": null,
+                "id": 24,
+                "race": "HU",
+                "user_id": 3
+              },
+              {
+                "wc3_season": 0,
+                "wins": 0,
+                "losses": 1,
+                "games": 1,
+                "mmr": 1503,
+                "winrate": null,
+                "league": null,
+                "id": 17,
+                "race": "NE",
+                "user_id": 3
+              },
+              {
+                "wc3_season": 2,
+                "wins": 2,
+                "losses": 3,
+                "games": 5,
+                "mmr": 1523,
+                "winrate": null,
+                "league": null,
+                "id": 19,
+                "race": "NE",
+                "user_id": 3
+              },
+              {
+                "wc3_season": 4,
+                "wins": 4,
+                "losses": 5,
+                "games": 9,
+                "mmr": 1543,
+                "winrate": null,
+                "league": null,
+                "id": 21,
+                "race": "NE",
+                "user_id": 3
+              },
+              {
+                "wc3_season": 6,
+                "wins": 6,
+                "losses": 7,
+                "games": 13,
+                "mmr": 1563,
+                "winrate": null,
+                "league": null,
+                "id": 23,
+                "race": "NE",
+                "user_id": 3
+              }
+            ],
+            "signup_seasons": [],
+            "signup_race": "HU",
+            "played_as": null,
+            "fantasy_tier": null,
+            "fantasy_tier_pinned": false,
+            "draft_position": null,
+            "draft_excluded": false,
+            "tags": [],
+            "gnl_stats": [
+              {
+                "user_id": 3,
+                "team_id": 2,
+                "games": 1,
+                "wins": 1,
+                "losses": 0,
+                "season_id": 2,
+                "matchup_history": [
+                  "UD"
+                ],
+                "out_rounds": []
+              }
+            ],
+            "trophies": []
+          },
+          {
+            "name": "P5",
+            "discordTag": "p5",
+            "discordId": "5",
+            "mmr": 1700,
+            "country": "NO",
+            "timezone": null,
+            "twitch_url": null,
+            "youtube_url": null,
+            "avatar_url": null,
+            "id": 5,
+            "battleTag": "P5#5555",
+            "race": "RANDOM",
+            "w3c_synced_at": null,
+            "ladder_synced_at": null,
+            "w3c_stats": [
+              {
+                "wc3_season": 7,
+                "wins": 7,
+                "losses": 8,
+                "games": 15,
+                "mmr": 1575,
+                "winrate": null,
+                "league": null,
+                "id": 34,
+                "race": "HU",
+                "user_id": 5
+              },
+              {
+                "wc3_season": 2,
+                "wins": 2,
+                "losses": 3,
+                "games": 5,
+                "mmr": 1525,
+                "winrate": null,
+                "league": null,
+                "id": 33,
+                "race": "NE",
+                "user_id": 5
+              }
+            ],
+            "signup_seasons": [],
+            "signup_race": null,
+            "played_as": null,
+            "fantasy_tier": null,
+            "fantasy_tier_pinned": false,
+            "draft_position": null,
+            "draft_excluded": false,
+            "tags": [],
+            "gnl_stats": [
+              {
+                "user_id": 5,
+                "team_id": 2,
+                "games": 1,
+                "wins": 0,
+                "losses": 1,
+                "season_id": 2,
+                "matchup_history": [
+                  "OC"
+                ],
+                "out_rounds": []
+              }
+            ],
+            "trophies": []
+          }
+        ]
+      },
+      "captains_by_season": {},
+      "seasons_info": [
+        {
+          "season_id": 2,
+          "name": "Season 2",
+          "league_short_name": "SL",
+          "final_score": 3,
+          "points_available": -6,
+          "points_against": 3,
+          "series_won": 1,
+          "series_lost": 1
+        }
+      ],
+      "discord_role_missing": []
+    }
+  },
+  "/events/2/teams/3": {
+    "status": 200,
+    "body": {
+      "id": 3,
+      "league_id": 1,
+      "name": "Gamma",
+      "long_name": null,
+      "icon_url": null,
+      "player_by_season": {},
+      "captains_by_season": {},
+      "seasons_info": [],
+      "discord_role_missing": []
+    }
+  }
+}
