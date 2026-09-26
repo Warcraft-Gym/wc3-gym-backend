@@ -110,10 +110,16 @@ class Series(SeriesBase, DBModel, table=True):
         default=False, sa_column_kwargs={"server_default": false()}
     )
     entrant1: EventEntrant | None = Relationship(
-        sa_relationship_kwargs={"foreign_keys": "[Series.entrant1_id]"}
+        sa_relationship_kwargs={
+            "lazy": "raise_on_sql",
+            "foreign_keys": "[Series.entrant1_id]",
+        }
     )
     entrant2: EventEntrant | None = Relationship(
-        sa_relationship_kwargs={"foreign_keys": "[Series.entrant2_id]"}
+        sa_relationship_kwargs={
+            "lazy": "raise_on_sql",
+            "foreign_keys": "[Series.entrant2_id]",
+        }
     )
     # The feeder graph: each slot takes the winner, or the loser, of one series
     slot1_from_series_id: int | None = Field(
@@ -132,19 +138,28 @@ class Series(SeriesBase, DBModel, table=True):
         default=None, foreign_key="event_division.id", ondelete="SET NULL"
     )
     match: "Match" = Relationship(
-        sa_relationship_kwargs={"foreign_keys": "[Series.match_id]"}
+        sa_relationship_kwargs={
+            "lazy": "raise_on_sql",
+            "foreign_keys": "[Series.match_id]",
+        }
     )
     player1: "User" = Relationship(
-        sa_relationship_kwargs={"foreign_keys": "[Series.player1_id]"}
+        sa_relationship_kwargs={
+            "lazy": "raise_on_sql",
+            "foreign_keys": "[Series.player1_id]",
+        }
     )
     player2: "User" = Relationship(
-        sa_relationship_kwargs={"foreign_keys": "[Series.player2_id]"}
+        sa_relationship_kwargs={
+            "lazy": "raise_on_sql",
+            "foreign_keys": "[Series.player2_id]",
+        }
     )
     casts: list[SeriesCast] = Relationship(
-        sa_relationship_kwargs={"cascade": "all, delete-orphan"}
+        sa_relationship_kwargs={"lazy": "raise_on_sql", "cascade": "all, delete-orphan"}
     )
     veto_steps: list[DBSeriesVetoStep] = Relationship(
-        sa_relationship_kwargs={"cascade": "all, delete-orphan"}
+        sa_relationship_kwargs={"lazy": "raise_on_sql", "cascade": "all, delete-orphan"}
     )
 
     @classmethod

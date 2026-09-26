@@ -48,20 +48,35 @@ class DraftSeries(DraftSeriesBase, DBModel, table=True):
     )
 
     match: "Match" = Relationship(
-        sa_relationship_kwargs={"foreign_keys": "[DraftSeries.match_id]"}
+        sa_relationship_kwargs={
+            "lazy": "raise_on_sql",
+            "foreign_keys": "[DraftSeries.match_id]",
+        }
     )
     player1: "User" = Relationship(
-        sa_relationship_kwargs={"foreign_keys": "[DraftSeries.player1_id]"}
+        sa_relationship_kwargs={
+            "lazy": "raise_on_sql",
+            "foreign_keys": "[DraftSeries.player1_id]",
+        }
     )
     player2: "User" = Relationship(
-        sa_relationship_kwargs={"foreign_keys": "[DraftSeries.player2_id]"}
+        sa_relationship_kwargs={
+            "lazy": "raise_on_sql",
+            "foreign_keys": "[DraftSeries.player2_id]",
+        }
     )
     # Quoting the whole union breaks the mapper, so these keep Optional["User"]
     created_by: Optional["User"] = Relationship(
-        sa_relationship_kwargs={"foreign_keys": "[DraftSeries.created_by_user_id]"}
+        sa_relationship_kwargs={
+            "lazy": "raise_on_sql",
+            "foreign_keys": "[DraftSeries.created_by_user_id]",
+        }
     )
     updated_by: Optional["User"] = Relationship(
-        sa_relationship_kwargs={"foreign_keys": "[DraftSeries.updated_by_user_id]"}
+        sa_relationship_kwargs={
+            "lazy": "raise_on_sql",
+            "foreign_keys": "[DraftSeries.updated_by_user_id]",
+        }
     )
 
     @classmethod

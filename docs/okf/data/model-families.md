@@ -4,7 +4,7 @@ title: Model families
 description: Every entity is a family of SQLModel classes, one table class and separate Create, Update and Public shapes, with validators in one module and every datetime aware UTC.
 resource: ../../../app/models/base.py
 tags: [data]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-26T14:40:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-26T20:17:19Z }
 sources:
   - id: base
     resource: ../../../app/models/base.py
@@ -47,7 +47,7 @@ Every stored datetime is `timestamptz` through `UTCDateTime`, and every input fi
 
 # Relationships
 
-A relationship names its foreign keys as a string when SQLAlchemy needs them, `"[Series.match_id]"`, and `tests/test_models.py` resolves every one so a wrong name fails as a test and not as a request. Loader options are pinned per Public shape (`_eager_options`) and the query budget test counts them. Two sibling eager loads run in hash order, so a test that captures SQL treats the statements after the first as a set.
+A relationship names its foreign keys as a string when SQLAlchemy needs them, `"[Series.match_id]"`, and `tests/test_models.py` resolves every one so a wrong name fails as a test and not as a request. Every relationship of the user, team, series, draft, fantasy team, bet and season tables, and of the link rows, is `lazy="raise_on_sql"`: a read loads only what its loader options name (`_eager_options`, `summary_loads`, `roster_loads`), and reading any other relation raises instead of sending a statement (see [response shapes](../api/response-shapes.md)). The query budget test counts the statements of every read and write. Two sibling eager loads run in hash order, so a test that captures SQL treats the statements after the first as a set.
 
 # Pictures are URLs
 

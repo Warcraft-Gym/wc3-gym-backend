@@ -456,11 +456,9 @@ def test_teams_season_roster_users_are_summaries(
         assert "name" in player
         assert "signup_seasons" not in player
         assert player["record"]["season_id"] == season_id
-        assert player["gnl_stats"] == [player["record"]]
+        assert "gnl_stats" not in player
     for team in teams:
         assert set(team["captains_by_season"]) == {str(season_id)}
         for captain in team["captains_by_season"][str(season_id)]:
             assert "signup_seasons" not in captain
-            assert captain["gnl_stats"] == (
-                [captain["record"]] if captain["record"] else []
-            )
+            assert "gnl_stats" not in captain

@@ -9,9 +9,10 @@ file is dropped from the bucket instead.
 import logging
 from collections.abc import Iterable
 
+from sqlalchemy.orm import joinedload
 from sqlmodel import col, select
 
-from app.core.db import Session
+from app.core.db import Session, rel
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.core.scoring import wins_needed
 from app.models.match import Match
@@ -31,7 +32,11 @@ def max_games(series_id: int) -> int:
     """The most games this series can hold: one short of twice the map wins its
     season needs, so a Bo3 tops out at 3."""
     with Session() as session:
-        row = session.get(Series, series_id)
+        row = session.get(
+            Series,
+            series_id,
+            options=[joinedload(rel(Series.match)).joinedload(rel(Match.season))],
+        )
         season = row.match.season if row and row.match else None
         return 2 * wins_needed(season.map_rules if season else None) - 1
 

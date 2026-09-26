@@ -10,11 +10,13 @@ from typing import Any
 
 from sqlalchemy import ColumnElement, ColumnExpressionArgument, func, select
 from sqlalchemy.orm import Session as OrmSession
-from sqlalchemy.orm import aliased
+from sqlalchemy.orm import aliased, selectinload
+from sqlalchemy.orm.strategy_options import _AbstractLoad
 from sqlmodel import col
 
+from app.core.db import rel
 from app.models.settings import Settings
-from app.models.user import UserSummaryPublic
+from app.models.user import User, UserSummaryPublic
 from app.models.w3c_stats import RaceMmr, W3CStats, W3CStatsPublic
 
 # The setting that names the W3C season the app is on
@@ -42,6 +44,11 @@ def window(current: int) -> tuple[int, int]:
 def in_window(current: int) -> ColumnElement[bool]:
     """The w3cstats rows of the live window, for a where clause or a loader."""
     return col(W3CStats.wc3_season).in_(window(current))
+
+
+def window_rows(current: int) -> _AbstractLoad:
+    """The load of a User's w3cstats rows of the live window."""
+    return selectinload(rel(User.w3c_stats).and_(in_window(current)))
 
 
 def summarize(

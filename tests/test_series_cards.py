@@ -11,6 +11,7 @@ from httpx2 import Client
 from sqlmodel import select
 
 from app.core.db import Session
+from app.models.base import ident
 from app.models.enums import Race
 from app.models.relationships import round_row
 from app.models.season import Season
@@ -130,7 +131,11 @@ def _open_series(seeded: dict[str, Any]) -> list[Any]:
         claimed = session.get(Series, seeded["series_open_id"])
         assert played and claimed
         played.date_time, claimed.date_time = first, later
-        claimed.casts.append(SeriesCast(channel_url="https://twitch.tv/gnlcaster"))
+        session.add(
+            SeriesCast(
+                series_id=ident(claimed), channel_url="https://twitch.tv/gnlcaster"
+            )
+        )
     with Session() as session:
         ids = session.scalars(select(Series.id)).all()
     return [SeriesService().get(series_id) for series_id in ids]

@@ -205,7 +205,7 @@ class TeamService:
     ) -> TeamRosterPublic:
         """Replace the captains a team has in a season. Any number of them."""
         with Session.begin() as session:
-            team, _ = _event_team(session, team_id, season_id)
+            _event_team(session, team_id, season_id)
 
             for user_id in captain_ids:
                 if not session.get(User, user_id):
@@ -217,23 +217,19 @@ class TeamService:
             ):
                 session.add(DBTeamSeason(team_id=team_id, season_id=season_id))
 
-            before = {
-                seat.user_id
-                for seat in team.captain_seasons
-                if seat.season_id == season_id
-            }
-            after = set(captain_ids)
-            for user_id in before - after:
-                session.delete(
-                    session.get(
-                        DBTeamSeasonCaptain,
-                        {
-                            "team_id": team_id,
-                            "season_id": season_id,
-                            "user_id": user_id,
-                        },
+            seats = {
+                seat.user_id: seat
+                for seat in session.scalars(
+                    select(DBTeamSeasonCaptain).where(
+                        col(DBTeamSeasonCaptain.team_id) == team_id,
+                        col(DBTeamSeasonCaptain.season_id) == season_id,
                     )
                 )
+            }
+            before = set(seats)
+            after = set(captain_ids)
+            for user_id in before - after:
+                session.delete(seats[user_id])
             for user_id in after - before:
                 session.add(
                     DBTeamSeasonCaptain(

@@ -21,6 +21,7 @@ from typing import Literal, NamedTuple
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session as OrmSession
+from sqlalchemy.orm.attributes import instance_state, set_committed_value
 from sqlmodel import col
 
 from app.core.map_order import DEFAULT_RULES, rules_of
@@ -29,7 +30,12 @@ from app.models.base import ident
 from app.models.event_entrant import EventEntrant
 from app.models.event_stage import EventStage
 from app.models.match import Match
-from app.models.relationships import DBEventRound, DBTeamSeasonCaptain, round_row
+from app.models.relationships import (
+    DBEventRound,
+    DBMapSeason,
+    DBTeamSeasonCaptain,
+    round_row,
+)
 from app.models.season import Season
 from app.models.series import Series, SeriesPublic, SeriesRulesPublic
 from app.models.user_team_season import DBUserTeamSeason
@@ -47,17 +53,42 @@ class SeriesRules(NamedTuple):
     map_pool: list[int]
 
 
+def fixture(session: OrmSession, series: Series) -> Match | None:
+    """The fixture of a series, read by id once and kept on the row, so every
+    later read of `series.match` holds it."""
+    if series.match_id is None:
+        return None
+    if "match" in instance_state(series).unloaded:
+        set_committed_value(series, "match", session.get_one(Match, series.match_id))
+    return series.match
+
+
+def map_pool(session: OrmSession, event: Season) -> list[DBMapSeason]:
+    """The pool links of an event, in pool order, read once and kept on the
+    event, so every later read of `event.maps` holds them."""
+    if "maps" in instance_state(event).unloaded:
+        links = session.scalars(
+            select(DBMapSeason)
+            .where(col(DBMapSeason.season_id) == ident(event))
+            .order_by(col(DBMapSeason.position))
+        ).all()
+        set_committed_value(event, "maps", list(links))
+    return event.maps
+
+
 def series_round(session: OrmSession, series: Series) -> DBEventRound | None:
     """The round a series is played in: the fixture's playday, else its own."""
-    if series.match is not None:
-        return round_row(session, series.match.season_id, series.match.playday)
+    match = fixture(session, series)
+    if match is not None:
+        return round_row(session, match.season_id, match.playday)
     return session.get(DBEventRound, series.round_id) if series.round_id else None
 
 
 def series_event(session: OrmSession, series: Series) -> Season | None:
     """The event a series belongs to, through its fixture or through its round."""
-    if series.match is not None:
-        return series.match.season
+    match = fixture(session, series)
+    if match is not None:
+        return match.season
     round_ = series_round(session, series)
     return session.get(Season, round_.season_id) if round_ else None
 
@@ -130,7 +161,7 @@ def _team_sides(session: OrmSession, series: Series) -> list[TeamSide]:
                     TeamSide(side, entrant.team_id, entrant.event_id, not named[side])
                 )
         return found
-    match = series.match
+    match = fixture(session, series)
     if match is None:
         return []
     return [
@@ -149,7 +180,7 @@ def reads_its_stage(
 def series_rules(session: OrmSession, series: Series) -> SeriesRules:
     """The map rules, the best-of and the map pool of one series."""
     event = series_event(session, series)
-    pool = [link.map_id for link in event.maps] if event else []
+    pool = [link.map_id for link in map_pool(session, event)] if event else []
     round_ = series_round(session, series)
     on_stage = reads_its_stage(series.match_id, series.entrant1_id, series.entrant2_id)
     stage = (

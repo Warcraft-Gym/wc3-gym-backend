@@ -9,6 +9,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from httpx2 import Client
 
 from app.core.db import Session
+from app.models.base import ident
 from app.models.season import SeasonPublic
 from app.models.series import Series
 from app.models.series_cast import SeriesCast
@@ -61,7 +62,11 @@ def test_upcoming_marks_a_cast_series_that_is_on_now(
         series = session.get(Series, seeded["series_open_id"])
         assert series
         series.date_time = soon
-        series.casts.append(SeriesCast(channel_url="https://www.twitch.tv/gnlcaster"))
+        session.add(
+            SeriesCast(
+                series_id=ident(series), channel_url="https://www.twitch.tv/gnlcaster"
+            )
+        )
     body, headers = signed(command("upcoming"))
     assert (
         client.post("/discord/interactions", content=body, headers=headers).status_code
@@ -79,7 +84,11 @@ def test_upcoming_posts_the_window_publicly(
         series = session.get(Series, seeded["series_open_id"])
         assert series
         series.date_time = soon
-        series.casts.append(SeriesCast(channel_url="https://www.twitch.tv/gnlcaster"))
+        session.add(
+            SeriesCast(
+                series_id=ident(series), channel_url="https://www.twitch.tv/gnlcaster"
+            )
+        )
     body, headers = signed(command("upcoming"))
     resp = client.post("/discord/interactions", content=body, headers=headers)
     assert resp.status_code == 200
@@ -113,7 +122,11 @@ def test_upcoming_puts_the_claimed_series_first_in_its_match(
         assert unclaimed and claimed
         unclaimed.date_time = first
         claimed.date_time = later
-        claimed.casts.append(SeriesCast(channel_url="https://twitch.tv/thank_s_"))
+        session.add(
+            SeriesCast(
+                series_id=ident(claimed), channel_url="https://twitch.tv/thank_s_"
+            )
+        )
     body, headers = signed(command("upcoming"))
     client.post("/discord/interactions", content=body, headers=headers)
     description = discord_calls[0][2]["embeds"][0]["description"]

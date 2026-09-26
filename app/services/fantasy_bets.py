@@ -177,7 +177,10 @@ class FantasyBetService:
                         joinedload(rel(Series.player1)),
                         joinedload(rel(Series.player2)),
                         joinedload(rel(Series.match)).noload("*"),
-                        noload("*"),
+                        noload(rel(Series.casts)),
+                        noload(rel(Series.veto_steps)),
+                        noload(rel(Series.entrant1)),
+                        noload(rel(Series.entrant2)),
                     ),
                 )
                 .where(filter)

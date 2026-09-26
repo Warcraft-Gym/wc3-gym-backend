@@ -76,16 +76,23 @@ on it; the bet list adds four, for the season, the series with its match, the
 casts and the veto picks. None of the seven grows with the answer. Naming the W3C season
 the summary reads costs one statement more, and a second one where no
 `current_w3c_season` setting is stored.
+
+Every write route is pinned too: the tests above pin the series, draft, bet,
+fantasy team and roster writes, and test_every_write_pins_its_statements pins
+the rest on the seeded league, one request each after the rows it needs are
+written. Every relationship refuses an on-the-spot load, so a read that needs
+a relation its loader did not name raises in these tests instead of paying a
+statement per row.
 """
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import timedelta
 from typing import Any
 
 import pytest
 from fastapi import FastAPI
-from httpx2 import Client
+from httpx2 import Client, Response
 from sqlalchemy import event, select
 from sqlalchemy.orm import joinedload, raiseload
 
@@ -95,21 +102,28 @@ from app.models.base import ident
 from app.models.draft_series import DraftSeries, DraftSeriesCreate
 from app.models.enums import Race
 from app.models.event_entrant import EventEntrant
-from app.models.fantasy_bet import FantasyBetCreate
+from app.models.fantasy_bet import FantasyBet, FantasyBetCreate
+from app.models.map import Map
 from app.models.player_career_stats import (
     PlayerCareerStats,
     PlayerCareerStatsPublic,
 )
-from app.models.relationships import DBFantasyTeamPlayer, DBUserSeasonSignup
+from app.models.relationships import (
+    DBFantasyTeamPlayer,
+    DBMapSeason,
+    DBUserSeasonSignup,
+)
 from app.models.season import Season
 from app.models.series import Series, SeriesCreate, SeriesPublic, SeriesUpdate
 from app.models.types import utcnow
 from app.models.user import User
+from app.models.user_battle_tag import UserBattleTag
 from app.models.w3c_stats import W3CStats
 from app.services import derived
 from app.services.draft_series import DraftSeriesService
 from app.services.fantasy_bets import FantasyBetService
 from app.services.fantasy_teams import FantasyTeamService
+from app.services.link_prompts import suggest
 from app.services.maps import MapService
 from app.services.matches import MatchService
 from app.services.player_career_stats import PlayerCareerStatsService
@@ -117,8 +131,16 @@ from app.services.seasons import SeasonService
 from app.services.series import SeriesService
 from app.services.teams import TeamService
 from app.services.users import UserService, summary_loads
+from tests.test_auth import PNG
 from tests.test_fantasy_locks import schedule, score
+from tests.test_ffa import ffa, lobbies, play
+from tests.test_mixed_fixture import (  # noqa: F401  # clan_war is a fixture
+    clan_war,
+    roster,
+    template,
+)
 from tests.test_player_session import member_session
+from tests.test_stage_engine import generate
 
 STATS_PER_PLAYER = 8
 
@@ -190,7 +212,6 @@ def test_get_series_costs_fourteen_statements(league: dict[str, Any]) -> None:
     assert series.player1.race_mmrs
     assert series.player1.record is not None
     assert series.player1.record.season_id == league["season_id"]
-    assert series.player1.gnl_stats == [series.player1.record]
     assert tally[0] == 14
 
 
@@ -393,7 +414,7 @@ def test_summary_loads_cover_the_player_graph(league: dict[str, Any]) -> None:
     assert public.player1 is not None
     assert not hasattr(public.player1, "w3c_stats")
     assert not hasattr(public.player1, "signup_seasons")
-    assert len(public.player1.gnl_stats) == 1
+    assert public.player1.record is not None
     assert len(public.player1.tags) == 1
 
 
@@ -515,7 +536,7 @@ def test_one_fantasy_team_costs_fifteen_statements(
     assert len(players) == 2
     for player in (body["captain"], *players):
         assert player["record"]["season_id"] == league["season_id"]
-        assert player["gnl_stats"] == [player["record"]]
+        assert "gnl_stats" not in player
         assert "signup_seasons" not in player
     assert tally[0] == 15
     assert int(response.headers["X-DB-Rows"]) <= 29 + ROWS_MARGIN
@@ -845,7 +866,7 @@ def test_an_event_team_costs_twenty_one_statements(league: dict[str, Any]) -> No
     assert [info.season_id for info in team.seasons_info] == [league["season_id"]]
     captains = team.captains_by_season[league["season_id"]]
     assert len(captains) == 2
-    assert all(c.record and c.gnl_stats == [c.record] for c in captains)
+    assert all(c.record for c in captains)
     assert tally[0] == 21
 
 
@@ -1078,3 +1099,630 @@ def test_the_signups_read_costs_seven_statements(league: dict[str, Any]) -> None
     assert set(seasons.values()) == {1}
     assert all(len(row.tags) == 1 for row in rows)
     assert tally[0] == 7
+
+
+class Form(dict[str, str]):
+    """A request body sent as a form, the way the report dialog posts it."""
+
+
+class Upload(dict[str, tuple[str, bytes, str]]):
+    """A request body sent as a multipart file upload."""
+
+
+class Writer:
+    """The ids and headers a write case builds its request from, and the rows
+    the case needs written before the request it pins."""
+
+    def __init__(
+        self,
+        client: Client,
+        league: dict[str, Any],
+        admin: dict[str, str],
+        member: Callable[..., dict[str, str]],
+        replay_uploaded: Callable[..., None],
+    ) -> None:
+        self.client, self.league, self.admin, self.member = (
+            client,
+            league,
+            admin,
+            member,
+        )
+        self.replay_uploaded = replay_uploaded
+        self.p1, self.p2, self.p3, self.p4 = league["player_ids"]
+        self.season, self.match = league["season_id"], league["match_id"]
+        self.team_a, self.league_id = league["team_a_id"], league["league_id"]
+        self.played, self.open = league["series_played_id"], league["series_open_id"]
+
+    def send(
+        self, method: str, url: str, body: object, headers: dict[str, str]
+    ) -> Response:
+        if isinstance(body, Form):
+            return self.client.request(method, url, data=body, headers=headers)
+        if isinstance(body, Upload):
+            return self.client.request(method, url, files=body, headers=headers)
+        return self.client.request(method, url, json=body, headers=headers)
+
+    def made(self, method: str, url: str, body: object, headers: dict[str, str]) -> Any:  # noqa: ANN401  # a JSON body
+        response = self.send(method, url, body, headers)
+        assert response.status_code < 300, response.text
+        return response.json() if response.content else None
+
+    def tag(self) -> int:
+        body = self.made("POST", "/users/me/tags", {"tag": "Alt#7777"}, self.member())
+        return next(tag["id"] for tag in body["tags"] if tag["tag"] == "Alt#7777")
+
+    def no_login(self) -> int:
+        """A person from an earlier season, with no Discord login to stop a merge."""
+        with Session.begin() as session:
+            person = User(name="Old", discordId=None, race=Race.HU)
+            session.add(person)
+            session.flush()
+            session.add(
+                UserBattleTag(
+                    user_id=ident(person),
+                    tag="Older#1234",
+                    source="sheet",
+                    is_active=True,
+                )
+            )
+            return ident(person)
+
+    def prompt(self) -> int:
+        with Session.begin() as session:
+            person = session.get_one(User, self.no_login())
+            suggest(session, person, "sheet", tag="p1#1111")
+        return self.made("GET", "/users/me/prompts", None, self.member())[0]["id"]
+
+    def user(self) -> int:
+        body = {
+            "name": "P5",
+            "battleTag": "P5#5555",
+            "discordTag": "p5",
+            "discordId": "5",
+            "race": "HU",
+        }
+        return self.made("POST", "/users", body, self.admin)["id"]
+
+    def team(self) -> int:
+        url = f"/leagues/{self.league_id}/teams"
+        return self.made("POST", url, {"name": "Gamma"}, self.admin)["id"]
+
+    def cast(self) -> int:
+        body = {"channel_url": "twitch.tv/gnlcaster"}
+        url = f"/series/{self.open}/casts"
+        return self.made("POST", url, body, self.member("3"))[0]["id"]
+
+    def draft(self) -> int:
+        """The seeded draft of the match."""
+        with Session() as session:
+            return ident(session.scalars(select(DraftSeries)).one())
+
+    def free_draft(self) -> int:
+        """A draft the fixture has room to promote: the open series and the
+        seeded draft make way."""
+        self.made("DELETE", f"/series/{self.open}", None, self.admin)
+        self.made("DELETE", f"/draft-series/{self.draft()}", None, self.admin)
+        body = {
+            "match_id": self.match,
+            "player1_id": self.p2,
+            "player2_id": self.p4,
+            "host_player_id": self.p2,
+        }
+        return self.made("POST", "/draft-series", body, self.admin)["id"]
+
+    def captain(self) -> dict[str, str]:
+        url = f"/events/{self.season}/teams/{self.team_a}/captains"
+        self.made("PUT", url, {"captain_ids": [self.p1]}, self.admin)
+        return self.member()
+
+    def no_checkin(self) -> dict[str, str]:
+        """P1, in a season that takes no check-in, so every round is open."""
+        with Session.begin() as session:
+            session.get_one(Season, self.season).checkin_enabled = False
+        return self.member()
+
+    def zoned(self) -> dict[str, str]:
+        """P1, with the timezone a block needs."""
+        with Session.begin() as session:
+            session.get_one(User, self.p1).timezone = "Europe/Berlin"
+        return self.member()
+
+    def block(self) -> int:
+        body = {
+            "label": "Work",
+            "weekdays": 31,
+            "start_local": "09:00",
+            "end_local": "17:00",
+        }
+        return self.made("POST", "/player-blocks/repeating", body, self.zoned())["id"]
+
+    def busy(self) -> int:
+        body = {"label": "Holiday", "first_day": "2026-01-06", "last_day": "2026-01-08"}
+        return self.made("POST", "/player-blocks/busy", body, self.zoned())["id"]
+
+    def fantasy_team(self) -> int:
+        body = {"name": "Night Owls", "season_id": self.season, "captain_id": self.p2}
+        return self.made("POST", "/fantasy/teams", body, self.admin)["id"]
+
+    def drafted(self) -> int:
+        """The seeded fantasy team, with P1 drafted onto it."""
+        team_id = self.league["fantasy_team_id"]
+        url = f"/fantasy/teams/{team_id}/players"
+        self.made("POST", url, {"player_ids": [self.p1]}, self.admin)
+        return team_id
+
+    def bet(self) -> int:
+        with Session() as session:
+            return ident(session.scalars(select(FantasyBet)).one())
+
+    def public_bet(self) -> int:
+        """P1's bet on the open series, which has not started."""
+        body = {"series_id": self.open, "winner_id": self.p2, "bet_points": 10}
+        return self.made("POST", "/fantasy-bet", body, self.member())["id"]
+
+    def replay(self, *games: int) -> dict[str, str]:
+        """P1, with a replay of those games of the played series in the bucket."""
+        self.replay_uploaded(self.played, *games)
+        return self.member()
+
+    def moved(self) -> dict[str, str]:
+        """P1, with game 1 of the played series confirmed."""
+        headers = self.replay(1)
+        self.made("PUT", f"/player-series/{self.played}/replays/1", None, headers)
+        return headers
+
+    def veto(self) -> int:
+        """P2, side A of the open series, in a season with an order and a pool;
+        answers the map P2 bans first."""
+        with Session.begin() as session:
+            season = session.get_one(Season, self.season)
+            season.pick_ban = "Ban_A|Ban_B|Pick_A|Pick_B"
+            season.map_rules = "fixed,loser,loser"
+            maps = [Map(name=name, shortname=name) for name in ("EI", "TS", "LR", "AL")]
+            session.add_all(maps)
+            session.flush()
+            session.add_all(
+                DBMapSeason(map_id=ident(map), season_id=self.season, position=n)
+                for n, map in enumerate(maps, start=1)
+            )
+            return ident(maps[0])
+
+
+# A write case: the method, the path, the body and the headers of the request it pins
+WriteCase = Callable[[Writer], tuple[str, str, object, dict[str, str]]]
+
+WRITES: dict[str, tuple[WriteCase, int]] = {
+    "POST /users": (
+        lambda w: (
+            "POST",
+            "/users",
+            {
+                "name": "P6",
+                "battleTag": "P6#6666",
+                "discordTag": "p6",
+                "discordId": "6",
+                "race": "OC",
+            },
+            w.admin,
+        ),
+        15,
+    ),
+    "POST /users/me/tags": (
+        lambda w: ("POST", "/users/me/tags", {"tag": "Alt#7777"}, w.member()),
+        26,
+    ),
+    "POST /users/me/prompts/{prompt_id}": (
+        lambda w: (
+            "POST",
+            f"/users/me/prompts/{w.prompt()}",
+            {"accept": True},
+            w.member(),
+        ),
+        112,
+    ),
+    "PUT /users/me/tags/{tag_id}/active": (
+        lambda w: ("PUT", f"/users/me/tags/{w.tag()}/active", None, w.member()),
+        21,
+    ),
+    "DELETE /users/me/tags/{tag_id}": (
+        lambda w: ("DELETE", f"/users/me/tags/{w.tag()}", None, w.member()),
+        22,
+    ),
+    "POST /users/{user_id}/tags/{tag_id}/move": (
+        lambda w: (
+            "POST",
+            f"/users/{w.p1}/tags/{w.tag()}/move",
+            {"to_user_id": w.p2},
+            w.admin,
+        ),
+        22,
+    ),
+    "POST /users/{user_id}/merge": (
+        lambda w: (
+            "POST",
+            f"/users/{w.no_login()}/merge",
+            {"into_user_id": w.p3},
+            w.admin,
+        ),
+        78,
+    ),
+    "PUT /users/{user_id}": (
+        lambda w: ("PUT", f"/users/{w.p1}", {"country": "NL"}, w.admin),
+        16,
+    ),
+    "DELETE /users/{user_id}": (
+        lambda w: ("DELETE", f"/users/{w.user()}", None, w.admin),
+        10,
+    ),
+    "PUT /users/{user_id}/ban": (
+        lambda w: ("PUT", f"/users/{w.p1}/ban", None, w.admin),
+        2,
+    ),
+    "DELETE /users/{user_id}/ban": (
+        lambda w: ("DELETE", f"/users/{w.p1}/ban", None, w.admin),
+        1,
+    ),
+    "POST /leagues/{league_id}/teams": (
+        lambda w: ("POST", f"/leagues/{w.league_id}/teams", {"name": "Delta"}, w.admin),
+        4,
+    ),
+    "PUT /leagues/{league_id}/teams/{team_id}": (
+        lambda w: (
+            "PUT",
+            f"/leagues/{w.league_id}/teams/{w.team_a}",
+            {"long_name": "Alpha Team"},
+            w.admin,
+        ),
+        7,
+    ),
+    "POST /leagues/{league_id}/teams/{team_id}/image": (
+        lambda w: (
+            "POST",
+            f"/leagues/{w.league_id}/teams/{w.team_a}/image",
+            Upload(image=("icon.png", PNG, "image/png")),
+            w.admin,
+        ),
+        2,
+    ),
+    "DELETE /leagues/{league_id}/teams/{team_id}": (
+        lambda w: ("DELETE", f"/leagues/{w.league_id}/teams/{w.team()}", None, w.admin),
+        6,
+    ),
+    "PUT /events/{event_id}/teams/{team_id}/availability": (
+        lambda w: (
+            "PUT",
+            f"/events/{w.season}/teams/{w.team_a}/availability",
+            {"user_id": w.p2, "playday": 1, "available": False},
+            w.captain(),
+        ),
+        21,
+    ),
+    "PUT /events/{event_id}/teams/{team_id}/availability/all": (
+        lambda w: (
+            "PUT",
+            f"/events/{w.season}/teams/{w.team_a}/availability/all",
+            {"user_id": w.p2, "available": False},
+            w.captain(),
+        ),
+        20,
+    ),
+    "DELETE /events/{event_id}/teams/{team_id}/players": (
+        lambda w: (
+            "DELETE",
+            f"/events/{w.season}/teams/{w.team_a}/players",
+            {"player_ids": [w.p2]},
+            w.admin,
+        ),
+        33,
+    ),
+    "PUT /series/{series_id}/result-kind": (
+        lambda w: (
+            "PUT",
+            f"/series/{w.open}/result-kind",
+            {"result_kind": "walkover", "winner": 1},
+            w.admin,
+        ),
+        23,
+    ),
+    "DELETE /series/{series_id}": (
+        lambda w: ("DELETE", f"/series/{w.open}", None, w.admin),
+        5,
+    ),
+    "POST /series/{series_id}/casts": (
+        lambda w: (
+            "POST",
+            f"/series/{w.open}/casts",
+            {"channel_url": "twitch.tv/gnlcaster"},
+            w.member("3"),
+        ),
+        14,
+    ),
+    "PUT /series/{series_id}/casts/{cast_id}": (
+        lambda w: (
+            "PUT",
+            f"/series/{w.open}/casts/{w.cast()}",
+            {"channel_url": "twitch.tv/othercaster"},
+            w.member("3"),
+        ),
+        9,
+    ),
+    "PUT /series/{series_id}/casts/{cast_id}/vod": (
+        lambda w: (
+            "PUT",
+            f"/series/{w.open}/casts/{w.cast()}/vod",
+            {"vod_url": "https://www.twitch.tv/videos/123"},
+            w.member("3"),
+        ),
+        9,
+    ),
+    "DELETE /series/{series_id}/casts/{cast_id}": (
+        lambda w: ("DELETE", f"/series/{w.open}/casts/{w.cast()}", None, w.member("3")),
+        8,
+    ),
+    "PUT /draft-series/{draft_series_id}": (
+        lambda w: (
+            "PUT",
+            f"/draft-series/{w.draft()}",
+            {"host_player_id": w.p3},
+            w.admin,
+        ),
+        15,
+    ),
+    "DELETE /draft-series/{draft_series_id}": (
+        lambda w: ("DELETE", f"/draft-series/{w.draft()}", None, w.admin),
+        8,
+    ),
+    "DELETE /draft-series/match/{match_id}": (
+        lambda w: ("DELETE", f"/draft-series/match/{w.match}", None, w.admin),
+        2,
+    ),
+    "POST /draft-series/{draft_series_id}/promote": (
+        lambda w: ("POST", f"/draft-series/{w.free_draft()}/promote", None, w.admin),
+        23,
+    ),
+    "PUT /draft-series/match/{match_id}/teams/{team_id}/ready": (
+        lambda w: (
+            "PUT",
+            f"/draft-series/match/{w.match}/teams/{w.team_a}/ready",
+            {"ready": True},
+            w.captain(),
+        ),
+        21,
+    ),
+    "PUT /draft-series/match/{match_id}/teams/{team_id}/seen": (
+        lambda w: (
+            "PUT",
+            f"/draft-series/match/{w.match}/teams/{w.team_a}/seen",
+            None,
+            w.captain(),
+        ),
+        16,
+    ),
+    "PUT /draft-series/match/{match_id}/max-mmr-difference": (
+        lambda w: (
+            "PUT",
+            f"/draft-series/match/{w.match}/max-mmr-difference",
+            {"max_mmr_difference": 250},
+            w.captain(),
+        ),
+        22,
+    ),
+    "PUT /events/{event_id}/fantasy/tiers": (
+        lambda w: (
+            "PUT",
+            f"/events/{w.season}/fantasy/tiers",
+            {"cuts": [1100, 1300], "tiers": {str(w.p1): 1}},
+            w.admin,
+        ),
+        5,
+    ),
+    "POST /fantasy/teams": (
+        lambda w: (
+            "POST",
+            "/fantasy/teams",
+            {"name": "Night Owls", "season_id": w.season, "captain_id": w.p2},
+            w.admin,
+        ),
+        24,
+    ),
+    "DELETE /fantasy/teams/{team_id}": (
+        lambda w: ("DELETE", f"/fantasy/teams/{w.fantasy_team()}", None, w.admin),
+        3,
+    ),
+    "DELETE /fantasy/teams/{team_id}/players": (
+        lambda w: (
+            "DELETE",
+            f"/fantasy/teams/{w.drafted()}/players",
+            {"player_ids": [w.p1]},
+            w.admin,
+        ),
+        18,
+    ),
+    "PUT /fantasy/bets/{bet_id}": (
+        lambda w: ("PUT", f"/fantasy/bets/{w.bet()}", {"bet_points": 20}, w.admin),
+        16,
+    ),
+    "DELETE /fantasy/bets/{bet_id}": (
+        lambda w: ("DELETE", f"/fantasy/bets/{w.bet()}", None, w.admin),
+        2,
+    ),
+    "POST /signup": (
+        lambda w: (
+            "POST",
+            "/signup",
+            {"name": "P9", "battleTag": "P9#1234", "race": "HU", "country": "DE"},
+            w.member("99"),
+        ),
+        40,
+    ),
+    "PUT /player-availability": (
+        lambda w: (
+            "PUT",
+            "/player-availability",
+            {"playday": 2, "available": False},
+            w.member(),
+        ),
+        22,
+    ),
+    "PUT /player-availability/all": (
+        lambda w: (
+            "PUT",
+            "/player-availability/all",
+            {"available": False},
+            w.no_checkin(),
+        ),
+        21,
+    ),
+    "POST /player-blocks/repeating": (
+        lambda w: (
+            "POST",
+            "/player-blocks/repeating",
+            {
+                "label": "Work",
+                "weekdays": 31,
+                "start_local": "09:00",
+                "end_local": "17:00",
+            },
+            w.zoned(),
+        ),
+        17,
+    ),
+    "PUT /player-blocks/repeating/{block_id}": (
+        lambda w: (
+            "PUT",
+            f"/player-blocks/repeating/{w.block()}",
+            {"label": "Office"},
+            w.member(),
+        ),
+        14,
+    ),
+    "DELETE /player-blocks/repeating/{block_id}": (
+        lambda w: ("DELETE", f"/player-blocks/repeating/{w.block()}", None, w.member()),
+        14,
+    ),
+    "POST /player-blocks/busy": (
+        lambda w: (
+            "POST",
+            "/player-blocks/busy",
+            {"label": "Holiday", "first_day": "2026-01-06", "last_day": "2026-01-08"},
+            w.zoned(),
+        ),
+        17,
+    ),
+    "PUT /player-blocks/busy/{busy_id}": (
+        lambda w: (
+            "PUT",
+            f"/player-blocks/busy/{w.busy()}",
+            {"label": "Trip"},
+            w.member(),
+        ),
+        14,
+    ),
+    "DELETE /player-blocks/busy/{busy_id}": (
+        lambda w: ("DELETE", f"/player-blocks/busy/{w.busy()}", None, w.member()),
+        14,
+    ),
+    "PUT /player-series/{series_id}": (
+        lambda w: (
+            "PUT",
+            f"/player-series/{w.played}",
+            Form(action="score_updated", player1_score="2", player2_score="0"),
+            w.replay(1, 2),
+        ),
+        65,
+    ),
+    "POST /player-series/{series_id}/replays/{game_no}/upload-url": (
+        lambda w: (
+            "POST",
+            f"/player-series/{w.played}/replays/1/upload-url",
+            None,
+            w.member(),
+        ),
+        31,
+    ),
+    "PUT /player-series/{series_id}/replays/{game_no}": (
+        lambda w: ("PUT", f"/player-series/{w.played}/replays/2", None, w.replay(2)),
+        33,
+    ),
+    "PUT /player-series/{series_id}/replays/{game_no}/move/{to_game}": (
+        lambda w: (
+            "PUT",
+            f"/player-series/{w.played}/replays/1/move/2",
+            None,
+            w.moved(),
+        ),
+        34,
+    ),
+    "PUT /player-series/{series_id}/veto": (
+        lambda w: (
+            "PUT",
+            f"/player-series/{w.open}/veto",
+            {"action": "step", "map_id": w.veto()},
+            w.member("2"),
+        ),
+        32,
+    ),
+    "PUT /user-info": (
+        lambda w: ("PUT", "/user-info", {"twitch_url": "gnlcaster"}, w.member()),
+        31,
+    ),
+    "DELETE /fantasy-bet/{bet_id}": (
+        lambda w: ("DELETE", f"/fantasy-bet/{w.public_bet()}", None, w.member()),
+        11,
+    ),
+}
+
+
+@pytest.mark.parametrize("case", list(WRITES))
+def test_every_write_pins_its_statements(
+    client: Client,
+    league: dict[str, Any],
+    auth_headers: dict[str, str],
+    member: Callable[..., dict[str, str]],
+    replay_uploaded: Callable[..., None],
+    monkeypatch: pytest.MonkeyPatch,
+    case: str,
+) -> None:
+    """Each write route the tests above do not pin, on the seeded league: the
+    statements of the one request, after the rows it needs are written. The
+    W3Champions calls of a signup answer without the network."""
+    monkeypatch.setattr(UserService, "validate_battle_tag", lambda self, tag: True)
+    monkeypatch.setattr(UserService, "update_w3c_stats_by_id", lambda self, _: None)
+    build, statements = WRITES[case]
+    writer = Writer(client, league, auth_headers, member, replay_uploaded)
+    method, url, body, headers = build(writer)
+    with count_statements() as tally:
+        response = writer.send(method, url, body, headers)
+    assert response.status_code < 300, response.text
+    assert tally[0] == statements
+
+
+def test_a_lobby_place_write_pins_its_statements(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """PUT /series/{id}/places on the first lobby of a four player FFA: the
+    write, the advance and the stage row it answers."""
+    event, stage, _ = ffa(4)
+    generate(client, auth_headers, event, stage)
+    lobby = lobbies(client, event, stage)[0]
+    with count_statements() as tally:
+        response = play(client, auth_headers, lobby, [1, 2, 3, 4])
+    assert response.status_code == 200, response.text
+    assert tally[0] == 16
+
+
+def test_a_side_write_pins_its_statements(
+    client: Client,
+    auth_headers: dict[str, str],
+    member: Callable[..., dict[str, str]],
+    clan_war: dict[str, Any],  # noqa: F811  # the fixture imported above
+) -> None:
+    """PUT /series/{id}/sides by the captain of one clan, on the 2v2 of a
+    clan war: the roster checks, the write and the stage row it answers."""
+    pair = template(client, auth_headers, clan_war).json()[1]
+    first, _ = clan_war["rosters"]
+    captain = member(clan_war["captains"][0])
+    with count_statements() as tally:
+        response = roster(client, captain, pair["id"], 1, first[:2])
+    assert response.status_code == 200, response.text
+    assert tally[0] == 27

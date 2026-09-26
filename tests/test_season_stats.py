@@ -194,7 +194,7 @@ def test_an_imported_season_answers_the_record(
     else:
         teams = client.get(f"/events/{season_id}/teams").json()
         stats = next(
-            player["gnl_stats"]
+            [player["record"]]
             for team in teams
             for player in team["player_by_season"][str(season_id)]
             if player["id"] == user_id

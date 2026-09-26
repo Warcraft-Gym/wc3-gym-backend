@@ -8,6 +8,7 @@ import pytest
 from httpx2 import Client
 
 from app.core.db import Session
+from app.models.base import ident
 from app.models.season import Season
 from app.models.series import Series
 from app.models.series_cast import SeriesCast
@@ -110,7 +111,11 @@ def test_announce_posts_the_match_card(
         series = session.get(Series, series_id)
         assert series
         series.date_time = when
-        series.casts.append(SeriesCast(channel_url="https://www.twitch.tv/gnlcaster"))
+        session.add(
+            SeriesCast(
+                series_id=ident(series), channel_url="https://www.twitch.tv/gnlcaster"
+            )
+        )
     assert send(client, command("announce", user="4", series=series_id)) == {"ok": True}
     (post, delete) = discord_calls
     assert post[:2] == ("POST", CHANNEL)

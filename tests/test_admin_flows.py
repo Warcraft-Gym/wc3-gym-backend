@@ -391,11 +391,11 @@ def test_a_recorded_result_moves_the_player_season_stats(
     )
 
     winner = roster(client, league["team_a_id"], league["season_id"])[0]
-    stats = winner["gnl_stats"][0]
+    stats = winner["record"]
     assert (stats["games"], stats["wins"], stats["losses"]) == (1, 1, 0)
 
     loser = roster(client, league["team_b_id"], league["season_id"])[0]
-    stats = loser["gnl_stats"][0]
+    stats = loser["record"]
     assert (stats["games"], stats["wins"], stats["losses"]) == (1, 0, 1)
 
 
@@ -423,7 +423,7 @@ def test_a_corrected_result_replaces_the_player_record(
     put(client, auth_headers, series_path, {"player1_score": 2, "player2_score": 0})
     put(client, auth_headers, series_path, {"player1_score": 0, "player2_score": 2})
 
-    stats = roster(client, league["team_a_id"], league["season_id"])[0]["gnl_stats"][0]
+    stats = roster(client, league["team_a_id"], league["season_id"])[0]["record"]
     assert (stats["games"], stats["wins"], stats["losses"]) == (1, 0, 1)
 
 

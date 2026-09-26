@@ -50,10 +50,10 @@ def test_a_result_posts_once_and_a_correction_edits_it(
     monkeypatch.setenv("FRONTEND_URL", "https://gnl.test/")
     series_id = seeded["series_open_id"]
     with Session.begin() as session:
-        series = session.get(Series, series_id)
-        assert series
-        series.casts.append(
+        assert session.get(Series, series_id)
+        session.add(
             SeriesCast(
+                series_id=series_id,
                 channel_url="https://twitch.tv/gnlcaster",
                 vod_url="https://www.twitch.tv/videos/123",
             )

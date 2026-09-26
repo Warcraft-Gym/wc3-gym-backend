@@ -4,7 +4,7 @@ title: Scheduling and availability
 description: A player answers whether they can play a round, keeps soft blocks that inform but never constrain, and a pair's shared free time is read as intervals for a series and as one count before one exists.
 resource: ../../../app/services/availability.py
 tags: [events, scheduling]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-26T18:37:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-26T20:17:19Z }
 sources:
   - id: availability
     resource: ../../../app/services/availability.py
@@ -65,4 +65,4 @@ A player with no stored answer whose blocks cover a whole round window reads as 
 
 # The rounds a roster sits out
 
-`GET /events/{event_id}/teams/{team_id}` carries `out_rounds` on each player's `record`, the same row as his one `gnl_stats` entry: the playdays of that event the player sits out, a stored "no" and a derived blocked-out round alike. The list says which rounds, never why and never who wrote the answer, so the public read holds no blocked time. An event without scheduling answers an empty list, and the whole roster costs a fixed number of statements, never one per player. Every other payload that carries these season stats answers an empty list as well, so the rounds a player sits out are read from the roster read alone. The full grid with its writers stays on the captains' read, `GET /events/{event_id}/teams/{team_id}/availability`.
+`GET /events/{event_id}/teams/{team_id}` carries `out_rounds` on each player's `record`: the playdays of that event the player sits out, a stored "no" and a derived blocked-out round alike. The list says which rounds, never why and never who wrote the answer, so the public read holds no blocked time. An event without scheduling answers an empty list, and the whole roster costs a fixed number of statements, never one per player. Every other payload that carries these season stats answers an empty list as well, so the rounds a player sits out are read from the roster read alone. The full grid with its writers stays on the captains' read, `GET /events/{event_id}/teams/{team_id}/availability`.

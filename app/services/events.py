@@ -24,6 +24,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Session as OrmSession
 from sqlalchemy.orm import joinedload, noload, selectinload
+from sqlalchemy.orm.attributes import instance_state
 from sqlmodel import col
 
 from app.core.checkin_hint import availability_hints
@@ -67,6 +68,7 @@ from app.models.relationships import (
     DBUserSeasonSignup,
     EventRoundPublic,
     SeasonRoundPublic,
+    event_rounds,
 )
 from app.models.round_availability import DBRoundAvailability
 from app.models.season import (
@@ -95,7 +97,13 @@ from app.models.w3c_stats import W3CStats, W3CStatsPublic
 from app.services import stage_engine
 from app.services.battle_tags import attach_tag, person_by_tag
 from app.services.users import summary_loads
-from app.services.w3c_stats import in_window, summarize, w3c_season, window
+from app.services.w3c_stats import (
+    in_window,
+    summarize,
+    w3c_season,
+    window,
+    window_rows,
+)
 
 # The shape of a battle tag: a name, then # and the player's number
 BATTLE_TAG = re.compile(r"[^\s#]+#\d{3,8}")
@@ -151,8 +159,15 @@ def phase_of(
         return "running"
     if event.signups_open:
         return "signups_open"
-    if event.checkin_enabled and checkin_open(event):
-        return "checkin"
+    if event.checkin_enabled:
+        # list reads load rounds; a bare event reads them here
+        rounds = (
+            event.rounds
+            if "rounds" not in instance_state(event).unloaded
+            else event_rounds(session, ident(event))
+        )
+        if checkin_open(event, rounds):
+            return "checkin"
     return "seeded"
 
 
@@ -208,23 +223,23 @@ def last_stage_drawn(
     return {event_id: played_out for event_id, (_, played_out) in last.items()}
 
 
-def open_rounds(event: Season) -> list[DBEventRound]:
-    """The dated rounds of the event that are not over, earliest first."""
+def open_rounds(rounds: Iterable[DBEventRound]) -> list[DBEventRound]:
+    """The dated rounds of an event that are not over, earliest first."""
     now = _today()
     dated = sorted(
-        (row for row in event.rounds if row.start_date is not None),
+        (row for row in rounds if row.start_date is not None),
         key=lambda row: (row.start_date, row.number),
     )
     return [row for row in dated if (row.end_date or row.start_date) >= now]
 
 
-def next_round(event: Season) -> DBEventRound | None:
+def next_round(rounds: Iterable[DBEventRound]) -> DBEventRound | None:
     """The next dated round of the event: the earliest one that is not over.
 
     A round with no dates is no round to check into, and a stage that holds no
     rounds at all leaves the event checking in to itself.
     """
-    return next(iter(open_rounds(event)), None)
+    return next(iter(open_rounds(rounds)), None)
 
 
 def checkin_window(
@@ -244,15 +259,15 @@ def checkin_window(
     )
 
 
-def checkin_open(event: Season) -> bool:
+def checkin_open(event: Season, rounds: Sequence[DBEventRound]) -> bool:
     """Whether the event's check-in stands open today, in whichever shape it takes.
 
     An event whose next round carries dates checks in to that round; every
     other event checks in to itself, up to the day it starts. An event with
     nothing to check into is shut, and a window nobody dated never closes.
     """
-    round_ = next_round(event)
-    undated = any(row.start_date is None for row in event.rounds)
+    round_ = next_round(rounds)
+    undated = any(row.start_date is None for row in rounds)
     if round_ is None and not undated and _start(event) is None:
         return False
     window = checkin_window(event, round_)
@@ -374,7 +389,7 @@ class EventService:
                 else [_default_stage(event)]
             )
             _write_stages(session, event, stages)
-            return _public(session, event, full=True)
+            return _answer(session, ident(event))
 
     def update(self, event_id: int, data: EventUpdate) -> EventPublic:
         """Change the event fields the body names; the stages have their own route."""
@@ -409,7 +424,7 @@ class EventService:
 
                 fill_rounds(session, event, data.round_count or 0)
             session.flush()
-            return _public(session, event, full=True)
+            return _answer(session, ident(event))
 
     def delete(self, event_id: int) -> None:
         """Delete an event and let its owned rows follow their foreign keys."""
@@ -450,7 +465,7 @@ class EventService:
                     session, event, rows[len(current) :], start=len(current) + 1
                 )
             session.flush()
-            return _public(session, event, full=True)
+            return _answer(session, ident(event))
 
     def get_leagues(self) -> list[LeaguePublic]:
         """Every league, without its events."""
@@ -517,7 +532,7 @@ class EventService:
             ids = [event.id for event in events]
             counts = series_counts_by_event(session, ids)
             drawn = last_stage_drawn(session, ids)
-            rounds = {event.id: next_round(event) for event in events}
+            rounds = {event.id: next_round(event.rounds) for event in events}
             # Only an event whose check-in is on and dated shows a hint
             hints = _round_hints(
                 session,
@@ -655,7 +670,7 @@ class EventService:
         """
         with Session.begin() as session:
             event = _event(session, event_id)
-            if next_round(event) is not None:
+            if next_round(event_rounds(session, event_id)) is not None:
                 raise BadRequestError(
                     "This event checks in per round. Answer the round instead."
                 )
@@ -728,7 +743,7 @@ class EventService:
                 for position, row in enumerate(divisions, start=1)
             )
             session.flush()
-            return _public(session, event, full=True)
+            return _answer(session, ident(event))
 
     def assign_divisions(self, event_id: int) -> EventPublic:
         """Cut the entrants into the divisions from the MMR of their signup race.
@@ -764,7 +779,7 @@ class EventService:
                 # The cut leaves out an entrant no band of it takes
                 row.division_id = None if band is None else divisions[band].id
             session.flush()
-            return _public(session, event, full=True)
+            return _answer(session, ident(event))
 
     def set_seeds(
         self, event_id: int, stage_id: int, data: SeedWrite
@@ -844,10 +859,21 @@ def _leave_night(
 
 
 def _event(session: OrmSession, event_id: int, full: bool = False) -> Season:
-    event = session.get(Season, event_id, options=_EVENT_OPTIONS if full else None)
+    """The event row; `full` reads it again with its pool and rounds."""
+    event = session.get(
+        Season,
+        event_id,
+        options=_EVENT_OPTIONS if full else None,
+        populate_existing=full,
+    )
     if event is None:
         raise NotFoundError(f"Event not found by id: {event_id}")
     return event
+
+
+def _answer(session: OrmSession, event_id: int) -> EventPublic:
+    """What every event write answers: the event read again after the flush."""
+    return _public(session, _event(session, event_id, full=True), full=True)
 
 
 def _stage(session: OrmSession, event_id: int, stage_id: int) -> EventStage:
@@ -1079,7 +1105,7 @@ def _captain_fixtures(
     wanted = {
         event_id: rounds
         for event_id in seats
-        if (rounds := open_rounds(by_id[event_id]))
+        if (rounds := open_rounds(by_id[event_id].rounds))
     }
     if not wanted:
         return {}
@@ -1159,7 +1185,7 @@ def _member_row(
 ) -> MemberEventRow:
     """One member home row: the event, and what the caller may do with it."""
     phase = phase_of(session, event, counts, last_stage)
-    is_open = event.checkin_enabled and checkin_open(event)
+    is_open = event.checkin_enabled and checkin_open(event, event.rounds)
     shape = (
         None
         if not event.checkin_enabled
@@ -1264,7 +1290,7 @@ def _public(
     public.rounds = [SeasonRoundPublic.from_row(row) for row in (event.rounds or [])]
     if not full:
         return public
-    public.checkin_open = event.checkin_enabled and checkin_open(event)
+    public.checkin_open = event.checkin_enabled and checkin_open(event, event.rounds)
     public.stages = [
         EventStagePublic.model_validate(row)
         for row in session.scalars(
@@ -1352,12 +1378,19 @@ def _by_battle_tag(session: OrmSession, battle_tag: str, race: Race) -> User:
         )
     user = person_by_tag(session, tag)
     if user is not None:
-        return user
+        # The rating reads take his W3C rows of the live window
+        return session.scalars(
+            select(User)
+            .options(window_rows(w3c_season(session)))
+            .where(col(User.id) == ident(user))
+            .execution_options(populate_existing=True)
+        ).one()
     user = User(
         name=tag.split("#")[0] or tag,
         discordTag="",
         discordId="",
         race=race,
+        w3c_stats=[],
     )
     session.add(user)
     attach_tag(session, user, tag, "signup")

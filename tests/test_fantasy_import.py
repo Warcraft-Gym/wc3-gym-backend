@@ -10,10 +10,11 @@ from typing import Any
 import pytest
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import selectinload
 from sqlmodel import col
 from starlette.testclient import TestClient as Client
 
-from app.core.db import Session
+from app.core.db import Session, rel
 from app.models.enums import Race
 from app.models.fantasy_bet import FantasyBet
 from app.models.fantasy_team import FantasyTeam
@@ -265,7 +266,9 @@ def test_a_drafted_player_matches_a_name_in_another_case(
 
     with Session() as session:
         team = session.scalars(
-            select(FantasyTeam).where(col(FantasyTeam.name) == "Night Owls")
+            select(FantasyTeam)
+            .options(selectinload(rel(FantasyTeam.drafted_players)))
+            .where(col(FantasyTeam.name) == "Night Owls")
         ).one()
         drafted_ids = {player.user_id for player in team.drafted_players}
     assert drafted_ids == set(seeded["player_ids"])

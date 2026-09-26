@@ -25,6 +25,7 @@ from app.models.series_veto_step import (
     VetoPlayer,
 )
 from app.models.team import Team
+from app.models.user import User
 from app.services.series_rules import (
     SeriesRules,
     acts_for_side,
@@ -248,7 +249,8 @@ def _veto_side(session: OrmSession, series: Series, side: int) -> VetoPlayer:
     `id` is the user of the side or nothing at all, so a client may compare it
     with its own user id; a team side names the team in its own two fields.
     """
-    user = series.player1 if side == 1 else series.player2
+    user_id = series.player1_id if side == 1 else series.player2_id
+    user = session.get(User, user_id) if user_id else None
     if user is not None:
         return VetoPlayer(id=ident(user), name=user.name)
     entrant_id = series.entrant1_id if side == 1 else series.entrant2_id

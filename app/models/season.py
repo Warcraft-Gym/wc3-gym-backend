@@ -190,14 +190,17 @@ class Season(SeasonBase, DBModel, table=True):
         default=None, sa_type=UTCDateTime
     )
     user_teams: list["DBUserTeamSeason"] = Relationship(
-        back_populates="season", sa_relationship_kwargs={"cascade": "all, delete"}
+        back_populates="season",
+        sa_relationship_kwargs={"lazy": "raise_on_sql", "cascade": "all, delete"},
     )
     teams: list["DBTeamSeason"] = Relationship(
-        back_populates="season", sa_relationship_kwargs={"cascade": "all, delete"}
+        back_populates="season",
+        sa_relationship_kwargs={"lazy": "raise_on_sql", "cascade": "all, delete"},
     )
     maps: list["DBMapSeason"] = Relationship(
         back_populates="season",
         sa_relationship_kwargs={
+            "lazy": "raise_on_sql",
             "cascade": "all, delete",
             "order_by": "DBMapSeason.position",
         },
@@ -205,6 +208,7 @@ class Season(SeasonBase, DBModel, table=True):
     rounds: list["DBEventRound"] = Relationship(
         back_populates="season",
         sa_relationship_kwargs={
+            "lazy": "raise_on_sql",
             "cascade": "all, delete",
             "order_by": "DBEventRound.number",
         },
@@ -230,7 +234,8 @@ class Season(SeasonBase, DBModel, table=True):
         )
 
     signup_users: list["DBUserSeasonSignup"] = Relationship(
-        back_populates="season", sa_relationship_kwargs={"cascade": "all, delete"}
+        back_populates="season",
+        sa_relationship_kwargs={"lazy": "raise_on_sql", "cascade": "all, delete"},
     )
 
 

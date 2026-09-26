@@ -52,17 +52,26 @@ class FantasyTeam(FantasyTeamBase, DBModel, table=True):
     drafted_race: Race | None = None
 
     drafted_team: Team | None = Relationship(
-        sa_relationship_kwargs={"foreign_keys": "[FantasyTeam.drafted_team_id]"}
+        sa_relationship_kwargs={
+            "lazy": "raise_on_sql",
+            "foreign_keys": "[FantasyTeam.drafted_team_id]",
+        }
     )
     captain: "User" = Relationship(
-        sa_relationship_kwargs={"foreign_keys": "[FantasyTeam.captain_id]"}
+        sa_relationship_kwargs={
+            "lazy": "raise_on_sql",
+            "foreign_keys": "[FantasyTeam.captain_id]",
+        }
     )
     season: "Season" = Relationship(
-        sa_relationship_kwargs={"foreign_keys": "[FantasyTeam.season_id]"}
+        sa_relationship_kwargs={
+            "lazy": "raise_on_sql",
+            "foreign_keys": "[FantasyTeam.season_id]",
+        }
     )
     drafted_players: list["DBFantasyTeamPlayer"] = Relationship(
         back_populates="fantasy_team",
-        sa_relationship_kwargs={"cascade": "all, delete"},
+        sa_relationship_kwargs={"lazy": "raise_on_sql", "cascade": "all, delete"},
     )
 
 

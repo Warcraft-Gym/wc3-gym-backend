@@ -30,7 +30,7 @@ from app.services.events import (
 from app.services.koth.night import divisions_of, series_of
 from app.services.settings import SettingsService
 from app.services.users import UserService
-from app.services.w3c_stats import w3c_season
+from app.services.w3c_stats import w3c_season, window_rows
 
 logger = logging.getLogger(__name__)
 
@@ -62,12 +62,13 @@ def follow(
         if not divisions_of(session, event_id):
             # A night with no bracket cuts nothing; the row waits unplaced
             return None
-        user = session.get(User, row.user_id) if row.user_id else None
-        ask = (
-            not synced
-            and user is not None
-            and unrated(user, row.race, w3c_season(session))
+        season = w3c_season(session)
+        user = (
+            session.get(User, row.user_id, options=[window_rows(season)])
+            if row.user_id
+            else None
         )
+        ask = not synced and user is not None and unrated(user, row.race, season)
         tag = (user.battleTag or "") if user is not None else ""
         user_id = ident(user) if user is not None else 0
     if ask and tag:

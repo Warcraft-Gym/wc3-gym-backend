@@ -46,7 +46,8 @@ class GnlEventService:
             fields = data.model_dump(
                 exclude={"stages", "round_count", "map_ids", "entrant_kind"}
             )
-            event = Season(**fields, entrant_kind=league.entrant_kind)
+            # The pool is written after the order check, so it starts empty
+            event = Season(**fields, entrant_kind=league.entrant_kind, maps=[])
             session.add(event)
             session.flush()
             check_order(event)
