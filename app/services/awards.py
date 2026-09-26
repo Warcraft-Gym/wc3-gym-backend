@@ -14,6 +14,7 @@ from app.core.db import Session
 from app.core.exceptions import NotFoundError
 from app.models.base import ident
 from app.models.event_award import EventAward, EventAwardPublic
+from app.models.event_history import KothHistoryEvent
 from app.models.event_stage import EventStage
 from app.models.season import Season
 from app.services import stage_engine
@@ -33,6 +34,12 @@ def close_event(session: OrmSession, event_id: int) -> list[EventAward]:
     The last stage is the one the event ends on, so its table holds the places
     the event pays. The old rows go first, which makes a second close a rewrite.
     """
+    if session.get(KothHistoryEvent, event_id) is not None:
+        return list(
+            session.scalars(
+                select(EventAward).where(col(EventAward.event_id) == event_id)
+            )
+        )
     session.execute(delete(EventAward).where(col(EventAward.event_id) == event_id))
     stage = _last_stage(session, event_id)
     if stage is None:

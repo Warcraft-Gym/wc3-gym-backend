@@ -10,6 +10,7 @@ from app.core.exceptions import BadRequestError, NotFoundError
 from app.core.ordering import SortOrder, ordered
 from app.core.query import QueryElement, QueryUtil
 from app.core.scoring import recordable, wins_needed
+from app.models.event_history import KothHistorySeries
 from app.models.match import Match
 from app.models.series import (
     SERIES_SORTS,
@@ -81,6 +82,11 @@ class SeriesService:
             row = Series.get_by_id(session, series_id)
             if not row:
                 raise NotFoundError("Series not found")
+            archived = select(col(KothHistorySeries.series_id)).where(
+                col(KothHistorySeries.series_id) == series_id
+            )
+            if session.scalar(archived) is not None:
+                raise BadRequestError("An archived series keeps its source result")
             was_scored = stage_engine.scored(row)
             was_slot = stage_engine.won_slot(row)
             Series.update_object(session, row, **series.model_dump(exclude_unset=True))
@@ -151,9 +157,7 @@ class SeriesService:
                 return 0
             statement = select(func.count()).select_from(Series)
             if season_id is not None:
-                statement = statement.where(
-                    col(Series.match).has(col(Match.season_id) == season_id)
-                )
+                statement = statement.where(Series.in_event(season_id))
             if filter is not None:
                 statement = statement.where(filter)
             return session.scalar(statement) or 0

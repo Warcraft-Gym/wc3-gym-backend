@@ -11,6 +11,7 @@
     ]
   },
   "GET /events/1": {
+    "archived": false,
     "checkin_days": 3,
     "checkin_enabled": true,
     "checkin_open": false,

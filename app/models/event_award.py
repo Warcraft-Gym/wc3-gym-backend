@@ -8,6 +8,7 @@ without knowing which kind of event paid it.
 from datetime import datetime
 from typing import Annotated
 
+from sqlalchemy import Column
 from sqlmodel import Field, SQLModel
 
 from app.models.base import DBModel
@@ -31,8 +32,9 @@ class EventAward(DBModel, table=True):
     # The place the award pays; null for a title that ranks nobody
     place: int | None = None
     title: str = Field(max_length=50)
-    awarded_at: Annotated[datetime, AwareUTC] = Field(
-        default_factory=utcnow, sa_type=UTCDateTime
+    awarded_at: Annotated[datetime | None, AwareUTC] = Field(
+        default_factory=utcnow,
+        sa_column=Column(UTCDateTime().evaluates_none(), nullable=True, default=utcnow),
     )
 
 
@@ -46,4 +48,4 @@ class EventAwardPublic(SQLModel):
     team_id: int | None = None
     place: int | None = None
     title: str
-    awarded_at: Annotated[datetime, AwareUTC]
+    awarded_at: Annotated[datetime | None, AwareUTC]

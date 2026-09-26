@@ -41,6 +41,7 @@ from app.models.series import (
     StageSeriesRow,
     TemplateSeries,
 )
+from app.models.series_game import DBSeriesGame
 from app.models.series_side import (
     LobbySidesWrite,
     PlacesWrite,
@@ -412,6 +413,7 @@ def on_reopened(session: OrmSession, row: Series, force: bool = False) -> None:
         other.player1_score = None
         other.player2_score = None
         other.result_kind = "played"
+        game_one(session, other)
     session.flush()
 
 
@@ -423,10 +425,26 @@ def after_score(
     force: bool = False,
 ) -> None:
     """Follow a score change into the bracket and move the crown behind it."""
+    game_one(session, row)
     _follow_score(session, row, was_scored, was_slot, force)
     # Only a save that changes who won moves the crown
     if not was_scored or was_slot != won_slot(row):
         crown(session, row)
+
+
+def game_one(session: OrmSession, row: Series) -> None:
+    """A koth series is one map, so its game 1 carries the series winner."""
+    stage = _stage_of(session, row)
+    if stage is None or stage.format is not StageFormat.koth:
+        return
+    game = session.get(DBSeriesGame, (ident(row), 1))
+    slot = won_slot(row)
+    if game is None:
+        if slot is None:
+            return
+        game = DBSeriesGame(series_id=ident(row), game_no=1)
+        session.add(game)
+    game.winner_side = {1: "A", 2: "B"}.get(slot)
 
 
 def crown(session: OrmSession, row: Series) -> None:

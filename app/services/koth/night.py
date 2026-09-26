@@ -18,6 +18,7 @@ from app.core.exceptions import BadRequestError, NotFoundError
 from app.models.base import ident
 from app.models.enums import EventKind, LeagueKind, SignupPolicy, StageFormat
 from app.models.event_division import EventDivision, EventDivisionWrite
+from app.models.event_history import KothHistoryEvent
 from app.models.event_stage import EventStageWrite
 from app.models.koth_night import NightOpen
 from app.models.league import League
@@ -84,6 +85,10 @@ def close_night(event_id: int) -> EventPublic:
         night = session.get(Season, event_id)
         if night is None or night.kind is not EventKind.koth:
             raise NotFoundError(f"KOTH night not found by id: {event_id}")
+        if session.get(KothHistoryEvent, event_id) is not None:
+            raise BadRequestError(
+                "An archived night is already closed; its source results are preserved"
+            )
         chains: dict[int | None, list[Series]] = {}
         for row in series_of(session, event_id):
             chains.setdefault(row.division_id, []).append(row)
@@ -109,7 +114,10 @@ def last_night(session: OrmSession, open_only: bool = False) -> Season | None:
     """The newest KOTH night, or the newest one that takes signups."""
     statement = (
         select(Season)
-        .where(col(Season.kind) == EventKind.koth)
+        .where(
+            col(Season.kind) == EventKind.koth,
+            ~col(Season.id).in_(select(col(KothHistoryEvent.event_id))),
+        )
         .order_by(col(Season.id).desc())
     )
     if open_only:

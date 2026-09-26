@@ -4,7 +4,7 @@ title: event_entrant
 description: One player or one pre-made team in one event, with its race, seed, division, check-in and withdrawal stamps; a withdrawn entrant keeps its row.
 resource: ../../../../app/models/event_entrant.py
 tags: [events, data]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-20T18:00:00Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-09-26T04:00:00Z }
 verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
 sources:
   - id: model
@@ -24,8 +24,9 @@ sources:
 |---|---|---|---|
 | `id` | INTEGER | no | Primary key. |
 | `event_id` | INTEGER | no | The event entered. |
-| `user_id` | INTEGER | yes | The player, on a solo event. Exactly one of `user_id` and `team_id` is set. |
+| `user_id` | INTEGER | yes | The player, on a solo event. Exactly one of user, team and historical participant is set. |
 | `team_id` | INTEGER | yes | The pre-made team, on a team event. |
+| `historical_participant_id` | INTEGER | yes | The unresolved source identity, unique per entrant. No account or signup race is inferred. |
 | `race` | VARCHAR | yes | The race a player enters on: `RANDOM`, `HU`, `OC`, `NE`, `UD`. A team row has none. The service refuses a player row without one. |
 | `note` | VARCHAR | yes | What the entrant wants to work on, asked by a signup-only event. |
 | `seed` | INTEGER | yes | The seed inside the division, from 1. Null until seeded, and cleared when a seed order leaves the entrant out. On a KOTH night it is the line of the bracket: a new row takes the seed after the last one and an unplaced row holds none. |
@@ -50,3 +51,5 @@ Pointed at by [series](series.md) (`entrant1_id`, `entrant2_id`), [series_side](
 
 - The MMR and the warnings on the payload derive from [w3cstats](w3cstats.md) on every read. Eligibility warns and never refuses; only `entrant_cap` refuses. See [events module](../../concepts/events-module.md).
 - A drafted GNL team is a [user_team_season](user_team_season.md) row, not an entrant.
+
+Archival participants are scoped to an event and a source section. Exact labels share an entrant only inside that section. Normal signups still require a race and a known account or full tag.

@@ -9,6 +9,7 @@ from typing import Annotated, Literal
 
 from sqlmodel import SQLModel
 
+from app.models.event_history import EventVideoPublic
 from app.models.types import AwareUTC, NumToStr
 
 
@@ -118,12 +119,30 @@ class KothPlayed(SQLModel):
     replay: bool = False
 
 
+class KothHistoricalSeries(SQLModel):
+    series_id: int
+    sequence: int
+    side1: KothPlayer
+    side2: KothPlayer
+    winner_side: Literal[1, 2] | None = None
+    result_unavailable: bool
+    # From winner-stays-on order: shown on the board, left out of every record
+    inferred_winner_side: Literal[1, 2] | None = None
+    # Neither side played on, which the organisers read as a forfeit
+    forfeit: bool = False
+    review_note: str | None = None
+
+
 class KothBracket(SQLModel):
     """One bracket of the night as the run page and the dashboard draw it."""
 
     division_id: int
     name: str | None = None
     lower_bound: int | None = None
+    historical: bool = False
+    upper_bound: int | None = None
+    historical_king: KothPlayer | None = None
+    history: list[KothHistoricalSeries] = []
     king: KothSeat | None = None
     # The king of this bracket when the last closed night ended, a hint only
     defender: KothPlayer | None = None
@@ -138,6 +157,9 @@ class KothBoard(SQLModel):
     """The whole night in one read: its header, who waits for a bracket, and
     every bracket with its king, its line and the series it played."""
 
+    historical: bool = False
+    date_label: str | None = None
+    videos: list[EventVideoPublic] = []
     night_id: int
     name: str
     starts_at: Annotated[datetime | None, AwareUTC] = None

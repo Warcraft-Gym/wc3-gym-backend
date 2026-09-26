@@ -73,3 +73,10 @@ The 48 tables, one concept each. A concept's `# Schema` lists every column; `tes
 * [discord_role_binding](discord_role_binding.md) - One binding of a role kind and scope to a guild role, so the sync can grant and take back that role from what the database says.
 * [discord_role_hidden](discord_role_hidden.md) - One guild role an admin marked as none of the app's business, so the binding page hides it and it can never be bound.
 * [discord_post](discord_post.md) - One card the app posted in Discord and may edit later, with the two stamps that pace edits to the channel's rate limit.
+
+# Historical evidence and videos
+
+* [historical_participant](historical_participant.md) - One unresolved identity scoped to an event and a source section.
+* [koth_history_event](koth_history_event.md) - The immutable source capture and import provenance for one historical KOTH event.
+* [koth_history_series](koth_history_series.md) - The source row behind one imported competitive BO1 series.
+* [event_video](event_video.md) - One video link associated with an event, with its provider, title and display order.

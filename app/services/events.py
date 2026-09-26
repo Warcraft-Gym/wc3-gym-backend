@@ -46,6 +46,7 @@ from app.models.event_entrant import (
     EventEntrantPublic,
     SeedWrite,
 )
+from app.models.event_history import KothHistoryEvent
 from app.models.event_stage import EventStage, EventStagePublic, EventStageWrite
 from app.models.league import League, LeagueCreate, LeaguePublic, LeagueUpdate
 from app.models.map import MapPublic
@@ -314,7 +315,12 @@ class EventService:
             admin = is_admin(claims)
             if not event.published and not admin:
                 raise NotFoundError(f"Event not found by id: {event_id}")
-            return _public(session, event, full=True, drafts=admin)
+            public = _public(session, event, full=True, drafts=admin)
+            public.archived = (
+                event.kind is EventKind.koth
+                and session.get(KothHistoryEvent, event_id) is not None
+            )
+            return public
 
     def add(self, data: EventCreate) -> EventPublic:
         """Create an event and the stages it plays, or one default stage.

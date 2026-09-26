@@ -32,6 +32,7 @@ from app.models import (
     event_award,
     event_division,
     event_entrant,
+    event_history,
     event_stage,
     fantasy_bet,
     fantasy_team,

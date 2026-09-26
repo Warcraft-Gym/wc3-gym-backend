@@ -2,12 +2,15 @@ from collections.abc import Sequence
 from datetime import datetime
 from typing import Annotated, Any, Literal, Self
 
+import pydantic
 from sqlalchemy import (
+    CheckConstraint,
     ColumnElement,
     ColumnExpressionArgument,
     Index,
     and_,
     false,
+    or_,
     select,
 )
 from sqlalchemy.orm import Session, joinedload, selectinload
@@ -18,8 +21,9 @@ from app.core.db import rel
 from app.core.ordering import SortOrder, ordered
 from app.models.base import DBModel, PublicModel, ident
 from app.models.enums import Race
+from app.models.event_entrant import EventEntrant
 from app.models.match import Match, MatchPublic
-from app.models.relationships import EventRoundPublic
+from app.models.relationships import DBEventRound, EventRoundPublic
 from app.models.series_cast import CastPublic, SeriesCast
 from app.models.series_side import SeriesSidePublic
 from app.models.series_veto_step import DBSeriesVetoStep
@@ -50,6 +54,10 @@ class Series(SeriesBase, DBModel, table=True):
     __tablename__ = "series"
     # A pair of players meet once inside a fixture
     __table_args__ = (
+        CheckConstraint(
+            "NOT result_unavailable OR (player1_score IS NULL AND player2_score IS NULL)",
+            name="unknown_result_scores",
+        ),
         Index(
             "uq_series_match_id_player1_id_player2_id",
             "match_id",
@@ -96,6 +104,15 @@ class Series(SeriesBase, DBModel, table=True):
     # played, walkover or forfeit
     result_kind: str = Field(
         default="played", max_length=10, sa_column_kwargs={"server_default": "played"}
+    )
+    result_unavailable: bool = Field(
+        default=False, sa_column_kwargs={"server_default": false()}
+    )
+    entrant1: EventEntrant | None = Relationship(
+        sa_relationship_kwargs={"foreign_keys": "[Series.entrant1_id]"}
+    )
+    entrant2: EventEntrant | None = Relationship(
+        sa_relationship_kwargs={"foreign_keys": "[Series.entrant2_id]"}
     )
     # The feeder graph: each slot takes the winner, or the loser, of one series
     slot1_from_series_id: int | None = Field(
@@ -164,11 +181,11 @@ class Series(SeriesBase, DBModel, table=True):
         order: SortOrder = "asc",
     ) -> Sequence[Self]:
         stmt = select(cls).options(*cls._list_eager_options(picks_only=True))
-        stmt = stmt.where(col(cls.match).has(col(Match.season_id) == season_id))
+        stmt = stmt.where(cls.in_event(season_id))
         if filters is not None:
             stmt = stmt.where(filters)
         if sort == "week":
-            stmt = stmt.join(Match, col(Match.id) == cls.match_id)
+            stmt = stmt.outerjoin(Match, col(Match.id) == cls.match_id)
         # Offset paging is deterministic only with a fixed order
         stmt = (
             ordered(stmt, SERIES_SORTS, sort, order, col(cls.id))
@@ -176,6 +193,17 @@ class Series(SeriesBase, DBModel, table=True):
             .limit(limit)
         )
         return session.scalars(stmt).all()
+
+    @classmethod
+    def in_event(cls, event_id: int) -> ColumnElement[bool]:
+        return or_(
+            col(cls.match).has(col(Match.season_id) == event_id),
+            col(cls.round_id).in_(
+                select(col(DBEventRound.id)).where(
+                    col(DBEventRound.season_id) == event_id
+                )
+            ),
+        )
 
     @classmethod
     def _list_eager_options(cls, *, picks_only: bool = False) -> tuple[ORMOption, ...]:
@@ -190,6 +218,12 @@ class Series(SeriesBase, DBModel, table=True):
             # full veto, so no caller may write through it.
             steps = steps.and_(col(DBSeriesVetoStep.action) == "pick")
         return (
+            joinedload(rel(cls.entrant1)).joinedload(
+                rel(EventEntrant.historical_participant)
+            ),
+            joinedload(rel(cls.entrant2)).joinedload(
+                rel(EventEntrant.historical_participant)
+            ),
             joinedload(rel(cls.match)).joinedload(rel(Match.team1)),
             joinedload(rel(cls.match)).joinedload(rel(Match.team2)),
             joinedload(rel(cls.match)).joinedload(rel(Match.season)),
@@ -204,6 +238,12 @@ class Series(SeriesBase, DBModel, table=True):
     def _eager_options(cls) -> tuple[ORMOption, ...]:
         """The rows a season report reads off every series."""
         return (
+            joinedload(rel(cls.entrant1)).joinedload(
+                rel(EventEntrant.historical_participant)
+            ),
+            joinedload(rel(cls.entrant2)).joinedload(
+                rel(EventEntrant.historical_participant)
+            ),
             joinedload(rel(cls.match)).joinedload(rel(Match.team1)),
             joinedload(rel(cls.match)).joinedload(rel(Match.team2)),
             joinedload(rel(cls.match)).joinedload(rel(Match.season)),
@@ -298,6 +338,27 @@ class SeriesRulesPublic(SQLModel):
 
 
 class SeriesPublic(SeriesBase, PublicModel):
+    result_unavailable: bool = pydantic.Field(
+        default=False, exclude_if=lambda value: not value
+    )
+    entrant1_id: int | None = pydantic.Field(
+        default=None, exclude_if=lambda value: value is None
+    )
+    entrant2_id: int | None = pydantic.Field(
+        default=None, exclude_if=lambda value: value is None
+    )
+    division_id: int | None = pydantic.Field(
+        default=None, exclude_if=lambda value: value is None
+    )
+    sequence: int | None = pydantic.Field(
+        default=None, exclude_if=lambda value: value is None
+    )
+    player1_source_name: str | None = pydantic.Field(
+        default=None, exclude_if=lambda value: value is None
+    )
+    player2_source_name: str | None = pydantic.Field(
+        default=None, exclude_if=lambda value: value is None
+    )
     id: int
     match_id: int | None = None
     player1_id: int | None = None
@@ -333,6 +394,17 @@ class SeriesPublic(SeriesBase, PublicModel):
     def from_series(cls, series: Series) -> Self:
         return cls(
             id=ident(series),
+            result_unavailable=series.result_unavailable,
+            entrant1_id=series.entrant1_id,
+            entrant2_id=series.entrant2_id,
+            division_id=series.division_id,
+            sequence=series.sequence,
+            player1_source_name=series.entrant1.historical_participant.source_name
+            if series.entrant1 and series.entrant1.historical_participant
+            else None,
+            player2_source_name=series.entrant2.historical_participant.source_name
+            if series.entrant2 and series.entrant2.historical_participant
+            else None,
             match_id=series.match_id,
             match=MatchPublic.from_match(series.match) if series.match else None,
             date_time=series.date_time,
@@ -358,6 +430,17 @@ class SeriesPublic(SeriesBase, PublicModel):
         """The series with reduced players, so no player collection loads."""
         return cls(
             id=ident(series),
+            result_unavailable=series.result_unavailable,
+            entrant1_id=series.entrant1_id,
+            entrant2_id=series.entrant2_id,
+            division_id=series.division_id,
+            sequence=series.sequence,
+            player1_source_name=series.entrant1.historical_participant.source_name
+            if series.entrant1 and series.entrant1.historical_participant
+            else None,
+            player2_source_name=series.entrant2.historical_participant.source_name
+            if series.entrant2 and series.entrant2.historical_participant
+            else None,
             match_id=series.match_id,
             match=MatchPublic.from_match(series.match) if series.match else None,
             date_time=series.date_time,
@@ -390,7 +473,7 @@ def has_result(series: Series | SeriesPublic) -> bool:
 
 class StageSeriesRow(SeriesPublic):
     """One series of a stage: the public series plus the columns a stage is run
-    from. They stay off SeriesPublic, so every other series payload holds."""
+    from. Archive identity fields are optional on other series payloads."""
 
     round_id: int | None = None
     sequence: int | None = None
@@ -454,6 +537,17 @@ class SeriesFeedersPublic(PublicModel):
     def from_series(cls, series: Series) -> Self:
         return cls(
             id=ident(series),
+            result_unavailable=series.result_unavailable,
+            entrant1_id=series.entrant1_id,
+            entrant2_id=series.entrant2_id,
+            division_id=series.division_id,
+            sequence=series.sequence,
+            player1_source_name=series.entrant1.historical_participant.source_name
+            if series.entrant1 and series.entrant1.historical_participant
+            else None,
+            player2_source_name=series.entrant2.historical_participant.source_name
+            if series.entrant2 and series.entrant2.historical_participant
+            else None,
             result_kind=series.result_kind,
             slot1_from_series_id=series.slot1_from_series_id,
             slot1_takes_loser=series.slot1_takes_loser,

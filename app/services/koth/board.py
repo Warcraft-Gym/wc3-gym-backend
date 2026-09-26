@@ -19,6 +19,7 @@ from app.models.base import ident
 from app.models.enums import EventKind
 from app.models.event_division import EventDivision
 from app.models.event_entrant import EventEntrant
+from app.models.event_history import KothHistoryEvent
 from app.models.koth_night import (
     KothBoard,
     KothBracket,
@@ -48,10 +49,14 @@ NOBODY: Line = ("", None)
 def read(night_id: int | None = None, public: bool = False) -> KothBoard:
     """The whole night, or tonight's night when no id is named."""
     with Session() as session:
-        night = _night(session, night_id)
+        night, date_label = _night(session, night_id)
         if public and not night.published:
             raise NotFoundError(f"KOTH night not found by id: {night_id}")
         event_id = ident(night)
+        if date_label is not None:
+            from app.services.koth.history_board import read_archive
+
+            return read_archive(session, night, date_label)
         entrants = _entrants(session, event_id)
         series = series_of(session, event_id)
         mmrs = _mmrs(session, entrants)
@@ -270,6 +275,7 @@ def _defenders(session: OrmSession, night: Season) -> dict[int, int]:
         select(Season)
         .where(
             col(Season.kind) == EventKind.koth,
+            ~col(Season.id).in_(select(col(KothHistoryEvent.event_id))),
             col(Season.id) < ident(night),
             col(Season.closed_at).is_not(None),
         )
@@ -333,14 +339,18 @@ def _entrants(session: OrmSession, event_id: int) -> list[EventEntrant]:
     )
 
 
-def _night(session: OrmSession, night_id: int | None) -> Season:
-    """The night the read names, or the one that takes signups."""
+def _night(session: OrmSession, night_id: int | None) -> tuple[Season, str | None]:
+    """The named event and its archive label, without loading the source record."""
     if night_id is None:
-        return tonight(session)
-    night = session.get(Season, night_id)
-    if night is None or night.kind is not EventKind.koth:
+        return tonight(session), None
+    row = session.execute(
+        select(Season, col(KothHistoryEvent.date_label))
+        .outerjoin(KothHistoryEvent, col(KothHistoryEvent.event_id) == Season.id)
+        .where(col(Season.id) == night_id, col(Season.kind) == EventKind.koth)
+    ).first()
+    if row is None:
         raise NotFoundError(f"KOTH night not found by id: {night_id}")
-    return night
+    return row[0], row[1]
 
 
 def place(row: EventEntrant) -> tuple[int, int]:
