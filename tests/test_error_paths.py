@@ -235,7 +235,7 @@ def test_a_failed_player_lookup_logs_the_traceback(
     def broken(self: UserService, discord_id: str) -> Never:
         raise RuntimeError("the lookup fell over")
 
-    monkeypatch.setattr(UserService, "find_by_discord_id", broken)
+    monkeypatch.setattr(UserService, "id_by_discord_id", broken)
     headers = member()
 
     with caplog.at_level(logging.ERROR):

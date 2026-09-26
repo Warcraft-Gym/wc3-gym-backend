@@ -1,16 +1,16 @@
 """Pin how many statements one series, bets or career stats answer costs.
 
-Series._eager_options, DraftSeries._eager_options, FantasyBet.eager_options,
-FantasyBet.list_eager_options and PlayerCareerStats.eager_options decide the
+Series._eager_options, DraftSeries._eager_options, FantasyBet.loads,
+the fantasy team loads and PlayerCareerStats.eager_options decide the
 count, and the count is a constant: it does not grow with the number of
 w3c_stats, team_seasons or season signups a player carries, nor with the
 number of career rows. A lazy load added to the serialization raises the count
 and fails a test here.
 
-A single series, draft or bet read joins its players bare, then reads them
-again with app.services.users.summary_loads: one statement for the players,
-one for their team row in the read's event and one for their tags. A write
-answers through the same read after its commit.
+A single series, draft, bet or fantasy team read joins its players bare, then
+reads them again with app.services.users.summary_loads: one statement for the
+players, one for their team row in the read's event and one for their tags. A
+write answers through the same read after its commit.
 
 Two tests layer raiseload on the paths the options cover, so an
 unintended lazy load on those paths raises instead of passing silently.
@@ -72,14 +72,15 @@ is the trade these budgets pay for: a joined collection sends each parent row
 once per child row, while a selectin statement reads every distinct row once.
 The fantasy team list adds one for the season of the answer, one for the
 drafted players' season stats and one for the ladder summary of every person
-on it; the bet list adds four, for the season, the series, the match and the
-match's season. None of the seven grows with the answer. Naming the W3C season
+on it; the bet list adds four, for the season, the series with its match, the
+casts and the veto picks. None of the seven grows with the answer. Naming the W3C season
 the summary reads costs one statement more, and a second one where no
 `current_w3c_season` setting is stored.
 """
 
 from collections.abc import Iterator
 from contextlib import contextmanager
+from datetime import timedelta
 from typing import Any
 
 import pytest
@@ -99,9 +100,10 @@ from app.models.player_career_stats import (
     PlayerCareerStats,
     PlayerCareerStatsPublic,
 )
-from app.models.relationships import DBUserSeasonSignup
+from app.models.relationships import DBFantasyTeamPlayer, DBUserSeasonSignup
 from app.models.season import Season
 from app.models.series import Series, SeriesCreate, SeriesPublic, SeriesUpdate
+from app.models.types import utcnow
 from app.models.user import User
 from app.models.w3c_stats import W3CStats
 from app.services import derived
@@ -115,6 +117,8 @@ from app.services.seasons import SeasonService
 from app.services.series import SeriesService
 from app.services.teams import TeamService
 from app.services.users import UserService, summary_loads
+from tests.test_fantasy_locks import schedule, score
+from tests.test_player_session import member_session
 
 STATS_PER_PLAYER = 8
 
@@ -301,11 +305,11 @@ def test_a_draft_write_answers_through_the_read(league: dict[str, Any]) -> None:
     assert tally[0] == 7
 
 
-def test_one_bet_costs_eleven_statements(league: dict[str, Any]) -> None:
-    """The bet with its series, match and season, the casts, the veto steps,
-    three for the four player summaries, and the derived points, signup races
-    and season record of the series players. The season is its summary, so
-    its maps stay unread."""
+def test_one_bet_costs_thirteen_statements(league: dict[str, Any]) -> None:
+    """The bet, its season, its series as the list row with its match, the
+    casts, the veto picks, three for the four player summaries, and the
+    derived points, signup races and season record of the series players. The
+    season is its summary, so its maps stay unread."""
     service = FantasyBetService()
     bets, _ = service.get_all()
     with count_statements() as tally:
@@ -316,11 +320,11 @@ def test_one_bet_costs_eleven_statements(league: dict[str, Any]) -> None:
     assert bet.series.player1 is not None
     assert bet.series.player1.record is not None
     assert bet.series.player1.record.games == 1
-    assert tally[0] == 11
+    assert tally[0] == 13
 
 
 def test_a_bet_write_answers_through_the_read(league: dict[str, Any]) -> None:
-    """The settings, the write, then the eleven of the single read."""
+    """The settings, the write, then the thirteen of the single read."""
     players = league["player_ids"]
     create = FantasyBetCreate(
         season_id=league["season_id"],
@@ -333,7 +337,7 @@ def test_a_bet_write_answers_through_the_read(league: dict[str, Any]) -> None:
         bet = FantasyBetService().add(create)
     assert bet.winner is not None
     assert bet.winner.record is not None
-    assert tally[0] == 12
+    assert tally[0] == 14
 
 
 def test_the_entrants_read_costs_twelve_statements(
@@ -393,9 +397,9 @@ def test_summary_loads_cover_the_player_graph(league: dict[str, Any]) -> None:
     assert len(public.player1.tags) == 1
 
 
-def test_fantasy_bets_list_costs_ten_statements(league: dict[str, Any]) -> None:
+def test_fantasy_bets_list_costs_eight_statements(league: dict[str, Any]) -> None:
     """The list carries the casts and the veto picks of each series, and the
-    derived points.
+    derived points; the match rides joined on its series.
 
     The bet result reads the map scores of the series the answer already
     carries, so it adds no statement of its own.
@@ -408,7 +412,7 @@ def test_fantasy_bets_list_costs_ten_statements(league: dict[str, Any]) -> None:
     assert bets[0].bet_result == 10
     assert bets[0].user is not None
     assert bets[0].user.race_mmrs == []
-    assert tally[0] == 10
+    assert tally[0] == 8
 
 
 def add_bets_to_the_season(seeded: dict[str, Any], count: int) -> None:
@@ -421,7 +425,7 @@ def add_bets_to_the_season(seeded: dict[str, Any], count: int) -> None:
 
 
 def test_the_bets_count_holds_when_the_bets_grow(league: dict[str, Any]) -> None:
-    """Four more bets, the same ten statements."""
+    """Four more bets, the same eight statements."""
     add_bets_to_the_season(league, 4)
 
     service = FantasyBetService()
@@ -429,7 +433,7 @@ def test_the_bets_count_holds_when_the_bets_grow(league: dict[str, Any]) -> None
         bets, _ = service.get_all()
     assert len(bets) == 5
     assert all(bet.bet_result == 10 for bet in bets)
-    assert tally[0] == 10
+    assert tally[0] == 8
 
 
 from sqlmodel import col
@@ -476,6 +480,184 @@ def test_the_fantasy_team_search_costs_thirteen_statements(
     assert len(teams) == 5
     assert total is None
     assert tally[0] == 13
+
+
+def draft_two(league: dict[str, Any]) -> None:
+    """P2 and P3 drafted into the seeded fantasy team, so a lazy load per
+    member shows."""
+    with Session.begin() as session:
+        for user_id in league["player_ids"][1:3]:
+            session.add(
+                DBFantasyTeamPlayer(
+                    fantasy_team_id=league["fantasy_team_id"], user_id=user_id
+                )
+            )
+
+
+def open_the_season(league: dict[str, Any]) -> None:
+    """No series scored or past its time, so a member may still write."""
+    score(league["series_played_id"], None, None)
+    schedule(league["series_played_id"], utcnow() + timedelta(days=1))
+
+
+def test_one_fantasy_team_costs_fifteen_statements(
+    client: Client, league: dict[str, Any]
+) -> None:
+    """The team with its drafted team and members, its season, three for the
+    member summaries, the four of the scores, the signup races, two for the
+    current W3C season, the ladder summary and two for the season record."""
+    draft_two(league)
+    with count_statements() as tally:
+        response = client.get(f"/fantasy/teams/{league['fantasy_team_id']}")
+    assert response.status_code == 200
+    body = response.json()
+    players = body["drafted_players"]
+    assert len(players) == 2
+    for player in (body["captain"], *players):
+        assert player["record"]["season_id"] == league["season_id"]
+        assert player["gnl_stats"] == [player["record"]]
+        assert "signup_seasons" not in player
+    assert tally[0] == 15
+    assert int(response.headers["X-DB-Rows"]) <= 29 + ROWS_MARGIN
+
+
+def test_an_owner_team_edit_reads_the_team_once(
+    client: Client, league: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The owner check and the reseat check read the team row, and the write
+    answers through the single read once; it built the team three times, at
+    77 statements."""
+    draft_two(league)
+    open_the_season(league)
+    headers = member_session(monkeypatch, "1", "p1")
+    with count_statements() as tally:
+        response = client.put(
+            f"/fantasy/teams/{league['fantasy_team_id']}",
+            json={"name": "Renamed"},
+            headers=headers,
+        )
+    assert response.status_code == 200, response.text
+    assert response.json()["name"] == "Renamed"
+    assert tally[0] == 30
+    assert int(response.headers["X-DB-Rows"]) <= 42 + ROWS_MARGIN
+
+
+def test_adding_team_players_answers_through_the_read(
+    client: Client, league: dict[str, Any], auth_headers: dict[str, str]
+) -> None:
+    """The write, then the fifteen of the single read, so the answer carries
+    the ladder summary and the record the read carries."""
+    draft_two(league)
+    with count_statements() as tally:
+        response = client.post(
+            f"/fantasy/teams/{league['fantasy_team_id']}/players",
+            json={"player_ids": [league["player_ids"][3]]},
+            headers=auth_headers,
+        )
+    assert response.status_code == 200, response.text
+    assert len(response.json()["drafted_players"]) == 3
+    assert tally[0] == 20
+    assert int(response.headers["X-DB-Rows"]) <= 40 + ROWS_MARGIN
+
+
+def test_a_fantasy_registration_answers_once(
+    client: Client,
+    league: dict[str, Any],
+    auth_headers: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The captain's team is updated and its roster set in one transaction,
+    then the single read answers once; it built the team four times, at 97
+    statements."""
+    season = league["season_id"]
+    p1, p2, p3, _ = league["player_ids"]
+    response = client.put(
+        f"/events/{season}/fantasy/tiers",
+        json={"cuts": [1100, 1300], "tiers": {str(p1): 1, str(p2): 2, str(p3): 3}},
+        headers=auth_headers,
+    )
+    assert response.status_code == 204, response.text
+    open_the_season(league)
+    headers = member_session(monkeypatch, "1", "p1")
+    team = {
+        "season_id": season,
+        "drafted_team_id": league["team_a_id"],
+        "drafted_race": "HU",
+        "player_ids": [p1, p2, p3],
+    }
+    with count_statements() as tally:
+        response = client.post("/fantasy-team", json=team, headers=headers)
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert body["id"] == league["fantasy_team_id"]
+    assert {player["id"] for player in body["drafted_players"]} == {p1, p2, p3}
+    assert tally[0] == 55
+    assert int(response.headers["X-DB-Rows"]) <= 58 + ROWS_MARGIN
+
+
+def test_one_bet_route_costs_the_single_read(
+    client: Client, league: dict[str, Any]
+) -> None:
+    """The thirteen of the single read, with the auth of the request."""
+    bet_id = client.get("/fantasy/bets").json()[0]["id"]
+    with count_statements() as tally:
+        response = client.get(f"/fantasy/bets/{bet_id}")
+    assert response.status_code == 200
+    assert response.json()["series"]["player1"]["record"] is not None
+    assert tally[0] == 13
+    assert int(response.headers["X-DB-Rows"]) <= 17 + ROWS_MARGIN
+
+
+def test_an_admin_bet_answers_through_the_read(
+    client: Client, league: dict[str, Any], auth_headers: dict[str, str]
+) -> None:
+    """The admin token, the settings, the write, then the thirteen of the
+    single read."""
+    players = league["player_ids"]
+    bet = {
+        "season_id": league["season_id"],
+        "series_id": league["series_open_id"],
+        "user_id": players[1],
+        "winner_id": players[1],
+        "bet_points": 10,
+    }
+    with count_statements() as tally:
+        response = client.post("/fantasy/bets", json=bet, headers=auth_headers)
+    assert response.status_code == 201, response.text
+    assert tally[0] == 15
+    assert int(response.headers["X-DB-Rows"]) <= 20 + ROWS_MARGIN
+
+
+def test_a_public_bet_reads_rows_and_answers_once(
+    client: Client, league: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The open check reads the series row and the caller check his id; the
+    place and the edit each answer through the single bet read once. They
+    built the whole series and the whole bet to check them, at 42 and 51
+    statements."""
+    headers = member_session(monkeypatch, "1", "p1")
+    bet = {
+        "series_id": league["series_open_id"],
+        "winner_id": league["player_ids"][1],
+        "bet_points": 10,
+    }
+    with count_statements() as tally:
+        response = client.post("/fantasy-bet", json=bet, headers=headers)
+    assert response.status_code == 201, response.text
+    assert response.json()["season_id"] == league["season_id"]
+    assert tally[0] == 26
+    assert int(response.headers["X-DB-Rows"]) <= 28 + ROWS_MARGIN
+
+    with count_statements() as tally:
+        response = client.put(
+            f"/fantasy-bet/{response.json()['id']}",
+            json={"bet_points": 5},
+            headers=headers,
+        )
+    assert response.status_code == 200, response.text
+    assert response.json()["bet_points"] == 5
+    assert tally[0] == 25
+    assert int(response.headers["X-DB-Rows"]) <= 30 + ROWS_MARGIN
 
 
 def test_career_stats_cost_two_statements(league: dict[str, Any]) -> None:

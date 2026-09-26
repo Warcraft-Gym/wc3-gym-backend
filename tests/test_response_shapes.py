@@ -11,6 +11,8 @@ from typing import Any
 from httpx2 import Client
 from pydantic import BaseModel
 
+from app.models.fantasy_bet import FantasyBetPublic
+from app.models.fantasy_team import FantasyTeamPublic
 from app.models.season import Season, SeasonBase, SeasonSummaryPublic
 from app.models.team import Team
 from app.models.team_summary import TeamSummaryPublic
@@ -25,11 +27,11 @@ EMBEDS: dict[type, tuple[type[BaseModel], type[BaseModel]]] = {
     Season: (SeasonBase, SeasonSummaryPublic),
 }
 
-# Sites that still embed a detail shape; the fantasy players are not summaries yet
-ALLOWED = {
-    ("FantasyTeamPublic", "captain"): "the fantasy team embeds UserPublic",
-    ("FantasyTeamPublic", "drafted_players"): "the fantasy team embeds UserPublic",
-}
+# Sites that still embed a detail shape, each with its reason
+ALLOWED: dict[tuple[str, str], str] = {}
+
+# Entities with no summary: they answer at the top level only, never embedded
+TOP_LEVEL_ONLY = (FantasyTeamPublic, FantasyBetPublic)
 
 # Schema names of entities, which a summary may not hold a list of
 ENTITY_PREFIXES = (
@@ -112,6 +114,19 @@ def test_an_embedded_entity_is_its_summary(client: Client) -> None:
                 embedded = _refs(sub, set()) & detail
                 if embedded and (name, prop) not in ALLOWED:
                     wrong.append(f"{name}.{prop} embeds {sorted(embedded)}")
+    assert wrong == []
+
+
+def test_a_top_level_entity_is_never_embedded(client: Client) -> None:
+    spec = client.get("/openapi.json").json()
+    schemas = spec["components"]["schemas"]
+    names = {model.__name__ for model in TOP_LEVEL_ONLY}
+    wrong = [
+        f"{name}.{prop} embeds {sorted(embedded)}"
+        for name in sorted(_answered(spec))
+        for prop, sub in (schemas[name].get("properties") or {}).items()
+        if (embedded := _refs(sub, set()) & names)
+    ]
     assert wrong == []
 
 

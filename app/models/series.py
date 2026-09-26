@@ -15,6 +15,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Session, joinedload, selectinload
 from sqlalchemy.orm.interfaces import ORMOption
+from sqlalchemy.orm.strategy_options import _AbstractLoad
 from sqlmodel import Field, Relationship, SQLModel, col
 
 from app.core.db import rel
@@ -206,7 +207,9 @@ class Series(SeriesBase, DBModel, table=True):
         )
 
     @classmethod
-    def _list_eager_options(cls, *, picks_only: bool = False) -> tuple[ORMOption, ...]:
+    def _list_eager_options(
+        cls, *, picks_only: bool = False
+    ) -> tuple[_AbstractLoad, ...]:
         """The to-one relations the reduced public series reads.
 
         picks_only loads the two pick steps alone, which is all the reduced

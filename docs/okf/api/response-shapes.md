@@ -24,6 +24,12 @@ sources:
   - id: roster-loads
     resource: ../../../app/services/teams.py
     title: roster_loads
+  - id: fantasy-team
+    resource: ../../../app/services/fantasy_teams.py
+    title: FantasyTeamService.get and the team loads
+  - id: fantasy-bet
+    resource: ../../../app/models/fantasy_bet.py
+    title: FantasyBet.loads
   - id: nesting
     resource: ../../../tests/test_response_shapes.py
     title: The nesting test
@@ -48,9 +54,10 @@ sources:
 | Team | `TeamSummaryPublic` | `TeamPublic`; `TeamRosterPublic` on an event's list | `TeamPublic` from its league; `TeamRosterPublic` from its event |
 | Season | `SeasonSummaryPublic` | `SeasonPublic` | `EventPublic` |
 | Series | `SeriesPublic`, the players as summaries | `SeriesPublic`, `StageSeriesRow` | `SeriesPublic` |
-| Fantasy team, bet | none | `FantasyTeamPublic`, `FantasyBetPublic` | the same classes |
+| Fantasy team | none | `FantasyTeamPublic`: the season and drafted team summaries, the captain and drafted players as player summaries | the same class |
+| Fantasy bet | none | `FantasyBetPublic`: the season summary, `user` and `winner` as player summaries, `series` as the series list row | the same class |
 
-The member variants `UserMemberListPublic` and `UserMemberPublic` add `discordTag` and `discordId` (see [users](../data/tables/users.md)). The nesting test allows the sites that still embed a detail shape by name, with the reason: the fantasy captain and drafted players. `TeamPublic`, `TeamRosterPublic` and `SeasonPublic` answer only at the top level.
+The member variants `UserMemberListPublic` and `UserMemberPublic` add `discordTag` and `discordId` (see [users](../data/tables/users.md)). The nesting test allows no site to embed a detail shape. `TeamPublic`, `TeamRosterPublic` and `SeasonPublic` answer only at the top level, and `FantasyTeamPublic` and `FantasyBetPublic` too: the nesting test fails where any answer embeds them.
 
 # The player summary
 
@@ -61,12 +68,15 @@ The member variants `UserMemberListPublic` and `UserMemberPublic` add `discordTa
 | Embedded at | Event of the record | Record counts filled |
 |---|---|---|
 | `GET /series/{id}`, `POST /series`, `PUT /series/{id}`, `PUT /series/{id}/result-kind` and the draft promote: `player1` and `player2` | the series' event | yes |
-| `GET /fantasy/bets/{id}` and every bet write: the series players | the bet's season | yes |
+| `GET /fantasy/bets/{id}`, every bet write and `POST`, `PUT /fantasy-bet`: the series players | the bet's season | yes |
 | the same bets: `user` and `winner` | the bet's season | no |
+| `GET /fantasy/teams/{id}`, every team write and `POST /fantasy-team`: the captain and the drafted players | the team's season | yes |
+| the fantasy team list and search: the drafted players | each team's season | yes |
+| the same lists: the captain | none, `record` null | |
 | `GET /draft-series/{id}`, `GET /draft-series/match/{id}` and the draft writes | the match's season | no |
 | `GET /events/{event_id}/entrants` | the event | no |
 | `GET /events/{event_id}/teams`, `GET /events/{event_id}/teams/{team_id}` and the three event team writes: the roster and the captains | the event | yes |
-| every series list, stage row, series side and bet list | none, `record` null | |
+| every series list, stage row, series side, and the bet list and search | none, `record` null | |
 
 # The team and season shapes
 
@@ -82,6 +92,10 @@ The member variants `UserMemberListPublic` and `UserMemberPublic` add `discordTa
 
 `summary_loads(event_id)` in `app/services/users.py` is the one loader of a player summary, relative to a `User`: the tags, and the `user_team_season` row of `event_id` alone (none without one), with no signups and no `w3cstats` rows. `signups=True` adds the signups a list row names; `window=<season>` loads the `w3cstats` rows of that live window for an entrant's MMR. The user list and search, the signups read and the entrants read compose it.
 
-A single series, draft or bet read joins its players bare, then calls `load_players(session, ids, event_id)`, which reads those players again with `summary_loads(event_id)`: one statement for the players, one for their team rows and one for their tags. The event is known only once the row is read, so the reload comes after it.
+A single series, draft, bet or fantasy team read joins its players bare, then calls `load_players(session, ids, event_id)`, which reads those players again with `summary_loads(event_id)`: one statement for the players, one for their team rows and one for their tags. The event is known only once the row is read, so the reload comes after it.
+
+`FantasyTeamService.get` is the one fantasy team read: the team with its season, drafted team and members bare, then `load_players` in the team's season. The team writes (`POST`, `PUT /fantasy/teams`, the players writes) and `POST /fantasy-team` answer through it once, after the commit. The team list and search join the same rows and add the team rows of the drafted players, so each carries the record of his team's season. The owner check, the reseat check and the score breakdown read the `fantasy_teams` row, not the answer.
+
+`FantasyBet.loads()` is the one bet loader: the season, the bettor and winner bare, and the series with the loads of a series list row (`Series._list_eager_options(picks_only=True)`). `FantasyBetService.get` adds `load_players` in the bet's season; the bet writes and `POST`, `PUT /fantasy-bet` answer through it once. The bet list uses the same loader without the reload. The bet search keeps a lean row: the series with its players and bare match, no casts, picks or teams. The public bet writes check the series and the bet on their rows.
 
 `roster_loads(event_id)` in `app/services/teams.py` is the one loader of an event roster, relative to a `Team`: the `user_team_season` and `team_season_captain` rows of `event_id` with their users under `summary_loads(event_id)`, and the `team_season` row of that event. The event team list and the single event team read compose it; no other team read loads a roster.

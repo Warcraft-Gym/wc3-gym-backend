@@ -7,11 +7,8 @@ from sqlmodel import Field, Relationship, SQLModel
 
 from app.core.db import rel
 from app.models.base import DBModel, PublicModel, ident
-from app.models.match import Match
 from app.models.season import Season, SeasonSummaryPublic
 from app.models.series import Series, SeriesPublic
-from app.models.series_cast import SeriesCast
-from app.models.series_veto_step import DBSeriesVetoStep
 from app.models.user import User, UserSummaryPublic
 
 
@@ -46,64 +43,18 @@ class FantasyBet(FantasyBetBase, DBModel, table=True):
     )
 
     @classmethod
-    def eager_options(cls) -> tuple[ORMOption, ...]:
-        """Every relation the public bet reads; the rows of its four player
-        summaries load apart, with app.services.users.load_players."""
-        return (
-            joinedload(rel(cls.user)),
-            joinedload(rel(cls.winner)),
-            joinedload(rel(cls.series)).joinedload(rel(Series.player1)),
-            joinedload(rel(cls.series)).joinedload(rel(Series.player2)),
-            joinedload(rel(cls.series))
-            .selectinload(rel(Series.casts))
-            .joinedload(rel(SeriesCast.user)),
-            joinedload(rel(cls.series))
-            .selectinload(rel(Series.veto_steps))
-            .joinedload(rel(DBSeriesVetoStep.map)),
-            joinedload(rel(cls.season)),
-            joinedload(rel(cls.series))
-            .joinedload(rel(Series.match))
-            .joinedload(rel(Match.team1)),
-            joinedload(rel(cls.series))
-            .joinedload(rel(Series.match))
-            .joinedload(rel(Match.team2)),
-            joinedload(rel(cls.series))
-            .joinedload(rel(Series.match))
-            .joinedload(rel(Match.season)),
-            joinedload(rel(cls.series))
-            .joinedload(rel(Series.match))
-            .joinedload(rel(Match.fixed_map)),
-        )
-
-    @classmethod
-    def list_eager_options(cls) -> tuple[ORMOption, ...]:
-        """The to-one relations the reduced public bet reads."""
-        # A season, a series and a match are each shared by many bets of a page,
-        # so selectin reads every distinct row once, not once per bet
+    def loads(cls) -> tuple[ORMOption, ...]:
+        """The rows a bet answer reads off the bet: its season, its bettor and
+        winner bare, and its series as the series list row. A season and a
+        series are each shared by many bets of a page, so selectin reads every
+        distinct row once, not once per bet."""
         return (
             selectinload(rel(cls.season)),
             joinedload(rel(cls.user)),
             joinedload(rel(cls.winner)),
-            selectinload(rel(cls.series)).joinedload(rel(Series.player1)),
-            selectinload(rel(cls.series)).joinedload(rel(Series.player2)),
-            selectinload(rel(cls.series))
-            .selectinload(rel(Series.match))
-            .joinedload(rel(Match.team1)),
-            selectinload(rel(cls.series))
-            .selectinload(rel(Series.match))
-            .joinedload(rel(Match.team2)),
-            selectinload(rel(cls.series))
-            .selectinload(rel(Series.match))
-            .selectinload(rel(Match.season)),
-            selectinload(rel(cls.series))
-            .selectinload(rel(Series.match))
-            .joinedload(rel(Match.fixed_map)),
-            selectinload(rel(cls.series))
-            .selectinload(rel(Series.casts))
-            .joinedload(rel(SeriesCast.user)),
-            selectinload(rel(cls.series))
-            .selectinload(rel(Series.veto_steps))
-            .joinedload(rel(DBSeriesVetoStep.map)),
+            selectinload(rel(cls.series)).options(
+                *Series._list_eager_options(picks_only=True)
+            ),
         )
 
 
@@ -148,6 +99,8 @@ class FantasyBetPublic(FantasyBetBase, PublicModel):
 
     @classmethod
     def from_fantasy_bet(cls, fbet: FantasyBet) -> Self:
+        """The bet; its players carry their record in its season where the
+        read loaded it."""
         return cls(
             id=ident(fbet),
             series_id=fbet.series_id,
@@ -166,23 +119,5 @@ class FantasyBetPublic(FantasyBetBase, PublicModel):
             winner=UserSummaryPublic.from_user(fbet.winner, fbet.season_id)
             if fbet.winner
             else None,
-            bet_points=fbet.bet_points,
-        )
-
-    @classmethod
-    def from_fantasy_bet_reduced(cls, fbet: FantasyBet) -> Self:
-        """Every field of the bet, its players outside an event context."""
-        return cls(
-            id=ident(fbet),
-            series_id=fbet.series_id,
-            season_id=fbet.season_id,
-            season=SeasonSummaryPublic.from_season(fbet.season)
-            if fbet.season
-            else None,
-            series=SeriesPublic.from_series(fbet.series) if fbet.series else None,
-            user_id=fbet.user_id,
-            user=UserSummaryPublic.from_user(fbet.user) if fbet.user else None,
-            winner_id=fbet.winner_id,
-            winner=UserSummaryPublic.from_user(fbet.winner) if fbet.winner else None,
             bet_points=fbet.bet_points,
         )

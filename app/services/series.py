@@ -69,6 +69,29 @@ def add_in(session: OrmSession, series: SeriesCreate) -> int:
     return ident(row)
 
 
+def update_in(
+    session: OrmSession, series_id: int, series: SeriesUpdate, force: bool = False
+) -> None:
+    """Write the named fields inside a transaction the caller owns. A score
+    written, cleared or turned around here also moves the bracket, and `force`
+    allows a change that loses a later result."""
+    row = Series.get_by_id(session, series_id)
+    if not row:
+        raise NotFoundError("Series not found")
+    archived = select(col(KothHistorySeries.series_id)).where(
+        col(KothHistorySeries.series_id) == series_id
+    )
+    if session.scalar(archived) is not None:
+        raise BadRequestError("An archived series keeps its source result")
+    was_scored = stage_engine.scored(row)
+    was_slot = stage_engine.won_slot(row)
+    Series.update_object(session, row, **series.model_dump(exclude_unset=True))
+    both_scores(row, stage_engine.series_wins(session, row))
+    in_season(row)
+    derived.clear_kept_off_race(session, row)
+    stage_engine.after_score(session, row, was_scored, was_slot, force)
+
+
 class SeriesService:
     def add(self, series: SeriesCreate) -> SeriesPublic:
         with Session.begin() as session:
@@ -78,25 +101,8 @@ class SeriesService:
     def update(
         self, series_id: int, series: SeriesUpdate, force: bool = False
     ) -> SeriesPublic:
-        """Write the named fields. A score written, cleared or turned around
-        here also moves the bracket, and `force` allows a change that loses a
-        later result."""
         with Session.begin() as session:
-            row = Series.get_by_id(session, series_id)
-            if not row:
-                raise NotFoundError("Series not found")
-            archived = select(col(KothHistorySeries.series_id)).where(
-                col(KothHistorySeries.series_id) == series_id
-            )
-            if session.scalar(archived) is not None:
-                raise BadRequestError("An archived series keeps its source result")
-            was_scored = stage_engine.scored(row)
-            was_slot = stage_engine.won_slot(row)
-            Series.update_object(session, row, **series.model_dump(exclude_unset=True))
-            both_scores(row, stage_engine.series_wins(session, row))
-            in_season(row)
-            derived.clear_kept_off_race(session, row)
-            stage_engine.after_score(session, row, was_scored, was_slot, force)
+            update_in(session, series_id, series, force)
         return self.get(series_id)
 
     def delete(self, series_id: int) -> None:

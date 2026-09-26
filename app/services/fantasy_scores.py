@@ -7,25 +7,29 @@ same scores for one team, with the per-part breakdown the page reads.
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy.orm import Session as OrmSession
+from sqlalchemy.orm import joinedload, selectinload
 
 from app.core import fantasy
-from app.core.db import Session
+from app.core.db import Session, rel
+from app.core.exceptions import NotFoundError
 from app.core.query import QueryUtil
+from app.models.fantasy_team import FantasyTeam
+from app.models.relationships import DBFantasyTeamPlayer
 from app.models.season_info import SeasonInfoPublic
 from app.models.team import Team, TeamPublic
 from app.models.team_season import DBTeamSeason
+from app.models.team_summary import TeamSummaryPublic
+from app.models.user import UserSummaryPublic
 from app.services import derived
 from app.services.fantasy_bets import FantasyBetService
-from app.services.fantasy_teams import FantasyTeamService
 from app.services.ladder import team_achievement_points
 
 if TYPE_CHECKING:
-    from app.models.fantasy_team import FantasyTeamPublic
     from app.models.season import SeasonPublic
 
 
 def _drafted_standing(
-    session: OrmSession, fantasy_team: "FantasyTeamPublic", season: "SeasonPublic"
+    session: OrmSession, fantasy_team: FantasyTeam, season: "SeasonPublic"
 ) -> fantasy.Standing | None:
     """What the drafted team stands at in the season, derived for that season
     alone; none when the team did not enter it."""
@@ -35,7 +39,7 @@ def _drafted_standing(
     ):
         return None
     team = TeamPublic(
-        **drafted_team.model_dump(),
+        **TeamSummaryPublic.from_team(drafted_team).model_dump(),
         seasons_info=[SeasonInfoPublic(season_id=season.id)],
     )
     derived.fill_standings(session, [team])
@@ -51,7 +55,7 @@ def _drafted_standing(
 
 
 def _grind(
-    session: OrmSession, fantasy_team: "FantasyTeamPublic", season: "SeasonPublic"
+    session: OrmSession, fantasy_team: FantasyTeam, season: "SeasonPublic"
 ) -> fantasy.Grind | None:
     """The grind pick of the fantasy team, with the name of the team it picked.
 
@@ -74,16 +78,32 @@ def _grind(
 
 
 def team_score_breakdown(
-    fantasy_team_service: FantasyTeamService,
     fantasy_bet_service: FantasyBetService,
     fantasy_team_id: int,
     season: "SeasonPublic",
 ) -> dict[str, Any]:
     """How a fantasy team's score was calculated, component by component."""
-    # get raises NotFoundError for an unknown id.
-    fantasy_team = fantasy_team_service.get(fantasy_team_id)
-
-    with Session.begin() as session:
+    # A read that writes nothing, so the rows stay readable once it closes
+    with Session() as session:
+        fantasy_team = session.get(
+            FantasyTeam,
+            fantasy_team_id,
+            options=(
+                joinedload(rel(FantasyTeam.drafted_team)),
+                selectinload(rel(FantasyTeam.drafted_players)).joinedload(
+                    rel(DBFantasyTeamPlayer.users)
+                ),
+            ),
+        )
+        if not fantasy_team:
+            raise NotFoundError("Fantasy Team not found")
+        drafted_players = [
+            UserSummaryPublic.from_user(dp.users) for dp in fantasy_team.drafted_players
+        ]
+        # A drafted player scores on the race he registered on for the season
+        derived.fill_user_signup_races(
+            session, [(player, fantasy_team.season_id) for player in drafted_players]
+        )
         series_by_week = derived.fantasy_series(session, {season.id}).get(season.id, {})
         grind = _grind(session, fantasy_team, season)
         standing = _drafted_standing(session, fantasy_team, season)
@@ -98,7 +118,7 @@ def team_score_breakdown(
     scores = fantasy.team_scores(
         drafted_players=[
             fantasy.Player(player.id, player.name, fantasy.race_value(player.race))
-            for player in fantasy_team.drafted_players
+            for player in drafted_players
         ],
         drafted_race=fantasy.race_value(fantasy_team.drafted_race),
         standing=standing,
@@ -114,7 +134,7 @@ def team_score_breakdown(
         include_breakdown=True,
     )
 
-    drafted_race = fantasy_team.drafted_race
+    drafted_race = fantasy.race_value(fantasy_team.drafted_race)
     race_total_points = race_points.get(drafted_race, 0)
     drafted_race_weekly = race_weekly_details.get(drafted_race, [])
     for detail in drafted_race_weekly:

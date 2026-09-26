@@ -319,7 +319,8 @@ def test_fantasy_teams_list_keeps_every_key_with_empty_collections(
     assert team["captain"]["name"]
     assert team["season"]["name"]
     assert team["drafted_team"]["name"]
-    assert team["captain"]["signup_seasons"] == []
+    # The captain is the player summary, which holds no signups
+    assert "signup_seasons" not in team["captain"]
     assert "maps" not in team["season"]
     assert "player_by_season" not in team["drafted_team"]
     assert "seasons_info" not in team["drafted_team"]

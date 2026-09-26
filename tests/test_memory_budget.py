@@ -1,6 +1,6 @@
 """Pin the peak memory one fantasy bets list answer costs.
 
-FantasyBet.list_eager_options and the reduced builders decide the cost,
+FantasyBet.loads and the player summary builder decide the cost,
 and the cost per bet is flat: it does not grow with the seasons a
 player signed up for, the stats the player carries or the maps a season
 holds. A collection put back into the list serialization multiplies the
