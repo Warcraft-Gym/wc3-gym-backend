@@ -23,7 +23,7 @@ from app.models.types import (
     UTCDateTime,
     utcnow,
 )
-from app.models.user import UserPublic
+from app.models.user import UserSummaryPublic
 
 
 class EventEntrant(DBModel, table=True):
@@ -146,7 +146,7 @@ class EventEntrantPublic(SQLModel):
 
     id: int
     event_id: int
-    user: UserPublic | None = None
+    user: UserSummaryPublic | None = None
     team: TeamReduced | None = None
     race: Annotated[str | None, EnumValue] = None
     note: str | None = None

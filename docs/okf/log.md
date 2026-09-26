@@ -1,5 +1,9 @@
 # Bundle history
 
+## 2026-09-27
+
+* **Add**: [Response shapes](api/response-shapes.md). A player inside another answer is `UserSummaryPublic`, whose `record` is the one of the read's event and whose `gnl_stats` holds that one entry; the series, draft and bet writes answer through their single read.
+
 ## 2026-09-26
 
 * **Update**: the ladder summary `race_mmrs` and `main_race` is read in SQL, one row per player and race, one statement per answer; no read loads the raw `w3cstats` rows for it.

@@ -89,11 +89,12 @@ from app.models.team import Team
 from app.models.team_reduced import TeamReduced
 from app.models.team_season import DBTeamSeason
 from app.models.types import utcnow
-from app.models.user import User, UserPublic
+from app.models.user import User, UserSummaryPublic
 from app.models.user_team_season import DBUserTeamSeason
 from app.models.w3c_stats import W3CStats, W3CStatsPublic
 from app.services import stage_engine
 from app.services.battle_tags import attach_tag, person_by_tag
+from app.services.users import summary_loads
 from app.services.w3c_stats import in_window, summarize, w3c_season, window
 
 # The shape of a battle tag: a name, then # and the player's number
@@ -1412,7 +1413,7 @@ def _entrant_publics(
     """
     team_ids = {row.team_id for row in rows if row.team_id}
     season = w3c_season(session)
-    users = _users_for(session, rows, season)
+    users = _users_for(session, rows, season, event.id)
     teams = {
         team.id: team
         for team in session.scalars(select(Team).where(col(Team.id).in_(team_ids)))
@@ -1422,19 +1423,19 @@ def _entrant_publics(
 
 
 def _users_for(
-    session: OrmSession, rows: Sequence[EventEntrant], current: int
+    session: OrmSession,
+    rows: Sequence[EventEntrant],
+    current: int,
+    event_id: int | None = None,
 ) -> dict[int | None, User]:
-    """The players behind those entrant rows, with the window W3C stats their MMR reads."""
+    """The players behind those entrant rows, with the window W3C stats their
+    MMR reads and the summary rows of `event_id`."""
     user_ids = {row.user_id for row in rows if row.user_id}
     return {
         user.id: user
         for user in session.scalars(
             select(User)
-            .options(
-                selectinload(rel(User.w3c_stats).and_(in_window(current))),
-                noload(rel(User.team_seasons)),
-                noload(rel(User.signup_seasons)),
-            )
+            .options(*summary_loads(event_id, window=current))
             .where(col(User.id).in_(user_ids))
         ).unique()
     }
@@ -1671,12 +1672,14 @@ def _from_previous_stage(
     ]
 
 
-def _summarized(user: User | None, current: int) -> UserPublic | None:
+def _summarized(
+    user: User | None, current: int, event_id: int | None
+) -> UserSummaryPublic | None:
     """The user of an entrant row, with his ladder summary from the window rows
     _users_for loaded for his rating."""
     if user is None:
         return None
-    public = UserPublic.from_user(user)
+    public = UserSummaryPublic.from_user(user, event_id)
     rows = [W3CStatsPublic.model_validate(stat) for stat in user.w3c_stats]
     public.race_mmrs, public.main_race = summarize(rows, current)
     return public
@@ -1703,7 +1706,7 @@ def _entrant_public(
     return EventEntrantPublic(
         id=ident(row),
         event_id=row.event_id,
-        user=_summarized(user, season),
+        user=_summarized(user, season, event.id),
         team=TeamReduced.from_team(team) if team else None,
         race=row.race,
         note=row.note,

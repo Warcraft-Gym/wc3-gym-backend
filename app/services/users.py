@@ -8,7 +8,7 @@ from sqlalchemy import ColumnElement, Select, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as OrmSession
 from sqlalchemy.orm import noload, selectinload
-from sqlalchemy.orm.interfaces import ORMOption
+from sqlalchemy.orm.strategy_options import _AbstractLoad
 from sqlmodel import col
 
 from app.core.battle_tags import STAND_IN_ID_PREFIX, has_login, is_real_tag
@@ -33,6 +33,7 @@ from app.models.user import (
     UserUpdate,
 )
 from app.models.user_battle_tag import MergePlan, UserBattleTag
+from app.models.user_team_season import DBUserTeamSeason
 from app.models.w3c_stats import (
     W3CStats,
     W3CStatsCreate,
@@ -46,7 +47,7 @@ from app.services.battle_tags import (
     set_active_tag,
 )
 from app.services.w3c import REQUEST_TIMEOUT, W3CService
-from app.services.w3c_stats import fill, w3c_season
+from app.services.w3c_stats import fill, in_window, w3c_season
 
 if TYPE_CHECKING:
     from app.services.settings import SettingsService
@@ -62,17 +63,43 @@ W3C_SYNC_WORKERS = 4
 SYNC_MAX_AGE = timedelta(minutes=10)
 
 
-def _list_options() -> tuple[ORMOption, ...]:
-    """The list row has no gnl_stats, so the link rows stay out; the ladder
-    summary is read on its own."""
+def summary_loads(
+    event_id: int | None, *, signups: bool = False, window: int | None = None
+) -> tuple[_AbstractLoad, ...]:
+    """The loads of a player summary, relative to a User: the tags, and the
+    team row of `event_id` alone, none without one. `signups` adds the signups
+    a list row names; `window` loads the W3C rows of that rating window."""
+    team_seasons = rel(User.team_seasons)
+    signup_seasons = rel(User.signup_seasons)
+    w3c_stats = rel(User.w3c_stats)
     return (
-        noload(rel(User.team_seasons)),
-        noload(rel(User.w3c_stats)),
-        selectinload(rel(User.signup_seasons)).joinedload(
-            rel(DBUserSeasonSignup.season)
-        ),
+        selectinload(team_seasons.and_(col(DBUserTeamSeason.season_id) == event_id))
+        if event_id is not None
+        else noload(team_seasons),
         selectinload(rel(User.battle_tags)),
+        selectinload(signup_seasons).joinedload(rel(DBUserSeasonSignup.season))
+        if signups
+        else noload(signup_seasons),
+        selectinload(w3c_stats.and_(in_window(window)))
+        if window is not None
+        else noload(w3c_stats),
     )
+
+
+def load_players(
+    session: OrmSession, user_ids: Iterable[int | None], event_id: int | None
+) -> None:
+    """Read those players again with the rows of their summary. The caller
+    holds them through a relation it joined bare, so the rows land on the
+    objects that relation answers."""
+    wanted = {user_id for user_id in user_ids if user_id}
+    if wanted:
+        session.scalars(
+            select(User)
+            .options(*summary_loads(event_id))
+            .where(col(User.id).in_(wanted))
+            .execution_options(populate_existing=True)
+        ).all()
 
 
 def _list_publics(
@@ -301,7 +328,7 @@ class UserService:
             # Offset paging is deterministic only with a fixed order
             statement = (
                 select(User)
-                .options(*_list_options())
+                .options(*summary_loads(None, signups=True))
                 .where(filter)
                 .order_by(col(User.id))
                 .offset(offset)
@@ -349,7 +376,7 @@ class UserService:
             # Offset paging is deterministic only with a fixed order
             statement = (
                 select(User)
-                .options(*_list_options())
+                .options(*summary_loads(None, signups=True))
                 .where(*filters)
                 .order_by(col(User.id))
                 .offset(offset)

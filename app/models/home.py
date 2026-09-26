@@ -13,7 +13,7 @@ from app.models.base import PublicModel
 from app.models.series import SeriesPublic
 from app.models.series_cast import CastPublic
 from app.models.team_reduced import TeamReduced
-from app.models.user import UserPublic
+from app.models.user import UserSummaryPublic
 
 
 class HomePlayer(PublicModel):
@@ -109,7 +109,7 @@ class HomeSeries(PublicModel):
 
 
 def _side(
-    player: UserPublic | None, race: str | None, mmr: int | None
+    player: UserSummaryPublic | None, race: str | None, mmr: int | None
 ) -> HomePlayer | None:
     """The player of one side, reduced to the four fields a card prints."""
     if player is None:

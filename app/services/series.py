@@ -10,6 +10,7 @@ from app.core.exceptions import BadRequestError, NotFoundError
 from app.core.ordering import SortOrder, ordered
 from app.core.query import QueryElement, QueryUtil
 from app.core.scoring import recordable, wins_needed
+from app.models.base import ident
 from app.models.event_history import KothHistorySeries
 from app.models.match import Match
 from app.models.series import (
@@ -21,6 +22,7 @@ from app.models.series import (
     SeriesUpdate,
 )
 from app.services import derived, series_rules, stage_engine
+from app.services.users import load_players
 from app.services.w3c_stats import fill, w3c_season
 
 
@@ -57,21 +59,21 @@ def in_season(row: Series) -> None:
         )
 
 
-def add_in(session: OrmSession, series: SeriesCreate) -> SeriesPublic:
-    """Write one series inside a transaction the caller owns and opened."""
+def add_in(session: OrmSession, series: SeriesCreate) -> int:
+    """Write one series inside a transaction the caller owns and opened, and
+    answer its id."""
     row = Series.add(session, series.model_dump())
     both_scores(row, stage_engine.series_wins(session, row))
     in_season(row)
     derived.clear_kept_off_race(session, row)
-    public = SeriesPublic.from_series(row)
-    derived.fill_series(session, [public])
-    return public
+    return ident(row)
 
 
 class SeriesService:
     def add(self, series: SeriesCreate) -> SeriesPublic:
         with Session.begin() as session:
-            return add_in(session, series)
+            series_id = add_in(session, series)
+        return self.get(series_id)
 
     def update(
         self, series_id: int, series: SeriesUpdate, force: bool = False
@@ -95,16 +97,15 @@ class SeriesService:
             in_season(row)
             derived.clear_kept_off_race(session, row)
             stage_engine.after_score(session, row, was_scored, was_slot, force)
-            public = SeriesPublic.from_series(row)
-            derived.fill_series(session, [public])
-            return public
+        return self.get(series_id)
 
     def delete(self, series_id: int) -> None:
         with Session.begin() as session:
             Series.delete(session, series_id)
 
     def get(self, series_id: int) -> SeriesPublic:
-        """One series; its players carry the ladder summary."""
+        """One series; its players carry the ladder summary and their record
+        in its event. Every series write answers through this read."""
         with Session.begin() as session:
             current = w3c_season(session)
             series = session.scalars(
@@ -114,7 +115,10 @@ class SeriesService:
             ).first()
             if not series:
                 raise NotFoundError("Series not found")
-            public = SeriesPublic.from_series(series)
+            event = series_rules.series_event(session, series)
+            event_id = event.id if event else None
+            load_players(session, (series.player1_id, series.player2_id), event_id)
+            public = SeriesPublic.from_series(series, event_id)
             derived.fill_series(session, [public])
             fill(session, [public.player1, public.player2], current)
             return public
@@ -148,7 +152,7 @@ class SeriesService:
                 .limit(limit)
             )
             series_list = session.scalars(statement).all()
-            result = [SeriesPublic.from_series_reduced(s) for s in series_list]
+            result = [SeriesPublic.from_series(s) for s in series_list]
             events = derived.fill_series(session, result)
             derived.fill_mmrs(session, result, events)
             return result
@@ -186,7 +190,7 @@ class SeriesService:
             series_list = Series.search_for_season_and_playday(
                 session, season_id, playday, filter, limit=limit, offset=offset
             )
-            result = [SeriesPublic.from_series_reduced(s) for s in series_list]
+            result = [SeriesPublic.from_series(s) for s in series_list]
             events = derived.fill_series(session, result)
             derived.fill_mmrs(session, result, events)
             return result
@@ -216,7 +220,7 @@ class SeriesService:
                 sort=sort,
                 order=order,
             )
-            result = [SeriesPublic.from_series_reduced(s) for s in series_list]
+            result = [SeriesPublic.from_series(s) for s in series_list]
             known = series_rules.from_loaded_season(series_list)
             events = derived.fill_series(session, result, known)
             derived.fill_mmrs(session, result, events)

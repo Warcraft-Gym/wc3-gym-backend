@@ -48,7 +48,7 @@ from app.services import ladder_maps
 from app.services.ladder import _w3c_seasons_for, mmr_on
 from app.services.maps import MapService
 from app.services.series_veto import check_order
-from app.services.users import UserService
+from app.services.users import UserService, summary_loads
 from app.services.w3c_stats import fill, w3c_season
 
 logger = logging.getLogger(__name__)
@@ -616,21 +616,14 @@ class SeasonService:
                 raise NotFoundError("Season not found")
 
             current = w3c_season(session)
-            # The signup row has no gnl_stats and reads its ladder summary on
-            # its own, so the link rows and W3C rows stay out
+            # The ladder summary is read on its own; the edit dialog of the
+            # assign page lists every season of the player
             statement = (
                 select(DBUserSeasonSignup)
                 .options(
-                    joinedload(rel(DBUserSeasonSignup.user)).noload(
-                        rel(User.team_seasons)
-                    ),
-                    joinedload(rel(DBUserSeasonSignup.user)).noload(
-                        rel(User.w3c_stats)
-                    ),
-                    # The edit dialog of the assign page lists every season of the player
-                    joinedload(rel(DBUserSeasonSignup.user))
-                    .selectinload(rel(User.signup_seasons))
-                    .joinedload(rel(DBUserSeasonSignup.season)),
+                    joinedload(rel(DBUserSeasonSignup.user)).options(
+                        *summary_loads(None, signups=True)
+                    )
                 )
                 .where(col(DBUserSeasonSignup.season_id) == season_id)
                 # Offset paging is deterministic only with a fixed order

@@ -1,5 +1,5 @@
 import logging
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import Session as OrmSession
@@ -33,6 +33,7 @@ from app.models.types import utcnow
 from app.models.user import User
 from app.services import derived
 from app.services import series as series_writer
+from app.services.users import load_players
 
 logger = logging.getLogger(__name__)
 
@@ -238,6 +239,22 @@ def _stage_max_mmr_difference(session: OrmSession, event_id: int) -> int | None:
     return stage.max_mmr_difference or MAX_MMR_DIFFERENCE
 
 
+def _publics(
+    session: OrmSession, rows: Sequence[DraftSeries]
+) -> list[DraftSeriesPublic]:
+    """The drafts of one match, each player with his record in its season."""
+    if not rows:
+        return []
+    load_players(
+        session,
+        (player for row in rows for player in (row.player1_id, row.player2_id)),
+        rows[0].match.season_id if rows[0].match else None,
+    )
+    result = [DraftSeriesPublic.from_draft_series(row) for row in rows]
+    derived.fill_signup_races(session, result)
+    return result
+
+
 class DraftSeriesService:
     def add(
         self, draft_series: DraftSeriesCreate, user_id: int | None = None
@@ -255,9 +272,8 @@ class DraftSeriesService:
                 },
             )
             clear_ready(session, row.match_id)
-            public = DraftSeriesPublic.from_draft_series(row)
-            derived.fill_signup_races(session, [public])
-            return public
+            draft_series_id = ident(row)
+        return self.get(draft_series_id)
 
     def update(
         self,
@@ -276,9 +292,7 @@ class DraftSeriesService:
             if not row:
                 raise NotFoundError("Draft series not found")
             clear_ready(session, row.match_id)
-            public = DraftSeriesPublic.from_draft_series(row)
-            derived.fill_signup_races(session, [public])
-            return public
+        return self.get(draft_series_id)
 
     def delete(self, draft_series_id: int) -> None:
         with Session.begin() as session:
@@ -295,9 +309,7 @@ class DraftSeriesService:
             ).first()
             if not draft_series:
                 raise NotFoundError("Draft series not found")
-            public = DraftSeriesPublic.from_draft_series(draft_series)
-            derived.fill_signup_races(session, [public])
-            return public
+            return _publics(session, [draft_series])[0]
 
     def get_by_match_id(
         self, match_id: int, limit: int | None = None, offset: int = 0
@@ -312,12 +324,7 @@ class DraftSeriesService:
                 .offset(offset)
                 .limit(limit)
             )
-            result = [
-                DraftSeriesPublic.from_draft_series(row)
-                for row in session.scalars(statement).all()
-            ]
-            derived.fill_signup_races(session, result)
-            return result
+            return _publics(session, session.scalars(statement).all())
 
     def delete_by_match_id(self, match_id: int) -> None:
         """Delete all draft series for a given match"""
@@ -355,7 +362,8 @@ class DraftSeriesService:
             session.flush()
             if replaced_id is not None:
                 Series.delete(session, replaced_id)
-            return series_writer.add_in(session, create)
+            series_id = series_writer.add_in(session, create)
+        return series_writer.SeriesService().get(series_id)
 
     def replace_preview(self, draft_series_id: int) -> ReplacePreviewPublic:
         """What promoting this draft takes away: the booked time and the veto."""

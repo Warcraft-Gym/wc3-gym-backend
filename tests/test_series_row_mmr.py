@@ -1,6 +1,6 @@
 """The reduced series lists carry the W3C rating of both sides.
 
-`SeriesPublic.from_series_reduced` carries no ladder summary, so the season
+A listed `SeriesPublic` carries no ladder summary, so the season
 list (the upcoming page) and `GET /player-series` (the round cards of the
 player page) hold the rating on the row itself. On a running event the rule
 is the one the stage rows and the entrant lists use: the newest row of the live

@@ -10,7 +10,7 @@ from app.core.config import frontend_url
 from app.core.db import Session
 from app.models.map import Map
 from app.models.series import SeriesPublic
-from app.models.user import UserPublic
+from app.models.user import UserSummaryPublic
 from app.services.commands.base import (
     PRIVATE,
     PUBLIC,
@@ -45,7 +45,7 @@ def picked(payload: dict[str, Any], services: Services) -> SeriesPublic | None:
     )
 
 
-def ping(player: UserPublic | None) -> str:
+def ping(player: UserSummaryPublic | None) -> str:
     """The player pinged, or their name when the account has no Discord id."""
     if player and player.discordId:
         return f"<@{player.discordId}>"

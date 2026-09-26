@@ -1,12 +1,16 @@
 """Pin how many statements one series, bets or career stats answer costs.
 
-Series._eager_options, DraftSeries._eager_options,
-FantasyBet.list_eager_options and
-PlayerCareerStats.eager_options decide the count, and the count is a
-constant: it does not grow with the number of w3c_stats, team_seasons or
-season signups a player carries, nor with the number of career rows. A
-lazy load added to the serialization raises the count and fails a test
-here.
+Series._eager_options, DraftSeries._eager_options, FantasyBet.eager_options,
+FantasyBet.list_eager_options and PlayerCareerStats.eager_options decide the
+count, and the count is a constant: it does not grow with the number of
+w3c_stats, team_seasons or season signups a player carries, nor with the
+number of career rows. A lazy load added to the serialization raises the count
+and fails a test here.
+
+A single series, draft or bet read joins its players bare, then reads them
+again with app.services.users.summary_loads: one statement for the players,
+one for their team row in the read's event and one for their tags. A write
+answers through the same read after its commit.
 
 Two tests layer raiseload on the paths the options cover, so an
 unintended lazy load on those paths raises instead of passing silently.
@@ -82,15 +86,17 @@ from sqlalchemy.orm import joinedload
 from app.core.db import Session, rel
 from app.core.query import QueryUtil
 from app.models.base import ident
-from app.models.draft_series import DraftSeries
+from app.models.draft_series import DraftSeries, DraftSeriesCreate
 from app.models.enums import Race
+from app.models.event_entrant import EventEntrant
+from app.models.fantasy_bet import FantasyBetCreate
 from app.models.player_career_stats import (
     PlayerCareerStats,
     PlayerCareerStatsPublic,
 )
 from app.models.relationships import DBUserSeasonSignup
 from app.models.season import Season
-from app.models.series import Series, SeriesPublic
+from app.models.series import Series, SeriesCreate, SeriesPublic, SeriesUpdate
 from app.models.user import User
 from app.models.w3c_stats import W3CStats
 from app.services import derived
@@ -102,7 +108,7 @@ from app.services.player_career_stats import PlayerCareerStatsService
 from app.services.seasons import SeasonService
 from app.services.series import SeriesService
 from app.services.teams import TeamService
-from app.services.users import UserService
+from app.services.users import UserService, load_players
 
 STATS_PER_PLAYER = 8
 
@@ -166,13 +172,16 @@ def league(app: FastAPI, seeded: dict[str, Any]) -> dict[str, Any]:
     return seeded
 
 
-def test_get_series_costs_fifteen_statements(league: dict[str, Any]) -> None:
+def test_get_series_costs_fourteen_statements(league: dict[str, Any]) -> None:
     service = SeriesService()
     with count_statements() as tally:
         series = service.get(league["series_played_id"])
     assert series.player1 is not None
     assert series.player1.race_mmrs
-    assert tally[0] == 15
+    assert series.player1.record is not None
+    assert series.player1.record.season_id == league["season_id"]
+    assert series.player1.gnl_stats == [series.player1.record]
+    assert tally[0] == 14
 
 
 def test_search_for_season_costs_seven_statements(league: dict[str, Any]) -> None:
@@ -213,12 +222,15 @@ def test_the_season_record_costs_two_statements(league: dict[str, Any]) -> None:
     assert users[0].gnl_stats[0].games == 1
 
 
-def test_draft_series_by_match_costs_six_statements(league: dict[str, Any]) -> None:
+def test_draft_series_by_match_costs_five_statements(league: dict[str, Any]) -> None:
+    """The drafts, three for the player summaries and one for the signup races."""
     service = DraftSeriesService()
     with count_statements() as tally:
         draft_list = service.get_by_match_id(league["match_id"])
     assert len(draft_list) == 1
-    assert tally[0] == 6
+    assert draft_list[0].player1 is not None
+    assert draft_list[0].player1.record is not None
+    assert tally[0] == 5
 
 
 def test_statement_count_holds_when_the_collections_grow(
@@ -237,14 +249,114 @@ def test_statement_count_holds_when_the_collections_grow(
     assert series.player1 is not None
     # one summary row per race, whatever the history holds
     assert len(series.player1.race_mmrs) == 1
-    assert tally[0] == 15
+    assert tally[0] == 14
 
 
-def test_options_cover_the_player_graph(league: dict[str, Any]) -> None:
-    """raiseload on both players, so a lazy load there raises.
+def test_a_series_write_answers_through_the_read(league: dict[str, Any]) -> None:
+    """A write pays its own statements, then the fourteen of the single read
+    after its commit, so the answer carries what GET /series/{id} carries."""
+    players = league["player_ids"]
+    service = SeriesService()
+    create = SeriesCreate(
+        match_id=league["match_id"],
+        player1_id=players[0],
+        player2_id=players[1],
+        host_player_id=players[0],
+    )
+    with count_statements() as tally:
+        added = service.add(create)
+    assert added.player1 is not None
+    assert added.player1.record is not None
+    assert added.player1.race_mmrs
+    assert tally[0] == 21
 
-    The wildcard covers the relationships of a player the options do not
-    name, so dropping any of the three player options fails this test.
+    with count_statements() as tally:
+        updated = service.update(
+            league["series_open_id"], SeriesUpdate(host_player_id=players[1])
+        )
+    assert updated.player2 is not None
+    assert updated.player2.record is not None
+    assert tally[0] == 24
+
+
+def test_a_draft_write_answers_through_the_read(league: dict[str, Any]) -> None:
+    """The write and its fixture check, then the read of one draft."""
+    players = league["player_ids"]
+    create = DraftSeriesCreate(
+        match_id=league["match_id"],
+        player1_id=players[1],
+        player2_id=players[2],
+        host_player_id=players[1],
+    )
+    with count_statements() as tally:
+        draft = DraftSeriesService().add(create)
+    assert draft.player1 is not None
+    assert draft.player1.record is not None
+    assert tally[0] == 7
+
+
+def test_one_bet_costs_thirteen_statements(league: dict[str, Any]) -> None:
+    """The bet with its series, match and season, the casts, the veto steps,
+    the season maps, three for the four player summaries, and the derived
+    points, signup races and season record of the series players."""
+    service = FantasyBetService()
+    bets, _ = service.get_all()
+    with count_statements() as tally:
+        bet = service.get(bets[0].id)
+    assert bet.user is not None
+    assert bet.user.record is not None
+    assert bet.series is not None
+    assert bet.series.player1 is not None
+    assert bet.series.player1.record is not None
+    assert bet.series.player1.record.games == 1
+    assert tally[0] == 13
+
+
+def test_a_bet_write_answers_through_the_read(league: dict[str, Any]) -> None:
+    """The settings, the write, then the thirteen of the single read."""
+    players = league["player_ids"]
+    create = FantasyBetCreate(
+        season_id=league["season_id"],
+        series_id=league["series_open_id"],
+        user_id=players[1],
+        winner_id=players[1],
+        bet_points=10,
+    )
+    with count_statements() as tally:
+        bet = FantasyBetService().add(create)
+    assert bet.winner is not None
+    assert bet.winner.record is not None
+    assert tally[0] == 14
+
+
+def test_the_entrants_read_costs_twelve_statements(
+    client: Client, league: dict[str, Any]
+) -> None:
+    """Four reads of the event, the entrants, two for the current W3C season,
+    the players, their team row in the event, their tags, their window W3C
+    rows and the teams. The count does not grow with the number of entrants."""
+    with Session.begin() as session:
+        for user_id in league["player_ids"]:
+            session.add(
+                EventEntrant(
+                    event_id=league["season_id"], user_id=user_id, race=Race.HU
+                )
+            )
+    with count_statements() as tally:
+        response = client.get(f"/events/{league['season_id']}/entrants")
+    assert response.status_code == 200
+    rows = response.json()
+    assert len(rows) == len(league["player_ids"])
+    assert all(row["user"]["record"]["season_id"] for row in rows)
+    assert tally[0] == 12
+    assert int(response.headers["X-DB-Rows"]) <= 28
+
+
+def test_summary_loads_cover_the_player_graph(league: dict[str, Any]) -> None:
+    """raiseload on both players, then their summary rows through load_players.
+
+    The wildcard covers the relationships of a player summary_loads does not
+    name, so a summary that reads one fails this test.
     """
     options = (
         *Series._eager_options(),
@@ -258,12 +370,16 @@ def test_options_cover_the_player_graph(league: dict[str, Any]) -> None:
             .where(col(Series.id) == league["series_played_id"])
         ).first()
         assert series is not None
-        public = SeriesPublic.from_series(series)
+        load_players(
+            session, (series.player1_id, series.player2_id), league["season_id"]
+        )
+        public = SeriesPublic.from_series(series, league["season_id"])
 
     assert public.player1 is not None
     assert not hasattr(public.player1, "w3c_stats")
+    assert not hasattr(public.player1, "signup_seasons")
     assert len(public.player1.gnl_stats) == 1
-    assert len(public.player1.signup_seasons) == 1
+    assert len(public.player1.tags) == 1
 
 
 def test_fantasy_bets_list_costs_ten_statements(league: dict[str, Any]) -> None:
@@ -620,7 +736,8 @@ def test_the_season_list_costs_the_same_when_seasons_grow(
 
 # Rows one call of each route reads on the league fixture, as X-DB-Rows reports it
 ROWS_PER_CALL = {
-    "/series/{series_played_id}": 16,
+    # The players twice, joined and then with their summary rows; one tag row each
+    "/series/{series_played_id}": 18,
     "/events/{season_id}/series": 11,
     "/fantasy/bets": 10,
     "/fantasy/teams": 10,
@@ -628,7 +745,8 @@ ROWS_PER_CALL = {
     "/stats/career/{player_id}": 3,
     "/events/{season_id}/teams": 30,
     "/events/{season_id}/teams/{team_a_id}": 28,
-    "/events/{season_id}/signups": 14,
+    # One tag row per player
+    "/events/{season_id}/signups": 18,
     # One tag row per player
     "/users": 18,
     # One summary row per race, and one row naming the current W3C season
@@ -650,11 +768,11 @@ def test_rows_per_call_stay_under_the_ceiling(
     assert int(response.headers["X-DB-Rows"]) <= ROWS_PER_CALL[route] + ROWS_MARGIN
 
 
-def test_the_signups_read_costs_six_statements(league: dict[str, Any]) -> None:
+def test_the_signups_read_costs_seven_statements(league: dict[str, Any]) -> None:
     """The season, two for the current W3C season, the signups with their users,
-    one statement for the signups of those users with their seasons and one for
-    their ladder summary. The count does not grow with the number of signups or
-    seasons."""
+    one statement for the signups of those users with their seasons, one for
+    their tags and one for their ladder summary. The count does not grow with
+    the number of signups or seasons."""
     service = SeasonService(
         user_app_service=UserService(), map_app_service=MapService()
     )
@@ -674,4 +792,5 @@ def test_the_signups_read_costs_six_statements(league: dict[str, Any]) -> None:
     seasons = {row.id: len(row.signup_seasons) for row in rows}
     assert seasons.pop(league["player_ids"][0]) == 2
     assert set(seasons.values()) == {1}
-    assert tally[0] == 6
+    assert all(len(row.tags) == 1 for row in rows)
+    assert tally[0] == 7
