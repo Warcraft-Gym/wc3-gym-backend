@@ -69,7 +69,7 @@ def all_events() -> list[KothEventSummary]:
 
 
 def active_event() -> KothEventPublic:
-    """The night that takes signups: the newest published one still open."""
+    """Tonight: the newest published night nobody closed yet."""
     with Session.begin() as session:
         row = night.last_night(session, open_only=True)
         if row is None:
@@ -170,7 +170,7 @@ def create_signups(
     """
     with Session.begin() as session:
         event_id = (
-            ident(night.tonight(session))
+            ident(night.taking_signups(session))
             if event_id is None
             else ident(_night(session, event_id))
         )
@@ -187,7 +187,7 @@ def withdraw(battle_tag: str, race: str | None = None) -> None:
     """
     named = _race(race)
     with Session.begin() as session:
-        event_id = ident(night.tonight(session))
+        event_id = ident(night.taking_signups(session))
         # Any tag the person holds withdraws them
         user = person_by_tag(session, battle_tag)
         if user is None:

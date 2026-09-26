@@ -306,6 +306,7 @@ def test_a_threshold_move_recuts_the_next_signup(
 def test_one_event_is_active_after_an_activation(
     client: Client, auth_headers: dict[str, str], koth: dict[str, Any]
 ) -> None:
+    client.post(f"/koth/nights/{koth['event_id']}/close", headers=auth_headers)
     second = client.post(
         "/koth/events",
         headers=auth_headers,
@@ -628,6 +629,7 @@ def test_the_admin_signup_lands_on_the_event_he_names(
     client: Client, koth: dict[str, Any], auth_headers: dict[str, str]
 ) -> None:
     """The admin adds a player to the event on screen, not to the open one."""
+    client.post(f"/koth/nights/{koth['event_id']}/close", headers=auth_headers)
     later = client.post(
         "/koth/events",
         headers=auth_headers,
@@ -642,11 +644,11 @@ def test_the_admin_signup_lands_on_the_event_he_names(
             "twitch_username": "player_three",
             "battle_tag": "P3#3333",
             "races": ["human"],
-            "event_id": later["id"],
+            "event_id": koth["event_id"],
         },
     )
 
     assert resp.status_code == 201, resp.text
-    assert [s["event_id"] for s in resp.json()] == [later["id"]]
-    open_night = client.get(f"/koth/events/{koth['event_id']}/signups").json()
+    assert [s["event_id"] for s in resp.json()] == [koth["event_id"]]
+    open_night = client.get(f"/koth/events/{later['id']}/signups").json()
     assert "P3#3333" not in [s["battle_tag"] for s in open_night]

@@ -25,7 +25,7 @@ from app.services.events import (
     _by_battle_tag,
     _stats_for,
 )
-from app.services.koth.night import tonight
+from app.services.koth.night import taking_signups
 from app.services.koth.signup import follow, sync_rating, unrated
 from app.services.w3c_stats import w3c_season
 
@@ -47,7 +47,7 @@ def signup(
     if not twitch or not battletag:
         raise BadRequestError("Missing required parameters: token, twitch, battletag")
     with Session.begin() as session:
-        event_id = ident(tonight(session))
+        event_id = ident(taking_signups(session))
     chosen = enter(event_id, battletag, race)
 
     with Session.begin() as session:

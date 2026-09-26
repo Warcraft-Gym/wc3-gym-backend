@@ -1,7 +1,7 @@
 """What an admin names to open and run a KOTH night, and what the board reads.
 
 The night itself is an event row; the board is the one read the run page and
-the public dashboard both draw, so nothing here is stored.
+the night page both draw, so nothing here is stored.
 """
 
 from datetime import datetime
@@ -134,7 +134,7 @@ class KothHistoricalSeries(SQLModel):
 
 
 class KothBracket(SQLModel):
-    """One bracket of the night as the run page and the dashboard draw it."""
+    """One bracket of the night as the run page and the night page draw it."""
 
     division_id: int
     name: str | None = None

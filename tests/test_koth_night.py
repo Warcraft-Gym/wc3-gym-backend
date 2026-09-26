@@ -142,7 +142,8 @@ def test_a_night_takes_the_bounds_of_the_night_before(
     client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
 ) -> None:
     """The bounds are named once; the next night reads them off the last one."""
-    open_night(client, auth_headers, lower_bounds=[0, 1500, 1800])
+    first = open_night(client, auth_headers, lower_bounds=[0, 1500, 1800])
+    client.post(f"/koth/nights/{first['id']}/close", headers=auth_headers)
     second = open_night(client, auth_headers, starts_at=LATER)
 
     assert [row["lower_bound"] for row in second["divisions"]] == [1800, 1500, 0]
@@ -282,6 +283,48 @@ def test_a_signup_with_no_night_open_is_refused(
     resp = sign_up(client, "Any#1001", "streamer", "human")
     assert resp.status_code == 400
     assert resp.json()["error"] == "No KOTH night is open"
+
+
+def test_a_night_with_signups_closed_stays_tonight_and_refuses_signups(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """Tonight is the night nobody closed; its signup flag only gates the doors."""
+    night = open_night(client, auth_headers)
+    resp = client.put(
+        f"/events/{night['id']}", json={"signups_open": False}, headers=auth_headers
+    )
+    assert resp.status_code == 200, resp.text
+
+    board = client.get("/koth/board")
+    assert board.status_code == 200, board.text
+    assert board.json()["night_id"] == night["id"]
+    chat = sign_up(client, "Any#1001", "streamer", "human")
+    assert chat.status_code == 400
+    assert chat.json()["error"] == "Signups are closed"
+    site = client.post(
+        "/koth/signups",
+        json={
+            "client_token": "",
+            "twitch_username": "streamer",
+            "battle_tag": "Any#1001",
+        },
+    )
+    assert site.status_code == 400
+    assert site.json()["error"] == "Signups are closed"
+
+
+def test_a_second_night_opens_only_after_the_open_one_closes(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    first = open_night(client, auth_headers)
+    resp = client.post("/koth/nights", json={"starts_at": LATER}, headers=auth_headers)
+    assert resp.status_code == 409
+    assert resp.json()["error"] == "Close the open night first."
+
+    client.post(f"/koth/nights/{first['id']}/close", headers=auth_headers)
+    assert client.get("/koth/board").json()["error"] == "No KOTH night is open"
+    second = open_night(client, auth_headers, starts_at=LATER)
+    assert client.get("/koth/board").json()["night_id"] == second["id"]
 
 
 def test_a_koth_write_refuses_an_id_from_another_kind_of_event(

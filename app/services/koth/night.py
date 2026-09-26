@@ -2,9 +2,9 @@
 
 The night is an event of the KOTH league: one stage of format koth, best of
 one, and three divisions that are the brackets. Nothing new is stored for
-"tonight" or "finished": the night that takes signups is the newest published
-KOTH event whose signups stand open, and closing it deletes the series nobody
-played, so every series left carries a result.
+"tonight" or "finished": tonight is the newest published KOTH event nobody
+closed yet, and closing it deletes the series nobody played, so every series
+left carries a result. One night is open at a time.
 """
 
 from datetime import datetime
@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session as OrmSession
 from sqlmodel import col
 
 from app.core.db import Session
-from app.core.exceptions import BadRequestError, NotFoundError
+from app.core.exceptions import ApiError, BadRequestError, NotFoundError
 from app.models.base import ident
 from app.models.enums import EventKind, LeagueKind, SignupPolicy, StageFormat
 from app.models.event_division import EventDivision, EventDivisionWrite
@@ -48,6 +48,8 @@ def open_night(data: NightOpen) -> EventPublic:
             )
         if _named(session, name) is not None:
             raise BadRequestError(f"An event is already named {name}")
+        if last_night(session, open_only=True, published_only=False) is not None:
+            raise ApiError(409, {"error": "Close the open night first."})
     service = EventService()
     night = service.add(
         EventCreate(
@@ -103,15 +105,25 @@ def close_night(event_id: int) -> EventPublic:
 
 
 def tonight(session: OrmSession) -> Season:
-    """The night that takes signups: the newest published one still open."""
+    """The night that runs: the newest published one nobody closed yet."""
     night = last_night(session, open_only=True)
     if night is None:
         raise BadRequestError("No KOTH night is open")
     return night
 
 
-def last_night(session: OrmSession, open_only: bool = False) -> Season | None:
-    """The newest KOTH night, or the newest one that takes signups."""
+def taking_signups(session: OrmSession) -> Season:
+    """Tonight, refused while its signups stand closed."""
+    night = tonight(session)
+    if not night.signups_open:
+        raise BadRequestError("Signups are closed")
+    return night
+
+
+def last_night(
+    session: OrmSession, open_only: bool = False, published_only: bool = True
+) -> Season | None:
+    """The newest KOTH night, or the newest one nobody closed yet."""
     statement = (
         select(Season)
         .where(
@@ -121,9 +133,9 @@ def last_night(session: OrmSession, open_only: bool = False) -> Season | None:
         .order_by(col(Season.id).desc())
     )
     if open_only:
-        statement = statement.where(
-            col(Season.published).is_(True), col(Season.signups_open).is_(True)
-        )
+        statement = statement.where(col(Season.closed_at).is_(None))
+        if published_only:
+            statement = statement.where(col(Season.published).is_(True))
     return session.scalars(statement).first()
 
 
