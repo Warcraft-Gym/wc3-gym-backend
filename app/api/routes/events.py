@@ -2,7 +2,7 @@
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 
 from app.api.deps import (
     EventServiceDep,
@@ -10,6 +10,7 @@ from app.api.deps import (
     OptionalLogin,
     RequireLogin,
     UserServiceDep,
+    edge_cache,
     require_admin,
 )
 from app.api.search import SearchQuery
@@ -50,6 +51,7 @@ router = APIRouter(tags=["events"])
 def get_events(
     service: EventServiceDep,
     claims: OptionalLogin,
+    response: Response,
     kind: EventKind | None = None,
     league_id: int | None = None,
     published: bool | None = None,
@@ -61,6 +63,10 @@ def get_events(
     A draft reads for an admin only; every other caller sees the published
     events whatever the filter asks for.
     """
+    if claims is None:
+        # An anonymous caller always sees the published-only page; an admin's
+        # bearer never reaches the edge, so this never caches a draft.
+        edge_cache(response, 300, 3600)
     return service.get_all(
         kind=kind,
         league_id=league_id,

@@ -3,6 +3,7 @@
 ## 2026-09-26
 
 * **Add**: `egress_snapshot` and `egress_statement`. A daily job copies pg_stat_statements into the database and answers the rows and estimated egress since the run before, per statement, role and nesting level; `GET /jobs/egress-snapshots` lists the windows.
+* **Update**: an anonymous `GET /events` carries a public cache header; an admin's bearer never reaches the edge.
 
 ## 2026-09-25
 
