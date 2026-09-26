@@ -24,6 +24,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Session as OrmSession
 from sqlalchemy.orm import joinedload, noload, selectinload
+from sqlalchemy.orm.attributes import instance_state
 from sqlmodel import col
 
 from app.core.checkin_hint import availability_hints
@@ -158,10 +159,15 @@ def phase_of(
         return "running"
     if event.signups_open:
         return "signups_open"
-    if event.checkin_enabled and checkin_open(
-        event, event_rounds(session, ident(event))
-    ):
-        return "checkin"
+    if event.checkin_enabled:
+        # list reads load rounds; a bare event reads them here
+        rounds = (
+            event.rounds
+            if "rounds" not in instance_state(event).unloaded
+            else event_rounds(session, ident(event))
+        )
+        if checkin_open(event, rounds):
+            return "checkin"
     return "seeded"
 
 

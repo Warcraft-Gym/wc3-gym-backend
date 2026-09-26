@@ -180,7 +180,7 @@ class AvailabilityService:
                     ]
                 )
             session.flush()
-            return _season_rows(session, season, rounds, user_id)
+            return _season_rows(session, season, every, user_id)
 
 
 def team_rows(
