@@ -1,5 +1,5 @@
-"""The egress monitor: after each daily snapshot, the cycle's level, the database size and their
-Discord posts.
+"""The egress monitor: after each daily snapshot, the cycle's level, the database size, the
+Vercel usage and their Discord posts.
 
 The builders are pure and return webhook payloads; `post` sends one and never fails the job.
 An alert posts once per change of level, so each check's state row is read and written on every run.
@@ -38,6 +38,15 @@ TOP_ROUTES = 3
 DB_KEY = "db_size"
 DB_CAP_MB = 500.0  # the Supabase Free database size
 DB_RED = 0.9  # a database over this share of DB_CAP_MB alerts
+VERCEL_KEY = "vercel"
+VERCEL_USAGE_API = "https://api.vercel.com/v2/usage"
+# Hobby has no billing cycle: its limits hold over a rolling 30 days
+VERCEL_WINDOW = timedelta(days=30)
+VERCEL_INVOCATIONS = 1_000_000  # Vercel Hobby included usage, rolling 30 days
+VERCEL_GB_HOURS = 360.0  # Hobby's Provisioned Memory (vercel.com/docs/functions/usage-and-pricing); the API's gb_hours may count less
+VERCEL_REQUESTS = 1_000_000  # Vercel Hobby included usage, rolling 30 days
+VERCEL_BANDWIDTH_GB = 100.0  # Vercel Hobby included usage, rolling 30 days
+VERCEL_RED = 0.8  # any meter at this share of its included usage alerts
 
 RED, AMBER, GREEN, BLUE = 0xD63232, 0xF0A04B, 0x36A64F, 0x4F95D8
 SILENT = 1 << 12  # SUPPRESS_NOTIFICATIONS: the post shows without a notification
@@ -423,6 +432,129 @@ def db_level(mb: float) -> Level:
     return Level.RED if mb > DB_RED * DB_CAP_MB else Level.NORMAL
 
 
+@dataclass(frozen=True)
+class Vercel:
+    """The team's usage summed over the rolling window."""
+
+    invocations: int
+    gb_hours: float
+    requests: int
+    hits: int
+    bandwidth_bytes: int
+
+    @property
+    def meters(self) -> list[tuple[str, str, float]]:
+        """Each meter's label, figure and share of its included usage."""
+        gb = self.bandwidth_bytes / 1e9
+        return [
+            (
+                "Invocations",
+                f"{self.invocations:,}",
+                self.invocations / VERCEL_INVOCATIONS,
+            ),
+            (
+                "Function GB-hours",
+                f"{self.gb_hours:,.1f}",
+                self.gb_hours / VERCEL_GB_HOURS,
+            ),
+            ("Requests", f"{self.requests:,}", self.requests / VERCEL_REQUESTS),
+            ("Bandwidth", f"{gb:,.2f} GB", gb / VERCEL_BANDWIDTH_GB),
+        ]
+
+    @property
+    def high(self) -> list[str]:
+        """The meters at VERCEL_RED or over, each with its share."""
+        return [
+            f"{label} at {share:.0%}"
+            for label, _, share in self.meters
+            if share >= VERCEL_RED
+        ]
+
+    @property
+    def level(self) -> Level:
+        return Level.RED if self.high else Level.NORMAL
+
+
+def vercel_lines(v: Vercel) -> str:
+    lines = [f"{label} {figure} · {share:.0%}" for label, figure, share in v.meters]
+    if v.requests:
+        lines.append(f"Cache hits {v.hits / v.requests:.0%}")
+    return "\n".join(lines)
+
+
+def vercel_alert(
+    v: Vercel, now: datetime, mention: str | None, links: dict[str, str] | None = None
+) -> dict[str, Any]:
+    """The red alert: a meter is at VERCEL_RED of its included usage."""
+    description = (
+        f"{' and '.join(v.high)} of the included usage over the last 30 days. "
+        "Hobby pauses the feature for 30 days when a limit is hit."
+    )
+    fields = [
+        field("Vercel, 30 days", vercel_lines(v), inline=False),
+        field("Since", stamp(now)),
+        field(
+            "Next step",
+            "Check which routes and functions drive the meter in the Vercel usage page. "
+            f"[Egress jobs]({JOBS_DOC})",
+            inline=False,
+        ),
+    ]
+    return message(
+        now,
+        RED,
+        "Vercel usage: near the included limit",
+        description,
+        fields,
+        mention=mention,
+        links=links,
+        ask="Vercel usage needs action today",
+        footer=MONITOR_FOOTER,
+    )
+
+
+def vercel_rejected_alert(
+    now: datetime, mention: str | None, links: dict[str, str] | None = None
+) -> dict[str, Any]:
+    """The token alert; it links the Vercel usage dashboard when that is set."""
+    links = links or {}
+    vercel = {k: v for k, v in links.items() if k == "Vercel usage"}
+    return message(
+        now,
+        RED,
+        "Vercel usage could not be read: token rejected",
+        "Vercel refused the token: it expired or was revoked. "
+        "Set `VERCEL_USAGE_TOKEN` to a new token scoped to the team.",
+        [field("Since", stamp(now))],
+        mention=mention,
+        links=vercel,
+        ask="Vercel usage needs action today",
+        footer=MONITOR_FOOTER,
+    )
+
+
+def vercel_recovery(
+    v: Vercel, was: str, since: datetime, now: datetime
+) -> dict[str, Any]:
+    """The silent all-clear after the usage was red or could not be read."""
+    red = was == Level.RED
+    return message(
+        now,
+        GREEN,
+        f"Vercel usage: {f'back under {VERCEL_RED:.0%}' if red else 'read again'}",
+        f"Every meter is under {VERCEL_RED:.0%} of its included usage.",
+        [
+            field("Vercel, 30 days", vercel_lines(v), inline=False),
+            field(
+                f"{'Red' if red else 'Unavailable'} for",
+                f"{duration(now - since)}, since {stamp(since)}",
+            ),
+        ],
+        silent=True,
+        footer=MONITOR_FOOTER,
+    )
+
+
 STATUS = {
     Level.NORMAL: (BLUE, "All meters normal."),
     Level.AMBER: (AMBER, "Yesterday was over the daily budget."),
@@ -436,9 +568,12 @@ def digest(
     links: dict[str, str] | None = None,
     db_mb: float | None = None,
     db_error: str | None = None,
+    vercel: Vercel | None = None,
+    vercel_error: str | None = None,
 ) -> dict[str, Any]:
     """The silent daily post with every meter; before the first window, the baseline note.
-    The database size shows when it was read or its read failed, and a red one turns the
+    The database size and the Vercel usage show when they were read or their read failed,
+    and a red one turns the
     digest red."""
     extra, alarms = [], []
     if db_mb is not None:
@@ -447,6 +582,14 @@ def digest(
             alarms.append("The database is near its size cap.")
     elif db_error is not None:
         extra.append(field("Database size", f"not read ({db_error})"))
+    if vercel is not None:
+        extra.append(field("Vercel, 30 days", vercel_lines(vercel), inline=False))
+        if vercel.level == Level.RED:
+            alarms.append("Vercel usage is near the included limit.")
+    elif vercel_error is not None:
+        extra.append(
+            field("Vercel, 30 days", f"not read ({vercel_error})", inline=False)
+        )
     if m.last is None:
         return message(
             m.now,
@@ -548,6 +691,64 @@ def database_mb() -> float | None:
     return None
 
 
+def vercel_usage(now: datetime) -> Vercel | Level | None:
+    """The team's usage over the rolling window from the Vercel API; UNAVAILABLE when the
+    token is rejected; None when VERCEL_USAGE_TOKEN or VERCEL_TEAM_ID is unset. Any other
+    failure raises to the run, which shows it in the digest."""
+    token = os.getenv("VERCEL_USAGE_TOKEN", "").strip()
+    team = os.getenv("VERCEL_TEAM_ID", "").strip()
+    if not token or not team:
+        return None
+    # The API answers 400 for a `to` in the future or a range over 31 days
+    end = now - timedelta(minutes=1)
+    params = {
+        "teamId": team,
+        "type": "requests",
+        "from": iso_ms(end - VERCEL_WINDOW),
+        "to": iso_ms(end),
+    }
+    response = requests.get(
+        VERCEL_USAGE_API,
+        params=params,
+        headers={"Authorization": f"Bearer {token}"},
+        timeout=10,
+    )
+    if response.status_code in (401, 403):
+        log.warning("vercel usage not read: token rejected %s", response.status_code)
+        return Level.UNAVAILABLE
+    response.raise_for_status()
+    days = response.json()["data"]
+    total = {name: sum(day.get(name) or 0 for day in days) for name in VERCEL_FIELDS}
+    return Vercel(
+        invocations=int(sum(total[f"function_invocation_{k}_count"] for k in OUTCOMES)),
+        gb_hours=float(
+            sum(total[f"function_execution_{k}_gb_hours"] for k in OUTCOMES[:3])
+        ),
+        requests=int(total["request_hit_count"] + total["request_miss_count"]),
+        hits=int(total["request_hit_count"]),
+        # In and out: https://vercel.com/docs/manage-cdn-usage#calculating-fast-data-transfer
+        bandwidth_bytes=int(
+            total["bandwidth_incoming_bytes"] + total["bandwidth_outgoing_bytes"]
+        ),
+    )
+
+
+OUTCOMES = ("successful", "error", "timeout", "throttle")
+VERCEL_FIELDS = (
+    *(f"function_invocation_{k}_count" for k in OUTCOMES),
+    *(f"function_execution_{k}_gb_hours" for k in OUTCOMES[:3]),
+    "request_hit_count",
+    "request_miss_count",
+    "bandwidth_incoming_bytes",
+    "bandwidth_outgoing_bytes",
+)
+
+
+def iso_ms(at: datetime) -> str:
+    """An ISO 8601 UTC time to the millisecond, as the Vercel API takes it."""
+    return at.astimezone(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
 def save(key: str, level: Level, since: datetime, now: datetime) -> None:
     """Store the level; `since` moves only when the level changes."""
     with Session.begin() as session:
@@ -572,17 +773,26 @@ def report(result: EgressSnapshotResult, now: datetime | None = None) -> None:
     now = now or utcnow()
     mention = mention_id()
     links = dashboards()
-    db_error = None
+    db_error = vercel_error = None
     try:
         db_mb = database_mb()
     except Exception as error:
         # A read that keeps failing shows in the digest; the log line carries the type only
         db_mb, db_error = None, type(error).__name__
         log.warning("database size not read: %s", db_error)
+    try:
+        usage = vercel_usage(now)
+    except Exception as error:
+        # The type and HTTP status only: the error text may carry the request and its token
+        status = getattr(getattr(error, "response", None), "status_code", None)
+        name = type(error).__name__
+        usage, vercel_error = None, f"{name} {status}" if status else name
+        log.warning("vercel usage not read: %s", vercel_error)
+    vercel = usage if isinstance(usage, Vercel) else None
     changes: list[Change] = []
     out: dict[str, Any] | None = None
     with Session() as session:
-        keys = [KEY, DB_KEY]
+        keys = [KEY, DB_KEY, VERCEL_KEY]
         found = session.scalars(
             select(MonitorState).where(col(MonitorState.key).in_(keys))
         )
@@ -613,7 +823,7 @@ def report(result: EgressSnapshotResult, now: datetime | None = None) -> None:
                     lambda s: recovery(m, s.level, s.since),
                 )
             )
-            out = digest(m, routes, links, db_mb, db_error)
+            out = digest(m, routes, links, db_mb, db_error, vercel, vercel_error)
         if db_mb is not None:
             mb = db_mb
             changes.append(
@@ -624,6 +834,28 @@ def report(result: EgressSnapshotResult, now: datetime | None = None) -> None:
                     now,
                     lambda: db_alert(mb, now, mention, links),
                     lambda s: db_recovery(mb, s.since, now),
+                )
+            )
+        if vercel is not None:
+            v = vercel
+            changes.append(
+                change(
+                    states.get(VERCEL_KEY),
+                    VERCEL_KEY,
+                    v.level,
+                    now,
+                    lambda: vercel_alert(v, now, mention, links),
+                    lambda s: vercel_recovery(v, s.level, s.since, now),
+                )
+            )
+        elif usage == Level.UNAVAILABLE:
+            changes.append(
+                change(
+                    states.get(VERCEL_KEY),
+                    VERCEL_KEY,
+                    Level.UNAVAILABLE,
+                    now,
+                    lambda: vercel_rejected_alert(now, mention, links),
                 )
             )
     for c in changes:

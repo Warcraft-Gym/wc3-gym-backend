@@ -243,6 +243,8 @@ FRONTEND_URL="http://localhost:5003"
 | `DEV_ALERTS_MENTION_USER_ID` | Optional Discord user id to tag on an alert; unset = no tag. Digits only, anything else is ignored | `123456789012345678` |
 | `DEV_ALERTS_SUPABASE_USAGE_URL` | Optional dashboard link shown on dev alerts; unset = no link. The alert and digest titles link to it. https only, anything else is ignored | `https://...` |
 | `DEV_ALERTS_VERCEL_USAGE_URL` | Optional dashboard link shown on dev alerts; unset = no link. https only, anything else is ignored | `https://...` |
+| `VERCEL_USAGE_TOKEN` | Optional Vercel token scoped to the team, read by the egress monitor for usage; unset = no Vercel meters. Needs `VERCEL_TEAM_ID` too | `vcp_...` |
+| `VERCEL_TEAM_ID` | Optional Vercel team id the egress monitor reads usage for; unset = no Vercel meters. Needs `VERCEL_USAGE_TOKEN` too | `team_...` |
 | `BLOB_STORE_ID` | The Vercel Blob store holding the team logos and map thumbnails: `gnl-media` in production, `gnl-media-staging` elsewhere. Set by the store connection | `store_...` |
 | `VERCEL_OIDC_TOKEN` | Local runs only: the OIDC token the blob calls authenticate with. On Vercel it arrives with each request. `vercel env pull` writes it; it lasts 12 hours | `eyJ...` |
 | `CLOUDFLARE_ACCOUNT_ID` | The Cloudflare account holding the replay bucket | `a1b2c3...` |
