@@ -89,3 +89,24 @@ def test_a_cast_has_no_discord_id_and_the_reminder_still_tags(
     series = SeriesService().get(series_id)
     content = reminder_card(series)["content"]
     assert content.startswith("<@2> <@") and "<@3>" in content
+
+
+def test_the_user_list_and_search_serve_the_discord_account_to_an_admin_only(
+    client: Client,
+    seeded: dict[str, Any],
+    auth_headers: dict[str, str],
+    member: Callable[..., dict[str, str]],
+) -> None:
+    def rows(headers: dict[str, str]) -> list[list[dict[str, Any]]]:
+        listed = client.get("/users", headers=headers)
+        found = client.post("/users/search?query=name == P1", headers=headers)
+        assert listed.status_code == 200 and found.status_code == 200, found.text
+        assert found.json()
+        return [listed.json(), found.json()]
+
+    for answer in rows(auth_headers):
+        p1 = next(row for row in answer if row["name"] == "P1")
+        assert (p1["discordId"], p1["discordTag"]) == ("1", "p1")
+    for headers in (member("2"), {}):
+        for answer in rows(headers):
+            assert all(bare(row) for row in answer)

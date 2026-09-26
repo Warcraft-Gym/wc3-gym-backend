@@ -255,6 +255,13 @@ class TrophyPublic(SQLModel):
     team_icon_url: str | None = None
 
 
+class UserMemberListPublic(UserListPublic):
+    """A list row read by an admin: the Discord account is served."""
+
+    discordTag: str | None = None
+    discordId: str | None = None
+
+
 class UserPublic(UserListPublic):
     gnl_stats: Annotated[list[UserTeamSeasonStatsPublic], NoneToList] = []
     # Derived by app.services.derived.fill_trophies; empty until it runs
