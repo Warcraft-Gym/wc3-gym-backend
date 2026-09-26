@@ -2,19 +2,20 @@
 
 The night is an event of the KOTH league: one stage of format koth, best of
 one, and three divisions that are the brackets. Nothing new is stored for
-"tonight" or "finished": the night that takes signups is the newest published
-KOTH event whose signups stand open, and closing it deletes the series nobody
-played, so every series left carries a result.
+"tonight" or "finished": tonight is the newest published KOTH event nobody
+closed that started less than a day ago, and closing it deletes the series
+nobody played, so every series left carries a result. One night is open at a
+time, and opening the next one closes a night that expired.
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import Select, func, select
 from sqlalchemy.orm import Session as OrmSession
 from sqlmodel import col
 
 from app.core.db import Session
-from app.core.exceptions import BadRequestError, NotFoundError
+from app.core.exceptions import ApiError, BadRequestError, NotFoundError
 from app.models.base import ident
 from app.models.enums import EventKind, LeagueKind, SignupPolicy, StageFormat
 from app.models.event_division import EventDivision, EventDivisionWrite
@@ -34,11 +35,21 @@ DEFAULT_BOUNDS = (0, 1450, 1600)
 LEAGUE_SHORT_NAME = "KOTH"
 BRACKETS = 3
 ADMIN = {"role": "admin"}
+# A night nobody closed stops being tonight this long after it starts
+NIGHT_EXPIRES_AFTER = timedelta(hours=24)
 
 
 def open_night(data: NightOpen) -> EventPublic:
     """Write tonight's night: the event, its koth stage and its brackets."""
     name = data.name or _in_words(data.starts_at)
+    with Session.begin() as session:
+        unclosed = _unclosed(session)
+        if unclosed is not None and is_tonight(unclosed):
+            raise ApiError(409, {"error": "Close the open night first."})
+        expired = ident(unclosed) if unclosed is not None else None
+    # A night that expired unclosed is closed now, so its series and awards settle
+    if expired is not None:
+        close_night(expired)
     with Session.begin() as session:
         league_id = _league(session)
         bounds = list(data.lower_bounds or _last_bounds(session) or DEFAULT_BOUNDS)
@@ -103,26 +114,55 @@ def close_night(event_id: int) -> EventPublic:
 
 
 def tonight(session: OrmSession) -> Season:
-    """The night that takes signups: the newest published one still open."""
+    """The night that runs: the newest published one nobody closed yet."""
     night = last_night(session, open_only=True)
     if night is None:
         raise BadRequestError("No KOTH night is open")
     return night
 
 
-def last_night(session: OrmSession, open_only: bool = False) -> Season | None:
-    """The newest KOTH night, or the newest one that takes signups."""
-    statement = (
-        select(Season)
-        .where(
-            col(Season.kind) == EventKind.koth,
-            ~col(Season.id).in_(select(col(KothHistoryEvent.event_id))),
-        )
-        .order_by(col(Season.id).desc())
+def taking_signups(session: OrmSession) -> Season:
+    """Tonight, refused while its signups stand closed."""
+    night = tonight(session)
+    if not night.signups_open:
+        raise BadRequestError("Signups are closed")
+    return night
+
+
+def is_tonight(night: Season) -> bool:
+    """Whether the night is still tonight: nobody closed it and it has not expired."""
+    return (
+        night.closed_at is None
+        and night.starts_at is not None
+        and night.starts_at > utcnow() - NIGHT_EXPIRES_AFTER
     )
+
+
+def _unclosed(session: OrmSession) -> Season | None:
+    """The night nobody closed, published or not, expired or not."""
+    return session.scalars(
+        _koth_nights()
+        .where(col(Season.closed_at).is_(None))
+        .order_by(col(Season.id).desc())
+    ).first()
+
+
+def _koth_nights() -> Select[tuple[Season]]:
+    """Every KOTH night that is not archived."""
+    return select(Season).where(
+        col(Season.kind) == EventKind.koth,
+        ~col(Season.id).in_(select(col(KothHistoryEvent.event_id))),
+    )
+
+
+def last_night(session: OrmSession, open_only: bool = False) -> Season | None:
+    """The newest KOTH night, or tonight: published, not closed, not expired."""
+    statement = _koth_nights().order_by(col(Season.id).desc())
     if open_only:
         statement = statement.where(
-            col(Season.published).is_(True), col(Season.signups_open).is_(True)
+            col(Season.published).is_(True),
+            col(Season.closed_at).is_(None),
+            col(Season.starts_at) > utcnow() - NIGHT_EXPIRES_AFTER,
         )
     return session.scalars(statement).first()
 

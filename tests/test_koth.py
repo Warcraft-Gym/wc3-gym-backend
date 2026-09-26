@@ -7,6 +7,7 @@ chains. The rating a signup cuts on is the W3C stats the app stored, so
 nothing here reaches w3champions.
 """
 
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
@@ -21,7 +22,9 @@ from app.models.w3c_stats import W3CStats
 from app.services.w3c import W3CService
 from tests.seed import active
 
-EVENT = {"name": "KOTH 1", "event_date": "2026-01-10T20:00:00Z"}
+# Tonight is a night that started less than a day ago, so the event is today
+TODAY = datetime.now(tz=UTC).date()
+EVENT = {"name": "KOTH 1", "event_date": f"{TODAY:%Y-%m-%d}T20:00:00Z"}
 SIGNUP = {
     "client_token": "test-nightbot-token",
     "twitch_username": "streamer",
@@ -306,10 +309,14 @@ def test_a_threshold_move_recuts_the_next_signup(
 def test_one_event_is_active_after_an_activation(
     client: Client, auth_headers: dict[str, str], koth: dict[str, Any]
 ) -> None:
+    client.post(f"/koth/nights/{koth['event_id']}/close", headers=auth_headers)
     second = client.post(
         "/koth/events",
         headers=auth_headers,
-        json={"name": "KOTH 2", "event_date": "2026-01-17T20:00:00Z"},
+        json={
+            "name": "KOTH 2",
+            "event_date": f"{TODAY + timedelta(days=7):%Y-%m-%d}T20:00:00Z",
+        },
     ).json()
 
     def active_ids() -> list[int]:
@@ -628,10 +635,14 @@ def test_the_admin_signup_lands_on_the_event_he_names(
     client: Client, koth: dict[str, Any], auth_headers: dict[str, str]
 ) -> None:
     """The admin adds a player to the event on screen, not to the open one."""
+    client.post(f"/koth/nights/{koth['event_id']}/close", headers=auth_headers)
     later = client.post(
         "/koth/events",
         headers=auth_headers,
-        json={"name": "KOTH 2", "event_date": "2026-02-10T20:00:00Z"},
+        json={
+            "name": "KOTH 2",
+            "event_date": f"{TODAY + timedelta(days=31):%Y-%m-%d}T20:00:00Z",
+        },
     ).json()
     rate("P3#3333", Race.HU, 1400)
 
@@ -642,11 +653,11 @@ def test_the_admin_signup_lands_on_the_event_he_names(
             "twitch_username": "player_three",
             "battle_tag": "P3#3333",
             "races": ["human"],
-            "event_id": later["id"],
+            "event_id": koth["event_id"],
         },
     )
 
     assert resp.status_code == 201, resp.text
-    assert [s["event_id"] for s in resp.json()] == [later["id"]]
-    open_night = client.get(f"/koth/events/{koth['event_id']}/signups").json()
+    assert [s["event_id"] for s in resp.json()] == [koth["event_id"]]
+    open_night = client.get(f"/koth/events/{later['id']}/signups").json()
     assert "P3#3333" not in [s["battle_tag"] for s in open_night]

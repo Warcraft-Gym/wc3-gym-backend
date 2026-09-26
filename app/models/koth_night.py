@@ -1,7 +1,7 @@
 """What an admin names to open and run a KOTH night, and what the board reads.
 
 The night itself is an event row; the board is the one read the run page and
-the public dashboard both draw, so nothing here is stored.
+the night page both draw, so nothing here is stored.
 """
 
 from datetime import datetime
@@ -109,6 +109,7 @@ class KothPlayed(SQLModel):
     `held` left it with the king who played, `none` was a side game.
     `winner_side` is the side of the series the winner played, so a client
     turns the result around with the other side and needs no series read.
+    `forfeit` marks a series the loser gave up by leaving the night.
     """
 
     series_id: int
@@ -117,6 +118,7 @@ class KothPlayed(SQLModel):
     winner_side: Literal[1, 2]
     throne: Literal["moved", "held", "none"]
     replay: bool = False
+    forfeit: bool = False
 
 
 class KothHistoricalSeries(SQLModel):
@@ -134,7 +136,7 @@ class KothHistoricalSeries(SQLModel):
 
 
 class KothBracket(SQLModel):
-    """One bracket of the night as the run page and the dashboard draw it."""
+    """One bracket of the night as the run page and the night page draw it."""
 
     division_id: int
     name: str | None = None

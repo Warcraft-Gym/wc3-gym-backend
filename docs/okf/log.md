@@ -4,6 +4,8 @@
 
 * **Update**: no user answer carries the raw `w3c_stats` rows; the ladder summary `race_mmrs` and `main_race` replaces them, and the bet and draft series reads no longer load them.
 * **Update**: `PUT /koth/nights/{id}/bounds` saves while a series is on the table; the two rows of that series keep their bracket until it ends, then the cut takes them by the bounds as they stand.
+* **Update**: tonight is the newest published KOTH night with no `closed_at` that started less than 24 hours ago, whatever its signup flag; `POST /koth/nights` closes an expired night first and answers 409 while another night is open; the signup doors that name no night answer "Signups are closed" while tonight's signups are off.
+* **Update**: a KOTH withdraw goes through while the night is tonight, and a row that leaves forfeits: its series on the table, or as a king a new series to the first free player in line; the board's played rows carry `forfeit`.
 * **Update**: `GET /events` answers `X-Total-Count`, the count of every event its filters keep, so a client pages it with `limit` and `offset`.
 * **Update**: the live MMR window is the current and the previous W3Champions season; user payloads carry the ladder summary (`race_mmrs`, `main_race`), list reads load only the window's `w3cstats` rows, a roster of an event that is over carries `mmr_entered`, and the Discord series card reads the summary.
 * **Add**: [Edge cache](concepts/edge-cache.md). Every cached open read uses one of three timer classes, live, running or settled; an event read is settled once the event is finished; the entrants, stage series, stage standings, achievements and an anonymous event read are cached; a player read is running.

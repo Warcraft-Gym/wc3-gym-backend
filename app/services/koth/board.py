@@ -1,10 +1,10 @@
-"""The one read the KOTH run page and the public dashboard both draw.
+"""The one read the KOTH run page and the night page both draw.
 
 Everything the night shows is here: the header, the rows no bracket holds
 yet, and per bracket the king, the hint of who defended last time, the series
 on the table, the line that waits and the series already played. The read
 costs a fixed number of statements, none of them per entrant or per series,
-because the dashboard polls it while the night runs.
+because the stream view polls it while the night runs.
 """
 
 from collections.abc import Sequence
@@ -208,6 +208,7 @@ def _played(
                 winner_side=2 if stage_engine.won_slot(row) == 2 else 1,
                 throne=throne,
                 replay=ident(row) in replays,
+                forfeit=row.result_kind == "forfeit",
             )
         )
     return list(reversed(rows))
@@ -302,7 +303,7 @@ def _mmrs(session: OrmSession, rows: Sequence[EventEntrant]) -> dict[int, int | 
     """Each row against the rating of the race it signed up on, in two reads.
 
     The board answers a figure per row and never the stored stat rows behind
-    it, because the dashboard draws this read all night.
+    it, because the night page draws this read all night.
     """
     ratings = race_ratings(session, [(row.user_id, _race(row)) for row in rows])
     mmrs: dict[int, int | None] = {}

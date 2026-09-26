@@ -611,8 +611,10 @@ class EventService:
         """Stamp the caller's own entrant rows as withdrawn; the rows stay.
 
         A race names one row of an event that takes one entry per race; no
-        race withdraws every active row of the caller.
+        race withdraws every active row of the caller. A KOTH night takes a
+        withdraw until it closes or expires, and the rows forfeit what they owe.
         """
+        players: list[int | None] = []
         with Session.begin() as session:
             event = _event(session, event_id)
             user = _caller(session, claims)
@@ -630,9 +632,17 @@ class EventService:
             )
             if not rows:
                 raise NotFoundError("No signup to withdraw")
-            for row in rows:
-                row.withdrawn_at = utcnow()
-            stage_engine.uncrown(session, [ident(row) for row in rows])
+            koth = event.kind is EventKind.koth
+            if koth:
+                players = _leave_night(session, event, rows)
+            else:
+                for row in rows:
+                    row.withdrawn_at = utcnow()
+                stage_engine.uncrown(session, [ident(row) for row in rows])
+        if koth and players:
+            from app.services.koth.signup import recut
+
+            recut(event_id, only=players)
 
     def check_in(
         self, event_id: int, entrant_id: int, claims: dict[str, Any] | None
@@ -819,6 +829,17 @@ def _league_entrant_kind(session: OrmSession, league_id: int | None) -> EntrantK
     """The entrant kind a new event copies from its league; solo without one."""
     league = session.get(League, league_id) if league_id else None
     return league.entrant_kind if league else EntrantKind.solo
+
+
+def _leave_night(
+    session: OrmSession, event: Season, rows: Sequence[EventEntrant]
+) -> list[int | None]:
+    """Withdraw rows from a KOTH night that is still tonight; see `live.leave`."""
+    from app.services.koth import live, night
+
+    if not night.is_tonight(event):
+        raise BadRequestError("The night is closed")
+    return live.leave(session, ident(event), rows)
 
 
 def _event(session: OrmSession, event_id: int, full: bool = False) -> Season:

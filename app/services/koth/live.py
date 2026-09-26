@@ -7,6 +7,7 @@ bracket holds one open series at a time, so the night never runs ahead of
 what is actually being played.
 """
 
+from collections.abc import Sequence
 from itertools import pairwise
 
 from sqlalchemy import select
@@ -64,19 +65,31 @@ def start_series(night_id: int, data: SeriesStart) -> KothBoard:
             raise ApiError(
                 409, {"error": "This bracket already has a series on the table"}
             )
-        session.add(
-            Series(
-                round_id=ident(_round(session, _stage(session, event_id))),
-                division_id=first.division_id,
-                entrant1_id=ident(first),
-                entrant2_id=ident(second),
-                player1_id=first.user_id,
-                player2_id=second.user_id,
-                host_player_id=first.user_id or 0,
-                sequence=max((row.sequence or 0) for row in chain) + 1 if chain else 1,
-            )
-        )
+        _add_series(session, event_id, first, second, chain)
     return board.read(night_id)
+
+
+def _add_series(
+    session: OrmSession,
+    event_id: int,
+    first: EventEntrant,
+    second: EventEntrant,
+    chain: Sequence[Series],
+) -> Series:
+    """Write one best of one between two rows of a bracket, after its chain."""
+    row = Series(
+        round_id=ident(_round(session, _stage(session, event_id))),
+        division_id=first.division_id,
+        entrant1_id=ident(first),
+        entrant2_id=ident(second),
+        player1_id=first.user_id,
+        player2_id=second.user_id,
+        host_player_id=first.user_id or 0,
+        sequence=max((one.sequence or 0) for one in chain) + 1 if chain else 1,
+    )
+    session.add(row)
+    session.flush()
+    return row
 
 
 def cancel_series(night_id: int, series_id: int) -> KothBoard:
@@ -101,24 +114,101 @@ def set_result(night_id: int, series_id: int, data: SeriesResult) -> KothBoard:
     with Session.begin() as session:
         _open_night(session, night_id)
         row = _series(session, night_id, series_id)
-        was_scored = stage_engine.scored(row)
-        was_slot = stage_engine.won_slot(row)
-        row.player1_score = 1 if data.winner == 1 else 0
-        row.player2_score = 0 if data.winner == 1 else 1
-        stage_engine.game_one(session, row)
-        session.flush()
-        # The same result sent again moves neither the crown nor the line
-        if not was_scored or was_slot != data.winner:
-            stage_engine.after_score(session, row, was_scored, was_slot)
-            beaten = stage_engine.entrant_of(row, takes_loser=True)
-            loser = session.get(EventEntrant, beaten) if beaten else None
-            if loser is not None:
-                _to_the_end(session, loser)
+        was_scored = _score(session, row, data.winner)
         players = [row.entrant1_id, row.entrant2_id]
     # A series that just ended frees its two rows for the bounds as they stand
     if not was_scored:
         recut(night_id, only=players)
     return board.read(night_id)
+
+
+def _score(session: OrmSession, row: Series, winner: int, kind: str = "played") -> bool:
+    """Write who won the one map and follow it into the crown and the line.
+
+    Answers whether the series carried a result before.
+    """
+    was_scored = stage_engine.scored(row)
+    was_slot = stage_engine.won_slot(row)
+    row.player1_score = 1 if winner == 1 else 0
+    row.player2_score = 0 if winner == 1 else 1
+    row.result_kind = kind
+    stage_engine.game_one(session, row)
+    session.flush()
+    # The same result sent again moves neither the crown nor the line
+    if not was_scored or was_slot != winner:
+        stage_engine.after_score(session, row, was_scored, was_slot)
+        beaten = stage_engine.entrant_of(row, takes_loser=True)
+        loser = session.get(EventEntrant, beaten) if beaten else None
+        if loser is not None:
+            _to_the_end(session, loser)
+    return was_scored
+
+
+def leave(
+    session: OrmSession, event_id: int, rows: Sequence[EventEntrant]
+) -> list[int | None]:
+    """Withdraw race rows from a night, forfeiting what they owe first.
+
+    A row in a series on the table loses it by forfeit. A king whose bracket
+    has no series on the table and a player free to play in its line loses a
+    forfeit series to the first of them, who takes the crown. Any other throne
+    the rows wear is left empty. Answers the rows of every series scored here,
+    for the recut.
+    """
+    ids = {ident(row) for row in rows}
+    players: list[int | None] = []
+    chain = series_of(session, event_id)
+    for series in chain:
+        if not stage_engine.scored(series) and ids & {
+            series.entrant1_id,
+            series.entrant2_id,
+        }:
+            _score(session, series, 2 if series.entrant1_id in ids else 1, "forfeit")
+            players += [series.entrant1_id, series.entrant2_id]
+    for division in divisions_of(session, event_id):
+        king = (
+            session.get(EventEntrant, division.king_entrant_id)
+            if division.king_entrant_id in ids
+            else None
+        )
+        bracket = [one for one in chain if one.division_id == division.id]
+        if king is None or any(not stage_engine.scored(one) for one in bracket):
+            continue
+        challenger = _first_free(session, event_id, king, chain)
+        if challenger is None:
+            continue
+        series = _add_series(session, event_id, king, challenger, bracket)
+        _score(session, series, 2, "forfeit")
+        players += [series.entrant1_id, series.entrant2_id]
+    left = utcnow()
+    for row in rows:
+        row.withdrawn_at = left
+    stage_engine.uncrown(session, list(ids))
+    session.flush()
+    return players
+
+
+def _first_free(
+    session: OrmSession, event_id: int, king: EventEntrant, chain: Sequence[Series]
+) -> EventEntrant | None:
+    """The first row in the king's line whose player plays no series on the table."""
+    if king.division_id is None:
+        return None
+    busy = {
+        player
+        for one in chain
+        if not stage_engine.scored(one)
+        for player in (one.player1_id, one.player2_id)
+    }
+    line = sorted(_live_field(session, event_id, king.division_id), key=board.place)
+    return next(
+        (
+            row
+            for row in line
+            if row.user_id != king.user_id and row.user_id not in busy
+        ),
+        None,
+    )
 
 
 def set_queue(night_id: int, division_id: int, data: QueueWrite) -> KothBoard:
@@ -196,21 +286,12 @@ def set_bounds(night_id: int, data: BoundsWrite) -> KothBoard:
 
 
 def remove_entrant(night_id: int, entrant_id: int) -> KothBoard:
-    """Take a row out of tonight: it leaves the line, the throne and the table."""
+    """Take a row out of tonight; it forfeits what it owes, as a withdraw does."""
     with Session.begin() as session:
         night = _open_night(session, night_id)
-        row = _entrant(session, ident(night), entrant_id)
-        row.withdrawn_at = utcnow()
-        stage_engine.uncrown(session, [entrant_id])
-        players: list[int | None] = []
-        for series in series_of(session, ident(night)):
-            if not stage_engine.scored(series) and entrant_id in (
-                series.entrant1_id,
-                series.entrant2_id,
-            ):
-                players += [series.entrant1_id, series.entrant2_id]
-                session.delete(series)
-        session.flush()
+        players = leave(
+            session, ident(night), [_entrant(session, ident(night), entrant_id)]
+        )
     if players:
         recut(night_id, only=players)
     return board.read(night_id)
