@@ -2,6 +2,7 @@
 
 ## 2026-09-26
 
+* **Update**: `w3c_ladder_matches` gains an index on (`user_id`, `race`, `start_time`), the seek of `mmr_at`.
 * **Update**: `current_w3c_season` anchors the live MMR window in the W3Champions, settings and ladder concepts; the Vercel crons, the load-all-seasons reads and the `Field(exclude=True)` pattern state the current code.
 * **Update**: no user answer carries the raw `w3c_stats` rows; the ladder summary `race_mmrs` and `main_race` replaces them, and the bet and draft series reads no longer load them.
 * **Update**: `PUT /koth/nights/{id}/bounds` saves while a series is on the table; the two rows of that series keep their bracket until it ends, then the cut takes them by the bounds as they stand.
