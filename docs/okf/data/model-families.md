@@ -4,7 +4,7 @@ title: Model families
 description: Every entity is a family of SQLModel classes, one table class and separate Create, Update and Public shapes, with validators in one module and every datetime aware UTC.
 resource: ../../../app/models/base.py
 tags: [data]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-23T17:45:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-26T14:40:00Z }
 sources:
   - id: base
     resource: ../../../app/models/base.py
@@ -25,7 +25,7 @@ sources:
 | `X(XBase, DBModel, table=True)` | the table. `id: int | None` because a row exists before the database assigns its key. Relationships live here. |
 | `XCreate(XBase)` | what a client sends to create. Required fields are required here. Never carries `id`. |
 | `XUpdate(SQLModel)` | every field optional. The service applies `model_dump(exclude_unset=True)`, so a key left out keeps its stored value. |
-| `XPublic(XBase, PublicModel)` | what the API answers. `id: int` because the client can rely on it. Derived fields are filled by `app/services/derived.py`. |
+| `XPublic(XBase, PublicModel)` | what the API answers. `id: int` because the client can rely on it. Derived fields are filled by `app/services/derived.py`. A field a Discord card or a derived fill reads but no client may see stays on the shape with `Field(exclude=True)` (`discordTag`, `discordId`, `w3c_stats` on the user shapes); `UserMemberPublic` and `UserMemberListPublic` declare the two Discord fields again for the callers allowed to see them. |
 
 An update path takes an `XUpdate` built from the fields it means to change, never an `XPublic` read back. One schema doing create, update and response duty wiped columns silently; see [the pitfall](../pitfalls/one-schema-wipes-columns.md).
 

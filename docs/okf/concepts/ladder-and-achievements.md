@@ -4,7 +4,7 @@ title: W3C ladder and achievements
 description: Every ranked 1v1 match of a GNL player is stored once, scored per season on their signup race, and 24 badge rules run as one SQL union.
 resource: ../../../app/services/ladder.py
 tags: [w3champions]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-26T12:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-26T14:40:00Z }
 sources:
   - id: ladder
     resource: ../../../app/services/ladder.py
@@ -55,7 +55,7 @@ An achievement instance is a row of `ladder_achievements(season_id, rule_id, poi
 
 # The W3Champions season pin
 
-The `settings` row `current_w3c_season` pins the season the MMR columns read. The derived default (the newest season from the API) is wrong on the day a season opens, when every player reads as zero games. The pin is a deliberate hand edit a few times a year. Never auto-follow the latest season and never clear the row. See [settings](settings-and-current-season.md).
+The `settings` row `current_w3c_season` pins the season the ratings read: the live MMR window is that season and the one before it. The derived default (the newest season stored, or from the API for the ladder sync) is wrong on the day a season opens, when every player reads as zero games. The pin is a deliberate hand edit a few times a year. Never auto-follow the latest season and never clear the row. See [settings](settings-and-current-season.md).
 
 # Synchronisation
 
