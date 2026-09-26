@@ -348,7 +348,7 @@ def unavailable_alert(
         now,
         RED,
         "Egress snapshot could not run",
-        f"{reason}. The next run is due {stamp(now + timedelta(days=1), 'R')}.",
+        f"{reason[:1].upper()}{reason[1:]}. The next run is due {stamp(now + timedelta(days=1), 'R')}.",
         [field("Since", stamp(now))],
         mention=mention,
     )
