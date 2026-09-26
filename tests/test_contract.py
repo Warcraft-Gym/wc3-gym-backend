@@ -107,7 +107,7 @@ def test_season_signups_answer_list_rows(
     rows = get_json(client, f"/events/{seeded['season_id']}/signups")
     assert len(rows) == 1
     assert rows[0]["battleTag"] == "P1#1111"
-    assert rows[0]["w3c_stats"] == []
+    assert "w3c_stats" not in rows[0]
     assert "gnl_stats" not in rows[0]
 
 
@@ -230,7 +230,7 @@ def test_fantasy_bets_list_keeps_every_key_with_empty_collections(
         bet["series"]["player1"],
         bet["series"]["player2"],
     ):
-        assert user["w3c_stats"] == []
+        assert "w3c_stats" not in user
         assert user["gnl_stats"] == []
         assert user["signup_seasons"] == []
 
@@ -250,7 +250,7 @@ def test_fantasy_bet_by_id_keeps_the_full_graph(
     bet_id = get_json(client, "/fantasy/bets")[0]["id"]
     bet = get_json(client, f"/fantasy/bets/{bet_id}")
     assert set(bet) == BET_KEYS
-    assert len(bet["user"]["w3c_stats"]) == 1
+    assert "w3c_stats" not in bet["user"]
     assert len(bet["user"]["gnl_stats"]) == 1
     assert [m["shortname"] for m in bet["season"]["maps"]] == ["CH"]
 
@@ -285,7 +285,7 @@ def test_series_season_list_keeps_every_key_with_empty_collections(
     assert series["player1"]["race"]
     assert series["match"]["team1"]["name"]
     for player in (series["player1"], series["player2"]):
-        assert player["w3c_stats"] == []
+        assert "w3c_stats" not in player
         assert player["gnl_stats"] == []
         assert player["signup_seasons"] == []
 
@@ -303,7 +303,8 @@ def test_series_by_id_keeps_the_full_graph(
         session.commit()
 
     series = get_json(client, f"/series/{seeded['series_played_id']}")
-    assert len(series["player1"]["w3c_stats"]) == 1
+    assert "w3c_stats" not in series["player1"]
+    assert len(series["player1"]["race_mmrs"]) == 1
 
 
 def test_fantasy_teams_list_keeps_every_key_with_empty_collections(

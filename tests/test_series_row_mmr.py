@@ -1,6 +1,6 @@
 """The reduced series lists carry the W3C rating of both sides.
 
-`SeriesPublic.from_series_reduced` leaves `w3c_stats` empty, so the season
+`SeriesPublic.from_series_reduced` carries no ladder summary, so the season
 list (the upcoming page) and `GET /player-series` (the round cards of the
 player page) hold the rating on the row itself. On a running event the rule
 is the one the stage rows and the entrant lists use: the newest row of the live
@@ -142,7 +142,7 @@ def test_the_season_list_rates_both_sides_on_the_race_the_row_names(
 
     assert (row["player1_race"], row["player2_race"]) == ("HU", "NE")
     assert (row["player1_mmr"], row["player2_mmr"]) == (1500, 1400)
-    assert row["player1"]["w3c_stats"] == []
+    assert "w3c_stats" not in row["player1"]
 
 
 def test_the_player_series_read_rates_both_sides(
@@ -157,7 +157,7 @@ def test_the_player_series_read_rates_both_sides(
 
     row = played(body["series"], signed_up["series_played_id"])
     assert (row["player1_mmr"], row["player2_mmr"]) == (1500, 1400)
-    assert row["player1"]["w3c_stats"] == []
+    assert "w3c_stats" not in row["player1"]
 
 
 def test_a_row_reads_the_newest_rated_season_of_the_race(

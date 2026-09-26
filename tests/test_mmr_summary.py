@@ -169,10 +169,7 @@ def test_the_profile_agrees_with_the_old_picks(
 def test_list_reads_carry_the_window_alone(client: Client, stats: list[int]) -> None:
     users = client.get("/users").json()
     listed = {user["id"]: user for user in users if user["id"] in stats}
-    assert {
-        stats.index(user_id): sorted(row["wc3_season"] for row in user["w3c_stats"])
-        for user_id, user in listed.items()
-    } == {0: [24, 25], 1: [24, 24, 25], 2: [], 3: []}
+    assert all("w3c_stats" not in user for user in users)
     summary = by_key(stats, {i: u["race_mmrs"] for i, u in listed.items()})
     assert summary == {
         key: pick for key, pick in OLD_RATINGS.items() if pick[0] >= CURRENT - 1
@@ -197,10 +194,11 @@ def test_the_signups_list_carries_the_window_alone(
             )
         session.commit()
     signed = client.get(f"/events/{seeded['season_id']}/signups").json()
-    assert {
-        stats.index(user["id"]): sorted(row["wc3_season"] for row in user["w3c_stats"])
-        for user in signed
-    } == {0: [24, 25], 1: [24, 24, 25], 2: [], 3: []}
+    assert all("w3c_stats" not in user for user in signed)
+    summary = by_key(stats, {user["id"]: user["race_mmrs"] for user in signed})
+    assert summary == {
+        key: pick for key, pick in OLD_RATINGS.items() if pick[0] >= CURRENT - 1
+    }
 
 
 def test_ratings_read_the_window(stats: list[int]) -> None:

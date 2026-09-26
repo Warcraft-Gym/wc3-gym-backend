@@ -186,7 +186,6 @@
         "timezone": null,
         "trophies": [],
         "twitch_url": null,
-        "w3c_stats": [],
         "w3c_synced_at": null,
         "youtube_url": null
       },
@@ -221,7 +220,6 @@
         "timezone": null,
         "trophies": [],
         "twitch_url": null,
-        "w3c_stats": [],
         "w3c_synced_at": null,
         "youtube_url": null
       },
@@ -321,7 +319,6 @@
         "timezone": null,
         "trophies": [],
         "twitch_url": null,
-        "w3c_stats": [],
         "w3c_synced_at": null,
         "youtube_url": null
       },
@@ -356,7 +353,6 @@
         "timezone": null,
         "trophies": [],
         "twitch_url": null,
-        "w3c_stats": [],
         "w3c_synced_at": null,
         "youtube_url": null
       },
@@ -409,7 +405,6 @@
       ],
       "timezone": null,
       "twitch_url": null,
-      "w3c_stats": [],
       "w3c_synced_at": null,
       "youtube_url": null
     },
@@ -534,7 +529,6 @@
           "timezone": null,
           "trophies": [],
           "twitch_url": null,
-          "w3c_stats": [],
           "w3c_synced_at": null,
           "youtube_url": null
         },
@@ -569,7 +563,6 @@
           "timezone": null,
           "trophies": [],
           "twitch_url": null,
-          "w3c_stats": [],
           "w3c_synced_at": null,
           "youtube_url": null
         },
@@ -634,7 +627,6 @@
     "timezone": null,
     "trophies": [],
     "twitch_url": null,
-    "w3c_stats": [],
     "w3c_synced_at": null,
     "youtube_url": null
   },

@@ -275,10 +275,10 @@ def test_teams_season_carries_the_person_row_fields(
         assert person["race"]
         assert person["country"]
         assert person["mmr"] is not None
-        assert isinstance(person["w3c_stats"], list)
-    # The roster sorts on the w3c_stats row for the configured w3c season.
-    rated = next(p for p in people if p["w3c_stats"])
-    stat = rated["w3c_stats"][0]
+        assert "w3c_stats" not in person
+    # The summary reads the w3cstats row of the configured w3c season.
+    rated = next(p for p in people if p["race_mmrs"])
+    stat = rated["race_mmrs"][0]
     assert stat["wc3_season"] == WC3_SEASON
     assert stat["mmr"] is not None
     assert stat["race"]
@@ -440,7 +440,7 @@ def test_fantasy_teams_search_carries_the_draft_fields(
 def test_teams_season_roster_users_carry_no_signup_seasons(
     client: Client, public_seed: dict[str, Any]
 ) -> None:
-    """The season roster keeps its stats; the free collections answer empty."""
+    """The season roster keeps its ladder summary; the free collections answer empty."""
     season_id = public_seed["season_id"]
     teams = get_json(client, f"/events/{season_id}/teams")
     players = [
@@ -451,7 +451,7 @@ def test_teams_season_roster_users_carry_no_signup_seasons(
     assert players
     for player in players:
         # The site person row reads these
-        assert "w3c_stats" in player
+        assert "race_mmrs" in player
         assert "name" in player
         # No consumer reads these on this route
         assert player["signup_seasons"] == []

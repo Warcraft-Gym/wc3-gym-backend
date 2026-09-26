@@ -76,10 +76,11 @@ class DraftSeries(DraftSeriesBase, DBModel, table=True):
             joinedload(rel(cls.match)).joinedload(rel(Match.team1)),
             joinedload(rel(cls.match)).joinedload(rel(Match.team2)),
             joinedload(rel(cls.match)).joinedload(rel(Match.season)),
-            joinedload(rel(cls.player1)).selectinload(rel(User.w3c_stats)),
+            # A draft answer derives no ladder summary, so it reads no ladder rows
+            joinedload(rel(cls.player1)).noload(rel(User.w3c_stats)),
             joinedload(rel(cls.player1)).selectinload(rel(User.team_seasons)),
             joinedload(rel(cls.player1)).selectinload(rel(User.signup_seasons)),
-            joinedload(rel(cls.player2)).selectinload(rel(User.w3c_stats)),
+            joinedload(rel(cls.player2)).noload(rel(User.w3c_stats)),
             joinedload(rel(cls.player2)).selectinload(rel(User.team_seasons)),
             joinedload(rel(cls.player2)).selectinload(rel(User.signup_seasons)),
             # The two names ride the same statement; no query per row

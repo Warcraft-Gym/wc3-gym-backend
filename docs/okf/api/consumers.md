@@ -51,6 +51,7 @@ A change that fails one of these is a cross-repository change. Ship the consumer
 - Every error is `{"error": ...}`.
 - A field is added, never renamed in place. `week_map_id` on the veto board and `playday` on fixtures are examples of names kept for consumers.
 - The GNL season payloads keep `season_id`, `phase` and `playday` although the table is `event`.
+- A player's ladder rating is the summary `race_mmrs` and `main_race` on every user payload; no payload carries the raw `w3cstats` rows.
 - Consumers use the league routes for team identity and the event routes for GNL data. The one unscoped team route is `GET /teams/{team_id}/image`, deprecated, which the web app's logo fallback reads.
 - List routes page with `limit` and `offset` and answer `X-Total-Count`.
 - Reads are open. Writes need an admin, or the owning member for self-service routes.
