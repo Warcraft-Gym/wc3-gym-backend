@@ -620,3 +620,29 @@ def test_rows_per_call_stay_under_the_ceiling(
     response = client.get(path)
     assert response.status_code == 200
     assert int(response.headers["X-DB-Rows"]) <= ROWS_PER_CALL[route] + ROWS_MARGIN
+
+
+def test_the_signups_read_costs_five_statements(league: dict[str, Any]) -> None:
+    """The season, two for the current W3C season, the signups with their users
+    and window W3C rows, and one statement for every season those users signed
+    up for. A signup read per user cost one round trip each."""
+    service = SeasonService(
+        user_app_service=UserService(), map_app_service=MapService()
+    )
+    with Session.begin() as session:
+        other = Season(name="Earlier season", series_per_round=1)
+        session.add(other)
+        session.flush()
+        session.add(
+            DBUserSeasonSignup(
+                user_id=league["player_ids"][0], season_id=ident(other), race=Race.HU
+            )
+        )
+
+    with count_statements() as tally:
+        rows = service.get_signed_up_users(league["season_id"])
+    assert len(rows) == len(league["player_ids"]) >= 3
+    seasons = {row.id: len(row.signup_seasons) for row in rows}
+    assert seasons.pop(league["player_ids"][0]) == 2
+    assert set(seasons.values()) == {1}
+    assert tally[0] == 5

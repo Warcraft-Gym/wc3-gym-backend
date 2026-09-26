@@ -627,6 +627,10 @@ class SeasonService:
                     joinedload(rel(DBUserSeasonSignup.user)).noload(
                         rel(User.team_seasons)
                     ),
+                    # The edit dialog of the assign page lists every season of the player
+                    joinedload(rel(DBUserSeasonSignup.user))
+                    .selectinload(rel(User.signup_seasons))
+                    .joinedload(rel(DBUserSeasonSignup.season)),
                 )
                 .where(col(DBUserSeasonSignup.season_id) == season_id)
                 # Offset paging is deterministic only with a fixed order
