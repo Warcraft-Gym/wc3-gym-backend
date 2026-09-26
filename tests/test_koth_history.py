@@ -126,7 +126,10 @@ def test_import_keeps_unknowns_and_every_competitive_bo1(client: Client) -> None
     assert board["videos"][0]["url"] == "https://www.youtube.com/watch?v=abcdefghijk"
     assert "source_record" not in response.text and "raw_html" not in response.text
     assert int(response.headers["X-DB-Statements"]) <= 6
-    assert "s-maxage=15" in response.headers["cache-control"]
+    assert (
+        response.headers["cache-control"]
+        == "public, s-maxage=3600, stale-while-revalidate=86400"
+    )
     series = client.get(f"/events/{event_id}/series")
     assert series.status_code == 200, series.text
     assert len(series.json()) == 3
