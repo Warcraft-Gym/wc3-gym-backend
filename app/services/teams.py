@@ -140,7 +140,9 @@ def _load_w3c_stats(session: OrmSession, teams: Iterable[Team]) -> None:
         return
     rows: dict[int, list[W3CStats]] = {user_id: [] for user_id in users}
     for stat in session.scalars(
-        select(W3CStats).where(col(W3CStats.user_id).in_(users))
+        select(W3CStats)
+        .where(col(W3CStats.user_id).in_(users))
+        .order_by(col(W3CStats.id))
     ):
         rows[stat.user_id].append(stat)
     for user_id, user in users.items():

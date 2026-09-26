@@ -145,54 +145,6 @@
               "ladder_synced_at": null,
               "w3c_stats": [
                 {
-                  "wc3_season": 1,
-                  "wins": 1,
-                  "losses": 2,
-                  "games": 3,
-                  "mmr": 1511,
-                  "winrate": null,
-                  "league": null,
-                  "id": 2,
-                  "race": "HU",
-                  "user_id": 1
-                },
-                {
-                  "wc3_season": 3,
-                  "wins": 3,
-                  "losses": 4,
-                  "games": 7,
-                  "mmr": 1531,
-                  "winrate": null,
-                  "league": null,
-                  "id": 4,
-                  "race": "HU",
-                  "user_id": 1
-                },
-                {
-                  "wc3_season": 5,
-                  "wins": 5,
-                  "losses": 6,
-                  "games": 11,
-                  "mmr": 1551,
-                  "winrate": null,
-                  "league": null,
-                  "id": 6,
-                  "race": "HU",
-                  "user_id": 1
-                },
-                {
-                  "wc3_season": 7,
-                  "wins": 7,
-                  "losses": 8,
-                  "games": 15,
-                  "mmr": 1571,
-                  "winrate": null,
-                  "league": null,
-                  "id": 8,
-                  "race": "HU",
-                  "user_id": 1
-                },
-                {
                   "wc3_season": 0,
                   "wins": 0,
                   "losses": 1,
@@ -202,6 +154,18 @@
                   "league": null,
                   "id": 1,
                   "race": "NE",
+                  "user_id": 1
+                },
+                {
+                  "wc3_season": 1,
+                  "wins": 1,
+                  "losses": 2,
+                  "games": 3,
+                  "mmr": 1511,
+                  "winrate": null,
+                  "league": null,
+                  "id": 2,
+                  "race": "HU",
                   "user_id": 1
                 },
                 {
@@ -217,6 +181,18 @@
                   "user_id": 1
                 },
                 {
+                  "wc3_season": 3,
+                  "wins": 3,
+                  "losses": 4,
+                  "games": 7,
+                  "mmr": 1531,
+                  "winrate": null,
+                  "league": null,
+                  "id": 4,
+                  "race": "HU",
+                  "user_id": 1
+                },
+                {
                   "wc3_season": 4,
                   "wins": 4,
                   "losses": 5,
@@ -229,6 +205,18 @@
                   "user_id": 1
                 },
                 {
+                  "wc3_season": 5,
+                  "wins": 5,
+                  "losses": 6,
+                  "games": 11,
+                  "mmr": 1551,
+                  "winrate": null,
+                  "league": null,
+                  "id": 6,
+                  "race": "HU",
+                  "user_id": 1
+                },
+                {
                   "wc3_season": 6,
                   "wins": 6,
                   "losses": 7,
@@ -238,6 +226,18 @@
                   "league": null,
                   "id": 7,
                   "race": "NE",
+                  "user_id": 1
+                },
+                {
+                  "wc3_season": 7,
+                  "wins": 7,
+                  "losses": 8,
+                  "games": 15,
+                  "mmr": 1571,
+                  "winrate": null,
+                  "league": null,
+                  "id": 8,
+                  "race": "HU",
                   "user_id": 1
                 }
               ],
@@ -284,54 +284,6 @@
               "ladder_synced_at": null,
               "w3c_stats": [
                 {
-                  "wc3_season": 1,
-                  "wins": 1,
-                  "losses": 2,
-                  "games": 3,
-                  "mmr": 1512,
-                  "winrate": null,
-                  "league": null,
-                  "id": 10,
-                  "race": "HU",
-                  "user_id": 2
-                },
-                {
-                  "wc3_season": 3,
-                  "wins": 3,
-                  "losses": 4,
-                  "games": 7,
-                  "mmr": 1532,
-                  "winrate": null,
-                  "league": null,
-                  "id": 12,
-                  "race": "HU",
-                  "user_id": 2
-                },
-                {
-                  "wc3_season": 5,
-                  "wins": 5,
-                  "losses": 6,
-                  "games": 11,
-                  "mmr": 1552,
-                  "winrate": null,
-                  "league": null,
-                  "id": 14,
-                  "race": "HU",
-                  "user_id": 2
-                },
-                {
-                  "wc3_season": 7,
-                  "wins": 7,
-                  "losses": 8,
-                  "games": 15,
-                  "mmr": 1572,
-                  "winrate": null,
-                  "league": null,
-                  "id": 16,
-                  "race": "HU",
-                  "user_id": 2
-                },
-                {
                   "wc3_season": 0,
                   "wins": 0,
                   "losses": 1,
@@ -341,6 +293,18 @@
                   "league": null,
                   "id": 9,
                   "race": "NE",
+                  "user_id": 2
+                },
+                {
+                  "wc3_season": 1,
+                  "wins": 1,
+                  "losses": 2,
+                  "games": 3,
+                  "mmr": 1512,
+                  "winrate": null,
+                  "league": null,
+                  "id": 10,
+                  "race": "HU",
                   "user_id": 2
                 },
                 {
@@ -356,6 +320,18 @@
                   "user_id": 2
                 },
                 {
+                  "wc3_season": 3,
+                  "wins": 3,
+                  "losses": 4,
+                  "games": 7,
+                  "mmr": 1532,
+                  "winrate": null,
+                  "league": null,
+                  "id": 12,
+                  "race": "HU",
+                  "user_id": 2
+                },
+                {
                   "wc3_season": 4,
                   "wins": 4,
                   "losses": 5,
@@ -368,6 +344,18 @@
                   "user_id": 2
                 },
                 {
+                  "wc3_season": 5,
+                  "wins": 5,
+                  "losses": 6,
+                  "games": 11,
+                  "mmr": 1552,
+                  "winrate": null,
+                  "league": null,
+                  "id": 14,
+                  "race": "HU",
+                  "user_id": 2
+                },
+                {
                   "wc3_season": 6,
                   "wins": 6,
                   "losses": 7,
@@ -377,6 +365,18 @@
                   "league": null,
                   "id": 15,
                   "race": "NE",
+                  "user_id": 2
+                },
+                {
+                  "wc3_season": 7,
+                  "wins": 7,
+                  "losses": 8,
+                  "games": 15,
+                  "mmr": 1572,
+                  "winrate": null,
+                  "league": null,
+                  "id": 16,
+                  "race": "HU",
                   "user_id": 2
                 }
               ],
@@ -427,54 +427,6 @@
               "ladder_synced_at": null,
               "w3c_stats": [
                 {
-                  "wc3_season": 1,
-                  "wins": 1,
-                  "losses": 2,
-                  "games": 3,
-                  "mmr": 1511,
-                  "winrate": null,
-                  "league": null,
-                  "id": 2,
-                  "race": "HU",
-                  "user_id": 1
-                },
-                {
-                  "wc3_season": 3,
-                  "wins": 3,
-                  "losses": 4,
-                  "games": 7,
-                  "mmr": 1531,
-                  "winrate": null,
-                  "league": null,
-                  "id": 4,
-                  "race": "HU",
-                  "user_id": 1
-                },
-                {
-                  "wc3_season": 5,
-                  "wins": 5,
-                  "losses": 6,
-                  "games": 11,
-                  "mmr": 1551,
-                  "winrate": null,
-                  "league": null,
-                  "id": 6,
-                  "race": "HU",
-                  "user_id": 1
-                },
-                {
-                  "wc3_season": 7,
-                  "wins": 7,
-                  "losses": 8,
-                  "games": 15,
-                  "mmr": 1571,
-                  "winrate": null,
-                  "league": null,
-                  "id": 8,
-                  "race": "HU",
-                  "user_id": 1
-                },
-                {
                   "wc3_season": 0,
                   "wins": 0,
                   "losses": 1,
@@ -484,6 +436,18 @@
                   "league": null,
                   "id": 1,
                   "race": "NE",
+                  "user_id": 1
+                },
+                {
+                  "wc3_season": 1,
+                  "wins": 1,
+                  "losses": 2,
+                  "games": 3,
+                  "mmr": 1511,
+                  "winrate": null,
+                  "league": null,
+                  "id": 2,
+                  "race": "HU",
                   "user_id": 1
                 },
                 {
@@ -499,6 +463,18 @@
                   "user_id": 1
                 },
                 {
+                  "wc3_season": 3,
+                  "wins": 3,
+                  "losses": 4,
+                  "games": 7,
+                  "mmr": 1531,
+                  "winrate": null,
+                  "league": null,
+                  "id": 4,
+                  "race": "HU",
+                  "user_id": 1
+                },
+                {
                   "wc3_season": 4,
                   "wins": 4,
                   "losses": 5,
@@ -511,6 +487,18 @@
                   "user_id": 1
                 },
                 {
+                  "wc3_season": 5,
+                  "wins": 5,
+                  "losses": 6,
+                  "games": 11,
+                  "mmr": 1551,
+                  "winrate": null,
+                  "league": null,
+                  "id": 6,
+                  "race": "HU",
+                  "user_id": 1
+                },
+                {
                   "wc3_season": 6,
                   "wins": 6,
                   "losses": 7,
@@ -520,6 +508,18 @@
                   "league": null,
                   "id": 7,
                   "race": "NE",
+                  "user_id": 1
+                },
+                {
+                  "wc3_season": 7,
+                  "wins": 7,
+                  "losses": 8,
+                  "games": 15,
+                  "mmr": 1571,
+                  "winrate": null,
+                  "league": null,
+                  "id": 8,
+                  "race": "HU",
                   "user_id": 1
                 }
               ],
@@ -586,54 +586,6 @@
               "ladder_synced_at": null,
               "w3c_stats": [
                 {
-                  "wc3_season": 1,
-                  "wins": 1,
-                  "losses": 2,
-                  "games": 3,
-                  "mmr": 1513,
-                  "winrate": null,
-                  "league": null,
-                  "id": 18,
-                  "race": "HU",
-                  "user_id": 3
-                },
-                {
-                  "wc3_season": 3,
-                  "wins": 3,
-                  "losses": 4,
-                  "games": 7,
-                  "mmr": 1533,
-                  "winrate": null,
-                  "league": null,
-                  "id": 20,
-                  "race": "HU",
-                  "user_id": 3
-                },
-                {
-                  "wc3_season": 5,
-                  "wins": 5,
-                  "losses": 6,
-                  "games": 11,
-                  "mmr": 1553,
-                  "winrate": null,
-                  "league": null,
-                  "id": 22,
-                  "race": "HU",
-                  "user_id": 3
-                },
-                {
-                  "wc3_season": 7,
-                  "wins": 7,
-                  "losses": 8,
-                  "games": 15,
-                  "mmr": 1573,
-                  "winrate": null,
-                  "league": null,
-                  "id": 24,
-                  "race": "HU",
-                  "user_id": 3
-                },
-                {
                   "wc3_season": 0,
                   "wins": 0,
                   "losses": 1,
@@ -643,6 +595,18 @@
                   "league": null,
                   "id": 17,
                   "race": "NE",
+                  "user_id": 3
+                },
+                {
+                  "wc3_season": 1,
+                  "wins": 1,
+                  "losses": 2,
+                  "games": 3,
+                  "mmr": 1513,
+                  "winrate": null,
+                  "league": null,
+                  "id": 18,
+                  "race": "HU",
                   "user_id": 3
                 },
                 {
@@ -658,6 +622,18 @@
                   "user_id": 3
                 },
                 {
+                  "wc3_season": 3,
+                  "wins": 3,
+                  "losses": 4,
+                  "games": 7,
+                  "mmr": 1533,
+                  "winrate": null,
+                  "league": null,
+                  "id": 20,
+                  "race": "HU",
+                  "user_id": 3
+                },
+                {
                   "wc3_season": 4,
                   "wins": 4,
                   "losses": 5,
@@ -670,6 +646,18 @@
                   "user_id": 3
                 },
                 {
+                  "wc3_season": 5,
+                  "wins": 5,
+                  "losses": 6,
+                  "games": 11,
+                  "mmr": 1553,
+                  "winrate": null,
+                  "league": null,
+                  "id": 22,
+                  "race": "HU",
+                  "user_id": 3
+                },
+                {
                   "wc3_season": 6,
                   "wins": 6,
                   "losses": 7,
@@ -679,6 +667,18 @@
                   "league": null,
                   "id": 23,
                   "race": "NE",
+                  "user_id": 3
+                },
+                {
+                  "wc3_season": 7,
+                  "wins": 7,
+                  "losses": 8,
+                  "games": 15,
+                  "mmr": 1573,
+                  "winrate": null,
+                  "league": null,
+                  "id": 24,
+                  "race": "HU",
                   "user_id": 3
                 }
               ],
@@ -725,54 +725,6 @@
               "ladder_synced_at": null,
               "w3c_stats": [
                 {
-                  "wc3_season": 1,
-                  "wins": 1,
-                  "losses": 2,
-                  "games": 3,
-                  "mmr": 1514,
-                  "winrate": null,
-                  "league": null,
-                  "id": 26,
-                  "race": "HU",
-                  "user_id": 4
-                },
-                {
-                  "wc3_season": 3,
-                  "wins": 3,
-                  "losses": 4,
-                  "games": 7,
-                  "mmr": 1534,
-                  "winrate": null,
-                  "league": null,
-                  "id": 28,
-                  "race": "HU",
-                  "user_id": 4
-                },
-                {
-                  "wc3_season": 5,
-                  "wins": 5,
-                  "losses": 6,
-                  "games": 11,
-                  "mmr": 1554,
-                  "winrate": null,
-                  "league": null,
-                  "id": 30,
-                  "race": "HU",
-                  "user_id": 4
-                },
-                {
-                  "wc3_season": 7,
-                  "wins": 7,
-                  "losses": 8,
-                  "games": 15,
-                  "mmr": 1574,
-                  "winrate": null,
-                  "league": null,
-                  "id": 32,
-                  "race": "HU",
-                  "user_id": 4
-                },
-                {
                   "wc3_season": 0,
                   "wins": 0,
                   "losses": 1,
@@ -782,6 +734,18 @@
                   "league": null,
                   "id": 25,
                   "race": "NE",
+                  "user_id": 4
+                },
+                {
+                  "wc3_season": 1,
+                  "wins": 1,
+                  "losses": 2,
+                  "games": 3,
+                  "mmr": 1514,
+                  "winrate": null,
+                  "league": null,
+                  "id": 26,
+                  "race": "HU",
                   "user_id": 4
                 },
                 {
@@ -797,6 +761,18 @@
                   "user_id": 4
                 },
                 {
+                  "wc3_season": 3,
+                  "wins": 3,
+                  "losses": 4,
+                  "games": 7,
+                  "mmr": 1534,
+                  "winrate": null,
+                  "league": null,
+                  "id": 28,
+                  "race": "HU",
+                  "user_id": 4
+                },
+                {
                   "wc3_season": 4,
                   "wins": 4,
                   "losses": 5,
@@ -809,6 +785,18 @@
                   "user_id": 4
                 },
                 {
+                  "wc3_season": 5,
+                  "wins": 5,
+                  "losses": 6,
+                  "games": 11,
+                  "mmr": 1554,
+                  "winrate": null,
+                  "league": null,
+                  "id": 30,
+                  "race": "HU",
+                  "user_id": 4
+                },
+                {
                   "wc3_season": 6,
                   "wins": 6,
                   "losses": 7,
@@ -818,6 +806,18 @@
                   "league": null,
                   "id": 31,
                   "race": "NE",
+                  "user_id": 4
+                },
+                {
+                  "wc3_season": 7,
+                  "wins": 7,
+                  "losses": 8,
+                  "games": 15,
+                  "mmr": 1574,
+                  "winrate": null,
+                  "league": null,
+                  "id": 32,
+                  "race": "HU",
                   "user_id": 4
                 }
               ],
@@ -868,18 +868,6 @@
               "ladder_synced_at": null,
               "w3c_stats": [
                 {
-                  "wc3_season": 7,
-                  "wins": 7,
-                  "losses": 8,
-                  "games": 15,
-                  "mmr": 1575,
-                  "winrate": null,
-                  "league": null,
-                  "id": 34,
-                  "race": "HU",
-                  "user_id": 5
-                },
-                {
                   "wc3_season": 2,
                   "wins": 2,
                   "losses": 3,
@@ -889,6 +877,18 @@
                   "league": null,
                   "id": 33,
                   "race": "NE",
+                  "user_id": 5
+                },
+                {
+                  "wc3_season": 7,
+                  "wins": 7,
+                  "losses": 8,
+                  "games": 15,
+                  "mmr": 1575,
+                  "winrate": null,
+                  "league": null,
+                  "id": 34,
+                  "race": "HU",
                   "user_id": 5
                 }
               ],
@@ -949,54 +949,6 @@
               "ladder_synced_at": null,
               "w3c_stats": [
                 {
-                  "wc3_season": 1,
-                  "wins": 1,
-                  "losses": 2,
-                  "games": 3,
-                  "mmr": 1511,
-                  "winrate": null,
-                  "league": null,
-                  "id": 2,
-                  "race": "HU",
-                  "user_id": 1
-                },
-                {
-                  "wc3_season": 3,
-                  "wins": 3,
-                  "losses": 4,
-                  "games": 7,
-                  "mmr": 1531,
-                  "winrate": null,
-                  "league": null,
-                  "id": 4,
-                  "race": "HU",
-                  "user_id": 1
-                },
-                {
-                  "wc3_season": 5,
-                  "wins": 5,
-                  "losses": 6,
-                  "games": 11,
-                  "mmr": 1551,
-                  "winrate": null,
-                  "league": null,
-                  "id": 6,
-                  "race": "HU",
-                  "user_id": 1
-                },
-                {
-                  "wc3_season": 7,
-                  "wins": 7,
-                  "losses": 8,
-                  "games": 15,
-                  "mmr": 1571,
-                  "winrate": null,
-                  "league": null,
-                  "id": 8,
-                  "race": "HU",
-                  "user_id": 1
-                },
-                {
                   "wc3_season": 0,
                   "wins": 0,
                   "losses": 1,
@@ -1006,6 +958,18 @@
                   "league": null,
                   "id": 1,
                   "race": "NE",
+                  "user_id": 1
+                },
+                {
+                  "wc3_season": 1,
+                  "wins": 1,
+                  "losses": 2,
+                  "games": 3,
+                  "mmr": 1511,
+                  "winrate": null,
+                  "league": null,
+                  "id": 2,
+                  "race": "HU",
                   "user_id": 1
                 },
                 {
@@ -1021,6 +985,18 @@
                   "user_id": 1
                 },
                 {
+                  "wc3_season": 3,
+                  "wins": 3,
+                  "losses": 4,
+                  "games": 7,
+                  "mmr": 1531,
+                  "winrate": null,
+                  "league": null,
+                  "id": 4,
+                  "race": "HU",
+                  "user_id": 1
+                },
+                {
                   "wc3_season": 4,
                   "wins": 4,
                   "losses": 5,
@@ -1033,6 +1009,18 @@
                   "user_id": 1
                 },
                 {
+                  "wc3_season": 5,
+                  "wins": 5,
+                  "losses": 6,
+                  "games": 11,
+                  "mmr": 1551,
+                  "winrate": null,
+                  "league": null,
+                  "id": 6,
+                  "race": "HU",
+                  "user_id": 1
+                },
+                {
                   "wc3_season": 6,
                   "wins": 6,
                   "losses": 7,
@@ -1042,6 +1030,18 @@
                   "league": null,
                   "id": 7,
                   "race": "NE",
+                  "user_id": 1
+                },
+                {
+                  "wc3_season": 7,
+                  "wins": 7,
+                  "losses": 8,
+                  "games": 15,
+                  "mmr": 1571,
+                  "winrate": null,
+                  "league": null,
+                  "id": 8,
+                  "race": "HU",
                   "user_id": 1
                 }
               ],
@@ -1088,54 +1088,6 @@
               "ladder_synced_at": null,
               "w3c_stats": [
                 {
-                  "wc3_season": 1,
-                  "wins": 1,
-                  "losses": 2,
-                  "games": 3,
-                  "mmr": 1512,
-                  "winrate": null,
-                  "league": null,
-                  "id": 10,
-                  "race": "HU",
-                  "user_id": 2
-                },
-                {
-                  "wc3_season": 3,
-                  "wins": 3,
-                  "losses": 4,
-                  "games": 7,
-                  "mmr": 1532,
-                  "winrate": null,
-                  "league": null,
-                  "id": 12,
-                  "race": "HU",
-                  "user_id": 2
-                },
-                {
-                  "wc3_season": 5,
-                  "wins": 5,
-                  "losses": 6,
-                  "games": 11,
-                  "mmr": 1552,
-                  "winrate": null,
-                  "league": null,
-                  "id": 14,
-                  "race": "HU",
-                  "user_id": 2
-                },
-                {
-                  "wc3_season": 7,
-                  "wins": 7,
-                  "losses": 8,
-                  "games": 15,
-                  "mmr": 1572,
-                  "winrate": null,
-                  "league": null,
-                  "id": 16,
-                  "race": "HU",
-                  "user_id": 2
-                },
-                {
                   "wc3_season": 0,
                   "wins": 0,
                   "losses": 1,
@@ -1145,6 +1097,18 @@
                   "league": null,
                   "id": 9,
                   "race": "NE",
+                  "user_id": 2
+                },
+                {
+                  "wc3_season": 1,
+                  "wins": 1,
+                  "losses": 2,
+                  "games": 3,
+                  "mmr": 1512,
+                  "winrate": null,
+                  "league": null,
+                  "id": 10,
+                  "race": "HU",
                   "user_id": 2
                 },
                 {
@@ -1160,6 +1124,18 @@
                   "user_id": 2
                 },
                 {
+                  "wc3_season": 3,
+                  "wins": 3,
+                  "losses": 4,
+                  "games": 7,
+                  "mmr": 1532,
+                  "winrate": null,
+                  "league": null,
+                  "id": 12,
+                  "race": "HU",
+                  "user_id": 2
+                },
+                {
                   "wc3_season": 4,
                   "wins": 4,
                   "losses": 5,
@@ -1172,6 +1148,18 @@
                   "user_id": 2
                 },
                 {
+                  "wc3_season": 5,
+                  "wins": 5,
+                  "losses": 6,
+                  "games": 11,
+                  "mmr": 1552,
+                  "winrate": null,
+                  "league": null,
+                  "id": 14,
+                  "race": "HU",
+                  "user_id": 2
+                },
+                {
                   "wc3_season": 6,
                   "wins": 6,
                   "losses": 7,
@@ -1181,6 +1169,18 @@
                   "league": null,
                   "id": 15,
                   "race": "NE",
+                  "user_id": 2
+                },
+                {
+                  "wc3_season": 7,
+                  "wins": 7,
+                  "losses": 8,
+                  "games": 15,
+                  "mmr": 1572,
+                  "winrate": null,
+                  "league": null,
+                  "id": 16,
+                  "race": "HU",
                   "user_id": 2
                 }
               ],
@@ -1231,54 +1231,6 @@
               "ladder_synced_at": null,
               "w3c_stats": [
                 {
-                  "wc3_season": 1,
-                  "wins": 1,
-                  "losses": 2,
-                  "games": 3,
-                  "mmr": 1511,
-                  "winrate": null,
-                  "league": null,
-                  "id": 2,
-                  "race": "HU",
-                  "user_id": 1
-                },
-                {
-                  "wc3_season": 3,
-                  "wins": 3,
-                  "losses": 4,
-                  "games": 7,
-                  "mmr": 1531,
-                  "winrate": null,
-                  "league": null,
-                  "id": 4,
-                  "race": "HU",
-                  "user_id": 1
-                },
-                {
-                  "wc3_season": 5,
-                  "wins": 5,
-                  "losses": 6,
-                  "games": 11,
-                  "mmr": 1551,
-                  "winrate": null,
-                  "league": null,
-                  "id": 6,
-                  "race": "HU",
-                  "user_id": 1
-                },
-                {
-                  "wc3_season": 7,
-                  "wins": 7,
-                  "losses": 8,
-                  "games": 15,
-                  "mmr": 1571,
-                  "winrate": null,
-                  "league": null,
-                  "id": 8,
-                  "race": "HU",
-                  "user_id": 1
-                },
-                {
                   "wc3_season": 0,
                   "wins": 0,
                   "losses": 1,
@@ -1288,6 +1240,18 @@
                   "league": null,
                   "id": 1,
                   "race": "NE",
+                  "user_id": 1
+                },
+                {
+                  "wc3_season": 1,
+                  "wins": 1,
+                  "losses": 2,
+                  "games": 3,
+                  "mmr": 1511,
+                  "winrate": null,
+                  "league": null,
+                  "id": 2,
+                  "race": "HU",
                   "user_id": 1
                 },
                 {
@@ -1303,6 +1267,18 @@
                   "user_id": 1
                 },
                 {
+                  "wc3_season": 3,
+                  "wins": 3,
+                  "losses": 4,
+                  "games": 7,
+                  "mmr": 1531,
+                  "winrate": null,
+                  "league": null,
+                  "id": 4,
+                  "race": "HU",
+                  "user_id": 1
+                },
+                {
                   "wc3_season": 4,
                   "wins": 4,
                   "losses": 5,
@@ -1315,6 +1291,18 @@
                   "user_id": 1
                 },
                 {
+                  "wc3_season": 5,
+                  "wins": 5,
+                  "losses": 6,
+                  "games": 11,
+                  "mmr": 1551,
+                  "winrate": null,
+                  "league": null,
+                  "id": 6,
+                  "race": "HU",
+                  "user_id": 1
+                },
+                {
                   "wc3_season": 6,
                   "wins": 6,
                   "losses": 7,
@@ -1324,6 +1312,18 @@
                   "league": null,
                   "id": 7,
                   "race": "NE",
+                  "user_id": 1
+                },
+                {
+                  "wc3_season": 7,
+                  "wins": 7,
+                  "losses": 8,
+                  "games": 15,
+                  "mmr": 1571,
+                  "winrate": null,
+                  "league": null,
+                  "id": 8,
+                  "race": "HU",
                   "user_id": 1
                 }
               ],
@@ -1395,54 +1395,6 @@
               "ladder_synced_at": null,
               "w3c_stats": [
                 {
-                  "wc3_season": 1,
-                  "wins": 1,
-                  "losses": 2,
-                  "games": 3,
-                  "mmr": 1513,
-                  "winrate": null,
-                  "league": null,
-                  "id": 18,
-                  "race": "HU",
-                  "user_id": 3
-                },
-                {
-                  "wc3_season": 3,
-                  "wins": 3,
-                  "losses": 4,
-                  "games": 7,
-                  "mmr": 1533,
-                  "winrate": null,
-                  "league": null,
-                  "id": 20,
-                  "race": "HU",
-                  "user_id": 3
-                },
-                {
-                  "wc3_season": 5,
-                  "wins": 5,
-                  "losses": 6,
-                  "games": 11,
-                  "mmr": 1553,
-                  "winrate": null,
-                  "league": null,
-                  "id": 22,
-                  "race": "HU",
-                  "user_id": 3
-                },
-                {
-                  "wc3_season": 7,
-                  "wins": 7,
-                  "losses": 8,
-                  "games": 15,
-                  "mmr": 1573,
-                  "winrate": null,
-                  "league": null,
-                  "id": 24,
-                  "race": "HU",
-                  "user_id": 3
-                },
-                {
                   "wc3_season": 0,
                   "wins": 0,
                   "losses": 1,
@@ -1452,6 +1404,18 @@
                   "league": null,
                   "id": 17,
                   "race": "NE",
+                  "user_id": 3
+                },
+                {
+                  "wc3_season": 1,
+                  "wins": 1,
+                  "losses": 2,
+                  "games": 3,
+                  "mmr": 1513,
+                  "winrate": null,
+                  "league": null,
+                  "id": 18,
+                  "race": "HU",
                   "user_id": 3
                 },
                 {
@@ -1467,6 +1431,18 @@
                   "user_id": 3
                 },
                 {
+                  "wc3_season": 3,
+                  "wins": 3,
+                  "losses": 4,
+                  "games": 7,
+                  "mmr": 1533,
+                  "winrate": null,
+                  "league": null,
+                  "id": 20,
+                  "race": "HU",
+                  "user_id": 3
+                },
+                {
                   "wc3_season": 4,
                   "wins": 4,
                   "losses": 5,
@@ -1479,6 +1455,18 @@
                   "user_id": 3
                 },
                 {
+                  "wc3_season": 5,
+                  "wins": 5,
+                  "losses": 6,
+                  "games": 11,
+                  "mmr": 1553,
+                  "winrate": null,
+                  "league": null,
+                  "id": 22,
+                  "race": "HU",
+                  "user_id": 3
+                },
+                {
                   "wc3_season": 6,
                   "wins": 6,
                   "losses": 7,
@@ -1488,6 +1476,18 @@
                   "league": null,
                   "id": 23,
                   "race": "NE",
+                  "user_id": 3
+                },
+                {
+                  "wc3_season": 7,
+                  "wins": 7,
+                  "losses": 8,
+                  "games": 15,
+                  "mmr": 1573,
+                  "winrate": null,
+                  "league": null,
+                  "id": 24,
+                  "race": "HU",
                   "user_id": 3
                 }
               ],
@@ -1534,54 +1534,6 @@
               "ladder_synced_at": null,
               "w3c_stats": [
                 {
-                  "wc3_season": 1,
-                  "wins": 1,
-                  "losses": 2,
-                  "games": 3,
-                  "mmr": 1514,
-                  "winrate": null,
-                  "league": null,
-                  "id": 26,
-                  "race": "HU",
-                  "user_id": 4
-                },
-                {
-                  "wc3_season": 3,
-                  "wins": 3,
-                  "losses": 4,
-                  "games": 7,
-                  "mmr": 1534,
-                  "winrate": null,
-                  "league": null,
-                  "id": 28,
-                  "race": "HU",
-                  "user_id": 4
-                },
-                {
-                  "wc3_season": 5,
-                  "wins": 5,
-                  "losses": 6,
-                  "games": 11,
-                  "mmr": 1554,
-                  "winrate": null,
-                  "league": null,
-                  "id": 30,
-                  "race": "HU",
-                  "user_id": 4
-                },
-                {
-                  "wc3_season": 7,
-                  "wins": 7,
-                  "losses": 8,
-                  "games": 15,
-                  "mmr": 1574,
-                  "winrate": null,
-                  "league": null,
-                  "id": 32,
-                  "race": "HU",
-                  "user_id": 4
-                },
-                {
                   "wc3_season": 0,
                   "wins": 0,
                   "losses": 1,
@@ -1591,6 +1543,18 @@
                   "league": null,
                   "id": 25,
                   "race": "NE",
+                  "user_id": 4
+                },
+                {
+                  "wc3_season": 1,
+                  "wins": 1,
+                  "losses": 2,
+                  "games": 3,
+                  "mmr": 1514,
+                  "winrate": null,
+                  "league": null,
+                  "id": 26,
+                  "race": "HU",
                   "user_id": 4
                 },
                 {
@@ -1606,6 +1570,18 @@
                   "user_id": 4
                 },
                 {
+                  "wc3_season": 3,
+                  "wins": 3,
+                  "losses": 4,
+                  "games": 7,
+                  "mmr": 1534,
+                  "winrate": null,
+                  "league": null,
+                  "id": 28,
+                  "race": "HU",
+                  "user_id": 4
+                },
+                {
                   "wc3_season": 4,
                   "wins": 4,
                   "losses": 5,
@@ -1618,6 +1594,18 @@
                   "user_id": 4
                 },
                 {
+                  "wc3_season": 5,
+                  "wins": 5,
+                  "losses": 6,
+                  "games": 11,
+                  "mmr": 1554,
+                  "winrate": null,
+                  "league": null,
+                  "id": 30,
+                  "race": "HU",
+                  "user_id": 4
+                },
+                {
                   "wc3_season": 6,
                   "wins": 6,
                   "losses": 7,
@@ -1627,6 +1615,18 @@
                   "league": null,
                   "id": 31,
                   "race": "NE",
+                  "user_id": 4
+                },
+                {
+                  "wc3_season": 7,
+                  "wins": 7,
+                  "losses": 8,
+                  "games": 15,
+                  "mmr": 1574,
+                  "winrate": null,
+                  "league": null,
+                  "id": 32,
+                  "race": "HU",
                   "user_id": 4
                 }
               ],
@@ -1677,18 +1677,6 @@
               "ladder_synced_at": null,
               "w3c_stats": [
                 {
-                  "wc3_season": 7,
-                  "wins": 7,
-                  "losses": 8,
-                  "games": 15,
-                  "mmr": 1575,
-                  "winrate": null,
-                  "league": null,
-                  "id": 34,
-                  "race": "HU",
-                  "user_id": 5
-                },
-                {
                   "wc3_season": 2,
                   "wins": 2,
                   "losses": 3,
@@ -1698,6 +1686,18 @@
                   "league": null,
                   "id": 33,
                   "race": "NE",
+                  "user_id": 5
+                },
+                {
+                  "wc3_season": 7,
+                  "wins": 7,
+                  "losses": 8,
+                  "games": 15,
+                  "mmr": 1575,
+                  "winrate": null,
+                  "league": null,
+                  "id": 34,
+                  "race": "HU",
                   "user_id": 5
                 }
               ],
@@ -1810,54 +1810,6 @@
             "ladder_synced_at": null,
             "w3c_stats": [
               {
-                "wc3_season": 1,
-                "wins": 1,
-                "losses": 2,
-                "games": 3,
-                "mmr": 1511,
-                "winrate": null,
-                "league": null,
-                "id": 2,
-                "race": "HU",
-                "user_id": 1
-              },
-              {
-                "wc3_season": 3,
-                "wins": 3,
-                "losses": 4,
-                "games": 7,
-                "mmr": 1531,
-                "winrate": null,
-                "league": null,
-                "id": 4,
-                "race": "HU",
-                "user_id": 1
-              },
-              {
-                "wc3_season": 5,
-                "wins": 5,
-                "losses": 6,
-                "games": 11,
-                "mmr": 1551,
-                "winrate": null,
-                "league": null,
-                "id": 6,
-                "race": "HU",
-                "user_id": 1
-              },
-              {
-                "wc3_season": 7,
-                "wins": 7,
-                "losses": 8,
-                "games": 15,
-                "mmr": 1571,
-                "winrate": null,
-                "league": null,
-                "id": 8,
-                "race": "HU",
-                "user_id": 1
-              },
-              {
                 "wc3_season": 0,
                 "wins": 0,
                 "losses": 1,
@@ -1867,6 +1819,18 @@
                 "league": null,
                 "id": 1,
                 "race": "NE",
+                "user_id": 1
+              },
+              {
+                "wc3_season": 1,
+                "wins": 1,
+                "losses": 2,
+                "games": 3,
+                "mmr": 1511,
+                "winrate": null,
+                "league": null,
+                "id": 2,
+                "race": "HU",
                 "user_id": 1
               },
               {
@@ -1882,6 +1846,18 @@
                 "user_id": 1
               },
               {
+                "wc3_season": 3,
+                "wins": 3,
+                "losses": 4,
+                "games": 7,
+                "mmr": 1531,
+                "winrate": null,
+                "league": null,
+                "id": 4,
+                "race": "HU",
+                "user_id": 1
+              },
+              {
                 "wc3_season": 4,
                 "wins": 4,
                 "losses": 5,
@@ -1894,6 +1870,18 @@
                 "user_id": 1
               },
               {
+                "wc3_season": 5,
+                "wins": 5,
+                "losses": 6,
+                "games": 11,
+                "mmr": 1551,
+                "winrate": null,
+                "league": null,
+                "id": 6,
+                "race": "HU",
+                "user_id": 1
+              },
+              {
                 "wc3_season": 6,
                 "wins": 6,
                 "losses": 7,
@@ -1903,6 +1891,18 @@
                 "league": null,
                 "id": 7,
                 "race": "NE",
+                "user_id": 1
+              },
+              {
+                "wc3_season": 7,
+                "wins": 7,
+                "losses": 8,
+                "games": 15,
+                "mmr": 1571,
+                "winrate": null,
+                "league": null,
+                "id": 8,
+                "race": "HU",
                 "user_id": 1
               }
             ],
@@ -1949,54 +1949,6 @@
             "ladder_synced_at": null,
             "w3c_stats": [
               {
-                "wc3_season": 1,
-                "wins": 1,
-                "losses": 2,
-                "games": 3,
-                "mmr": 1512,
-                "winrate": null,
-                "league": null,
-                "id": 10,
-                "race": "HU",
-                "user_id": 2
-              },
-              {
-                "wc3_season": 3,
-                "wins": 3,
-                "losses": 4,
-                "games": 7,
-                "mmr": 1532,
-                "winrate": null,
-                "league": null,
-                "id": 12,
-                "race": "HU",
-                "user_id": 2
-              },
-              {
-                "wc3_season": 5,
-                "wins": 5,
-                "losses": 6,
-                "games": 11,
-                "mmr": 1552,
-                "winrate": null,
-                "league": null,
-                "id": 14,
-                "race": "HU",
-                "user_id": 2
-              },
-              {
-                "wc3_season": 7,
-                "wins": 7,
-                "losses": 8,
-                "games": 15,
-                "mmr": 1572,
-                "winrate": null,
-                "league": null,
-                "id": 16,
-                "race": "HU",
-                "user_id": 2
-              },
-              {
                 "wc3_season": 0,
                 "wins": 0,
                 "losses": 1,
@@ -2006,6 +1958,18 @@
                 "league": null,
                 "id": 9,
                 "race": "NE",
+                "user_id": 2
+              },
+              {
+                "wc3_season": 1,
+                "wins": 1,
+                "losses": 2,
+                "games": 3,
+                "mmr": 1512,
+                "winrate": null,
+                "league": null,
+                "id": 10,
+                "race": "HU",
                 "user_id": 2
               },
               {
@@ -2021,6 +1985,18 @@
                 "user_id": 2
               },
               {
+                "wc3_season": 3,
+                "wins": 3,
+                "losses": 4,
+                "games": 7,
+                "mmr": 1532,
+                "winrate": null,
+                "league": null,
+                "id": 12,
+                "race": "HU",
+                "user_id": 2
+              },
+              {
                 "wc3_season": 4,
                 "wins": 4,
                 "losses": 5,
@@ -2033,6 +2009,18 @@
                 "user_id": 2
               },
               {
+                "wc3_season": 5,
+                "wins": 5,
+                "losses": 6,
+                "games": 11,
+                "mmr": 1552,
+                "winrate": null,
+                "league": null,
+                "id": 14,
+                "race": "HU",
+                "user_id": 2
+              },
+              {
                 "wc3_season": 6,
                 "wins": 6,
                 "losses": 7,
@@ -2042,6 +2030,18 @@
                 "league": null,
                 "id": 15,
                 "race": "NE",
+                "user_id": 2
+              },
+              {
+                "wc3_season": 7,
+                "wins": 7,
+                "losses": 8,
+                "games": 15,
+                "mmr": 1572,
+                "winrate": null,
+                "league": null,
+                "id": 16,
+                "race": "HU",
                 "user_id": 2
               }
             ],
@@ -2092,54 +2092,6 @@
             "ladder_synced_at": null,
             "w3c_stats": [
               {
-                "wc3_season": 1,
-                "wins": 1,
-                "losses": 2,
-                "games": 3,
-                "mmr": 1511,
-                "winrate": null,
-                "league": null,
-                "id": 2,
-                "race": "HU",
-                "user_id": 1
-              },
-              {
-                "wc3_season": 3,
-                "wins": 3,
-                "losses": 4,
-                "games": 7,
-                "mmr": 1531,
-                "winrate": null,
-                "league": null,
-                "id": 4,
-                "race": "HU",
-                "user_id": 1
-              },
-              {
-                "wc3_season": 5,
-                "wins": 5,
-                "losses": 6,
-                "games": 11,
-                "mmr": 1551,
-                "winrate": null,
-                "league": null,
-                "id": 6,
-                "race": "HU",
-                "user_id": 1
-              },
-              {
-                "wc3_season": 7,
-                "wins": 7,
-                "losses": 8,
-                "games": 15,
-                "mmr": 1571,
-                "winrate": null,
-                "league": null,
-                "id": 8,
-                "race": "HU",
-                "user_id": 1
-              },
-              {
                 "wc3_season": 0,
                 "wins": 0,
                 "losses": 1,
@@ -2149,6 +2101,18 @@
                 "league": null,
                 "id": 1,
                 "race": "NE",
+                "user_id": 1
+              },
+              {
+                "wc3_season": 1,
+                "wins": 1,
+                "losses": 2,
+                "games": 3,
+                "mmr": 1511,
+                "winrate": null,
+                "league": null,
+                "id": 2,
+                "race": "HU",
                 "user_id": 1
               },
               {
@@ -2164,6 +2128,18 @@
                 "user_id": 1
               },
               {
+                "wc3_season": 3,
+                "wins": 3,
+                "losses": 4,
+                "games": 7,
+                "mmr": 1531,
+                "winrate": null,
+                "league": null,
+                "id": 4,
+                "race": "HU",
+                "user_id": 1
+              },
+              {
                 "wc3_season": 4,
                 "wins": 4,
                 "losses": 5,
@@ -2176,6 +2152,18 @@
                 "user_id": 1
               },
               {
+                "wc3_season": 5,
+                "wins": 5,
+                "losses": 6,
+                "games": 11,
+                "mmr": 1551,
+                "winrate": null,
+                "league": null,
+                "id": 6,
+                "race": "HU",
+                "user_id": 1
+              },
+              {
                 "wc3_season": 6,
                 "wins": 6,
                 "losses": 7,
@@ -2185,6 +2173,18 @@
                 "league": null,
                 "id": 7,
                 "race": "NE",
+                "user_id": 1
+              },
+              {
+                "wc3_season": 7,
+                "wins": 7,
+                "losses": 8,
+                "games": 15,
+                "mmr": 1571,
+                "winrate": null,
+                "league": null,
+                "id": 8,
+                "race": "HU",
                 "user_id": 1
               }
             ],
@@ -2254,54 +2254,6 @@
             "ladder_synced_at": null,
             "w3c_stats": [
               {
-                "wc3_season": 1,
-                "wins": 1,
-                "losses": 2,
-                "games": 3,
-                "mmr": 1513,
-                "winrate": null,
-                "league": null,
-                "id": 18,
-                "race": "HU",
-                "user_id": 3
-              },
-              {
-                "wc3_season": 3,
-                "wins": 3,
-                "losses": 4,
-                "games": 7,
-                "mmr": 1533,
-                "winrate": null,
-                "league": null,
-                "id": 20,
-                "race": "HU",
-                "user_id": 3
-              },
-              {
-                "wc3_season": 5,
-                "wins": 5,
-                "losses": 6,
-                "games": 11,
-                "mmr": 1553,
-                "winrate": null,
-                "league": null,
-                "id": 22,
-                "race": "HU",
-                "user_id": 3
-              },
-              {
-                "wc3_season": 7,
-                "wins": 7,
-                "losses": 8,
-                "games": 15,
-                "mmr": 1573,
-                "winrate": null,
-                "league": null,
-                "id": 24,
-                "race": "HU",
-                "user_id": 3
-              },
-              {
                 "wc3_season": 0,
                 "wins": 0,
                 "losses": 1,
@@ -2311,6 +2263,18 @@
                 "league": null,
                 "id": 17,
                 "race": "NE",
+                "user_id": 3
+              },
+              {
+                "wc3_season": 1,
+                "wins": 1,
+                "losses": 2,
+                "games": 3,
+                "mmr": 1513,
+                "winrate": null,
+                "league": null,
+                "id": 18,
+                "race": "HU",
                 "user_id": 3
               },
               {
@@ -2326,6 +2290,18 @@
                 "user_id": 3
               },
               {
+                "wc3_season": 3,
+                "wins": 3,
+                "losses": 4,
+                "games": 7,
+                "mmr": 1533,
+                "winrate": null,
+                "league": null,
+                "id": 20,
+                "race": "HU",
+                "user_id": 3
+              },
+              {
                 "wc3_season": 4,
                 "wins": 4,
                 "losses": 5,
@@ -2338,6 +2314,18 @@
                 "user_id": 3
               },
               {
+                "wc3_season": 5,
+                "wins": 5,
+                "losses": 6,
+                "games": 11,
+                "mmr": 1553,
+                "winrate": null,
+                "league": null,
+                "id": 22,
+                "race": "HU",
+                "user_id": 3
+              },
+              {
                 "wc3_season": 6,
                 "wins": 6,
                 "losses": 7,
@@ -2347,6 +2335,18 @@
                 "league": null,
                 "id": 23,
                 "race": "NE",
+                "user_id": 3
+              },
+              {
+                "wc3_season": 7,
+                "wins": 7,
+                "losses": 8,
+                "games": 15,
+                "mmr": 1573,
+                "winrate": null,
+                "league": null,
+                "id": 24,
+                "race": "HU",
                 "user_id": 3
               }
             ],
@@ -2393,54 +2393,6 @@
             "ladder_synced_at": null,
             "w3c_stats": [
               {
-                "wc3_season": 1,
-                "wins": 1,
-                "losses": 2,
-                "games": 3,
-                "mmr": 1514,
-                "winrate": null,
-                "league": null,
-                "id": 26,
-                "race": "HU",
-                "user_id": 4
-              },
-              {
-                "wc3_season": 3,
-                "wins": 3,
-                "losses": 4,
-                "games": 7,
-                "mmr": 1534,
-                "winrate": null,
-                "league": null,
-                "id": 28,
-                "race": "HU",
-                "user_id": 4
-              },
-              {
-                "wc3_season": 5,
-                "wins": 5,
-                "losses": 6,
-                "games": 11,
-                "mmr": 1554,
-                "winrate": null,
-                "league": null,
-                "id": 30,
-                "race": "HU",
-                "user_id": 4
-              },
-              {
-                "wc3_season": 7,
-                "wins": 7,
-                "losses": 8,
-                "games": 15,
-                "mmr": 1574,
-                "winrate": null,
-                "league": null,
-                "id": 32,
-                "race": "HU",
-                "user_id": 4
-              },
-              {
                 "wc3_season": 0,
                 "wins": 0,
                 "losses": 1,
@@ -2450,6 +2402,18 @@
                 "league": null,
                 "id": 25,
                 "race": "NE",
+                "user_id": 4
+              },
+              {
+                "wc3_season": 1,
+                "wins": 1,
+                "losses": 2,
+                "games": 3,
+                "mmr": 1514,
+                "winrate": null,
+                "league": null,
+                "id": 26,
+                "race": "HU",
                 "user_id": 4
               },
               {
@@ -2465,6 +2429,18 @@
                 "user_id": 4
               },
               {
+                "wc3_season": 3,
+                "wins": 3,
+                "losses": 4,
+                "games": 7,
+                "mmr": 1534,
+                "winrate": null,
+                "league": null,
+                "id": 28,
+                "race": "HU",
+                "user_id": 4
+              },
+              {
                 "wc3_season": 4,
                 "wins": 4,
                 "losses": 5,
@@ -2477,6 +2453,18 @@
                 "user_id": 4
               },
               {
+                "wc3_season": 5,
+                "wins": 5,
+                "losses": 6,
+                "games": 11,
+                "mmr": 1554,
+                "winrate": null,
+                "league": null,
+                "id": 30,
+                "race": "HU",
+                "user_id": 4
+              },
+              {
                 "wc3_season": 6,
                 "wins": 6,
                 "losses": 7,
@@ -2486,6 +2474,18 @@
                 "league": null,
                 "id": 31,
                 "race": "NE",
+                "user_id": 4
+              },
+              {
+                "wc3_season": 7,
+                "wins": 7,
+                "losses": 8,
+                "games": 15,
+                "mmr": 1574,
+                "winrate": null,
+                "league": null,
+                "id": 32,
+                "race": "HU",
                 "user_id": 4
               }
             ],
@@ -2536,18 +2536,6 @@
             "ladder_synced_at": null,
             "w3c_stats": [
               {
-                "wc3_season": 7,
-                "wins": 7,
-                "losses": 8,
-                "games": 15,
-                "mmr": 1575,
-                "winrate": null,
-                "league": null,
-                "id": 34,
-                "race": "HU",
-                "user_id": 5
-              },
-              {
                 "wc3_season": 2,
                 "wins": 2,
                 "losses": 3,
@@ -2557,6 +2545,18 @@
                 "league": null,
                 "id": 33,
                 "race": "NE",
+                "user_id": 5
+              },
+              {
+                "wc3_season": 7,
+                "wins": 7,
+                "losses": 8,
+                "games": 15,
+                "mmr": 1575,
+                "winrate": null,
+                "league": null,
+                "id": 34,
+                "race": "HU",
                 "user_id": 5
               }
             ],
@@ -2630,54 +2630,6 @@
               "ladder_synced_at": null,
               "w3c_stats": [
                 {
-                  "wc3_season": 1,
-                  "wins": 1,
-                  "losses": 2,
-                  "games": 3,
-                  "mmr": 1511,
-                  "winrate": null,
-                  "league": null,
-                  "id": 2,
-                  "race": "HU",
-                  "user_id": 1
-                },
-                {
-                  "wc3_season": 3,
-                  "wins": 3,
-                  "losses": 4,
-                  "games": 7,
-                  "mmr": 1531,
-                  "winrate": null,
-                  "league": null,
-                  "id": 4,
-                  "race": "HU",
-                  "user_id": 1
-                },
-                {
-                  "wc3_season": 5,
-                  "wins": 5,
-                  "losses": 6,
-                  "games": 11,
-                  "mmr": 1551,
-                  "winrate": null,
-                  "league": null,
-                  "id": 6,
-                  "race": "HU",
-                  "user_id": 1
-                },
-                {
-                  "wc3_season": 7,
-                  "wins": 7,
-                  "losses": 8,
-                  "games": 15,
-                  "mmr": 1571,
-                  "winrate": null,
-                  "league": null,
-                  "id": 8,
-                  "race": "HU",
-                  "user_id": 1
-                },
-                {
                   "wc3_season": 0,
                   "wins": 0,
                   "losses": 1,
@@ -2687,6 +2639,18 @@
                   "league": null,
                   "id": 1,
                   "race": "NE",
+                  "user_id": 1
+                },
+                {
+                  "wc3_season": 1,
+                  "wins": 1,
+                  "losses": 2,
+                  "games": 3,
+                  "mmr": 1511,
+                  "winrate": null,
+                  "league": null,
+                  "id": 2,
+                  "race": "HU",
                   "user_id": 1
                 },
                 {
@@ -2702,6 +2666,18 @@
                   "user_id": 1
                 },
                 {
+                  "wc3_season": 3,
+                  "wins": 3,
+                  "losses": 4,
+                  "games": 7,
+                  "mmr": 1531,
+                  "winrate": null,
+                  "league": null,
+                  "id": 4,
+                  "race": "HU",
+                  "user_id": 1
+                },
+                {
                   "wc3_season": 4,
                   "wins": 4,
                   "losses": 5,
@@ -2714,6 +2690,18 @@
                   "user_id": 1
                 },
                 {
+                  "wc3_season": 5,
+                  "wins": 5,
+                  "losses": 6,
+                  "games": 11,
+                  "mmr": 1551,
+                  "winrate": null,
+                  "league": null,
+                  "id": 6,
+                  "race": "HU",
+                  "user_id": 1
+                },
+                {
                   "wc3_season": 6,
                   "wins": 6,
                   "losses": 7,
@@ -2723,6 +2711,18 @@
                   "league": null,
                   "id": 7,
                   "race": "NE",
+                  "user_id": 1
+                },
+                {
+                  "wc3_season": 7,
+                  "wins": 7,
+                  "losses": 8,
+                  "games": 15,
+                  "mmr": 1571,
+                  "winrate": null,
+                  "league": null,
+                  "id": 8,
+                  "race": "HU",
                   "user_id": 1
                 }
               ],
@@ -2767,54 +2767,6 @@
               "ladder_synced_at": null,
               "w3c_stats": [
                 {
-                  "wc3_season": 1,
-                  "wins": 1,
-                  "losses": 2,
-                  "games": 3,
-                  "mmr": 1512,
-                  "winrate": null,
-                  "league": null,
-                  "id": 10,
-                  "race": "HU",
-                  "user_id": 2
-                },
-                {
-                  "wc3_season": 3,
-                  "wins": 3,
-                  "losses": 4,
-                  "games": 7,
-                  "mmr": 1532,
-                  "winrate": null,
-                  "league": null,
-                  "id": 12,
-                  "race": "HU",
-                  "user_id": 2
-                },
-                {
-                  "wc3_season": 5,
-                  "wins": 5,
-                  "losses": 6,
-                  "games": 11,
-                  "mmr": 1552,
-                  "winrate": null,
-                  "league": null,
-                  "id": 14,
-                  "race": "HU",
-                  "user_id": 2
-                },
-                {
-                  "wc3_season": 7,
-                  "wins": 7,
-                  "losses": 8,
-                  "games": 15,
-                  "mmr": 1572,
-                  "winrate": null,
-                  "league": null,
-                  "id": 16,
-                  "race": "HU",
-                  "user_id": 2
-                },
-                {
                   "wc3_season": 0,
                   "wins": 0,
                   "losses": 1,
@@ -2824,6 +2776,18 @@
                   "league": null,
                   "id": 9,
                   "race": "NE",
+                  "user_id": 2
+                },
+                {
+                  "wc3_season": 1,
+                  "wins": 1,
+                  "losses": 2,
+                  "games": 3,
+                  "mmr": 1512,
+                  "winrate": null,
+                  "league": null,
+                  "id": 10,
+                  "race": "HU",
                   "user_id": 2
                 },
                 {
@@ -2839,6 +2803,18 @@
                   "user_id": 2
                 },
                 {
+                  "wc3_season": 3,
+                  "wins": 3,
+                  "losses": 4,
+                  "games": 7,
+                  "mmr": 1532,
+                  "winrate": null,
+                  "league": null,
+                  "id": 12,
+                  "race": "HU",
+                  "user_id": 2
+                },
+                {
                   "wc3_season": 4,
                   "wins": 4,
                   "losses": 5,
@@ -2851,6 +2827,18 @@
                   "user_id": 2
                 },
                 {
+                  "wc3_season": 5,
+                  "wins": 5,
+                  "losses": 6,
+                  "games": 11,
+                  "mmr": 1552,
+                  "winrate": null,
+                  "league": null,
+                  "id": 14,
+                  "race": "HU",
+                  "user_id": 2
+                },
+                {
                   "wc3_season": 6,
                   "wins": 6,
                   "losses": 7,
@@ -2860,6 +2848,18 @@
                   "league": null,
                   "id": 15,
                   "race": "NE",
+                  "user_id": 2
+                },
+                {
+                  "wc3_season": 7,
+                  "wins": 7,
+                  "losses": 8,
+                  "games": 15,
+                  "mmr": 1572,
+                  "winrate": null,
+                  "league": null,
+                  "id": 16,
+                  "race": "HU",
                   "user_id": 2
                 }
               ],
@@ -2908,54 +2908,6 @@
               "ladder_synced_at": null,
               "w3c_stats": [
                 {
-                  "wc3_season": 1,
-                  "wins": 1,
-                  "losses": 2,
-                  "games": 3,
-                  "mmr": 1512,
-                  "winrate": null,
-                  "league": null,
-                  "id": 10,
-                  "race": "HU",
-                  "user_id": 2
-                },
-                {
-                  "wc3_season": 3,
-                  "wins": 3,
-                  "losses": 4,
-                  "games": 7,
-                  "mmr": 1532,
-                  "winrate": null,
-                  "league": null,
-                  "id": 12,
-                  "race": "HU",
-                  "user_id": 2
-                },
-                {
-                  "wc3_season": 5,
-                  "wins": 5,
-                  "losses": 6,
-                  "games": 11,
-                  "mmr": 1552,
-                  "winrate": null,
-                  "league": null,
-                  "id": 14,
-                  "race": "HU",
-                  "user_id": 2
-                },
-                {
-                  "wc3_season": 7,
-                  "wins": 7,
-                  "losses": 8,
-                  "games": 15,
-                  "mmr": 1572,
-                  "winrate": null,
-                  "league": null,
-                  "id": 16,
-                  "race": "HU",
-                  "user_id": 2
-                },
-                {
                   "wc3_season": 0,
                   "wins": 0,
                   "losses": 1,
@@ -2965,6 +2917,18 @@
                   "league": null,
                   "id": 9,
                   "race": "NE",
+                  "user_id": 2
+                },
+                {
+                  "wc3_season": 1,
+                  "wins": 1,
+                  "losses": 2,
+                  "games": 3,
+                  "mmr": 1512,
+                  "winrate": null,
+                  "league": null,
+                  "id": 10,
+                  "race": "HU",
                   "user_id": 2
                 },
                 {
@@ -2980,6 +2944,18 @@
                   "user_id": 2
                 },
                 {
+                  "wc3_season": 3,
+                  "wins": 3,
+                  "losses": 4,
+                  "games": 7,
+                  "mmr": 1532,
+                  "winrate": null,
+                  "league": null,
+                  "id": 12,
+                  "race": "HU",
+                  "user_id": 2
+                },
+                {
                   "wc3_season": 4,
                   "wins": 4,
                   "losses": 5,
@@ -2992,6 +2968,18 @@
                   "user_id": 2
                 },
                 {
+                  "wc3_season": 5,
+                  "wins": 5,
+                  "losses": 6,
+                  "games": 11,
+                  "mmr": 1552,
+                  "winrate": null,
+                  "league": null,
+                  "id": 14,
+                  "race": "HU",
+                  "user_id": 2
+                },
+                {
                   "wc3_season": 6,
                   "wins": 6,
                   "losses": 7,
@@ -3001,6 +2989,18 @@
                   "league": null,
                   "id": 15,
                   "race": "NE",
+                  "user_id": 2
+                },
+                {
+                  "wc3_season": 7,
+                  "wins": 7,
+                  "losses": 8,
+                  "games": 15,
+                  "mmr": 1572,
+                  "winrate": null,
+                  "league": null,
+                  "id": 16,
+                  "race": "HU",
                   "user_id": 2
                 }
               ],
@@ -3067,54 +3067,6 @@
               "ladder_synced_at": null,
               "w3c_stats": [
                 {
-                  "wc3_season": 1,
-                  "wins": 1,
-                  "losses": 2,
-                  "games": 3,
-                  "mmr": 1513,
-                  "winrate": null,
-                  "league": null,
-                  "id": 18,
-                  "race": "HU",
-                  "user_id": 3
-                },
-                {
-                  "wc3_season": 3,
-                  "wins": 3,
-                  "losses": 4,
-                  "games": 7,
-                  "mmr": 1533,
-                  "winrate": null,
-                  "league": null,
-                  "id": 20,
-                  "race": "HU",
-                  "user_id": 3
-                },
-                {
-                  "wc3_season": 5,
-                  "wins": 5,
-                  "losses": 6,
-                  "games": 11,
-                  "mmr": 1553,
-                  "winrate": null,
-                  "league": null,
-                  "id": 22,
-                  "race": "HU",
-                  "user_id": 3
-                },
-                {
-                  "wc3_season": 7,
-                  "wins": 7,
-                  "losses": 8,
-                  "games": 15,
-                  "mmr": 1573,
-                  "winrate": null,
-                  "league": null,
-                  "id": 24,
-                  "race": "HU",
-                  "user_id": 3
-                },
-                {
                   "wc3_season": 0,
                   "wins": 0,
                   "losses": 1,
@@ -3124,6 +3076,18 @@
                   "league": null,
                   "id": 17,
                   "race": "NE",
+                  "user_id": 3
+                },
+                {
+                  "wc3_season": 1,
+                  "wins": 1,
+                  "losses": 2,
+                  "games": 3,
+                  "mmr": 1513,
+                  "winrate": null,
+                  "league": null,
+                  "id": 18,
+                  "race": "HU",
                   "user_id": 3
                 },
                 {
@@ -3139,6 +3103,18 @@
                   "user_id": 3
                 },
                 {
+                  "wc3_season": 3,
+                  "wins": 3,
+                  "losses": 4,
+                  "games": 7,
+                  "mmr": 1533,
+                  "winrate": null,
+                  "league": null,
+                  "id": 20,
+                  "race": "HU",
+                  "user_id": 3
+                },
+                {
                   "wc3_season": 4,
                   "wins": 4,
                   "losses": 5,
@@ -3151,6 +3127,18 @@
                   "user_id": 3
                 },
                 {
+                  "wc3_season": 5,
+                  "wins": 5,
+                  "losses": 6,
+                  "games": 11,
+                  "mmr": 1553,
+                  "winrate": null,
+                  "league": null,
+                  "id": 22,
+                  "race": "HU",
+                  "user_id": 3
+                },
+                {
                   "wc3_season": 6,
                   "wins": 6,
                   "losses": 7,
@@ -3160,6 +3148,18 @@
                   "league": null,
                   "id": 23,
                   "race": "NE",
+                  "user_id": 3
+                },
+                {
+                  "wc3_season": 7,
+                  "wins": 7,
+                  "losses": 8,
+                  "games": 15,
+                  "mmr": 1573,
+                  "winrate": null,
+                  "league": null,
+                  "id": 24,
+                  "race": "HU",
                   "user_id": 3
                 }
               ],
@@ -3204,18 +3204,6 @@
               "ladder_synced_at": null,
               "w3c_stats": [
                 {
-                  "wc3_season": 7,
-                  "wins": 7,
-                  "losses": 8,
-                  "games": 15,
-                  "mmr": 1575,
-                  "winrate": null,
-                  "league": null,
-                  "id": 34,
-                  "race": "HU",
-                  "user_id": 5
-                },
-                {
                   "wc3_season": 2,
                   "wins": 2,
                   "losses": 3,
@@ -3225,6 +3213,18 @@
                   "league": null,
                   "id": 33,
                   "race": "NE",
+                  "user_id": 5
+                },
+                {
+                  "wc3_season": 7,
+                  "wins": 7,
+                  "losses": 8,
+                  "games": 15,
+                  "mmr": 1575,
+                  "winrate": null,
+                  "league": null,
+                  "id": 34,
+                  "race": "HU",
                   "user_id": 5
                 }
               ],
@@ -3299,54 +3299,6 @@
               "ladder_synced_at": null,
               "w3c_stats": [
                 {
-                  "wc3_season": 1,
-                  "wins": 1,
-                  "losses": 2,
-                  "games": 3,
-                  "mmr": 1511,
-                  "winrate": null,
-                  "league": null,
-                  "id": 2,
-                  "race": "HU",
-                  "user_id": 1
-                },
-                {
-                  "wc3_season": 3,
-                  "wins": 3,
-                  "losses": 4,
-                  "games": 7,
-                  "mmr": 1531,
-                  "winrate": null,
-                  "league": null,
-                  "id": 4,
-                  "race": "HU",
-                  "user_id": 1
-                },
-                {
-                  "wc3_season": 5,
-                  "wins": 5,
-                  "losses": 6,
-                  "games": 11,
-                  "mmr": 1551,
-                  "winrate": null,
-                  "league": null,
-                  "id": 6,
-                  "race": "HU",
-                  "user_id": 1
-                },
-                {
-                  "wc3_season": 7,
-                  "wins": 7,
-                  "losses": 8,
-                  "games": 15,
-                  "mmr": 1571,
-                  "winrate": null,
-                  "league": null,
-                  "id": 8,
-                  "race": "HU",
-                  "user_id": 1
-                },
-                {
                   "wc3_season": 0,
                   "wins": 0,
                   "losses": 1,
@@ -3356,6 +3308,18 @@
                   "league": null,
                   "id": 1,
                   "race": "NE",
+                  "user_id": 1
+                },
+                {
+                  "wc3_season": 1,
+                  "wins": 1,
+                  "losses": 2,
+                  "games": 3,
+                  "mmr": 1511,
+                  "winrate": null,
+                  "league": null,
+                  "id": 2,
+                  "race": "HU",
                   "user_id": 1
                 },
                 {
@@ -3371,6 +3335,18 @@
                   "user_id": 1
                 },
                 {
+                  "wc3_season": 3,
+                  "wins": 3,
+                  "losses": 4,
+                  "games": 7,
+                  "mmr": 1531,
+                  "winrate": null,
+                  "league": null,
+                  "id": 4,
+                  "race": "HU",
+                  "user_id": 1
+                },
+                {
                   "wc3_season": 4,
                   "wins": 4,
                   "losses": 5,
@@ -3383,6 +3359,18 @@
                   "user_id": 1
                 },
                 {
+                  "wc3_season": 5,
+                  "wins": 5,
+                  "losses": 6,
+                  "games": 11,
+                  "mmr": 1551,
+                  "winrate": null,
+                  "league": null,
+                  "id": 6,
+                  "race": "HU",
+                  "user_id": 1
+                },
+                {
                   "wc3_season": 6,
                   "wins": 6,
                   "losses": 7,
@@ -3392,6 +3380,18 @@
                   "league": null,
                   "id": 7,
                   "race": "NE",
+                  "user_id": 1
+                },
+                {
+                  "wc3_season": 7,
+                  "wins": 7,
+                  "losses": 8,
+                  "games": 15,
+                  "mmr": 1571,
+                  "winrate": null,
+                  "league": null,
+                  "id": 8,
+                  "race": "HU",
                   "user_id": 1
                 }
               ],
@@ -3436,54 +3436,6 @@
               "ladder_synced_at": null,
               "w3c_stats": [
                 {
-                  "wc3_season": 1,
-                  "wins": 1,
-                  "losses": 2,
-                  "games": 3,
-                  "mmr": 1512,
-                  "winrate": null,
-                  "league": null,
-                  "id": 10,
-                  "race": "HU",
-                  "user_id": 2
-                },
-                {
-                  "wc3_season": 3,
-                  "wins": 3,
-                  "losses": 4,
-                  "games": 7,
-                  "mmr": 1532,
-                  "winrate": null,
-                  "league": null,
-                  "id": 12,
-                  "race": "HU",
-                  "user_id": 2
-                },
-                {
-                  "wc3_season": 5,
-                  "wins": 5,
-                  "losses": 6,
-                  "games": 11,
-                  "mmr": 1552,
-                  "winrate": null,
-                  "league": null,
-                  "id": 14,
-                  "race": "HU",
-                  "user_id": 2
-                },
-                {
-                  "wc3_season": 7,
-                  "wins": 7,
-                  "losses": 8,
-                  "games": 15,
-                  "mmr": 1572,
-                  "winrate": null,
-                  "league": null,
-                  "id": 16,
-                  "race": "HU",
-                  "user_id": 2
-                },
-                {
                   "wc3_season": 0,
                   "wins": 0,
                   "losses": 1,
@@ -3493,6 +3445,18 @@
                   "league": null,
                   "id": 9,
                   "race": "NE",
+                  "user_id": 2
+                },
+                {
+                  "wc3_season": 1,
+                  "wins": 1,
+                  "losses": 2,
+                  "games": 3,
+                  "mmr": 1512,
+                  "winrate": null,
+                  "league": null,
+                  "id": 10,
+                  "race": "HU",
                   "user_id": 2
                 },
                 {
@@ -3508,6 +3472,18 @@
                   "user_id": 2
                 },
                 {
+                  "wc3_season": 3,
+                  "wins": 3,
+                  "losses": 4,
+                  "games": 7,
+                  "mmr": 1532,
+                  "winrate": null,
+                  "league": null,
+                  "id": 12,
+                  "race": "HU",
+                  "user_id": 2
+                },
+                {
                   "wc3_season": 4,
                   "wins": 4,
                   "losses": 5,
@@ -3520,6 +3496,18 @@
                   "user_id": 2
                 },
                 {
+                  "wc3_season": 5,
+                  "wins": 5,
+                  "losses": 6,
+                  "games": 11,
+                  "mmr": 1552,
+                  "winrate": null,
+                  "league": null,
+                  "id": 14,
+                  "race": "HU",
+                  "user_id": 2
+                },
+                {
                   "wc3_season": 6,
                   "wins": 6,
                   "losses": 7,
@@ -3529,6 +3517,18 @@
                   "league": null,
                   "id": 15,
                   "race": "NE",
+                  "user_id": 2
+                },
+                {
+                  "wc3_season": 7,
+                  "wins": 7,
+                  "losses": 8,
+                  "games": 15,
+                  "mmr": 1572,
+                  "winrate": null,
+                  "league": null,
+                  "id": 16,
+                  "race": "HU",
                   "user_id": 2
                 }
               ],
@@ -3577,54 +3577,6 @@
               "ladder_synced_at": null,
               "w3c_stats": [
                 {
-                  "wc3_season": 1,
-                  "wins": 1,
-                  "losses": 2,
-                  "games": 3,
-                  "mmr": 1512,
-                  "winrate": null,
-                  "league": null,
-                  "id": 10,
-                  "race": "HU",
-                  "user_id": 2
-                },
-                {
-                  "wc3_season": 3,
-                  "wins": 3,
-                  "losses": 4,
-                  "games": 7,
-                  "mmr": 1532,
-                  "winrate": null,
-                  "league": null,
-                  "id": 12,
-                  "race": "HU",
-                  "user_id": 2
-                },
-                {
-                  "wc3_season": 5,
-                  "wins": 5,
-                  "losses": 6,
-                  "games": 11,
-                  "mmr": 1552,
-                  "winrate": null,
-                  "league": null,
-                  "id": 14,
-                  "race": "HU",
-                  "user_id": 2
-                },
-                {
-                  "wc3_season": 7,
-                  "wins": 7,
-                  "losses": 8,
-                  "games": 15,
-                  "mmr": 1572,
-                  "winrate": null,
-                  "league": null,
-                  "id": 16,
-                  "race": "HU",
-                  "user_id": 2
-                },
-                {
                   "wc3_season": 0,
                   "wins": 0,
                   "losses": 1,
@@ -3634,6 +3586,18 @@
                   "league": null,
                   "id": 9,
                   "race": "NE",
+                  "user_id": 2
+                },
+                {
+                  "wc3_season": 1,
+                  "wins": 1,
+                  "losses": 2,
+                  "games": 3,
+                  "mmr": 1512,
+                  "winrate": null,
+                  "league": null,
+                  "id": 10,
+                  "race": "HU",
                   "user_id": 2
                 },
                 {
@@ -3649,6 +3613,18 @@
                   "user_id": 2
                 },
                 {
+                  "wc3_season": 3,
+                  "wins": 3,
+                  "losses": 4,
+                  "games": 7,
+                  "mmr": 1532,
+                  "winrate": null,
+                  "league": null,
+                  "id": 12,
+                  "race": "HU",
+                  "user_id": 2
+                },
+                {
                   "wc3_season": 4,
                   "wins": 4,
                   "losses": 5,
@@ -3661,6 +3637,18 @@
                   "user_id": 2
                 },
                 {
+                  "wc3_season": 5,
+                  "wins": 5,
+                  "losses": 6,
+                  "games": 11,
+                  "mmr": 1552,
+                  "winrate": null,
+                  "league": null,
+                  "id": 14,
+                  "race": "HU",
+                  "user_id": 2
+                },
+                {
                   "wc3_season": 6,
                   "wins": 6,
                   "losses": 7,
@@ -3670,6 +3658,18 @@
                   "league": null,
                   "id": 15,
                   "race": "NE",
+                  "user_id": 2
+                },
+                {
+                  "wc3_season": 7,
+                  "wins": 7,
+                  "losses": 8,
+                  "games": 15,
+                  "mmr": 1572,
+                  "winrate": null,
+                  "league": null,
+                  "id": 16,
+                  "race": "HU",
                   "user_id": 2
                 }
               ],
@@ -3741,54 +3741,6 @@
               "ladder_synced_at": null,
               "w3c_stats": [
                 {
-                  "wc3_season": 1,
-                  "wins": 1,
-                  "losses": 2,
-                  "games": 3,
-                  "mmr": 1513,
-                  "winrate": null,
-                  "league": null,
-                  "id": 18,
-                  "race": "HU",
-                  "user_id": 3
-                },
-                {
-                  "wc3_season": 3,
-                  "wins": 3,
-                  "losses": 4,
-                  "games": 7,
-                  "mmr": 1533,
-                  "winrate": null,
-                  "league": null,
-                  "id": 20,
-                  "race": "HU",
-                  "user_id": 3
-                },
-                {
-                  "wc3_season": 5,
-                  "wins": 5,
-                  "losses": 6,
-                  "games": 11,
-                  "mmr": 1553,
-                  "winrate": null,
-                  "league": null,
-                  "id": 22,
-                  "race": "HU",
-                  "user_id": 3
-                },
-                {
-                  "wc3_season": 7,
-                  "wins": 7,
-                  "losses": 8,
-                  "games": 15,
-                  "mmr": 1573,
-                  "winrate": null,
-                  "league": null,
-                  "id": 24,
-                  "race": "HU",
-                  "user_id": 3
-                },
-                {
                   "wc3_season": 0,
                   "wins": 0,
                   "losses": 1,
@@ -3798,6 +3750,18 @@
                   "league": null,
                   "id": 17,
                   "race": "NE",
+                  "user_id": 3
+                },
+                {
+                  "wc3_season": 1,
+                  "wins": 1,
+                  "losses": 2,
+                  "games": 3,
+                  "mmr": 1513,
+                  "winrate": null,
+                  "league": null,
+                  "id": 18,
+                  "race": "HU",
                   "user_id": 3
                 },
                 {
@@ -3813,6 +3777,18 @@
                   "user_id": 3
                 },
                 {
+                  "wc3_season": 3,
+                  "wins": 3,
+                  "losses": 4,
+                  "games": 7,
+                  "mmr": 1533,
+                  "winrate": null,
+                  "league": null,
+                  "id": 20,
+                  "race": "HU",
+                  "user_id": 3
+                },
+                {
                   "wc3_season": 4,
                   "wins": 4,
                   "losses": 5,
@@ -3825,6 +3801,18 @@
                   "user_id": 3
                 },
                 {
+                  "wc3_season": 5,
+                  "wins": 5,
+                  "losses": 6,
+                  "games": 11,
+                  "mmr": 1553,
+                  "winrate": null,
+                  "league": null,
+                  "id": 22,
+                  "race": "HU",
+                  "user_id": 3
+                },
+                {
                   "wc3_season": 6,
                   "wins": 6,
                   "losses": 7,
@@ -3834,6 +3822,18 @@
                   "league": null,
                   "id": 23,
                   "race": "NE",
+                  "user_id": 3
+                },
+                {
+                  "wc3_season": 7,
+                  "wins": 7,
+                  "losses": 8,
+                  "games": 15,
+                  "mmr": 1573,
+                  "winrate": null,
+                  "league": null,
+                  "id": 24,
+                  "race": "HU",
                   "user_id": 3
                 }
               ],
@@ -3878,18 +3878,6 @@
               "ladder_synced_at": null,
               "w3c_stats": [
                 {
-                  "wc3_season": 7,
-                  "wins": 7,
-                  "losses": 8,
-                  "games": 15,
-                  "mmr": 1575,
-                  "winrate": null,
-                  "league": null,
-                  "id": 34,
-                  "race": "HU",
-                  "user_id": 5
-                },
-                {
                   "wc3_season": 2,
                   "wins": 2,
                   "losses": 3,
@@ -3899,6 +3887,18 @@
                   "league": null,
                   "id": 33,
                   "race": "NE",
+                  "user_id": 5
+                },
+                {
+                  "wc3_season": 7,
+                  "wins": 7,
+                  "losses": 8,
+                  "games": 15,
+                  "mmr": 1575,
+                  "winrate": null,
+                  "league": null,
+                  "id": 34,
+                  "race": "HU",
                   "user_id": 5
                 }
               ],
@@ -4025,54 +4025,6 @@
             "ladder_synced_at": null,
             "w3c_stats": [
               {
-                "wc3_season": 1,
-                "wins": 1,
-                "losses": 2,
-                "games": 3,
-                "mmr": 1511,
-                "winrate": null,
-                "league": null,
-                "id": 2,
-                "race": "HU",
-                "user_id": 1
-              },
-              {
-                "wc3_season": 3,
-                "wins": 3,
-                "losses": 4,
-                "games": 7,
-                "mmr": 1531,
-                "winrate": null,
-                "league": null,
-                "id": 4,
-                "race": "HU",
-                "user_id": 1
-              },
-              {
-                "wc3_season": 5,
-                "wins": 5,
-                "losses": 6,
-                "games": 11,
-                "mmr": 1551,
-                "winrate": null,
-                "league": null,
-                "id": 6,
-                "race": "HU",
-                "user_id": 1
-              },
-              {
-                "wc3_season": 7,
-                "wins": 7,
-                "losses": 8,
-                "games": 15,
-                "mmr": 1571,
-                "winrate": null,
-                "league": null,
-                "id": 8,
-                "race": "HU",
-                "user_id": 1
-              },
-              {
                 "wc3_season": 0,
                 "wins": 0,
                 "losses": 1,
@@ -4082,6 +4034,18 @@
                 "league": null,
                 "id": 1,
                 "race": "NE",
+                "user_id": 1
+              },
+              {
+                "wc3_season": 1,
+                "wins": 1,
+                "losses": 2,
+                "games": 3,
+                "mmr": 1511,
+                "winrate": null,
+                "league": null,
+                "id": 2,
+                "race": "HU",
                 "user_id": 1
               },
               {
@@ -4097,6 +4061,18 @@
                 "user_id": 1
               },
               {
+                "wc3_season": 3,
+                "wins": 3,
+                "losses": 4,
+                "games": 7,
+                "mmr": 1531,
+                "winrate": null,
+                "league": null,
+                "id": 4,
+                "race": "HU",
+                "user_id": 1
+              },
+              {
                 "wc3_season": 4,
                 "wins": 4,
                 "losses": 5,
@@ -4109,6 +4085,18 @@
                 "user_id": 1
               },
               {
+                "wc3_season": 5,
+                "wins": 5,
+                "losses": 6,
+                "games": 11,
+                "mmr": 1551,
+                "winrate": null,
+                "league": null,
+                "id": 6,
+                "race": "HU",
+                "user_id": 1
+              },
+              {
                 "wc3_season": 6,
                 "wins": 6,
                 "losses": 7,
@@ -4118,6 +4106,18 @@
                 "league": null,
                 "id": 7,
                 "race": "NE",
+                "user_id": 1
+              },
+              {
+                "wc3_season": 7,
+                "wins": 7,
+                "losses": 8,
+                "games": 15,
+                "mmr": 1571,
+                "winrate": null,
+                "league": null,
+                "id": 8,
+                "race": "HU",
                 "user_id": 1
               }
             ],
@@ -4162,54 +4162,6 @@
             "ladder_synced_at": null,
             "w3c_stats": [
               {
-                "wc3_season": 1,
-                "wins": 1,
-                "losses": 2,
-                "games": 3,
-                "mmr": 1512,
-                "winrate": null,
-                "league": null,
-                "id": 10,
-                "race": "HU",
-                "user_id": 2
-              },
-              {
-                "wc3_season": 3,
-                "wins": 3,
-                "losses": 4,
-                "games": 7,
-                "mmr": 1532,
-                "winrate": null,
-                "league": null,
-                "id": 12,
-                "race": "HU",
-                "user_id": 2
-              },
-              {
-                "wc3_season": 5,
-                "wins": 5,
-                "losses": 6,
-                "games": 11,
-                "mmr": 1552,
-                "winrate": null,
-                "league": null,
-                "id": 14,
-                "race": "HU",
-                "user_id": 2
-              },
-              {
-                "wc3_season": 7,
-                "wins": 7,
-                "losses": 8,
-                "games": 15,
-                "mmr": 1572,
-                "winrate": null,
-                "league": null,
-                "id": 16,
-                "race": "HU",
-                "user_id": 2
-              },
-              {
                 "wc3_season": 0,
                 "wins": 0,
                 "losses": 1,
@@ -4219,6 +4171,18 @@
                 "league": null,
                 "id": 9,
                 "race": "NE",
+                "user_id": 2
+              },
+              {
+                "wc3_season": 1,
+                "wins": 1,
+                "losses": 2,
+                "games": 3,
+                "mmr": 1512,
+                "winrate": null,
+                "league": null,
+                "id": 10,
+                "race": "HU",
                 "user_id": 2
               },
               {
@@ -4234,6 +4198,18 @@
                 "user_id": 2
               },
               {
+                "wc3_season": 3,
+                "wins": 3,
+                "losses": 4,
+                "games": 7,
+                "mmr": 1532,
+                "winrate": null,
+                "league": null,
+                "id": 12,
+                "race": "HU",
+                "user_id": 2
+              },
+              {
                 "wc3_season": 4,
                 "wins": 4,
                 "losses": 5,
@@ -4246,6 +4222,18 @@
                 "user_id": 2
               },
               {
+                "wc3_season": 5,
+                "wins": 5,
+                "losses": 6,
+                "games": 11,
+                "mmr": 1552,
+                "winrate": null,
+                "league": null,
+                "id": 14,
+                "race": "HU",
+                "user_id": 2
+              },
+              {
                 "wc3_season": 6,
                 "wins": 6,
                 "losses": 7,
@@ -4255,6 +4243,18 @@
                 "league": null,
                 "id": 15,
                 "race": "NE",
+                "user_id": 2
+              },
+              {
+                "wc3_season": 7,
+                "wins": 7,
+                "losses": 8,
+                "games": 15,
+                "mmr": 1572,
+                "winrate": null,
+                "league": null,
+                "id": 16,
+                "race": "HU",
                 "user_id": 2
               }
             ],
@@ -4303,54 +4303,6 @@
             "ladder_synced_at": null,
             "w3c_stats": [
               {
-                "wc3_season": 1,
-                "wins": 1,
-                "losses": 2,
-                "games": 3,
-                "mmr": 1512,
-                "winrate": null,
-                "league": null,
-                "id": 10,
-                "race": "HU",
-                "user_id": 2
-              },
-              {
-                "wc3_season": 3,
-                "wins": 3,
-                "losses": 4,
-                "games": 7,
-                "mmr": 1532,
-                "winrate": null,
-                "league": null,
-                "id": 12,
-                "race": "HU",
-                "user_id": 2
-              },
-              {
-                "wc3_season": 5,
-                "wins": 5,
-                "losses": 6,
-                "games": 11,
-                "mmr": 1552,
-                "winrate": null,
-                "league": null,
-                "id": 14,
-                "race": "HU",
-                "user_id": 2
-              },
-              {
-                "wc3_season": 7,
-                "wins": 7,
-                "losses": 8,
-                "games": 15,
-                "mmr": 1572,
-                "winrate": null,
-                "league": null,
-                "id": 16,
-                "race": "HU",
-                "user_id": 2
-              },
-              {
                 "wc3_season": 0,
                 "wins": 0,
                 "losses": 1,
@@ -4360,6 +4312,18 @@
                 "league": null,
                 "id": 9,
                 "race": "NE",
+                "user_id": 2
+              },
+              {
+                "wc3_season": 1,
+                "wins": 1,
+                "losses": 2,
+                "games": 3,
+                "mmr": 1512,
+                "winrate": null,
+                "league": null,
+                "id": 10,
+                "race": "HU",
                 "user_id": 2
               },
               {
@@ -4375,6 +4339,18 @@
                 "user_id": 2
               },
               {
+                "wc3_season": 3,
+                "wins": 3,
+                "losses": 4,
+                "games": 7,
+                "mmr": 1532,
+                "winrate": null,
+                "league": null,
+                "id": 12,
+                "race": "HU",
+                "user_id": 2
+              },
+              {
                 "wc3_season": 4,
                 "wins": 4,
                 "losses": 5,
@@ -4387,6 +4363,18 @@
                 "user_id": 2
               },
               {
+                "wc3_season": 5,
+                "wins": 5,
+                "losses": 6,
+                "games": 11,
+                "mmr": 1552,
+                "winrate": null,
+                "league": null,
+                "id": 14,
+                "race": "HU",
+                "user_id": 2
+              },
+              {
                 "wc3_season": 6,
                 "wins": 6,
                 "losses": 7,
@@ -4396,6 +4384,18 @@
                 "league": null,
                 "id": 15,
                 "race": "NE",
+                "user_id": 2
+              },
+              {
+                "wc3_season": 7,
+                "wins": 7,
+                "losses": 8,
+                "games": 15,
+                "mmr": 1572,
+                "winrate": null,
+                "league": null,
+                "id": 16,
+                "race": "HU",
                 "user_id": 2
               }
             ],
@@ -4465,54 +4465,6 @@
             "ladder_synced_at": null,
             "w3c_stats": [
               {
-                "wc3_season": 1,
-                "wins": 1,
-                "losses": 2,
-                "games": 3,
-                "mmr": 1513,
-                "winrate": null,
-                "league": null,
-                "id": 18,
-                "race": "HU",
-                "user_id": 3
-              },
-              {
-                "wc3_season": 3,
-                "wins": 3,
-                "losses": 4,
-                "games": 7,
-                "mmr": 1533,
-                "winrate": null,
-                "league": null,
-                "id": 20,
-                "race": "HU",
-                "user_id": 3
-              },
-              {
-                "wc3_season": 5,
-                "wins": 5,
-                "losses": 6,
-                "games": 11,
-                "mmr": 1553,
-                "winrate": null,
-                "league": null,
-                "id": 22,
-                "race": "HU",
-                "user_id": 3
-              },
-              {
-                "wc3_season": 7,
-                "wins": 7,
-                "losses": 8,
-                "games": 15,
-                "mmr": 1573,
-                "winrate": null,
-                "league": null,
-                "id": 24,
-                "race": "HU",
-                "user_id": 3
-              },
-              {
                 "wc3_season": 0,
                 "wins": 0,
                 "losses": 1,
@@ -4522,6 +4474,18 @@
                 "league": null,
                 "id": 17,
                 "race": "NE",
+                "user_id": 3
+              },
+              {
+                "wc3_season": 1,
+                "wins": 1,
+                "losses": 2,
+                "games": 3,
+                "mmr": 1513,
+                "winrate": null,
+                "league": null,
+                "id": 18,
+                "race": "HU",
                 "user_id": 3
               },
               {
@@ -4537,6 +4501,18 @@
                 "user_id": 3
               },
               {
+                "wc3_season": 3,
+                "wins": 3,
+                "losses": 4,
+                "games": 7,
+                "mmr": 1533,
+                "winrate": null,
+                "league": null,
+                "id": 20,
+                "race": "HU",
+                "user_id": 3
+              },
+              {
                 "wc3_season": 4,
                 "wins": 4,
                 "losses": 5,
@@ -4549,6 +4525,18 @@
                 "user_id": 3
               },
               {
+                "wc3_season": 5,
+                "wins": 5,
+                "losses": 6,
+                "games": 11,
+                "mmr": 1553,
+                "winrate": null,
+                "league": null,
+                "id": 22,
+                "race": "HU",
+                "user_id": 3
+              },
+              {
                 "wc3_season": 6,
                 "wins": 6,
                 "losses": 7,
@@ -4558,6 +4546,18 @@
                 "league": null,
                 "id": 23,
                 "race": "NE",
+                "user_id": 3
+              },
+              {
+                "wc3_season": 7,
+                "wins": 7,
+                "losses": 8,
+                "games": 15,
+                "mmr": 1573,
+                "winrate": null,
+                "league": null,
+                "id": 24,
+                "race": "HU",
                 "user_id": 3
               }
             ],
@@ -4602,18 +4602,6 @@
             "ladder_synced_at": null,
             "w3c_stats": [
               {
-                "wc3_season": 7,
-                "wins": 7,
-                "losses": 8,
-                "games": 15,
-                "mmr": 1575,
-                "winrate": null,
-                "league": null,
-                "id": 34,
-                "race": "HU",
-                "user_id": 5
-              },
-              {
                 "wc3_season": 2,
                 "wins": 2,
                 "losses": 3,
@@ -4623,6 +4611,18 @@
                 "league": null,
                 "id": 33,
                 "race": "NE",
+                "user_id": 5
+              },
+              {
+                "wc3_season": 7,
+                "wins": 7,
+                "losses": 8,
+                "games": 15,
+                "mmr": 1575,
+                "winrate": null,
+                "league": null,
+                "id": 34,
+                "race": "HU",
                 "user_id": 5
               }
             ],
