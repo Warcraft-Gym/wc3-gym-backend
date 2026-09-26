@@ -239,7 +239,10 @@ FRONTEND_URL="http://localhost:5003"
 | `DISCORD_PUBLIC_KEY` | The app's public key from the Discord Developer Portal; `POST /discord/interactions` checks Discord's signature with it and answers 503 while it is unset | 64-character hex string |
 | `DISCORD_APPLICATION_ID` | The Discord application id; `just discord-commands` registers the slash commands on the guild with it | `123456789012345678` |
 | `CRON_SECRET` | Bearer token the `/jobs` routes check; unset, every `/jobs` route answers 503 | 64-character hex string |
-| `DEV_ALERTS_WEBHOOK_URL` | Optional Discord channel webhook for dev alerts; the egress snapshot posts there when a day is over budget or the run fails. Unset, nothing posts | `https://discord.com/api/webhooks/<id>/<token>` |
+| `DEV_ALERTS_WEBHOOK_URL` | Optional Discord channel webhook for dev alerts; the egress snapshot posts its daily digest there, and an alert when the cycle is on track to pass the cap or the run fails. Unset, nothing posts | `https://discord.com/api/webhooks/<id>/<token>` |
+| `DEV_ALERTS_MENTION_USER_ID` | Optional Discord user id to tag on an alert; unset = no tag. Digits only, anything else is ignored | `123456789012345678` |
+| `DEV_ALERTS_SUPABASE_USAGE_URL` | Optional dashboard link shown on dev alerts; unset = no link. The alert and digest titles link to it. https only, anything else is ignored | `https://...` |
+| `DEV_ALERTS_VERCEL_USAGE_URL` | Optional dashboard link shown on dev alerts; unset = no link. https only, anything else is ignored | `https://...` |
 | `BLOB_STORE_ID` | The Vercel Blob store holding the team logos and map thumbnails: `gnl-media` in production, `gnl-media-staging` elsewhere. Set by the store connection | `store_...` |
 | `VERCEL_OIDC_TOKEN` | Local runs only: the OIDC token the blob calls authenticate with. On Vercel it arrives with each request. `vercel env pull` writes it; it lasts 12 hours | `eyJ...` |
 | `CLOUDFLARE_ACCOUNT_ID` | The Cloudflare account holding the replay bucket | `a1b2c3...` |

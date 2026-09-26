@@ -2,6 +2,7 @@
 
 ## 2026-09-26
 
+* **Add**: `monitor_state`. The egress snapshot levels the billing cycle after each run and posts Discord embeds: an alert when the cycle is on track to pass the cap or the run fails, a silent recovery when it clears, and a silent daily digest, each linking to the usage dashboards.
 * **Add**: `egress_snapshot` and `egress_statement`. A daily job copies pg_stat_statements into the database and answers the rows and estimated egress since the run before, per statement, role and nesting level; `GET /jobs/egress-snapshots` lists the windows.
 * **Update**: an anonymous `GET /events` carries a public cache header; an admin's bearer never reaches the edge.
 * **Update**: `discordTag` and `discordId` leave every user answer but a logged-in `GET /users/{key}` and an admin's `GET /users` and `POST /users/search`, and `discord_id` leaves the cast answer; an anonymous `GET /users/{key}` carries a public cache header.

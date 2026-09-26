@@ -4,7 +4,7 @@ title: Scheduled jobs
 description: Five job routes behind a shared secret, two called daily by Vercel, one every five minutes by a Cloudflare Worker because a Vercel cron runs at most once a day, and two an operator reads for egress.
 resource: ../../../app/api/routes/jobs.py
 tags: [deploy]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-26T04:13:41Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-26T18:00:00Z }
 sources:
   - id: jobs
     resource: ../../../app/api/routes/jobs.py
@@ -12,6 +12,9 @@ sources:
   - id: snapshot
     resource: ../../../app/services/egress_snapshot.py
     title: The egress snapshot and its windows
+  - id: monitor
+    resource: ../../../app/services/egress_monitor.py
+    title: The egress monitor's levels and posts
   - id: vercel
     resource: ../../../vercel.json
     title: The daily crons
@@ -24,7 +27,7 @@ sources:
 | `GET /jobs/w3c-sync` | drains the stalest players' ladder matches and stats for 50 seconds, inside the 60 second function limit | Vercel cron at 04:00 UTC, shifted by up to 59 minutes |
 | `GET /jobs/cast-reminders` | posts the reminder card for series that start soon | the Cloudflare Worker in the Discord adapter repository, every five minutes |
 | `GET /jobs/egress?days=7` | the [egress ledger](../data/tables/egress_ledger.md) rows of the last `days` days (1 to 90), most rows first, with `Cache-Control: no-store` | an operator, with `just egress-routes` against a local server |
-| `GET /jobs/egress-snapshot` | copies pg_stat_statements into [egress_snapshot](../data/tables/egress_snapshot.md) on the server, deletes snapshots older than 35 days, and answers the window since the run before: rows, estimated MB, MB a day against the budget, and the ten statements that returned the most rows; an over-budget or failed run posts to `DEV_ALERTS_WEBHOOK_URL` when it is set | Vercel cron at 00:00 UTC, shifted by up to 59 minutes |
+| `GET /jobs/egress-snapshot` | copies pg_stat_statements into [egress_snapshot](../data/tables/egress_snapshot.md) on the server, deletes snapshots older than 35 days, and answers the window since the run before: rows, estimated MB, MB a day against the budget, and the ten statements that returned the most rows; then [the egress monitor](#the-egress-monitor) levels the cycle and posts to `DEV_ALERTS_WEBHOOK_URL` when it is set | Vercel cron at 00:00 UTC, shifted by up to 59 minutes |
 | `GET /jobs/egress-snapshots?days=7` | one window per snapshot of the last `days` days (1 to 35), oldest first, totals only, with `Cache-Control: no-store` | an operator, with `just egress-days` against a local server |
 
 All five check `Authorization: Bearer <CRON_SECRET>`. With `CRON_SECRET` unset every job route answers 503, so a deployment without the secret runs no job.
@@ -32,6 +35,23 @@ All five check `Authorization: Bearer <CRON_SECRET>`. With `CRON_SECRET` unset e
 # The egress snapshot
 
 The snapshot job fetches no statistics row to the function: the copy is an `INSERT ... SELECT`, and only the summary leaves the database. Without pg_stat_statements, on SQLite or on a Postgres where the view is not on the search path or cannot be read, the job answers 200 with `available: false` and a reason. Within an hour of the last snapshot it writes nothing and answers `available: true` with `skipped`, so a retry never turns a short window into a day rate. The estimate is rows times the bytes-per-row rate in `app/core/egress_stats.py`, and `over_budget` compares the day rate with `BUDGET_MB_PER_DAY` in `app/services/egress_snapshot.py`, the default of `just db check`.
+
+# The egress monitor
+
+After each run that writes a snapshot, `app/services/egress_monitor.py` levels the billing cycle, stores the level in [monitor_state](../data/tables/monitor_state.md) and posts Discord embeds to `DEV_ALERTS_WEBHOOK_URL`. Unset, it posts nothing. A skipped run posts nothing and keeps the level.
+
+- The cycle starts on day `CYCLE_START_DAY` of each month, UTC. A window counts toward the cycle its start falls in, so the run just after midnight on the first day bills the day before to the cycle before.
+- The 3-day average is the MB of the windows that ended in the last 72 hours over their hours, times 24; with none, the last window. The projection is the cycle so far plus that average times the days left.
+- `red` when the projection is over `RED_MB`, 90% of `CAP_MB`, the egress cap per cycle. `amber` when the last window is over `BUDGET_MB_PER_DAY`; amber only colours the digest. `unavailable` when the run could not read the statistics or raised. Otherwise `normal`.
+- An alert posts when the level changes to `red` or to `unavailable`, never twice in a row. An alert Discord does not take, or one with the webhook unset, leaves the stored level as it was, so the next run posts it again. It tags `DEV_ALERTS_MENTION_USER_ID` when that is set to digits, and nobody otherwise.
+- A recovery posts, silent, when the level changes from `red` or `unavailable` to `normal` or `amber`.
+- The digest posts, silent, after every run that writes a snapshot, after any alert or recovery. Before the first window it says the baseline is taken.
+- The red alert and the digest link to the usage dashboards set in `DEV_ALERTS_SUPABASE_USAGE_URL` and `DEV_ALERTS_VERCEL_USAGE_URL`: the title opens the Supabase one, and a last Dashboards field lists each one set. A value that is not an https URL is ignored. The posts carry figures and links, and the dashboards draw the charts.
+- The alert and the digest list the three routes of the [egress ledger](../data/tables/egress_ledger.md) with the most rows on the day the last window covers, and the digest is titled with that day.
+- A run that raises posts its error type through the same state row. When the state cannot be read either, the alert posts without it.
+- A failed post is logged with its error type and HTTP status and never fails the job. A monitor that raises is logged with its error type, and the route still answers the snapshot, which is already stored.
+
+A run reads the state row, at most one window per day since the cycle start or the last 72 hours, whichever is earlier, and three ledger rows.
 
 # Request cost headers
 

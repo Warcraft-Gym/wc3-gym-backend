@@ -1,8 +1,9 @@
 """The daily egress ledger: what each route costs the database."""
 
-from datetime import timedelta
+from datetime import date, timedelta
 
 from sqlalchemy.dialects import postgresql, sqlite
+from sqlalchemy.orm import Session as OrmSession
 from sqlmodel import col, select
 
 from app.core.db import Cost, Session
@@ -47,3 +48,15 @@ def recent(days: int) -> list[EgressLedger]:
                 .order_by(col(EgressLedger.rows).desc(), col(EgressLedger.route))
             ).all()
         )
+
+
+def busiest(session: OrmSession, day: date, top: int) -> list[EgressLedger]:
+    """The `top` rows of one day with the most rows returned."""
+    return list(
+        session.scalars(
+            select(EgressLedger)
+            .where(col(EgressLedger.day) == day)
+            .order_by(col(EgressLedger.rows).desc(), col(EgressLedger.route))
+            .limit(top)
+        ).all()
+    )
