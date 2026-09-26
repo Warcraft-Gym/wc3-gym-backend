@@ -624,8 +624,8 @@ def test_rows_per_call_stay_under_the_ceiling(
 
 def test_the_signups_read_costs_five_statements(league: dict[str, Any]) -> None:
     """The season, two for the current W3C season, the signups with their users
-    and window W3C rows, and one statement for every season those users signed
-    up for. A signup read per user cost one round trip each."""
+    and window W3C rows, and one statement for the signups of those users with
+    their seasons. The count does not grow with the number of signups or seasons."""
     service = SeasonService(
         user_app_service=UserService(), map_app_service=MapService()
     )
