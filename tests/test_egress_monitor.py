@@ -738,7 +738,7 @@ def test_the_route_list_gives_way_before_the_dashboards() -> None:
 TOKEN = "vercel-test-token"
 
 
-def day(**counts: float) -> dict[str, Any]:
+def day(**counts: object) -> dict[str, Any]:
     """One day of the usage answer: zero for each meter not given, plus a field we ignore."""
     return {"date": "2026-09-28", "other_count": 7, **counts}
 
@@ -778,7 +778,7 @@ def answer(
     monkeypatch.setattr(egress_monitor.requests, "get", get)
 
 
-# 214,531 invocations, 49.9 GB-hours, 364,870 requests half from the cache, 2.35 GB out
+# 214,531 invocations, 49.9 GB-hours, 364,870 requests half from the cache, 2.35 GB in and out
 USAGE = [
     day(
         function_invocation_successful_count=200_000,
@@ -787,7 +787,8 @@ USAGE = [
         function_execution_error_gb_hours=9.0,
         request_hit_count=182_435,
         request_miss_count=100_000,
-        bandwidth_outgoing_bytes=2_000_000_000,
+        bandwidth_incoming_bytes=50_000_000,
+        bandwidth_outgoing_bytes=1_950_000_000,
     ),
     day(
         function_invocation_timeout_count=500,
@@ -818,7 +819,7 @@ def test_the_digest_sums_the_vercel_meters_over_a_rolling_30_days(
     assert titles(sent) == ["Daily infrastructure digest · 28 Sep"]
     assert vercel_field(sent[0]) == (
         "Invocations 214,531 · 21%\n"
-        "GB-hours 49.9 · 14%\n"
+        "Function GB-hours 49.9 · 14%\n"
         "Requests 364,870 · 36%\n"
         "Bandwidth 2.35 GB · 2%\n"
         "Cache hits 50%"
@@ -870,7 +871,8 @@ def test_a_meter_at_80_percent_alerts_once_and_recovers_under_it(
     alert, digest = sent
     assert alert["content"] == f"<@{FAKE_ID}> Vercel usage needs action today"
     assert alert["embeds"][0]["description"] == (
-        "GB-hours at 83% and Requests at 80% of the included usage over the last 30 days. "
+        "Function GB-hours at 83% and Requests at 80% of the included usage "
+        "over the last 30 days. "
         "Hobby pauses the feature for 30 days when a limit is hit."
     )
     assert digest["embeds"][0]["color"] == egress_monitor.RED
@@ -916,7 +918,7 @@ def test_a_rejected_token_alerts_once_and_a_good_read_says_so(
     assert vercel_field(sent[1]) is None
     current = state(egress_monitor.VERCEL_KEY)
     assert current is not None and current.level == "unavailable"
-    assert TOKEN not in caplog.text
+    assert all(TOKEN not in r.getMessage() for r in caplog.records)
     sent.clear()
 
     answer(monkeypatch, vercel, days=USAGE)
@@ -943,7 +945,7 @@ def test_an_undelivered_vercel_alert_posts_again_on_the_next_run(
 
 
 @pytest.mark.parametrize("status", [500, 503])
-def test_a_server_error_omits_the_field_and_keeps_the_level(
+def test_a_server_error_shows_not_read_and_keeps_the_level(
     monkeypatch: pytest.MonkeyPatch,
     sent: list[dict[str, Any]],
     vercel: list[dict[str, Any]],
@@ -958,13 +960,14 @@ def test_a_server_error_omits_the_field_and_keeps_the_level(
     answer(monkeypatch, vercel, status=status)
     run(monkeypatch, daily(20))
     assert titles(sent) == ["Daily infrastructure digest · 28 Sep"]
-    assert vercel_field(sent[0]) is None
-    assert f"HTTPError {status}" in caplog.text and TOKEN not in caplog.text
+    assert vercel_field(sent[0]) == f"not read (HTTPError {status})"
+    assert f"HTTPError {status}" in caplog.text
+    assert all(TOKEN not in r.getMessage() for r in caplog.records)
     current = state(egress_monitor.VERCEL_KEY)
     assert current is not None and current.updated_at == before
 
 
-def test_a_timeout_omits_the_field_and_logs_no_token(
+def test_a_timeout_shows_not_read_and_logs_no_token(
     monkeypatch: pytest.MonkeyPatch,
     sent: list[dict[str, Any]],
     vercel: list[dict[str, Any]],
@@ -976,9 +979,47 @@ def test_a_timeout_omits_the_field_and_logs_no_token(
     monkeypatch.setattr(egress_monitor.requests, "get", slow)
     run(monkeypatch, daily(20))
     assert titles(sent) == ["Daily infrastructure digest · 28 Sep"]
-    assert vercel_field(sent[0]) is None
-    assert "Timeout None" in caplog.text and TOKEN not in caplog.text
+    assert vercel_field(sent[0]) == "not read (Timeout)"
+    assert "Timeout" in caplog.text
+    assert all(TOKEN not in r.getMessage() for r in caplog.records)
     assert state(egress_monitor.VERCEL_KEY) is None
+
+
+@pytest.mark.parametrize(
+    ("days", "error"),
+    [
+        ([day(request_hit_count="many")], "TypeError"),
+        ([day(bandwidth_outgoing_bytes=float("inf"))], "OverflowError"),
+        ([None], "AttributeError"),
+    ],
+)
+def test_a_bad_body_shows_not_read(
+    monkeypatch: pytest.MonkeyPatch,
+    sent: list[dict[str, Any]],
+    vercel: list[dict[str, Any]],
+    days: list[Any],
+    error: str,
+) -> None:
+    answer(monkeypatch, vercel, days=days)
+    run(monkeypatch, daily(20))
+    assert vercel_field(sent[0]) == f"not read ({error})"
+    assert state(egress_monitor.VERCEL_KEY) is None
+
+
+def test_the_token_alert_links_the_vercel_dashboard(
+    monkeypatch: pytest.MonkeyPatch,
+    sent: list[dict[str, Any]],
+    vercel: list[dict[str, Any]],
+) -> None:
+    monkeypatch.setenv("DEV_ALERTS_VERCEL_USAGE_URL", "https://vercel.test/usage")
+    monkeypatch.setenv("DEV_ALERTS_SUPABASE_USAGE_URL", "https://supabase.test/usage")
+    answer(monkeypatch, vercel, status=401)
+    run(monkeypatch, daily(20))
+    embed = sent[0]["embeds"][0]
+    assert embed["title"] == "Vercel usage could not be read: token rejected"
+    assert embed["fields"][-1]["value"] == "[Vercel usage](https://vercel.test/usage)"
+    assert "url" not in embed
+    assert embed["footer"]["text"] == egress_monitor.MONITOR_FOOTER
 
 
 def test_a_digest_with_every_field_fits_discords_limits(

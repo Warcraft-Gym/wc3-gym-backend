@@ -43,7 +43,7 @@ VERCEL_USAGE_API = "https://api.vercel.com/v2/usage"
 # Hobby has no billing cycle: its limits hold over a rolling 30 days
 VERCEL_WINDOW = timedelta(days=30)
 VERCEL_INVOCATIONS = 1_000_000  # Vercel Hobby included usage, rolling 30 days
-VERCEL_GB_HOURS = 360.0  # Vercel Hobby included usage, rolling 30 days
+VERCEL_GB_HOURS = 360.0  # Hobby's Provisioned Memory (vercel.com/docs/functions/usage-and-pricing); the API's gb_hours may count less
 VERCEL_REQUESTS = 1_000_000  # Vercel Hobby included usage, rolling 30 days
 VERCEL_BANDWIDTH_GB = 100.0  # Vercel Hobby included usage, rolling 30 days
 VERCEL_RED = 0.8  # any meter at this share of its included usage alerts
@@ -452,7 +452,11 @@ class Vercel:
                 f"{self.invocations:,}",
                 self.invocations / VERCEL_INVOCATIONS,
             ),
-            ("GB-hours", f"{self.gb_hours:,.1f}", self.gb_hours / VERCEL_GB_HOURS),
+            (
+                "Function GB-hours",
+                f"{self.gb_hours:,.1f}",
+                self.gb_hours / VERCEL_GB_HOURS,
+            ),
             ("Requests", f"{self.requests:,}", self.requests / VERCEL_REQUESTS),
             ("Bandwidth", f"{gb:,.2f} GB", gb / VERCEL_BANDWIDTH_GB),
         ]
@@ -505,10 +509,16 @@ def vercel_alert(
         mention=mention,
         links=links,
         ask="Vercel usage needs action today",
+        footer=MONITOR_FOOTER,
     )
 
 
-def vercel_rejected_alert(now: datetime, mention: str | None) -> dict[str, Any]:
+def vercel_rejected_alert(
+    now: datetime, mention: str | None, links: dict[str, str] | None = None
+) -> dict[str, Any]:
+    """The token alert; it links the Vercel usage dashboard when that is set."""
+    links = links or {}
+    vercel = {k: v for k, v in links.items() if k == "Vercel usage"}
     return message(
         now,
         RED,
@@ -517,7 +527,9 @@ def vercel_rejected_alert(now: datetime, mention: str | None) -> dict[str, Any]:
         "Set `VERCEL_USAGE_TOKEN` to a new token scoped to the team.",
         [field("Since", stamp(now))],
         mention=mention,
+        links=vercel,
         ask="Vercel usage needs action today",
+        footer=MONITOR_FOOTER,
     )
 
 
@@ -539,6 +551,7 @@ def vercel_recovery(
             ),
         ],
         silent=True,
+        footer=MONITOR_FOOTER,
     )
 
 
@@ -680,8 +693,8 @@ def database_mb() -> float | None:
 
 def vercel_usage(now: datetime) -> Vercel | Level | None:
     """The team's usage over the rolling window from the Vercel API; UNAVAILABLE when the
-    token is rejected; None when VERCEL_USAGE_TOKEN or VERCEL_TEAM_ID is unset or the read
-    failed otherwise."""
+    token is rejected; None when VERCEL_USAGE_TOKEN or VERCEL_TEAM_ID is unset. Any other
+    failure raises to the run, which shows it in the digest."""
     token = os.getenv("VERCEL_USAGE_TOKEN", "").strip()
     team = os.getenv("VERCEL_TEAM_ID", "").strip()
     if not token or not team:
@@ -694,34 +707,18 @@ def vercel_usage(now: datetime) -> Vercel | Level | None:
         "from": iso_ms(end - VERCEL_WINDOW),
         "to": iso_ms(end),
     }
-    try:
-        response = requests.get(
-            VERCEL_USAGE_API,
-            params=params,
-            headers={"Authorization": f"Bearer {token}"},
-            timeout=10,
-        )
-        if response.status_code in (401, 403):
-            log.warning(
-                "vercel usage not read: token rejected %s", response.status_code
-            )
-            return Level.UNAVAILABLE
-        response.raise_for_status()
-        days = response.json()["data"]
-        total = {
-            name: sum(day.get(name) or 0 for day in days) for name in VERCEL_FIELDS
-        }
-    except (
-        requests.RequestException,
-        ValueError,
-        KeyError,
-        TypeError,
-        AttributeError,
-    ) as error:
-        # Log the type and status only: never the token
-        status = getattr(getattr(error, "response", None), "status_code", None)
-        log.warning("vercel usage not read: %s %s", type(error).__name__, status)
-        return None
+    response = requests.get(
+        VERCEL_USAGE_API,
+        params=params,
+        headers={"Authorization": f"Bearer {token}"},
+        timeout=10,
+    )
+    if response.status_code in (401, 403):
+        log.warning("vercel usage not read: token rejected %s", response.status_code)
+        return Level.UNAVAILABLE
+    response.raise_for_status()
+    days = response.json()["data"]
+    total = {name: sum(day.get(name) or 0 for day in days) for name in VERCEL_FIELDS}
     return Vercel(
         invocations=int(sum(total[f"function_invocation_{k}_count"] for k in OUTCOMES)),
         gb_hours=float(
@@ -729,7 +726,10 @@ def vercel_usage(now: datetime) -> Vercel | Level | None:
         ),
         requests=int(total["request_hit_count"] + total["request_miss_count"]),
         hits=int(total["request_hit_count"]),
-        bandwidth_bytes=int(total["bandwidth_outgoing_bytes"]),
+        # In and out: https://vercel.com/docs/manage-cdn-usage#calculating-fast-data-transfer
+        bandwidth_bytes=int(
+            total["bandwidth_incoming_bytes"] + total["bandwidth_outgoing_bytes"]
+        ),
     )
 
 
@@ -739,6 +739,7 @@ VERCEL_FIELDS = (
     *(f"function_execution_{k}_gb_hours" for k in OUTCOMES[:3]),
     "request_hit_count",
     "request_miss_count",
+    "bandwidth_incoming_bytes",
     "bandwidth_outgoing_bytes",
 )
 
@@ -784,10 +785,8 @@ def report(result: EgressSnapshotResult, now: datetime | None = None) -> None:
     except Exception as error:
         # The type and HTTP status only: the error text may carry the request and its token
         status = getattr(getattr(error, "response", None), "status_code", None)
-        usage, vercel_error = (
-            None,
-            " ".join(filter(None, [type(error).__name__, status and str(status)])),
-        )
+        name = type(error).__name__
+        usage, vercel_error = None, f"{name} {status}" if status else name
         log.warning("vercel usage not read: %s", vercel_error)
     vercel = usage if isinstance(usage, Vercel) else None
     changes: list[Change] = []
@@ -856,7 +855,7 @@ def report(result: EgressSnapshotResult, now: datetime | None = None) -> None:
                     VERCEL_KEY,
                     Level.UNAVAILABLE,
                     now,
-                    lambda: vercel_rejected_alert(now, mention),
+                    lambda: vercel_rejected_alert(now, mention, links),
                 )
             )
     for c in changes:
