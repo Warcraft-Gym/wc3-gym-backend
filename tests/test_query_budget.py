@@ -165,9 +165,10 @@ def test_get_series_costs_fourteen_statements(league: dict[str, Any]) -> None:
     assert tally[0] == 14
 
 
-def test_search_for_season_costs_nine_statements(league: dict[str, Any]) -> None:
-    """The season list is reduced: one statement for the casts, one for the veto
-    steps, none per player and none per series.
+def test_search_for_season_costs_eight_statements(league: dict[str, Any]) -> None:
+    """The season list is reduced: one statement for the casts, one for the pick
+    steps, none per player and none per series. A GNL series reads its rules
+    off the season its fixture loads, so the rules cost no statement.
 
     The reduced player carries no stats, so the list rates both sides of every
     row itself: three statements while the W3Champions season setting is unset,
@@ -181,7 +182,7 @@ def test_search_for_season_costs_nine_statements(league: dict[str, Any]) -> None
     assert series_list[0].player1 is not None
     assert series_list[0].player1.name
     assert series_list[0].player1.w3c_stats == []
-    assert tally[0] == 9
+    assert tally[0] == 8
 
 
 def test_the_season_record_costs_two_statements(league: dict[str, Any]) -> None:
@@ -579,7 +580,7 @@ def test_the_season_list_costs_the_same_when_seasons_grow(
 # Rows one call of each route reads on the league fixture, as X-DB-Rows reports it
 ROWS_PER_CALL = {
     "/series/{series_played_id}": 29,
-    "/events/{season_id}/series": 16,
+    "/events/{season_id}/series": 14,
     "/fantasy/bets": 10,
     "/fantasy/teams": 9,
     "/stats/career": 4,
