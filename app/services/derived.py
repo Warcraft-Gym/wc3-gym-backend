@@ -40,6 +40,7 @@ from sqlalchemy import (
     ColumnElement,
     Integer,
     SQLColumnExpression,
+    String,
     and_,
     case,
     cast,
@@ -644,12 +645,13 @@ def _gnl_matchups(
     session: Session, user_ids: set[int], season_ids: set[int]
 ) -> dict[tuple[int, int], list[str | None]]:
     """The race every opponent of every named player registered on, in one
-    statement.
+    statement that answers one row per player and season.
 
     The opponent is the other player of the series, so the two sides union
-    again. Playday then series id, so the list reads in the order the season
-    was played. An opponent the season holds no signup for reads null, and the
-    entry stays in the list so it keeps the length of the season.
+    again. Each entry carries its playday and series id, and the list sorts on
+    them, so it reads in the order the season was played. An opponent the
+    season holds no signup for reads null, and the entry stays in the list so
+    it keeps the length of the season.
     """
     signup1, signup2 = aliased(DBUserSeasonSignup), aliased(DBUserSeasonSignup)
     sides = union_all(
@@ -673,15 +675,31 @@ def _gnl_matchups(
         .join(signup2, signup_on(signup2, col(Series.player1_id)), isouter=True),
     ).subquery()
 
+    # "playday:series id:race", the race empty when the opponent has none
+    entry = (
+        cast(sides.c.playday, String)
+        + ":"
+        + cast(sides.c.series_id, String)
+        + ":"
+        + func.coalesce(cast(sides.c.race, String), "")
+    )
     rows = session.execute(
-        select(sides.c.user_id, sides.c.season_id, sides.c.race)
+        select(sides.c.user_id, sides.c.season_id, func.aggregate_strings(entry, ","))
         .where(sides.c.user_id.in_(user_ids), sides.c.season_id.in_(season_ids))
-        .order_by(sides.c.playday, sides.c.series_id)
+        .group_by(sides.c.user_id, sides.c.season_id)
     ).all()
 
     history: dict[tuple[int, int], list[str | None]] = {}
-    for user_id, season_id, race in rows:
-        history.setdefault((user_id, season_id), []).append(fantasy.race_value(race))
+    for user_id, season_id, joined in rows:
+        entries = sorted(
+            (int(playday), int(series_id), race)
+            for playday, series_id, race in (
+                item.split(":") for item in joined.split(",")
+            )
+        )
+        history[(user_id, season_id)] = [
+            fantasy.race_value(Race[race]) if race else None for _, _, race in entries
+        ]
     return history
 
 

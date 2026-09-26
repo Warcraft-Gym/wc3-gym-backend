@@ -584,7 +584,8 @@ ROWS_PER_CALL = {
     "/fantasy/teams": 9,
     "/stats/career": 4,
     "/stats/career/{player_id}": 3,
-    "/events/{season_id}/teams": 55,
+    "/events/{season_id}/teams": 57,
+    "/events/{season_id}/teams/{team_a_id}": 41,
     # One tag row per player
     "/users": 41,
     "/users/{player_id}": 14,

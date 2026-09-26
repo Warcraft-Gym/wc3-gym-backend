@@ -1,15 +1,18 @@
 import logging
+from collections.abc import Iterable
 from typing import Any
 
 from sqlalchemy import select, true
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as OrmSession
 from sqlalchemy.orm import joinedload, noload, selectinload
+from sqlalchemy.orm.attributes import instance_state, set_committed_value
 from sqlmodel import col
 
 from app.core.db import Session, rel
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.core.query import QueryElement, QueryUtil
+from app.models.base import ident
 from app.models.league import League
 from app.models.relationships import DBTeamSeasonCaptain
 from app.models.season import Season, progress_by_seasons
@@ -17,6 +20,7 @@ from app.models.team import Team, TeamCreate, TeamPublic, TeamUpdate
 from app.models.team_season import DBTeamSeason
 from app.models.user import User, UserPublic
 from app.models.user_team_season import DBUserTeamSeason
+from app.models.w3c_stats import W3CStats
 from app.services import availability, blob, derived, discord_roles
 from app.services.users import UserService
 
@@ -89,7 +93,11 @@ def _public(session: OrmSession, team: Team) -> TeamPublic:
 
 
 def _season_loads(season_id: int) -> list[Any]:
-    """Loader options for one season of a team: roster, captains and stats."""
+    """Loader options for one season of a team: roster, captains and stats.
+
+    The W3C rows are left to _load_w3c_stats, since a captain is often a
+    roster player too and a loader on each path reads his rows twice.
+    """
     roster = rel(Team.user_seasons).and_(col(DBUserTeamSeason.season_id) == season_id)
     info = rel(Team.season_info).and_(col(DBTeamSeason.season_id) == season_id)
     stats = rel(User.team_seasons).and_(col(DBUserTeamSeason.season_id) == season_id)
@@ -100,7 +108,6 @@ def _season_loads(season_id: int) -> list[Any]:
         joinedload(roster)
         .joinedload(rel(DBUserTeamSeason.user))
         .options(
-            selectinload(rel(User.w3c_stats)),
             selectinload(stats),
             noload(rel(User.signup_seasons)),
         ),
@@ -109,11 +116,37 @@ def _season_loads(season_id: int) -> list[Any]:
         selectinload(seats)
         .joinedload(rel(DBTeamSeasonCaptain.user))
         .options(
-            selectinload(rel(User.w3c_stats)),
             noload(rel(User.team_seasons)),
             noload(rel(User.signup_seasons)),
         ),
     ]
+
+
+def _load_w3c_stats(session: OrmSession, teams: Iterable[Team]) -> None:
+    """The W3C rows of every roster player and captain, in one statement.
+
+    Each user is read once, however many seats he holds across the teams.
+    """
+    users = {
+        ident(user): user
+        for team in teams
+        for user in (
+            *(seat.user for seat in team.user_seasons),
+            *(seat.user for seat in team.captain_seasons),
+        )
+        if user is not None and "w3c_stats" in instance_state(user).unloaded
+    }
+    if not users:
+        return
+    rows: dict[int, list[W3CStats]] = {user_id: [] for user_id in users}
+    for stat in session.scalars(
+        select(W3CStats)
+        .where(col(W3CStats.user_id).in_(users))
+        .order_by(col(W3CStats.id))
+    ):
+        rows[stat.user_id].append(stat)
+    for user_id, user in users.items():
+        set_committed_value(user, "w3c_stats", rows[user_id])
 
 
 # A team list reads the season rows and no people; noload alone, because a
@@ -356,6 +389,7 @@ class TeamService:
             )
             if not team:
                 raise NotFoundError("Team not found")
+            _load_w3c_stats(session, [team])
             public = _public(session, team)
             # An event without scheduling asks nobody, so every list stays empty
             if event.scheduling_enabled:
@@ -476,6 +510,7 @@ class TeamService:
                 .limit(limit)
             )
             teams = session.scalars(statement).unique().all()
+            _load_w3c_stats(session, teams)
             result = [TeamPublic.from_team(team) for team in teams]
             _fill(session, result)
             return result
