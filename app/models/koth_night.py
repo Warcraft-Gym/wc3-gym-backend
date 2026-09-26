@@ -126,6 +126,9 @@ class KothHistoricalSeries(SQLModel):
     side2: KothPlayer
     winner_side: Literal[1, 2] | None = None
     result_unavailable: bool
+    # From winner-stays-on order: shown on the board, left out of every record
+    inferred_winner_side: Literal[1, 2] | None = None
+    review_note: str | None = None
 
 
 class KothBracket(SQLModel):

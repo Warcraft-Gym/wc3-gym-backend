@@ -58,6 +58,76 @@ def bounds(label: str) -> tuple[int | None, int | None]:
     return None, None
 
 
+# A parenthesis naming a race is evidence of the race, not a note about the result
+RACE_TAGS = {
+    "hu",
+    "human",
+    "orc",
+    "oc",
+    "ud",
+    "undead",
+    "ne",
+    "nightelf",
+    "elf",
+    "rdm",
+    "random",
+    "offrace",
+}
+
+
+def _name(value: str) -> str:
+    return re.sub(r"[^0-9a-z]", "", value.casefold())
+
+
+def _note(raw: str) -> bool:
+    """Whether the source text carries a note, such as a player who left."""
+    return any(_name(tag) not in RACE_TAGS for tag in re.findall(r"\(([^)]*)\)", raw))
+
+
+def infer_winners(
+    rows: list[dict[str, Any]], king: str | None
+) -> list[tuple[int | None, str | None]]:
+    """(inferred winner side, review note) per BO1 of one bracket, in source order.
+
+    Winner stays on: the side that plays the next series won this one, and the
+    last series was won by the reported king. A bracket is inferred whole or
+    not at all, so a single break, a source note, a name that only nearly
+    matches, or a disagreeing source result leaves every winner to a human.
+    """
+    if not rows:
+        return []
+    pairs = [(_name(row["player_1"]), _name(row["player_2"])) for row in rows]
+    after = [*pairs[1:], ((_name(king),) if king else ())]
+    winners: list[int | None] = []
+    notes: list[str | None] = []
+    for index, (row, pair, following) in enumerate(
+        zip(rows, pairs, after, strict=True)
+    ):
+        stays = [side for side, name in enumerate(pair, 1) if name in following]
+        last = index == len(rows) - 1
+        winner = stays[0] if len(stays) == 1 else None
+        explicit = row["winner"]
+        if _note(row["raw_text"]):
+            note = "The source adds a note to this series"
+        elif last and not king:
+            note = "No king is recorded"
+        elif last and not stays:
+            note = "The reported king is not in the last series"
+        elif not stays:
+            note = "Neither side plays the next series"
+        elif winner is None:
+            note = "Both sides play the next series"
+        elif explicit and _name(explicit) != pair[winner - 1]:
+            note = "The source result differs from the order"
+        else:
+            note = None
+        winners.append(None if explicit else winner)
+        notes.append(note)
+    if any(notes):
+        return [(None, note) for note in notes]
+    return list(zip(winners, notes, strict=True))
+
+
 def load_capture(directory: Path) -> list[dict[str, Any]]:
     """Verify every file in the capture manifest before reading its event records."""
     directory = directory.resolve()
@@ -271,9 +341,15 @@ def _insert_event(session: OrmSession, record: dict[str, Any]) -> int:
                 entrants[name] = entrant
             return entrants[name]
 
+        played = [row for row in section["matches"] if row["record_type"] == "match"]
+        king_name = section["crowns"][-1]["player"] if section["crowns"] else None
+        inferred = dict(
+            zip(map(id, played), infer_winners(played, king_name), strict=True)
+        )
         for ordinal, row in enumerate(section["matches"], 1):
             if row["record_type"] != "match":
                 continue
+            inferred_winner, review_note = inferred[id(row)]
             first, second = participant(row["player_1"]), participant(row["player_2"])
             winner = (
                 "A"
@@ -304,6 +380,8 @@ def _insert_event(session: OrmSession, record: dict[str, Any]) -> int:
                     event_id=event_id,
                     source_key=f"{section_no}:{ordinal}",
                     source_record=row,
+                    inferred_winner=inferred_winner,
+                    review_note=review_note,
                 )
             )
         for crown in section["crowns"]:

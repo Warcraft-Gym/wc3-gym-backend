@@ -6,7 +6,12 @@ from sqlmodel import col
 
 from app.models.base import ident
 from app.models.event_entrant import EventEntrant
-from app.models.event_history import EventVideo, EventVideoPublic, HistoricalParticipant
+from app.models.event_history import (
+    EventVideo,
+    EventVideoPublic,
+    HistoricalParticipant,
+    KothHistorySeries,
+)
 from app.models.koth_night import (
     KothBoard,
     KothBracket,
@@ -19,7 +24,7 @@ from app.services.koth.night import divisions_of, series_of
 
 
 def read_archive(session: Session, night: Season, date_label: str) -> KothBoard:
-    """Five narrow batch reads after the event and archive lookup; raw evidence stays private."""
+    """Six narrow batch reads after the event and archive lookup; raw evidence stays private."""
     event_id = ident(night)
     people = {
         entrant_id: KothPlayer(entrant_id=entrant_id, name=name)
@@ -33,6 +38,16 @@ def read_archive(session: Session, night: Season, date_label: str) -> KothBoard:
         )
     }
     series = series_of(session, event_id)
+    inferred = {
+        series_id: (winner, note)
+        for series_id, winner, note in session.execute(
+            select(
+                col(KothHistorySeries.series_id),
+                col(KothHistorySeries.inferred_winner),
+                col(KothHistorySeries.review_note),
+            ).where(col(KothHistorySeries.event_id) == event_id)
+        )
+    }
     brackets = []
     for division in divisions_of(session, event_id):
         brackets.append(
@@ -55,6 +70,8 @@ def read_archive(session: Session, night: Season, date_label: str) -> KothBoard:
                         else 1
                         if (row.player1_score or 0) > (row.player2_score or 0)
                         else 2,
+                        inferred_winner_side=inferred.get(ident(row), (None, None))[0],
+                        review_note=inferred.get(ident(row), (None, None))[1],
                     )
                     for row in series
                     if row.division_id == ident(division)

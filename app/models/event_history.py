@@ -42,6 +42,10 @@ class KothHistorySeries(DBModel, table=True):
     event_id: int = Field(index=True, foreign_key="event.id", ondelete="CASCADE")
     source_key: str = Field(max_length=200)
     source_record: dict[str, Any] = Field(sa_type=JSON)
+    # Winner-stays-on order names the winner, 1 or 2; shown on the board, never in records
+    inferred_winner: int | None = None
+    # Why this series stops the bracket's inference, for a human to review
+    review_note: str | None = Field(default=None, max_length=200)
 
 
 class EventVideo(DBModel, table=True):

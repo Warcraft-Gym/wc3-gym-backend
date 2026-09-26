@@ -111,6 +111,10 @@ def upgrade() -> None:
             "source_key", sqlmodel.sql.sqltypes.AutoString(length=200), nullable=False
         ),
         sa.Column("source_record", sa.JSON(), nullable=False),
+        sa.Column("inferred_winner", sa.Integer(), nullable=True),
+        sa.Column(
+            "review_note", sqlmodel.sql.sqltypes.AutoString(length=200), nullable=True
+        ),
         sa.ForeignKeyConstraint(
             ["event_id"],
             ["event.id"],

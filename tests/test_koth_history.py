@@ -15,7 +15,12 @@ from app.models.event_history import EventVideo, HistoricalParticipant, KothHist
 from app.models.series import Series
 from app.models.series_game import DBSeriesGame
 from app.models.user import User
-from app.services.koth.history_import import bounds, import_capture, local_url
+from app.services.koth.history_import import (
+    bounds,
+    import_capture,
+    infer_winners,
+    local_url,
+)
 from tests.test_koth_night import open_night
 
 
@@ -111,6 +116,9 @@ def test_import_keeps_unknowns_and_every_competitive_bo1(client: Client) -> None
     assert second["name"] == "Gold and below" and second["lower_bound"] is None
     assert first["historical_king"]["name"] == "OTHER"
     assert [r["winner_side"] for r in first["history"]] == [None, 2]
+    assert [r["inferred_winner_side"] for r in first["history"]] == [None, None]
+    assert first["history"][0]["review_note"] == "Both sides play the next series"
+    assert second["history"][0]["review_note"] == "No king is recorded"
     for bracket in board["brackets"]:
         assert not bracket["queue"] and bracket["open_series"] is None
         for row in bracket["history"]:
@@ -299,6 +307,96 @@ def test_full_offline_capture(client: Client) -> None:
         series = client.get(f"/events/{event_id}/series?limit=500")
         assert series.status_code == 200, series.text
         assert {row["id"] for row in series.json()} == series_ids
-        assert int(response.headers["X-DB-Statements"]) <= 5
-        assert int(response.headers["X-DB-Rows"]) <= 69
-        assert len(response.content) < 10000
+        assert int(response.headers["X-DB-Statements"]) <= 6
+        assert int(response.headers["X-DB-Rows"]) <= 98
+        assert len(response.content) < 11000
+
+
+def bo1(
+    first: str, second: str, raw: str = "", winner: str | None = None
+) -> dict[str, Any]:
+    return {
+        "record_type": "match",
+        "player_1": first,
+        "player_2": second,
+        "winner": winner,
+        "raw_text": f"{first} vs. {second} {raw}",
+    }
+
+
+def test_winner_stays_on_infers_a_whole_bracket() -> None:
+    rows = [bo1("Ann", "Bo"), bo1("ann", "Cy", "(HU)"), bo1("Cy", "Di")]
+    assert infer_winners(rows, "Di") == [(1, None), (2, None), (2, None)]
+    # a source result stays the source's and is never inferred over
+    assert infer_winners([], "Di") == []
+    rows[1]["winner"] = "Cy"
+    assert infer_winners(rows, "Di") == [(1, None), (None, None), (2, None)]
+
+
+@pytest.mark.parametrize(
+    ("rows", "king", "note"),
+    [
+        (
+            [bo1("Ann", "Bo"), bo1("Cy", "Di")],
+            "Di",
+            "Neither side plays the next series",
+        ),
+        (
+            [bo1("Ann", "Bo"), bo1("Bo", "Ann")],
+            "Ann",
+            "Both sides play the next series",
+        ),
+        (
+            [bo1("Ann", "Bo"), bo1("Ann", "Cy")],
+            "Bo",
+            "The reported king is not in the last series",
+        ),
+        ([bo1("Ann", "Bo"), bo1("Ann", "Cy")], None, "No king is recorded"),
+        (
+            [bo1("Ann", "Bo", "(Ann had to leave)"), bo1("Bo", "Cy")],
+            "Cy",
+            "The source adds a note to this series",
+        ),
+        (
+            [bo1("Ann", "Bo", winner="Bo"), bo1("Ann", "Cy")],
+            "Cy",
+            "The source result differs from the order",
+        ),
+        (
+            [bo1("Anne", "Bo"), bo1("Ann", "Cy")],
+            "Cy",
+            "Neither side plays the next series",
+        ),
+    ],
+)
+def test_any_doubt_leaves_the_whole_bracket_to_review(
+    rows: list[dict[str, Any]], king: str | None, note: str
+) -> None:
+    inferred = infer_winners(rows, king)
+    assert all(winner is None for winner, _ in inferred)
+    assert note in [n for _, n in inferred]
+
+
+def test_an_inferred_winner_shows_on_the_board_and_stays_out_of_records(
+    client: Client,
+) -> None:
+    record = capture()[0]
+    record["sections"] = [
+        {
+            "kind": "bracket",
+            "title": "Gold and below",
+            "matches": [bo1("Ann", "Bo"), bo1("Ann", "Cy")],
+            "crowns": [{"player": "Cy", "raw_text": "Cy is crowned King"}],
+        }
+    ]
+    event_id = import_capture([record], apply=True)["event_ids"]["capture-first"]
+    with Session() as session:
+        rows = list(session.scalars(select(Series)))
+        assert all(r.player1_score is None and r.result_unavailable for r in rows)
+        games = session.scalars(select(DBSeriesGame))
+        assert all(g.winner_side is None for g in games)
+    history = client.get(f"/koth/nights/{event_id}/board").json()["brackets"][0][
+        "history"
+    ]
+    assert [r["inferred_winner_side"] for r in history] == [1, 2]
+    assert [r["winner_side"] for r in history] == [None, None]
