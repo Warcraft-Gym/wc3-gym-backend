@@ -32,7 +32,7 @@ Every event kind shares the rows: `league`, `event`, `event_stage`, `event_round
 
 The rule that keeps this workable: **the shared engine never branches on kind.** A kind that needs different behaviour gets a kind module (`app/services/koth/`, and the GNL draft and fantasy services) and, where it needs its own columns, a side table. Never write `if kind == "gnl"` inside a shared service. See [the decision](../decisions/unified-event-model.md).
 
-The event API is the canonical HTTP surface for every kind. `EventPublic` includes the GNL map pool, rounds, score configuration, fantasy configuration and unscored-series count. The two fields that exist only on `SeasonPublic`, `user_signup` and `signup_race`, describe the caller in a legacy response; event signup routes carry that state.
+The event API is the canonical HTTP surface for every kind. `EventPublic` includes the GNL map pool, rounds, score configuration, fantasy configuration and unscored-series count. `user_signup` exists only on `SeasonPublic` and is always empty; `signup_race` and `played_as` are always null there. A user's `signup_seasons` entries are `SeasonSummaryPublic` and carry that signup's `signup_race` and `played_as` (see [response shapes](../api/response-shapes.md)); event signup routes carry the caller's signup state.
 
 # Stages
 
