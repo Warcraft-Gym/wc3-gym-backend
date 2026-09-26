@@ -1,5 +1,9 @@
 # Bundle history
 
+## 2026-09-26
+
+* **Update**: an admin who captains carries the `seats` list, so `/me` names that admin's teams and each season's `captain` flag; a view-as request drops the admin's own seats.
+
 ## 2026-09-24
 
 * **Add**: `link_prompt`. Only a tag Battle.net verified joins an earlier player to a login unasked; a weaker hint is a suggestion the login answers once. A claim joins at once, unverified, and a verify takes a tag another login holds unverified.

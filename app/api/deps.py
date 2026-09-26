@@ -128,6 +128,10 @@ def _resolve_claims(request: Request) -> dict[str, Any]:
     discord_id = _discord_id(clerk_user_id)
     claims: dict[str, Any] = {"sub": discord_id, "clerk_user_id": clerk_user_id}
     if admins.is_admin(discord_id):
+        # an admin who also captains keeps the seats, so the app can name their team
+        seats = team_service.captain_seats(discord_id)
+        if seats:
+            claims |= _seat_claims(seats, discord_roles.current_season())
         return _view_as(request, claims | {"role": "admin"})
     claims["role"] = discord.role_for(discord_id)
     if claims["role"] == "member":
@@ -182,6 +186,10 @@ def _view_as(request: Request, claims: dict[str, Any]) -> dict[str, Any]:
     role = request.headers.get("x-view-as")
     if role not in ("captain", "member", "guest"):
         return claims
+    # the admin's own seats never leak into the viewed role; a viewed captain names its own
+    claims = {
+        k: v for k, v in claims.items() if k not in ("seats", "team_id", "season_id")
+    }
     claims |= {"role": role, "actual_role": "admin"}
     if role != "captain":
         return claims
