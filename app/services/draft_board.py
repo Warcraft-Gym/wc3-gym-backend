@@ -16,7 +16,7 @@ from datetime import datetime, timedelta
 from itertools import product
 from typing import Any
 
-from sqlalchemy import Row, and_, case, func, literal, or_, select
+from sqlalchemy import Row, and_, case, func, literal, or_, select, union
 from sqlalchemy.orm import Session as OrmSession
 from sqlalchemy.orm import aliased
 from sqlmodel import col
@@ -43,6 +43,7 @@ from app.models.relationships import (
 )
 from app.models.season import LEAGUE_SHORT_NAME, Season
 from app.models.series import Series
+from app.models.types import utcnow
 from app.models.user import User
 from app.models.user_block import UserBlock, UserBusy
 from app.models.user_team_season import DBUserTeamSeason
@@ -109,8 +110,8 @@ def meetings(user_a: int, user_b: int) -> list[PairMeeting]:
     """Every finished series the two players played, newest first, capped at
     `MEETINGS_LIMIT`, with the MMR each held at the time.
 
-    One statement: the meetings carry the race each side played, and the two
-    ratings hang off them as `ladder.mmr_at` reads at the series time, so the
+    The current w3champions season, then one statement: the meetings carry the
+    race each side played, and the two ratings hang off them as `ladder.mmr_at` reads at the series time, so the
     answer costs the same whoever the pair is.
     """
     if user_a == user_b:
@@ -344,9 +345,10 @@ def _meeting_rows(session: OrmSession, user_a: int, user_b: int) -> Sequence[Row
     """The finished series between the two, newest first, with the race each
     played and the MMR each held going into it.
 
-    One statement. The two ratings are `ladder.mmr_at` reads inside the
-    w3champions seasons of the meeting's event, so neither the ladder rows nor
-    an extra round trip per meeting reach the caller. A series with no time
+    The current w3champions season, then one statement. The two ratings are
+    `ladder.mmr_at` reads inside the w3champions seasons of the meeting's
+    event, plus the current one while its end has not passed, so neither the
+    ladder rows nor an extra round trip per meeting reach the caller. A series with no time
     reads the ladder against the first day of its round, and sorts last where
     it has neither.
     """
@@ -403,7 +405,21 @@ def _meeting_rows(session: OrmSession, user_a: int, user_b: int) -> Sequence[Row
     )
     # each meeting reads the ladder inside the w3champions seasons of its own event
     bound = ladder.w3c_seasons(session, select(met.c.event_id))
-    seasons = select(bound.c.wc3_season).where(bound.c.event_id == met.c.event_id)
+    event = aliased(Season)
+    # an event whose end has not passed also reads the current w3champions season
+    running = (
+        select(col(event.id))
+        .where(
+            col(event.id) == met.c.event_id,
+            col(event.closed_at).is_(None),
+            or_(col(event.end_date).is_(None), col(event.end_date) >= utcnow().date()),
+        )
+        .exists()
+    )
+    seasons = union(
+        select(bound.c.wc3_season).where(bound.c.event_id == met.c.event_id),
+        select(literal(events._w3c_season(session))).where(running),
+    )
     return session.execute(
         select(
             met.c.series_id,

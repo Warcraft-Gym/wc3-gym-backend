@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
 from sqlalchemy import (
     CTE,
     ColumnElement,
+    CompoundSelect,
     Row,
     Select,
     SQLColumnExpression,
@@ -811,7 +812,7 @@ def mmr_at(
     user_id: SQLColumnExpression[int | None] | int,
     race: SQLColumnExpression[Race | None] | Race,
     instant: SQLColumnExpression[datetime | None] | datetime,
-    wc3_seasons: Sequence[int] | Select[tuple[int]],
+    wc3_seasons: Sequence[int] | Select[tuple[int]] | CompoundSelect,
 ) -> ColumnElement[int | None]:
     """The rule `mmr_on` states, for one player and race at one instant, as a
     scalar subquery over the row it hangs off. A list of rows costs no

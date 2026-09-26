@@ -184,7 +184,7 @@ def test_search_for_season_costs_nine_statements(league: dict[str, Any]) -> None
     assert series_list[0].player1 is not None
     assert series_list[0].player1.name
     assert series_list[0].player1.w3c_stats == []
-    # eight while every list read the snapshot; the finished season costs one more
+    # three reads find the finished season, one reads the MMR of the time
     assert tally[0] == 9
 
 

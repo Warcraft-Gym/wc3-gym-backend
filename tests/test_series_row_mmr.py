@@ -380,7 +380,8 @@ def test_a_finished_event_with_no_stored_match_rates_no_row(
     """No match in the window names no W3C season, so no row takes today's figure."""
     first, _, third, _ = finished["player_ids"]
     rate((first, Race.HU, 20, 1500), (third, Race.NE, 20, 1400))
-    play(first, Race.HU, 24 * 60, 11, (1490, 1510))
+    # season 20 is the current one, so a fallback to it would rate the first row
+    play(first, Race.HU, 24 * 60, 20, (1490, 1510))
 
     rows = season_rows(client, finished["season_id"])
 
