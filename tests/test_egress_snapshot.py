@@ -183,3 +183,67 @@ def test_a_run_within_an_hour_of_the_last_writes_nothing(
             session.execute(text("SELECT count(*) FROM egress_snapshot")).scalar_one()
             == 1
         )
+
+
+def result(
+    mb_per_day: float, available: bool = True
+) -> egress_snapshot.EgressSnapshotResult:
+    start = datetime(2026, 9, 26)
+    w = egress_snapshot.window(
+        start, start + timedelta(days=1), 10, int(mb_per_day * 1e4)
+    )
+    return egress_snapshot.EgressSnapshotResult(
+        available=available,
+        reason=None
+        if available
+        else "the pg_stat_statements extension is not installed",
+        budget_mb_per_day=egress_snapshot.BUDGET_MB_PER_DAY,
+        window=w if available else None,
+        top=[
+            egress_snapshot.EgressStatementRows(query="SELECT series", calls=10, rows=5)
+        ],
+    )
+
+
+def test_the_alert_names_an_over_budget_day_or_a_failed_run_and_nothing_else() -> None:
+    assert egress_snapshot.alert_text(result(50)) is None
+    over = egress_snapshot.alert_text(result(140))
+    assert (
+        over is not None
+        and "~140 MB/day (budget 80)" in over
+        and "SELECT series" in over
+    )
+    assert egress_snapshot.alert_text(result(0, available=False)) == (
+        "Egress snapshot could not run: the pg_stat_statements extension is not installed"
+    )
+
+
+def test_the_alert_posts_only_when_the_webhook_is_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    posts: list[dict] = []
+
+    class Sent:
+        def raise_for_status(self) -> None: ...
+
+    def post(url: str, json: dict, timeout: float) -> Sent:
+        posts.append(json)
+        return Sent()
+
+    monkeypatch.setattr(egress_snapshot.requests, "post", post)
+    monkeypatch.delenv("DEV_ALERTS_WEBHOOK_URL", raising=False)
+    egress_snapshot.alert(result(140))
+    monkeypatch.setenv("DEV_ALERTS_WEBHOOK_URL", "")
+    egress_snapshot.alert(result(140))
+    assert posts == []
+
+    monkeypatch.setenv("DEV_ALERTS_WEBHOOK_URL", "https://discord.test/webhook")
+    egress_snapshot.alert(result(50))
+    egress_snapshot.alert(result(140))
+    assert len(posts) == 1 and posts[0]["allowed_mentions"] == {"parse": []}
+
+    def down(url: str, json: dict, timeout: float) -> Sent:
+        raise egress_snapshot.requests.ConnectionError("down")
+
+    monkeypatch.setattr(egress_snapshot.requests, "post", down)
+    egress_snapshot.alert(result(140))

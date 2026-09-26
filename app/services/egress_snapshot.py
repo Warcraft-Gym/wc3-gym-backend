@@ -3,8 +3,11 @@
 The copy is an INSERT ... SELECT on the server, so a run returns only its summary to the client.
 """
 
+import logging
+import os
 from datetime import datetime, timedelta
 
+import requests
 from sqlalchemy import BigInteger, Integer, Text, bindparam, text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session as OrmSession
@@ -17,6 +20,8 @@ from app.models.egress_snapshot import (
     EgressWindow,
 )
 from app.models.types import UTCDateTime, utcnow
+
+log = logging.getLogger(__name__)
 
 # The per-project budget of `just db check`: 80 MB a day fits 5 GB a month
 BUDGET_MB_PER_DAY = 80.0
@@ -176,3 +181,40 @@ def recent(days: int) -> list[EgressWindow]:
     """The windows of the snapshots taken in the last `days` days, oldest first."""
     with Session() as session:
         return windows(session, utcnow() - timedelta(days=days))
+
+
+def alert_text(result: EgressSnapshotResult) -> str | None:
+    """The #webhooks message for a run that failed or went over budget; None when all is well."""
+    if not result.available:
+        return f"Egress snapshot could not run: {result.reason}"
+    w = result.window
+    if w is None or not w.over_budget:
+        return None
+    lines = [
+        (
+            f"Supabase egress over budget: ~{w.mb_per_day:,.0f} MB/day "
+            f"(budget {result.budget_mb_per_day:.0f}), {w.rows:,} rows "
+            f"from {w.start:%d %b %H:%M} to {w.end:%d %b %H:%M} UTC"
+        )
+    ]
+    lines += [
+        f"- {s.rows:,} rows, {s.calls:,} calls: `{s.query[:90]}`"
+        for s in result.top[:3]
+    ]
+    return "\n".join(lines)
+
+
+def alert(result: EgressSnapshotResult) -> None:
+    """Post alert_text to the DEV_ALERTS_WEBHOOK_URL channel webhook; never fails the job."""
+    url = os.getenv("DEV_ALERTS_WEBHOOK_URL")
+    message = alert_text(result)
+    if not url or message is None:
+        return
+    try:
+        requests.post(
+            url,
+            json={"content": message, "allowed_mentions": {"parse": []}},
+            timeout=10,
+        ).raise_for_status()
+    except requests.RequestException as error:
+        log.warning("egress alert not posted: %s", error)

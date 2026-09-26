@@ -107,9 +107,12 @@ def egress_ledger(
 def take_egress_snapshot(credentials: Credentials) -> EgressSnapshotResult:
     """Copy pg_stat_statements into egress_snapshot and diff it with the copy before,
     for Vercel Cron once a day. Without pg_stat_statements it answers available: false;
-    within an hour of the last snapshot it writes nothing and answers `skipped`."""
+    within an hour of the last snapshot it writes nothing and answers `skipped`.
+    A failed or over-budget run posts to the DEV_ALERTS_WEBHOOK_URL channel."""
     only_the_scheduler(credentials)
-    return egress_snapshot.take()
+    result = egress_snapshot.take()
+    egress_snapshot.alert(result)
+    return result
 
 
 @router.get("/jobs/egress-snapshots")
