@@ -18,6 +18,7 @@ from app.core.security import is_admin
 from app.models.draft_board import PairMeeting
 from app.models.link_prompt import LinkPromptPublic, PromptAnswer
 from app.models.player_history import PlayerHistory
+from app.models.player_reads import PlayerSeasonPublic, PlayerSeriesSummaryPublic
 from app.models.user import (
     UserCreate,
     UserListPublic,
@@ -29,7 +30,7 @@ from app.models.user import (
 from app.models.user_battle_tag import MergePlan, MergeWrite, TagMoveWrite, TagWrite
 from app.models.user_block import SoftBlocksPublic
 from app.models.w3c_ladder_match import LadderPlayer
-from app.services import draft_board, player_history
+from app.services import draft_board, player_history, player_reads
 
 logger = logging.getLogger(__name__)
 
@@ -241,6 +242,29 @@ def get_user_history(user_id: int, response: Response) -> PlayerHistory:
     """Every GNL season this player took part in, and every opponent they met."""
     edge_cache(response, "running")
     return player_history.history(user_id)
+
+
+@router.get("/users/{user_id}/seasons")
+def get_user_seasons(user_id: int, response: Response) -> list[PlayerSeasonPublic]:
+    """Every season this player held a roster or a captain seat in, newest first."""
+    edge_cache(response, "settled")
+    return player_reads.seasons(user_id)
+
+
+@router.get("/users/{user_id}/series")
+def get_user_series(
+    user_id: int,
+    response: Response,
+    event_id: Annotated[list[int], Query(min_length=1, max_length=50)],
+    limit: Annotated[int, Query(ge=1, le=500)] = 500,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> list[PlayerSeriesSummaryPublic]:
+    """One page of this player's GNL series in the named events, at most 500,
+    from his side, by season, week, time and id."""
+    rows, total = player_reads.series(user_id, event_id, limit=limit, offset=offset)
+    response.headers["X-Total-Count"] = str(total)
+    edge_cache(response, "settled")
+    return rows
 
 
 @router.get("/users/{user_a}/meetings/{user_b}")

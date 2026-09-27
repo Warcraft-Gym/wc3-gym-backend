@@ -47,7 +47,7 @@ def get_all_career_stats(
 def get_career_stats_by_user(
     stat_id: int, service: StatsServiceDep, response: Response
 ) -> dict[str, Any]:
-    """Retrieve career statistics for a single player by user ID."""
+    """The row `/stats/career` holds for this user id, or 404 when it holds none."""
     stat = service.get_by_user_id(stat_id)
     if not stat:
         raise NotFoundError("Stats not found")

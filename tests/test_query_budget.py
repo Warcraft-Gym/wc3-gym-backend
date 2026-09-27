@@ -52,8 +52,13 @@ an event that is over carries the MMR every roster player entered it with on
 the signup race statement, at no statement more.
 
 A career list derives its totals, search, order and page in SQL. A single
-stored career row filters its tally to the linked user and matching name.
-Neither statement count grows with the number of players or career rows.
+career row is the list's statement filtered to the user id. Neither statement
+count grows with the number of players or career rows.
+
+A player's seasons read costs three statements: his seats with their team and
+signup, and the season record pair. His series read costs two: the page as
+columns with its count, and the casts of the page. Neither grows with the
+number of seasons or series.
 
 The season list reads the phase of every season it answers in one grouped
 aggregate, so it does not grow with the number of seasons. Identifying the
@@ -119,7 +124,7 @@ from app.models.types import utcnow
 from app.models.user import User
 from app.models.user_battle_tag import UserBattleTag
 from app.models.w3c_stats import W3CStats
-from app.services import derived
+from app.services import derived, player_reads
 from app.services.draft_series import DraftSeriesService
 from app.services.fantasy_bets import FantasyBetService
 from app.services.fantasy_teams import FantasyTeamService
@@ -762,14 +767,33 @@ def test_career_stats_cost_two_statements_when_every_player_holds_a_row(
     assert tally[0] == 2
 
 
-def test_one_career_row_costs_three_statements(league: dict[str, Any]) -> None:
-    """One row and its player, and the two statements of the derived totals."""
+def test_one_career_row_costs_two_statements(league: dict[str, Any]) -> None:
+    """The league seasons, and the list's statement filtered to the user."""
     service = PlayerCareerStatsService()
     with count_statements() as tally:
         stats = service.get_by_user_id(league["player_ids"][0])
     assert stats is not None
     assert stats.series_won == 1
+    assert tally[0] == 2
+
+
+def test_a_players_seasons_cost_three_statements(league: dict[str, Any]) -> None:
+    """The seats with their team and signup, and the season record pair."""
+    with count_statements() as tally:
+        seasons = player_reads.seasons(league["player_ids"][0])
+    assert [row.record.wins for row in seasons] == [1]
     assert tally[0] == 3
+
+
+def test_a_players_series_cost_two_statements(league: dict[str, Any]) -> None:
+    """The page of series as columns with its count, and their casts."""
+    with count_statements() as tally:
+        rows, total = player_reads.series(
+            league["player_ids"][0], [league["season_id"]]
+        )
+    assert [row.id for row in rows] == [league["series_played_id"]]
+    assert total == 1
+    assert tally[0] == 2
 
 
 def add_teams_to_the_season(season_id: int, count: int) -> None:
@@ -1042,7 +1066,11 @@ ROWS_PER_CALL = {
     "/fantasy/bets": 10,
     "/fantasy/teams": 10,
     "/stats/career": 4,
-    "/stats/career/{player_id}": 3,
+    "/stats/career/{player_id}": 2,
+    # One seat row, one tally row, one matchup row
+    "/users/{player_id}/seasons": 3,
+    # One series row; the seeded series has no cast
+    "/users/{player_id}/series?event_id={season_id}": 1,
     # One tag row per player
     "/events/{season_id}/teams": 34,
     "/events/{season_id}/teams/{team_a_id}": 30,

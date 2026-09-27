@@ -79,19 +79,9 @@ class PlayerCareerStatsService:
             )
 
     def get_by_user_id(self, user_id: int) -> PlayerCareerStatsPublic | None:
-        """Get career stats for a specific user"""
+        """The career list's row for the user, or None when the list holds none"""
         with Session.begin() as session:
-            stat = session.scalars(
-                select(PlayerCareerStats)
-                .options(*PlayerCareerStats.eager_options())
-                .where(col(PlayerCareerStats.user_id) == user_id)
-                .limit(1)
-            ).first()
-            if not stat:
-                return None
-            public = PlayerCareerStatsPublic.from_career_stats(stat)
-            derived.fill_career(session, [public])
-            return public
+            return derived.career_row(session, user_id)
 
     def update_historical_baseline(
         self,

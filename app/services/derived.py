@@ -1219,6 +1219,26 @@ CAREER_SORTS: dict[CareerSort, Callable[[Any, ColumnElement[Any]], Any]] = {
 }
 
 
+def _career_tiebreak(row: Any) -> tuple[ColumnElement[Any], ...]:  # noqa: ANN401
+    """A row with no id closes its tie, and the ids break the rest."""
+    return (case((row.id.is_(None), 1), else_=0), row.id, row.user_id)
+
+
+def career_row(session: Session, user_id: int) -> PlayerCareerStatsPublic | None:
+    """The row the career list holds for the user id, its first in rating order
+    should two carry it, from the same statement filtered to him."""
+    totals = _career_totals(_system_seasons(session))
+    row = totals.c
+    found = session.execute(
+        select(totals, User)
+        .outerjoin(User, col(User.id) == row.user_id)
+        .where(row.user_id == user_id)
+        .order_by(row.rating.desc(), *_career_tiebreak(row))
+        .limit(1)
+    ).first()
+    return _career_public(found, found.User) if found else None
+
+
 def career_page(
     session: Session,
     search: str = "",
@@ -1258,7 +1278,7 @@ def career_page(
             )
         )
 
-    tiebreak = (case((row.id.is_(None), 1), else_=0), row.id, row.user_id)
+    tiebreak = _career_tiebreak(row)
     if sort is None:
         keys = (row.rating.desc(), *tiebreak)
     else:

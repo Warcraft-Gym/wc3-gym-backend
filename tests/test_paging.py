@@ -45,6 +45,7 @@ PAGED_ROUTES = [
     ("POST", "/fantasy/bets/search?query=id > 0"),
     ("GET", "/draft-series/match/{match_id}"),
     ("GET", "/player-series"),
+    ("GET", "/users/{player_id}/series?event_id={season_id}"),
 ]
 
 
@@ -54,6 +55,7 @@ def build(path: str, seeded: dict[str, Any], **params: int) -> str:
         season_id=seeded["season_id"],
         league_id=seeded["league_id"],
         match_id=seeded["match_id"],
+        player_id=seeded["player_ids"][0],
     )
     separator = "&" if "?" in path else "?"
     query = "&".join(f"{name}={value}" for name, value in params.items())
@@ -248,6 +250,11 @@ DEFAULT_ORDER = {
         "round_availability.user_id, round_availability.playday",
         "event_round.number",
         "event_round.number",
+    ],
+    # The page, then the casts of its series
+    "GET /users/{player_id}/series?event_id={season_id}": [
+        "side.season_id, side.week NULLS LAST, side.date_time NULLS LAST, side.id",
+        "series_cast.id",
     ],
 }
 
