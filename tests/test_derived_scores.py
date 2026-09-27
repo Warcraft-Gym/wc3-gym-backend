@@ -178,6 +178,9 @@ def test_the_answered_match_score_sums_its_series(
     match = get(client, f"/matches/{league['match_id']}")
     # The five series pay the same total to both sides on either system.
     assert (match["team1_score"], match["team2_score"]) == (total, total)
+    listed = get(client, f"/events/{league['season_id']}/matches")
+    assert [row["id"] for row in listed] == [league["match_id"]]
+    assert (listed[0]["team1_score"], listed[0]["team2_score"]) == (total, total)
 
 
 @pytest.mark.parametrize(

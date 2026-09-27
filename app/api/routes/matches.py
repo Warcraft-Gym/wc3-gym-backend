@@ -1,9 +1,9 @@
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 
-from app.api.deps import MatchServiceDep, require_admin
+from app.api.deps import MatchServiceDep, event_edge_cache, require_admin
 from app.api.search import SearchQuery
 from app.models.match import MatchCreate, MatchPublic, MatchUpdate
 from app.models.series_replay import SeriesReplayPublic
@@ -66,3 +66,12 @@ def search_match(
 ) -> list[MatchPublic]:
     """Search matches by criteria using a custom query format, 100 a page."""
     return service.search(query, limit=limit, offset=offset)
+
+
+@router.get("/events/{event_id}/matches", tags=["events"])
+def get_matches_by_event(
+    event_id: int, service: MatchServiceDep, response: Response
+) -> list[MatchPublic]:
+    """Every match of an event in playday order, with its two team scores."""
+    event_edge_cache(response, event_id)
+    return service.for_season(event_id)
