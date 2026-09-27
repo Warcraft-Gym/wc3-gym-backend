@@ -180,3 +180,6 @@ docs/okf/index.html
 
 # Supabase egress snapshots that `just db snapshot` appends to
 data/egress/
+
+# Dummy entry: PR test for branch protection admin-bypass validation, safe to keep or remove
+*.branch-protection-test
