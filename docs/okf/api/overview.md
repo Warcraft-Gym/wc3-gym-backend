@@ -4,7 +4,7 @@ title: API overview
 description: Twenty-one route modules under one FastAPI app, one error envelope, paging with a total header, a search language, and OpenAPI at /docs.
 resource: ../../../app/api/main.py
 tags: [api]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-26T18:37:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-27T18:00:00Z }
 sources:
   - id: router
     resource: ../../../app/api/main.py
@@ -25,7 +25,7 @@ sources:
 | Module | Prefix | Area |
 |---|---|---|
 | `login.py` | `/login`, `/me` | the admin token login and the session answer |
-| `users.py` | `/users` | players, a member's own battle tags, the admin tag move and merge, bans, blocks, W3Champions sync, history, the meetings of two players |
+| `users.py` | `/users` | players, a member's own battle tags, the admin tag move and merge, bans, blocks, W3Champions sync, history, a player's seasons and series, the meetings of two players |
 | `teams.py` | `/leagues/{league_id}/teams`, `/events/{event_id}/teams`, `/teams/{team_id}/image` | league-owned teams, event rosters, captains, availability grid, logos; the unscoped logo read is deprecated |
 | `seasons.py` | `/events/{event_id}`, `/achievements` | GNL maps, rounds, signups, ladder reads and badges |
 | `leagues.py` | `/leagues` | leagues |
@@ -39,7 +39,7 @@ sources:
 | `fantasy.py` | `/fantasy`, `/events/{event_id}/fantasy` | admin fantasy management and event-scoped reads, tiers and breakdowns |
 | `koth.py`, `koth_nights.py` | `/koth` | nights, the live night an admin runs, the board, and the old KOTH payloads |
 | `config.py` | `/config` | settings, admins, role bindings, role sync |
-| `stats.py` | `/stats/career` | career stats |
+| `stats.py` | `/stats/career` | career stats; `/stats/career/{user_id}` is the list's row for that user id |
 | `import_export.py` | `/import`, `/export`, `/fantasy/import` | workbooks |
 | `jobs.py` | `/jobs` | the scheduled jobs |
 | `discord.py` | `/discord/interactions` | the forwarded Discord interactions |

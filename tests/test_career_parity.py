@@ -223,7 +223,7 @@ def answers(client: Client, users: dict[str, int]) -> dict[str, Any]:
     by_user = {}
     for name, user_id in users.items():
         resp = client.get(f"/stats/career/{user_id}")
-        # Foxtrot holds two rows, and the route answers either one
+        # Foxtrot holds two rows; the test below pins which one answers
         if name != "Foxtrot":
             by_user[name] = resp.json() if resp.status_code == 200 else None
 
@@ -271,3 +271,19 @@ def test_every_page_walks_the_whole_order(
         assert page.headers["X-Total-Count"] == total
         walked += page.json()
     assert walked == whole.json()
+
+
+def test_one_player_is_his_first_row_in_the_list(
+    client: Client, mixed_league: dict[str, int]
+) -> None:
+    """Every user reads the first list row that carries his user id, else 404."""
+    first: dict[int, Any] = {}
+    for row in client.get("/stats/career").json():
+        if row["user_id"] is not None:
+            first.setdefault(row["user_id"], row)
+    for user_id in mixed_league.values():
+        resp = client.get(f"/stats/career/{user_id}")
+        if user_id in first:
+            assert resp.json() == first[user_id]
+        else:
+            assert resp.status_code == 404

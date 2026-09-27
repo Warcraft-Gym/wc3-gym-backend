@@ -4,7 +4,7 @@ title: Response shapes
 description: An entity inside another answer is its summary shape, bounded by the read's event; the detail comes only from the entity's own read, a write answers through that read, and every relationship refuses an on-the-spot load.
 resource: ../../../app/models/user.py
 tags: [api, data]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-26T20:17:19Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-27T18:00:00Z }
 sources:
   - id: user
     resource: ../../../app/models/user.py
@@ -33,6 +33,9 @@ sources:
   - id: nesting
     resource: ../../../tests/test_response_shapes.py
     title: The nesting test
+  - id: player-reads
+    resource: ../../../app/services/player_reads.py
+    title: A player's seasons and series
   - id: budget
     resource: ../../../tests/test_query_budget.py
     title: The statement and row pins
@@ -81,13 +84,20 @@ The member variants `UserMemberListPublic` and `UserMemberPublic` add `discordTa
 
 # The team and season shapes
 
-`TeamSummaryPublic` (`app/models/team_summary.py`) holds `id`, `league_id`, `name`, `long_name` and `icon_url`. A match's teams, a stage row, an entrant's team, a captain fixture and a fantasy team's `drafted_team` embed it.
+`TeamSummaryPublic` (`app/models/team_summary.py`) holds `id`, `league_id`, `name`, `long_name` and `icon_url`. A match's teams, a stage row, an entrant's team, a captain fixture, a fantasy team's `drafted_team` and a player season row embed it.
 
 `TeamPublic` is the summary plus `seasons_info` (the standings of each event the team entered) and `discord_role_missing`. It answers `GET /leagues/{league_id}/teams/{team_id}`, the league team list, search and `basic` read, `GET /events/{event_id}/teams/basic` (whose `seasons_info` holds that event alone), and `POST` and `PUT /leagues/{league_id}/teams`, which answer through the single read after the commit.
 
 `TeamRosterPublic` is `TeamPublic` plus `player_by_season` and `captains_by_season`, each with exactly one key, the event of the path, and a list of player summaries under it (empty when the team fields none). It answers `GET /events/{event_id}/teams`, `GET /events/{event_id}/teams/{team_id}`, and the three event team writes: `POST` and `DELETE /events/{event_id}/teams/{team_id}/players` and `PUT .../captains`, which answer through the event team read after the commit; the captains write adds `discord_role_missing`. `seasons_info` holds that event alone.
 
 `SeasonSummaryPublic` holds `id`, `name`, `league_short_name`, `league_name`, `round_count`, `phase`, `start_date`, `end_date`, `round_end_zone`, `map_rules`, and `signup_race` and `played_as` where a signup row carries them. A match's season, on every match read and every series that carries its match, a fantasy team's and a bet's season, and each `signup_seasons` entry embed it. It holds no maps and no rounds.
+
+# A player's own reads
+
+Two reads answer one player from his side, computed in SQL, and embed no entity but a team summary.
+
+- `GET /users/{user_id}/seasons` answers `PlayerSeasonPublic` per season the player held a roster or a captain seat in, newest first: `season_id`, `team` as `TeamSummaryPublic` (the roster team, else the captained team), `is_captain`, `captain_only`, `signup_race`, `played_as`, and `record` (`games`, `wins`, `losses`, `matchup_history`, counted as `gnl_stats` counts them). Three statements.
+- `GET /users/{user_id}/series?event_id=...` answers `PlayerSeriesSummaryPublic` per GNL series of the named events, flat: the player's `race` and `score`, the opponent's id, name, race and score, the two team names, and one cast. Two statements: the page as columns with its count, and the casts of the page.
 
 # Loads
 

@@ -2,6 +2,8 @@
 
 ## 2026-09-27
 
+* **Add**: `GET /users/{user_id}/seasons` and `GET /users/{user_id}/series?event_id=` answer a player's seasons and GNL series from his side, computed in SQL, cached settled; [response shapes](api/response-shapes.md), [edge cache](concepts/edge-cache.md) and [consumers](api/consumers.md) state them.
+* **Update**: `GET /stats/career/{user_id}` answers the row the career list holds for that user id, and 404 only when the list holds none.
 * **Update**: [Response shapes](api/response-shapes.md) and [model families](data/model-families.md): every relationship of the user, team, series, draft, fantasy team, bet and season tables and of the link rows refuses an on-the-spot load (`raise_on_sql`); the embedded player summary drops `gnl_stats` and serves `record` alone.
 * **Update**: [Response shapes](api/response-shapes.md) gains the fantasy rows: a fantasy team's captain and drafted players are player summaries with the record of its season; the team and the bet each answer through one read, `FantasyTeamService.get` and `FantasyBetService.get`, and `POST /fantasy-team` and `POST`, `PUT /fantasy-bet` build their answer once.
 * **Update**: [Response shapes](api/response-shapes.md) gains the team and season rows: a team inside another answer is `TeamSummaryPublic` and a season `SeasonSummaryPublic`; the event team reads and writes answer `TeamRosterPublic`, one event's roster, through `roster_loads`; the league team reads and writes answer `TeamPublic`.
