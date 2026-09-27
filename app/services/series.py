@@ -222,11 +222,13 @@ class SeriesService:
         player_id: int | None = None,
         team_id: int | None = None,
         match_id: int | None = None,
+        is_fantasy_match: bool | None = None,
     ) -> list[SeriesPublic]:
         """The matching series of one season, one page at a time.
 
         sort names a column of SERIES_SORTS and the series id breaks its ties.
         player_id, team_id and match_id each narrow the list and AND together.
+        is_fantasy_match keeps fantasy series if true and the rest if false.
         """
         conds = []
         if player_id is not None:
@@ -244,6 +246,10 @@ class SeriesService:
             )
         if match_id is not None:
             conds.append(col(Series.match_id) == match_id)
+        if is_fantasy_match is not None:
+            # A null flag counts as not fantasy
+            flag = func.coalesce(col(Series.is_fantasy_match), False)
+            conds.append(flag == is_fantasy_match)
         with Session.begin() as session:
             filter = QueryUtil.convert_query_to_db_filter(Series, query)
             if filter is not None:

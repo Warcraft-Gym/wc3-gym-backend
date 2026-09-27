@@ -151,6 +151,7 @@ def get_series_by_event(
     player_id: int | None = None,
     team_id: int | None = None,
     match_id: int | None = None,
+    is_fantasy_match: bool | None = None,
 ) -> list[SeriesPublic]:
     """Return one page of an event's series, at most 500, optionally filtered."""
     event_edge_cache(response, event_id)
@@ -162,6 +163,7 @@ def get_series_by_event(
         player_id=player_id,
         team_id=team_id,
         match_id=match_id,
+        is_fantasy_match=is_fantasy_match,
     )
 
 
