@@ -33,7 +33,7 @@ sources:
 | Nightbot | no repository | `GET /koth/signup`, and the deprecated `/koth/*` reads | the Nightbot token |
 | the stream overlay and bookmarks | none | the deprecated `/koth/*` reads | none |
 
-The WordPress shortcodes today call the older backend host, not this deployment, and that host answers 502, so the shortcodes show no data. Three of their paths do not exist here: `GET /teams/season/{id}`, `GET /seasons/{id}` and `POST /series/season/{id}/playday/{n}/search`. Before the shortcodes point at this deployment, those calls move to `GET /events/{id}/teams`, `GET /events/{id}` and `POST /events/{id}/rounds/{n}/series/search`. `GET /events/{id}` is not the old season payload: it has no `user_signup` or `signup_race`, and its `phase` and `signups_open` follow the event model, so the PHP that reads those fields changes with the move.
+The WordPress shortcodes today call the older backend host, not this deployment, and that host answers 502, so the shortcodes show no data. Three of their paths do not exist here: `GET /teams/season/{id}`, `GET /seasons/{id}` and `POST /series/season/{id}/playday/{n}/search`. Before the shortcodes point at this deployment, those calls move to `GET /events/{id}/teams`, `GET /events/{id}`, and `GET /events/{id}/matches` with `GET /events/{id}/series?match_id={id}`. `GET /events/{id}` is not the old season payload: it has no `user_signup` or `signup_race`, and its `phase` and `signups_open` follow the event model, so the PHP that reads those fields changes with the move.
 
 # What pins the shapes
 

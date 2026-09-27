@@ -192,24 +192,6 @@ class SeriesService:
         with Session.begin() as session:
             return derived.fantasy_series(session, {season_id}).get(season_id, {})
 
-    def search_for_season_and_playday(
-        self,
-        season_id: int,
-        playday: int,
-        query: QueryElement | None,
-        limit: int | None = None,
-        offset: int = 0,
-    ) -> list[SeriesPublic]:
-        with Session.begin() as session:
-            filter = QueryUtil.convert_query_to_db_filter(Series, query)
-            series_list = Series.search_for_season_and_playday(
-                session, season_id, playday, filter, limit=limit, offset=offset
-            )
-            result = [SeriesPublic.from_series(s) for s in series_list]
-            events = derived.fill_series(session, result)
-            derived.fill_mmrs(session, result, events)
-            return result
-
     def search_for_season(
         self,
         season_id: int,

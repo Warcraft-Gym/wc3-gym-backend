@@ -11,9 +11,7 @@ from app.api.deps import (
     event_edge_cache,
     require_admin,
 )
-from app.api.search import SearchQuery
 from app.core.exceptions import ApiError, NotFoundError
-from app.core.query import QueryUtil
 from app.core.security import is_admin
 from app.models.series import (
     ResultKindWrite,
@@ -114,33 +112,6 @@ def get_series(series_id: int, service: SeriesServiceDep) -> SeriesPublic:
     return service.get(series_id)
 
 
-@router.post("/series/search")
-def search_series(
-    service: SeriesServiceDep,
-    query: SearchQuery,
-    limit: Annotated[int, Query(ge=1, le=500)] = 500,
-    offset: Annotated[int, Query(ge=0)] = 0,
-) -> list[SeriesPublic]:
-    """Search series by criteria using a custom query format."""
-    return service.search(query, limit=limit, offset=offset)
-
-
-@router.post("/events/{event_id}/rounds/{playday}/series/search", tags=["events"])
-def search_series_by_event_and_playday(
-    event_id: int,
-    playday: int,
-    service: SeriesServiceDep,
-    query: str = "",
-    limit: Annotated[int, Query(ge=1, le=500)] = 500,
-    offset: Annotated[int, Query(ge=0)] = 0,
-) -> list[SeriesPublic]:
-    """Return series matching the search query for one event round."""
-    parsed_query = QueryUtil.parse_query(query)
-    return service.search_for_season_and_playday(
-        event_id, playday, parsed_query, limit=limit, offset=offset
-    )
-
-
 @router.get("/events/{event_id}/series", tags=["events"])
 def get_series_by_event(
     event_id: int,
@@ -165,19 +136,6 @@ def get_series_by_event(
         match_id=match_id,
         is_fantasy_match=is_fantasy_match,
     )
-
-
-@router.post("/events/{event_id}/series/search", tags=["events"])
-def search_series_by_event(
-    event_id: int,
-    service: SeriesServiceDep,
-    query: str = "",
-    limit: Annotated[int, Query(ge=1, le=500)] = 500,
-    offset: Annotated[int, Query(ge=0)] = 0,
-) -> list[SeriesPublic]:
-    """Return series matching the search query for an event."""
-    parsed_query = QueryUtil.parse_query(query)
-    return service.search_for_season(event_id, parsed_query, limit=limit, offset=offset)
 
 
 def caster(claims: RequireMember, user_service: UserServiceDep) -> tuple[int, bool]:
