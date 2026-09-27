@@ -207,8 +207,14 @@ def two_seasons() -> dict[str, int]:
         return {"plain": ident(plain), "priced": ident(priced), "user": uid[1]}
 
 
-PAGES = ("", "?limit=1", "?limit=3&offset=2", "?offset=5", "?limit=500&offset=100")
-SEARCHES = ("", "player1_id > 0", "is_fantasy_match == True", "player1_score == 3")
+PAGES = (
+    "",
+    "?limit=1",
+    "?limit=3&offset=2",
+    "?offset=5",
+    "?limit=500&offset=100",
+    "?is_fantasy_match=true",
+)
 SORTS = (None, "date_time", "week", "id")
 
 
@@ -221,12 +227,6 @@ def answers(client: Client, league: dict[str, int]) -> dict[str, Any]:
             resp = client.get(f"/events/{event_id}/series{page}")
             assert resp.status_code == 200
             found[f"GET {season} {page}"] = resp.text
-        for search in SEARCHES:
-            resp = client.post(
-                f"/events/{event_id}/series/search", params={"query": search}
-            )
-            assert resp.status_code == 200
-            found[f"POST {season} {search!r}"] = resp.text
 
     service = SeriesService()
     mine = QueryUtil.parse_query(

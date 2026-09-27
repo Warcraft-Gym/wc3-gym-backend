@@ -115,7 +115,7 @@ def rate(*rows: tuple[int, Race, int, int | None]) -> None:
 
 def season_rows(client: Client, season_id: int) -> list[dict[str, Any]]:
     """The season series list the upcoming page reads."""
-    resp = client.post(f"/events/{season_id}/series/search?query=id > 0")
+    resp = client.get(f"/events/{season_id}/series")
     assert resp.status_code == 200, resp.text
     return resp.json()
 
@@ -287,8 +287,9 @@ def test_the_season_list_costs_a_constant_number_of_statements(
     # every row P1 plays, the seeded one and the eighteen grown ones
     assert sum(row["player1_mmr"] == 1500 for row in rows) == 19
     assert small[0] == large[0]
-    # nine today; the guard is that it is a constant, not that it is low
-    assert large[0] <= 10, large[0]
+    # twelve today, three of them the event phase the cache header reads;
+    # the guard is that it is a constant, not that it is low
+    assert large[0] <= 12, large[0]
 
 
 def test_the_player_series_read_costs_a_constant_number_of_statements(

@@ -8,7 +8,6 @@ from sqlalchemy import (
     ColumnElement,
     ColumnExpressionArgument,
     Index,
-    and_,
     false,
     or_,
     select,
@@ -161,28 +160,6 @@ class Series(SeriesBase, DBModel, table=True):
     veto_steps: list[DBSeriesVetoStep] = Relationship(
         sa_relationship_kwargs={"lazy": "raise_on_sql", "cascade": "all, delete-orphan"}
     )
-
-    @classmethod
-    def search_for_season_and_playday(
-        cls,
-        session: Session,
-        season_id: int,
-        playday: int,
-        filters: ColumnExpressionArgument[bool] | None,
-        limit: int | None = None,
-        offset: int = 0,
-    ) -> Sequence[Self]:
-        stmt = select(cls).options(*cls._list_eager_options())
-        stmt = stmt.where(
-            col(cls.match).has(
-                and_(col(Match.season_id) == season_id, col(Match.playday) == playday)
-            )
-        )
-        if filters is not None:
-            stmt = stmt.where(filters)
-        # Offset paging is deterministic only with a fixed order
-        stmt = stmt.order_by(col(cls.id)).offset(offset).limit(limit)
-        return session.scalars(stmt).all()
 
     @classmethod
     def search_for_season(

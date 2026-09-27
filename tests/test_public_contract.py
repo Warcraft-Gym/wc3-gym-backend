@@ -13,7 +13,7 @@ The shortcodes and the routes they call:
   gnl-teams-players       GET  /config/settings, GET /events/{id}/teams,
                           GET /teams/{id}/image
   gnl-week-series         GET  /config/settings, POST /matches/search,
-                          POST /events/{id}/rounds/{n}/series/search
+                          GET /events/{id}/series?match_id={id}
   gnl-fantasy-teams       GET  /config/settings, POST /fantasy/teams/search
   gnl-fantasy-leaderboard GET  /config/settings, POST /fantasy/teams/search
 """
@@ -371,11 +371,11 @@ def test_matches_search_by_playday_carries_the_team_names(
             assert "long_name" in match[side]
 
 
-def test_series_by_season_and_playday_carries_the_week_table_fields(
+def test_series_of_a_fixture_carries_the_week_table_fields(
     client: Client, public_seed: dict[str, Any]
 ) -> None:
-    season_id = public_seed["season_id"]
-    series = post_json(client, f"/events/{season_id}/rounds/1/series/search")
+    season_id, match_id = public_seed["season_id"], public_seed["match_id"]
+    series = get_json(client, f"/events/{season_id}/series?match_id={match_id}")
     assert len(series) == 2
     for entry in series:
         assert "id" in entry

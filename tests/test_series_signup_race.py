@@ -129,7 +129,7 @@ def test_a_series_list_carries_the_signup_race(
     client: Client, league: dict[str, Any]
 ) -> None:
     season_id = league["season_id"]
-    response = client.post(f"/events/{season_id}/rounds/1/series/search")
+    response = client.get(f"/events/{season_id}/series")
     entries = {entry["id"]: entry for entry in response.json()}
     assert len(entries) == 2
     played = entries[league["series_played_id"]]
