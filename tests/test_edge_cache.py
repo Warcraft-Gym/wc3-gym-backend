@@ -93,6 +93,7 @@ EVENT_READS = [
     "/events/{id}",
     "/events/{id}/entrants",
     "/events/{id}/achievements",
+    "/events/{id}/matches",
     "/events/{id}/ladder",
     "/events/{id}/ladder/players",
     "/events/{id}/stages/{stage}/series",
