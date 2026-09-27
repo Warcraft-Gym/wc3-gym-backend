@@ -52,6 +52,7 @@ Each route's deprecated aliases carry the same header.
 | `GET /events/{event_id}/series`, `GET /events/{event_id}/stages/{stage_id}/series`, `GET /events/{event_id}/stages/{stage_id}/standings` | by the event's phase |
 | `GET /events/{event_id}/teams`, its `basic` twin, `GET /events/{event_id}/teams/{team_id}` | by the event's phase |
 | `GET /events/{event_id}/ladder`, `GET /events/{event_id}/ladder/players` | by the event's phase |
+| `GET /events/{event_id}/fantasy/teams`, `GET /events/{event_id}/fantasy/teams/{team_id}/breakdown` | by the event's phase |
 | `GET /stats/career`, `GET /stats/career/{user_id}` | settled |
 | `GET /events`, for an anonymous caller only | settled |
 | `GET /leagues`, `GET /maps`, `GET /config/w3c`, `GET /config/settings/{key}` | settled |

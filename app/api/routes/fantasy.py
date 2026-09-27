@@ -9,6 +9,7 @@ from app.api.deps import (
     RequireLogin,
     SeasonServiceDep,
     UserServiceDep,
+    event_edge_cache,
     require_admin,
 )
 from app.api.search import SearchQuery
@@ -174,6 +175,7 @@ def get_event_fantasy_teams(
     query = QueryUtil.parse_query(f"season_id == {event_id}")
     teams, total = service.search(query, limit=limit, offset=offset)
     response.headers["X-Total-Count"] = str(total or 0)
+    event_edge_cache(response, event_id)
     return teams
 
 
@@ -276,6 +278,7 @@ def get_fantasy_team_breakdown(
     event_id: int,
     season_service: SeasonServiceDep,
     fantasy_bet_service: FantasyBetServiceDep,
+    response: Response,
 ) -> dict[str, Any]:
     """Get detailed score breakdown for a fantasy team.
 
@@ -284,4 +287,6 @@ def get_fantasy_team_breakdown(
     """
     # get raises NotFoundError, which answers 404
     season = season_service.get(event_id)
-    return team_score_breakdown(fantasy_bet_service, team_id, season)
+    breakdown = team_score_breakdown(fantasy_bet_service, team_id, season)
+    event_edge_cache(response, event_id)
+    return breakdown

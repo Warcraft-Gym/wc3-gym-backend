@@ -51,6 +51,8 @@ def test_an_open_read_is_cacheable_at_the_edge(
         "/events/{season_id}/teams",
         "/events/{season_id}/teams/basic",
         "/events/{season_id}/teams/{team_a_id}",
+        "/events/{season_id}/fantasy/teams",
+        "/events/{season_id}/fantasy/teams/{fantasy_team_id}/breakdown",
     ],
 )
 def test_a_finished_event_is_cached_for_an_hour(
@@ -96,6 +98,7 @@ EVENT_READS = [
     "/events/{id}/matches",
     "/events/{id}/ladder",
     "/events/{id}/ladder/players",
+    "/events/{id}/fantasy/teams",
     "/events/{id}/stages/{stage}/series",
     "/events/{id}/stages/{stage}/standings",
 ]
@@ -160,6 +163,14 @@ def test_a_not_found_on_a_cached_route_is_not_cached(
     client: Client, seeded: dict[str, Any]
 ) -> None:
     resp = client.get(f"/events/{seeded['season_id']}/teams/999999")
+    assert resp.status_code == 404
+    assert "public" not in resp.headers.get("cache-control", "")
+
+
+def test_a_missing_fantasy_team_breakdown_is_not_cached(
+    client: Client, seeded: dict[str, Any]
+) -> None:
+    resp = client.get(f"/events/{seeded['season_id']}/fantasy/teams/999999/breakdown")
     assert resp.status_code == 404
     assert "public" not in resp.headers.get("cache-control", "")
 
