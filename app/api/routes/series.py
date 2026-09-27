@@ -148,10 +148,21 @@ def get_series_by_event(
     response: Response,
     limit: Annotated[int, Query(ge=1, le=500)] = 500,
     offset: Annotated[int, Query(ge=0)] = 0,
+    player_id: int | None = None,
+    team_id: int | None = None,
+    match_id: int | None = None,
 ) -> list[SeriesPublic]:
-    """Return one page of an event's series, at most 500."""
+    """Return one page of an event's series, at most 500, optionally filtered."""
     event_edge_cache(response, event_id)
-    return service.search_for_season(event_id, None, limit=limit, offset=offset)
+    return service.search_for_season(
+        event_id,
+        None,
+        limit=limit,
+        offset=offset,
+        player_id=player_id,
+        team_id=team_id,
+        match_id=match_id,
+    )
 
 
 @router.post("/events/{event_id}/series/search", tags=["events"])
