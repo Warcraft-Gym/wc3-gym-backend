@@ -68,7 +68,7 @@ def _own_side(claims: dict[str, Any], match: MatchPublic, team_id: int) -> None:
 
 
 def _seated_team(claims: dict[str, Any], match: MatchPublic) -> int | None:
-    """The team the caller captains in this fixture; nothing for an admin."""
+    """The team the caller captains in this fixture; nothing for a caller without a seat in it."""
     seats = claim_seats(claims)
     for team_id in (match.team1_id, match.team2_id):
         if team_id is not None and (team_id, match.season_id) in seats:

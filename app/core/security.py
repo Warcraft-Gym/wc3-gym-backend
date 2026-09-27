@@ -8,12 +8,19 @@ from typing import Any
 import jwt
 
 
-def create_access_token(identity: str, minutes: int, kind: str = "access") -> str:
+def create_access_token(
+    identity: str,
+    minutes: int,
+    kind: str = "access",
+    extra: dict[str, Any] | None = None,
+) -> str:
     """The admin token's access token; a player's session belongs to Clerk.
-    Another `kind` is no login: the Battle.net link signs its state with it."""
+    Another `kind` is no login: the Battle.net link signs its state with it,
+    and the local dev login mints `dev`. `extra` adds claims of its own."""
     now = datetime.now(UTC)
     return jwt.encode(
-        {
+        (extra or {})
+        | {
             "sub": identity,
             "type": kind,
             "jti": str(uuid.uuid4()),
@@ -42,3 +49,8 @@ def is_admin(claims: dict[str, Any] | None) -> bool:
     return claims is not None and (
         claims.get("role") == "admin" or claims.get("sub") == "admin"
     )
+
+
+def dev_login_enabled() -> bool:
+    """Whether the local dev login answers: DEV_LOGIN=1 on a machine that is no deployment."""
+    return os.getenv("DEV_LOGIN") == "1" and not os.getenv("VERCEL")

@@ -4,7 +4,7 @@ title: Authentication
 description: A bearer token is either the admin token's JWT or a Clerk session; the claims resolve the Discord id and the role once per request, and five guards build on them.
 resource: ../../../app/api/deps.py
 tags: [auth]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-24T11:21:07Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-27T10:00:00Z }
 sources:
   - id: deps
     resource: ../../../app/api/deps.py
@@ -27,12 +27,16 @@ sources:
 
 `require_login` tries the JWT first and falls back to Clerk. It admits a guest too.
 
+# Local dev login
+
+A local instance has no Discord server, so no Clerk session passes the guild check there. To test the app as a player, set `DEV_LOGIN=1` in the local backend's `.env`; never set it on a deployment. Both routes then admit only the admin token's session: no bearer answers 401, and any other session answers 403, a dev session and a Clerk admin included, so a player never switches to another player. `GET /dev/players?search=` lists up to 30 players that have a Discord id, each marked `captain` when it holds a seat in a running season, and `POST /dev/login {"user_id", "role"}` answers a token for one of them as `member`, `guest` or `admin`. The session is that player: `require_login` resolves its role the way it resolves a Clerk session's, so a member with a seat is a captain and an admin can view as a lower role. With `DEV_LOGIN` unset both routes answer 404 to every caller, the admin token included, and such a token is refused.
+
 # From a session to claims
 
 Once per request, `clerk_claims` resolves and caches on `request.state`:
 
 - the Discord id behind the Clerk user, from `clerk_account`, written by the first request of a login and rewritten only when Clerk names another Discord account;
-- the role: `admin` from `admin_grant` or `ADMIN_DISCORD_IDS` with no guild read; else `member` or `guest` from the guild read; a member with captain seats in a running season becomes `captain` with a `seats` list.
+- the role: `admin` from `admin_grant` or `ADMIN_DISCORD_IDS` with no guild read, carrying a `seats` list when the admin also captains; else `member` or `guest` from the guild read; a member with captain seats in a running season becomes `captain` with a `seats` list.
 
 An admin grant and a captain seat are read live, so they show on the next request. The guild answer, member or guest, is kept per process for one minute (`ROLE_TTL` in `app/services/discord.py`), so a guild join, leave or kick shows within a minute. A failed guild read is never kept. See [Discord integration](../concepts/discord-integration.md).
 
@@ -60,7 +64,7 @@ A token of type `bnet_state` or `bnet_link` is no bearer: `require_login` admits
 
 # /me
 
-`GET /me` answers the account: `discord_id`, `name`, `avatar`, `role`, `actual_role`, `user` (the linked players row or null), `superadmin`, `signed_up`, `season_id`, `team`, `seats`, and `seasons` (every season that is not complete, newest first, each with its phase, switches, dates, and this account's roster and captain facts). The frontend keeps this answer for the session and reads its role from it. It also refreshes the profile avatar from Discord.
+`GET /me` answers the account: `discord_id`, `name`, `avatar`, `role`, `actual_role`, `user` (the linked players row or null), `superadmin`, `signed_up`, `season_id`, `team`, `seats`, and `seasons` (every season that is not complete, newest first, each with its phase, switches, dates, and this account's roster and captain facts). The frontend keeps this answer for the session and reads its role from it. It also refreshes the profile avatar from Discord. A local dev login has no Clerk account, so its `name` is the player's and `superadmin` is false.
 
 # View as
 

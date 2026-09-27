@@ -277,3 +277,40 @@ def test_player_series_answers_the_season_the_query_names(
     assert len(body["rounds"]) == 4
     # without the parameter the identity's own season answers
     assert client.get("/player-series", headers=p1).json()["season_id"] == later
+
+
+def test_an_admin_who_captains_keeps_the_seats(
+    client: Client,
+    seeded: dict[str, Any],
+    p1: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The role stays admin, and /me names the team so the app can link it."""
+    _captain(seeded["team_a_id"], seeded["season_id"], seeded["player_ids"][0])
+    monkeypatch.setenv("ADMIN_DISCORD_IDS", "1")
+
+    me = client.get("/me", headers=p1).json()
+
+    assert me["role"] == "admin"
+    assert me["seats"] == [
+        {"team_id": seeded["team_a_id"], "season_id": seeded["season_id"]}
+    ]
+    season = next(one for one in me["seasons"] if one["id"] == seeded["season_id"])
+    assert season["captain"] is True
+
+
+def test_viewing_as_a_member_drops_the_admin_seats(
+    client: Client,
+    seeded: dict[str, Any],
+    p1: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A viewed member meets a member's checks, so the admin's own seats go."""
+    _captain(seeded["team_a_id"], seeded["season_id"], seeded["player_ids"][0])
+    monkeypatch.setenv("ADMIN_DISCORD_IDS", "1")
+
+    me = client.get("/me", headers=p1 | {"X-View-As": "member"}).json()
+
+    assert me["role"] == "member"
+    assert me["actual_role"] == "admin"
+    assert me["seats"] == []

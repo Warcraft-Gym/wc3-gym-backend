@@ -7,6 +7,7 @@ database; the engine work happens in create_app.
 
 import logging
 import os
+from collections.abc import Callable
 from functools import cache
 from typing import Annotated, Any, Literal
 
@@ -18,7 +19,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.core.db import Session
 from app.core.exceptions import ApiError
-from app.core.security import decode_token, is_admin
+from app.core.security import decode_token, dev_login_enabled, is_admin
 from app.models.clerk_account import ClerkAccount
 from app.models.season import EventPhase, Season
 from app.services import admins, discord, discord_roles
@@ -134,16 +135,60 @@ def _resolve_claims(request: Request) -> dict[str, Any]:
 
     clerk_user_id = str(state.payload["sub"])
     discord_id = _discord_id(clerk_user_id)
-    claims: dict[str, Any] = {"sub": discord_id, "clerk_user_id": clerk_user_id}
-    if admins.is_admin(discord_id):
+    return _claims_for(
+        request,
+        {"sub": discord_id, "clerk_user_id": clerk_user_id},
+        admin=admins.is_admin(discord_id),
+        guild_role=lambda: discord.role_for(discord_id),
+    )
+
+
+def _claims_for(
+    request: Request,
+    claims: dict[str, Any],
+    *,
+    admin: bool,
+    guild_role: Callable[[], str],
+) -> dict[str, Any]:
+    """The role of a Discord account, whichever session carried it.
+
+    An admin needs no guild read. Everyone else is what `guild_role` answers,
+    "member" or "guest", and a member with a seat in a running season is a
+    captain. The Clerk session and the local dev login both come through here.
+    """
+    discord_id = claims["sub"]
+    if admin:
+        # an admin who also captains keeps the seats, so the app can name their team
+        seats = team_service.captain_seats(discord_id)
+        if seats:
+            claims |= _seat_claims(seats, discord_roles.current_season())
         return _view_as(request, claims | {"role": "admin"})
-    claims["role"] = discord.role_for(discord_id)
+    claims["role"] = guild_role()
     if claims["role"] == "member":
         seats = team_service.captain_seats(discord_id)
         if seats:
             current = discord_roles.current_season()
             claims |= {"role": "captain"} | _seat_claims(seats, current)
     return claims
+
+
+def _dev_claims(request: Request, token: dict[str, Any]) -> dict[str, Any]:
+    """The claims of a local dev login: the player the token names, as the role it asked for.
+
+    Cached on request.state like a Clerk session, so the guards that run twice
+    on one request resolve it once.
+    """
+    cached = getattr(request.state, "claims", None)
+    if cached is not None:
+        return cached
+    role = token.get("role", "member")
+    request.state.claims = _claims_for(
+        request,
+        {"sub": str(token["sub"]), "dev": True, "name": token.get("name")},
+        admin=role == "admin",
+        guild_role=lambda: "guest" if role == "guest" else "member",
+    )
+    return request.state.claims
 
 
 def _seat_claims(seats: list[tuple[int, int]], current: int | None) -> dict[str, Any]:
@@ -190,6 +235,10 @@ def _view_as(request: Request, claims: dict[str, Any]) -> dict[str, Any]:
     role = request.headers.get("x-view-as")
     if role not in ("captain", "member", "guest"):
         return claims
+    # the admin's own seats never leak into the viewed role; a viewed captain names its own
+    claims = {
+        k: v for k, v in claims.items() if k not in ("seats", "team_id", "season_id")
+    }
     claims |= {"role": role, "actual_role": "admin"}
     if role != "captain":
         return claims
@@ -249,6 +298,8 @@ def require_login(request: Request, credentials: Credentials) -> dict[str, Any]:
         claims = decode_token(credentials.credentials)
     except jwt.InvalidTokenError:
         return clerk_claims(request)
+    if claims.get("type") == "dev" and dev_login_enabled():
+        return _dev_claims(request, claims)
     if claims.get("type") != "access":
         raise ApiError(422, {"error": "Only access tokens are allowed"})
     return claims

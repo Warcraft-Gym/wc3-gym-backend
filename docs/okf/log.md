@@ -2,6 +2,7 @@
 
 ## 2026-09-27
 
+* **Update**: `GET /dev/players` and `POST /dev/login` admit only the admin token's session; the authentication page and the local runbook state it.
 * **Update**: [Response shapes](api/response-shapes.md) and [model families](data/model-families.md): every relationship of the user, team, series, draft, fantasy team, bet and season tables and of the link rows refuses an on-the-spot load (`raise_on_sql`); the embedded player summary drops `gnl_stats` and serves `record` alone.
 * **Update**: [Response shapes](api/response-shapes.md) gains the fantasy rows: a fantasy team's captain and drafted players are player summaries with the record of its season; the team and the bet each answer through one read, `FantasyTeamService.get` and `FantasyBetService.get`, and `POST /fantasy-team` and `POST`, `PUT /fantasy-bet` build their answer once.
 * **Update**: [Response shapes](api/response-shapes.md) gains the team and season rows: a team inside another answer is `TeamSummaryPublic` and a season `SeasonSummaryPublic`; the event team reads and writes answer `TeamRosterPublic`, one event's roster, through `roster_loads`; the league team reads and writes answer `TeamPublic`.
@@ -9,6 +10,8 @@
 
 ## 2026-09-26
 
+* **Add**: the local dev login, `GET /dev/players` and `POST /dev/login` behind `DEV_LOGIN=1`, signs in as any player with a Discord id as a member, guest or admin; the authentication page and the local runbook state it.
+* **Update**: an admin who captains carries the `seats` list, so `/me` names that admin's teams and each season's `captain` flag; a view-as request drops the admin's own seats.
 * **Update**: the ladder summary `race_mmrs` and `main_race` is read in SQL, one row per player and race, one statement per answer; no read loads the raw `w3cstats` rows for it.
 * **Update**: `w3c_ladder_matches` gains an index on (`user_id`, `race`, `start_time`), the seek of `mmr_at`.
 * **Update**: `current_w3c_season` anchors the live MMR window in the W3Champions, settings and ladder concepts; the Vercel crons, the load-all-seasons reads and the `Field(exclude=True)` pattern state the current code.
