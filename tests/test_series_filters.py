@@ -1,4 +1,4 @@
-"""GET /events/{event_id}/series takes player_id, team_id and match_id.
+"""GET /events/{event_id}/series filters by player, team, match and fantasy flag.
 
 Each one narrows the season's series list, and given together they AND.
 The seeded season holds one match with two series: series_played
@@ -9,8 +9,13 @@ from typing import Any
 
 from httpx2 import Client
 
+from app.models.series import SeriesUpdate
+from app.services.series import SeriesService
 
-def series_rows(client: Client, season_id: int, **params: int) -> list[dict[str, Any]]:
+
+def series_rows(
+    client: Client, season_id: int, **params: int | bool
+) -> list[dict[str, Any]]:
     resp = client.get(f"/events/{season_id}/series", params=params)
     assert resp.status_code == 200, resp.text
     return resp.json()
@@ -70,3 +75,16 @@ def test_unmatched_and_combined_filters(client: Client, seeded: dict[str, Any]) 
         team_id=seeded["team_b_id"],
     )
     assert [row["id"] for row in rows] == [seeded["series_played_id"]]
+
+
+def test_is_fantasy_match_splits_fantasy_from_the_rest(
+    client: Client, seeded: dict[str, Any]
+) -> None:
+    """series_open keeps a null flag, which counts as not fantasy."""
+    SeriesService().update(
+        seeded["series_played_id"], SeriesUpdate(is_fantasy_match=True)
+    )
+    fantasy = series_rows(client, seeded["season_id"], is_fantasy_match=True)
+    rest = series_rows(client, seeded["season_id"], is_fantasy_match=False)
+    assert [row["id"] for row in fantasy] == [seeded["series_played_id"]]
+    assert [row["id"] for row in rest] == [seeded["series_open_id"]]
