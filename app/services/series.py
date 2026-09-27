@@ -1,6 +1,6 @@
 from datetime import timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session as OrmSession
 from sqlmodel import col
 
@@ -219,13 +219,36 @@ class SeriesService:
         *,
         sort: SeriesSort | None = None,
         order: SortOrder = "asc",
+        player_id: int | None = None,
+        team_id: int | None = None,
+        match_id: int | None = None,
     ) -> list[SeriesPublic]:
         """The matching series of one season, one page at a time.
 
         sort names a column of SERIES_SORTS and the series id breaks its ties.
+        player_id, team_id and match_id each narrow the list and AND together.
         """
+        conds = []
+        if player_id is not None:
+            conds.append(
+                or_(
+                    col(Series.player1_id) == player_id,
+                    col(Series.player2_id) == player_id,
+                )
+            )
+        if team_id is not None:
+            conds.append(
+                col(Series.match).has(
+                    or_(col(Match.team1_id) == team_id, col(Match.team2_id) == team_id)
+                )
+            )
+        if match_id is not None:
+            conds.append(col(Series.match_id) == match_id)
         with Session.begin() as session:
             filter = QueryUtil.convert_query_to_db_filter(Series, query)
+            if filter is not None:
+                conds.append(filter)
+            filter = and_(*conds) if conds else None
             series_list = Series.search_for_season(
                 session,
                 season_id,
