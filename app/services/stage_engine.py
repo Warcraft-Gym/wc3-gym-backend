@@ -36,11 +36,11 @@ from app.models.season import Season
 from app.models.series import (
     ResultKindWrite,
     Series,
-    SeriesPublic,
     StageSeriesPublic,
     StageSeriesRow,
     TemplateSeries,
 )
+from app.models.series_game import DBSeriesGame
 from app.models.series_side import (
     LobbySidesWrite,
     PlacesWrite,
@@ -49,8 +49,8 @@ from app.models.series_side import (
     SideRoster,
 )
 from app.models.team import Team
-from app.models.team_reduced import TeamReduced
-from app.models.user import User, UserPublic
+from app.models.team_summary import TeamSummaryPublic
+from app.models.user import User, UserSummaryPublic
 from app.models.user_team_season import DBUserTeamSeason
 from app.services import derived, draft_series
 from app.services.series_rules import acts_for_side, series_rules, stands_on_side
@@ -280,10 +280,10 @@ def generate_next_round(
                 row.sequence = sequence
                 made.append(row)
         session.flush()
-        rows = [StageSeriesRow.from_series_reduced(row) for row in made]
-        derived.fill_series(session, rows)
+        rows = [StageSeriesRow.from_series(row) for row in _stage_rows(session, made)]
+        events = derived.fill_series(session, rows)
         _fill_teams(session, rows)
-        derived.fill_mmrs(session, rows)
+        derived.fill_mmrs(session, rows, events)
         _fill_sides(session, rows)
         return StageSeriesPublic(
             rounds=[EventRoundPublic.from_row(row) for row in drew.values()],
@@ -357,12 +357,11 @@ def add_challenger(event_id: int, stage_id: int, entrant_id: int) -> StageSeries
             if entrant.division_id
             else None
         )
-        public = StageSeriesRow.from_series_reduced(
-            append_to_chain(session, stage, division, entrant)
-        )
-        derived.fill_series(session, [public])
+        added = append_to_chain(session, stage, division, entrant)
+        public = StageSeriesRow.from_series(_stage_rows(session, [added])[0])
+        events = derived.fill_series(session, [public])
         _fill_teams(session, [public])
-        derived.fill_mmrs(session, [public])
+        derived.fill_mmrs(session, [public], events)
         _fill_sides(session, [public])
         return public
 
@@ -412,6 +411,7 @@ def on_reopened(session: OrmSession, row: Series, force: bool = False) -> None:
         other.player1_score = None
         other.player2_score = None
         other.result_kind = "played"
+        game_one(session, other)
     session.flush()
 
 
@@ -423,10 +423,26 @@ def after_score(
     force: bool = False,
 ) -> None:
     """Follow a score change into the bracket and move the crown behind it."""
+    game_one(session, row)
     _follow_score(session, row, was_scored, was_slot, force)
     # Only a save that changes who won moves the crown
     if not was_scored or was_slot != won_slot(row):
         crown(session, row)
+
+
+def game_one(session: OrmSession, row: Series) -> None:
+    """A koth series is one map, so its game 1 carries the series winner."""
+    stage = _stage_of(session, row)
+    if stage is None or stage.format is not StageFormat.koth:
+        return
+    game = session.get(DBSeriesGame, (ident(row), 1))
+    slot = won_slot(row)
+    if game is None:
+        if slot is None:
+            return
+        game = DBSeriesGame(series_id=ident(row), game_no=1)
+        session.add(game)
+    game.winner_side = {1: "A", 2: "B"}.get(slot)
 
 
 def crown(session: OrmSession, row: Series) -> None:
@@ -506,7 +522,7 @@ def _follow_score(
         on_reopened(session, row, force)
 
 
-def set_result_kind(series_id: int, data: ResultKindWrite) -> SeriesPublic:
+def set_result_kind(series_id: int, data: ResultKindWrite) -> None:
     """Score a series that was not played, and carry its winner downstream."""
     with Session.begin() as session:
         row = session.get(Series, series_id)
@@ -518,9 +534,6 @@ def set_result_kind(series_id: int, data: ResultKindWrite) -> SeriesPublic:
         on_scored(session, row)
         _auto_advance(session, row)
         crown(session, row)
-        public = SeriesPublic.from_series(row)
-        derived.fill_series(session, [public])
-        return public
 
 
 def set_places(series_id: int, data: PlacesWrite) -> StageSeriesRow:
@@ -631,10 +644,10 @@ def set_fixture_template(
         ]
         session.add_all(rows)
         session.flush()
-        public = [StageSeriesRow.from_series_reduced(row) for row in rows]
-        derived.fill_series(session, public)
+        public = [StageSeriesRow.from_series(row) for row in _stage_rows(session, rows)]
+        events = derived.fill_series(session, public)
         _fill_teams(session, public)
-        derived.fill_mmrs(session, public)
+        derived.fill_mmrs(session, public, events)
         _fill_sides(session, public)
         return public
 
@@ -663,12 +676,12 @@ def series_of(event_id: int, stage_id: int) -> StageSeriesPublic:
             .where(col(Series.round_id).in_(numbers))
         ).all()
         rows = [
-            StageSeriesRow.from_series_reduced(row)
+            StageSeriesRow.from_series(row)
             for row in sorted(held, key=lambda row: _drawn(numbers, row))
         ]
-        derived.fill_series(session, rows)
+        events = derived.fill_series(session, rows)
         _fill_teams(session, rows)
-        derived.fill_mmrs(session, rows)
+        derived.fill_mmrs(session, rows, events)
         _fill_sides(session, rows)
         return StageSeriesPublic(
             rounds=[EventRoundPublic.from_row(row) for row in rounds], series=rows
@@ -843,12 +856,28 @@ def _entrants_by_id(
     }
 
 
+def _stage_rows(session: OrmSession, rows: Sequence[Series]) -> list[Series]:
+    """Those series read again with the loads of a stage row, in the order
+    given: a write answers what the stage read answers."""
+    ids = [ident(row) for row in rows]
+    read = {
+        ident(row): row
+        for row in session.scalars(
+            select(Series)
+            .options(*Series._list_eager_options())
+            .where(col(Series.id).in_(ids))
+            .execution_options(populate_existing=True)
+        )
+    }
+    return [read[series_id] for series_id in ids]
+
+
 def _lobby_read(session: OrmSession, row: Series) -> StageSeriesRow:
     """One lobby as its box reads it: the series, its seats and their places."""
-    public = StageSeriesRow.from_series_reduced(row)
-    derived.fill_series(session, [public])
+    public = StageSeriesRow.from_series(_stage_rows(session, [row])[0])
+    events = derived.fill_series(session, [public])
     _fill_teams(session, [public])
-    derived.fill_mmrs(session, [public])
+    derived.fill_mmrs(session, [public], events)
     _fill_sides(session, [public])
     return public
 
@@ -869,7 +898,7 @@ def _fill_sides(session: OrmSession, rows: Sequence[StageSeriesRow]) -> None:
             SeriesSidePublic(
                 side_no=side.side_no,
                 user_id=side.user_id or None,
-                user=UserPublic.from_user_reduced(user) if user else None,
+                user=UserSummaryPublic.from_user(user) if user else None,
                 entrant_id=side.entrant_id,
                 place=side.place,
             )
@@ -955,7 +984,7 @@ def _fill_teams(session: OrmSession, rows: Sequence[StageSeriesRow]) -> None:
     if not wanted:
         return
     teams = {
-        ident(entrant): TeamReduced.from_team(team)
+        ident(entrant): TeamSummaryPublic.from_team(team)
         for entrant, team in session.execute(
             select(EventEntrant, Team)
             .join(Team, col(Team.id) == col(EventEntrant.team_id))

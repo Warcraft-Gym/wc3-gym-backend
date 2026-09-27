@@ -9,7 +9,7 @@ A 1v1 series writes no row here, so every GNL read keeps its shape.
 from sqlmodel import Field, SQLModel
 
 from app.models.base import DBModel
-from app.models.user import UserPublic
+from app.models.user import UserSummaryPublic
 
 
 class SeriesSide(DBModel, table=True):
@@ -41,7 +41,7 @@ class SeriesSidePublic(SQLModel):
     side_no: int
     user_id: int | None = None
     # The player in the seat, so a lobby box prints his name and his race
-    user: UserPublic | None = None
+    user: UserSummaryPublic | None = None
     entrant_id: int | None = None
     place: int | None = None
 

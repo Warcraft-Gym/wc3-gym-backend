@@ -28,6 +28,7 @@ from app.models.relationships import (
     DBMapSeason,
     DBUserSeasonSignup,
     SeasonRoundWrite,
+    event_rounds,
     round_row,
 )
 from app.models.round_availability import DBRoundAvailability
@@ -45,10 +46,11 @@ from app.models.team import Team
 from app.models.team_season import DBTeamSeason
 from app.models.user import User, UserListPublic
 from app.services import ladder_maps
-from app.services.ladder import mmr_on
+from app.services.ladder import _w3c_seasons_for, mmr_on
 from app.services.maps import MapService
 from app.services.series_veto import check_order
-from app.services.users import UserService
+from app.services.users import UserService, summary_loads
+from app.services.w3c_stats import fill, w3c_season
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +92,7 @@ def fill_rounds(session: OrmSession, season: Season, wanted: int) -> None:
     after the one before it; a round past the last playday is dropped with the
     availability answers for it; a set date stays. The rows are the round count,
     so nothing stores it."""
-    rounds = {row.number: row for row in season.rounds}
+    rounds = {row.number: row for row in event_rounds(session, ident(season))}
     stage_id = first_stage_id(session, ident(season))
     for playday in range(1, wanted + 1):
         row = rounds.get(playday) or DBEventRound(
@@ -150,7 +152,14 @@ def resolved_tiers(
     """Each signup's fantasy tier: the pin, else the band its MMR on the Apply date falls in."""
     cuts, applied = season.fantasy_tier_cuts, season.fantasy_tiers_applied_at
     mmrs = (
-        mmr_on(session, [signup.user_id for signup in signups], applied)
+        mmr_on(
+            session,
+            [signup.user_id for signup in signups],
+            applied,
+            # a running season with no stored match yet reads the current w3champions season
+            _w3c_seasons_for(session, season)
+            or ([w3c_season(session)] if season.running else []),
+        )
         if cuts and applied
         else {}
     )
@@ -179,6 +188,21 @@ def _publics(session: OrmSession, seasons: Sequence[Season]) -> list[SeasonPubli
     """A list of seasons, with one aggregate for the phase of all of them."""
     progress = progress_by_seasons(session, seasons)
     return [_public(session, season, progress[season.id]) for season in seasons]
+
+
+def _season(session: OrmSession, season_id: int) -> Season:
+    """The season with its pool and rounds, read again even when the session holds it."""
+    season = session.get(
+        Season, season_id, options=_SEASON_OPTIONS, populate_existing=True
+    )
+    if not season:
+        raise NotFoundError(f"Season not found by id: {season_id}")
+    return season
+
+
+def _answer(session: OrmSession, season_id: int) -> SeasonPublic:
+    """What every season write answers: the season read again after the flush."""
+    return _public(session, _season(session, season_id))
 
 
 def gnl_league(session: OrmSession) -> League:
@@ -219,7 +243,7 @@ class SeasonService:
             session.add_all(default_rows(new_season.id))
             session.flush()
             fill_rounds(session, new_season, _wanted(season) or 0)
-            return _public(session, new_season)
+            return _answer(session, ident(new_season))
 
     def update(self, season_id: int, season: SeasonUpdate) -> SeasonPublic:
         with Session.begin() as session:
@@ -231,11 +255,11 @@ class SeasonService:
             if not row:
                 raise NotFoundError("Season not found")
             if season.model_fields_set & {"pick_ban", "map_rules"}:
-                check_order(row)
+                check_order(_season(session, season_id))
             if season.model_fields_set & {"round_count", "start_date"}:
                 wanted = _wanted(season)
                 fill_rounds(session, row, row.round_count if wanted is None else wanted)
-            return _public(session, row)
+            return _answer(session, season_id)
 
     def delete(self, season_id: int) -> None:
         with Session.begin() as session:
@@ -344,7 +368,7 @@ class SeasonService:
                 except IntegrityError:
                     logger.debug(f"Team {team_id} is already in season {season_id}")
             session.flush()
-            return _public(session, season)
+            return _answer(session, season_id)
 
     def search(
         self, query: QueryElement | None, limit: int | None = None, offset: int = 0
@@ -383,13 +407,11 @@ class SeasonService:
                     )
                 session.delete(team_season)
             session.flush()
-            return _public(session, season)
+            return _answer(session, season_id)
 
     def add_maps(self, season_id: int, map_ids: list[int]) -> SeasonPublic:
         with Session.begin() as session:
-            season = session.get(Season, season_id)
-            if not season:
-                raise NotFoundError(f"Season not found by id: {season_id}")
+            season = _season(session, season_id)
             # A new map joins the pool behind the ones already in it
             position = max((link.position for link in season.maps), default=-1) + 1
             for map_id in map_ids:
@@ -406,14 +428,12 @@ class SeasonService:
                 except IntegrityError:
                     logger.debug(f"Map {map_id} is already in season {season_id}")
             session.flush()
-            return _public(session, season)
+            return _answer(session, season_id)
 
     def ladder_import_preview(self, season_id: int) -> list[LadderMapRow]:
         """Every 1v1 ladder map, and whether the season already plays it."""
         with Session.begin() as session:
-            season = session.get(Season, season_id)
-            if not season:
-                raise NotFoundError(f"Season not found by id: {season_id}")
+            season = _season(session, season_id)
             pool = {
                 ladder_maps.folded_base(link.map.name)
                 for link in season.maps
@@ -435,9 +455,7 @@ class SeasonService:
     def set_map_order(self, season_id: int, map_ids: list[int]) -> SeasonPublic:
         """Reorder the whole pool. The ids given are exactly the ids in it."""
         with Session.begin() as session:
-            season = session.get(Season, season_id)
-            if not season:
-                raise NotFoundError(f"Season not found by id: {season_id}")
+            season = _season(session, season_id)
             pool = {link.map_id: link for link in season.maps}
             if sorted(map_ids) != sorted(pool):
                 raise BadRequestError(
@@ -446,9 +464,7 @@ class SeasonService:
             for position, map_id in enumerate(map_ids):
                 pool[map_id].position = position
             session.flush()
-            # The loaded collection keeps its old order until it is read again
-            session.expire(season, ["maps"])
-            return _public(session, season)
+            return _answer(session, season_id)
 
     def set_round(self, season_id: int, data: SeasonRoundWrite) -> SeasonPublic:
         """Set the dates and the game 1 map of one round.
@@ -456,9 +472,7 @@ class SeasonService:
         A field left out of the write keeps its value; a null clears it.
         """
         with Session.begin() as session:
-            season = session.get(Season, season_id)
-            if not season:
-                raise NotFoundError(f"Season not found by id: {season_id}")
+            season = _season(session, season_id)
             if not 1 <= data.playday <= season.round_count:
                 raise BadRequestError(
                     f"playday must be between 1 and {season.round_count}"
@@ -481,14 +495,11 @@ class SeasonService:
                 raise BadRequestError("end_date must not be before start_date")
             session.add(row)
             session.flush()
-            session.expire(season, ["rounds", "round_count"])
-            return _public(session, season)
+            return _answer(session, season_id)
 
     def remove_maps(self, season_id: int, map_ids: list[int]) -> SeasonPublic:
         with Session.begin() as session:
-            season = session.get(Season, season_id)
-            if not season:
-                raise NotFoundError(f"Season not found by id: {season_id}")
+            season = _season(session, season_id)
             for map_id in map_ids:
                 map = session.get(Map, map_id)
                 if not map:
@@ -506,7 +517,7 @@ class SeasonService:
                 if round_.map_id in map_ids:
                     round_.map_id = None
             session.flush()
-            session.refresh(season)
+            season = _season(session, season_id)
             # A smaller pool may no longer carry the order
             check_order(season)
             return _public(session, season)
@@ -543,7 +554,7 @@ class SeasonService:
                 except IntegrityError:
                     logger.debug(f"User {user_id} is already signed up to {season_id}")
             session.flush()
-            return _public(session, season)
+            return _answer(session, season_id)
 
     @staticmethod
     def _race(race: str | None) -> Race:
@@ -573,7 +584,7 @@ class SeasonService:
                     )
                 session.delete(user_season)
             session.flush()
-            return _public(session, season)
+            return _answer(session, season_id)
 
     def update_signup(
         self, season_id: int, user_id: int, data: SeasonSignupUpdate
@@ -589,7 +600,7 @@ class SeasonService:
             fields = data.model_dump(exclude_unset=True)
             if "race" in fields:
                 fields["race"] = self._race(fields["race"])
-                phase, _ = signup.season.progress(session)
+                phase, _ = session.get_one(Season, season_id).progress(session)
                 if phase != "open" and fields["race"] != signup.race:
                     raise BadRequestError(
                         "A season that has started keeps its signup races. "
@@ -597,7 +608,7 @@ class SeasonService:
                     )
             signup.sqlmodel_update(fields)
             session.flush()
-            return _public(session, signup.season)
+            return _answer(session, season_id)
 
     def get_signed_up_users(
         self, season_id: int, limit: int | None = None, offset: int = 0
@@ -607,16 +618,15 @@ class SeasonService:
             if season is None:
                 raise NotFoundError("Season not found")
 
-            # The signup row has no gnl_stats, so the link rows stay out
+            current = w3c_season(session)
+            # The ladder summary is read on its own; the edit dialog of the
+            # assign page lists every season of the player
             statement = (
                 select(DBUserSeasonSignup)
                 .options(
-                    joinedload(rel(DBUserSeasonSignup.user))
-                    .joinedload(rel(User.w3c_stats))
-                    .noload("*"),
-                    joinedload(rel(DBUserSeasonSignup.user)).noload(
-                        rel(User.team_seasons)
-                    ),
+                    joinedload(rel(DBUserSeasonSignup.user)).options(
+                        *summary_loads(None, signups=True)
+                    )
                 )
                 .where(col(DBUserSeasonSignup.season_id) == season_id)
                 # Offset paging is deterministic only with a fixed order
@@ -647,5 +657,5 @@ class SeasonService:
                         user_public.draft_excluded = signup.draft_excluded
                         user_public.fantasy_tier = tiers.get(signup.user_id)
                         result.append(user_public)
-
+            fill(session, result, current)
             return result

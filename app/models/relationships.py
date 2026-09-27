@@ -38,8 +38,12 @@ class DBUserSeasonSignup(DBModel, table=True):
     draft_excluded: bool = Field(
         default=False, sa_column_kwargs={"server_default": "false"}
     )
-    user: "User" = Relationship(back_populates="signup_seasons")
-    season: "Season" = Relationship(back_populates="signup_users")
+    user: "User" = Relationship(
+        back_populates="signup_seasons", sa_relationship_kwargs={"lazy": "raise_on_sql"}
+    )
+    season: "Season" = Relationship(
+        back_populates="signup_users", sa_relationship_kwargs={"lazy": "raise_on_sql"}
+    )
 
 
 class DBTeamSeasonCaptain(DBModel, table=True):
@@ -47,8 +51,11 @@ class DBTeamSeasonCaptain(DBModel, table=True):
     team_id: int = Field(foreign_key="teams.id", primary_key=True)
     season_id: int = Field(index=True, foreign_key="event.id", primary_key=True)
     user_id: int = Field(index=True, foreign_key="users.id", primary_key=True)
-    team: "Team" = Relationship(back_populates="captain_seasons")
-    user: "User" = Relationship()
+    team: "Team" = Relationship(
+        back_populates="captain_seasons",
+        sa_relationship_kwargs={"lazy": "raise_on_sql"},
+    )
+    user: "User" = Relationship(sa_relationship_kwargs={"lazy": "raise_on_sql"})
 
 
 class DBMapSeason(DBModel, table=True):
@@ -57,8 +64,12 @@ class DBMapSeason(DBModel, table=True):
     season_id: int = Field(index=True, foreign_key="event.id", primary_key=True)
     # The place of the map in the pool; the season service appends at the end
     position: int = Field(default=0, sa_column_kwargs={"server_default": "0"})
-    season: "Season" = Relationship(back_populates="maps")
-    map: "Map" = Relationship(back_populates="seasons")
+    season: "Season" = Relationship(
+        back_populates="maps", sa_relationship_kwargs={"lazy": "raise_on_sql"}
+    )
+    map: "Map" = Relationship(
+        back_populates="seasons", sa_relationship_kwargs={"lazy": "raise_on_sql"}
+    )
 
 
 class DBEventRound(DBModel, table=True):
@@ -92,7 +103,9 @@ class DBEventRound(DBModel, table=True):
     )
     # Overrides the stage's best of for this round; null follows the stage
     best_of: int | None = None
-    season: "Season" = Relationship(back_populates="rounds")
+    season: "Season" = Relationship(
+        back_populates="rounds", sa_relationship_kwargs={"lazy": "raise_on_sql"}
+    )
 
 
 def round_row(session: OrmSession, season_id: int, number: int) -> DBEventRound | None:
@@ -104,6 +117,17 @@ def round_row(session: OrmSession, season_id: int, number: int) -> DBEventRound 
             col(DBEventRound.number) == number,
         )
     ).first()
+
+
+def event_rounds(session: OrmSession, season_id: int) -> list[DBEventRound]:
+    """The round rows of one event, by number."""
+    return list(
+        session.scalars(
+            select(DBEventRound)
+            .where(col(DBEventRound.season_id) == season_id)
+            .order_by(col(DBEventRound.number))
+        )
+    )
 
 
 class SeasonRoundPublic(SQLModel):
@@ -165,5 +189,10 @@ class DBFantasyTeamPlayer(DBModel, table=True):
     fantasy_team_id: int = Field(foreign_key="fantasy_teams.id", primary_key=True)
     user_id: int = Field(index=True, foreign_key="users.id", primary_key=True)
     # Additional columns can be added here if needed
-    fantasy_team: "FantasyTeam" = Relationship(back_populates="drafted_players")
-    users: "User" = Relationship(back_populates="fantasy_teams")
+    fantasy_team: "FantasyTeam" = Relationship(
+        back_populates="drafted_players",
+        sa_relationship_kwargs={"lazy": "raise_on_sql"},
+    )
+    users: "User" = Relationship(
+        back_populates="fantasy_teams", sa_relationship_kwargs={"lazy": "raise_on_sql"}
+    )

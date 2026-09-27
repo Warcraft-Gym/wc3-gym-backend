@@ -3,7 +3,7 @@ type: Pitfall
 title: A Hobby cron runs once a day
 description: A vercel.json schedule more frequent than daily fails every deployment with no build log, and production silently stays on the previous build.
 tags: [deploy]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-26T10:00:00Z }
 sources:
   - id: source
     resource: ../../../vercel.json
@@ -16,4 +16,4 @@ Three merges produced no deployment at all. The GitHub status said only "Deploym
 
 # The rule
 
-One daily schedule in `vercel.json`. Anything more frequent runs from outside against a `/jobs` route. After any merge that touches `vercel.json`, read the commit status; a failed Vercel context with no deployment row means the deployment creation failed, not the build. See [jobs](../api/jobs.md).
+Daily schedules only in `vercel.json`. Anything more frequent runs from outside against a `/jobs` route. After any merge that touches `vercel.json`, read the commit status; a failed Vercel context with no deployment row means the deployment creation failed, not the build. See [jobs](../api/jobs.md).

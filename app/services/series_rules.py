@@ -21,6 +21,7 @@ from typing import Literal, NamedTuple
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session as OrmSession
+from sqlalchemy.orm.attributes import instance_state, set_committed_value
 from sqlmodel import col
 
 from app.core.map_order import DEFAULT_RULES, rules_of
@@ -29,7 +30,12 @@ from app.models.base import ident
 from app.models.event_entrant import EventEntrant
 from app.models.event_stage import EventStage
 from app.models.match import Match
-from app.models.relationships import DBEventRound, DBTeamSeasonCaptain, round_row
+from app.models.relationships import (
+    DBEventRound,
+    DBMapSeason,
+    DBTeamSeasonCaptain,
+    round_row,
+)
 from app.models.season import Season
 from app.models.series import Series, SeriesPublic, SeriesRulesPublic
 from app.models.user_team_season import DBUserTeamSeason
@@ -47,17 +53,42 @@ class SeriesRules(NamedTuple):
     map_pool: list[int]
 
 
+def fixture(session: OrmSession, series: Series) -> Match | None:
+    """The fixture of a series, read by id once and kept on the row, so every
+    later read of `series.match` holds it."""
+    if series.match_id is None:
+        return None
+    if "match" in instance_state(series).unloaded:
+        set_committed_value(series, "match", session.get_one(Match, series.match_id))
+    return series.match
+
+
+def map_pool(session: OrmSession, event: Season) -> list[DBMapSeason]:
+    """The pool links of an event, in pool order, read once and kept on the
+    event, so every later read of `event.maps` holds them."""
+    if "maps" in instance_state(event).unloaded:
+        links = session.scalars(
+            select(DBMapSeason)
+            .where(col(DBMapSeason.season_id) == ident(event))
+            .order_by(col(DBMapSeason.position))
+        ).all()
+        set_committed_value(event, "maps", list(links))
+    return event.maps
+
+
 def series_round(session: OrmSession, series: Series) -> DBEventRound | None:
     """The round a series is played in: the fixture's playday, else its own."""
-    if series.match is not None:
-        return round_row(session, series.match.season_id, series.match.playday)
+    match = fixture(session, series)
+    if match is not None:
+        return round_row(session, match.season_id, match.playday)
     return session.get(DBEventRound, series.round_id) if series.round_id else None
 
 
 def series_event(session: OrmSession, series: Series) -> Season | None:
     """The event a series belongs to, through its fixture or through its round."""
-    if series.match is not None:
-        return series.match.season
+    match = fixture(session, series)
+    if match is not None:
+        return match.season
     round_ = series_round(session, series)
     return session.get(Season, round_.season_id) if round_ else None
 
@@ -130,7 +161,7 @@ def _team_sides(session: OrmSession, series: Series) -> list[TeamSide]:
                     TeamSide(side, entrant.team_id, entrant.event_id, not named[side])
                 )
         return found
-    match = series.match
+    match = fixture(session, series)
     if match is None:
         return []
     return [
@@ -149,7 +180,7 @@ def reads_its_stage(
 def series_rules(session: OrmSession, series: Series) -> SeriesRules:
     """The map rules, the best-of and the map pool of one series."""
     event = series_event(session, series)
-    pool = [link.map_id for link in event.maps] if event else []
+    pool = [link.map_id for link in map_pool(session, event)] if event else []
     round_ = series_round(session, series)
     on_stage = reads_its_stage(series.match_id, series.entrant1_id, series.entrant2_id)
     stage = (
@@ -175,19 +206,49 @@ class Resolved(NamedTuple):
     wins: int
 
 
+# The event, the map rules, the best-of and the score system of one series
+Rules = tuple[int | None, str, int, str | None]
+
+
+def from_loaded_season(series_list: Iterable[Series]) -> dict[int, Rules]:
+    """The rules of every series that prices on the season its loaded fixture
+    names, as _resolve answers them; a series that names an entrant is left
+    out, because its round's stage may price it."""
+    found: dict[int, Rules] = {}
+    for series in series_list:
+        match = series.match
+        if match is None or match.season is None:
+            continue
+        if reads_its_stage(series.match_id, series.entrant1_id, series.entrant2_id):
+            continue
+        rules = match.season.map_rules
+        found[ident(series)] = (
+            match.season_id,
+            rules or DEFAULT_RULES,
+            len(rules_of(rules)),
+            match.season.score_system,
+        )
+    return found
+
+
 def fill_rules(
-    session: OrmSession, rows: Iterable[SeriesPublic | None]
+    session: OrmSession,
+    rows: Iterable[SeriesPublic | None],
+    known: dict[int, Rules] | None = None,
 ) -> dict[int, Resolved]:
     """Fill the rules of every series and answer the event and the scale of
     each one, which the points and the race fill then key on.
 
     A fixture cannot answer the rules on its own, because the stage its round
-    names holds them, so one statement resolves every row.
+    names holds them, so one statement resolves every row that `known` (from
+    from_loaded_season) does not already answer.
     """
     filled = [row for row in rows if row is not None]
     if not filled:
         return {}
-    resolved = _resolve(session, {row.id for row in filled})
+    known = known or {}
+    resolved = {row.id: known[row.id] for row in filled if row.id in known}
+    resolved |= _resolve(session, {row.id for row in filled} - resolved.keys())
     found: dict[int, Resolved] = {}
     for row in filled:
         if row.id not in resolved:
@@ -198,9 +259,7 @@ def fill_rules(
     return found
 
 
-def _resolve(
-    session: OrmSession, series_ids: set[int]
-) -> dict[int, tuple[int | None, str, int, str | None]]:
+def _resolve(session: OrmSession, series_ids: set[int]) -> dict[int, Rules]:
     """The event, the map rules, the best-of and the score system of every
     named series, in one statement: through the stage its round names when the
     row was generated, else through its season."""
@@ -228,7 +287,7 @@ def _resolve(
         .outerjoin(Season, col(Season.id) == event_id)
         .where(col(Series.id).in_(series_ids))
     ).all()
-    found: dict[int, tuple[int | None, str, int, str | None]] = {}
+    found: dict[int, Rules] = {}
     for (
         row_id,
         stage_id,

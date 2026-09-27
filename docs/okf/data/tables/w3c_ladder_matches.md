@@ -38,7 +38,7 @@ sources:
 
 # Keys and joins
 
-Primary key `id`. Foreign keys: `user_id` to [users](users.md); `battle_tag_id` to [user_battle_tag](user_battle_tag.md), set null when the tag row goes. Unique index on (`w3c_match_id`, `user_id`). Index on (`user_id`, `start_time`).
+Primary key `id`. Foreign keys: `user_id` to [users](users.md); `battle_tag_id` to [user_battle_tag](user_battle_tag.md), set null when the tag row goes. Unique index on (`w3c_match_id`, `user_id`). Index on (`user_id`, `start_time`); index on (`user_id`, `race`, `start_time`) for `mmr_at`.
 
 # Rules
 

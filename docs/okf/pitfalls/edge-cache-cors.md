@@ -19,4 +19,4 @@ sources:
 
 # The rule
 
-A route that sets `Cache-Control: public` writes `Access-Control-Allow-Origin: *` itself, beside it. `edge_cache` in `app/api/deps.py` writes the two together; use it rather than either header alone. The cached routes are listed in [the API overview](../api/overview.md). Test it with a client that sends no `Origin`. Reproduce with a cache-buster query so the real key is untouched. The frontend sends no bearer on that route, because a request with an Authorization header is never cached.
+A route that sets `Cache-Control: public` writes `Access-Control-Allow-Origin: *` itself, beside it. `edge_cache` in `app/api/deps.py` writes the two together; use it rather than either header alone. The cached routes are listed in [Edge cache](../concepts/edge-cache.md). Test it with a client that sends no `Origin`. Reproduce with a cache-buster query so the real key is untouched. The frontend sends no bearer on that route, because a request with an Authorization header is never cached.

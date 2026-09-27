@@ -2,7 +2,7 @@ from collections.abc import Iterable
 from datetime import date, datetime
 from typing import TYPE_CHECKING, Annotated, Any, Literal, NamedTuple, Self
 
-from pydantic import NonNegativeInt, PositiveInt
+from pydantic import ConfigDict, NonNegativeInt, PositiveInt
 from sqlalchemy import (
     JSON,
     Index,
@@ -17,7 +17,9 @@ from sqlalchemy import (
     text,
     true,
 )
+from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import Session, column_property
+from sqlalchemy.sql.elements import ColumnElement
 from sqlmodel import Field, Relationship, SQLModel, col
 
 from app.models.base import DBModel, ident
@@ -30,7 +32,7 @@ from app.models.relationships import (
     EventRoundPublic,
     SeasonRoundPublic,
 )
-from app.models.team_reduced import TeamReduced
+from app.models.team_summary import TeamSummaryPublic
 from app.models.types import (
     AwareUTC,
     EnumValue,
@@ -112,6 +114,8 @@ class SeasonProgress(NamedTuple):
 class Season(SeasonBase, DBModel, table=True):
     # A GNL season is one event of the GNL league; "season" stays its name in the payloads
     __tablename__ = "event"
+    # lets pydantic pass over the running hybrid below
+    model_config = ConfigDict(ignored_types=(hybrid_property,))
     if TYPE_CHECKING:
         # Mapped below the class, where Season.id exists; declared here so a
         # type checker sees it
@@ -186,14 +190,17 @@ class Season(SeasonBase, DBModel, table=True):
         default=None, sa_type=UTCDateTime
     )
     user_teams: list["DBUserTeamSeason"] = Relationship(
-        back_populates="season", sa_relationship_kwargs={"cascade": "all, delete"}
+        back_populates="season",
+        sa_relationship_kwargs={"lazy": "raise_on_sql", "cascade": "all, delete"},
     )
     teams: list["DBTeamSeason"] = Relationship(
-        back_populates="season", sa_relationship_kwargs={"cascade": "all, delete"}
+        back_populates="season",
+        sa_relationship_kwargs={"lazy": "raise_on_sql", "cascade": "all, delete"},
     )
     maps: list["DBMapSeason"] = Relationship(
         back_populates="season",
         sa_relationship_kwargs={
+            "lazy": "raise_on_sql",
             "cascade": "all, delete",
             "order_by": "DBMapSeason.position",
         },
@@ -201,6 +208,7 @@ class Season(SeasonBase, DBModel, table=True):
     rounds: list["DBEventRound"] = Relationship(
         back_populates="season",
         sa_relationship_kwargs={
+            "lazy": "raise_on_sql",
             "cascade": "all, delete",
             "order_by": "DBEventRound.number",
         },
@@ -210,8 +218,24 @@ class Season(SeasonBase, DBModel, table=True):
         """The season's phase from its series; a season with no series is open."""
         return progress_by_seasons(session, [self])[self.id]
 
+    @hybrid_property
+    def running(self) -> bool:
+        """Not closed and its end date not passed; only a running event reads the current W3C season."""
+        return self.closed_at is None and (
+            self.end_date is None or self.end_date >= utcnow().date()
+        )
+
+    @running.inplace.expression
+    @classmethod
+    def _running_expression(cls) -> ColumnElement[bool]:
+        return and_(
+            col(cls.closed_at).is_(None),
+            or_(col(cls.end_date).is_(None), col(cls.end_date) >= utcnow().date()),
+        )
+
     signup_users: list["DBUserSeasonSignup"] = Relationship(
-        back_populates="season", sa_relationship_kwargs={"cascade": "all, delete"}
+        back_populates="season",
+        sa_relationship_kwargs={"lazy": "raise_on_sql", "cascade": "all, delete"},
     )
 
 
@@ -241,6 +265,7 @@ def series_counts_by_event(
         col(Series.player1_score).is_not(None),
         col(Series.player2_score).is_not(None),
     )
+    scored = or_(scored, col(Series.result_unavailable).is_(True))
     started = or_(scored, col(Series.date_time) <= utcnow())
     rows = session.execute(
         select(
@@ -396,6 +421,52 @@ class SeasonSignupUpdate(SQLModel):
     race: str | None = None
 
 
+class SeasonSummaryPublic(SQLModel):
+    """A season inside another object: its name, league, dates and phase."""
+
+    id: int
+    name: str
+    # The short name of the season's league; null when the event has no league
+    league_short_name: str | None = None
+    # The full name of that league; null when the event has no league
+    league_name: str | None = None
+    # How many rounds the season has, counted from its round rows
+    round_count: int | None = None
+    # Derived from the series where a read fills it; null otherwise
+    phase: SeasonPhase | None = None
+    start_date: date | None = None
+    end_date: date | None = None
+    # IANA name; a round of this season ends at midnight in this zone
+    round_end_zone: str | None = None
+    # One rule per game; the fantasy score reads the best-of of a bet's series off it
+    map_rules: str | None = None
+    # The race of the signup this season is nested under; null everywhere else
+    signup_race: Annotated[str | None, EnumValue] = None
+    # The tag of that signup, null when it names none
+    played_as: str | None = None
+
+    @classmethod
+    def from_season(
+        cls,
+        season: Season,
+        signup_race: Race | None = None,
+        played_as: str | None = None,
+    ) -> Self:
+        return cls(
+            id=ident(season),
+            name=season.name,
+            league_short_name=season.league_short_name,
+            league_name=season.league_name,
+            round_count=season.round_count,
+            start_date=season.start_date,
+            end_date=season.end_date,
+            round_end_zone=season.round_end_zone,
+            map_rules=season.map_rules,
+            signup_race=signup_race,
+            played_as=played_as,
+        )
+
+
 class SeasonPublic(SeasonBase):
     id: int
     # The short name of the season's league; null when the event has no league
@@ -404,7 +475,6 @@ class SeasonPublic(SeasonBase):
     league_name: str | None = None
     # How many rounds the season has, counted from its round rows
     round_count: int | None = None
-    # The short form of a season carries only the name, so these read null
     series_per_round: int | None = None
     score_system: str | None = None
     fantasy_grind: bool | None = None
@@ -412,7 +482,7 @@ class SeasonPublic(SeasonBase):
     fantasy_tiers: int | None = None
     fantasy_tier_cuts: Annotated[list[int], NoneToList] = []
     fantasy_tiers_applied_at: Annotated[datetime | None, AwareUTC] = None
-    # Derived from the series when the season is the subject; null when nested
+    # Derived from the series; null until the read fills it
     phase: SeasonPhase | None = None
     unscored_series: int | None = None
     start_date: date | None = None
@@ -421,9 +491,8 @@ class SeasonPublic(SeasonBase):
     rounds: Annotated[list[SeasonRoundPublic], NoneToList] = []
     # Always empty; the public pages read this field
     user_signup: Annotated[list[Any], NoneToList] = []
-    # The race of the signup this season is nested under; null everywhere else
+    # Always null on a season answer; a signup's season summary carries them
     signup_race: Annotated[str | None, EnumValue] = None
-    # The tag of that signup, null when it names none
     played_as: str | None = None
 
     @classmethod
@@ -444,54 +513,6 @@ class SeasonPublic(SeasonBase):
                 if map_season and map_season.map
             ],
             rounds=[SeasonRoundPublic.from_row(row) for row in (season.rounds or [])],
-            discordRole=season.discordRole,
-            map_rules=season.map_rules,
-            score_system=season.score_system,
-            fantasy_grind=season.fantasy_grind,
-            signups_open=season.signups_open,
-            scheduling_enabled=season.scheduling_enabled,
-            checkin_days=season.checkin_days,
-            fantasy_tiers=tier_count(season.fantasy_tier_cuts),
-            fantasy_tier_cuts=season.fantasy_tier_cuts or [],
-            fantasy_tiers_applied_at=season.fantasy_tiers_applied_at,
-        )
-
-    @classmethod
-    def from_season_reduced(
-        cls,
-        season: Season,
-        signup_race: Race | None = None,
-        played_as: str | None = None,
-    ) -> Self:
-        """The name, the id, the map rules and the grind flag only. Used where
-        a season is a label on another object rather than the subject."""
-        return cls(
-            id=ident(season),
-            name=season.name,
-            league_short_name=season.league_short_name,
-            league_name=season.league_name,
-            map_rules=season.map_rules,
-            fantasy_grind=season.fantasy_grind,
-            signups_open=season.signups_open,
-            scheduling_enabled=season.scheduling_enabled,
-            checkin_days=season.checkin_days,
-            signup_race=signup_race,
-            played_as=played_as,
-        )
-
-    @classmethod
-    def from_season_without_maps(cls, season: Season) -> Self:
-        """Every scalar field of the season, without the map pool."""
-        return cls(
-            id=ident(season),
-            name=season.name,
-            league_short_name=season.league_short_name,
-            league_name=season.league_name,
-            round_count=season.round_count,
-            series_per_round=season.series_per_round,
-            pick_ban=season.pick_ban,
-            start_date=season.start_date,
-            end_date=season.end_date,
             discordRole=season.discordRole,
             map_rules=season.map_rules,
             score_system=season.score_system,
@@ -592,6 +613,8 @@ class EventPublic(SQLModel):
     checkin_open: bool | None = None
     # The entrants who have not withdrawn; null on a list read
     entrant_count: int | None = None
+    # Imported from the KOTH archive: its board is the source record; null on a list read
+    archived: bool | None = None
     stages: list[EventStagePublic] = []
     divisions: list[EventDivisionPublic] = []
     # The events this one is the parent of, newest first; empty on a list read
@@ -706,8 +729,8 @@ class CaptainFixture(SQLModel):
     playday: int
     round_start: date | None = None
     round_end: date | None = None
-    team1: TeamReduced
-    team2: TeamReduced
+    team1: TeamSummaryPublic
+    team2: TeamSummaryPublic
     series_per_round: int
     # Series the fixture already published, and drafts still open on it
     published: int = 0

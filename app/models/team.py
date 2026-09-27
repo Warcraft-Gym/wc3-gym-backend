@@ -1,34 +1,17 @@
-from typing import TYPE_CHECKING, Annotated, Any, Self
+from typing import TYPE_CHECKING, Annotated, Self
 
-from pydantic import BeforeValidator
 from sqlmodel import Field, Relationship, SQLModel
 
-from app.models.base import DBModel, ident
+from app.models.base import DBModel
 from app.models.season_info import SeasonInfoPublic
-from app.models.team_reduced import TeamReduced
+from app.models.team_summary import TeamSummaryPublic
 from app.models.types import NoneToList, NumToStr
-from app.models.user import UserPublic
+from app.models.user import UserSummaryPublic
 
 if TYPE_CHECKING:
     from app.models.relationships import DBTeamSeasonCaptain
     from app.models.team_season import DBTeamSeason
     from app.models.user_team_season import DBUserTeamSeason
-
-
-def _season_lists(value: Any) -> Any:  # noqa: ANN401  # a validator sees raw input
-    """Per-season lists: drop empty seasons and None entries."""
-    if not value:
-        return {}
-    if not isinstance(value, dict):
-        return value
-    result = {}
-    for season, items in value.items():
-        if items:
-            result[season] = [item for item in items if item is not None]
-    return result
-
-
-SeasonLists = BeforeValidator(_season_lists)
 
 
 class TeamBase(SQLModel):
@@ -47,14 +30,17 @@ class Team(TeamBase, DBModel, table=True):
     # the public blob the logo is served from
     icon_url: str | None = Field(default=None, max_length=500)
     user_seasons: list["DBUserTeamSeason"] = Relationship(
-        back_populates="team", sa_relationship_kwargs={"cascade": "all, delete"}
+        back_populates="team",
+        sa_relationship_kwargs={"lazy": "raise_on_sql", "cascade": "all, delete"},
     )
     season_info: list["DBTeamSeason"] = Relationship(
-        back_populates="team", sa_relationship_kwargs={"cascade": "all, delete"}
+        back_populates="team",
+        sa_relationship_kwargs={"lazy": "raise_on_sql", "cascade": "all, delete"},
     )
     captain_seasons: list["DBTeamSeasonCaptain"] = Relationship(
         back_populates="team",
         sa_relationship_kwargs={
+            "lazy": "raise_on_sql",
             "cascade": "all, delete",
             "order_by": "DBTeamSeasonCaptain.user_id",
         },
@@ -80,53 +66,42 @@ class TeamCaptainIds(SQLModel):
     captain_ids: list[int] = []
 
 
-class TeamPublic(TeamReduced):
-    """A team plus who played and captained for it, season by season.
+class TeamPublic(TeamSummaryPublic):
+    """One team: the summary plus the events it entered."""
 
-    The lists are assembled from the link rows rather than read off the
-    team, so this one is built by from_team, not by model_validate.
-    """
-
-    player_by_season: Annotated[dict[int, list[UserPublic]], SeasonLists] = {}
-    captains_by_season: Annotated[dict[int, list[UserPublic]], SeasonLists] = {}
     seasons_info: Annotated[list[SeasonInfoPublic], NoneToList] = []
     # Captains whose Discord account still lacks a bound role; only Save Captains fills it
     discord_role_missing: Annotated[list[str], NoneToList] = []
 
     @classmethod
     def from_team(cls, team: Team) -> Self:
-        players = {}
-        captains = {}
-        seasons_info = [
+        row = super().from_team(team)
+        row.seasons_info = [
             SeasonInfoPublic(season_id=info.season_id) for info in team.season_info
         ]
+        return row
 
-        if team.user_seasons:
-            for ut in team.user_seasons:
-                if not players.get(ut.season_id):
-                    players[ut.season_id] = []
-                # A noload on the link leaves the user unloaded
-                user = UserPublic.from_user(ut.user) if ut.user else None
-                if user:
-                    for gnl_stat in user.gnl_stats:
-                        if gnl_stat.season_id == ut.season_id:
-                            user.gnl_stats = [gnl_stat]
-                            break
-                    players[ut.season_id].append(user)
 
-        # Load captains from the team_season_captain rows
-        for seat in team.captain_seasons:
-            built = UserPublic.from_user(seat.user) if seat.user else None
-            if built:
-                captains.setdefault(seat.season_id, []).append(built)
+class TeamRosterPublic(TeamPublic):
+    """A team in one event: who played and captained for it there, under the
+    event's id alone. The loader bounds the link rows to that event."""
 
-        return cls(
-            id=ident(team),
-            league_id=team.league_id,
-            name=team.name,
-            long_name=team.long_name,
-            icon_url=team.icon_url,
-            player_by_season=players,
-            captains_by_season=captains,
-            seasons_info=seasons_info,
-        )
+    player_by_season: dict[int, list[UserSummaryPublic]] = {}
+    captains_by_season: dict[int, list[UserSummaryPublic]] = {}
+
+    @classmethod
+    def from_roster(cls, team: Team, event_id: int) -> Self:
+        row = cls.from_team(team)
+        row.player_by_season = {
+            event_id: [
+                UserSummaryPublic.from_user(seat.user, event_id)
+                for seat in team.user_seasons
+            ]
+        }
+        row.captains_by_season = {
+            event_id: [
+                UserSummaryPublic.from_user(seat.user, event_id)
+                for seat in team.captain_seasons
+            ]
+        }
+        return row

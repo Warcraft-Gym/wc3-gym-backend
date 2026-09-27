@@ -234,6 +234,7 @@ def test_a_meeting_carries_the_fixed_map_and_the_picks(
     from app.core.db import Session
     from app.models.base import ident
     from app.models.map import Map
+    from app.models.match import Match
     from app.models.series import Series
     from app.models.series_veto_step import DBSeriesVetoStep
 
@@ -244,7 +245,7 @@ def test_a_meeting_carries_the_fixed_map_and_the_picks(
         session.flush()
         series = session.get(Series, seeded["series_played_id"])
         assert series is not None
-        series.match.fixed_map_id = seeded["map_id"]
+        session.get_one(Match, series.match_id).fixed_map_id = seeded["map_id"]
         session.add_all(
             [
                 DBSeriesVetoStep(

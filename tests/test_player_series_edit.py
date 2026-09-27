@@ -75,7 +75,8 @@ def test_a_flag_set_after_the_read_survives_the_player_edit(
 
     def read_then_admin_sets_the_flag(sid: int) -> SeriesPublic:
         series = read_series(sid)
-        series_service.update(sid, SeriesUpdate(is_fantasy_match=True))
+        # The admin writes through a service of his own request
+        SeriesService().update(sid, SeriesUpdate(is_fantasy_match=True))
         return series
 
     monkeypatch.setattr(series_service, "get", read_then_admin_sets_the_flag)

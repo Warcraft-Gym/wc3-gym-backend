@@ -54,6 +54,17 @@ def sign_up(season_id: int, user_ids: list[int], race: Race | None = None) -> No
         session.commit()
 
 
+def date_around_now(season_id: int) -> None:
+    """Date the season from two days back to two months ahead, so the matches
+    a test stores around now sit inside its window and name its W3C seasons."""
+    today = datetime.now(UTC).date()
+    with Session() as session:
+        season = session.get_one(Season, season_id)
+        season.start_date = today - timedelta(days=2)
+        season.end_date = today + timedelta(days=60)
+        session.commit()
+
+
 def set_signup_race(season_id: int, user_id: int, race: Race) -> None:
     """The race the player registered on for that one season."""
     with Session() as session:
@@ -805,7 +816,10 @@ def test_the_season_ladder_is_cacheable_at_the_edge(
     client: Client, league: dict[str, Any]
 ) -> None:
     ladder = client.get(f"/events/{league['season_id']}/ladder")
-    assert ladder.headers["cache-control"] == "public, s-maxage=3600"
+    # the seeded season reads finished, so the ladder is settled
+    assert ladder.headers["cache-control"] == (
+        "public, s-maxage=3600, stale-while-revalidate=86400"
+    )
     # this client sends no Origin, the shape of a fill by curl or a bot. The copy the
     # edge stores must still let a browser read it.
     assert ladder.headers["access-control-allow-origin"] == "*"

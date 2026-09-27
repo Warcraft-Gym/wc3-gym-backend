@@ -1,6 +1,6 @@
 from datetime import timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session as OrmSession
 from sqlmodel import col
 
@@ -10,7 +10,10 @@ from app.core.exceptions import BadRequestError, NotFoundError
 from app.core.ordering import SortOrder, ordered
 from app.core.query import QueryElement, QueryUtil
 from app.core.scoring import recordable, wins_needed
+from app.models.base import ident
+from app.models.event_history import KothHistorySeries
 from app.models.match import Match
+from app.models.season import Season
 from app.models.series import (
     SERIES_SORTS,
     Series,
@@ -19,10 +22,18 @@ from app.models.series import (
     SeriesSort,
     SeriesUpdate,
 )
-from app.services import derived, stage_engine
+from app.services import derived, series_rules, stage_engine
+from app.services.users import load_players
+from app.services.w3c_stats import fill, w3c_season
 
 
-def both_scores(row: Series, wins: int | None = None) -> None:
+def _fixture_season(session: OrmSession, row: Series) -> Season | None:
+    """The season of the series' fixture; a series with no fixture has none."""
+    match = series_rules.fixture(session, row)
+    return match.season if match else None
+
+
+def both_scores(session: OrmSession, row: Series, wins: int | None = None) -> None:
     """A result is both map scores or neither, and the pair either finishes the
     series or is 0-0, which records a series that was never played.
 
@@ -34,7 +45,8 @@ def both_scores(row: Series, wins: int | None = None) -> None:
     if row.player1_score is None or row.player2_score is None:
         return
     if wins is None:
-        wins = wins_needed(row.match.season.map_rules if row.match else None)
+        season = _fixture_season(session, row)
+        wins = wins_needed(season.map_rules if season else None)
     if not recordable(row.player1_score, row.player2_score, wins):
         raise BadRequestError(
             f"A series of this season ends at {wins} map wins, or 0-0 when it "
@@ -42,11 +54,12 @@ def both_scores(row: Series, wins: int | None = None) -> None:
         )
 
 
-def in_season(row: Series) -> None:
+def in_season(session: OrmSession, row: Series) -> None:
     """A series cannot sit before its season starts: a mistyped year reads as
     a season that has commenced, and every report of it is wrong. start_date is
     a calendar date, so the day of slack covers the player's timezone."""
-    start = row.match.season.start_date if row.match else None
+    season = _fixture_season(session, row)
+    start = season.start_date if season else None
     if row.date_time is None or start is None:
         return
     if row.date_time.date() < start - timedelta(days=1):
@@ -55,49 +68,61 @@ def in_season(row: Series) -> None:
         )
 
 
-def add_in(session: OrmSession, series: SeriesCreate) -> SeriesPublic:
-    """Write one series inside a transaction the caller owns and opened."""
+def add_in(session: OrmSession, series: SeriesCreate) -> int:
+    """Write one series inside a transaction the caller owns and opened, and
+    answer its id."""
     row = Series.add(session, series.model_dump())
-    both_scores(row, stage_engine.series_wins(session, row))
-    in_season(row)
+    both_scores(session, row, stage_engine.series_wins(session, row))
+    in_season(session, row)
     derived.clear_kept_off_race(session, row)
-    public = SeriesPublic.from_series(row)
-    derived.fill_series(session, [public])
-    return public
+    return ident(row)
+
+
+def update_in(
+    session: OrmSession, series_id: int, series: SeriesUpdate, force: bool = False
+) -> None:
+    """Write the named fields inside a transaction the caller owns. A score
+    written, cleared or turned around here also moves the bracket, and `force`
+    allows a change that loses a later result."""
+    row = Series.get_by_id(session, series_id)
+    if not row:
+        raise NotFoundError("Series not found")
+    archived = select(col(KothHistorySeries.series_id)).where(
+        col(KothHistorySeries.series_id) == series_id
+    )
+    if session.scalar(archived) is not None:
+        raise BadRequestError("An archived series keeps its source result")
+    was_scored = stage_engine.scored(row)
+    was_slot = stage_engine.won_slot(row)
+    Series.update_object(session, row, **series.model_dump(exclude_unset=True))
+    both_scores(session, row, stage_engine.series_wins(session, row))
+    in_season(session, row)
+    derived.clear_kept_off_race(session, row)
+    stage_engine.after_score(session, row, was_scored, was_slot, force)
 
 
 class SeriesService:
     def add(self, series: SeriesCreate) -> SeriesPublic:
         with Session.begin() as session:
-            return add_in(session, series)
+            series_id = add_in(session, series)
+        return self.get(series_id)
 
     def update(
         self, series_id: int, series: SeriesUpdate, force: bool = False
     ) -> SeriesPublic:
-        """Write the named fields. A score written, cleared or turned around
-        here also moves the bracket, and `force` allows a change that loses a
-        later result."""
         with Session.begin() as session:
-            row = Series.get_by_id(session, series_id)
-            if not row:
-                raise NotFoundError("Series not found")
-            was_scored = stage_engine.scored(row)
-            was_slot = stage_engine.won_slot(row)
-            Series.update_object(session, row, **series.model_dump(exclude_unset=True))
-            both_scores(row, stage_engine.series_wins(session, row))
-            in_season(row)
-            derived.clear_kept_off_race(session, row)
-            stage_engine.after_score(session, row, was_scored, was_slot, force)
-            public = SeriesPublic.from_series(row)
-            derived.fill_series(session, [public])
-            return public
+            update_in(session, series_id, series, force)
+        return self.get(series_id)
 
     def delete(self, series_id: int) -> None:
         with Session.begin() as session:
             Series.delete(session, series_id)
 
     def get(self, series_id: int) -> SeriesPublic:
+        """One series; its players carry the ladder summary and their record
+        in its event. Every series write answers through this read."""
         with Session.begin() as session:
+            current = w3c_season(session)
             series = session.scalars(
                 select(Series)
                 .options(*Series._eager_options())
@@ -105,8 +130,12 @@ class SeriesService:
             ).first()
             if not series:
                 raise NotFoundError("Series not found")
-            public = SeriesPublic.from_series(series)
+            event = series_rules.series_event(session, series)
+            event_id = event.id if event else None
+            load_players(session, (series.player1_id, series.player2_id), event_id)
+            public = SeriesPublic.from_series(series, event_id)
             derived.fill_series(session, [public])
+            fill(session, [public.player1, public.player2], current)
             return public
 
     def search(
@@ -138,9 +167,9 @@ class SeriesService:
                 .limit(limit)
             )
             series_list = session.scalars(statement).all()
-            result = [SeriesPublic.from_series_reduced(s) for s in series_list]
-            derived.fill_series(session, result)
-            derived.fill_mmrs(session, result)
+            result = [SeriesPublic.from_series(s) for s in series_list]
+            events = derived.fill_series(session, result)
+            derived.fill_mmrs(session, result, events)
             return result
 
     def count(self, query: QueryElement | None, season_id: int | None = None) -> int:
@@ -151,9 +180,7 @@ class SeriesService:
                 return 0
             statement = select(func.count()).select_from(Series)
             if season_id is not None:
-                statement = statement.where(
-                    col(Series.match).has(col(Match.season_id) == season_id)
-                )
+                statement = statement.where(Series.in_event(season_id))
             if filter is not None:
                 statement = statement.where(filter)
             return session.scalar(statement) or 0
@@ -165,24 +192,6 @@ class SeriesService:
         with Session.begin() as session:
             return derived.fantasy_series(session, {season_id}).get(season_id, {})
 
-    def search_for_season_and_playday(
-        self,
-        season_id: int,
-        playday: int,
-        query: QueryElement | None,
-        limit: int | None = None,
-        offset: int = 0,
-    ) -> list[SeriesPublic]:
-        with Session.begin() as session:
-            filter = QueryUtil.convert_query_to_db_filter(Series, query)
-            series_list = Series.search_for_season_and_playday(
-                session, season_id, playday, filter, limit=limit, offset=offset
-            )
-            result = [SeriesPublic.from_series_reduced(s) for s in series_list]
-            derived.fill_series(session, result)
-            derived.fill_mmrs(session, result)
-            return result
-
     def search_for_season(
         self,
         season_id: int,
@@ -192,13 +201,42 @@ class SeriesService:
         *,
         sort: SeriesSort | None = None,
         order: SortOrder = "asc",
+        player_id: int | None = None,
+        team_id: int | None = None,
+        match_id: int | None = None,
+        is_fantasy_match: bool | None = None,
     ) -> list[SeriesPublic]:
         """The matching series of one season, one page at a time.
 
         sort names a column of SERIES_SORTS and the series id breaks its ties.
+        player_id, team_id and match_id each narrow the list and AND together.
+        is_fantasy_match keeps fantasy series if true and the rest if false.
         """
+        conds = []
+        if player_id is not None:
+            conds.append(
+                or_(
+                    col(Series.player1_id) == player_id,
+                    col(Series.player2_id) == player_id,
+                )
+            )
+        if team_id is not None:
+            conds.append(
+                col(Series.match).has(
+                    or_(col(Match.team1_id) == team_id, col(Match.team2_id) == team_id)
+                )
+            )
+        if match_id is not None:
+            conds.append(col(Series.match_id) == match_id)
+        if is_fantasy_match is not None:
+            # A null flag counts as not fantasy
+            flag = func.coalesce(col(Series.is_fantasy_match), False)
+            conds.append(flag == is_fantasy_match)
         with Session.begin() as session:
             filter = QueryUtil.convert_query_to_db_filter(Series, query)
+            if filter is not None:
+                conds.append(filter)
+            filter = and_(*conds) if conds else None
             series_list = Series.search_for_season(
                 session,
                 season_id,
@@ -208,7 +246,8 @@ class SeriesService:
                 sort=sort,
                 order=order,
             )
-            result = [SeriesPublic.from_series_reduced(s) for s in series_list]
-            derived.fill_series(session, result)
-            derived.fill_mmrs(session, result)
+            result = [SeriesPublic.from_series(s) for s in series_list]
+            known = series_rules.from_loaded_season(series_list)
+            events = derived.fill_series(session, result, known)
+            derived.fill_mmrs(session, result, events)
             return result

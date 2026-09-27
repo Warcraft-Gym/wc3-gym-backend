@@ -41,7 +41,7 @@ def won(*sides: str) -> list[dict[str, Any]]:
     ]
 
 
-def stored_games(series_id: int) -> list[tuple[int, str, int | None]]:
+def stored_games(series_id: int) -> list[tuple[int, str | None, int | None]]:
     with Session() as session:
         rows = session.scalars(
             select(DBSeriesGame)

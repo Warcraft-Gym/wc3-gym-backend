@@ -7,13 +7,9 @@ from sqlmodel import Field, Relationship, SQLModel
 
 from app.core.db import rel
 from app.models.base import DBModel, PublicModel, ident
-from app.models.match import Match
-from app.models.relationships import DBMapSeason, DBUserSeasonSignup
-from app.models.season import Season, SeasonPublic
+from app.models.season import Season, SeasonSummaryPublic
 from app.models.series import Series, SeriesPublic
-from app.models.series_cast import SeriesCast
-from app.models.series_veto_step import DBSeriesVetoStep
-from app.models.user import User, UserPublic
+from app.models.user import User, UserSummaryPublic
 
 
 class FantasyBetBase(SQLModel):
@@ -34,94 +30,43 @@ class FantasyBet(FantasyBetBase, DBModel, table=True):
     bet_points: int
 
     season: "Season" = Relationship(
-        sa_relationship_kwargs={"foreign_keys": "[FantasyBet.season_id]"}
+        sa_relationship_kwargs={
+            "lazy": "raise_on_sql",
+            "foreign_keys": "[FantasyBet.season_id]",
+        }
     )
     series: "Series" = Relationship(
-        sa_relationship_kwargs={"foreign_keys": "[FantasyBet.series_id]"}
+        sa_relationship_kwargs={
+            "lazy": "raise_on_sql",
+            "foreign_keys": "[FantasyBet.series_id]",
+        }
     )
     user: "User" = Relationship(
-        sa_relationship_kwargs={"foreign_keys": "[FantasyBet.user_id]"}
+        sa_relationship_kwargs={
+            "lazy": "raise_on_sql",
+            "foreign_keys": "[FantasyBet.user_id]",
+        }
     )
     winner: "User" = Relationship(
-        sa_relationship_kwargs={"foreign_keys": "[FantasyBet.winner_id]"}
+        sa_relationship_kwargs={
+            "lazy": "raise_on_sql",
+            "foreign_keys": "[FantasyBet.winner_id]",
+        }
     )
 
     @classmethod
-    def eager_options(cls) -> tuple[ORMOption, ...]:
-        """Every relation the public bet reads."""
-        # A bet holds four users: both sides of the bet and both players
-        players = (
-            joinedload(rel(cls.user)),
-            joinedload(rel(cls.winner)),
-            joinedload(rel(cls.series)).joinedload(rel(Series.player1)),
-            joinedload(rel(cls.series)).joinedload(rel(Series.player2)),
-            joinedload(rel(cls.series))
-            .selectinload(rel(Series.casts))
-            .joinedload(rel(SeriesCast.user)),
-        )
-        return (
-            # Every path in players ends at a user; this one ends at a map
-            joinedload(rel(cls.series))
-            .selectinload(rel(Series.veto_steps))
-            .joinedload(rel(DBSeriesVetoStep.map)),
-            # Collections use selectinload; a joined collection multiplies the rows
-            joinedload(rel(cls.season))
-            .selectinload(rel(Season.maps))
-            .joinedload(rel(DBMapSeason.map)),
-            joinedload(rel(cls.series))
-            .joinedload(rel(Series.match))
-            .joinedload(rel(Match.team1)),
-            joinedload(rel(cls.series))
-            .joinedload(rel(Series.match))
-            .joinedload(rel(Match.team2)),
-            joinedload(rel(cls.series))
-            .joinedload(rel(Series.match))
-            .joinedload(rel(Match.season)),
-            joinedload(rel(cls.series))
-            .joinedload(rel(Series.match))
-            .joinedload(rel(Match.fixed_map)),
-            *(
-                option
-                for player in players
-                for option in (
-                    player.selectinload(rel(User.w3c_stats)),
-                    player.selectinload(rel(User.team_seasons)),
-                    player.selectinload(rel(User.signup_seasons)).joinedload(
-                        rel(DBUserSeasonSignup.season)
-                    ),
-                )
-            ),
-        )
-
-    @classmethod
-    def list_eager_options(cls) -> tuple[ORMOption, ...]:
-        """The to-one relations the reduced public bet reads."""
-        # A season, a series and a match are each shared by many bets of a page,
-        # so selectin reads every distinct row once, not once per bet
+    def loads(cls) -> tuple[ORMOption, ...]:
+        """The rows a bet answer reads off the bet: its season, its bettor and
+        winner bare, and its series as the series list row. A season and a
+        series are each shared by many bets of a page, so selectin reads every
+        distinct row once, not once per bet."""
         return (
             selectinload(rel(cls.season)),
             joinedload(rel(cls.user)),
             joinedload(rel(cls.winner)),
-            selectinload(rel(cls.series)).joinedload(rel(Series.player1)),
-            selectinload(rel(cls.series)).joinedload(rel(Series.player2)),
-            selectinload(rel(cls.series))
-            .selectinload(rel(Series.match))
-            .joinedload(rel(Match.team1)),
-            selectinload(rel(cls.series))
-            .selectinload(rel(Series.match))
-            .joinedload(rel(Match.team2)),
-            selectinload(rel(cls.series))
-            .selectinload(rel(Series.match))
-            .selectinload(rel(Match.season)),
-            selectinload(rel(cls.series))
-            .selectinload(rel(Series.match))
-            .joinedload(rel(Match.fixed_map)),
-            selectinload(rel(cls.series))
-            .selectinload(rel(Series.casts))
-            .joinedload(rel(SeriesCast.user)),
-            selectinload(rel(cls.series))
-            .selectinload(rel(Series.veto_steps))
-            .joinedload(rel(DBSeriesVetoStep.map)),
+            selectinload(rel(cls.series)).options(
+                *Series._list_eager_options(picks_only=True)
+            ),
         )
 
 
@@ -159,42 +104,32 @@ class FantasyBetPublic(FantasyBetBase, PublicModel):
     user_id: int | None = None
     winner_id: int | None = None
     bet_points: int | None = None
-    season: SeasonPublic | None = None
+    season: SeasonSummaryPublic | None = None
     series: SeriesPublic | None = None
-    user: UserPublic | None = None
-    winner: UserPublic | None = None
+    user: UserSummaryPublic | None = None
+    winner: UserSummaryPublic | None = None
 
     @classmethod
     def from_fantasy_bet(cls, fbet: FantasyBet) -> Self:
+        """The bet; its players carry their record in its season where the
+        read loaded it."""
         return cls(
             id=ident(fbet),
             series_id=fbet.series_id,
             season_id=fbet.season_id,
-            season=SeasonPublic.from_season(fbet.season) if fbet.season else None,
-            series=SeriesPublic.from_series(fbet.series) if fbet.series else None,
-            user_id=fbet.user_id,
-            user=UserPublic.from_user(fbet.user) if fbet.user else None,
-            winner_id=fbet.winner_id,
-            winner=UserPublic.from_user(fbet.winner) if fbet.winner else None,
-            bet_points=fbet.bet_points,
-        )
-
-    @classmethod
-    def from_fantasy_bet_reduced(cls, fbet: FantasyBet) -> Self:
-        """Every field of the bet, with the nested collections empty."""
-        return cls(
-            id=ident(fbet),
-            series_id=fbet.series_id,
-            season_id=fbet.season_id,
-            season=SeasonPublic.from_season_without_maps(fbet.season)
+            season=SeasonSummaryPublic.from_season(fbet.season)
             if fbet.season
             else None,
-            series=SeriesPublic.from_series_reduced(fbet.series)
+            series=SeriesPublic.from_series(fbet.series, fbet.season_id)
             if fbet.series
             else None,
             user_id=fbet.user_id,
-            user=UserPublic.from_user_reduced(fbet.user) if fbet.user else None,
+            user=UserSummaryPublic.from_user(fbet.user, fbet.season_id)
+            if fbet.user
+            else None,
             winner_id=fbet.winner_id,
-            winner=UserPublic.from_user_reduced(fbet.winner) if fbet.winner else None,
+            winner=UserSummaryPublic.from_user(fbet.winner, fbet.season_id)
+            if fbet.winner
+            else None,
             bet_points=fbet.bet_points,
         )

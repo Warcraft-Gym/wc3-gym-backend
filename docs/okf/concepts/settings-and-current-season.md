@@ -4,7 +4,7 @@ title: Settings and the current season
 description: A key-value table holds the few runtime values an admin edits, including the two season pointers, and a missing row falls back to the newest season.
 resource: ../../../app/services/settings.py
 tags: [api]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-26T14:40:00Z }
 sources:
   - id: settings
     resource: ../../../app/services/settings.py
@@ -22,7 +22,7 @@ sources:
 | Key | Read by | When missing |
 |---|---|---|
 | `current_gnl_season` | the captain check, the role sync, the public signup form, the player history, the Discord bot | the newest season |
-| `current_w3c_season` | the MMR columns and the ladder sync | the newest W3Champions season from the API |
+| `current_w3c_season` | the live MMR window, that season and the one before it, and the ladder sync | the ratings read the newest season stored in `w3cstats`; the ladder sync reads the newest season from the API |
 | `w3c_url` | the W3Champions client; wins over the `W3C_URL` variable | the variable, then the default |
 | `KOTH_NIGHTBOT_TOKEN` | the Twitch chat signup | the signup answers 401 |
 | `results_channel_id` | the result card | no card |

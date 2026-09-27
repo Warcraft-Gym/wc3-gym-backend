@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Query, Response
 from app.api.deps import (
     LadderServiceDep,
     SeasonServiceDep,
-    edge_cache,
+    event_edge_cache,
     require_admin,
 )
 from app.models.ladder_achievement import (
@@ -199,9 +199,10 @@ def get_achievement_catalogue() -> list[SeasonAchievementPublic]:
 
 @router.get("/events/{event_id}/achievements", tags=["events"])
 def get_season_achievements(
-    event_id: int, service: SeasonServiceDep
+    event_id: int, service: SeasonServiceDep, response: Response
 ) -> list[SeasonAchievementPublic]:
     """The rules this season pays, with its prices and numbers."""
+    event_edge_cache(response, event_id)
     return service.achievements(event_id)
 
 
@@ -222,7 +223,7 @@ def get_season_ladder(
     event_id: int, service: LadderServiceDep, response: Response
 ) -> SeasonLadder:
     """The ladder of a season: its teams, its players and its hours."""
-    edge_cache(response, 3600)  # matches change once a day at the cron
+    event_edge_cache(response, event_id)
     return service.season_ladder(event_id)
 
 
@@ -231,5 +232,5 @@ def get_season_ladder_players(
     event_id: int, service: LadderServiceDep, response: Response
 ) -> list[SeasonPlayer]:
     """Every signup of the season with his ladder record, without the achievements."""
-    edge_cache(response, 900, 3600)
+    event_edge_cache(response, event_id)
     return service.season_players(event_id)

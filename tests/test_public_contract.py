@@ -13,7 +13,7 @@ The shortcodes and the routes they call:
   gnl-teams-players       GET  /config/settings, GET /events/{id}/teams,
                           GET /teams/{id}/image
   gnl-week-series         GET  /config/settings, POST /matches/search,
-                          POST /events/{id}/rounds/{n}/series/search
+                          GET /events/{id}/series?match_id={id}
   gnl-fantasy-teams       GET  /config/settings, POST /fantasy/teams/search
   gnl-fantasy-leaderboard GET  /config/settings, POST /fantasy/teams/search
 """
@@ -271,14 +271,14 @@ def test_teams_season_carries_the_person_row_fields(
     for person in people:
         assert person["name"]
         assert person["battleTag"]
-        assert person["discordTag"]
+        assert "discordTag" not in person and "discordId" not in person
         assert person["race"]
         assert person["country"]
         assert person["mmr"] is not None
-        assert isinstance(person["w3c_stats"], list)
-    # The roster sorts on the w3c_stats row for the configured w3c season.
-    rated = next(p for p in people if p["w3c_stats"])
-    stat = rated["w3c_stats"][0]
+        assert "w3c_stats" not in person
+    # The summary reads the w3cstats row of the configured w3c season.
+    rated = next(p for p in people if p["race_mmrs"])
+    stat = rated["race_mmrs"][0]
     assert stat["wc3_season"] == WC3_SEASON
     assert stat["mmr"] is not None
     assert stat["race"]
@@ -371,11 +371,11 @@ def test_matches_search_by_playday_carries_the_team_names(
             assert "long_name" in match[side]
 
 
-def test_series_by_season_and_playday_carries_the_week_table_fields(
+def test_series_of_a_fixture_carries_the_week_table_fields(
     client: Client, public_seed: dict[str, Any]
 ) -> None:
-    season_id = public_seed["season_id"]
-    series = post_json(client, f"/events/{season_id}/rounds/1/series/search")
+    season_id, match_id = public_seed["season_id"], public_seed["match_id"]
+    series = get_json(client, f"/events/{season_id}/series?match_id={match_id}")
     assert len(series) == 2
     for entry in series:
         assert "id" in entry
@@ -404,7 +404,7 @@ def test_fantasy_teams_search_carries_the_leaderboard_fields(
     for team in teams:
         assert team["name"]
         assert team["captain"]["name"]
-        assert team["captain"]["discordTag"]
+        assert "discordTag" not in team["captain"]
         for column in (
             "total_points",
             "player_points",
@@ -427,7 +427,7 @@ def test_fantasy_teams_search_carries_the_draft_fields(
         assert isinstance(team["drafted_players"], list)
         for player in team["drafted_players"]:
             assert player["name"]
-            assert player["discordTag"]
+            assert "discordTag" not in player
         assert team["drafted_team"]["name"]
         assert team["drafted_race"]
     drafted = next(t for t in teams if t["id"] == public_seed["fantasy_team_id"])
@@ -437,10 +437,11 @@ def test_fantasy_teams_search_carries_the_draft_fields(
     assert empty["drafted_players"] == []
 
 
-def test_teams_season_roster_users_carry_no_signup_seasons(
+def test_teams_season_roster_users_are_summaries(
     client: Client, public_seed: dict[str, Any]
 ) -> None:
-    """The season roster keeps its stats; the free collections answer empty."""
+    """The season roster and its captains are player summaries: the ladder
+    summary and the record of this season, no signups."""
     season_id = public_seed["season_id"]
     teams = get_json(client, f"/events/{season_id}/teams")
     players = [
@@ -451,12 +452,13 @@ def test_teams_season_roster_users_carry_no_signup_seasons(
     assert players
     for player in players:
         # The site person row reads these
-        assert "w3c_stats" in player
+        assert "race_mmrs" in player
         assert "name" in player
-        # No consumer reads these on this route
-        assert player["signup_seasons"] == []
+        assert "signup_seasons" not in player
+        assert player["record"]["season_id"] == season_id
+        assert "gnl_stats" not in player
     for team in teams:
-        for captains in team["captains_by_season"].values():
-            for captain in captains:
-                assert captain["gnl_stats"] == []
-                assert captain["signup_seasons"] == []
+        assert set(team["captains_by_season"]) == {str(season_id)}
+        for captain in team["captains_by_season"][str(season_id)]:
+            assert "signup_seasons" not in captain
+            assert "gnl_stats" not in captain

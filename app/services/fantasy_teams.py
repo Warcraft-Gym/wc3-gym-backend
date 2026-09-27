@@ -1,15 +1,17 @@
 import logging
-from typing import Any
+from collections.abc import Iterable, Sequence
 
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as OrmSession
-from sqlalchemy.orm import joinedload, noload, selectinload
+from sqlalchemy.orm import joinedload, selectinload
+from sqlalchemy.orm.interfaces import ORMOption
 from sqlmodel import col
 
 from app.core.db import Session, rel
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.core.query import QueryElement, QueryUtil
+from app.models.base import ident
 from app.models.fantasy_team import (
     FantasyTeam,
     FantasyTeamCreate,
@@ -20,46 +22,52 @@ from app.models.relationships import DBFantasyTeamPlayer, DBUserSeasonSignup
 from app.models.season import Season, tier_count
 from app.models.team_season import DBTeamSeason
 from app.models.user import User
-from app.models.w3c_stats import W3CStats
 from app.services import derived, discord_roles
-from app.services.events import SEASONS, _w3c_season
 from app.services.seasons import resolved_tiers
+from app.services.users import load_players
+from app.services.w3c_stats import fill, w3c_season
 
 logger = logging.getLogger(__name__)
 
 
-def _reduced_options(session: OrmSession) -> list[Any]:
-    """Every relation the list answer reads; the other sub-collections stay
-    empty. The drafted players carry their stats so the leaderboard shows MMR
-    and GNL record without one request per player.
-
-    The stats stop at the W3C seasons the app rates against, the same window
-    app.services.events.race_ratings reads: an older season carries no current
-    rating, so a stored history reaching back to W3C season 0 would multiply
-    this read for rows no client draws. The single-team read carries every
-    stored season, because it loads no options of its own.
-
-    A player's own collections use selectinload: joining both of them under one
-    player multiplies every team row by both. The season is one row every team
-    of it shares, so selectin reads it once instead of once per team. The
-    players stay joined, because the captain of a team is often drafted by
-    another one, and a later statement leaves that shared player without stats.
-    """
-    stats = rel(User.w3c_stats).and_(
-        col(W3CStats.wc3_season) > _w3c_season(session) - SEASONS
+def _loads() -> tuple[ORMOption, ...]:
+    """The rows a fantasy team answer reads off the team: its season, its
+    drafted team and its members bare. A season is shared by every team of it,
+    so selectin reads it once."""
+    return (
+        selectinload(rel(FantasyTeam.season)),
+        joinedload(rel(FantasyTeam.drafted_team)),
+        joinedload(rel(FantasyTeam.captain)),
+        joinedload(rel(FantasyTeam.drafted_players)).joinedload(
+            rel(DBFantasyTeamPlayer.users)
+        ),
     )
-    return [
-        selectinload(rel(FantasyTeam.season)).noload("*"),
-        joinedload(rel(FantasyTeam.drafted_team)).noload("*"),
-        joinedload(rel(FantasyTeam.captain)).noload("*"),
+
+
+def _list_loads() -> tuple[ORMOption, ...]:
+    """The list rows add the team rows of the drafted players, so each carries
+    his record in the season of his team; the captain carries none."""
+    return (
+        *_loads(),
         joinedload(rel(FantasyTeam.drafted_players))
         .joinedload(rel(DBFantasyTeamPlayer.users))
-        .options(
-            selectinload(rel(User.team_seasons)).noload("*"),
-            selectinload(stats),
-            noload("*"),
-        ),
+        .selectinload(rel(User.team_seasons)),
+    )
+
+
+def _publics(
+    session: OrmSession, fteams: Sequence[FantasyTeam]
+) -> list[FantasyTeamPublic]:
+    """The answers of the teams: their scores, and the ladder summary and the
+    season record of every member."""
+    result = [FantasyTeamPublic.from_fantasy_team(fteam) for fteam in fteams]
+    members = [
+        user for team in result for user in (team.captain, *team.drafted_players)
     ]
+    derived.fill_fantasy_teams(session, result)
+    fill(session, members, w3c_season(session))
+    derived.fill_gnl_stats(session, members)
+    return result
 
 
 def _check_grind(
@@ -106,22 +114,59 @@ def _check_roster(
         )
 
 
+def _add_players_in(
+    session: OrmSession, fteam: FantasyTeam, player_ids: Iterable[int]
+) -> None:
+    """Link the players to the team; a link already there stays."""
+    for user_id in player_ids:
+        user = session.get(User, user_id)
+        if not user:
+            raise NotFoundError(f"User not found by id: {user_id}")
+        try:
+            # The primary key decides: a duplicate link is already there
+            with session.begin_nested():
+                session.add(DBFantasyTeamPlayer(users=user, fantasy_team=fteam))
+        except IntegrityError:
+            logger.debug(f"User {user_id} is already in fantasy team {fteam.id}")
+
+
+def _remove_players_in(
+    session: OrmSession, team_id: int, player_ids: Iterable[int]
+) -> None:
+    """Unlink the players from the team; each must be on it."""
+    for user_id in player_ids:
+        user_team = session.get(
+            DBFantasyTeamPlayer, {"fantasy_team_id": team_id, "user_id": user_id}
+        )
+        if not user_team:
+            raise NotFoundError(
+                f"User not part of the fantasy team, user id: {user_id}"
+            )
+        session.delete(user_team)
+
+
 class FantasyTeamService:
     def check_roster(self, season_id: int, player_ids: list[int]) -> None:
         """A roster holds one signup from each tier the season cuts."""
         with Session.begin() as session:
             _check_roster(session, season_id, player_ids, complete=True)
 
+    def owner(self, fantasy_team_id: int) -> tuple[int, int]:
+        """The captain and the season of the team, off its row."""
+        with Session.begin() as session:
+            fteam = session.get(FantasyTeam, fantasy_team_id)
+            if not fteam:
+                raise NotFoundError("Fantasy Team not found")
+            return fteam.captain_id, fteam.season_id
+
     def add(self, fantasy_team: FantasyTeamCreate) -> FantasyTeamPublic:
         with Session.begin() as session:
             _check_grind(session, fantasy_team.grind_team_id, fantasy_team.season_id)
-            row = FantasyTeam.add(session, fantasy_team.model_dump())
-            public = FantasyTeamPublic.from_fantasy_team(row)
-            derived.fill_fantasy_teams(session, [public])
+            team_id = ident(FantasyTeam.add(session, fantasy_team.model_dump()))
 
         # A captain earns the fantasy role, so the guild hears about the team
         discord_roles.sync([fantasy_team.captain_id])
-        return public
+        return self.get(team_id)
 
     def update(
         self, fantasy_team_id: int, fantasy_team: FantasyTeamUpdate
@@ -135,23 +180,61 @@ class FantasyTeamService:
             if not row:
                 raise NotFoundError("Fantasy Team not found")
             _check_grind(session, row.grind_team_id, row.season_id)
-            public = FantasyTeamPublic.from_fantasy_team(row)
-            derived.fill_fantasy_teams(session, [public])
-            return public
+        return self.get(fantasy_team_id)
+
+    def register(
+        self, fantasy_team: FantasyTeamCreate, player_ids: list[int]
+    ) -> FantasyTeamPublic:
+        """The public registration: the captain's one team of the season,
+        created or updated, and its roster set to `player_ids` when it names any."""
+        with Session.begin() as session:
+            fteam = session.scalars(
+                select(FantasyTeam).where(
+                    col(FantasyTeam.captain_id) == fantasy_team.captain_id,
+                    col(FantasyTeam.season_id) == fantasy_team.season_id,
+                )
+            ).first()
+            created = fteam is None
+            if fteam is None:
+                fteam = FantasyTeam.add(session, fantasy_team.model_dump())
+            else:
+                FantasyTeam.update_object(
+                    session, fteam, **fantasy_team.model_dump(exclude_unset=True)
+                )
+            _check_grind(session, fteam.grind_team_id, fteam.season_id)
+            team_id = ident(fteam)
+            if player_ids:
+                current = set(
+                    session.scalars(
+                        select(col(DBFantasyTeamPlayer.user_id)).where(
+                            col(DBFantasyTeamPlayer.fantasy_team_id) == team_id
+                        )
+                    ).all()
+                )
+                _add_players_in(
+                    session, fteam, [pid for pid in player_ids if pid not in current]
+                )
+                _remove_players_in(session, team_id, current - set(player_ids))
+
+        if created:
+            # A captain earns the fantasy role, so the guild hears about the team
+            discord_roles.sync([fantasy_team.captain_id])
+        return self.get(team_id)
 
     def delete(self, fantasy_team_id: int) -> None:
         with Session.begin() as session:
             FantasyTeam.delete(session, fantasy_team_id)
 
     def get(self, fantasy_team_id: int) -> FantasyTeamPublic:
+        """One team; its captain and drafted players carry their record in its
+        season. Every team write answers through this read."""
         with Session.begin() as session:
-            fteam = session.get(FantasyTeam, fantasy_team_id)
+            fteam = session.get(FantasyTeam, fantasy_team_id, options=_loads())
             if not fteam:
                 raise NotFoundError("Fantasy Team not found")
-            public = FantasyTeamPublic.from_fantasy_team(fteam)
-            derived.fill_standings(session, [public.drafted_team])
-            derived.fill_fantasy_teams(session, [public])
-            return public
+            members = (fteam.captain_id, *(dp.user_id for dp in fteam.drafted_players))
+            load_players(session, members, fteam.season_id)
+            return _publics(session, [fteam])[0]
 
     def get_all(
         self, limit: int | None = None, offset: int = 0
@@ -162,18 +245,13 @@ class FantasyTeamService:
             # Offset paging is deterministic only with a fixed order
             statement = (
                 select(FantasyTeam)
-                .options(*_reduced_options(session))
+                .options(*_list_loads())
                 .order_by(col(FantasyTeam.id))
                 .offset(offset)
                 .limit(limit)
             )
             fteams = session.scalars(statement).unique().all()
-            result = [FantasyTeamPublic.from_fantasy_team(fteam) for fteam in fteams]
-            derived.fill_fantasy_teams(session, result)
-            derived.fill_gnl_stats(
-                session, [player for team in result for player in team.drafted_players]
-            )
-            return result, total
+            return _publics(session, fteams), total
 
     def search(
         self, query: QueryElement | None, limit: int | None = None, offset: int = 0
@@ -192,19 +270,14 @@ class FantasyTeamService:
             # Offset paging is deterministic only with a fixed order
             statement = (
                 select(FantasyTeam)
-                .options(*_reduced_options(session))
+                .options(*_list_loads())
                 .where(filter)
                 .order_by(col(FantasyTeam.id))
                 .offset(offset)
                 .limit(limit)
             )
             fteams = session.scalars(statement).unique().all()
-            result = [FantasyTeamPublic.from_fantasy_team(fteam) for fteam in fteams]
-            derived.fill_fantasy_teams(session, result)
-            derived.fill_gnl_stats(
-                session, [player for team in result for player in team.drafted_players]
-            )
-            return result, total
+            return _publics(session, fteams), total
 
     def add_players(
         self, team_id: int, player_ids: list[int], *, member: bool = False
@@ -227,40 +300,15 @@ class FantasyTeamService:
                     sorted({*current, *player_ids}),
                     complete=False,
                 )
-            for user_id in player_ids:
-                user = session.get(User, user_id)
-                if not user:
-                    raise NotFoundError(f"User not found by id: {user_id}")
-                try:
-                    # The primary key decides: a duplicate link is already there
-                    with session.begin_nested():
-                        session.add(DBFantasyTeamPlayer(users=user, fantasy_team=fteam))
-                except IntegrityError:
-                    logger.debug(f"User {user_id} is already in fantasy team {team_id}")
-            session.flush()
-            public = FantasyTeamPublic.from_fantasy_team(fteam)
-            derived.fill_fantasy_teams(session, [public])
-            return public
+            _add_players_in(session, fteam, player_ids)
+        return self.get(team_id)
 
     def remove_players(self, team_id: int, player_ids: list[int]) -> FantasyTeamPublic:
         with Session.begin() as session:
-            fteam = session.get(FantasyTeam, team_id)
-            if not fteam:
+            if not session.get(FantasyTeam, team_id):
                 raise NotFoundError(f"Fantasy Team not found by id: {team_id}")
             for user_id in player_ids:
-                user = session.get(User, user_id)
-                if not user:
+                if not session.get(User, user_id):
                     raise NotFoundError(f"User not found by id: {user_id}")
-                user_team = session.get(
-                    DBFantasyTeamPlayer,
-                    {"fantasy_team_id": team_id, "user_id": user.id},
-                )
-                if not user_team:
-                    raise NotFoundError(
-                        f"User not part of the fantasy team, user id: {user_id}"
-                    )
-                session.delete(user_team)
-            session.flush()
-            public = FantasyTeamPublic.from_fantasy_team(fteam)
-            derived.fill_fantasy_teams(session, [public])
-            return public
+            _remove_players_in(session, team_id, player_ids)
+        return self.get(team_id)

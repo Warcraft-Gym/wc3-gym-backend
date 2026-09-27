@@ -4,7 +4,7 @@ title: Derived scores
 description: Series points, fixture scores, standings, career ratings and fantasy scores are computed from the map scores on every read, in a constant number of statements.
 resource: ../../../app/services/derived.py
 tags: [events, series, api]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-20T15:00:00Z }
+generated: { by: codex/gpt-6, at: 2026-09-25T08:58:00Z }
 sources:
   - id: derived
     resource: ../../../app/services/derived.py
@@ -27,7 +27,7 @@ A series stores only the maps each side won. Everything else is computed when it
 - **Series points.** A lost series keeps its map score. A won series pays the top of the scale minus the loser's maps. The scale comes from the season's `score_system` and the maps a win takes: `standard` tops at 2*wins-1, `helpstone` at 2*wins. A Bo3 tops at 3 or 4.
 - **Fixture score.** The sum of the series points per side.
 - **Standings.** The sum over a team's fixtures. A team with no played series reads (0, 0, full points available); there is no null state. The same sum counts the team's series record, `series_won` and `series_lost`: the side with more map wins takes the series, and a series with no score counts for neither.
-- **Career rating.** A season pays a player one point per series won, half a point per other series played, and one point for playing at all. Every league season first takes 15% off the rating a player carries. The fold runs over the seasons in order, so it depends on the whole league.
+- **Career rating.** A season pays a player one point per series won, half a point per other series played, and one point for playing at all. Every league season first takes 15% off the rating a player carries. The weighted sum uses integer decay weights, then truncates once. It depends on the whole league.
 - **Fantasy scores.** See [fantasy](fantasy.md).
 - **Per-player season record.** Games, wins and losses per season, from the series.
 
@@ -37,7 +37,7 @@ Under the old 3/2/1/0 scale a 2:1 was undervalued and a 1:2 overvalued, so three
 
 # Two faces, one rule
 
-Each rule has a Python face for loaded rows and a SQL `CASE` face for aggregates, both in `app/core/`. A test pins the two to each other over every combination. `app/services/derived.py` fills a response in two statements: one resolves the scale of every series or season in it, one sums the series on that scale. Seasons that share a scale share a statement. `tests/test_query_budget.py` fails when a serialization adds a lazy load.
+Each rule has a Python face for loaded rows and a SQL face for aggregates, both in `app/core/`. Tests pin the two to each other. The career list filters, sorts and pages the derived totals in SQL; a single stored career row limits its tally to the linked user and matching name. `tests/test_career_parity.py` pins the resulting answers. `app/services/derived.py` fills other responses in a constant number of statements. `tests/test_query_budget.py` fails when a serialization adds a lazy load.
 
 # What must never come back
 

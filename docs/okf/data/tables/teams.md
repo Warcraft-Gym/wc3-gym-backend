@@ -4,7 +4,7 @@ title: teams
 description: "One league-owned team: its league, short name, long name and the public URL of its logo."
 resource: ../../../../app/models/team.py
 tags: [teams, data]
-generated: { by: openai/gpt-6, at: 2026-09-15T21:52:57Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-26T18:37:00Z }
 verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
 sources:
   - id: model
@@ -34,6 +34,6 @@ Primary key `id`. Foreign key: `league_id` to [league](league.md). Pointed at by
 
 # Rules
 
-A team belongs to exactly one league. Its roster and captains belong to an event of that league through the link tables. The API manages the team identity under `/leagues/{league_id}/teams` and its event data under `/events/{event_id}/teams`.
+A team belongs to exactly one league. Its roster and captains belong to an event of that league through the link tables. The API manages the team identity under `/leagues/{league_id}/teams` and its event data under `/events/{event_id}/teams`. A team inside another answer is `TeamSummaryPublic`; the league reads answer `TeamPublic`, and the event reads answer `TeamRosterPublic`, whose roster and captains hold that event alone (see [Response shapes](../../api/response-shapes.md)).
 
 No bytes column; the store follows the row and a deleted team drops its picture after the commit. Standings derive from the fixtures on every read. See [pictures and replays](../../concepts/pictures-and-replays.md) and [the decision](../../decisions/pictures-as-urls.md).

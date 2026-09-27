@@ -4,7 +4,7 @@ title: series
 description: One series between two sides, a best-of with its scores, time, host, off races, result kind and the feeder graph a bracket runs on.
 resource: ../../../../app/models/series.py
 tags: [events, data]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T15:15:00Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-09-26T04:00:00Z }
 verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
 sources:
   - id: model
@@ -44,6 +44,7 @@ The first block is on `SeriesBase`, which the series payloads carry. The rest st
 | `sequence` | INTEGER | yes | The place of the series inside its round, its fixture or its chain. |
 | `side_size` | INTEGER | no | Players per side: 1 for a 1v1, 2 for a 2v2. |
 | `pick_rule` | VARCHAR | yes | How the sides of a fixture series are chosen: `drafted` by the captains, or `any`. Null on a series outside a template. |
+| `result_unavailable` | BOOLEAN | no | A historical played series whose outcome is unknown. Both scores must be null. |
 | `result_kind` | VARCHAR | no | `played`, `walkover` or `forfeit`. |
 | `slot1_from_series_id` | INTEGER | yes | The series that feeds side A. Null when side A is seeded directly. |
 | `slot1_takes_loser` | BOOLEAN | no | On: side A takes the loser of that series, as a lower bracket does. |
@@ -62,3 +63,5 @@ Pointed at by [series_side](series_side.md), [series_game](series_game.md), [ser
 - Points, the resolved race per side and the rules the series plays under derive on every read. See [derived scores](../../concepts/derived-scores.md) and [series reporting](../../concepts/series-reporting.md).
 - A series that names an entrant was generated and prices on its stage; a GNL series names two players and a fixture. See [the off-race decision](../../decisions/off-race-per-series.md).
 - A series with no result has both scores null; a result sets both. The games behind the score are [series_game](series_game.md) rows.
+
+Event series reads include standalone series through their round. Public rows include non-null entrant ids, division, sequence and source names. `result_unavailable` is included when true and defaults to false when absent. Unknown outcomes count toward event completion but not wins or losses.

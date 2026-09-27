@@ -16,7 +16,12 @@ from app.core.db import Session
 from app.core.exceptions import ApiError, BadRequestError, NotFoundError
 from app.models.base import ident
 from app.models.event_stage import EventStage
-from app.models.relationships import DBEventRound, SeasonRoundPublic, round_row
+from app.models.relationships import (
+    DBEventRound,
+    SeasonRoundPublic,
+    event_rounds,
+    round_row,
+)
 from app.models.round_availability import (
     DBRoundAvailability,
     RoundAvailabilityPublic,
@@ -61,6 +66,7 @@ class AvailabilityService:
             return _derive(
                 session,
                 session.get(Season, season_id),
+                event_rounds(session, season_id),
                 [user_id],
                 _rows(
                     session,
@@ -102,8 +108,9 @@ class AvailabilityService:
             weeks = season.round_count or 0
             if not 1 <= playday <= weeks:
                 raise BadRequestError(f"playday must be between 1 and {weeks}")
+            rounds = event_rounds(session, season_id)
             if set_by_user_id == user_id:
-                _checkin_window(season, playday)
+                _checkin_window(season, rounds, playday)
             if available is None:
                 row = session.get(DBRoundAvailability, (user_id, season_id, playday))
                 if row:
@@ -122,7 +129,7 @@ class AvailabilityService:
                     )
                 )
             session.flush()
-            return _season_rows(session, season, user_id)
+            return _season_rows(session, season, rounds, user_id)
 
     def set_all(
         self,
@@ -143,10 +150,11 @@ class AvailabilityService:
                 raise ApiError(
                     403, {"error": "scheduling_disabled", "message": NO_SCHEDULING}
                 )
-            rounds = [row for row in season.rounds if not _ended(season, row)]
+            every = event_rounds(session, season_id)
+            rounds = [row for row in every if not _ended(season, row)]
             if set_by_user_id == user_id:
                 for row in rounds:
-                    _checkin_window(season, row.number)
+                    _checkin_window(season, every, row.number)
             session.execute(
                 delete(DBRoundAvailability).where(
                     col(DBRoundAvailability.user_id) == user_id,
@@ -172,7 +180,7 @@ class AvailabilityService:
                     ]
                 )
             session.flush()
-            return _season_rows(session, season, user_id)
+            return _season_rows(session, season, every, user_id)
 
 
 def team_rows(
@@ -187,9 +195,12 @@ def team_rows(
             )
         )
     )
+    if not roster:
+        return []
     return _derive(
         session,
         session.get(Season, season_id),
+        event_rounds(session, season_id),
         roster,
         _rows(
             session,
@@ -214,12 +225,14 @@ def out_rounds(
     return out
 
 
-def _checkin_window(season: Season, playday: int) -> None:
+def _checkin_window(
+    season: Season, rounds: Sequence[DBEventRound], playday: int
+) -> None:
     """Refuse a player before the round's check-in opens and after it ends."""
     # An event that takes no check-in, or a blank window, keeps every round open
     if not season.checkin_enabled:
         return
-    row = next((r for r in season.rounds if r.number == playday), None)
+    row = next((r for r in rounds if r.number == playday), None)
     window = checkin_window(season, row) if row else None
     if window is None or row is None:
         return
@@ -254,12 +267,16 @@ def _season(session: OrmSession, season_id: int) -> Season:
 
 
 def _season_rows(
-    session: OrmSession, season: Season, user_id: int
+    session: OrmSession,
+    season: Season,
+    rounds: Sequence[DBEventRound],
+    user_id: int,
 ) -> list[RoundAvailabilityPublic]:
     """One player's rows for that event: what every availability write answers."""
     return _derive(
         session,
         season,
+        rounds,
         [user_id],
         _rows(
             session,
@@ -272,6 +289,7 @@ def _season_rows(
 def _derive(
     session: OrmSession,
     season: Season | None,
+    rounds: Sequence[DBEventRound],
     user_ids: Sequence[int],
     rows: list[RoundAvailabilityPublic],
 ) -> list[RoundAvailabilityPublic]:
@@ -284,7 +302,7 @@ def _derive(
     answered = {(row.user_id, row.playday) for row in rows}
     derived = [
         RoundAvailabilityPublic.derived(user_id, playday)
-        for user_id, playday in blocked_rounds(session, season, user_ids, season.rounds)
+        for user_id, playday in blocked_rounds(session, season, user_ids, rounds)
         if (user_id, playday) not in answered
     ]
     if not derived:

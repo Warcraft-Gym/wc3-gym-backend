@@ -13,7 +13,9 @@ import pytest
 from httpx2 import Client
 
 from app.core.db import Session
+from app.core.query import QueryUtil
 from app.models.settings import Settings
+from app.services.series import SeriesService
 from tests.seed import gnl_league_id
 
 # The five results a series can carry, as (player1_score, player2_score).
@@ -178,6 +180,9 @@ def test_the_answered_match_score_sums_its_series(
     match = get(client, f"/matches/{league['match_id']}")
     # The five series pay the same total to both sides on either system.
     assert (match["team1_score"], match["team2_score"]) == (total, total)
+    listed = get(client, f"/events/{league['season_id']}/matches")
+    assert [row["id"] for row in listed] == [league["match_id"]]
+    assert (listed[0]["team1_score"], listed[0]["team2_score"]) == (total, total)
 
 
 @pytest.mark.parametrize(
@@ -219,19 +224,18 @@ def two_seasons(client: Client, auth_headers: dict[str, str]) -> dict[str, Any]:
 
 
 def test_a_search_over_two_seasons_pays_each_row_by_its_own_season(
-    client: Client, two_seasons: dict[str, Any]
+    two_seasons: dict[str, Any],
 ) -> None:
-    resp = client.post("/series/search", params={"query": "player1_id > 0"})
-    assert resp.status_code == 200, resp.text
-    rows = {row["id"]: row for row in resp.json()}
+    found = SeriesService().search(QueryUtil.parse_query("player1_id > 0"))
+    rows = {row.id: row for row in found}
     assert len(rows) == 2 * len(RESULTS)
 
     # The sweep is the first result of each season, and it is the one the
     # two scales price differently.
     standard_sweep = rows[two_seasons["standard"]["series_ids"][0]]
     helpstone_sweep = rows[two_seasons["helpstone"]["series_ids"][0]]
-    assert standard_sweep["player1_points"] == 3
-    assert helpstone_sweep["player1_points"] == 4
+    assert standard_sweep.player1_points == 3
+    assert helpstone_sweep.player1_points == 4
 
 
 # Standings. A team stands at the sum of its derived series points, and the

@@ -4,7 +4,7 @@ title: Deploy to Vercel
 description: A merge to main deploys production and migrates in the build; staging mirrors main; previews use the staging database; the Hobby plan sets the limits.
 resource: ../../../vercel.json
 tags: [deploy]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-16T23:30:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-26T10:00:00Z }
 stale_after: 2027-03-14T00:00:00Z
 sources:
   - id: vercel-json
@@ -39,11 +39,11 @@ Every push builds a preview against the staging Supabase project. A branch with 
 
 # The Hobby limits
 
-- One cron per project, once a day. A more frequent schedule fails every deployment. Jobs that need minutes run from outside; see [jobs](../api/jobs.md).
+- Each cron runs at most once a day. A more frequent schedule fails every deployment. Jobs that need minutes run from outside; see [jobs](../api/jobs.md).
 - 100 deployment creations per rolling day across the account, and a daily build quota. A preview check that fails with the quota message is not a merge blocker.
 - Deployment storage counts GB-months over retained deployments. Retention is set in the dashboard: a day for everything but production, a week for production.
 - Function duration is 60 seconds. A season import from the API times out; import from a machine that runs the server.
 
 # The cron
 
-`vercel.json` schedules `GET /jobs/w3c-sync` at 04:00 UTC. Vercel may shift it by up to 59 minutes.
+`vercel.json` schedules `GET /jobs/w3c-sync` at 04:00 UTC and `GET /jobs/egress-snapshot` at 00:00 UTC. Vercel may shift each by up to 59 minutes.

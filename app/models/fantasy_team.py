@@ -5,10 +5,11 @@ from sqlmodel import Field, Relationship, SQLModel
 
 from app.models.base import DBModel, PublicModel, ident
 from app.models.enums import Race
-from app.models.season import SeasonPublic
-from app.models.team import Team, TeamPublic
+from app.models.season import SeasonSummaryPublic
+from app.models.team import Team
+from app.models.team_summary import TeamSummaryPublic
 from app.models.types import EnumValue, NoneToList, NumToStr, SuggestRace
-from app.models.user import UserPublic
+from app.models.user import UserSummaryPublic
 
 if TYPE_CHECKING:
     from app.models.relationships import DBFantasyTeamPlayer
@@ -51,17 +52,26 @@ class FantasyTeam(FantasyTeamBase, DBModel, table=True):
     drafted_race: Race | None = None
 
     drafted_team: Team | None = Relationship(
-        sa_relationship_kwargs={"foreign_keys": "[FantasyTeam.drafted_team_id]"}
+        sa_relationship_kwargs={
+            "lazy": "raise_on_sql",
+            "foreign_keys": "[FantasyTeam.drafted_team_id]",
+        }
     )
     captain: "User" = Relationship(
-        sa_relationship_kwargs={"foreign_keys": "[FantasyTeam.captain_id]"}
+        sa_relationship_kwargs={
+            "lazy": "raise_on_sql",
+            "foreign_keys": "[FantasyTeam.captain_id]",
+        }
     )
     season: "Season" = Relationship(
-        sa_relationship_kwargs={"foreign_keys": "[FantasyTeam.season_id]"}
+        sa_relationship_kwargs={
+            "lazy": "raise_on_sql",
+            "foreign_keys": "[FantasyTeam.season_id]",
+        }
     )
     drafted_players: list["DBFantasyTeamPlayer"] = Relationship(
         back_populates="fantasy_team",
-        sa_relationship_kwargs={"cascade": "all, delete"},
+        sa_relationship_kwargs={"lazy": "raise_on_sql", "cascade": "all, delete"},
     )
 
 
@@ -113,32 +123,35 @@ class FantasyTeamPublic(FantasyTeamBase, PublicModel):
     season_id: int | None = None
     captain_id: int | None = None
     drafted_race: Annotated[str | None, EnumValue] = None
-    season: SeasonPublic | None = None
-    captain: UserPublic | None = None
-    drafted_team: TeamPublic | None = None
-    drafted_players: Annotated[list[UserPublic], NoneToList] = []
+    season: SeasonSummaryPublic | None = None
+    captain: UserSummaryPublic | None = None
+    drafted_team: TeamSummaryPublic | None = None
+    drafted_players: Annotated[list[UserSummaryPublic], NoneToList] = []
 
     @classmethod
     def from_fantasy_team(cls, fteam: FantasyTeam) -> Self:
-        drafted_players = []
-        if fteam.drafted_players:
-            for dp in fteam.drafted_players:
-                user = UserPublic.from_user(dp.users)
-                if user:
-                    drafted_players.append(user)
-
+        """The team; its members carry their record in its season where the
+        read loaded it."""
+        season_id = fteam.season_id
         return cls(
             id=ident(fteam),
             name=fteam.name,
             season_id=fteam.season_id,
-            season=SeasonPublic.from_season(fteam.season) if fteam.season else None,
+            season=SeasonSummaryPublic.from_season(fteam.season)
+            if fteam.season
+            else None,
             captain_id=fteam.captain_id,
-            captain=UserPublic.from_user(fteam.captain) if fteam.captain else None,
+            captain=UserSummaryPublic.from_user(fteam.captain, season_id)
+            if fteam.captain
+            else None,
             drafted_team_id=fteam.drafted_team_id,
             grind_team_id=fteam.grind_team_id,
-            drafted_team=TeamPublic.from_team(fteam.drafted_team)
+            drafted_team=TeamSummaryPublic.from_team(fteam.drafted_team)
             if fteam.drafted_team
             else None,
             drafted_race=fteam.drafted_race,
-            drafted_players=drafted_players,
+            drafted_players=[
+                UserSummaryPublic.from_user(dp.users, season_id)
+                for dp in fteam.drafted_players or []
+            ],
         )

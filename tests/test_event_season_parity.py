@@ -104,7 +104,6 @@ def test_the_season_routes_live_under_events_only(client: Client) -> None:
         ("get", "/events/{event_id}/teams/basic"),
         ("get", "/events/{event_id}/teams/{team_id}"),
         ("get", "/events/{event_id}/series"),
-        ("post", "/events/{event_id}/series/search"),
         ("get", "/events/{event_id}/fantasy/teams"),
         ("post", "/events/{event_id}/maps"),
         ("delete", "/events/{event_id}/maps"),

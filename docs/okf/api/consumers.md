@@ -4,7 +4,7 @@ title: Consumers of the API
 description: Who calls the backend, which routes each one reads, which tests pin those shapes, and the rules a consumer follows to keep reads off the database.
 resource: ../../../tests/test_public_contract.py
 tags: [api]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-24T18:30:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-26T14:40:00Z }
 sources:
   - id: public-contract
     resource: ../../../tests/test_public_contract.py
@@ -25,15 +25,15 @@ sources:
 | Consumer | Repository | Reads | Auth |
 |---|---|---|---|
 | the web app | `wc3-gym-frontend` | most routes | Clerk session or the admin token |
-| the GNL website | `wc3-gnl-website` | server-side, from Next.js: `GET /leagues`, `GET /events`, `GET /leagues/{league_id}/teams`, and for finished events `/events/{event_id}/teams`, `/series`, `/ladder` and `/fantasy/teams`; for a player `GET /users/{user_id}`, `GET /users/{user_id}/history` and `GET /stats/career` | none |
+| the GNL website | `wc3-gnl-website` | server-side, from Next.js: `GET /leagues`, `GET /events`, `GET /leagues/{league_id}/teams`, and for finished events `/events/{event_id}/teams`, `/matches`, `/series`, `/ladder` and `/fantasy/teams`; for a player `GET /users/{user_id}`, `GET /users/{user_id}/history` and `GET /stats/career` | none |
 | the WordPress site | `gym_website_scripts` | eight paths on every page view, no cache, against the older backend host: `GET /stats/career`, `GET /config/settings`, `GET /teams/season/{id}`, `GET /teams/{id}/image`, `GET /seasons/{id}`, `POST /matches/search`, `POST /series/season/{id}/playday/{n}/search`, `POST /fantasy/teams/search` | none |
 | the Discord adapter | `wc3-gym-discord-bot` | `POST /discord/interactions` | Discord's signature |
 | the cast-reminder worker | `wc3-gym-discord-bot`, `cron/` | `GET /jobs/cast-reminders` every five minutes | `CRON_SECRET` bearer |
-| Vercel cron | this repository's `vercel.json` | `GET /jobs/w3c-sync` once a day | `CRON_SECRET` bearer |
+| Vercel cron | this repository's `vercel.json` | `GET /jobs/w3c-sync` and `GET /jobs/egress-snapshot`, each once a day | `CRON_SECRET` bearer |
 | Nightbot | no repository | `GET /koth/signup`, and the deprecated `/koth/*` reads | the Nightbot token |
 | the stream overlay and bookmarks | none | the deprecated `/koth/*` reads | none |
 
-The WordPress shortcodes today call the older backend host, not this deployment, and that host answers 502, so the shortcodes show no data. Three of their paths do not exist here: `GET /teams/season/{id}`, `GET /seasons/{id}` and `POST /series/season/{id}/playday/{n}/search`. Before the shortcodes point at this deployment, those calls move to `GET /events/{id}/teams`, `GET /events/{id}` and `POST /events/{id}/rounds/{n}/series/search`. `GET /events/{id}` is not the old season payload: it has no `user_signup` or `signup_race`, and its `phase` and `signups_open` follow the event model, so the PHP that reads those fields changes with the move.
+The WordPress shortcodes today call the older backend host, not this deployment, and that host answers 502, so the shortcodes show no data. Three of their paths do not exist here: `GET /teams/season/{id}`, `GET /seasons/{id}` and `POST /series/season/{id}/playday/{n}/search`. Before the shortcodes point at this deployment, those calls move to `GET /events/{id}/teams`, `GET /events/{id}`, and `GET /events/{id}/matches` with `GET /events/{id}/series?match_id={id}`. `GET /events/{id}` is not the old season payload: it has no `user_signup` or `signup_race`, and its `phase` and `signups_open` follow the event model, so the PHP that reads those fields changes with the move.
 
 # What pins the shapes
 
@@ -51,6 +51,7 @@ A change that fails one of these is a cross-repository change. Ship the consumer
 - Every error is `{"error": ...}`.
 - A field is added, never renamed in place. `week_map_id` on the veto board and `playday` on fixtures are examples of names kept for consumers.
 - The GNL season payloads keep `season_id`, `phase` and `playday` although the table is `event`.
+- A player's ladder rating is the summary `race_mmrs` and `main_race` on every user payload; no payload carries the raw `w3cstats` rows.
 - Consumers use the league routes for team identity and the event routes for GNL data. The one unscoped team route is `GET /teams/{team_id}/image`, deprecated, which the web app's logo fallback reads.
 - List routes page with `limit` and `offset` and answer `X-Total-Count`.
 - Reads are open. Writes need an admin, or the owning member for self-service routes.

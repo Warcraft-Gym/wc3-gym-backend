@@ -4,7 +4,7 @@ title: W3C ladder and achievements
 description: Every ranked 1v1 match of a GNL player is stored once, scored per season on their signup race, and 24 badge rules run as one SQL union.
 resource: ../../../app/services/ladder.py
 tags: [w3champions]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-24T10:20:55Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-26T14:40:00Z }
 sources:
   - id: ladder
     resource: ../../../app/services/ladder.py
@@ -39,6 +39,9 @@ Two sync pipelines exist and must not be confused: **matches** (this table, this
 - A player scores only on the race they signed the season up on; other races are stored and pay nothing; Random counts every race. The filter belongs in the read, never in the fetch.
 - The season window is the GNL `start_date..end_date` on that race. MMR carries across a W3Champions season boundary unchanged, so the read needs no season logic.
 - Games, wins, losses and points add up across every tag of the person. The MMR span and the MMR on a date read only the matches of the active tag, because each tag has its own rating.
+- The MMR on a date (`mmr_on` in Python, `mmr_at` as a scalar subquery) is what the player took into his first rated match at or after it, else what his last rated match before it left him with; when a W3Champions season opened between the two, the match before counts. Only the matches of the W3Champions seasons the caller names count. An event's seasons are those of the stored matches inside its window (`w3c_seasons`).
+- A series row of a finished event (closed or past its end) carries the MMR of the time per side: `mmr_at` at the series time, else its round's first day, on the race the row names, inside the event's W3Champions seasons, one statement per finished event and no ladder row sent. One statement tells the list's finished events from its running ones. No match in bound is null, never today's figure. A running event's rows read `w3cstats`. The draft board's meetings read `mmr_at` inside each meeting's own event, plus the current W3Champions season while that event runs (not closed, its end not passed); the fantasy tiers read `mmr_on` on the Apply date inside the season's W3Champions seasons, else the current one while the season runs and nothing once it is finished; a Discord series card reads the ladder summary of `w3cstats` on the race the row names.
+- A roster of an event that is over (closed or past its end) carries `mmr_entered` per player: `mmr_at` at the event's first day, midnight UTC, on his signup race, inside the event's W3Champions seasons, read on the statement that names every player's signup race, so it costs no statement and no row more. No signup race or no match in bound is null.
 - `GET /events/{id}/ladder` and `GET /users/{id}/ladder` answer the totals, per-day bars, MMR spans and badges. The event read is edge-cached; see [the pitfall](../pitfalls/edge-cache-cors.md).
 - A team card of the event ladder carries `icon_url`, and a row of `GET /events/{id}/ladder/players` carries `team`, `team_id` and `team_icon_url`. The roster read carries the logo, so neither costs a statement.
 
@@ -52,7 +55,7 @@ An achievement instance is a row of `ladder_achievements(season_id, rule_id, poi
 
 # The W3Champions season pin
 
-The `settings` row `current_w3c_season` pins the season the MMR columns read. The derived default (the newest season from the API) is wrong on the day a season opens, when every player reads as zero games. The pin is a deliberate hand edit a few times a year. Never auto-follow the latest season and never clear the row. See [settings](settings-and-current-season.md).
+The `settings` row `current_w3c_season` pins the season the ratings read: the live MMR window is that season and the one before it. The derived default (the newest season stored, or from the API for the ladder sync) is wrong on the day a season opens, when every player reads as zero games. The pin is a deliberate hand edit a few times a year. Never auto-follow the latest season and never clear the row. See [settings](settings-and-current-season.md).
 
 # Synchronisation
 

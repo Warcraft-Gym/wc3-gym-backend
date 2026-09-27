@@ -11,14 +11,16 @@ from httpx2 import Client
 from sqlmodel import select
 
 from app.core.db import Session
+from app.models.base import ident
 from app.models.enums import Race
 from app.models.relationships import round_row
 from app.models.season import Season
 from app.models.series import Series
 from app.models.series_cast import SeriesCast
+from app.models.settings import Settings
 from app.models.types import utcnow
 from app.models.user import User
-from app.models.w3c_ladder_match import W3CLadderMatch
+from app.models.w3c_stats import W3CStats
 from app.services import discord, series_cards
 from app.services.series import SeriesService
 from tests.seed import add_bets
@@ -44,26 +46,21 @@ def test_a_player_reads_flag_name_race_and_mmr(
     )
 
 
-def test_ratings_take_the_latest_synced_mmr_on_each_race(
+def test_ratings_take_the_live_summary_on_each_race(
     seeded: dict[str, Any],
 ) -> None:
-    """Whatever the season: the card shows the last number the sync stored."""
-    p2 = seeded["player_ids"][1]
-    now = utcnow()
+    """The card shows the ladder summary: the newest row in the current or the
+    previous W3C season; an older season shows none."""
+    p2, p4 = seeded["player_ids"][1], seeded["player_ids"][3]
     with Session.begin() as session:
-        for number, (days, mmr) in enumerate(((30, 1400), (1, 1450))):
+        session.add(Settings(key="current_w3c_season", value="26"))
+        for user_id, wc3_season, mmr in (
+            (p2, 25, 1400),
+            (p2, 26, 1450),
+            (p4, 24, 1300),
+        ):
             session.add(
-                W3CLadderMatch(
-                    w3c_match_id=f"m{number}",
-                    wc3_season=25,
-                    start_time=now - timedelta(days=days),
-                    duration_s=900,
-                    race=Race.OC,
-                    won=True,
-                    mmr_before=mmr - 20,
-                    mmr_after=mmr,
-                    user_id=p2,
-                )
+                W3CStats(user_id=user_id, wc3_season=wc3_season, race=Race.OC, mmr=mmr)
             )
     marks = series_cards.ratings([SeriesService().get(seeded["series_open_id"])])
     assert marks.mmr == {(p2, Race.OC): 1450}
@@ -115,7 +112,7 @@ def test_the_footer_carries_the_w3c_logo_and_the_oldest_sync(
         for user_id, hours in ((p2, 1), (p4, 0)):
             user = session.get(User, user_id)
             assert user
-            user.ladder_synced_at = oldest + timedelta(hours=hours)
+            user.w3c_synced_at = oldest + timedelta(hours=hours)
     card = series_cards.claim_card(SeriesService().get(seeded["series_open_id"]))
     embed = card["embeds"][0]
     assert embed["footer"] == {
@@ -134,7 +131,11 @@ def _open_series(seeded: dict[str, Any]) -> list[Any]:
         claimed = session.get(Series, seeded["series_open_id"])
         assert played and claimed
         played.date_time, claimed.date_time = first, later
-        claimed.casts.append(SeriesCast(channel_url="https://twitch.tv/gnlcaster"))
+        session.add(
+            SeriesCast(
+                series_id=ident(claimed), channel_url="https://twitch.tv/gnlcaster"
+            )
+        )
     with Session() as session:
         ids = session.scalars(select(Series.id)).all()
     return [SeriesService().get(series_id) for series_id in ids]

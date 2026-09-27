@@ -186,3 +186,36 @@ def test_pairings_rotate_and_guild_series_stay_unscheduled(
     for row in scheduled:
         assert not {row.player1_id, row.player2_id} & guild_users
         assert row.date_time and row.date_time.hour == 20
+
+
+def test_a_player_rated_only_before_the_window_sits_out(
+    seeded: dict[str, Any],
+) -> None:
+    with Session() as session:
+        outside = [
+            ident(user)
+            for user in session.scalars(
+                select(User).where(
+                    col(User.id).in_(seeded["player_ids"]),
+                    col(User.discordId).notin_(GUILD),
+                )
+            )
+        ]
+    stale = outside[-1]
+    with_ladder_mmr([user_id for user_id in seeded["player_ids"] if user_id != stale])
+    # a high rating from an old season orders nobody and seats nobody
+    with Session.begin() as session:
+        session.add(W3CStats(user_id=stale, wc3_season=10, race=Race.HU, mmr=3000))
+    build("1", "9999")
+
+    with Session() as session:
+        sid = session.scalar(select(col(Season.id)).where(col(Season.name) == NAME))
+        seated = {
+            user_id
+            for row in session.scalars(
+                select(Series).join(Match).where(col(Match.season_id) == sid)
+            )
+            for user_id in (row.player1_id, row.player2_id)
+        }
+    assert stale not in seated
+    assert set(outside[:-1]) & seated

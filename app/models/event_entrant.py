@@ -1,19 +1,20 @@
-"""One entrant of an event: a player, or a pre-made team.
+"""One entrant of an event: a player, a pre-made team, or an archival identity.
 
 Eligibility warns and never blocks (NE-8), so nothing here refuses a signup:
 a withdrawn or unchecked-in entrant keeps its row and its stamps say so. The
-one thing the row does refuse is naming both a user and a team, or neither.
+one thing the row does refuse is naming anything other than exactly one identity.
 """
 
 from datetime import datetime
 from typing import Annotated
 
 from sqlalchemy import CheckConstraint, UniqueConstraint, false, func
-from sqlmodel import Field, SQLModel
+from sqlmodel import Field, Relationship, SQLModel
 
 from app.models.base import DBModel
 from app.models.enums import Race, SeedSource, SignupChannel
-from app.models.team_reduced import TeamReduced
+from app.models.event_history import HistoricalParticipant
+from app.models.team_summary import TeamSummaryPublic
 from app.models.types import (
     AwareUTC,
     EnumValue,
@@ -22,7 +23,7 @@ from app.models.types import (
     UTCDateTime,
     utcnow,
 )
-from app.models.user import UserPublic
+from app.models.user import UserSummaryPublic
 
 
 class EventEntrant(DBModel, table=True):
@@ -38,10 +39,11 @@ class EventEntrant(DBModel, table=True):
         UniqueConstraint(
             "event_id", "team_id", name="uq_event_entrant_event_id_team_id"
         ),
-        # A row is one side: a player or a team, never both and never neither
+        # A side names exactly one account, team or archival identity
         CheckConstraint(
             "(CASE WHEN user_id IS NULL THEN 0 ELSE 1 END "
-            "+ CASE WHEN team_id IS NULL THEN 0 ELSE 1 END) = 1",
+            "+ CASE WHEN team_id IS NULL THEN 0 ELSE 1 END "
+            "+ CASE WHEN historical_participant_id IS NULL THEN 0 ELSE 1 END) = 1",
             name="one_entrant",
         ),
     )
@@ -51,10 +53,17 @@ class EventEntrant(DBModel, table=True):
     user_id: int | None = Field(
         default=None, index=True, foreign_key="users.id", ondelete="CASCADE"
     )
-    # A team event enters pre-made teams; exactly one of the two columns is set
+    # A team event enters pre-made teams
     team_id: int | None = Field(
         default=None, index=True, foreign_key="teams.id", ondelete="CASCADE"
     )
+    historical_participant_id: int | None = Field(
+        default=None,
+        unique=True,
+        foreign_key="historical_participant.id",
+        ondelete="CASCADE",
+    )
+    historical_participant: HistoricalParticipant | None = Relationship()
     # A player enters on a race; a team enters on the races of its roster
     race: Annotated[Race | None, SuggestRace] = None
     # What the entrant wants to work on, which a signup-only event asks for
@@ -137,8 +146,8 @@ class EventEntrantPublic(SQLModel):
 
     id: int
     event_id: int
-    user: UserPublic | None = None
-    team: TeamReduced | None = None
+    user: UserSummaryPublic | None = None
+    team: TeamSummaryPublic | None = None
     race: Annotated[str | None, EnumValue] = None
     note: str | None = None
     channel: Annotated[str | None, EnumValue] = None

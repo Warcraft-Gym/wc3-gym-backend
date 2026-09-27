@@ -1,0 +1,2606 @@
+{
+  "/leagues/1/teams": {
+    "status": 200,
+    "body": [
+      {
+        "id": 1,
+        "league_id": 1,
+        "name": "Alpha",
+        "long_name": "Team Alpha",
+        "icon_url": null,
+        "seasons_info": [
+          {
+            "season_id": 1,
+            "name": "Season 1",
+            "league_short_name": "SL",
+            "final_score": 6,
+            "points_available": 12,
+            "points_against": 6,
+            "series_won": 3,
+            "series_lost": 1
+          },
+          {
+            "season_id": 2,
+            "name": "Season 2",
+            "league_short_name": "SL",
+            "final_score": 3,
+            "points_available": -6,
+            "points_against": 3,
+            "series_won": 1,
+            "series_lost": 1
+          }
+        ],
+        "discord_role_missing": []
+      },
+      {
+        "id": 2,
+        "league_id": 1,
+        "name": "Beta",
+        "long_name": "Team Beta",
+        "icon_url": null,
+        "seasons_info": [
+          {
+            "season_id": 1,
+            "name": "Season 1",
+            "league_short_name": "SL",
+            "final_score": 6,
+            "points_available": 12,
+            "points_against": 6,
+            "series_won": 1,
+            "series_lost": 3
+          },
+          {
+            "season_id": 2,
+            "name": "Season 2",
+            "league_short_name": "SL",
+            "final_score": 3,
+            "points_available": -6,
+            "points_against": 3,
+            "series_won": 1,
+            "series_lost": 1
+          }
+        ],
+        "discord_role_missing": []
+      },
+      {
+        "id": 3,
+        "league_id": 1,
+        "name": "Gamma",
+        "long_name": null,
+        "icon_url": null,
+        "seasons_info": [],
+        "discord_role_missing": []
+      }
+    ]
+  },
+  "/leagues/1/teams/basic": {
+    "status": 200,
+    "body": [
+      {
+        "id": 1,
+        "league_id": 1,
+        "name": "Alpha",
+        "long_name": "Team Alpha",
+        "icon_url": null,
+        "seasons_info": [],
+        "discord_role_missing": []
+      },
+      {
+        "id": 2,
+        "league_id": 1,
+        "name": "Beta",
+        "long_name": "Team Beta",
+        "icon_url": null,
+        "seasons_info": [],
+        "discord_role_missing": []
+      },
+      {
+        "id": 3,
+        "league_id": 1,
+        "name": "Gamma",
+        "long_name": null,
+        "icon_url": null,
+        "seasons_info": [],
+        "discord_role_missing": []
+      }
+    ]
+  },
+  "/events/1/teams": {
+    "status": 200,
+    "body": [
+      {
+        "id": 1,
+        "league_id": 1,
+        "name": "Alpha",
+        "long_name": "Team Alpha",
+        "icon_url": null,
+        "seasons_info": [
+          {
+            "season_id": 1,
+            "name": "Season 1",
+            "league_short_name": "SL",
+            "final_score": 6,
+            "points_available": 12,
+            "points_against": 6,
+            "series_won": 3,
+            "series_lost": 1
+          }
+        ],
+        "discord_role_missing": [],
+        "player_by_season": {
+          "1": [
+            {
+              "name": "P1",
+              "mmr": 1500,
+              "country": "DE",
+              "timezone": null,
+              "twitch_url": null,
+              "youtube_url": null,
+              "avatar_url": null,
+              "id": 1,
+              "battleTag": "P1#1111",
+              "race": "HU",
+              "w3c_synced_at": null,
+              "ladder_synced_at": null,
+              "race_mmrs": [
+                {
+                  "race": "HU",
+                  "wc3_season": 7,
+                  "mmr": 1571,
+                  "games": 15,
+                  "wins": 7,
+                  "losses": 8,
+                  "stale": false
+                },
+                {
+                  "race": "NE",
+                  "wc3_season": 6,
+                  "mmr": 1561,
+                  "games": 13,
+                  "wins": 6,
+                  "losses": 7,
+                  "stale": false
+                }
+              ],
+              "main_race": "HU",
+              "mmr_entered": null,
+              "signup_race": "HU",
+              "played_as": null,
+              "fantasy_tier": null,
+              "tags": [
+                {
+                  "id": 1,
+                  "tag": "P1#1111",
+                  "verified": false,
+                  "active": true,
+                  "source": "signup",
+                  "first_seen": "2026-01-01T00:00:00Z",
+                  "last_seen": "2026-01-01T00:00:00Z"
+                }
+              ],
+              "record": {
+                "user_id": 1,
+                "team_id": 1,
+                "games": 3,
+                "wins": 2,
+                "losses": 1,
+                "season_id": 1,
+                "matchup_history": [
+                  "NE",
+                  null,
+                  "NE"
+                ],
+                "out_rounds": []
+              }
+            },
+            {
+              "name": "P2",
+              "mmr": 1400,
+              "country": "US",
+              "timezone": null,
+              "twitch_url": null,
+              "youtube_url": null,
+              "avatar_url": null,
+              "id": 2,
+              "battleTag": "P2#2222",
+              "race": "OC",
+              "w3c_synced_at": null,
+              "ladder_synced_at": null,
+              "race_mmrs": [
+                {
+                  "race": "HU",
+                  "wc3_season": 7,
+                  "mmr": 1572,
+                  "games": 15,
+                  "wins": 7,
+                  "losses": 8,
+                  "stale": false
+                },
+                {
+                  "race": "NE",
+                  "wc3_season": 6,
+                  "mmr": 1562,
+                  "games": 13,
+                  "wins": 6,
+                  "losses": 7,
+                  "stale": false
+                }
+              ],
+              "main_race": "HU",
+              "mmr_entered": null,
+              "signup_race": "OC",
+              "played_as": null,
+              "fantasy_tier": null,
+              "tags": [
+                {
+                  "id": 2,
+                  "tag": "P2#2222",
+                  "verified": false,
+                  "active": true,
+                  "source": "signup",
+                  "first_seen": "2026-01-01T00:00:00Z",
+                  "last_seen": "2026-01-01T00:00:00Z"
+                }
+              ],
+              "record": {
+                "user_id": 2,
+                "team_id": 1,
+                "games": 3,
+                "wins": 1,
+                "losses": 0,
+                "season_id": 1,
+                "matchup_history": [
+                  null,
+                  "UD",
+                  "HU"
+                ],
+                "out_rounds": []
+              }
+            }
+          ]
+        },
+        "captains_by_season": {
+          "1": [
+            {
+              "name": "P1",
+              "mmr": 1500,
+              "country": "DE",
+              "timezone": null,
+              "twitch_url": null,
+              "youtube_url": null,
+              "avatar_url": null,
+              "id": 1,
+              "battleTag": "P1#1111",
+              "race": "HU",
+              "w3c_synced_at": null,
+              "ladder_synced_at": null,
+              "race_mmrs": [
+                {
+                  "race": "HU",
+                  "wc3_season": 7,
+                  "mmr": 1571,
+                  "games": 15,
+                  "wins": 7,
+                  "losses": 8,
+                  "stale": false
+                },
+                {
+                  "race": "NE",
+                  "wc3_season": 6,
+                  "mmr": 1561,
+                  "games": 13,
+                  "wins": 6,
+                  "losses": 7,
+                  "stale": false
+                }
+              ],
+              "main_race": "HU",
+              "mmr_entered": null,
+              "signup_race": "HU",
+              "played_as": null,
+              "fantasy_tier": null,
+              "tags": [
+                {
+                  "id": 1,
+                  "tag": "P1#1111",
+                  "verified": false,
+                  "active": true,
+                  "source": "signup",
+                  "first_seen": "2026-01-01T00:00:00Z",
+                  "last_seen": "2026-01-01T00:00:00Z"
+                }
+              ],
+              "record": {
+                "user_id": 1,
+                "team_id": 1,
+                "games": 3,
+                "wins": 2,
+                "losses": 1,
+                "season_id": 1,
+                "matchup_history": [
+                  "NE",
+                  null,
+                  "NE"
+                ],
+                "out_rounds": []
+              }
+            }
+          ]
+        }
+      },
+      {
+        "id": 2,
+        "league_id": 1,
+        "name": "Beta",
+        "long_name": "Team Beta",
+        "icon_url": null,
+        "seasons_info": [
+          {
+            "season_id": 1,
+            "name": "Season 1",
+            "league_short_name": "SL",
+            "final_score": 6,
+            "points_available": 12,
+            "points_against": 6,
+            "series_won": 1,
+            "series_lost": 3
+          }
+        ],
+        "discord_role_missing": [],
+        "player_by_season": {
+          "1": [
+            {
+              "name": "P3",
+              "mmr": 1600,
+              "country": "FR",
+              "timezone": null,
+              "twitch_url": null,
+              "youtube_url": null,
+              "avatar_url": null,
+              "id": 3,
+              "battleTag": "P3#3333",
+              "race": "NE",
+              "w3c_synced_at": null,
+              "ladder_synced_at": null,
+              "race_mmrs": [
+                {
+                  "race": "HU",
+                  "wc3_season": 7,
+                  "mmr": 1573,
+                  "games": 15,
+                  "wins": 7,
+                  "losses": 8,
+                  "stale": false
+                },
+                {
+                  "race": "NE",
+                  "wc3_season": 6,
+                  "mmr": 1563,
+                  "games": 13,
+                  "wins": 6,
+                  "losses": 7,
+                  "stale": false
+                }
+              ],
+              "main_race": "HU",
+              "mmr_entered": null,
+              "signup_race": "NE",
+              "played_as": null,
+              "fantasy_tier": null,
+              "tags": [
+                {
+                  "id": 3,
+                  "tag": "P3#3333",
+                  "verified": false,
+                  "active": true,
+                  "source": "signup",
+                  "first_seen": "2026-01-01T00:00:00Z",
+                  "last_seen": "2026-01-01T00:00:00Z"
+                }
+              ],
+              "record": {
+                "user_id": 3,
+                "team_id": 2,
+                "games": 3,
+                "wins": 1,
+                "losses": 1,
+                "season_id": 1,
+                "matchup_history": [
+                  "HU",
+                  "OC",
+                  "HU"
+                ],
+                "out_rounds": []
+              }
+            },
+            {
+              "name": "P4",
+              "mmr": 1300,
+              "country": "SE",
+              "timezone": null,
+              "twitch_url": null,
+              "youtube_url": null,
+              "avatar_url": null,
+              "id": 4,
+              "battleTag": "P4#4444",
+              "race": "UD",
+              "w3c_synced_at": null,
+              "ladder_synced_at": null,
+              "race_mmrs": [
+                {
+                  "race": "HU",
+                  "wc3_season": 7,
+                  "mmr": 1574,
+                  "games": 15,
+                  "wins": 7,
+                  "losses": 8,
+                  "stale": false
+                },
+                {
+                  "race": "NE",
+                  "wc3_season": 6,
+                  "mmr": 1564,
+                  "games": 13,
+                  "wins": 6,
+                  "losses": 7,
+                  "stale": false
+                }
+              ],
+              "main_race": "HU",
+              "mmr_entered": null,
+              "signup_race": null,
+              "played_as": null,
+              "fantasy_tier": null,
+              "tags": [
+                {
+                  "id": 4,
+                  "tag": "P4#4444",
+                  "verified": false,
+                  "active": true,
+                  "source": "signup",
+                  "first_seen": "2026-01-01T00:00:00Z",
+                  "last_seen": "2026-01-01T00:00:00Z"
+                }
+              ],
+              "record": {
+                "user_id": 4,
+                "team_id": 2,
+                "games": 3,
+                "wins": 0,
+                "losses": 2,
+                "season_id": 1,
+                "matchup_history": [
+                  "OC",
+                  "NE",
+                  "OC"
+                ],
+                "out_rounds": []
+              }
+            }
+          ]
+        },
+        "captains_by_season": {
+          "1": [
+            {
+              "name": "P5",
+              "mmr": 1700,
+              "country": "NO",
+              "timezone": null,
+              "twitch_url": null,
+              "youtube_url": null,
+              "avatar_url": null,
+              "id": 5,
+              "battleTag": "P5#5555",
+              "race": "RANDOM",
+              "w3c_synced_at": null,
+              "ladder_synced_at": null,
+              "race_mmrs": [
+                {
+                  "race": "HU",
+                  "wc3_season": 7,
+                  "mmr": 1575,
+                  "games": 15,
+                  "wins": 7,
+                  "losses": 8,
+                  "stale": false
+                }
+              ],
+              "main_race": "HU",
+              "mmr_entered": null,
+              "signup_race": null,
+              "played_as": null,
+              "fantasy_tier": null,
+              "tags": [
+                {
+                  "id": 5,
+                  "tag": "P5#5555",
+                  "verified": false,
+                  "active": true,
+                  "source": "signup",
+                  "first_seen": "2026-01-01T00:00:00Z",
+                  "last_seen": "2026-01-01T00:00:00Z"
+                }
+              ],
+              "record": null
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "/events/1/teams?limit=1": {
+    "status": 200,
+    "body": [
+      {
+        "id": 1,
+        "league_id": 1,
+        "name": "Alpha",
+        "long_name": "Team Alpha",
+        "icon_url": null,
+        "seasons_info": [
+          {
+            "season_id": 1,
+            "name": "Season 1",
+            "league_short_name": "SL",
+            "final_score": 6,
+            "points_available": 12,
+            "points_against": 6,
+            "series_won": 3,
+            "series_lost": 1
+          }
+        ],
+        "discord_role_missing": [],
+        "player_by_season": {
+          "1": [
+            {
+              "name": "P1",
+              "mmr": 1500,
+              "country": "DE",
+              "timezone": null,
+              "twitch_url": null,
+              "youtube_url": null,
+              "avatar_url": null,
+              "id": 1,
+              "battleTag": "P1#1111",
+              "race": "HU",
+              "w3c_synced_at": null,
+              "ladder_synced_at": null,
+              "race_mmrs": [
+                {
+                  "race": "HU",
+                  "wc3_season": 7,
+                  "mmr": 1571,
+                  "games": 15,
+                  "wins": 7,
+                  "losses": 8,
+                  "stale": false
+                },
+                {
+                  "race": "NE",
+                  "wc3_season": 6,
+                  "mmr": 1561,
+                  "games": 13,
+                  "wins": 6,
+                  "losses": 7,
+                  "stale": false
+                }
+              ],
+              "main_race": "HU",
+              "mmr_entered": null,
+              "signup_race": "HU",
+              "played_as": null,
+              "fantasy_tier": null,
+              "tags": [
+                {
+                  "id": 1,
+                  "tag": "P1#1111",
+                  "verified": false,
+                  "active": true,
+                  "source": "signup",
+                  "first_seen": "2026-01-01T00:00:00Z",
+                  "last_seen": "2026-01-01T00:00:00Z"
+                }
+              ],
+              "record": {
+                "user_id": 1,
+                "team_id": 1,
+                "games": 3,
+                "wins": 2,
+                "losses": 1,
+                "season_id": 1,
+                "matchup_history": [
+                  "NE",
+                  null,
+                  "NE"
+                ],
+                "out_rounds": []
+              }
+            },
+            {
+              "name": "P2",
+              "mmr": 1400,
+              "country": "US",
+              "timezone": null,
+              "twitch_url": null,
+              "youtube_url": null,
+              "avatar_url": null,
+              "id": 2,
+              "battleTag": "P2#2222",
+              "race": "OC",
+              "w3c_synced_at": null,
+              "ladder_synced_at": null,
+              "race_mmrs": [
+                {
+                  "race": "HU",
+                  "wc3_season": 7,
+                  "mmr": 1572,
+                  "games": 15,
+                  "wins": 7,
+                  "losses": 8,
+                  "stale": false
+                },
+                {
+                  "race": "NE",
+                  "wc3_season": 6,
+                  "mmr": 1562,
+                  "games": 13,
+                  "wins": 6,
+                  "losses": 7,
+                  "stale": false
+                }
+              ],
+              "main_race": "HU",
+              "mmr_entered": null,
+              "signup_race": "OC",
+              "played_as": null,
+              "fantasy_tier": null,
+              "tags": [
+                {
+                  "id": 2,
+                  "tag": "P2#2222",
+                  "verified": false,
+                  "active": true,
+                  "source": "signup",
+                  "first_seen": "2026-01-01T00:00:00Z",
+                  "last_seen": "2026-01-01T00:00:00Z"
+                }
+              ],
+              "record": {
+                "user_id": 2,
+                "team_id": 1,
+                "games": 3,
+                "wins": 1,
+                "losses": 0,
+                "season_id": 1,
+                "matchup_history": [
+                  null,
+                  "UD",
+                  "HU"
+                ],
+                "out_rounds": []
+              }
+            }
+          ]
+        },
+        "captains_by_season": {
+          "1": [
+            {
+              "name": "P1",
+              "mmr": 1500,
+              "country": "DE",
+              "timezone": null,
+              "twitch_url": null,
+              "youtube_url": null,
+              "avatar_url": null,
+              "id": 1,
+              "battleTag": "P1#1111",
+              "race": "HU",
+              "w3c_synced_at": null,
+              "ladder_synced_at": null,
+              "race_mmrs": [
+                {
+                  "race": "HU",
+                  "wc3_season": 7,
+                  "mmr": 1571,
+                  "games": 15,
+                  "wins": 7,
+                  "losses": 8,
+                  "stale": false
+                },
+                {
+                  "race": "NE",
+                  "wc3_season": 6,
+                  "mmr": 1561,
+                  "games": 13,
+                  "wins": 6,
+                  "losses": 7,
+                  "stale": false
+                }
+              ],
+              "main_race": "HU",
+              "mmr_entered": null,
+              "signup_race": "HU",
+              "played_as": null,
+              "fantasy_tier": null,
+              "tags": [
+                {
+                  "id": 1,
+                  "tag": "P1#1111",
+                  "verified": false,
+                  "active": true,
+                  "source": "signup",
+                  "first_seen": "2026-01-01T00:00:00Z",
+                  "last_seen": "2026-01-01T00:00:00Z"
+                }
+              ],
+              "record": {
+                "user_id": 1,
+                "team_id": 1,
+                "games": 3,
+                "wins": 2,
+                "losses": 1,
+                "season_id": 1,
+                "matchup_history": [
+                  "NE",
+                  null,
+                  "NE"
+                ],
+                "out_rounds": []
+              }
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "/events/1/teams?limit=1&offset=1": {
+    "status": 200,
+    "body": [
+      {
+        "id": 2,
+        "league_id": 1,
+        "name": "Beta",
+        "long_name": "Team Beta",
+        "icon_url": null,
+        "seasons_info": [
+          {
+            "season_id": 1,
+            "name": "Season 1",
+            "league_short_name": "SL",
+            "final_score": 6,
+            "points_available": 12,
+            "points_against": 6,
+            "series_won": 1,
+            "series_lost": 3
+          }
+        ],
+        "discord_role_missing": [],
+        "player_by_season": {
+          "1": [
+            {
+              "name": "P3",
+              "mmr": 1600,
+              "country": "FR",
+              "timezone": null,
+              "twitch_url": null,
+              "youtube_url": null,
+              "avatar_url": null,
+              "id": 3,
+              "battleTag": "P3#3333",
+              "race": "NE",
+              "w3c_synced_at": null,
+              "ladder_synced_at": null,
+              "race_mmrs": [
+                {
+                  "race": "HU",
+                  "wc3_season": 7,
+                  "mmr": 1573,
+                  "games": 15,
+                  "wins": 7,
+                  "losses": 8,
+                  "stale": false
+                },
+                {
+                  "race": "NE",
+                  "wc3_season": 6,
+                  "mmr": 1563,
+                  "games": 13,
+                  "wins": 6,
+                  "losses": 7,
+                  "stale": false
+                }
+              ],
+              "main_race": "HU",
+              "mmr_entered": null,
+              "signup_race": "NE",
+              "played_as": null,
+              "fantasy_tier": null,
+              "tags": [
+                {
+                  "id": 3,
+                  "tag": "P3#3333",
+                  "verified": false,
+                  "active": true,
+                  "source": "signup",
+                  "first_seen": "2026-01-01T00:00:00Z",
+                  "last_seen": "2026-01-01T00:00:00Z"
+                }
+              ],
+              "record": {
+                "user_id": 3,
+                "team_id": 2,
+                "games": 3,
+                "wins": 1,
+                "losses": 1,
+                "season_id": 1,
+                "matchup_history": [
+                  "HU",
+                  "OC",
+                  "HU"
+                ],
+                "out_rounds": []
+              }
+            },
+            {
+              "name": "P4",
+              "mmr": 1300,
+              "country": "SE",
+              "timezone": null,
+              "twitch_url": null,
+              "youtube_url": null,
+              "avatar_url": null,
+              "id": 4,
+              "battleTag": "P4#4444",
+              "race": "UD",
+              "w3c_synced_at": null,
+              "ladder_synced_at": null,
+              "race_mmrs": [
+                {
+                  "race": "HU",
+                  "wc3_season": 7,
+                  "mmr": 1574,
+                  "games": 15,
+                  "wins": 7,
+                  "losses": 8,
+                  "stale": false
+                },
+                {
+                  "race": "NE",
+                  "wc3_season": 6,
+                  "mmr": 1564,
+                  "games": 13,
+                  "wins": 6,
+                  "losses": 7,
+                  "stale": false
+                }
+              ],
+              "main_race": "HU",
+              "mmr_entered": null,
+              "signup_race": null,
+              "played_as": null,
+              "fantasy_tier": null,
+              "tags": [
+                {
+                  "id": 4,
+                  "tag": "P4#4444",
+                  "verified": false,
+                  "active": true,
+                  "source": "signup",
+                  "first_seen": "2026-01-01T00:00:00Z",
+                  "last_seen": "2026-01-01T00:00:00Z"
+                }
+              ],
+              "record": {
+                "user_id": 4,
+                "team_id": 2,
+                "games": 3,
+                "wins": 0,
+                "losses": 2,
+                "season_id": 1,
+                "matchup_history": [
+                  "OC",
+                  "NE",
+                  "OC"
+                ],
+                "out_rounds": []
+              }
+            }
+          ]
+        },
+        "captains_by_season": {
+          "1": [
+            {
+              "name": "P5",
+              "mmr": 1700,
+              "country": "NO",
+              "timezone": null,
+              "twitch_url": null,
+              "youtube_url": null,
+              "avatar_url": null,
+              "id": 5,
+              "battleTag": "P5#5555",
+              "race": "RANDOM",
+              "w3c_synced_at": null,
+              "ladder_synced_at": null,
+              "race_mmrs": [
+                {
+                  "race": "HU",
+                  "wc3_season": 7,
+                  "mmr": 1575,
+                  "games": 15,
+                  "wins": 7,
+                  "losses": 8,
+                  "stale": false
+                }
+              ],
+              "main_race": "HU",
+              "mmr_entered": null,
+              "signup_race": null,
+              "played_as": null,
+              "fantasy_tier": null,
+              "tags": [
+                {
+                  "id": 5,
+                  "tag": "P5#5555",
+                  "verified": false,
+                  "active": true,
+                  "source": "signup",
+                  "first_seen": "2026-01-01T00:00:00Z",
+                  "last_seen": "2026-01-01T00:00:00Z"
+                }
+              ],
+              "record": null
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "/events/1/teams?offset=5": {
+    "status": 200,
+    "body": []
+  },
+  "/events/1/teams/basic": {
+    "status": 200,
+    "body": [
+      {
+        "id": 1,
+        "league_id": 1,
+        "name": "Alpha",
+        "long_name": "Team Alpha",
+        "icon_url": null,
+        "seasons_info": [
+          {
+            "season_id": 1,
+            "name": "Season 1",
+            "league_short_name": "SL",
+            "final_score": 6,
+            "points_available": 12,
+            "points_against": 6,
+            "series_won": 3,
+            "series_lost": 1
+          }
+        ],
+        "discord_role_missing": []
+      },
+      {
+        "id": 2,
+        "league_id": 1,
+        "name": "Beta",
+        "long_name": "Team Beta",
+        "icon_url": null,
+        "seasons_info": [
+          {
+            "season_id": 1,
+            "name": "Season 1",
+            "league_short_name": "SL",
+            "final_score": 6,
+            "points_available": 12,
+            "points_against": 6,
+            "series_won": 1,
+            "series_lost": 3
+          }
+        ],
+        "discord_role_missing": []
+      }
+    ]
+  },
+  "/events/1/teams/1": {
+    "status": 200,
+    "body": {
+      "id": 1,
+      "league_id": 1,
+      "name": "Alpha",
+      "long_name": "Team Alpha",
+      "icon_url": null,
+      "seasons_info": [
+        {
+          "season_id": 1,
+          "name": "Season 1",
+          "league_short_name": "SL",
+          "final_score": 6,
+          "points_available": 12,
+          "points_against": 6,
+          "series_won": 3,
+          "series_lost": 1
+        }
+      ],
+      "discord_role_missing": [],
+      "player_by_season": {
+        "1": [
+          {
+            "name": "P1",
+            "mmr": 1500,
+            "country": "DE",
+            "timezone": null,
+            "twitch_url": null,
+            "youtube_url": null,
+            "avatar_url": null,
+            "id": 1,
+            "battleTag": "P1#1111",
+            "race": "HU",
+            "w3c_synced_at": null,
+            "ladder_synced_at": null,
+            "race_mmrs": [
+              {
+                "race": "HU",
+                "wc3_season": 7,
+                "mmr": 1571,
+                "games": 15,
+                "wins": 7,
+                "losses": 8,
+                "stale": false
+              },
+              {
+                "race": "NE",
+                "wc3_season": 6,
+                "mmr": 1561,
+                "games": 13,
+                "wins": 6,
+                "losses": 7,
+                "stale": false
+              }
+            ],
+            "main_race": "HU",
+            "mmr_entered": null,
+            "signup_race": "HU",
+            "played_as": null,
+            "fantasy_tier": null,
+            "tags": [
+              {
+                "id": 1,
+                "tag": "P1#1111",
+                "verified": false,
+                "active": true,
+                "source": "signup",
+                "first_seen": "2026-01-01T00:00:00Z",
+                "last_seen": "2026-01-01T00:00:00Z"
+              }
+            ],
+            "record": {
+              "user_id": 1,
+              "team_id": 1,
+              "games": 3,
+              "wins": 2,
+              "losses": 1,
+              "season_id": 1,
+              "matchup_history": [
+                "NE",
+                null,
+                "NE"
+              ],
+              "out_rounds": []
+            }
+          },
+          {
+            "name": "P2",
+            "mmr": 1400,
+            "country": "US",
+            "timezone": null,
+            "twitch_url": null,
+            "youtube_url": null,
+            "avatar_url": null,
+            "id": 2,
+            "battleTag": "P2#2222",
+            "race": "OC",
+            "w3c_synced_at": null,
+            "ladder_synced_at": null,
+            "race_mmrs": [
+              {
+                "race": "HU",
+                "wc3_season": 7,
+                "mmr": 1572,
+                "games": 15,
+                "wins": 7,
+                "losses": 8,
+                "stale": false
+              },
+              {
+                "race": "NE",
+                "wc3_season": 6,
+                "mmr": 1562,
+                "games": 13,
+                "wins": 6,
+                "losses": 7,
+                "stale": false
+              }
+            ],
+            "main_race": "HU",
+            "mmr_entered": null,
+            "signup_race": "OC",
+            "played_as": null,
+            "fantasy_tier": null,
+            "tags": [
+              {
+                "id": 2,
+                "tag": "P2#2222",
+                "verified": false,
+                "active": true,
+                "source": "signup",
+                "first_seen": "2026-01-01T00:00:00Z",
+                "last_seen": "2026-01-01T00:00:00Z"
+              }
+            ],
+            "record": {
+              "user_id": 2,
+              "team_id": 1,
+              "games": 3,
+              "wins": 1,
+              "losses": 0,
+              "season_id": 1,
+              "matchup_history": [
+                null,
+                "UD",
+                "HU"
+              ],
+              "out_rounds": []
+            }
+          }
+        ]
+      },
+      "captains_by_season": {
+        "1": [
+          {
+            "name": "P1",
+            "mmr": 1500,
+            "country": "DE",
+            "timezone": null,
+            "twitch_url": null,
+            "youtube_url": null,
+            "avatar_url": null,
+            "id": 1,
+            "battleTag": "P1#1111",
+            "race": "HU",
+            "w3c_synced_at": null,
+            "ladder_synced_at": null,
+            "race_mmrs": [
+              {
+                "race": "HU",
+                "wc3_season": 7,
+                "mmr": 1571,
+                "games": 15,
+                "wins": 7,
+                "losses": 8,
+                "stale": false
+              },
+              {
+                "race": "NE",
+                "wc3_season": 6,
+                "mmr": 1561,
+                "games": 13,
+                "wins": 6,
+                "losses": 7,
+                "stale": false
+              }
+            ],
+            "main_race": "HU",
+            "mmr_entered": null,
+            "signup_race": "HU",
+            "played_as": null,
+            "fantasy_tier": null,
+            "tags": [
+              {
+                "id": 1,
+                "tag": "P1#1111",
+                "verified": false,
+                "active": true,
+                "source": "signup",
+                "first_seen": "2026-01-01T00:00:00Z",
+                "last_seen": "2026-01-01T00:00:00Z"
+              }
+            ],
+            "record": {
+              "user_id": 1,
+              "team_id": 1,
+              "games": 3,
+              "wins": 2,
+              "losses": 1,
+              "season_id": 1,
+              "matchup_history": [
+                "NE",
+                null,
+                "NE"
+              ],
+              "out_rounds": []
+            }
+          }
+        ]
+      }
+    }
+  },
+  "/events/1/teams/2": {
+    "status": 200,
+    "body": {
+      "id": 2,
+      "league_id": 1,
+      "name": "Beta",
+      "long_name": "Team Beta",
+      "icon_url": null,
+      "seasons_info": [
+        {
+          "season_id": 1,
+          "name": "Season 1",
+          "league_short_name": "SL",
+          "final_score": 6,
+          "points_available": 12,
+          "points_against": 6,
+          "series_won": 1,
+          "series_lost": 3
+        }
+      ],
+      "discord_role_missing": [],
+      "player_by_season": {
+        "1": [
+          {
+            "name": "P3",
+            "mmr": 1600,
+            "country": "FR",
+            "timezone": null,
+            "twitch_url": null,
+            "youtube_url": null,
+            "avatar_url": null,
+            "id": 3,
+            "battleTag": "P3#3333",
+            "race": "NE",
+            "w3c_synced_at": null,
+            "ladder_synced_at": null,
+            "race_mmrs": [
+              {
+                "race": "HU",
+                "wc3_season": 7,
+                "mmr": 1573,
+                "games": 15,
+                "wins": 7,
+                "losses": 8,
+                "stale": false
+              },
+              {
+                "race": "NE",
+                "wc3_season": 6,
+                "mmr": 1563,
+                "games": 13,
+                "wins": 6,
+                "losses": 7,
+                "stale": false
+              }
+            ],
+            "main_race": "HU",
+            "mmr_entered": null,
+            "signup_race": "NE",
+            "played_as": null,
+            "fantasy_tier": null,
+            "tags": [
+              {
+                "id": 3,
+                "tag": "P3#3333",
+                "verified": false,
+                "active": true,
+                "source": "signup",
+                "first_seen": "2026-01-01T00:00:00Z",
+                "last_seen": "2026-01-01T00:00:00Z"
+              }
+            ],
+            "record": {
+              "user_id": 3,
+              "team_id": 2,
+              "games": 3,
+              "wins": 1,
+              "losses": 1,
+              "season_id": 1,
+              "matchup_history": [
+                "HU",
+                "OC",
+                "HU"
+              ],
+              "out_rounds": []
+            }
+          },
+          {
+            "name": "P4",
+            "mmr": 1300,
+            "country": "SE",
+            "timezone": null,
+            "twitch_url": null,
+            "youtube_url": null,
+            "avatar_url": null,
+            "id": 4,
+            "battleTag": "P4#4444",
+            "race": "UD",
+            "w3c_synced_at": null,
+            "ladder_synced_at": null,
+            "race_mmrs": [
+              {
+                "race": "HU",
+                "wc3_season": 7,
+                "mmr": 1574,
+                "games": 15,
+                "wins": 7,
+                "losses": 8,
+                "stale": false
+              },
+              {
+                "race": "NE",
+                "wc3_season": 6,
+                "mmr": 1564,
+                "games": 13,
+                "wins": 6,
+                "losses": 7,
+                "stale": false
+              }
+            ],
+            "main_race": "HU",
+            "mmr_entered": null,
+            "signup_race": null,
+            "played_as": null,
+            "fantasy_tier": null,
+            "tags": [
+              {
+                "id": 4,
+                "tag": "P4#4444",
+                "verified": false,
+                "active": true,
+                "source": "signup",
+                "first_seen": "2026-01-01T00:00:00Z",
+                "last_seen": "2026-01-01T00:00:00Z"
+              }
+            ],
+            "record": {
+              "user_id": 4,
+              "team_id": 2,
+              "games": 3,
+              "wins": 0,
+              "losses": 2,
+              "season_id": 1,
+              "matchup_history": [
+                "OC",
+                "NE",
+                "OC"
+              ],
+              "out_rounds": []
+            }
+          }
+        ]
+      },
+      "captains_by_season": {
+        "1": [
+          {
+            "name": "P5",
+            "mmr": 1700,
+            "country": "NO",
+            "timezone": null,
+            "twitch_url": null,
+            "youtube_url": null,
+            "avatar_url": null,
+            "id": 5,
+            "battleTag": "P5#5555",
+            "race": "RANDOM",
+            "w3c_synced_at": null,
+            "ladder_synced_at": null,
+            "race_mmrs": [
+              {
+                "race": "HU",
+                "wc3_season": 7,
+                "mmr": 1575,
+                "games": 15,
+                "wins": 7,
+                "losses": 8,
+                "stale": false
+              }
+            ],
+            "main_race": "HU",
+            "mmr_entered": null,
+            "signup_race": null,
+            "played_as": null,
+            "fantasy_tier": null,
+            "tags": [
+              {
+                "id": 5,
+                "tag": "P5#5555",
+                "verified": false,
+                "active": true,
+                "source": "signup",
+                "first_seen": "2026-01-01T00:00:00Z",
+                "last_seen": "2026-01-01T00:00:00Z"
+              }
+            ],
+            "record": null
+          }
+        ]
+      }
+    }
+  },
+  "/events/1/teams/3": {
+    "status": 200,
+    "body": {
+      "id": 3,
+      "league_id": 1,
+      "name": "Gamma",
+      "long_name": null,
+      "icon_url": null,
+      "seasons_info": [],
+      "discord_role_missing": [],
+      "player_by_season": {
+        "1": []
+      },
+      "captains_by_season": {
+        "1": []
+      }
+    }
+  },
+  "/events/2/teams": {
+    "status": 200,
+    "body": [
+      {
+        "id": 1,
+        "league_id": 1,
+        "name": "Alpha",
+        "long_name": "Team Alpha",
+        "icon_url": null,
+        "seasons_info": [
+          {
+            "season_id": 2,
+            "name": "Season 2",
+            "league_short_name": "SL",
+            "final_score": 3,
+            "points_available": -6,
+            "points_against": 3,
+            "series_won": 1,
+            "series_lost": 1
+          }
+        ],
+        "discord_role_missing": [],
+        "player_by_season": {
+          "2": [
+            {
+              "name": "P1",
+              "mmr": 1500,
+              "country": "DE",
+              "timezone": null,
+              "twitch_url": null,
+              "youtube_url": null,
+              "avatar_url": null,
+              "id": 1,
+              "battleTag": "P1#1111",
+              "race": "HU",
+              "w3c_synced_at": null,
+              "ladder_synced_at": null,
+              "race_mmrs": [
+                {
+                  "race": "HU",
+                  "wc3_season": 7,
+                  "mmr": 1571,
+                  "games": 15,
+                  "wins": 7,
+                  "losses": 8,
+                  "stale": false
+                },
+                {
+                  "race": "NE",
+                  "wc3_season": 6,
+                  "mmr": 1561,
+                  "games": 13,
+                  "wins": 6,
+                  "losses": 7,
+                  "stale": false
+                }
+              ],
+              "main_race": "HU",
+              "mmr_entered": null,
+              "signup_race": "UD",
+              "played_as": null,
+              "fantasy_tier": null,
+              "tags": [
+                {
+                  "id": 1,
+                  "tag": "P1#1111",
+                  "verified": false,
+                  "active": true,
+                  "source": "signup",
+                  "first_seen": "2026-01-01T00:00:00Z",
+                  "last_seen": "2026-01-01T00:00:00Z"
+                }
+              ],
+              "record": {
+                "user_id": 1,
+                "team_id": 1,
+                "games": 1,
+                "wins": 0,
+                "losses": 1,
+                "season_id": 2,
+                "matchup_history": [
+                  "HU"
+                ],
+                "out_rounds": []
+              }
+            },
+            {
+              "name": "P2",
+              "mmr": 1400,
+              "country": "US",
+              "timezone": null,
+              "twitch_url": null,
+              "youtube_url": null,
+              "avatar_url": null,
+              "id": 2,
+              "battleTag": "P2#2222",
+              "race": "OC",
+              "w3c_synced_at": null,
+              "ladder_synced_at": null,
+              "race_mmrs": [
+                {
+                  "race": "HU",
+                  "wc3_season": 7,
+                  "mmr": 1572,
+                  "games": 15,
+                  "wins": 7,
+                  "losses": 8,
+                  "stale": false
+                },
+                {
+                  "race": "NE",
+                  "wc3_season": 6,
+                  "mmr": 1562,
+                  "games": 13,
+                  "wins": 6,
+                  "losses": 7,
+                  "stale": false
+                }
+              ],
+              "main_race": "HU",
+              "mmr_entered": null,
+              "signup_race": "OC",
+              "played_as": null,
+              "fantasy_tier": null,
+              "tags": [
+                {
+                  "id": 2,
+                  "tag": "P2#2222",
+                  "verified": false,
+                  "active": true,
+                  "source": "signup",
+                  "first_seen": "2026-01-01T00:00:00Z",
+                  "last_seen": "2026-01-01T00:00:00Z"
+                }
+              ],
+              "record": {
+                "user_id": 2,
+                "team_id": 1,
+                "games": 1,
+                "wins": 1,
+                "losses": 0,
+                "season_id": 2,
+                "matchup_history": [
+                  "OC"
+                ],
+                "out_rounds": []
+              }
+            }
+          ]
+        },
+        "captains_by_season": {
+          "2": [
+            {
+              "name": "P2",
+              "mmr": 1400,
+              "country": "US",
+              "timezone": null,
+              "twitch_url": null,
+              "youtube_url": null,
+              "avatar_url": null,
+              "id": 2,
+              "battleTag": "P2#2222",
+              "race": "OC",
+              "w3c_synced_at": null,
+              "ladder_synced_at": null,
+              "race_mmrs": [
+                {
+                  "race": "HU",
+                  "wc3_season": 7,
+                  "mmr": 1572,
+                  "games": 15,
+                  "wins": 7,
+                  "losses": 8,
+                  "stale": false
+                },
+                {
+                  "race": "NE",
+                  "wc3_season": 6,
+                  "mmr": 1562,
+                  "games": 13,
+                  "wins": 6,
+                  "losses": 7,
+                  "stale": false
+                }
+              ],
+              "main_race": "HU",
+              "mmr_entered": null,
+              "signup_race": "OC",
+              "played_as": null,
+              "fantasy_tier": null,
+              "tags": [
+                {
+                  "id": 2,
+                  "tag": "P2#2222",
+                  "verified": false,
+                  "active": true,
+                  "source": "signup",
+                  "first_seen": "2026-01-01T00:00:00Z",
+                  "last_seen": "2026-01-01T00:00:00Z"
+                }
+              ],
+              "record": {
+                "user_id": 2,
+                "team_id": 1,
+                "games": 1,
+                "wins": 1,
+                "losses": 0,
+                "season_id": 2,
+                "matchup_history": [
+                  "OC"
+                ],
+                "out_rounds": []
+              }
+            }
+          ]
+        }
+      },
+      {
+        "id": 2,
+        "league_id": 1,
+        "name": "Beta",
+        "long_name": "Team Beta",
+        "icon_url": null,
+        "seasons_info": [
+          {
+            "season_id": 2,
+            "name": "Season 2",
+            "league_short_name": "SL",
+            "final_score": 3,
+            "points_available": -6,
+            "points_against": 3,
+            "series_won": 1,
+            "series_lost": 1
+          }
+        ],
+        "discord_role_missing": [],
+        "player_by_season": {
+          "2": [
+            {
+              "name": "P3",
+              "mmr": 1600,
+              "country": "FR",
+              "timezone": null,
+              "twitch_url": null,
+              "youtube_url": null,
+              "avatar_url": null,
+              "id": 3,
+              "battleTag": "P3#3333",
+              "race": "NE",
+              "w3c_synced_at": null,
+              "ladder_synced_at": null,
+              "race_mmrs": [
+                {
+                  "race": "HU",
+                  "wc3_season": 7,
+                  "mmr": 1573,
+                  "games": 15,
+                  "wins": 7,
+                  "losses": 8,
+                  "stale": false
+                },
+                {
+                  "race": "NE",
+                  "wc3_season": 6,
+                  "mmr": 1563,
+                  "games": 13,
+                  "wins": 6,
+                  "losses": 7,
+                  "stale": false
+                }
+              ],
+              "main_race": "HU",
+              "mmr_entered": null,
+              "signup_race": "HU",
+              "played_as": null,
+              "fantasy_tier": null,
+              "tags": [
+                {
+                  "id": 3,
+                  "tag": "P3#3333",
+                  "verified": false,
+                  "active": true,
+                  "source": "signup",
+                  "first_seen": "2026-01-01T00:00:00Z",
+                  "last_seen": "2026-01-01T00:00:00Z"
+                }
+              ],
+              "record": {
+                "user_id": 3,
+                "team_id": 2,
+                "games": 1,
+                "wins": 1,
+                "losses": 0,
+                "season_id": 2,
+                "matchup_history": [
+                  "UD"
+                ],
+                "out_rounds": []
+              }
+            },
+            {
+              "name": "P5",
+              "mmr": 1700,
+              "country": "NO",
+              "timezone": null,
+              "twitch_url": null,
+              "youtube_url": null,
+              "avatar_url": null,
+              "id": 5,
+              "battleTag": "P5#5555",
+              "race": "RANDOM",
+              "w3c_synced_at": null,
+              "ladder_synced_at": null,
+              "race_mmrs": [
+                {
+                  "race": "HU",
+                  "wc3_season": 7,
+                  "mmr": 1575,
+                  "games": 15,
+                  "wins": 7,
+                  "losses": 8,
+                  "stale": false
+                }
+              ],
+              "main_race": "HU",
+              "mmr_entered": null,
+              "signup_race": null,
+              "played_as": null,
+              "fantasy_tier": null,
+              "tags": [
+                {
+                  "id": 5,
+                  "tag": "P5#5555",
+                  "verified": false,
+                  "active": true,
+                  "source": "signup",
+                  "first_seen": "2026-01-01T00:00:00Z",
+                  "last_seen": "2026-01-01T00:00:00Z"
+                }
+              ],
+              "record": {
+                "user_id": 5,
+                "team_id": 2,
+                "games": 1,
+                "wins": 0,
+                "losses": 1,
+                "season_id": 2,
+                "matchup_history": [
+                  "OC"
+                ],
+                "out_rounds": []
+              }
+            }
+          ]
+        },
+        "captains_by_season": {
+          "2": []
+        }
+      }
+    ]
+  },
+  "/events/2/teams?limit=1": {
+    "status": 200,
+    "body": [
+      {
+        "id": 1,
+        "league_id": 1,
+        "name": "Alpha",
+        "long_name": "Team Alpha",
+        "icon_url": null,
+        "seasons_info": [
+          {
+            "season_id": 2,
+            "name": "Season 2",
+            "league_short_name": "SL",
+            "final_score": 3,
+            "points_available": -6,
+            "points_against": 3,
+            "series_won": 1,
+            "series_lost": 1
+          }
+        ],
+        "discord_role_missing": [],
+        "player_by_season": {
+          "2": [
+            {
+              "name": "P1",
+              "mmr": 1500,
+              "country": "DE",
+              "timezone": null,
+              "twitch_url": null,
+              "youtube_url": null,
+              "avatar_url": null,
+              "id": 1,
+              "battleTag": "P1#1111",
+              "race": "HU",
+              "w3c_synced_at": null,
+              "ladder_synced_at": null,
+              "race_mmrs": [
+                {
+                  "race": "HU",
+                  "wc3_season": 7,
+                  "mmr": 1571,
+                  "games": 15,
+                  "wins": 7,
+                  "losses": 8,
+                  "stale": false
+                },
+                {
+                  "race": "NE",
+                  "wc3_season": 6,
+                  "mmr": 1561,
+                  "games": 13,
+                  "wins": 6,
+                  "losses": 7,
+                  "stale": false
+                }
+              ],
+              "main_race": "HU",
+              "mmr_entered": null,
+              "signup_race": "UD",
+              "played_as": null,
+              "fantasy_tier": null,
+              "tags": [
+                {
+                  "id": 1,
+                  "tag": "P1#1111",
+                  "verified": false,
+                  "active": true,
+                  "source": "signup",
+                  "first_seen": "2026-01-01T00:00:00Z",
+                  "last_seen": "2026-01-01T00:00:00Z"
+                }
+              ],
+              "record": {
+                "user_id": 1,
+                "team_id": 1,
+                "games": 1,
+                "wins": 0,
+                "losses": 1,
+                "season_id": 2,
+                "matchup_history": [
+                  "HU"
+                ],
+                "out_rounds": []
+              }
+            },
+            {
+              "name": "P2",
+              "mmr": 1400,
+              "country": "US",
+              "timezone": null,
+              "twitch_url": null,
+              "youtube_url": null,
+              "avatar_url": null,
+              "id": 2,
+              "battleTag": "P2#2222",
+              "race": "OC",
+              "w3c_synced_at": null,
+              "ladder_synced_at": null,
+              "race_mmrs": [
+                {
+                  "race": "HU",
+                  "wc3_season": 7,
+                  "mmr": 1572,
+                  "games": 15,
+                  "wins": 7,
+                  "losses": 8,
+                  "stale": false
+                },
+                {
+                  "race": "NE",
+                  "wc3_season": 6,
+                  "mmr": 1562,
+                  "games": 13,
+                  "wins": 6,
+                  "losses": 7,
+                  "stale": false
+                }
+              ],
+              "main_race": "HU",
+              "mmr_entered": null,
+              "signup_race": "OC",
+              "played_as": null,
+              "fantasy_tier": null,
+              "tags": [
+                {
+                  "id": 2,
+                  "tag": "P2#2222",
+                  "verified": false,
+                  "active": true,
+                  "source": "signup",
+                  "first_seen": "2026-01-01T00:00:00Z",
+                  "last_seen": "2026-01-01T00:00:00Z"
+                }
+              ],
+              "record": {
+                "user_id": 2,
+                "team_id": 1,
+                "games": 1,
+                "wins": 1,
+                "losses": 0,
+                "season_id": 2,
+                "matchup_history": [
+                  "OC"
+                ],
+                "out_rounds": []
+              }
+            }
+          ]
+        },
+        "captains_by_season": {
+          "2": [
+            {
+              "name": "P2",
+              "mmr": 1400,
+              "country": "US",
+              "timezone": null,
+              "twitch_url": null,
+              "youtube_url": null,
+              "avatar_url": null,
+              "id": 2,
+              "battleTag": "P2#2222",
+              "race": "OC",
+              "w3c_synced_at": null,
+              "ladder_synced_at": null,
+              "race_mmrs": [
+                {
+                  "race": "HU",
+                  "wc3_season": 7,
+                  "mmr": 1572,
+                  "games": 15,
+                  "wins": 7,
+                  "losses": 8,
+                  "stale": false
+                },
+                {
+                  "race": "NE",
+                  "wc3_season": 6,
+                  "mmr": 1562,
+                  "games": 13,
+                  "wins": 6,
+                  "losses": 7,
+                  "stale": false
+                }
+              ],
+              "main_race": "HU",
+              "mmr_entered": null,
+              "signup_race": "OC",
+              "played_as": null,
+              "fantasy_tier": null,
+              "tags": [
+                {
+                  "id": 2,
+                  "tag": "P2#2222",
+                  "verified": false,
+                  "active": true,
+                  "source": "signup",
+                  "first_seen": "2026-01-01T00:00:00Z",
+                  "last_seen": "2026-01-01T00:00:00Z"
+                }
+              ],
+              "record": {
+                "user_id": 2,
+                "team_id": 1,
+                "games": 1,
+                "wins": 1,
+                "losses": 0,
+                "season_id": 2,
+                "matchup_history": [
+                  "OC"
+                ],
+                "out_rounds": []
+              }
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "/events/2/teams?limit=1&offset=1": {
+    "status": 200,
+    "body": [
+      {
+        "id": 2,
+        "league_id": 1,
+        "name": "Beta",
+        "long_name": "Team Beta",
+        "icon_url": null,
+        "seasons_info": [
+          {
+            "season_id": 2,
+            "name": "Season 2",
+            "league_short_name": "SL",
+            "final_score": 3,
+            "points_available": -6,
+            "points_against": 3,
+            "series_won": 1,
+            "series_lost": 1
+          }
+        ],
+        "discord_role_missing": [],
+        "player_by_season": {
+          "2": [
+            {
+              "name": "P3",
+              "mmr": 1600,
+              "country": "FR",
+              "timezone": null,
+              "twitch_url": null,
+              "youtube_url": null,
+              "avatar_url": null,
+              "id": 3,
+              "battleTag": "P3#3333",
+              "race": "NE",
+              "w3c_synced_at": null,
+              "ladder_synced_at": null,
+              "race_mmrs": [
+                {
+                  "race": "HU",
+                  "wc3_season": 7,
+                  "mmr": 1573,
+                  "games": 15,
+                  "wins": 7,
+                  "losses": 8,
+                  "stale": false
+                },
+                {
+                  "race": "NE",
+                  "wc3_season": 6,
+                  "mmr": 1563,
+                  "games": 13,
+                  "wins": 6,
+                  "losses": 7,
+                  "stale": false
+                }
+              ],
+              "main_race": "HU",
+              "mmr_entered": null,
+              "signup_race": "HU",
+              "played_as": null,
+              "fantasy_tier": null,
+              "tags": [
+                {
+                  "id": 3,
+                  "tag": "P3#3333",
+                  "verified": false,
+                  "active": true,
+                  "source": "signup",
+                  "first_seen": "2026-01-01T00:00:00Z",
+                  "last_seen": "2026-01-01T00:00:00Z"
+                }
+              ],
+              "record": {
+                "user_id": 3,
+                "team_id": 2,
+                "games": 1,
+                "wins": 1,
+                "losses": 0,
+                "season_id": 2,
+                "matchup_history": [
+                  "UD"
+                ],
+                "out_rounds": []
+              }
+            },
+            {
+              "name": "P5",
+              "mmr": 1700,
+              "country": "NO",
+              "timezone": null,
+              "twitch_url": null,
+              "youtube_url": null,
+              "avatar_url": null,
+              "id": 5,
+              "battleTag": "P5#5555",
+              "race": "RANDOM",
+              "w3c_synced_at": null,
+              "ladder_synced_at": null,
+              "race_mmrs": [
+                {
+                  "race": "HU",
+                  "wc3_season": 7,
+                  "mmr": 1575,
+                  "games": 15,
+                  "wins": 7,
+                  "losses": 8,
+                  "stale": false
+                }
+              ],
+              "main_race": "HU",
+              "mmr_entered": null,
+              "signup_race": null,
+              "played_as": null,
+              "fantasy_tier": null,
+              "tags": [
+                {
+                  "id": 5,
+                  "tag": "P5#5555",
+                  "verified": false,
+                  "active": true,
+                  "source": "signup",
+                  "first_seen": "2026-01-01T00:00:00Z",
+                  "last_seen": "2026-01-01T00:00:00Z"
+                }
+              ],
+              "record": {
+                "user_id": 5,
+                "team_id": 2,
+                "games": 1,
+                "wins": 0,
+                "losses": 1,
+                "season_id": 2,
+                "matchup_history": [
+                  "OC"
+                ],
+                "out_rounds": []
+              }
+            }
+          ]
+        },
+        "captains_by_season": {
+          "2": []
+        }
+      }
+    ]
+  },
+  "/events/2/teams?offset=5": {
+    "status": 200,
+    "body": []
+  },
+  "/events/2/teams/basic": {
+    "status": 200,
+    "body": [
+      {
+        "id": 1,
+        "league_id": 1,
+        "name": "Alpha",
+        "long_name": "Team Alpha",
+        "icon_url": null,
+        "seasons_info": [
+          {
+            "season_id": 2,
+            "name": "Season 2",
+            "league_short_name": "SL",
+            "final_score": 3,
+            "points_available": -6,
+            "points_against": 3,
+            "series_won": 1,
+            "series_lost": 1
+          }
+        ],
+        "discord_role_missing": []
+      },
+      {
+        "id": 2,
+        "league_id": 1,
+        "name": "Beta",
+        "long_name": "Team Beta",
+        "icon_url": null,
+        "seasons_info": [
+          {
+            "season_id": 2,
+            "name": "Season 2",
+            "league_short_name": "SL",
+            "final_score": 3,
+            "points_available": -6,
+            "points_against": 3,
+            "series_won": 1,
+            "series_lost": 1
+          }
+        ],
+        "discord_role_missing": []
+      }
+    ]
+  },
+  "/events/2/teams/1": {
+    "status": 200,
+    "body": {
+      "id": 1,
+      "league_id": 1,
+      "name": "Alpha",
+      "long_name": "Team Alpha",
+      "icon_url": null,
+      "seasons_info": [
+        {
+          "season_id": 2,
+          "name": "Season 2",
+          "league_short_name": "SL",
+          "final_score": 3,
+          "points_available": -6,
+          "points_against": 3,
+          "series_won": 1,
+          "series_lost": 1
+        }
+      ],
+      "discord_role_missing": [],
+      "player_by_season": {
+        "2": [
+          {
+            "name": "P1",
+            "mmr": 1500,
+            "country": "DE",
+            "timezone": null,
+            "twitch_url": null,
+            "youtube_url": null,
+            "avatar_url": null,
+            "id": 1,
+            "battleTag": "P1#1111",
+            "race": "HU",
+            "w3c_synced_at": null,
+            "ladder_synced_at": null,
+            "race_mmrs": [
+              {
+                "race": "HU",
+                "wc3_season": 7,
+                "mmr": 1571,
+                "games": 15,
+                "wins": 7,
+                "losses": 8,
+                "stale": false
+              },
+              {
+                "race": "NE",
+                "wc3_season": 6,
+                "mmr": 1561,
+                "games": 13,
+                "wins": 6,
+                "losses": 7,
+                "stale": false
+              }
+            ],
+            "main_race": "HU",
+            "mmr_entered": null,
+            "signup_race": "UD",
+            "played_as": null,
+            "fantasy_tier": null,
+            "tags": [
+              {
+                "id": 1,
+                "tag": "P1#1111",
+                "verified": false,
+                "active": true,
+                "source": "signup",
+                "first_seen": "2026-01-01T00:00:00Z",
+                "last_seen": "2026-01-01T00:00:00Z"
+              }
+            ],
+            "record": {
+              "user_id": 1,
+              "team_id": 1,
+              "games": 1,
+              "wins": 0,
+              "losses": 1,
+              "season_id": 2,
+              "matchup_history": [
+                "HU"
+              ],
+              "out_rounds": []
+            }
+          },
+          {
+            "name": "P2",
+            "mmr": 1400,
+            "country": "US",
+            "timezone": null,
+            "twitch_url": null,
+            "youtube_url": null,
+            "avatar_url": null,
+            "id": 2,
+            "battleTag": "P2#2222",
+            "race": "OC",
+            "w3c_synced_at": null,
+            "ladder_synced_at": null,
+            "race_mmrs": [
+              {
+                "race": "HU",
+                "wc3_season": 7,
+                "mmr": 1572,
+                "games": 15,
+                "wins": 7,
+                "losses": 8,
+                "stale": false
+              },
+              {
+                "race": "NE",
+                "wc3_season": 6,
+                "mmr": 1562,
+                "games": 13,
+                "wins": 6,
+                "losses": 7,
+                "stale": false
+              }
+            ],
+            "main_race": "HU",
+            "mmr_entered": null,
+            "signup_race": "OC",
+            "played_as": null,
+            "fantasy_tier": null,
+            "tags": [
+              {
+                "id": 2,
+                "tag": "P2#2222",
+                "verified": false,
+                "active": true,
+                "source": "signup",
+                "first_seen": "2026-01-01T00:00:00Z",
+                "last_seen": "2026-01-01T00:00:00Z"
+              }
+            ],
+            "record": {
+              "user_id": 2,
+              "team_id": 1,
+              "games": 1,
+              "wins": 1,
+              "losses": 0,
+              "season_id": 2,
+              "matchup_history": [
+                "OC"
+              ],
+              "out_rounds": []
+            }
+          }
+        ]
+      },
+      "captains_by_season": {
+        "2": [
+          {
+            "name": "P2",
+            "mmr": 1400,
+            "country": "US",
+            "timezone": null,
+            "twitch_url": null,
+            "youtube_url": null,
+            "avatar_url": null,
+            "id": 2,
+            "battleTag": "P2#2222",
+            "race": "OC",
+            "w3c_synced_at": null,
+            "ladder_synced_at": null,
+            "race_mmrs": [
+              {
+                "race": "HU",
+                "wc3_season": 7,
+                "mmr": 1572,
+                "games": 15,
+                "wins": 7,
+                "losses": 8,
+                "stale": false
+              },
+              {
+                "race": "NE",
+                "wc3_season": 6,
+                "mmr": 1562,
+                "games": 13,
+                "wins": 6,
+                "losses": 7,
+                "stale": false
+              }
+            ],
+            "main_race": "HU",
+            "mmr_entered": null,
+            "signup_race": "OC",
+            "played_as": null,
+            "fantasy_tier": null,
+            "tags": [
+              {
+                "id": 2,
+                "tag": "P2#2222",
+                "verified": false,
+                "active": true,
+                "source": "signup",
+                "first_seen": "2026-01-01T00:00:00Z",
+                "last_seen": "2026-01-01T00:00:00Z"
+              }
+            ],
+            "record": {
+              "user_id": 2,
+              "team_id": 1,
+              "games": 1,
+              "wins": 1,
+              "losses": 0,
+              "season_id": 2,
+              "matchup_history": [
+                "OC"
+              ],
+              "out_rounds": []
+            }
+          }
+        ]
+      }
+    }
+  },
+  "/events/2/teams/2": {
+    "status": 200,
+    "body": {
+      "id": 2,
+      "league_id": 1,
+      "name": "Beta",
+      "long_name": "Team Beta",
+      "icon_url": null,
+      "seasons_info": [
+        {
+          "season_id": 2,
+          "name": "Season 2",
+          "league_short_name": "SL",
+          "final_score": 3,
+          "points_available": -6,
+          "points_against": 3,
+          "series_won": 1,
+          "series_lost": 1
+        }
+      ],
+      "discord_role_missing": [],
+      "player_by_season": {
+        "2": [
+          {
+            "name": "P3",
+            "mmr": 1600,
+            "country": "FR",
+            "timezone": null,
+            "twitch_url": null,
+            "youtube_url": null,
+            "avatar_url": null,
+            "id": 3,
+            "battleTag": "P3#3333",
+            "race": "NE",
+            "w3c_synced_at": null,
+            "ladder_synced_at": null,
+            "race_mmrs": [
+              {
+                "race": "HU",
+                "wc3_season": 7,
+                "mmr": 1573,
+                "games": 15,
+                "wins": 7,
+                "losses": 8,
+                "stale": false
+              },
+              {
+                "race": "NE",
+                "wc3_season": 6,
+                "mmr": 1563,
+                "games": 13,
+                "wins": 6,
+                "losses": 7,
+                "stale": false
+              }
+            ],
+            "main_race": "HU",
+            "mmr_entered": null,
+            "signup_race": "HU",
+            "played_as": null,
+            "fantasy_tier": null,
+            "tags": [
+              {
+                "id": 3,
+                "tag": "P3#3333",
+                "verified": false,
+                "active": true,
+                "source": "signup",
+                "first_seen": "2026-01-01T00:00:00Z",
+                "last_seen": "2026-01-01T00:00:00Z"
+              }
+            ],
+            "record": {
+              "user_id": 3,
+              "team_id": 2,
+              "games": 1,
+              "wins": 1,
+              "losses": 0,
+              "season_id": 2,
+              "matchup_history": [
+                "UD"
+              ],
+              "out_rounds": []
+            }
+          },
+          {
+            "name": "P5",
+            "mmr": 1700,
+            "country": "NO",
+            "timezone": null,
+            "twitch_url": null,
+            "youtube_url": null,
+            "avatar_url": null,
+            "id": 5,
+            "battleTag": "P5#5555",
+            "race": "RANDOM",
+            "w3c_synced_at": null,
+            "ladder_synced_at": null,
+            "race_mmrs": [
+              {
+                "race": "HU",
+                "wc3_season": 7,
+                "mmr": 1575,
+                "games": 15,
+                "wins": 7,
+                "losses": 8,
+                "stale": false
+              }
+            ],
+            "main_race": "HU",
+            "mmr_entered": null,
+            "signup_race": null,
+            "played_as": null,
+            "fantasy_tier": null,
+            "tags": [
+              {
+                "id": 5,
+                "tag": "P5#5555",
+                "verified": false,
+                "active": true,
+                "source": "signup",
+                "first_seen": "2026-01-01T00:00:00Z",
+                "last_seen": "2026-01-01T00:00:00Z"
+              }
+            ],
+            "record": {
+              "user_id": 5,
+              "team_id": 2,
+              "games": 1,
+              "wins": 0,
+              "losses": 1,
+              "season_id": 2,
+              "matchup_history": [
+                "OC"
+              ],
+              "out_rounds": []
+            }
+          }
+        ]
+      },
+      "captains_by_season": {
+        "2": []
+      }
+    }
+  },
+  "/events/2/teams/3": {
+    "status": 200,
+    "body": {
+      "id": 3,
+      "league_id": 1,
+      "name": "Gamma",
+      "long_name": null,
+      "icon_url": null,
+      "seasons_info": [],
+      "discord_role_missing": [],
+      "player_by_season": {
+        "2": []
+      },
+      "captains_by_season": {
+        "2": []
+      }
+    }
+  }
+}

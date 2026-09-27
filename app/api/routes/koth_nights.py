@@ -2,7 +2,7 @@
 
 A night is an event of the KOTH league. An admin makes every series by hand
 while the night runs, and each write answers the board, which is the one read
-the run page and the public dashboard both draw.
+the run page and the night page both draw.
 """
 
 from typing import Any
@@ -109,7 +109,7 @@ def restore_entrant(night_id: int, entrant_id: int) -> KothBoard:
 
 @router.get("/koth/board")
 def get_tonight_board(response: Response) -> KothBoard:
-    """The board of the night that takes signups."""
+    """The board of tonight: the newest published night nobody closed yet."""
     return _board(response, None)
 
 
@@ -121,9 +121,10 @@ def get_board(night_id: int, response: Response) -> KothBoard:
 
 
 def _board(response: Response, night_id: int | None) -> KothBoard:
-    """The board, cached at the edge because the dashboard polls it."""
-    edge_cache(response, 15)  # the dashboard polls every 30 seconds
-    return board.read(night_id, public=True)
+    """The board, live at the edge while the night runs, settled once it closes."""
+    answer = board.read(night_id, public=True)
+    edge_cache(response, "settled" if answer.closed else "live")
+    return answer
 
 
 @router.get("/koth/signup")

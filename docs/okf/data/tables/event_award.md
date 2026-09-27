@@ -4,7 +4,7 @@ title: event_award
 description: One place of a finished event, frozen from the table of its last stage when an admin closes it; a trophy read lists these rows.
 resource: ../../../../app/models/event_award.py
 tags: [events, data]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T15:15:00Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-09-26T04:00:00Z }
 verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
 sources:
   - id: model
@@ -26,7 +26,7 @@ sources:
 | `team_id` | INTEGER | yes | The team behind the entrant, on a team event. |
 | `place` | INTEGER | yes | The place, from 1. Null for a title that ranks nobody. |
 | `title` | VARCHAR | no | What the award prints: `Champion`, `Runner-up`, `Third`, else `Placed N`. |
-| `awarded_at` | TIMESTAMP | no | When the event was closed. Set by the app. |
+| `awarded_at` | TIMESTAMP | yes | When the award was made. Null when the archival source gives no instant. |
 
 # Keys and joins
 
@@ -34,4 +34,6 @@ Primary key `id`. Foreign keys: `event_id` to [event](event.md), cascade; `entra
 
 # Rules
 
-`POST /events/{id}/finish` deletes the event's rows and writes one per placed entrant of every division, so a second close rewrites and never doubles. See [events module](../../concepts/events-module.md).
+For live events, `POST /events/{id}/finish` deletes the event's rows and writes one per placed entrant of every division, so a second close rewrites and never doubles. See [events module](../../concepts/events-module.md).
+
+Finishing an imported historical event preserves its source awards. Crown identities remain unresolved independently of the pairings.

@@ -3,11 +3,37 @@
 ## 2026-09-27
 
 * **Update**: `GET /dev/players` and `POST /dev/login` admit only the admin token's session; the authentication page and the local runbook state it.
+* **Update**: [Response shapes](api/response-shapes.md) and [model families](data/model-families.md): every relationship of the user, team, series, draft, fantasy team, bet and season tables and of the link rows refuses an on-the-spot load (`raise_on_sql`); the embedded player summary drops `gnl_stats` and serves `record` alone.
+* **Update**: [Response shapes](api/response-shapes.md) gains the fantasy rows: a fantasy team's captain and drafted players are player summaries with the record of its season; the team and the bet each answer through one read, `FantasyTeamService.get` and `FantasyBetService.get`, and `POST /fantasy-team` and `POST`, `PUT /fantasy-bet` build their answer once.
+* **Update**: [Response shapes](api/response-shapes.md) gains the team and season rows: a team inside another answer is `TeamSummaryPublic` and a season `SeasonSummaryPublic`; the event team reads and writes answer `TeamRosterPublic`, one event's roster, through `roster_loads`; the league team reads and writes answer `TeamPublic`.
+* **Add**: [Response shapes](api/response-shapes.md). A player inside another answer is `UserSummaryPublic`, whose `record` is the one of the read's event and whose `gnl_stats` holds that one entry; the series, draft and bet writes answer through their single read.
 
 ## 2026-09-26
 
 * **Add**: the local dev login, `GET /dev/players` and `POST /dev/login` behind `DEV_LOGIN=1`, signs in as any player with a Discord id as a member, guest or admin; the authentication page and the local runbook state it.
 * **Update**: an admin who captains carries the `seats` list, so `/me` names that admin's teams and each season's `captain` flag; a view-as request drops the admin's own seats.
+* **Update**: the ladder summary `race_mmrs` and `main_race` is read in SQL, one row per player and race, one statement per answer; no read loads the raw `w3cstats` rows for it.
+* **Update**: `w3c_ladder_matches` gains an index on (`user_id`, `race`, `start_time`), the seek of `mmr_at`.
+* **Update**: `current_w3c_season` anchors the live MMR window in the W3Champions, settings and ladder concepts; the Vercel crons, the load-all-seasons reads and the `Field(exclude=True)` pattern state the current code.
+* **Update**: no user answer carries the raw `w3c_stats` rows; the ladder summary `race_mmrs` and `main_race` replaces them, and the bet and draft series reads no longer load them.
+* **Update**: `PUT /koth/nights/{id}/bounds` saves while a series is on the table; the two rows of that series keep their bracket until it ends, then the cut takes them by the bounds as they stand.
+* **Update**: tonight is the newest published KOTH night with no `closed_at` that started less than 24 hours ago, whatever its signup flag; `POST /koth/nights` closes an expired night first and answers 409 while another night is open; the signup doors that name no night answer "Signups are closed" while tonight's signups are off.
+* **Update**: a KOTH withdraw goes through while the night is tonight, and a row that leaves forfeits: its series on the table, or as a king a new series to the first free player in line; the board's played rows carry `forfeit`.
+* **Update**: `GET /events` answers `X-Total-Count`, the count of every event its filters keep, so a client pages it with `limit` and `offset`.
+* **Update**: the live MMR window is the current and the previous W3Champions season; user payloads carry the ladder summary (`race_mmrs`, `main_race`), list reads load only the window's `w3cstats` rows, a roster of an event that is over carries `mmr_entered`, and the Discord series card reads the summary.
+* **Add**: [Edge cache](concepts/edge-cache.md). Every cached open read uses one of three timer classes, live, running or settled; an event read is settled once the event is finished; the entrants, stage series, stage standings, achievements and an anonymous event read are cached; a player read is running.
+* **Update**: a series row of a finished event carries the MMR of the time from the ladder, bounded to the event's W3Champions seasons; the MMR on a date takes a season bound; only a running event reads the current W3Champions season.
+* **Update**: `monitor_state` holds a `vercel` row. With `VERCEL_USAGE_TOKEN` and `VERCEL_TEAM_ID` set, the egress monitor reads the Vercel usage over a rolling 30 days, shows it in the digest, and alerts once when a meter reaches 80% or the token is rejected.
+* **Update**: `monitor_state` holds a `db_size` row. The egress monitor reads the database size on the server after each run, shows it in the digest, and alerts once when it passes 90% of the cap.
+* **Add**: `monitor_state`. The egress snapshot levels the billing cycle after each run and posts Discord embeds: an alert when the cycle is on track to pass the cap or the run fails, a silent recovery when it clears, and a silent daily digest, each linking to the usage dashboards.
+* **Add**: `egress_snapshot` and `egress_statement`. A daily job copies pg_stat_statements into the database and answers the rows and estimated egress since the run before, per statement, role and nesting level; `GET /jobs/egress-snapshots` lists the windows.
+* **Update**: an anonymous `GET /events` carries a public cache header; an admin's bearer never reaches the edge.
+* **Update**: `discordTag` and `discordId` leave every user answer but a logged-in `GET /users/{key}` and an admin's `GET /users` and `POST /users/search`, and `discord_id` leaves the cast answer; an anonymous `GET /users/{key}` carries a public cache header.
+
+## 2026-09-25
+
+* **Update**: the career list derives and pages in SQL; the career player read carries a public cache header.
+* **Update**: the career rating uses one integer weighted sum before truncation.
 
 ## 2026-09-24
 
@@ -61,3 +87,5 @@
 * **Update**: one Data Model concept per table under `data/tables/`, each listing every column with its meaning, keys and joins; `data/tables.md` becomes `data/tables/index.md`; `tests/test_okf.py` pins the columns to the concepts; the events module gains the admin's path from a new league to a finished event; the model families, GNL season and fantasy pages are corrected where they named a column the schema does not hold.
 * **Update**: the events module page gains the phase rungs, the third-place rule, the previous-stage seeding guard, the drafted-teams signup rule and the check-in button rule; series reporting names the veto board's sides; the check-in hint module is renamed in scheduling and availability; KOTH names the old routes' id check.
 * **Creation**: Established the bundle: conventions, concepts, data, api, runbooks, decisions and pitfalls, written from the code on `main`, the repository documents, and the maintainers' recorded decisions. Every concept is `generated` by an agent and carries no `verified` entry yet.
+
+- 2026-09-26: Historical KOTH imports preserve unresolved identities, unavailable outcomes, source divisions and event video links.

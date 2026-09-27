@@ -171,15 +171,11 @@ def series() -> HomeSeries:
         # A series may sit in two lists, so the pass below names and rates it once
         seen = {ident(row.series): row for rows in lists for row in rows}
         public = {
-            key: SeriesPublic.from_series_reduced(row.series)
-            for key, row in seen.items()
+            key: SeriesPublic.from_series(row.series) for key, row in seen.items()
         }
-        derived.fill_signup_races(
-            session,
-            list(public.values()),
-            {key: row.event_id for key, row in seen.items()},
-        )
-        derived.fill_mmrs(session, list(public.values()))
+        events = {key: row.event_id for key, row in seen.items()}
+        derived.fill_signup_races(session, list(public.values()), events)
+        derived.fill_mmrs(session, list(public.values()), events)
         rounds = _rounds(session, set(seen))
         made = {
             key: HomeSeriesRow.from_series(

@@ -41,3 +41,39 @@ def test_report_totals_rows_between_two_snapshots(
     assert "~350 MB billed" in printed
     assert "pooler counter 2.0 MB" in printed
     assert rate == pytest.approx(3_500_000 * BYTES_PER_ROW / 1e6)
+
+
+def test_report_excludes_its_own_statement_scan(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    first = {
+        "at": "2026-09-22T00:00:00+00:00",
+        "pooler_sent": 0,
+        "sessions": 0,
+        "by_database": {},
+        "statements": {
+            "monitor": {
+                "db": "postgres",
+                "calls": 1,
+                "rows": 1000,
+                "q": "select s.queryid from pg_stat_statements s",
+            },
+            "app": {"db": "postgres", "calls": 1, "rows": 20, "q": "select a"},
+        },
+    }
+    second = {
+        **first,
+        "at": "2026-09-23T00:00:00+00:00",
+        "statements": {
+            "monitor": {**first["statements"]["monitor"], "calls": 2, "rows": 5000},
+            "app": {**first["statements"]["app"], "calls": 2, "rows": 30},
+        },
+    }
+    (tmp_path / "prod.jsonl").write_text(
+        json.dumps(first) + "\n" + json.dumps(second) + "\n"
+    )
+
+    rate = report("prod", out=tmp_path)
+
+    assert "rows returned 10" in capsys.readouterr().out
+    assert rate == pytest.approx(10 * BYTES_PER_ROW / 1e6)

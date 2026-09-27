@@ -12,9 +12,19 @@ from collections.abc import Iterable, Sequence
 from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 
-from sqlalchemy import delete, distinct, func, or_, select, update
+from sqlalchemy import (
+    ColumnElement,
+    delete,
+    distinct,
+    func,
+    or_,
+    select,
+    tuple_,
+    update,
+)
 from sqlalchemy.orm import Session as OrmSession
 from sqlalchemy.orm import joinedload, noload, selectinload
+from sqlalchemy.orm.attributes import instance_state
 from sqlmodel import col
 
 from app.core.checkin_hint import availability_hints
@@ -46,6 +56,7 @@ from app.models.event_entrant import (
     EventEntrantPublic,
     SeedWrite,
 )
+from app.models.event_history import KothHistoryEvent
 from app.models.event_stage import EventStage, EventStagePublic, EventStageWrite
 from app.models.league import League, LeagueCreate, LeaguePublic, LeagueUpdate
 from app.models.map import MapPublic
@@ -57,6 +68,7 @@ from app.models.relationships import (
     DBUserSeasonSignup,
     EventRoundPublic,
     SeasonRoundPublic,
+    event_rounds,
 )
 from app.models.round_availability import DBRoundAvailability
 from app.models.season import (
@@ -75,22 +87,23 @@ from app.models.season import (
     tier_count,
 )
 from app.models.series import Series
-from app.models.settings import Settings
 from app.models.team import Team
-from app.models.team_reduced import TeamReduced
 from app.models.team_season import DBTeamSeason
+from app.models.team_summary import TeamSummaryPublic
 from app.models.types import utcnow
-from app.models.user import User, UserPublic
+from app.models.user import User, UserSummaryPublic
 from app.models.user_team_season import DBUserTeamSeason
-from app.models.w3c_stats import W3CStats
+from app.models.w3c_stats import W3CStats, W3CStatsPublic
 from app.services import stage_engine
 from app.services.battle_tags import attach_tag, person_by_tag
-
-# How many W3C seasons back a rating is still the player's current one
-SEASONS = 3
-
-# The setting that names the W3C season the app is on
-W3C_SEASON_KEY = "current_w3c_season"
+from app.services.users import summary_loads
+from app.services.w3c_stats import (
+    in_window,
+    summarize,
+    w3c_season,
+    window,
+    window_rows,
+)
 
 # The shape of a battle tag: a name, then # and the player's number
 BATTLE_TAG = re.compile(r"[^\s#]+#\d{3,8}")
@@ -146,9 +159,33 @@ def phase_of(
         return "running"
     if event.signups_open:
         return "signups_open"
-    if event.checkin_enabled and checkin_open(event):
-        return "checkin"
+    if event.checkin_enabled:
+        # list reads load rounds; a bare event reads them here
+        rounds = (
+            event.rounds
+            if "rounds" not in instance_state(event).unloaded
+            else event_rounds(session, ident(event))
+        )
+        if checkin_open(event, rounds):
+            return "checkin"
     return "seeded"
+
+
+def finished_ids(session: OrmSession, event_ids: set[int]) -> set[int]:
+    """The events among `event_ids` that read finished, in three reads."""
+    if not event_ids:
+        return set()
+    events = session.scalars(select(Season).where(col(Season.id).in_(event_ids)))
+    counts = series_counts_by_event(session, event_ids)
+    drawn = last_stage_drawn(session, list(event_ids))
+    return {
+        ident(event)
+        for event in events.all()
+        if phase_of(
+            session, event, counts.get(event.id, NO_SERIES), drawn.get(event.id, True)
+        )
+        == "finished"
+    }
 
 
 def _signups_open(event: Season, phase: EventPhase) -> bool:
@@ -186,23 +223,23 @@ def last_stage_drawn(
     return {event_id: played_out for event_id, (_, played_out) in last.items()}
 
 
-def open_rounds(event: Season) -> list[DBEventRound]:
-    """The dated rounds of the event that are not over, earliest first."""
+def open_rounds(rounds: Iterable[DBEventRound]) -> list[DBEventRound]:
+    """The dated rounds of an event that are not over, earliest first."""
     now = _today()
     dated = sorted(
-        (row for row in event.rounds if row.start_date is not None),
+        (row for row in rounds if row.start_date is not None),
         key=lambda row: (row.start_date, row.number),
     )
     return [row for row in dated if (row.end_date or row.start_date) >= now]
 
 
-def next_round(event: Season) -> DBEventRound | None:
+def next_round(rounds: Iterable[DBEventRound]) -> DBEventRound | None:
     """The next dated round of the event: the earliest one that is not over.
 
     A round with no dates is no round to check into, and a stage that holds no
     rounds at all leaves the event checking in to itself.
     """
-    return next(iter(open_rounds(event)), None)
+    return next(iter(open_rounds(rounds)), None)
 
 
 def checkin_window(
@@ -222,15 +259,15 @@ def checkin_window(
     )
 
 
-def checkin_open(event: Season) -> bool:
+def checkin_open(event: Season, rounds: Sequence[DBEventRound]) -> bool:
     """Whether the event's check-in stands open today, in whichever shape it takes.
 
     An event whose next round carries dates checks in to that round; every
     other event checks in to itself, up to the day it starts. An event with
     nothing to check into is shut, and a window nobody dated never closes.
     """
-    round_ = next_round(event)
-    undated = any(row.start_date is None for row in event.rounds)
+    round_ = next_round(rounds)
+    undated = any(row.start_date is None for row in rounds)
     if round_ is None and not undated and _start(event) is None:
         return False
     window = checkin_window(event, round_)
@@ -259,26 +296,35 @@ class EventService:
         limit: int | None = None,
         offset: int = 0,
         claims: dict[str, Any] | None = None,
-    ) -> list[EventPublic]:
-        """One page of events, newest first, each with its computed phase.
+    ) -> tuple[list[EventPublic], int]:
+        """One page of events, newest first, each with its computed phase, and
+        the count of every event the filter keeps.
 
         An unpublished event is a draft only an admin reads, so a caller who
         is not one sees the published rows whatever the filter asks for.
         """
-        statement = (
-            select(Season).options(*_EVENT_OPTIONS).order_by(col(Season.id).desc())
-        )
+        filters: list[ColumnElement[bool]] = []
         if kind is not None:
-            statement = statement.where(col(Season.kind) == kind)
+            filters.append(col(Season.kind) == kind)
         if league_id is not None:
-            statement = statement.where(col(Season.league_id) == league_id)
+            filters.append(col(Season.league_id) == league_id)
         if published is not None:
-            statement = statement.where(col(Season.published).is_(published))
+            filters.append(col(Season.published).is_(published))
         if not is_admin(claims):
-            statement = statement.where(col(Season.published).is_(True))
+            filters.append(col(Season.published).is_(True))
+        statement = (
+            select(Season)
+            .options(*_EVENT_OPTIONS)
+            .where(*filters)
+            .order_by(col(Season.id).desc())
+        )
         with Session.begin() as session:
+            total = (
+                session.scalar(select(func.count()).select_from(Season).where(*filters))
+                or 0
+            )
             events = session.scalars(statement.offset(offset).limit(limit)).all()
-            return _publics(session, events)
+            return _publics(session, events), total
 
     def search(
         self,
@@ -314,7 +360,12 @@ class EventService:
             admin = is_admin(claims)
             if not event.published and not admin:
                 raise NotFoundError(f"Event not found by id: {event_id}")
-            return _public(session, event, full=True, drafts=admin)
+            public = _public(session, event, full=True, drafts=admin)
+            public.archived = (
+                event.kind is EventKind.koth
+                and session.get(KothHistoryEvent, event_id) is not None
+            )
+            return public
 
     def add(self, data: EventCreate) -> EventPublic:
         """Create an event and the stages it plays, or one default stage.
@@ -338,7 +389,7 @@ class EventService:
                 else [_default_stage(event)]
             )
             _write_stages(session, event, stages)
-            return _public(session, event, full=True)
+            return _answer(session, ident(event))
 
     def update(self, event_id: int, data: EventUpdate) -> EventPublic:
         """Change the event fields the body names; the stages have their own route."""
@@ -373,7 +424,7 @@ class EventService:
 
                 fill_rounds(session, event, data.round_count or 0)
             session.flush()
-            return _public(session, event, full=True)
+            return _answer(session, ident(event))
 
     def delete(self, event_id: int) -> None:
         """Delete an event and let its owned rows follow their foreign keys."""
@@ -414,7 +465,7 @@ class EventService:
                     session, event, rows[len(current) :], start=len(current) + 1
                 )
             session.flush()
-            return _public(session, event, full=True)
+            return _answer(session, ident(event))
 
     def get_leagues(self) -> list[LeaguePublic]:
         """Every league, without its events."""
@@ -481,7 +532,7 @@ class EventService:
             ids = [event.id for event in events]
             counts = series_counts_by_event(session, ids)
             drawn = last_stage_drawn(session, ids)
-            rounds = {event.id: next_round(event) for event in events}
+            rounds = {event.id: next_round(event.rounds) for event in events}
             # Only an event whose check-in is on and dated shows a hint
             hints = _round_hints(
                 session,
@@ -576,8 +627,10 @@ class EventService:
         """Stamp the caller's own entrant rows as withdrawn; the rows stay.
 
         A race names one row of an event that takes one entry per race; no
-        race withdraws every active row of the caller.
+        race withdraws every active row of the caller. A KOTH night takes a
+        withdraw until it closes or expires, and the rows forfeit what they owe.
         """
+        players: list[int | None] = []
         with Session.begin() as session:
             event = _event(session, event_id)
             user = _caller(session, claims)
@@ -595,9 +648,17 @@ class EventService:
             )
             if not rows:
                 raise NotFoundError("No signup to withdraw")
-            for row in rows:
-                row.withdrawn_at = utcnow()
-            stage_engine.uncrown(session, [ident(row) for row in rows])
+            koth = event.kind is EventKind.koth
+            if koth:
+                players = _leave_night(session, event, rows)
+            else:
+                for row in rows:
+                    row.withdrawn_at = utcnow()
+                stage_engine.uncrown(session, [ident(row) for row in rows])
+        if koth and players:
+            from app.services.koth.signup import recut
+
+            recut(event_id, only=players)
 
     def check_in(
         self, event_id: int, entrant_id: int, claims: dict[str, Any] | None
@@ -609,7 +670,7 @@ class EventService:
         """
         with Session.begin() as session:
             event = _event(session, event_id)
-            if next_round(event) is not None:
+            if next_round(event_rounds(session, event_id)) is not None:
                 raise BadRequestError(
                     "This event checks in per round. Answer the round instead."
                 )
@@ -682,7 +743,7 @@ class EventService:
                 for position, row in enumerate(divisions, start=1)
             )
             session.flush()
-            return _public(session, event, full=True)
+            return _answer(session, ident(event))
 
     def assign_divisions(self, event_id: int) -> EventPublic:
         """Cut the entrants into the divisions from the MMR of their signup race.
@@ -718,7 +779,7 @@ class EventService:
                 # The cut leaves out an entrant no band of it takes
                 row.division_id = None if band is None else divisions[band].id
             session.flush()
-            return _public(session, event, full=True)
+            return _answer(session, ident(event))
 
     def set_seeds(
         self, event_id: int, stage_id: int, data: SeedWrite
@@ -786,11 +847,33 @@ def _league_entrant_kind(session: OrmSession, league_id: int | None) -> EntrantK
     return league.entrant_kind if league else EntrantKind.solo
 
 
+def _leave_night(
+    session: OrmSession, event: Season, rows: Sequence[EventEntrant]
+) -> list[int | None]:
+    """Withdraw rows from a KOTH night that is still tonight; see `live.leave`."""
+    from app.services.koth import live, night
+
+    if not night.is_tonight(event):
+        raise BadRequestError("The night is closed")
+    return live.leave(session, ident(event), rows)
+
+
 def _event(session: OrmSession, event_id: int, full: bool = False) -> Season:
-    event = session.get(Season, event_id, options=_EVENT_OPTIONS if full else None)
+    """The event row; `full` reads it again with its pool and rounds."""
+    event = session.get(
+        Season,
+        event_id,
+        options=_EVENT_OPTIONS if full else None,
+        populate_existing=full,
+    )
     if event is None:
         raise NotFoundError(f"Event not found by id: {event_id}")
     return event
+
+
+def _answer(session: OrmSession, event_id: int) -> EventPublic:
+    """What every event write answers: the event read again after the flush."""
+    return _public(session, _event(session, event_id, full=True), full=True)
 
 
 def _stage(session: OrmSession, event_id: int, stage_id: int) -> EventStage:
@@ -1022,7 +1105,7 @@ def _captain_fixtures(
     wanted = {
         event_id: rounds
         for event_id in seats
-        if (rounds := open_rounds(by_id[event_id]))
+        if (rounds := open_rounds(by_id[event_id].rounds))
     }
     if not wanted:
         return {}
@@ -1061,8 +1144,8 @@ def _captain_fixtures(
                 playday=fixture.playday,
                 round_start=round_.start_date,
                 round_end=round_.end_date,
-                team1=TeamReduced.from_team(fixture.team1),
-                team2=TeamReduced.from_team(fixture.team2),
+                team1=TeamSummaryPublic.from_team(fixture.team1),
+                team2=TeamSummaryPublic.from_team(fixture.team2),
                 series_per_round=event.series_per_round,
                 published=held,
                 drafted=drafted.get(ident(fixture), 0),
@@ -1102,7 +1185,7 @@ def _member_row(
 ) -> MemberEventRow:
     """One member home row: the event, and what the caller may do with it."""
     phase = phase_of(session, event, counts, last_stage)
-    is_open = event.checkin_enabled and checkin_open(event)
+    is_open = event.checkin_enabled and checkin_open(event, event.rounds)
     shape = (
         None
         if not event.checkin_enabled
@@ -1207,7 +1290,7 @@ def _public(
     public.rounds = [SeasonRoundPublic.from_row(row) for row in (event.rounds or [])]
     if not full:
         return public
-    public.checkin_open = event.checkin_enabled and checkin_open(event)
+    public.checkin_open = event.checkin_enabled and checkin_open(event, event.rounds)
     public.stages = [
         EventStagePublic.model_validate(row)
         for row in session.scalars(
@@ -1295,26 +1378,23 @@ def _by_battle_tag(session: OrmSession, battle_tag: str, race: Race) -> User:
         )
     user = person_by_tag(session, tag)
     if user is not None:
-        return user
+        # The rating reads take his W3C rows of the live window
+        return session.scalars(
+            select(User)
+            .options(window_rows(w3c_season(session)))
+            .where(col(User.id) == ident(user))
+            .execution_options(populate_existing=True)
+        ).one()
     user = User(
         name=tag.split("#")[0] or tag,
         discordTag="",
         discordId="",
         race=race,
+        w3c_stats=[],
     )
     session.add(user)
     attach_tag(session, user, tag, "signup")
     return user
-
-
-def _w3c_season(session: OrmSession) -> int:
-    """The W3C season the app reads ratings against, or the newest one stored."""
-    named = session.scalar(
-        select(col(Settings.value)).where(col(Settings.key) == W3C_SEASON_KEY)
-    )
-    if named:
-        return int(named)
-    return session.scalar(select(func.max(col(W3CStats.wc3_season)))) or 0
 
 
 def _stats_for(
@@ -1322,15 +1402,17 @@ def _stats_for(
 ) -> tuple[int | None, int]:
     """The player's current W3C rating on that race, and the games behind it.
 
-    A season the player did not play on that race carries no rating, so the
-    rating is the newest stored season that carries one, three seasons back
-    from the season the app is on and no further: an older rating is not the
-    player's current one. The games are every season the app has synced for
-    that race, or the newest `games_seasons` of them where the event names a
-    window, because a min-games rule asks how much the player has played.
+    Both read the live window, `season` and the one before it: the rating is
+    the newest window row that carries one, the games are the sum of the
+    window rows, or of the newest `games_seasons` of them where the event
+    names a shorter span.
     """
-    rows = [stat for stat in (user.w3c_stats or []) if stat.race == race]
-    played = [stat for stat in rows if stat.mmr and stat.wc3_season > season - SEASONS]
+    rows = [
+        stat
+        for stat in (user.w3c_stats or [])
+        if stat.race == race and stat.wc3_season in window(season)
+    ]
+    played = [stat for stat in rows if stat.mmr]
     rating = max(played, key=lambda stat: stat.wc3_season).mmr if played else None
     counted = [
         stat
@@ -1363,84 +1445,97 @@ def _entrant_publics(
     and the rosters the rating of a team entrant is the mean of.
     """
     team_ids = {row.team_id for row in rows if row.team_id}
-    users = _users_for(session, rows)
+    season = w3c_season(session)
+    users = _users_for(session, rows, season, event.id)
     teams = {
         team.id: team
         for team in session.scalars(select(Team).where(col(Team.id).in_(team_ids)))
     }
-    season = _w3c_season(session)
     means = _team_mmrs(session, rows, season)
     return [_entrant_public(event, row, users, teams, means, season) for row in rows]
 
 
 def _users_for(
-    session: OrmSession, rows: Sequence[EventEntrant]
+    session: OrmSession,
+    rows: Sequence[EventEntrant],
+    current: int,
+    event_id: int | None = None,
 ) -> dict[int | None, User]:
-    """The players behind those entrant rows, with the W3C stats their MMR reads."""
+    """The players behind those entrant rows, with the window W3C stats their
+    MMR reads and the summary rows of `event_id`."""
     user_ids = {row.user_id for row in rows if row.user_id}
     return {
         user.id: user
         for user in session.scalars(
             select(User)
-            .options(
-                selectinload(rel(User.w3c_stats)),
-                noload(rel(User.team_seasons)),
-                noload(rel(User.signup_seasons)),
-            )
+            .options(*summary_loads(event_id, window=current))
             .where(col(User.id).in_(user_ids))
         ).unique()
     }
 
 
 def race_ratings(
-    session: OrmSession, sides: Iterable[tuple[int | None, str | None]]
+    session: OrmSession,
+    sides: Iterable[tuple[int | None, str | None]],
+    current: int | None = None,
 ) -> dict[tuple[int, str], int]:
     """The current rating of every (player, race) pair named, keyed by the pair.
 
     The list form of the rule `_stats_for` states for one player: the newest
-    stored season that carries a rating on that race, three seasons back from
-    the season the app is on and no further. Two reads whatever the number of
-    pairs, and the statement carries the rated seasons alone, so a list
-    payload rates each row without reading a stat it does not need. A pair
-    with no rating is left out.
+    window row that carries a rating on that race. Two reads whatever the
+    number of pairs, one where the caller passes the `current` season, and the
+    statement carries the rated seasons alone, so a list payload rates each
+    row without reading a stat it does not need. A pair with no rating is left
+    out.
     """
     pairs = {(user_id, race) for user_id, race in sides if user_id and race}
     if not pairs:
         return {}
-    season = _w3c_season(session)
-    rows = session.execute(
+    season = w3c_season(session) if current is None else current
+    rated = (
         select(
-            col(W3CStats.user_id),
-            col(W3CStats.race),
-            col(W3CStats.wc3_season),
-            col(W3CStats.mmr),
-        ).where(
-            col(W3CStats.user_id).in_({user_id for user_id, _ in pairs}),
-            col(W3CStats.race).in_({Race.from_text(race) for _, race in pairs}),
-            col(W3CStats.mmr) > 0,
-            col(W3CStats.wc3_season) > season - SEASONS,
+            col(W3CStats.user_id).label("user_id"),
+            col(W3CStats.race).label("race"),
+            col(W3CStats.mmr).label("mmr"),
+            func.row_number()
+            .over(
+                partition_by=(col(W3CStats.user_id), col(W3CStats.race)),
+                order_by=col(W3CStats.wc3_season).desc(),
+            )
+            .label("rank"),
         )
+        .where(
+            tuple_(col(W3CStats.user_id), col(W3CStats.race)).in_(
+                [(user_id, Race.from_text(race)) for user_id, race in pairs]
+            ),
+            col(W3CStats.mmr) > 0,
+            in_window(season),
+        )
+        .subquery()
+    )
+    rows = session.execute(
+        select(rated.c.user_id, rated.c.race, rated.c.mmr).where(rated.c.rank == 1)
     ).all()
-    newest: dict[tuple[int, str], tuple[int, int]] = {}
-    for user_id, race, wc3_season, mmr in rows:
-        key = (user_id, race.value)
-        if key in pairs and wc3_season >= newest.get(key, (-1, 0))[0]:
-            newest[key] = (wc3_season, mmr)
-    return {key: mmr for key, (_, mmr) in newest.items()}
+    return {
+        (user_id, race.value): mmr
+        for user_id, race, mmr in rows
+        if (user_id, race.value) in pairs
+    }
 
 
 def race_games(
     session: OrmSession,
     sides: Iterable[tuple[int | None, str | None]],
     seasons: int | None,
+    current: int,
 ) -> dict[tuple[int, str], int]:
     """The ladder games every (player, race) pair named has on record, keyed
     by the pair.
 
-    The list form of the games half of `_stats_for`: every synced season on
-    that race, or the newest `seasons` of them where the event names a window.
-    One read, two where the window is named, whatever the number of pairs. A
-    pair with no stored row is left out.
+    The list form of the games half of `_stats_for`: the window rows on that
+    race, or the newest `seasons` of them where the event names a shorter
+    span, in the `current` season's window. One read whatever the number of
+    pairs. A pair with no window row is left out.
     """
     pairs = {(user_id, race) for user_id, race in sides if user_id and race}
     if not pairs:
@@ -1448,9 +1543,10 @@ def race_games(
     where = [
         col(W3CStats.user_id).in_({user_id for user_id, _ in pairs}),
         col(W3CStats.race).in_({Race.from_text(race) for _, race in pairs}),
+        in_window(current),
     ]
     if seasons is not None:
-        where.append(col(W3CStats.wc3_season) > _w3c_season(session) - seasons)
+        where.append(col(W3CStats.wc3_season) > current - seasons)
     rows = session.execute(
         select(
             col(W3CStats.user_id),
@@ -1473,8 +1569,8 @@ def _mmrs(session: OrmSession, rows: Sequence[EventEntrant]) -> dict[int, int | 
     A team answers the mean of its roster, so a division cut and a seed order
     read one number for every entrant, whoever stands behind it.
     """
-    users = _users_for(session, rows)
-    season = _w3c_season(session)
+    season = w3c_season(session)
+    users = _users_for(session, rows, season)
     teams = _team_mmrs(session, rows, season)
     return {ident(row): _entrant_mmr(row, users, teams, season) for row in rows}
 
@@ -1511,7 +1607,9 @@ def _team_mmrs(
     members = session.scalars(
         select(DBUserTeamSeason)
         .options(
-            selectinload(rel(DBUserTeamSeason.user)).selectinload(rel(User.w3c_stats))
+            selectinload(rel(DBUserTeamSeason.user)).selectinload(
+                rel(User.w3c_stats).and_(in_window(season))
+            )
         )
         .where(
             col(DBUserTeamSeason.team_id).in_(teams),
@@ -1607,6 +1705,19 @@ def _from_previous_stage(
     ]
 
 
+def _summarized(
+    user: User | None, current: int, event_id: int | None
+) -> UserSummaryPublic | None:
+    """The user of an entrant row, with his ladder summary from the window rows
+    _users_for loaded for his rating."""
+    if user is None:
+        return None
+    public = UserSummaryPublic.from_user(user, event_id)
+    rows = [W3CStatsPublic.model_validate(stat) for stat in user.w3c_stats]
+    public.race_mmrs, public.main_race = summarize(rows, current)
+    return public
+
+
 def _entrant_public(
     event: Season,
     row: EventEntrant,
@@ -1628,8 +1739,8 @@ def _entrant_public(
     return EventEntrantPublic(
         id=ident(row),
         event_id=row.event_id,
-        user=UserPublic.from_user(user) if user else None,
-        team=TeamReduced.from_team(team) if team else None,
+        user=_summarized(user, season, event.id),
+        team=TeamSummaryPublic.from_team(team) if team else None,
         race=row.race,
         note=row.note,
         channel=row.channel,

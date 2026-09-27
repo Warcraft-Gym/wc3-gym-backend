@@ -44,6 +44,14 @@ BYTES_PER_ROW = 100
 NODE = ("node_network_transmit_bytes_total", "node_time_seconds")
 
 
+def monitoring_query(query: str) -> bool:
+    """Whether a statement is one of this script's pg_stat_statements reads."""
+    normalized = " ".join(query.lower().split())
+    return "from pg_stat_statements s" in normalized and normalized.startswith(
+        ("select s.queryid", "select coalesce(d.datname")
+    )
+
+
 def config(env: str) -> tuple[str, str, str]:
     """The project ref, secret key and database URL of one environment."""
     name = env.upper()
@@ -137,10 +145,17 @@ def report(env: str, limit: int = 15, out: Path = OUT) -> float:
     print(f"{env}: {a['at']} -> {b['at']}  ({hours:.1f} h)")
     # The bill follows rows returned, not the pooler counter: that counter resets on a
     # pooler restart and read 474 MB for the 21-23 Sep 2026 window the bill charged ~2.9 GB.
-    rows_out = sum(
-        now["rows"] - a["statements"].get(qid, {"rows": 0})["rows"]
-        for qid, now in b["statements"].items()
-    )
+    grew = []
+    for qid, now in b["statements"].items():
+        if monitoring_query(now["q"]):
+            continue
+        was = a["statements"].get(qid, {"calls": 0, "rows": 0})
+        d_rows = now["rows"] - was["rows"]
+        d_calls = now["calls"] - was["calls"]
+        if d_rows > 0 or d_calls > 0:
+            grew.append((d_rows, d_calls, now["db"], now["q"]))
+    grew.sort(reverse=True)
+    rows_out = sum(row[0] for row in grew)
     est = rows_out * BYTES_PER_ROW
     rate = est / max(hours, 0.01) * 24 / 1e6
     print(
@@ -151,22 +166,13 @@ def report(env: str, limit: int = 15, out: Path = OUT) -> float:
     print(f"  new sessions {b['sessions'] - a['sessions']:,}")
     sent = est
 
-    print("\n  by database (rows returned):")
-    for name in sorted(set(a["by_database"]) | set(b["by_database"])):
-        was = a["by_database"].get(name, {"calls": 0, "rows": 0})
-        now = b["by_database"].get(name, {"calls": 0, "rows": 0})
-        d_rows, d_calls = now["rows"] - was["rows"], now["calls"] - was["calls"]
+    print("\n  by database (application statement rows returned):")
+    for name in sorted({row[2] for row in grew}):
+        d_rows = sum(row[0] for row in grew if row[2] == name)
+        d_calls = sum(row[1] for row in grew if row[2] == name)
         if d_rows or d_calls:
             print(f"    {name:<28} {d_rows:>12,} rows  {d_calls:>10,} calls")
 
-    grew = []
-    for qid, now in b["statements"].items():
-        was = a["statements"].get(qid, {"calls": 0, "rows": 0})
-        d_rows = now["rows"] - was["rows"]
-        d_calls = now["calls"] - was["calls"]
-        if d_rows > 0 or d_calls > 0:
-            grew.append((d_rows, d_calls, now["db"], now["q"]))
-    grew.sort(reverse=True)
     # Share of the window's billed bytes, split by rows returned. A rough split: a
     # statement returning few wide rows is under-charged, many narrow rows over-charged.
     total_rows = sum(row[0] for row in grew) or 1

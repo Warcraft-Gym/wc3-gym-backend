@@ -20,13 +20,13 @@ class DBSeriesGame(DBModel, table=True):
     )
     # The games count from 1, in the order they were played
     game_no: int = Field(primary_key=True)
-    winner_side: str = Field(max_length=1)
+    winner_side: str | None = Field(default=None, max_length=1)
     map_id: int | None = Field(default=None, foreign_key="maps.id", ondelete="SET NULL")
 
 
 class SeriesGamePublic(SQLModel):
     game_no: int
-    winner_side: str
+    winner_side: str | None = None
     map_id: int | None = None
     # Filled from the season's map rules when no map is stored for the game
     offered_map_id: int | None = None

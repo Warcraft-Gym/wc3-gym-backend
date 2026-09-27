@@ -38,7 +38,7 @@ from app.models.user_block import (
 )
 from app.models.user_team_season import DBUserTeamSeason
 from app.services.availability import NO_SCHEDULING
-from app.services.series_rules import series_event, series_round
+from app.services.series_rules import fixture, series_event, series_round
 
 # The longest window the free-time read resolves
 MAX_WINDOW = timedelta(days=31)
@@ -117,7 +117,7 @@ class SoftBlockService:
             event = series_event(session, series)
             if event is None:
                 raise NotFoundError("season_not_found")
-            match = series.match
+            match = fixture(session, series)
             teams = (
                 {
                     (match.team1_id, match.season_id),

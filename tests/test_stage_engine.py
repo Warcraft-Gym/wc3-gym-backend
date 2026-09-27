@@ -1563,7 +1563,7 @@ def test_a_stage_series_rates_both_sides_on_the_race_it_names(
     row = stage_series(client, event, stage)["series"][0]
     assert (row["player1_race"], row["player2_race"]) == ("HU", "HU")
     assert (row["player1_mmr"], row["player2_mmr"]) == (1500, 1400)
-    assert row["player1"]["w3c_stats"] == []
+    assert "w3c_stats" not in row["player1"]
 
 
 def test_a_stage_row_reads_the_newest_rated_season_of_the_race(
@@ -1571,18 +1571,17 @@ def test_a_stage_row_reads_the_newest_rated_season_of_the_race(
 ) -> None:
     """The list rates a side by the rule the entrant list states for one player.
 
-    The newest stored season that carries a rating wins, and a season that
-    carries none, null or zero, is walked back over.
+    The newest window season that carries a rating wins, and a season that
+    carries none (zero) is walked back over, inside the window.
     """
     ids = players(2)
     with Session.begin() as session:
         session.add_all(
             [
-                W3CStats(user_id=ids[0], race=Race.HU, wc3_season=19, mmr=1600),
-                W3CStats(user_id=ids[0], race=Race.HU, wc3_season=20, mmr=1700),
-                W3CStats(user_id=ids[1], race=Race.HU, wc3_season=19, mmr=1400),
-                W3CStats(user_id=ids[1], race=Race.HU, wc3_season=20, mmr=0),
-                W3CStats(user_id=ids[1], race=Race.HU, wc3_season=21, mmr=None),
+                W3CStats(user_id=ids[0], race=Race.HU, wc3_season=20, mmr=1600),
+                W3CStats(user_id=ids[0], race=Race.HU, wc3_season=21, mmr=1700),
+                W3CStats(user_id=ids[1], race=Race.HU, wc3_season=20, mmr=1400),
+                W3CStats(user_id=ids[1], race=Race.HU, wc3_season=21, mmr=0),
             ]
         )
     event, (stage,) = cup(2, ids=ids)
@@ -1594,12 +1593,12 @@ def test_a_stage_row_reads_the_newest_rated_season_of_the_race(
 def test_a_stage_row_reads_no_rating_older_than_the_window(
     client: Client, auth_headers: dict[str, str]
 ) -> None:
-    """The window hangs on the season the app is on, three seasons back."""
+    """The window hangs on the season the app is on and the one before it."""
     ids = players(2)
     with Session.begin() as session:
         session.add_all(
             [
-                W3CStats(user_id=ids[0], race=Race.HU, wc3_season=15, mmr=1900),
+                W3CStats(user_id=ids[0], race=Race.HU, wc3_season=21, mmr=1900),
                 W3CStats(user_id=ids[1], race=Race.HU, wc3_season=23, mmr=1500),
             ]
         )

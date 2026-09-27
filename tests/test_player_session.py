@@ -57,8 +57,8 @@ def test_signup_takes_the_discord_fields_from_the_session(
     )
 
     assert resp.status_code == 201, resp.text
-    assert resp.json()["discordId"] == "1"
-    assert resp.json()["discordTag"] == "p1"
+    assert _row(resp.json()["id"])["discordId"] == "1"
+    assert _row(resp.json()["id"])["discordTag"] == "p1"
 
 
 def test_a_re_signup_keeps_the_fields_the_form_leaves_out(
@@ -283,7 +283,7 @@ def test_a_row_holding_only_the_discord_name_becomes_a_suggestion(
     resp = _signup(client, monkeypatch, "New#2222")
 
     assert resp.status_code == 201, resp.text
-    assert resp.json()["discordTag"] == "p1"
+    assert _row(resp.json()["id"])["discordTag"] == "p1"
     assert _row(earlier) == {
         "discordId": "",
         "discordTag": None,
@@ -305,7 +305,7 @@ def test_a_namesake_with_a_login_is_left_alone(
 
     assert resp.status_code == 201, resp.text
     assert resp.json()["id"] != namesake
-    assert resp.json()["discordTag"] == ""
+    assert _row(resp.json()["id"])["discordTag"] == ""
     assert _row(namesake)["discordId"] == "888"
 
 
@@ -334,8 +334,8 @@ def test_nothing_matching_makes_a_new_player(
     resp = _signup(client, monkeypatch, "Fresh#7777")
 
     assert resp.status_code == 201, resp.text
-    assert resp.json()["discordId"] == "1"
-    assert resp.json()["discordTag"] == "p1"
+    assert _row(resp.json()["id"])["discordId"] == "1"
+    assert _row(resp.json()["id"])["discordTag"] == "p1"
 
 
 def test_a_discord_name_matches_without_case(
@@ -347,7 +347,7 @@ def test_a_discord_name_matches_without_case(
     resp = _signup(client, monkeypatch, "Fresh#7777")
 
     assert resp.status_code == 201, resp.text
-    assert resp.json()["discordTag"] == "p1"
+    assert _row(resp.json()["id"])["discordTag"] == "p1"
 
 
 def test_a_namesake_differing_only_in_case_is_left_alone(
@@ -358,5 +358,5 @@ def test_a_namesake_differing_only_in_case_is_left_alone(
     resp = _signup(client, monkeypatch, "Mine#4444")
 
     assert resp.status_code == 201, resp.text
-    assert resp.json()["discordTag"] == ""
+    assert _row(resp.json()["id"])["discordTag"] == ""
     assert _row(namesake)["discordId"] == "888"

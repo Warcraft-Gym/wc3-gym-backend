@@ -13,9 +13,9 @@ from app.core.query import QueryUtil
 from app.models.season import SeasonPublic
 from app.models.series import SeriesPublic
 from app.models.series_cast import channel_name
-from app.models.team import TeamReduced
+from app.models.team_summary import TeamSummaryPublic
 from app.models.types import utcnow
-from app.models.user import UserPublic
+from app.models.user import UserSummaryPublic
 from app.services import discord, discord_roles
 from app.services.fantasy_teams import FantasyTeamService
 from app.services.ladder import LadderService
@@ -100,7 +100,7 @@ def flag(country: str | None) -> str:
     return ""
 
 
-def player_url(user: UserPublic) -> str | None:
+def player_url(user: UserSummaryPublic) -> str | None:
     """The player's GNL page, by BattleTag when he has one; none without FRONTEND_URL."""
     site = frontend_url()
     if not site:
@@ -109,7 +109,7 @@ def player_url(user: UserPublic) -> str | None:
     return f"{site}/player/{key}"
 
 
-def team_name(team: TeamReduced) -> str:
+def team_name(team: TeamSummaryPublic) -> str:
     """The full name with the short one in brackets: "Team Alpha (Alpha)"."""
     short = team.name or "?"
     return f"{team.long_name} ({short})" if team.long_name else short
@@ -118,7 +118,7 @@ def team_name(team: TeamReduced) -> str:
 def series_title(series: SeriesPublic) -> str:
     """The round and both sides as plain text: "Round 1 · A (Alpha) vs B (Beta)"."""
 
-    def side(player: UserPublic | None, team: TeamReduced | None) -> str:
+    def side(player: UserSummaryPublic | None, team: TeamSummaryPublic | None) -> str:
         name = (player.name if player else None) or "?"
         return f"{name} ({team.name})" if team else name
 

@@ -1,6 +1,7 @@
 """The Discord cards about series: the match card /announce posts, the claim
 card, the reminder, the result card and the /upcoming reply. A player reads
-{flag} {name} ({race} {mmr}), and the footer says when the W3C MMR was synced."""
+{flag} {name} ({race} {mmr}), and the footer says when the W3C MMR was synced.
+The MMR is the ladder summary's, on the race the row names."""
 
 import os
 from collections.abc import Callable, Sequence
@@ -18,8 +19,7 @@ from app.models.enums import Race
 from app.models.map import Map
 from app.models.relationships import round_row
 from app.models.series import SeriesPublic
-from app.models.types import utcnow
-from app.models.user import User, UserPublic
+from app.models.user import User, UserSummaryPublic
 from app.services import discord, replays
 from app.services.commands.base import (
     cast_link,
@@ -30,8 +30,8 @@ from app.services.commands.base import (
     team_name,
 )
 from app.services.commands.veto import board_link, ping
-from app.services.ladder import mmr_on
 from app.services.series_veto import SeriesVetoService
+from app.services.w3c_stats import summaries, w3c_season
 
 COLOR = 0x4A4DB8
 # Discord takes 6000 characters over a message's embeds and 4096 in one description
@@ -39,7 +39,7 @@ BUDGET, DESCRIPTION = 5500, 4000
 
 
 class Ratings(NamedTuple):
-    """Each player's latest synced MMR per race, and the oldest sync among them."""
+    """Each player's live MMR per race, and the oldest W3C sync among them."""
 
     mmr: dict[tuple[int, Race | None], int]
     synced: datetime | None
@@ -50,20 +50,26 @@ def ratings(rows: Sequence[SeriesPublic]) -> Ratings:
     if not ids:
         return Ratings({}, None)
     with Session() as session:
-        mmr = mmr_on(session, ids, utcnow())
+        found = summaries(session, ids, w3c_season(session))
         synced = session.scalar(
-            select(func.min(col(User.ladder_synced_at))).where(col(User.id).in_(ids))
+            select(func.min(col(User.w3c_synced_at))).where(col(User.id).in_(ids))
         )
+    mmr: dict[tuple[int, Race | None], int] = {
+        (user_id, Race(row.race)): row.mmr
+        for user_id, (race_mmrs, _) in found.items()
+        for row in race_mmrs
+        if row.race and row.mmr is not None
+    }
     if synced and synced.tzinfo is None:
         synced = synced.replace(tzinfo=UTC)
     return Ratings(mmr, synced)
 
 
-def _name(user: UserPublic | None) -> str:
+def _name(user: UserSummaryPublic | None) -> str:
     return md((user.name if user else None) or "?")
 
 
-def player(user: UserPublic | None, race: str | None, marks: Ratings) -> str:
+def player(user: UserSummaryPublic | None, race: str | None, marks: Ratings) -> str:
     """{flag} {name} ({race} {mmr}). The name links to the GNL profile; "?" is
     an MMR the sync has not seen on that race. A link label keeps the name
     unescaped: Discord shows a backslash inside a label as typed."""

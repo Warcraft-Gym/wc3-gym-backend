@@ -35,8 +35,26 @@ A team with no played series stands at zero, not at null.
 from collections.abc import Callable, Iterable
 from typing import Any, Literal, NamedTuple
 
-from sqlalchemy import ColumnElement, case, func, or_, select, tuple_, union_all
+from sqlalchemy import (
+    BigInteger,
+    ColumnElement,
+    Integer,
+    SQLColumnExpression,
+    String,
+    and_,
+    case,
+    cast,
+    column,
+    func,
+    null,
+    or_,
+    select,
+    tuple_,
+    union_all,
+    values,
+)
 from sqlalchemy.orm import Mapped, Session, aliased
+from sqlalchemy.sql.selectable import CTE, FromClause, Subquery
 from sqlmodel import col
 
 from app.core import career, fantasy
@@ -60,7 +78,7 @@ from app.models.event_stage import EventStage
 from app.models.fantasy_bet import FantasyBet, FantasyBetPublic
 from app.models.fantasy_team import FantasyTeamPublic
 from app.models.match import Match, MatchPublic
-from app.models.player_career_stats import PlayerCareerStatsPublic
+from app.models.player_career_stats import PlayerCareerStats, PlayerCareerStatsPublic
 from app.models.relationships import DBEventRound, DBUserSeasonSignup
 from app.models.season import (
     LEAGUE_SHORT_NAME,
@@ -74,11 +92,12 @@ from app.models.team import Team, TeamPublic
 from app.models.user import (
     TrophyPublic,
     User,
-    UserListPublic,
     UserPublic,
     UserReduced,
+    UserSummaryPublic,
 )
-from app.services import series_rules
+from app.models.w3c_ladder_match import W3CLadderMatch
+from app.services import ladder, series_rules
 
 type MatchScores = dict[int, tuple[int, int]]
 # score system and maps to win, the two arguments of the scoring rule
@@ -237,9 +256,12 @@ def clear_kept_off_race(session: Session, row: Series) -> None:
     back, so a stored value has to mean a real exception and nothing else.
     A write that names no off race pays no statement.
     """
-    season_id = row.match.season_id if row.match else None
-    if season_id is None or not (row.player1_off_race or row.player2_off_race):
+    if not (row.player1_off_race or row.player2_off_race):
         return
+    match = series_rules.fixture(session, row)
+    if match is None:
+        return
+    season_id = match.season_id
     signed = _signup_races(
         session,
         {
@@ -258,33 +280,56 @@ def clear_kept_off_race(session: Session, row: Series) -> None:
 
 
 def fill_user_signup_races(
-    session: Session, pairs: Iterable[tuple[UserListPublic, int | None]]
+    session: Session,
+    pairs: Iterable[tuple[UserSummaryPublic, int | None]],
+    entered: bool = False,
 ) -> None:
     """Fill the signup race and the played-as tag of every player for the
-    season he is named with, in one statement."""
+    season he is named with, in one statement.
+
+    With `entered`, the same statement answers the MMR each player entered a
+    finished season with (closed, or its end date passed): the ladder rule at
+    the season's first day, midnight UTC, on his signup race, inside the
+    season's w3champions seasons. A running season answers None.
+    """
     named = [(player, season_id) for player, season_id in pairs if season_id]
     keys = {(player.id, season) for player, season in named}
-    rows = (
-        session.execute(
-            select(
-                col(DBUserSeasonSignup.user_id),
-                col(DBUserSeasonSignup.season_id),
-                col(DBUserSeasonSignup.race),
-                col(DBUserSeasonSignup.played_as),
-            ).where(
-                tuple_(
-                    col(DBUserSeasonSignup.user_id), col(DBUserSeasonSignup.season_id)
-                ).in_(keys)
-            )
-        ).all()
-        if keys
-        else []
+    signup = select(
+        col(DBUserSeasonSignup.user_id),
+        col(DBUserSeasonSignup.season_id),
+        col(DBUserSeasonSignup.race),
+        col(DBUserSeasonSignup.played_as),
+    ).where(
+        tuple_(col(DBUserSeasonSignup.user_id), col(DBUserSeasonSignup.season_id)).in_(
+            keys
+        )
     )
+    if entered:
+        bound = ladder.w3c_seasons(session, list({season for _, season in keys}))
+        signup = signup.add_columns(
+            case(
+                (
+                    ~Season.running,
+                    ladder.mmr_at(
+                        col(DBUserSeasonSignup.user_id),
+                        col(DBUserSeasonSignup.race),
+                        ladder.midnight_utc(session, col(Season.start_date)),
+                        select(bound.c.wc3_season).where(
+                            bound.c.event_id == col(DBUserSeasonSignup.season_id)
+                        ),
+                    ),
+                ),
+                else_=None,
+            )
+        ).join(Season, col(Season.id) == col(DBUserSeasonSignup.season_id))
+    rows = session.execute(signup).all() if keys else []
     signed = {(row[0], row[1]): row for row in rows}
     for player, season_id in named:
         row = signed.get((player.id, season_id))
         player.signup_race = row.race.value if row and row.race else None
         player.played_as = row.played_as if row else None
+        if entered:
+            player.mmr_entered = row[4] if row else None
 
 
 def fill_signup_races(
@@ -328,21 +373,49 @@ def fill_signup_races(
         row.player2_race = off2 or (row.player2.signup_race if row.player2 else None)
 
 
-def fill_mmrs(session: Session, series_list: Iterable[SeriesPublic | None]) -> None:
-    """Rate both sides of every series on the race the row names, in two reads.
+def fill_mmrs(
+    session: Session,
+    series_list: Iterable[SeriesPublic | None],
+    events: dict[int, int],
+) -> None:
+    """Rate both sides of every series on the race the row names.
 
-    The reduced player of a list answer carries no W3C stats, so the row holds
-    the rating itself. Call it after `fill_series`, which names the races. The
-    reads are three while the W3Champions season setting is unset, because the
-    rule then asks the stats table for the newest stored season.
+    `events` names the event of each row, as `fill_series` answers it, so call
+    this after it. A row of a running event takes the current rating, two
+    reads, three while the W3Champions season setting is unset. A row of a
+    finished event (closed, or its end date passed) takes the MMR of the time:
+    the ladder rule at the series time, else its round's first day, inside the
+    event's w3champions seasons, one statement per finished event. Telling
+    them apart costs one read.
     """
-    # app.services.events imports this module, so its rule comes in on the call
+    # app.services.events imports this module, so its rules come in on the call
     from app.services.events import race_ratings
 
     rows = [series for series in series_list if series is not None]
+    event_ids = {events[row.id] for row in rows if row.id in events}
+    running_ids = (
+        set(
+            session.scalars(
+                select(col(Season.id)).where(
+                    col(Season.id).in_(event_ids), Season.running
+                )
+            )
+        )
+        if event_ids
+        else set()
+    )
+    finished = event_ids - running_ids
+    by_event: dict[int, list[SeriesPublic]] = {}
+    for row in rows:
+        if events.get(row.id) in finished:
+            by_event.setdefault(events[row.id], []).append(row)
+    for event_id, played in by_event.items():
+        _fill_mmrs_of_the_time(session, event_id, played)
+
+    running = [row for row in rows if events.get(row.id) not in finished]
     sides = [
         (player.id, race)
-        for row in rows
+        for row in running
         for player, race in (
             (row.player1, row.player1_race),
             (row.player2, row.player2_race),
@@ -350,21 +423,68 @@ def fill_mmrs(session: Session, series_list: Iterable[SeriesPublic | None]) -> N
         if player
     ]
     rated = race_ratings(session, sides)
-    for row in rows:
+    for row in running:
         if row.player1 and row.player1_race:
             row.player1_mmr = rated.get((row.player1.id, row.player1_race))
         if row.player2 and row.player2_race:
             row.player2_mmr = rated.get((row.player2.id, row.player2_race))
 
 
-def fill_series(session: Session, series_list: Iterable[SeriesPublic | None]) -> None:
+def _fill_mmrs_of_the_time(
+    session: Session, event_id: int, rows: list[SeriesPublic]
+) -> None:
+    """Both sides of every row of one finished event at the time it was
+    played, in one statement that sends two integers per row."""
+    sides = (
+        values(
+            column("id", Integer),
+            column("race1", String),
+            column("race2", String),
+            name="sides",
+        )
+        .data([(row.id, row.player1_race, row.player2_race) for row in rows])
+        .cte()
+    )
+    # a bound value reaches Postgres as text, which its race enum does not compare to
+    ladder_table: FromClause = getattr(W3CLadderMatch, "__table__")  # noqa: B009
+    race1, race2 = (
+        cast(race, ladder_table.c.race.type) for race in (sides.c.race1, sides.c.race2)
+    )
+    bound = ladder.w3c_seasons(session, [event_id])
+    seasons = select(bound.c.wc3_season)
+    instant = func.coalesce(col(Series.date_time), col(DBEventRound.start_date))
+    rated = {
+        series_id: (mmr1, mmr2)
+        for series_id, mmr1, mmr2 in session.execute(
+            select(
+                sides.c.id,
+                ladder.mmr_at(col(Series.player1_id), race1, instant, seasons),
+                ladder.mmr_at(col(Series.player2_id), race2, instant, seasons),
+            )
+            .join(Series, col(Series.id) == sides.c.id)
+            .join(
+                DBEventRound, col(DBEventRound.id) == col(Series.round_id), isouter=True
+            )
+        )
+    }
+    for row in rows:
+        row.player1_mmr, row.player2_mmr = rated.get(row.id, (None, None))
+
+
+def fill_series(
+    session: Session,
+    series_list: Iterable[SeriesPublic | None],
+    known: dict[int, series_rules.Rules] | None = None,
+) -> dict[int, int]:
     """Fill the points of every series, the score of the match it carries, the
-    signup race and the season record of its two players."""
+    signup race and the season record of its two players, and answer the event
+    of each row. `known` holds the rules series_rules.from_loaded_season
+    already answered."""
     rows = [series for series in series_list if series is not None]
     if not rows:
-        return
+        return {}
 
-    resolved = series_rules.fill_rules(session, rows)
+    resolved = series_rules.fill_rules(session, rows, known)
     scales: dict[int, Scale] = {}
     events: dict[int, int] = {}
     for series in rows:
@@ -391,6 +511,7 @@ def fill_series(session: Session, series_list: Iterable[SeriesPublic | None]) ->
         session,
         [player for series in rows for player in (series.player1, series.player2)],
     )
+    return events
 
 
 def fill_matches(session: Session, matches: Iterable[MatchPublic | None]) -> None:
@@ -629,12 +750,13 @@ def _gnl_matchups(
     session: Session, user_ids: set[int], season_ids: set[int]
 ) -> dict[tuple[int, int], list[str | None]]:
     """The race every opponent of every named player registered on, in one
-    statement.
+    statement that answers one row per player and season.
 
     The opponent is the other player of the series, so the two sides union
-    again. Playday then series id, so the list reads in the order the season
-    was played. An opponent the season holds no signup for reads null, and the
-    entry stays in the list so it keeps the length of the season.
+    again. Each entry carries its playday and series id, and the list sorts on
+    them, so it reads in the order the season was played. An opponent the
+    season holds no signup for reads null, and the entry stays in the list so
+    it keeps the length of the season.
     """
     signup1, signup2 = aliased(DBUserSeasonSignup), aliased(DBUserSeasonSignup)
     sides = union_all(
@@ -658,15 +780,31 @@ def _gnl_matchups(
         .join(signup2, signup_on(signup2, col(Series.player1_id)), isouter=True),
     ).subquery()
 
+    # "playday:series id:race", the race empty when the opponent has none
+    entry = (
+        cast(sides.c.playday, String)
+        + ":"
+        + cast(sides.c.series_id, String)
+        + ":"
+        + func.coalesce(cast(sides.c.race, String), "")
+    )
     rows = session.execute(
-        select(sides.c.user_id, sides.c.season_id, sides.c.race)
+        select(sides.c.user_id, sides.c.season_id, func.aggregate_strings(entry, ","))
         .where(sides.c.user_id.in_(user_ids), sides.c.season_id.in_(season_ids))
-        .order_by(sides.c.playday, sides.c.series_id)
+        .group_by(sides.c.user_id, sides.c.season_id)
     ).all()
 
     history: dict[tuple[int, int], list[str | None]] = {}
-    for user_id, season_id, race in rows:
-        history.setdefault((user_id, season_id), []).append(fantasy.race_value(race))
+    for user_id, season_id, joined in rows:
+        entries = sorted(
+            (int(playday), int(series_id), race)
+            for playday, series_id, race in (
+                item.split(":") for item in joined.split(",")
+            )
+        )
+        history[(user_id, season_id)] = [
+            fantasy.race_value(Race[race]) if race else None for _, _, race in entries
+        ]
     return history
 
 
@@ -778,14 +916,20 @@ def _season_trophies(
     return shelves
 
 
-def fill_gnl_stats(session: Session, users: Iterable[UserPublic | None]) -> None:
-    """Fill games, wins, losses and matchup_history on every gnl_stats row of
-    every user."""
+def fill_gnl_stats(session: Session, users: Iterable[UserSummaryPublic | None]) -> None:
+    """Fill games, wins, losses and matchup_history on every season record of
+    every user: each gnl_stats row of a player's own read, else his record."""
     rows = [
         stat
         for user in users
         if user is not None
-        for stat in user.gnl_stats
+        for stat in (
+            user.gnl_stats
+            if isinstance(user, UserPublic)
+            else [user.record]
+            if user.record
+            else []
+        )
         if stat.user_id is not None and stat.season_id is not None
     ]
     if not rows:
@@ -802,81 +946,186 @@ def fill_gnl_stats(session: Session, users: Iterable[UserPublic | None]) -> None
         stat.matchup_history = matchups.get(key, [])
 
 
-class CareerTally(NamedTuple):
-    """What one player took from one season: series he took part in, series
-    won and lost, and maps won and lost. A drawn series is neither won nor
-    lost."""
-
-    played: int
-    won: int
-    lost: int
-    games_won: int
-    games_lost: int
-
-
-class CareerPlayer(NamedTuple):
-    """One player of the league, and his tally of every season he stood in."""
-
-    name: str | None
-    seasons: dict[int | None, CareerTally]
-
-
-def _career_tallies(session: Session) -> dict[int, CareerPlayer]:
-    """The season tally of every player who stands in a series, in one statement.
+def _career_players(
+    system_seasons: list[int], focus: tuple[set[int], set[str]] | None = None
+) -> CTE:
+    """The totals of every player who stands in a series, one row each.
 
     A series counts for both of its players, so the two sides union before the
     grouping. A series with no map score still names the season the player
     stood in, and pays nothing.
     """
-    player1, player2 = aliased(User), aliased(User)
     sides = union_all(
         select(
             col(Series.player1_id).label("user_id"),
-            col(player1.name).label("player_name"),
             col(Match.season_id).label("season_id"),
             func.coalesce(Series.player1_score, 0).label("own"),
             func.coalesce(Series.player2_score, 0).label("opp"),
-        )
-        .join(Match, col(Match.id) == Series.match_id, isouter=True)
-        .join(player1, col(player1.id) == Series.player1_id, isouter=True),
+        ).join(Match, col(Match.id) == Series.match_id),
         select(
             col(Series.player2_id),
-            col(player2.name),
             col(Match.season_id),
             func.coalesce(Series.player2_score, 0),
             func.coalesce(Series.player1_score, 0),
-        )
-        .join(Match, col(Match.id) == Series.match_id, isouter=True)
-        .join(player2, col(player2.id) == Series.player2_id, isouter=True),
+        ).join(Match, col(Match.id) == Series.match_id),
     ).subquery()
 
     own, opp = sides.c.own, sides.c.opp
-    rows = session.execute(
+    season_query = (
         select(
             sides.c.user_id,
-            sides.c.player_name,
             sides.c.season_id,
-            func.sum(case((or_(own != 0, opp != 0), 1), else_=0)),
-            func.sum(case((own > opp, 1), else_=0)),
-            func.sum(case((opp > own, 1), else_=0)),
-            func.sum(own),
-            func.sum(opp),
+            func.sum(case((or_(own != 0, opp != 0), 1), else_=0)).label("played"),
+            func.sum(case((own > opp, 1), else_=0)).label("won"),
+            func.sum(case((opp > own, 1), else_=0)).label("lost"),
+            func.sum(own).label("games_won"),
+            func.sum(opp).label("games_lost"),
         )
         .where(sides.c.user_id.is_not(None))
-        .group_by(sides.c.user_id, sides.c.player_name, sides.c.season_id)
-    ).all()
-
-    players: dict[int, CareerPlayer] = {}
-    for user_id, name, season_id, played, won, lost, games_won, games_lost in rows:
-        player = players.setdefault(user_id, CareerPlayer(name, {}))
-        player.seasons[season_id] = CareerTally(
-            int(played or 0),
-            int(won or 0),
-            int(lost or 0),
-            int(games_won or 0),
-            int(games_lost or 0),
+        .group_by(sides.c.user_id, sides.c.season_id)
+    )
+    if focus is not None:
+        user_ids, names = focus
+        matching_ids = select(col(User.id)).where(col(User.name).in_(names))
+        season_query = season_query.where(
+            or_(sides.c.user_id.in_(user_ids), sides.c.user_id.in_(matching_ids))
         )
-    return players
+    seasons = season_query.subquery()
+
+    def total(value: SQLColumnExpression[int]) -> ColumnElement[int]:
+        # Postgres sums a bigint to a numeric, and the division needs an integer
+        return cast(func.sum(value), BigInteger)
+
+    score = career.season_score_sql(
+        seasons.c.won, seasons.c.played, seasons.c.season_id, system_seasons
+    )
+    return (
+        select(
+            seasons.c.user_id,
+            total(seasons.c.won).label("series_won"),
+            total(seasons.c.lost).label("series_lost"),
+            total(seasons.c.games_won).label("games_won"),
+            total(seasons.c.games_lost).label("games_lost"),
+            func.count(seasons.c.season_id).label("seasons"),
+            total(seasons.c.played).label("played"),
+            total(score).label("score"),
+        )
+        .group_by(seasons.c.user_id)
+        .cte("career_player")
+    )
+
+
+_HISTORICAL = (
+    "historical_rating",
+    "historical_series_won",
+    "historical_series_lost",
+    "historical_games_won",
+    "historical_games_lost",
+    "historical_seasons_played",
+)
+
+
+def _career_rows(player: CTE, stored_ids: set[int] | None = None) -> Subquery:
+    """Every career row of the league, and the player whose series it counts.
+
+    A stored row finds its player by user id. A row whose user holds no series
+    finds him by the name it carries, unless a row already stands for him by
+    user id, or an earlier row by name. A player who has played and holds no
+    row stands as a row of his own, with a null id and no historical baseline.
+    """
+    source: FromClause = getattr(PlayerCareerStats, "__table__")  # noqa: B009
+    if stored_ids is not None:
+        source = select(source).where(source.c.id.in_(stored_ids)).subquery()
+    stored = source.c
+    tallied = select(player.c.user_id)
+    direct = and_(stored.user_id.is_not(None), stored.user_id.in_(tallied))
+    claimed = select(stored.user_id).where(stored.user_id.in_(tallied))
+    # Two players of one name leave the row to the smaller user id
+    namesake = aliased(User)
+    by_name = (
+        select(func.min(namesake.id))
+        .where(col(namesake.name) == stored.player_name, col(namesake.id).in_(tallied))
+        .scalar_subquery()
+    )
+    candidates = select(
+        stored.id,
+        stored.user_id,
+        stored.player_name,
+        *(stored[name] for name in _HISTORICAL),
+        case((direct, stored.user_id)).label("direct_id"),
+        case((and_(~direct, by_name.not_in(claimed)), by_name)).label("candidate"),
+    ).subquery()
+    first = func.row_number().over(
+        partition_by=candidates.c.candidate, order_by=candidates.c.id
+    )
+    ranked = select(candidates, first.label("rank")).subquery()
+    rows = select(
+        ranked.c.id,
+        ranked.c.user_id,
+        ranked.c.player_name,
+        *(ranked.c[name] for name in _HISTORICAL),
+        func.coalesce(
+            ranked.c.direct_id, case((ranked.c.rank == 1, ranked.c.candidate))
+        ).label("player_id"),
+    ).cte("career_stored")
+
+    unclaimed = (
+        select(
+            cast(null(), Integer),
+            player.c.user_id,
+            col(User.name),
+            *(cast(null(), Integer) for _ in _HISTORICAL),
+            player.c.user_id,
+        )
+        .join(User, col(User.id) == player.c.user_id)
+        .where(
+            player.c.played > 0,
+            player.c.user_id.not_in(
+                select(rows.c.player_id).where(rows.c.player_id.is_not(None))
+            ),
+        )
+    )
+    return union_all(select(rows), unclaimed).subquery("career_row")
+
+
+def _career_totals(
+    system_seasons: list[int],
+    stored_ids: set[int] | None = None,
+    focus: tuple[set[int], set[str]] | None = None,
+) -> Subquery:
+    """Every career row with its baseline and the nine totals, one row each."""
+    player = _career_players(system_seasons, focus)
+    row = _career_rows(player, stored_ids)
+
+    def plus(historical: str, name: str) -> ColumnElement[int]:
+        return func.coalesce(row.c[historical], 0) + func.coalesce(player.c[name], 0)
+
+    series_won = plus("historical_series_won", "series_won")
+    series_lost = plus("historical_series_lost", "series_lost")
+    games_won = plus("historical_games_won", "games_won")
+    games_lost = plus("historical_games_lost", "games_lost")
+    return (
+        select(
+            row.c.id,
+            row.c.user_id,
+            row.c.player_name,
+            *(row.c[name] for name in _HISTORICAL),
+            career.rating_sql(
+                row.c.historical_rating,
+                func.coalesce(player.c.score, 0),
+                system_seasons,
+            ).label("rating"),
+            series_won.label("series_won"),
+            series_lost.label("series_lost"),
+            games_won.label("games_won"),
+            games_lost.label("games_lost"),
+            plus("historical_seasons_played", "seasons").label("seasons_played"),
+            career.winrate_sql(series_won, series_lost).label("series_winrate"),
+            career.winrate_sql(games_won, games_lost).label("games_winrate"),
+        )
+        .select_from(row.outerjoin(player, player.c.user_id == row.c.player_id))
+        .subquery("career_totals")
+    )
 
 
 def _system_seasons(session: Session) -> list[int]:
@@ -889,106 +1138,57 @@ def _system_seasons(session: Session) -> list[int]:
     return sorted(season_id for season_id in season_ids if season_id is not None)
 
 
-def _career_users(session: Session, user_ids: set[int]) -> dict[int, User]:
-    """The players a career row must carry. The row reads their scalars only."""
-    if not user_ids:
-        return {}
-    users = session.scalars(select(User).where(col(User.id).in_(user_ids))).all()
-    return {user.id: user for user in users if user.id is not None}
-
-
-def _match_players(
-    rows: list[PlayerCareerStatsPublic], tallies: dict[int, CareerPlayer]
-) -> tuple[list[CareerPlayer | None], set[int]]:
-    """The player every row stands for, and the players that hold no row.
-
-    A row finds its player by user id. A historical row that holds no user id
-    finds him by the name it carries, unless another row already stands for
-    him.
-    """
-    claimed = {row.user_id for row in rows if row.user_id in tallies}
-    by_name = {
-        player.name: user_id
-        for user_id, player in tallies.items()
-        if player.name is not None
-    }
-
-    players: list[CareerPlayer | None] = []
-    for row in rows:
-        if row.user_id in tallies:
-            players.append(tallies[row.user_id])
-            continue
-        user_id = by_name.get(row.player_name)
-        if user_id is None or user_id in claimed:
-            players.append(None)
-            continue
-        claimed.add(user_id)
-        players.append(tallies[user_id])
-    return players, set(tallies) - claimed
-
-
-def _fill_row(
-    row: PlayerCareerStatsPublic,
-    player: CareerPlayer | None,
-    system_seasons: list[int],
-) -> None:
-    """Fill the nine totals of one row from its historical baseline and its
-    series."""
-    seasons = player.seasons if player else {}
-    series_won = (row.historical_series_won or 0) + sum(
-        tally.won for tally in seasons.values()
+def _career_public(totals: Any, user: User | None) -> PlayerCareerStatsPublic:  # noqa: ANN401
+    """One row of the career statement as its public model."""
+    return PlayerCareerStatsPublic(
+        id=totals.id,
+        user_id=totals.user_id,
+        player_name=totals.player_name,
+        user=UserReduced.from_user_reduced(user) if user else None,
+        **{name: getattr(totals, name) for name in _HISTORICAL},
+        rating=totals.rating,
+        series_won=totals.series_won,
+        series_lost=totals.series_lost,
+        games_won=totals.games_won,
+        games_lost=totals.games_lost,
+        seasons_played=totals.seasons_played,
+        series_winrate=totals.series_winrate / 100,
+        games_winrate=totals.games_winrate / 100,
+        avg_series_per_season=career.per_season(
+            totals.series_won + totals.series_lost, totals.seasons_played
+        ),
     )
-    series_lost = (row.historical_series_lost or 0) + sum(
-        tally.lost for tally in seasons.values()
-    )
-    games_won = (row.historical_games_won or 0) + sum(
-        tally.games_won for tally in seasons.values()
-    )
-    games_lost = (row.historical_games_lost or 0) + sum(
-        tally.games_lost for tally in seasons.values()
-    )
-    seasons_played = (row.historical_seasons_played or 0) + sum(
-        1 for season_id in seasons if season_id is not None
-    )
-    points = {
-        season_id: career.season_points(tally.won, tally.played)
-        for season_id, tally in seasons.items()
-        if season_id is not None
-    }
-
-    row.rating = career.rating(row.historical_rating, points, system_seasons)
-    row.series_won = series_won
-    row.series_lost = series_lost
-    row.games_won = games_won
-    row.games_lost = games_lost
-    row.seasons_played = seasons_played
-    row.series_winrate = career.winrate(series_won, series_lost)
-    row.games_winrate = career.winrate(games_won, games_lost)
-    row.avg_series_per_season = career.per_season(
-        series_won + series_lost, seasons_played
-    )
-
-
-def _fill_rows(
-    session: Session, rows: list[PlayerCareerStatsPublic]
-) -> tuple[dict[int, CareerPlayer], set[int], list[int]]:
-    """Fill every row, and report the players that hold none."""
-    tallies = _career_tallies(session)
-    system_seasons = _system_seasons(session)
-    players, unclaimed = _match_players(rows, tallies)
-    for row, player in zip(rows, players, strict=True):
-        _fill_row(row, player, system_seasons)
-    return tallies, unclaimed, system_seasons
 
 
 def fill_career(
     session: Session, stats: Iterable[PlayerCareerStatsPublic | None]
 ) -> None:
-    """Fill the nine career totals of every row."""
-    rows = [row for row in stats if row is not None]
-    if rows:
-        _fill_rows(session, rows)
+    """Fill the nine career totals of every stored row, reading only those rows."""
+    rows = {row.id: row for row in stats if row is not None and row.id is not None}
+    if not rows:
+        return
+    focus = (
+        {row.user_id for row in rows.values() if row.user_id is not None},
+        {row.player_name for row in rows.values() if row.player_name is not None},
+    )
+    totals = _career_totals(_system_seasons(session), set(rows), focus)
+    for found in session.execute(select(totals).where(totals.c.id.in_(rows))).all():
+        filled = _career_public(found, None)
+        for name in _TOTALS:
+            setattr(rows[found.id], name, getattr(filled, name))
 
+
+_TOTALS = (
+    "rating",
+    "series_won",
+    "series_lost",
+    "games_won",
+    "games_lost",
+    "seasons_played",
+    "series_winrate",
+    "games_winrate",
+    "avg_series_per_season",
+)
 
 CareerSort = Literal[
     "name",
@@ -997,91 +1197,82 @@ CareerSort = Literal[
     "series_won",
     "series_lost",
     "series_winrate",
+    "games_winrate",
     "games_won",
     "games_lost",
-    "games_winrate",
     "seasons_played",
 ]
 
-# The names a career list sorts by, and the key each one reads from a row.
-# _fill_row sets the nine totals on every row, so no key answers None.
-CAREER_SORTS: dict[CareerSort, Callable[[PlayerCareerStatsPublic], Any]] = {
-    "name": lambda row: (
-        (row.user.name if row.user else row.player_name) or ""
-    ).casefold(),
-    "mapped": lambda row: row.user_id is not None,
-    "rating": lambda row: row.rating,
-    "series_won": lambda row: row.series_won,
-    "series_lost": lambda row: row.series_lost,
-    "series_winrate": lambda row: row.series_winrate,
-    "games_won": lambda row: row.games_won,
-    "games_lost": lambda row: row.games_lost,
-    "games_winrate": lambda row: row.games_winrate,
-    "seasons_played": lambda row: row.seasons_played,
+# The names a career list sorts by, and the SQL key each one reads. The name
+# key takes the career row and the name of the user it carries.
+CAREER_SORTS: dict[CareerSort, Callable[[Any, ColumnElement[Any]], Any]] = {
+    "name": lambda row, name: name,
+    "mapped": lambda row, name: case((row.user_id.is_not(None), 1), else_=0),
+    "rating": lambda row, name: row.rating,
+    "series_won": lambda row, name: row.series_won,
+    "series_lost": lambda row, name: row.series_lost,
+    "series_winrate": lambda row, name: row.series_winrate,
+    "games_won": lambda row, name: row.games_won,
+    "games_lost": lambda row, name: row.games_lost,
+    "games_winrate": lambda row, name: row.games_winrate,
+    "seasons_played": lambda row, name: row.seasons_played,
 }
 
 
-def _career_holds(row: PlayerCareerStatsPublic, needle: str) -> bool:
-    """True when the player name or the user name of the row holds needle."""
-    names = (row.player_name, row.user.name if row.user else None)
-    return any(name and needle in name.casefold() for name in names)
-
-
-def career_rows(
+def career_page(
     session: Session,
-    stored: list[PlayerCareerStatsPublic],
     search: str = "",
     *,
     sort: CareerSort | None = None,
     order: SortOrder = "asc",
-) -> list[PlayerCareerStatsPublic]:
-    """Every career row of the league, by rating or by the named key.
+    limit: int | None = None,
+    offset: int = 0,
+) -> tuple[list[PlayerCareerStatsPublic], int]:
+    """One page of the career rows of the league, and the count of them all.
 
-    A player who has played and holds no stored row stands in the list too,
-    with a null id and no historical baseline, so a new player counts from his
-    first result.
+    The database derives the totals, keeps the rows that match search, sorts
+    and pages them, so the answer reads only the rows of the page.
 
-    search keeps the rows whose player name or user name holds it, and it
-    matches without case. It runs before the sort, so the caller pages and
-    counts the kept rows.
-
-    sort names a key of CAREER_SORTS and order turns that key alone around.
-    The id tiebreak stays ascending, so both directions page the same rows.
+    search keeps the rows whose player name or user name holds it, without
+    case, before the count and the page. With no sort the rating orders the
+    rows; sort names a key of CAREER_SORTS and order turns that key alone
+    around. A row with no id closes its tie, and the ids break the rest, so
+    both directions page the same rows.
     """
-    tallies, unclaimed, system_seasons = _fill_rows(session, stored)
-    played = {
-        user_id
-        for user_id in unclaimed
-        if any(tally.played for tally in tallies[user_id].seasons.values())
-    }
-    rows = list(stored)
-    for user_id, user in _career_users(session, played).items():
-        row = PlayerCareerStatsPublic(
-            user_id=user_id,
-            player_name=user.name,
-            user=UserReduced.from_user_reduced(user),
-            historical_rating=None,
-            historical_series_won=None,
-            historical_series_lost=None,
-            historical_games_won=None,
-            historical_games_lost=None,
-            historical_seasons_played=None,
-        )
-        _fill_row(row, tallies[user_id], system_seasons)
-        rows.append(row)
+    totals = _career_totals(_system_seasons(session))
+    row = totals.c
+    name = func.lower(func.coalesce(User.name, row.player_name))
+    if session.get_bind().dialect.name == "postgresql":
+        # Byte order is code point order, the order Python sorts strings in
+        name = name.collate("C")
 
+    statement = select(totals, User, func.count().over().label("total")).outerjoin(
+        User, col(User.id) == row.user_id
+    )
     if search:
-        needle = search.casefold()
-        rows = [row for row in rows if _career_holds(row, needle)]
+        needle = search.lower()
+        statement = statement.where(
+            or_(
+                func.lower(row.player_name).contains(needle, autoescape=True),
+                func.lower(User.name).contains(needle, autoescape=True),
+            )
+        )
 
-    # A row with no id sorts last of its rating, because no id orders it
+    tiebreak = (case((row.id.is_(None), 1), else_=0), row.id, row.user_id)
     if sort is None:
-        rows.sort(key=lambda stat: (-stat.rating, stat.id is None, stat.id or 0))
+        keys = (row.rating.desc(), *tiebreak)
     else:
-        # The id pass runs first, so a stable sort leaves it as the tiebreak
-        rows.sort(key=lambda stat: (stat.id is None, stat.id or 0))
-        rows.sort(key=CAREER_SORTS[sort], reverse=order == "desc")
-    return rows
+        key = CAREER_SORTS[sort](row, name)
+        keys = (key.desc() if order == "desc" else key.asc(), *tiebreak)
+    found = session.execute(statement.order_by(*keys).offset(offset).limit(limit)).all()
+    if found:
+        total = found[0].total
+    elif offset:
+        # A page past the end holds no row to carry the count
+        total = session.scalar(select(func.count()).select_from(statement.subquery()))
+    else:
+        total = 0
+    return [_career_public(item, item.User) for item in found], total or 0
 
 
 def fantasy_series(

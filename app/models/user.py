@@ -8,7 +8,7 @@ from sqlmodel import Field, Relationship, SQLModel, col
 
 from app.models.base import DBModel, PublicModel, ident
 from app.models.enums import Race
-from app.models.season import SeasonPublic
+from app.models.season import SeasonSummaryPublic
 from app.models.types import (
     EnumValue,
     KnownTimeZone,
@@ -21,7 +21,7 @@ from app.models.types import (
 )
 from app.models.user_battle_tag import UserBattleTag, UserBattleTagPublic
 from app.models.user_team_season import UserTeamSeasonStatsPublic
-from app.models.w3c_stats import W3CStats, W3CStatsPublic
+from app.models.w3c_stats import RaceMmr, W3CStats
 
 if TYPE_CHECKING:
     from app.models.player_career_stats import PlayerCareerStats
@@ -78,23 +78,34 @@ class User(UserBase, DBModel, table=True):
     # An admin banned this player; the entrant row warns and never refuses
     banned_at: datetime | None = Field(default=None, sa_type=UTCDateTime)
     team_seasons: list["DBUserTeamSeason"] = Relationship(
-        back_populates="user", sa_relationship_kwargs={"cascade": "all, delete"}
+        back_populates="user",
+        sa_relationship_kwargs={"lazy": "raise_on_sql", "cascade": "all, delete"},
     )
     w3c_stats: list[W3CStats] = Relationship(
         back_populates="user",
-        sa_relationship_kwargs={"cascade": "all, delete-orphan"},
+        sa_relationship_kwargs={
+            "lazy": "raise_on_sql",
+            "cascade": "all, delete-orphan",
+        },
     )
     fantasy_teams: list["DBFantasyTeamPlayer"] = Relationship(
         back_populates="users",
-        sa_relationship_kwargs={"cascade": "all, delete-orphan"},
+        sa_relationship_kwargs={
+            "lazy": "raise_on_sql",
+            "cascade": "all, delete-orphan",
+        },
     )
     signup_seasons: list["DBUserSeasonSignup"] = Relationship(
-        back_populates="user", sa_relationship_kwargs={"cascade": "all, delete"}
+        back_populates="user",
+        sa_relationship_kwargs={"lazy": "raise_on_sql", "cascade": "all, delete"},
     )
-    career_stats: list["PlayerCareerStats"] = Relationship(back_populates="user")
+    career_stats: list["PlayerCareerStats"] = Relationship(
+        back_populates="user", sa_relationship_kwargs={"lazy": "raise_on_sql"}
+    )
     # Every tag the person played under, the active one first
     battle_tags: list[UserBattleTag] = Relationship(
         sa_relationship_kwargs={
+            "lazy": "raise_on_sql",
             "cascade": "all, delete",
             "order_by": "(UserBattleTag.is_active.desc(), UserBattleTag.id)",
         }
@@ -172,8 +183,9 @@ class UserReduced(UserBase, PublicModel):
     # A user reached through another object may hold only some of these
     name: str | None = None
     battleTag: str | None = None
-    discordTag: str | None = None
-    discordId: str | None = None
+    # Kept for the Discord cards, never served: UserMemberPublic serves them
+    discordTag: str | None = Field(default=None, exclude=True)
+    discordId: str | None = Field(default=None, exclude=True)
     race: Annotated[str | None, EnumValue] = None
     w3c_synced_at: datetime | None = None
     ladder_synced_at: datetime | None = None
@@ -199,40 +211,67 @@ class UserReduced(UserBase, PublicModel):
         )
 
 
-class UserListPublic(UserReduced):
-    """The user of a list answer: the scalars, the w3c stats and the signups."""
+class UserSummaryPublic(UserReduced):
+    """A user inside another object: the scalars, the ladder summary and the
+    record of the read's event."""
 
-    w3c_stats: Annotated[list[W3CStatsPublic], NoneToList] = []
-    signup_seasons: Annotated[list[SeasonPublic], NoneToList] = []
+    # The ladder summary per race, from app.services.w3c_stats.fill; `mmr` is the profile field
+    race_mmrs: list[RaceMmr] = []
+    # The race with the top window MMR and 10 or more window games, else null
+    main_race: str | None = None
+    # The MMR the player entered a finished event with; roster reads only
+    mmr_entered: int | None = None
     # The race and tier of one signup, filled by the signups answer of a single season
     signup_race: Annotated[str | None, EnumValue] = None
     # The tag of that signup, null when it names none
     played_as: str | None = None
     fantasy_tier: int | None = None
+    # Every tag the person holds, the active one first; empty where the read
+    # loads no tags
+    tags: Annotated[list[UserBattleTagPublic], NoneToList] = []
+    # The player's record in the read's event; null outside an event context
+    record: UserTeamSeasonStatsPublic | None = None
+
+    @classmethod
+    def from_user(cls, user: User, event_id: int | None = None) -> Self:
+        row = cls.from_user_reduced(user)
+        # A read that did not load a collection leaves it empty, never lazy loads
+        unloaded = instance_state(user).unloaded
+        if "battle_tags" not in unloaded:
+            row.tags = [UserBattleTagPublic.from_row(tag) for tag in user.battle_tags]
+        if event_id is not None and "team_seasons" not in unloaded:
+            row.record = next(
+                (
+                    UserTeamSeasonStatsPublic.from_user_team_season(stat)
+                    for stat in user.team_seasons
+                    if stat.season_id == event_id
+                ),
+                None,
+            )
+        return row
+
+
+class UserListPublic(UserSummaryPublic):
+    """The user of a list answer: the summary plus the signups."""
+
+    # A list row names no event, so it serves no record
+    record: UserTeamSeasonStatsPublic | None = Field(default=None, exclude=True)
+    signup_seasons: Annotated[list[SeasonSummaryPublic], NoneToList] = []
     # Set by hand on the signup row; an unpinned tier derives from the MMR
     fantasy_tier_pinned: bool = False
     draft_position: int | None = None
     # An admin took the player out of the pick list of the season
     draft_excluded: bool = False
-    # Every tag the person holds, the active one first; empty where the read
-    # loads no tags
-    tags: Annotated[list[UserBattleTagPublic], NoneToList] = []
 
     @classmethod
-    def from_user(cls, user: User) -> Self:
-        row = cls.from_user_reduced(user)
-        row.w3c_stats = [
-            W3CStatsPublic.model_validate(stat) for stat in (user.w3c_stats or [])
-        ]
+    def from_user(cls, user: User, event_id: int | None = None) -> Self:
+        row = super().from_user(user, event_id)
         row.signup_seasons = [
-            SeasonPublic.from_season_reduced(
+            SeasonSummaryPublic.from_season(
                 signup.season, signup.race, signup.played_as
             )
             for signup in (user.signup_seasons or [])
         ]
-        # A read that did not load the tags leaves them empty, never lazy loads
-        if "battle_tags" not in instance_state(user).unloaded:
-            row.tags = [UserBattleTagPublic.from_row(tag) for tag in user.battle_tags]
         return row
 
 
@@ -254,16 +293,32 @@ class TrophyPublic(SQLModel):
     team_icon_url: str | None = None
 
 
+class UserMemberListPublic(UserListPublic):
+    """A list row read by an admin: the Discord account is served."""
+
+    discordTag: str | None = None
+    discordId: str | None = None
+
+
 class UserPublic(UserListPublic):
+    """One player from his own read: gnl_stats holds every season he played."""
+
     gnl_stats: Annotated[list[UserTeamSeasonStatsPublic], NoneToList] = []
     # Derived by app.services.derived.fill_trophies; empty until it runs
     trophies: Annotated[list[TrophyPublic], NoneToList] = []
 
     @classmethod
-    def from_user(cls, user: User) -> Self:
-        row = super().from_user(user)
+    def from_user(cls, user: User, event_id: int | None = None) -> Self:
+        row = super().from_user(user, event_id)
         row.gnl_stats = [
             UserTeamSeasonStatsPublic.from_user_team_season(stat)
             for stat in (user.team_seasons or [])
         ]
         return row
+
+
+class UserMemberPublic(UserPublic):
+    """A player read by a logged-in caller: the Discord account is served."""
+
+    discordTag: str | None = None
+    discordId: str | None = None

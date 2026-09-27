@@ -2,13 +2,14 @@ import logging
 from typing import TYPE_CHECKING, Any, Literal
 
 from sqlalchemy import ColumnElement, func, select
-from sqlalchemy.orm import joinedload, selectinload
+from sqlalchemy.orm import joinedload, noload, selectinload
 from sqlmodel import col
 
 from app.core.db import Session, rel
 from app.core.exceptions import BadRequestError, NotFoundError
 from app.core.ordering import SortOrder, ordered
 from app.core.query import QueryElement, QueryUtil
+from app.models.base import ident
 from app.models.fantasy_bet import (
     FantasyBet,
     FantasyBetCreate,
@@ -18,6 +19,7 @@ from app.models.fantasy_bet import (
 from app.models.series import Series
 from app.models.user import User
 from app.services import derived
+from app.services.users import load_players
 
 if TYPE_CHECKING:
     from app.services.settings import SettingsService
@@ -86,11 +88,8 @@ class FantasyBetService:
 
     def add(self, fantasy_bet: FantasyBetCreate) -> FantasyBetPublic:
         with Session.begin() as session:
-            fbet = FantasyBet.add(session, fantasy_bet.model_dump())
-            public = FantasyBetPublic.from_fantasy_bet(fbet)
-            derived.fill_series(session, [public.series])
-            derived.fill_bet_results([public])
-            return public
+            bet_id = ident(FantasyBet.add(session, fantasy_bet.model_dump()))
+        return self.get(bet_id)
 
     def update(
         self, fantasy_bet_id: int, fantasy_bet: FantasyBetUpdate
@@ -103,22 +102,23 @@ class FantasyBetService:
             )
             if not row:
                 raise NotFoundError("Fantasy Bet not found")
-            public = FantasyBetPublic.from_fantasy_bet(row)
-            derived.fill_series(session, [public.series])
-            derived.fill_bet_results([public])
-            return public
+        return self.get(fantasy_bet_id)
 
     def delete(self, fantasy_bet_id: int) -> None:
         with Session.begin() as session:
             FantasyBet.delete(session, fantasy_bet_id)
 
     def get(self, fantasy_bet_id: int) -> FantasyBetPublic:
+        """One bet; its four players carry their record in the bet's season.
+        Every bet write answers through this read."""
         with Session.begin() as session:
-            fbet = session.get(
-                FantasyBet, fantasy_bet_id, options=FantasyBet.eager_options()
-            )
+            fbet = session.get(FantasyBet, fantasy_bet_id, options=FantasyBet.loads())
             if not fbet:
                 raise NotFoundError("Fantasy Bet not found")
+            players = (fbet.user_id, fbet.winner_id)
+            if fbet.series:
+                players += (fbet.series.player1_id, fbet.series.player2_id)
+            load_players(session, players, fbet.season_id)
             public = FantasyBetPublic.from_fantasy_bet(fbet)
             derived.fill_series(session, [public.series])
             derived.fill_bet_results([public])
@@ -135,13 +135,13 @@ class FantasyBetService:
             # Offset paging is deterministic only with a fixed order
             statement = (
                 select(FantasyBet)
-                .options(*FantasyBet.list_eager_options())
+                .options(*FantasyBet.loads())
                 .order_by(col(FantasyBet.id))
                 .offset(offset)
                 .limit(limit)
             )
             fbet = session.scalars(statement).unique().all()
-            result = [FantasyBetPublic.from_fantasy_bet_reduced(row) for row in fbet]
+            result = [FantasyBetPublic.from_fantasy_bet(row) for row in fbet]
             derived.fill_series(session, [bet.series for bet in result])
             derived.fill_bet_results(result)
             return result, total
@@ -168,21 +168,20 @@ class FantasyBetService:
             statement = (
                 select(FantasyBet)
                 .options(
-                    # A season and a series are each shared by many bets, so
-                    # selectin reads every distinct row once, not once per bet
-                    selectinload(rel(FantasyBet.season)).noload("*"),
-                    joinedload(rel(FantasyBet.user)).noload("*"),
-                    joinedload(rel(FantasyBet.winner)).noload("*"),
-                    selectinload(rel(FantasyBet.series)).noload("*"),
-                    selectinload(rel(FantasyBet.series))
-                    .joinedload(rel(Series.player1))
-                    .noload("*"),
-                    selectinload(rel(FantasyBet.series))
-                    .joinedload(rel(Series.player2))
-                    .noload("*"),
-                    selectinload(rel(FantasyBet.series))
-                    .joinedload(rel(Series.match))
-                    .noload("*"),
+                    # The search row is lean: its series carries the players and
+                    # the bare match, no casts, picks or teams
+                    selectinload(rel(FantasyBet.season)),
+                    joinedload(rel(FantasyBet.user)),
+                    joinedload(rel(FantasyBet.winner)),
+                    selectinload(rel(FantasyBet.series)).options(
+                        joinedload(rel(Series.player1)),
+                        joinedload(rel(Series.player2)),
+                        joinedload(rel(Series.match)).noload("*"),
+                        noload(rel(Series.casts)),
+                        noload(rel(Series.veto_steps)),
+                        noload(rel(Series.entrant1)),
+                        noload(rel(Series.entrant2)),
+                    ),
                 )
                 .where(filter)
             )

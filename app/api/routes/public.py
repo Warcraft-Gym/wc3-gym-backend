@@ -5,6 +5,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, Response
 from fastapi.concurrency import run_in_threadpool
 from pydantic import ValidationError
+from sqlalchemy.orm import joinedload
 from sqlmodel import SQLModel
 from starlette.datastructures import UploadFile
 
@@ -26,20 +27,19 @@ from app.api.deps import (
     require_login,
     require_member,
 )
-from app.core.db import Session
+from app.core.db import Session, rel
 from app.core.exceptions import ApiError, BadRequestError, NotFoundError
 from app.core.ordering import SortOrder
 from app.core.query import QueryUtil
 from app.core.security import is_admin
 from app.models.fantasy_bet import (
+    FantasyBet,
     FantasyBetCreate,
-    FantasyBetPublic,
     FantasyBetUpdate,
     PublicFantasyBetWrite,
 )
 from app.models.fantasy_team import (
     FantasyTeamCreate,
-    FantasyTeamUpdate,
     PublicFantasyTeamWrite,
 )
 from app.models.player_history import PlayerHistory
@@ -159,41 +159,45 @@ DashboardPlayer = Annotated[
 ]
 
 
-def _refuse_started(
-    series_service: SeriesService, series_id: int | None
-) -> SeriesPublic | None:
-    """The series the bet names, once it is still open: a bet closes when the
-    series is scored or past its time, and reopens if the series moves later."""
+def _refuse_started(series_id: int | None) -> int | None:
+    """The season of the series the bet names, once the series is still open:
+    a bet closes when the series is scored or past its time, and reopens if the
+    series moves later."""
     if series_id is None:
         return None
-    series = series_service.get(series_id)
-    # The same rule the season phase reads (app/models/season.py started)
-    scored = series.player1_score is not None and series.player2_score is not None
-    if scored or (series.date_time is not None and series.date_time <= utcnow()):
-        raise ApiError(
-            403,
-            {
-                "error": "series_started",
-                "message": "Bets close once the series has started",
-            },
+    with Session.begin() as session:
+        series = session.get(
+            Series, series_id, options=(joinedload(rel(Series.match)),)
         )
-    return series
+        if series is None:
+            raise NotFoundError("Series not found")
+        # The same rule the season phase reads (app/models/season.py started)
+        scored = series.player1_score is not None and series.player2_score is not None
+        if scored or (series.date_time is not None and series.date_time <= utcnow()):
+            raise ApiError(
+                403,
+                {
+                    "error": "series_started",
+                    "message": "Bets close once the series has started",
+                },
+            )
+        return series.match.season_id if series.match else None
 
 
 def _owned_bet(
-    entry: dict[str, Any],
-    user_service: UserServiceDep,
-    fantasy_bet_service: FantasyBetServiceDep,
-    bet_id: int,
-    verb: str,
-) -> FantasyBetPublic:
-    """The bet the identified player placed. Someone else's bet answers 403."""
-    users = user_service.find_by_discord_id(str(entry.get("discord_id")))
-    if not users:
+    entry: dict[str, Any], user_service: UserServiceDep, bet_id: int, verb: str
+) -> FantasyBet:
+    """The row of the bet the identified player placed. Someone else's bet
+    answers 403."""
+    user_id = user_service.id_by_discord_id(str(entry.get("discord_id")))
+    if user_id is None:
         raise NotFoundError("user_not_found")
-    # get raises NotFoundError, which answers 404
-    bet = fantasy_bet_service.get(bet_id)
-    if bet.user_id != users[0].id:
+    # A read that writes nothing, so the row stays readable once it closes
+    with Session() as session:
+        bet = session.get(FantasyBet, bet_id)
+    if bet is None:
+        raise NotFoundError("Fantasy Bet not found")
+    if bet.user_id != user_id:
         raise ApiError(
             403,
             {
@@ -821,12 +825,6 @@ def create_fantasy_team(
     else:
         user = users[0]
 
-    # Check if team already exists
-    team_query = QueryUtil.parse_query(
-        f"captain_id == {user.id} and season_id == {season_id}"
-    )
-    existing_teams, _ = fantasy_team_service.search(team_query)
-
     team_data: dict[str, Any] = {
         # Use provided name or default to user name
         "name": data.name if "name" in data.model_fields_set else user.name,
@@ -839,62 +837,24 @@ def create_fantasy_team(
     if "grind_team_id" in data.model_fields_set:
         team_data["grind_team_id"] = data.grind_team_id
 
-    if existing_teams and len(existing_teams) > 0:
-        # Update existing team
-        team = fantasy_team_service.update(
-            existing_teams[0].id, FantasyTeamUpdate(**team_data)
-        )
-        team_id = existing_teams[0].id
-    else:
-        # Create new team
-        team = fantasy_team_service.add(FantasyTeamCreate(**team_data))
-        team_id = team.id
-
-    # Update players if provided
-    if player_ids and len(player_ids) > 0:
-        # Get existing players
-        existing_player_ids = [
-            p.id
-            for p in (
-                existing_teams[0].drafted_players
-                if existing_teams and existing_teams[0].drafted_players
-                else []
-            )
-        ]
-
-        # Find players to add and remove
-        players_to_add = [pid for pid in player_ids if pid not in existing_player_ids]
-        players_to_remove = [
-            pid for pid in existing_player_ids if pid not in player_ids
-        ]
-
-        if players_to_add:
-            fantasy_team_service.add_players(team_id, players_to_add)
-        if players_to_remove:
-            fantasy_team_service.remove_players(team_id, players_to_remove)
-
-    # Return created/updated team
-    final_team = fantasy_team_service.get(team_id)
-    return final_team.to_dict()
+    # The captain's team of the season is created or updated, and answered once
+    team = fantasy_team_service.register(FantasyTeamCreate(**team_data), player_ids)
+    return team.to_dict()
 
 
 @router.post("/fantasy-bet", status_code=201)
 def create_fantasy_bet(
     user_service: UserServiceDep,
     fantasy_bet_service: FantasyBetServiceDep,
-    series_service: SeriesServiceDep,
     entry: Identity,
     data: PublicFantasyBetWrite | None = None,
 ) -> dict[str, Any] | None:
     """Create a fantasy bet for the identified player."""
     data = data or PublicFantasyBetWrite()
-    series = _refuse_started(series_service, data.series_id)
+    season_id = _refuse_started(data.series_id)
+    user_id = user_service.id_by_discord_id(str(entry.get("discord_id")))
 
-    # Get or create user based on discord info
-    existing_users = user_service.find_by_discord_id(str(entry.get("discord_id")))
-    user = existing_users[0] if existing_users else None
-
-    if not user:
+    if user_id is None:
         raise ApiError(
             404,
             {
@@ -907,8 +867,8 @@ def create_fantasy_bet(
     # The season is the series' own, so a bet cannot be tagged onto another one
     bet_payload: dict[str, Any] = {
         "series_id": data.series_id,
-        "season_id": series.match.season_id if series and series.match else None,
-        "user_id": user.id,
+        "season_id": season_id,
+        "user_id": user_id,
         "winner_id": data.winner_id,
         "bet_points": data.bet_points,
     }
@@ -927,21 +887,14 @@ def update_fantasy_bet(
     bet_id: int,
     user_service: UserServiceDep,
     fantasy_bet_service: FantasyBetServiceDep,
-    series_service: SeriesServiceDep,
     entry: Identity,
     data: PublicFantasyBetWrite | None = None,
 ) -> dict[str, Any] | None:
     """Update a fantasy bet of the identified player."""
     data = data or PublicFantasyBetWrite()
     patch = data.model_dump(exclude_unset=True)
-    existing_bet = _owned_bet(
-        entry,
-        user_service,
-        fantasy_bet_service,
-        bet_id,
-        "update",
-    )
-    _refuse_started(series_service, existing_bet.series_id)
+    existing_bet = _owned_bet(entry, user_service, bet_id, "update")
+    _refuse_started(existing_bet.series_id)
 
     # Update the bet
     bet_payload = {
@@ -968,10 +921,9 @@ def delete_fantasy_bet(
     bet_id: int,
     user_service: UserServiceDep,
     fantasy_bet_service: FantasyBetServiceDep,
-    series_service: SeriesServiceDep,
     entry: Identity,
 ) -> None:
     """Delete a fantasy bet of the identified player."""
-    bet = _owned_bet(entry, user_service, fantasy_bet_service, bet_id, "delete")
-    _refuse_started(series_service, bet.series_id)
+    bet = _owned_bet(entry, user_service, bet_id, "delete")
+    _refuse_started(bet.series_id)
     fantasy_bet_service.delete(bet_id)

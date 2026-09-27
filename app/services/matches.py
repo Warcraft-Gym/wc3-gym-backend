@@ -1,7 +1,7 @@
 import logging
 
 from sqlalchemy import select
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import joinedload, noload
 from sqlmodel import col
 
 from app.core.db import Session, rel
@@ -58,9 +58,32 @@ class MatchService:
             if not match:
                 logger.error("Match could not be found!")
                 raise NotFoundError("Match not found")
-            public = MatchPublic.from_match_with_season(match)
+            public = MatchPublic.from_match(match)
             derived.fill_matches(session, [public])
             return public
+
+    def for_season(self, season_id: int) -> list[MatchPublic]:
+        """Every match of a season in playday order, each with its two team scores."""
+        with Session.begin() as session:
+            # ponytail: no paging, a season holds a few dozen matches at most
+            matches = (
+                session.scalars(
+                    select(Match)
+                    .options(
+                        joinedload(rel(Match.team1)).noload("*"),
+                        joinedload(rel(Match.team2)).noload("*"),
+                        noload(rel(Match.season)),
+                        joinedload(rel(Match.fixed_map)),
+                    )
+                    .where(col(Match.season_id) == season_id)
+                    .order_by(col(Match.playday), col(Match.id))
+                )
+                .unique()
+                .all()
+            )
+            result = [MatchPublic.from_match(match) for match in matches]
+            derived.fill_matches(session, result)
+            return result
 
     def search(
         self, query: QueryElement | None, limit: int | None = None, offset: int = 0

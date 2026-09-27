@@ -239,6 +239,12 @@ FRONTEND_URL="http://localhost:5003"
 | `DISCORD_PUBLIC_KEY` | The app's public key from the Discord Developer Portal; `POST /discord/interactions` checks Discord's signature with it and answers 503 while it is unset | 64-character hex string |
 | `DISCORD_APPLICATION_ID` | The Discord application id; `just discord-commands` registers the slash commands on the guild with it | `123456789012345678` |
 | `CRON_SECRET` | Bearer token the `/jobs` routes check; unset, every `/jobs` route answers 503 | 64-character hex string |
+| `DEV_ALERTS_WEBHOOK_URL` | Optional Discord channel webhook for dev alerts; the egress snapshot posts its daily digest there, and an alert when the cycle is on track to pass the cap or the run fails. Unset, nothing posts | `https://discord.com/api/webhooks/<id>/<token>` |
+| `DEV_ALERTS_MENTION_USER_ID` | Optional Discord user id to tag on an alert; unset = no tag. Digits only, anything else is ignored | `123456789012345678` |
+| `DEV_ALERTS_SUPABASE_USAGE_URL` | Optional dashboard link shown on dev alerts; unset = no link. The alert and digest titles link to it. https only, anything else is ignored | `https://...` |
+| `DEV_ALERTS_VERCEL_USAGE_URL` | Optional dashboard link shown on dev alerts; unset = no link. https only, anything else is ignored | `https://...` |
+| `VERCEL_USAGE_TOKEN` | Optional Vercel token scoped to the team, read by the egress monitor for usage; unset = no Vercel meters. Needs `VERCEL_TEAM_ID` too | `vcp_...` |
+| `VERCEL_TEAM_ID` | Optional Vercel team id the egress monitor reads usage for; unset = no Vercel meters. Needs `VERCEL_USAGE_TOKEN` too | `team_...` |
 | `BLOB_STORE_ID` | The Vercel Blob store holding the team logos and map thumbnails: `gnl-media` in production, `gnl-media-staging` elsewhere. Set by the store connection | `store_...` |
 | `VERCEL_OIDC_TOKEN` | Local runs only: the OIDC token the blob calls authenticate with. On Vercel it arrives with each request. `vercel env pull` writes it; it lasts 12 hours | `eyJ...` |
 | `CLOUDFLARE_ACCOUNT_ID` | The Cloudflare account holding the replay bucket | `a1b2c3...` |
@@ -507,11 +513,12 @@ A route whose set is bounded by the structure of a season pages smaller by defau
 
 Every other list route keeps the default of 500, because its client reads the whole set in one request: the season reads of `/events/{event_id}/series`, the assign screen's `/events/{event_id}/signups`, the league-wide team routes, and the routes the page-walking clients call with `limit=500` of their own (`GET /users`, `GET /fantasy/teams`, `POST /fantasy/teams/search`, `POST /fantasy/bets/search`, `GET /stats/career`).
 
-Seven routes carry the total row count in an `X-Total-Count` response header, which CORS exposes to browsers. A client reads the header, then walks the pages with `limit` and `offset`. The count holds for the whole set the route answers, not for the page.
+Eight routes carry the total row count in an `X-Total-Count` response header, which CORS exposes to browsers. A client reads the header, then walks the pages with `limit` and `offset`. The count holds for the whole set the route answers, not for the page.
 
 | Route | Default page size |
 | --- | --- |
 | `GET /users` | 500 |
+| `GET /events` | 500 |
 | `GET /fantasy/teams` | 500 |
 | `POST /fantasy/teams/search` | 500 |
 | `GET /fantasy/bets` | 50 |

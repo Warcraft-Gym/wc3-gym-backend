@@ -209,6 +209,33 @@ def test_the_event_list_reads_newest_first_and_filters(
     ] == [first]
 
 
+def test_the_event_list_pages_newest_first_and_counts_every_event(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """Pages of two walk five nights newest first; the header counts all five,
+    the drafts only for an admin."""
+    nights = [
+        add_event(name=f"Night {index}", kind=EventKind.koth) for index in range(5)
+    ]
+    add_event(name="Hidden night", kind=EventKind.koth, published=False)
+    add_event(name="Open Cup")
+
+    walked = []
+    for offset in (0, 2, 4):
+        resp = client.get(f"/events?kind=koth&limit=2&offset={offset}")
+        assert resp.headers["X-Total-Count"] == "5"
+        walked.append([row["id"] for row in resp.json()])
+    assert walked == [nights[4:2:-1], nights[2:0:-1], nights[:1]]
+
+    past = client.get("/events?kind=koth&limit=2&offset=6")
+    assert past.json() == []
+    assert past.headers["X-Total-Count"] == "5"
+
+    admin = client.get("/events?kind=koth&limit=2", headers=auth_headers)
+    assert admin.headers["X-Total-Count"] == "6"
+    assert len(admin.json()) == 2
+
+
 def test_the_event_list_hides_a_draft_from_everyone_but_an_admin(
     client: Client,
     auth_headers: dict[str, str],

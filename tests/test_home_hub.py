@@ -160,6 +160,10 @@ def hub(seeded: dict[str, Any]) -> dict[str, Any]:
         gnl = session.get(Series, seeded["series_open_id"])
         assert gnl is not None
         gnl.date_time = now + timedelta(hours=1)
+        # the GNL season runs, so its rows read the current rating
+        season = session.get(Season, seeded["season_id"])
+        assert season is not None
+        season.end_date = (now + timedelta(days=30)).date()
         session.add_all(
             DBUserSeasonSignup(
                 user_id=user_id, season_id=seeded["season_id"], race=race
@@ -413,7 +417,9 @@ def test_the_hub_read_is_cacheable_at_the_edge(
     client: Client, hub: dict[str, Any]
 ) -> None:
     resp = client.get("/home/series")
-    assert resp.headers["cache-control"] == "public, s-maxage=120"
+    assert resp.headers["cache-control"] == (
+        "public, s-maxage=120, stale-while-revalidate=600"
+    )
     # this client sends no Origin, and the copy the edge stores must still read in a browser
     assert resp.headers["access-control-allow-origin"] == "*"
 
@@ -446,7 +452,8 @@ def test_the_hub_costs_a_fixed_number_of_statements(
     with count_statements() as tally:
         answer = home.series()
     assert len(answer.next) == 3
-    assert tally[0] == 15
+    # one of them tells the running events from the finished ones
+    assert tally[0] == 16
 
 
 def test_the_worst_case_answer_stays_under_the_egress_ceiling(

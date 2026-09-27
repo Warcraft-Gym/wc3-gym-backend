@@ -74,11 +74,9 @@ class PlayerCareerStatsService:
         sort names a key of derived.CAREER_SORTS and orders the rows by it.
         """
         with Session.begin() as session:
-            rows = derived.career_rows(
-                session, self._stored_rows(session), search, sort=sort, order=order
+            return derived.career_page(
+                session, search, sort=sort, order=order, limit=limit, offset=offset
             )
-            end = None if limit is None else offset + limit
-            return rows[offset:end], len(rows)
 
     def get_by_user_id(self, user_id: int) -> PlayerCareerStatsPublic | None:
         """Get career stats for a specific user"""

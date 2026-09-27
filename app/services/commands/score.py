@@ -11,7 +11,7 @@ import requests
 
 from app.core.config import frontend_url
 from app.core.exceptions import ApiError, BadRequestError, NotFoundError
-from app.models.user import UserPublic
+from app.models.user import UserSummaryPublic
 from app.services import discord, player_series, replays
 from app.services.commands.base import (
     PRIVATE,
@@ -101,7 +101,7 @@ def _store(attachment: dict[str, Any], series_id: int, game_no: int) -> bool:
     return True
 
 
-def _name(player: UserPublic | None) -> str:
+def _name(player: UserSummaryPublic | None) -> str:
     return (player.name if player else None) or "?"
 
 

@@ -7,7 +7,8 @@ from typing import TYPE_CHECKING
 from sqlalchemy import ColumnElement, Select, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as OrmSession
-from sqlalchemy.orm import joinedload, noload, selectinload
+from sqlalchemy.orm import noload, selectinload
+from sqlalchemy.orm.strategy_options import _AbstractLoad
 from sqlmodel import col
 
 from app.core.battle_tags import STAND_IN_ID_PREFIX, has_login, is_real_tag
@@ -19,6 +20,7 @@ from app.core.exceptions import (
     W3CThrottledError,
 )
 from app.core.query import QueryElement, QueryUtil
+from app.models.base import ident
 from app.models.link_prompt import LinkPromptPublic
 from app.models.relationships import DBUserSeasonSignup
 from app.models.season import Season
@@ -32,6 +34,7 @@ from app.models.user import (
     UserUpdate,
 )
 from app.models.user_battle_tag import MergePlan, UserBattleTag
+from app.models.user_team_season import DBUserTeamSeason
 from app.models.w3c_stats import (
     W3CStats,
     W3CStatsCreate,
@@ -45,6 +48,7 @@ from app.services.battle_tags import (
     set_active_tag,
 )
 from app.services.w3c import REQUEST_TIMEOUT, W3CService
+from app.services.w3c_stats import fill, w3c_season, window_rows
 
 if TYPE_CHECKING:
     from app.services.settings import SettingsService
@@ -60,21 +64,85 @@ W3C_SYNC_WORKERS = 4
 SYNC_MAX_AGE = timedelta(minutes=10)
 
 
-# The list row has no gnl_stats, so the link rows stay out
-_LIST_OPTIONS = (
-    noload(rel(User.team_seasons)),
-    joinedload(rel(User.w3c_stats)),
-    selectinload(rel(User.signup_seasons)).joinedload(rel(DBUserSeasonSignup.season)),
-    selectinload(rel(User.battle_tags)),
-)
+def summary_loads(
+    event_id: int | None, *, signups: bool = False, window: int | None = None
+) -> tuple[_AbstractLoad, ...]:
+    """The loads of a player summary, relative to a User: the tags, and the
+    team row of `event_id` alone, none without one. `signups` adds the signups
+    a list row names; `window` loads the W3C rows of that rating window."""
+    team_seasons = rel(User.team_seasons)
+    signup_seasons = rel(User.signup_seasons)
+    w3c_stats = rel(User.w3c_stats)
+    return (
+        selectinload(team_seasons.and_(col(DBUserTeamSeason.season_id) == event_id))
+        if event_id is not None
+        else noload(team_seasons),
+        selectinload(rel(User.battle_tags)),
+        selectinload(signup_seasons).joinedload(rel(DBUserSeasonSignup.season))
+        if signups
+        else noload(signup_seasons),
+        window_rows(window) if window is not None else noload(w3c_stats),
+    )
+
+
+def load_players(
+    session: OrmSession, user_ids: Iterable[int | None], event_id: int | None
+) -> None:
+    """Read those players again with the rows of their summary. The caller
+    holds them through a relation it joined bare, so the rows land on the
+    objects that relation answers."""
+    wanted = {user_id for user_id in user_ids if user_id}
+    if wanted:
+        session.scalars(
+            select(User)
+            .options(*summary_loads(event_id))
+            .where(col(User.id).in_(wanted))
+            .execution_options(populate_existing=True)
+        ).all()
+
+
+def _list_publics(
+    session: OrmSession, users: Iterable[User], current: int
+) -> list[UserListPublic]:
+    """The list rows of those users, with their ladder summary."""
+    publics = [UserListPublic.from_user(user) for user in users]
+    fill(session, publics, current)
+    return publics
 
 
 def _public(session: OrmSession, user: User) -> UserPublic:
-    """One user, with the season record of every team he played for and his trophies."""
+    """One user, with the season record of every team he played for, his
+    trophies, and his ladder summary with the stale races."""
     public = UserPublic.from_user(user)
     derived.fill_gnl_stats(session, [public])
     derived.fill_trophies(session, [public])
+    fill(session, [public], w3c_season(session), stale=True)
     return public
+
+
+def _user(session: OrmSession, user_id: int) -> User:
+    """The user with the rows of his own read, read again even when the session
+    holds him, so a write answers what the read answers."""
+    user = (
+        session.scalars(
+            select(User)
+            .options(
+                selectinload(rel(User.team_seasons)).noload("*"),
+                noload(rel(User.w3c_stats)),
+                selectinload(rel(User.signup_seasons)).joinedload(
+                    rel(DBUserSeasonSignup.season)
+                ),
+                selectinload(rel(User.battle_tags)),
+            )
+            .where(col(User.id) == user_id)
+            .execution_options(populate_existing=True)
+        )
+        .unique()
+        .first()
+    )
+    if not user:
+        raise NotFoundError(f"User not found: {user_id}")
+    return user
 
 
 class UserService:
@@ -86,7 +154,7 @@ class UserService:
         with Session.begin() as session:
             row = User.add(session, user.model_dump())
             attach_tag(session, row, user.battleTag, source)
-            return _public(session, row)
+            return _public(session, _user(session, ident(row)))
 
     def update(
         self, user_id: int, user: UserUpdate, source: str = "admin"
@@ -101,7 +169,7 @@ class UserService:
                 raise NotFoundError("User not found")
             if tag:
                 attach_tag(session, row, tag, source)
-            return _public(session, row)
+            return _public(session, _user(session, user_id))
 
     def set_avatar(self, user_id: int, avatar_url: str | None) -> None:
         """The Discord avatar the login just read: one UPDATE, nothing derived."""
@@ -173,26 +241,9 @@ class UserService:
             else:
                 held = person_by_tag(session, key)
                 user_id = held.id if held is not None else None
-            # Eager load related entities, disable nested loading
-            user = (
-                session.scalars(
-                    select(User)
-                    .options(
-                        joinedload(rel(User.team_seasons)).noload("*"),
-                        joinedload(rel(User.w3c_stats)),
-                        selectinload(rel(User.signup_seasons)).joinedload(
-                            rel(DBUserSeasonSignup.season)
-                        ),
-                        selectinload(rel(User.battle_tags)),
-                    )
-                    .where(col(User.id) == user_id)
-                )
-                .unique()
-                .first()
-            )
-            if not user:
+            if user_id is None:
                 raise NotFoundError(f"User not found: {key}")
-            return _public(session, user)
+            return _public(session, _user(session, user_id))
 
     def search(
         self, query: QueryElement | None, limit: int | None = None, offset: int = 0
@@ -280,17 +331,18 @@ class UserService:
         if filter is None:
             return []
         with Session.begin() as session:
+            current = w3c_season(session)
             # Offset paging is deterministic only with a fixed order
             statement = (
                 select(User)
-                .options(*_LIST_OPTIONS)
+                .options(*summary_loads(None, signups=True))
                 .where(filter)
                 .order_by(col(User.id))
                 .offset(offset)
                 .limit(limit)
             )
             users = session.scalars(statement).unique().all()
-            return [UserListPublic.from_user(user) for user in users]
+            return _list_publics(session, users, current)
 
     def get_all(
         self,
@@ -327,17 +379,18 @@ class UserService:
                 session.scalar(select(func.count()).select_from(User).where(*filters))
                 or 0
             )
+            current = w3c_season(session)
             # Offset paging is deterministic only with a fixed order
             statement = (
                 select(User)
-                .options(*_LIST_OPTIONS)
+                .options(*summary_loads(None, signups=True))
                 .where(*filters)
                 .order_by(col(User.id))
                 .offset(offset)
                 .limit(limit)
             )
             users = session.scalars(statement).unique().all()
-            return [UserListPublic.from_user(user) for user in users], total
+            return _list_publics(session, users, current), total
 
     def _own(self, session: OrmSession, discord_id: str) -> User:
         user = session.scalars(
