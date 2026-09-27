@@ -1,5 +1,9 @@
 # Bundle history
 
+## 2026-09-27
+
+* **Update**: `GET /dev/players` and `POST /dev/login` admit only the admin token's session; the authentication page and the local runbook state it.
+
 ## 2026-09-26
 
 * **Add**: the local dev login, `GET /dev/players` and `POST /dev/login` behind `DEV_LOGIN=1`, signs in as any player with a Discord id as a member, guest or admin; the authentication page and the local runbook state it.

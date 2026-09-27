@@ -4,25 +4,24 @@ A local instance has no Discord server, so no Clerk session passes the guild
 check. With DEV_LOGIN=1 on a local backend these routes mint a session for
 any player that has a Discord id, as a member, a guest or an admin; a member
 with a seat is a captain, as on a real login. Every route answers 404 unless
-`dev_login_enabled` holds.
+`dev_login_enabled` holds, and then admits only the admin token's session: the
+admin signs in first and picks a player from there.
 """
 
 import os
 from typing import Literal
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 from sqlalchemy import ColumnElement, func, or_, select
 from sqlmodel import col
 
-from app.api.deps import TeamServiceDep
+from app.api.deps import Credentials, TeamServiceDep, require_login
 from app.core.db import Session
 from app.core.exceptions import ApiError
 from app.core.security import create_access_token, dev_login_enabled
 from app.models.base import ident
 from app.models.user import User
-
-router = APIRouter(prefix="/dev", tags=["dev"], include_in_schema=False)
 
 LIMIT = 30
 
@@ -39,9 +38,25 @@ class DevLoginRequest(BaseModel):
     role: Literal["member", "guest", "admin"] = "member"
 
 
-def _enabled() -> None:
+def _admin_token(request: Request, credentials: Credentials) -> None:
+    """Admit the admin token's session, and only while the dev login is on.
+
+    The switch is read first, so a machine with it off answers 404 to anyone.
+    A dev session, even one signed in as an admin, and a Clerk admin are refused.
+    """
     if not dev_login_enabled():
         raise ApiError(404, {"error": "Not Found"})
+    claims = require_login(request, credentials)
+    if claims.get("type") != "access" or claims.get("sub") != "admin":
+        raise ApiError(403, {"error": "The admin token only"})
+
+
+router = APIRouter(
+    prefix="/dev",
+    tags=["dev"],
+    include_in_schema=False,
+    dependencies=[Depends(_admin_token)],
+)
 
 
 def _with_login() -> tuple[ColumnElement[bool], ...]:
@@ -57,7 +72,6 @@ def _with_login() -> tuple[ColumnElement[bool], ...]:
 @router.get("/players")
 def dev_players(teams: TeamServiceDep, search: str = "") -> list[DevPlayer]:
     """Up to 30 players that can sign in, by name or battle tag, each marked when it captains."""
-    _enabled()
     query = select(User).where(*_with_login()).order_by(col(User.name)).limit(LIMIT)
     if search.strip():
         like = f"%{search.strip().lower()}%"
@@ -86,7 +100,6 @@ def dev_players(teams: TeamServiceDep, search: str = "") -> list[DevPlayer]:
 @router.post("/login")
 def dev_login(data: DevLoginRequest) -> dict[str, str]:
     """A session for one player, as the role asked for."""
-    _enabled()
     with Session.begin() as session:
         user = session.scalars(
             select(User).where(col(User.id) == data.user_id, *_with_login())

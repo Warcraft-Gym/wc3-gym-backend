@@ -18,46 +18,71 @@ def dev_on(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("ADMIN_DISCORD_IDS", "")
 
 
-def _sign_in(client: Client, user_id: int, role: str = "member") -> dict[str, str]:
-    answer = client.post("/dev/login", json={"user_id": user_id, "role": role})
+def _sign_in(
+    client: Client, admin: dict[str, str], user_id: int, role: str = "member"
+) -> dict[str, str]:
+    answer = client.post(
+        "/dev/login", json={"user_id": user_id, "role": role}, headers=admin
+    )
     assert answer.status_code == 200, answer.text
     return {"Authorization": f"Bearer {answer.json()['access_token']}"}
 
 
 def test_everything_answers_404_while_the_dev_login_is_off(
-    client: Client, seeded: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+    client: Client,
+    seeded: dict[str, Any],
+    auth_headers: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Off by default; a token minted while it was on is refused once it is off."""
+    """Off by default, even to the admin token; a token minted while it was on is refused once it is off."""
     monkeypatch.delenv("DEV_LOGIN", raising=False)
-    assert client.get("/dev/players").status_code == 404
-    assert (
-        client.post("/dev/login", json={"user_id": seeded["player_ids"][0]}).status_code
-        == 404
-    )
+    user_id = seeded["player_ids"][0]
+    for headers in ({}, auth_headers):
+        assert client.get("/dev/players", headers=headers).status_code == 404
+        answer = client.post("/dev/login", json={"user_id": user_id}, headers=headers)
+        assert answer.status_code == 404
 
     monkeypatch.setenv("DEV_LOGIN", "1")
-    headers = _sign_in(client, seeded["player_ids"][0])
+    headers = _sign_in(client, auth_headers, user_id)
     monkeypatch.delenv("DEV_LOGIN")
     assert client.get("/me", headers=headers).status_code == 422
 
 
 def test_a_deployment_never_answers_even_with_the_switch_on(
-    client: Client, seeded: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+    client: Client,
+    seeded: dict[str, Any],
+    auth_headers: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("DEV_LOGIN", "1")
     monkeypatch.setenv("VERCEL", "1")
-    assert client.get("/dev/players").status_code == 404
-    assert (
-        client.post("/dev/login", json={"user_id": seeded["player_ids"][0]}).status_code
-        == 404
+    assert client.get("/dev/players", headers=auth_headers).status_code == 404
+    answer = client.post(
+        "/dev/login", json={"user_id": seeded["player_ids"][0]}, headers=auth_headers
     )
+    assert answer.status_code == 404
+
+
+def test_only_the_admin_token_reaches_the_dev_login(
+    client: Client, seeded: dict[str, Any], auth_headers: dict[str, str], dev_on: None
+) -> None:
+    """No session is 401; a dev session, even an admin one, is 403, so a player never switches."""
+    user_id = seeded["player_ids"][0]
+    assert client.get("/dev/players").status_code == 401
+    assert client.post("/dev/login", json={"user_id": user_id}).status_code == 401
+
+    for role in ("member", "admin"):
+        headers = _sign_in(client, auth_headers, user_id, role=role)
+        assert client.get("/dev/players", headers=headers).status_code == 403
+        answer = client.post("/dev/login", json={"user_id": user_id}, headers=headers)
+        assert answer.status_code == 403
 
 
 def test_a_member_login_is_that_player(
-    client: Client, seeded: dict[str, Any], dev_on: None
+    client: Client, seeded: dict[str, Any], auth_headers: dict[str, str], dev_on: None
 ) -> None:
     """The player's own /me and games; never the super admin."""
-    headers = _sign_in(client, seeded["player_ids"][0])
+    headers = _sign_in(client, auth_headers, seeded["player_ids"][0])
 
     me = client.get("/me", headers=headers).json()
 
@@ -73,10 +98,10 @@ def test_a_member_login_is_that_player(
 
 
 def test_a_player_with_a_seat_is_a_captain(
-    client: Client, seeded: dict[str, Any], dev_on: None
+    client: Client, seeded: dict[str, Any], auth_headers: dict[str, str], dev_on: None
 ) -> None:
     _captain(seeded["team_a_id"], seeded["season_id"], seeded["player_ids"][0])
-    headers = _sign_in(client, seeded["player_ids"][0])
+    headers = _sign_in(client, auth_headers, seeded["player_ids"][0])
 
     me = client.get("/me", headers=headers).json()
 
@@ -87,19 +112,19 @@ def test_a_player_with_a_seat_is_a_captain(
 
 
 def test_a_guest_login_reads_nothing_of_its_own(
-    client: Client, seeded: dict[str, Any], dev_on: None
+    client: Client, seeded: dict[str, Any], auth_headers: dict[str, str], dev_on: None
 ) -> None:
-    headers = _sign_in(client, seeded["player_ids"][0], role="guest")
+    headers = _sign_in(client, auth_headers, seeded["player_ids"][0], role="guest")
 
     assert client.get("/me", headers=headers).json()["role"] == "guest"
     assert client.post("/signup", json=SIGNUP_BODY, headers=headers).status_code == 403
 
 
 def test_an_admin_login_keeps_the_seats_and_can_view_as(
-    client: Client, seeded: dict[str, Any], dev_on: None
+    client: Client, seeded: dict[str, Any], auth_headers: dict[str, str], dev_on: None
 ) -> None:
     _captain(seeded["team_a_id"], seeded["season_id"], seeded["player_ids"][0])
-    headers = _sign_in(client, seeded["player_ids"][0], role="admin")
+    headers = _sign_in(client, auth_headers, seeded["player_ids"][0], role="admin")
 
     me = client.get("/me", headers=headers).json()
     assert me["role"] == "admin"
@@ -115,7 +140,7 @@ def test_an_admin_login_keeps_the_seats_and_can_view_as(
 
 
 def test_the_player_list_marks_captains_and_leaves_out_players_without_a_discord_id(
-    client: Client, seeded: dict[str, Any], dev_on: None
+    client: Client, seeded: dict[str, Any], auth_headers: dict[str, str], dev_on: None
 ) -> None:
     from app.core.db import Session
     from app.models.enums import Race
@@ -130,12 +155,13 @@ def test_the_player_list_marks_captains_and_leaves_out_players_without_a_discord
         )
     _captain(seeded["team_a_id"], seeded["season_id"], seeded["player_ids"][1])
 
-    players = client.get("/dev/players").json()
+    players = client.get("/dev/players", headers=auth_headers).json()
     names = [player["name"] for player in players]
 
     assert "No Login" not in names
     assert "Stand In" not in names
     assert {player["name"]: player["captain"] for player in players}["P2"] is True
-    assert client.get("/dev/players?search=p3").json()[0]["name"] == "P3"
-    stand_in = client.post("/dev/login", json={"user_id": 999999})
+    searched = client.get("/dev/players?search=p3", headers=auth_headers).json()
+    assert searched[0]["name"] == "P3"
+    stand_in = client.post("/dev/login", json={"user_id": 999999}, headers=auth_headers)
     assert stand_in.status_code == 400

@@ -4,7 +4,7 @@ title: Run locally
 description: Install with uv, copy the example environment, start Postgres and the backend with just, run the tests.
 resource: ../../../README.md
 tags: [deploy, tooling]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-26T19:30:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-27T10:00:00Z }
 stale_after: 2027-03-14T00:00:00Z
 sources:
   - id: readme
@@ -35,7 +35,7 @@ WSL and some laptops have no Docker. A real Postgres runs from the `pgserver` wh
 
 # Test as a player
 
-Set `DEV_LOGIN=1` in `.env` and restart the backend; the frontend shows "Sign in as a player" when its own `NEXT_PUBLIC_DEV_LOGIN=1` is set. Pick a seeded player with a Discord id and a role. See [authentication](../api/auth.md#local-dev-login). Set it on a local machine only.
+Set `DEV_LOGIN=1` in `.env` and restart the backend; with its own `NEXT_PUBLIC_DEV_LOGIN=1` set, the frontend offers "Sign in as a player" on `/admin-login` once the admin token is accepted. Pick a seeded player with a Discord id and a role. See [authentication](../api/auth.md#local-dev-login). Set it on a local machine only.
 
 # Daily loop
 

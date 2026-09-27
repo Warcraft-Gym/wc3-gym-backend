@@ -4,7 +4,7 @@ title: Authentication
 description: A bearer token is either the admin token's JWT or a Clerk session; the claims resolve the Discord id and the role once per request, and five guards build on them.
 resource: ../../../app/api/deps.py
 tags: [auth]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-26T19:30:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-27T10:00:00Z }
 sources:
   - id: deps
     resource: ../../../app/api/deps.py
@@ -29,7 +29,7 @@ sources:
 
 # Local dev login
 
-A local instance has no Discord server, so no Clerk session passes the guild check there. To test the app as a player, set `DEV_LOGIN=1` in the local backend's `.env`; never set it on a deployment. `GET /dev/players?search=` then lists up to 30 players that have a Discord id, each marked `captain` when it holds a seat in a running season, and `POST /dev/login {"user_id", "role"}` answers a token for one of them as `member`, `guest` or `admin`. The session is that player: `require_login` resolves its role the way it resolves a Clerk session's, so a member with a seat is a captain and an admin can view as a lower role. With `DEV_LOGIN` unset both routes answer 404 and such a token is refused.
+A local instance has no Discord server, so no Clerk session passes the guild check there. To test the app as a player, set `DEV_LOGIN=1` in the local backend's `.env`; never set it on a deployment. Both routes then admit only the admin token's session: no bearer answers 401, and any other session answers 403, a dev session and a Clerk admin included, so a player never switches to another player. `GET /dev/players?search=` lists up to 30 players that have a Discord id, each marked `captain` when it holds a seat in a running season, and `POST /dev/login {"user_id", "role"}` answers a token for one of them as `member`, `guest` or `admin`. The session is that player: `require_login` resolves its role the way it resolves a Clerk session's, so a member with a seat is a captain and an admin can view as a lower role. With `DEV_LOGIN` unset both routes answer 404 to every caller, the admin token included, and such a token is refused.
 
 # From a session to claims
 
