@@ -4,7 +4,7 @@ title: Roles and permissions
 description: Four roles decided by the database and the guild, ownership checked per row, reads open and writes admin-only, and an admin view-as switch.
 resource: ../../../app/api/deps.py
 tags: [auth]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-26T12:00:00Z }
+generated: { by: claude-code/claude-fable-5-1, at: 2026-09-27T12:24:12Z }
 sources:
   - id: deps
     resource: ../../../app/api/deps.py
@@ -26,7 +26,7 @@ sources:
 | captain | a member with a seat in `team_season_captain` for a running season | the database, live on every request |
 | admin | a row of `admin_grant`, or an id in `ADMIN_DISCORD_IDS` | the database; the environment ids are the bootstrap and cannot be revoked |
 
-An admin who also holds a captain seat keeps the role `admin` and carries the `seats` list as well, so `/me` names the teams that admin captains. The seats grant an admin nothing extra, since every guard already admits an admin.
+An admin who also holds a captain seat keeps the role `admin` and carries the `seats` list as well, so `/me` names the teams that admin captains. Every guard already admits an admin, so the seats change one answer: the draft `seen` stamp and the seen-at of the draft state read the caller's seat, so an admin who captains writes and reads them for the team held.
 
 Discord grants nothing: the guild owner, a role with the administrator bit and the old `admin_role` setting all read as members. `admin_role` stays a setting only because the old bot reads it. The super admin is the `ADMIN_TOKEN` login, a session with no Discord account, used by the admin UI's `/admin-login` page. See [authentication](../api/auth.md).
 

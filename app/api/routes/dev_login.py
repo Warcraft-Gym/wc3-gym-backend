@@ -105,6 +105,8 @@ def dev_login(data: DevLoginRequest) -> dict[str, str]:
             select(User).where(col(User.id) == data.user_id, *_with_login())
         ).first()
         if user is None:
+            if session.get(User, data.user_id) is None:
+                raise ApiError(404, {"error": "No such player"})
             raise ApiError(
                 400, {"error": "That player has no Discord id, so it cannot sign in"}
             )
