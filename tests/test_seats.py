@@ -314,3 +314,19 @@ def test_viewing_as_a_member_drops_the_admin_seats(
     assert me["role"] == "member"
     assert me["actual_role"] == "admin"
     assert me["seats"] == []
+
+
+def test_an_admin_who_captains_marks_the_draft_seen(
+    client: Client,
+    seeded: dict[str, Any],
+    p1: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The one guard the seats open: the seen stamp reads the caller's seat."""
+    monkeypatch.setenv("ADMIN_DISCORD_IDS", "1")
+    seen = f"/draft-series/match/{seeded['match_id']}/teams/{seeded['team_a_id']}/seen"
+
+    assert client.put(seen, headers=p1).status_code == 403
+
+    _captain(seeded["team_a_id"], seeded["season_id"], seeded["player_ids"][0])
+    assert client.put(seen, headers=p1).status_code == 204

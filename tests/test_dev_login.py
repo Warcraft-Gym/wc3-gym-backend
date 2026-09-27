@@ -143,16 +143,17 @@ def test_the_player_list_marks_captains_and_leaves_out_players_without_a_discord
     client: Client, seeded: dict[str, Any], auth_headers: dict[str, str], dev_on: None
 ) -> None:
     from app.core.db import Session
+    from app.models.base import ident
     from app.models.enums import Race
     from app.models.user import User
 
+    no_login = User(name="No Login", discordId=None, race=Race.HU)
     with Session.begin() as session:
         session.add_all(
-            [
-                User(name="No Login", discordId=None, race=Race.HU),
-                User(name="Stand In", discordId="gnl-17", race=Race.OC),
-            ]
+            [no_login, User(name="Stand In", discordId="gnl-17", race=Race.OC)]
         )
+        session.flush()
+        no_login_id = ident(no_login)
     _captain(seeded["team_a_id"], seeded["season_id"], seeded["player_ids"][1])
 
     players = client.get("/dev/players", headers=auth_headers).json()
@@ -163,5 +164,9 @@ def test_the_player_list_marks_captains_and_leaves_out_players_without_a_discord
     assert {player["name"]: player["captain"] for player in players}["P2"] is True
     searched = client.get("/dev/players?search=p3", headers=auth_headers).json()
     assert searched[0]["name"] == "P3"
-    stand_in = client.post("/dev/login", json={"user_id": 999999}, headers=auth_headers)
-    assert stand_in.status_code == 400
+    missing = client.post("/dev/login", json={"user_id": 999999}, headers=auth_headers)
+    assert missing.status_code == 404
+    no_discord = client.post(
+        "/dev/login", json={"user_id": no_login_id}, headers=auth_headers
+    )
+    assert no_discord.status_code == 400
