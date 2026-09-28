@@ -21,7 +21,7 @@ mod vercel './just/vercel.just'
 # Supabase egress snapshots of both projects: snapshot, report, check.
 mod db './just/db.just'
 
-# The egress monitor's reads from prod, staging or local: routes, egress.
+# The egress monitor's reads from prod, staging or local: `just monitor routes prod 7`.
 mod monitor './just/monitor.just'
 
 alias up := local::up

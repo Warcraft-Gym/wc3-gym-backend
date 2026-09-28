@@ -1,5 +1,5 @@
-# The egress monitor's reads from a deployment: `just monitor routes 1 staging`. Every recipe takes an
-# environment, prod by default: prod, staging (the shared preview deployment) or local (`just serve`).
+# The egress monitor's reads from a deployment: `just monitor routes staging 7` or `days=7`. Every recipe
+# takes an environment first, prod by default: prod, staging (the shared preview deployment) or local (`just serve`).
 # CRON_SECRET comes from .env (gitignored); prod and staging share it.
 
 # Recipes run from the repository root, one level up from this file.
@@ -23,10 +23,11 @@ api env="prod":
     esac
 
 # What each route cost the database over the last days, most estimated egress first.
-routes days="1" env="prod":
+routes env="prod" days="1":
     #!/usr/bin/env bash
     set -euo pipefail
-    BODY=$(just monitor _get "/jobs/egress?days={{ days }}" {{ env }})
+    days="{{ days }}"
+    BODY=$(just monitor _get "/jobs/egress?days=${days#days=}" {{ env }})
     export BODY
     uv run python - <<'PY'
     import json, os
@@ -45,10 +46,11 @@ routes days="1" env="prod":
     PY
 
 # The estimated egress between the daily snapshots of the last days, oldest first.
-egress days="7" env="prod":
+egress env="prod" days="7":
     #!/usr/bin/env bash
     set -euo pipefail
-    BODY=$(just monitor _get "/jobs/egress-snapshots?days={{ days }}" {{ env }})
+    days="{{ days }}"
+    BODY=$(just monitor _get "/jobs/egress-snapshots?days=${days#days=}" {{ env }})
     export BODY
     uv run python - <<'PY'
     import json, os
