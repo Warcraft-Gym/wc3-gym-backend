@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from app.core.egress_stats import BYTES_PER_ROW, report
+from app.core.egress_stats import estimate_bytes, report
 
 
 def test_report_totals_rows_between_two_snapshots(
@@ -37,10 +37,10 @@ def test_report_totals_rows_between_two_snapshots(
     rate = report("prod", out=tmp_path)
 
     printed = capsys.readouterr().out
-    assert "rows returned 3,500,000" in printed
-    assert "~350 MB billed" in printed
+    assert "rows returned 3,500,000 over 20 statements" in printed
+    assert "~403 MB billed" in printed
     assert "pooler counter 2.0 MB" in printed
-    assert rate == pytest.approx(3_500_000 * BYTES_PER_ROW / 1e6)
+    assert rate == pytest.approx(estimate_bytes(3_500_000, 20) / 1e6)
 
 
 def test_report_excludes_its_own_statement_scan(
@@ -76,4 +76,4 @@ def test_report_excludes_its_own_statement_scan(
     rate = report("prod", out=tmp_path)
 
     assert "rows returned 10" in capsys.readouterr().out
-    assert rate == pytest.approx(10 * BYTES_PER_ROW / 1e6)
+    assert rate == pytest.approx(estimate_bytes(10, 1) / 1e6)
