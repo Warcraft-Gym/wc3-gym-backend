@@ -107,6 +107,10 @@ class Meters:
     cycle_mb: float
     projected_mb: float
     staging_mb: float | None = None  # staging's share of cycle_mb; None when not read
+    staging_measured: bool = (
+        True  # False while staging's ledger holds no measured bytes
+    )
+    partial: bool = False  # a day of the cycle ran statements but measured no bytes
 
     @property
     def level(self) -> Level:
@@ -157,6 +161,7 @@ def meters(found: list[Day], now: datetime, staging: list[Day] | None = None) ->
         so_far, average = so_far + staging_mb, average + staging_average
     left = (c.end - now).total_seconds() / 86400
     complete = [d for d in found if d.day < now.date()]
+    in_cycle = [d for d in [*found, *(staging or [])] if d.day >= c.start.date()]
     return Meters(
         now=now,
         cycle=c,
@@ -165,6 +170,8 @@ def meters(found: list[Day], now: datetime, staging: list[Day] | None = None) ->
         cycle_mb=so_far,
         projected_mb=so_far + average * left,
         staging_mb=staging_mb,
+        staging_measured=not staging or any(d.mb is not None for d in staging),
+        partial=any(d.mb is None for d in in_cycle),
     )
 
 
@@ -671,11 +678,16 @@ def digest(
         field(
             "Cycle so far",
             f"{size(m.cycle_mb)} of the 5 GB cap\n{meter(m.cycle_mb, CAP_MB)}"
-            f" · day {m.day} of {m.cycle.days}",
+            f" · day {m.day} of {m.cycle.days}"
+            + ("\nmeasured days only" if m.partial else ""),
         ),
         field(
             "Staging",
-            "not read" if m.staging_mb is None else f"{size(m.staging_mb)} this cycle",
+            "not read"
+            if m.staging_mb is None
+            else f"{size(m.staging_mb)} this cycle"
+            if m.staging_measured
+            else "not measured",
         ),
         field("Projected", f"~{size(m.projected_mb)}"),
         *extra,
@@ -880,12 +892,16 @@ def report(result: EgressSnapshotResult, now: datetime | None = None) -> None:
                 )
             )
         else:
+            level, since = m.level, m.since
+            if m.partial and state is not None and state.level == Level.RED:
+                # A partly measured cycle reads low, so it never gives the all-clear
+                level, since = Level.RED, state.since
             changes.append(
                 change(
                     state,
                     KEY,
-                    m.level,
-                    m.since,
+                    level,
+                    since,
                     lambda: alert(m, routes, m.since, mention, links),
                     lambda s: recovery(m, s.level, s.since),
                 )

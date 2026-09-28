@@ -1096,3 +1096,29 @@ def test_the_unavailable_alert_starts_its_reason_with_a_capital() -> None:
     assert payload["embeds"][0]["description"].startswith(
         "The pg_stat_statements extension"
     )
+
+
+def test_a_partly_measured_cycle_holds_red_and_says_so(
+    monkeypatch: pytest.MonkeyPatch, sent: list[dict[str, Any]]
+) -> None:
+    before = NOW - timedelta(days=1)
+    run(monkeypatch, daily(200, now=before), before)
+    held = state()
+    assert held is not None and held.level == "red"
+    sent.clear()
+
+    # The 26th ran before the bytes were measured: the cycle reads low, so no all-clear
+    run(monkeypatch, [measured(3, None), measured(2, 20), measured(1, 20)])
+    assert titles(sent) == ["Daily infrastructure digest · 28 Sep"]
+    current = state()
+    assert current is not None and current.level == "red"
+    fields = {f["name"]: f["value"] for f in sent[0]["embeds"][0]["fields"]}
+    assert fields["Cycle so far"].endswith("measured days only")
+
+
+def test_staging_without_measured_bytes_reads_not_measured() -> None:
+    m = egress_monitor.meters(daily(20), NOW, [measured(1, None)])
+    assert not m.staging_measured and m.partial
+    payload = egress_monitor.digest(m, [])
+    fields = {f["name"]: f["value"] for f in payload["embeds"][0]["fields"]}
+    assert fields["Staging"] == "not measured"
