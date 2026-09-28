@@ -28,7 +28,7 @@ sources:
 | the GNL website | `wc3-gnl-website` | server-side, from Next.js: `GET /leagues`, `GET /events`, `GET /leagues/{league_id}/teams`, and for finished events `/events/{event_id}/teams`, `/matches`, `/series`, `/ladder` and `/fantasy/teams`; for a player `GET /users/{user_id}`, `GET /users/{user_id}/seasons`, `GET /users/{user_id}/series?event_id=` and `GET /stats/career/{user_id}` | none |
 | the WordPress site | `gym_website_scripts` | eight paths on every page view, no cache, against the older backend host: `GET /stats/career`, `GET /config/settings`, `GET /teams/season/{id}`, `GET /teams/{id}/image`, `GET /seasons/{id}`, `POST /matches/search`, `POST /series/season/{id}/playday/{n}/search`, `POST /fantasy/teams/search` | none |
 | the Discord adapter | `wc3-gym-discord-bot` | `POST /discord/interactions` | Discord's signature |
-| the cast-reminder worker | `wc3-gym-discord-bot`, `cron/` | `GET /jobs/cast-reminders` every five minutes | `CAST_REMINDER_SECRET` bearer |
+| the cast-reminder worker | `wc3-gym-discord-bot`, `cron/` | `GET /jobs/cast-reminders` every five minutes | `CLOUDFLARE_CRON_SECRET` bearer |
 | Vercel cron | this repository's `vercel.json` | `GET /jobs/w3c-sync` and `GET /jobs/egress-snapshot`, each once a day | `CRON_SECRET` bearer |
 | Nightbot | no repository | `GET /koth/signup`, and the deprecated `/koth/*` reads | the Nightbot token |
 | the stream overlay and bookmarks | none | the deprecated `/koth/*` reads | none |

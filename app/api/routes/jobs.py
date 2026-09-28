@@ -47,7 +47,7 @@ def cast_reminders(credentials: Credentials) -> dict[str, int]:
     skipped, so a run that repeats posts nothing twice. The Worker holds its own
     secret, so a leak there triggers nothing but this job.
     """
-    only_the_scheduler(credentials, "CAST_REMINDER_SECRET")
+    only_the_scheduler(credentials, "CLOUDFLARE_CRON_SECRET")
     due = casts.starting_soon(utcnow())
     return {"posted": sum(discord_posts.post_reminder(row) for row in due)}
 

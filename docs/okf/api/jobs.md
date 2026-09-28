@@ -30,7 +30,7 @@ sources:
 | `GET /jobs/egress-snapshot` | copies pg_stat_statements into [egress_snapshot](../data/tables/egress_snapshot.md) on the server, deletes snapshots older than 35 days, and answers the window since the run before: rows, estimated MB, MB a day against the budget, and the ten statements that returned the most rows; then [the egress monitor](#the-egress-monitor) levels the cycle, the database size and the Vercel usage and posts to `DEV_ALERTS_WEBHOOK_URL` when it is set | Vercel cron at 00:00 UTC, shifted by up to 59 minutes |
 | `GET /jobs/egress-snapshots?days=7` | one window per snapshot of the last `days` days (1 to 35), oldest first, totals only, with `Cache-Control: no-store` | an operator, with `just egress-days` against a local server |
 
-`/jobs/cast-reminders` checks `Authorization: Bearer <CAST_REMINDER_SECRET>`, the value the Worker holds; the other four check `Authorization: Bearer <CRON_SECRET>`, the name Vercel Cron sends. A route whose secret is unset answers 503, so a deployment without the secrets runs no job.
+`/jobs/cast-reminders` checks `Authorization: Bearer <CLOUDFLARE_CRON_SECRET>`, the value the Worker holds; the other four check `Authorization: Bearer <CRON_SECRET>`, the name Vercel Cron sends. A route whose secret is unset answers 503, so a deployment without the secrets runs no job.
 
 # The egress snapshot
 
