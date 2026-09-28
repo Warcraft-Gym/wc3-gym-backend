@@ -6,7 +6,7 @@ Every pull request gets a Vercel preview deployment. Vercel calls these deployme
 
 | Database | What it is |
 |---|---|
-| `wc3gym_template` | Seeded from the prod dump, migrated to the same revision as `main`, locked against connections. Only ever copied. |
+| `wc3gym_template` | Seeded from the prod dump, migrated to the same revision as `main`. Locked only while it is copied. Only ever copied. |
 | `wc3gym_staging` | The shared staging database, same content as the template, open for connections. Every preview that adds no migration uses it. |
 | `wc3gym_<branch>` | A branch's own copy of the template. Exists only while a branch that adds a migration is alive. |
 
@@ -45,11 +45,11 @@ Exactly one trigger: GitHub reports the branch deleted. The `Vercel staging data
 - **An old branch while `main` gained a migration.** Build fails with "rebase onto main". Stricter than needed, never a preview that silently errors.
 - **A build fails halfway through a copy.** The copy is partly migrated and has no fingerprint comment. The next push drops it and copies the template again, rather than continuing on a half-migrated database.
 - **A push edits a migration in place.** The revision id is unchanged, so alembic sees the copy at head, but the fingerprint differs: the copy is dropped and rebuilt.
-- **Reseeding from a newer prod dump.** `just vercel seed staging` rebuilds the template and the shared database and relocks the template. Open branch copies are untouched.
+- **Reseeding from a newer prod dump.** `just vercel seed staging` rebuilds the template and the shared database. Open branch copies are untouched.
 
 ## Why a template rather than seeding each copy from scratch
 
-Postgres refuses to copy a database that has any open connection, and the pooler always holds one on the shared database, so the shared database cannot be the copy source. The locked template is the smallest thing that can be: one extra database that nothing connects to. The alternative, creating an empty database and loading the seed repo in the build, needs a GitHub token in the Vercel build and moves the seed loader into this repo. The template needs neither; its cost is the unlock/relock around a reseed, which `just vercel seed staging` and the workflow do.
+Postgres refuses to copy a database that has any open connection, and the pooler always holds one on the shared database, so the shared database cannot be the copy source. The template is the smallest thing that can be: one extra database that only the migration connects to. The alternative, creating an empty database and loading the seed repo in the build, needs a GitHub token in the Vercel build and moves the seed loader into this repo. The template needs neither; its cost is that each copy locks it and ends the pooler's sessions on it. The lock lasts for the copy only: the pooler retries a locked database about 100 times a second for two minutes and logs every failure, which cost ~23 MB of log ingestion per push to main while the template stayed locked between copies.
 
 ## Why a second project rather than a second database in the production project
 
