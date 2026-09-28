@@ -120,7 +120,9 @@ def test_each_check_in_adds_what_arrived_since_the_last(
     tcp: tuple[socket.socket, socket.socket],
 ) -> None:
     sender, receiver = tcp
-    conn = SimpleNamespace(pgconn=SimpleNamespace(socket=receiver.fileno()))
+    conn = SimpleNamespace(
+        closed=False, pgconn=SimpleNamespace(socket=receiver.fileno())
+    )
     record = SimpleNamespace(info={})
     _start_received(conn, record)
     cost = start_request_cost()
@@ -147,3 +149,11 @@ def test_the_ledger_adds_the_measured_bytes_of_each_call(
         if r["route"] == "/x"
     )
     assert (row["calls"], row["db_bytes"], row["bytes"]) == (2, 1_000, 20)
+
+
+def test_an_invalidated_connection_checks_in_without_a_count() -> None:
+    record = SimpleNamespace(info={"received": 5})
+    cost = start_request_cost()
+    _count_received(None, record)
+    _count_received(SimpleNamespace(closed=True), record)
+    assert (cost.db_bytes, record.info["received"]) == (0, 5)

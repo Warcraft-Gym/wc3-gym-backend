@@ -103,7 +103,11 @@ def _start_received(dbapi_conn: Any, record: Any) -> None:  # noqa: ANN401
 
 def _count_received(dbapi_conn: Any, record: Any) -> None:  # noqa: ANN401
     """On check-in, add what the connection received since its last check-in to the
-    request's tally: the connect handshake, the ping, every result and the commit."""
+    request's tally: the connect handshake, the ping, every result and the commit.
+    An invalidated connection comes back without a driver connection or with a closed one;
+    what it received since its last check-in is not counted."""
+    if dbapi_conn is None or dbapi_conn.closed:
+        return
     now = received(dbapi_conn.pgconn.socket)
     if now is None:
         return
