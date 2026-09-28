@@ -39,6 +39,9 @@ DB_KEY = "db_size"
 DB_CAP_MB = 500.0  # the Supabase Free database size
 DB_RED = 0.9  # a database over this share of DB_CAP_MB alerts
 VERCEL_KEY = "vercel"
+# The staging project shares the egress cap; Vercel runs crons on production only, so prod's run
+# takes staging's snapshot through its own route and reads its windows back
+STAGING_API = "https://wc3-gym-backend-git-staging-wc-3-gym.vercel.app"
 VERCEL_USAGE_API = "https://api.vercel.com/v2/usage"
 # Hobby has no billing cycle: its limits hold over a rolling 30 days
 VERCEL_WINDOW = timedelta(days=30)
@@ -103,6 +106,9 @@ class Meters:
     average_mb_per_day: float
     cycle_mb: float
     projected_mb: float
+    staging_mb: float | None = (
+        None  # staging's share of cycle_mb; None when it was not read
+    )
 
     @property
     def level(self) -> Level:
@@ -129,14 +135,28 @@ class Meters:
         return (self.now - self.cycle.start).days + 1
 
 
-def meters(found: list[EgressWindow], now: datetime) -> Meters:
-    """The cycle's figures from the windows read, oldest first."""
-    c = cycle(now)
+def rates(found: list[EgressWindow], c: Cycle, now: datetime) -> tuple[float, float]:
+    """One project's cycle so far and recent MB a day, from its windows oldest first."""
     # The 00:00 run's window covers the day before, so a window counts in the cycle it starts in
     so_far = sum(w.estimated_mb for w in found if w.start >= c.start)
     recent = [w for w in found if w.end >= now - AVERAGE_OVER] or found[-1:]
     hours = sum(w.hours for w in recent)
     average = sum(w.estimated_mb for w in recent) / hours * 24 if hours else 0.0
+    return so_far, average
+
+
+def meters(
+    found: list[EgressWindow],
+    now: datetime,
+    staging: list[EgressWindow] | None = None,
+) -> Meters:
+    """The cycle's figures from prod's windows and staging's, each oldest first."""
+    c = cycle(now)
+    so_far, average = rates(found, c, now)
+    staging_mb = None
+    if staging is not None:
+        staging_mb, staging_average = rates(staging, c, now)
+        so_far, average = so_far + staging_mb, average + staging_average
     left = (c.end - now).total_seconds() / 86400
     return Meters(
         now=now,
@@ -145,7 +165,30 @@ def meters(found: list[EgressWindow], now: datetime) -> Meters:
         average_mb_per_day=average,
         cycle_mb=so_far,
         projected_mb=so_far + average * left,
+        staging_mb=staging_mb,
     )
+
+
+def staging_windows(since: datetime, now: datetime) -> list[EgressWindow] | None:
+    """Take staging's snapshot and read its windows since `since`; None off production or
+    when staging did not answer."""
+    if os.getenv("VERCEL_ENV") != "production":
+        return None
+    headers = {"Authorization": f"Bearer {os.getenv('CRON_SECRET', '')}"}
+    days = min((now - since).days + 1, 35)
+    try:
+        requests.get(f"{STAGING_API}/jobs/egress-snapshot", headers=headers, timeout=20)
+        r = requests.get(
+            f"{STAGING_API}/jobs/egress-snapshots",
+            params={"days": days},
+            headers=headers,
+            timeout=20,
+        )
+        r.raise_for_status()
+        return [EgressWindow.model_validate(w) for w in r.json()]
+    except (requests.RequestException, ValueError) as error:
+        log.warning("staging egress not read: %s", type(error).__name__)
+        return None
 
 
 # The dashboards a post links to, by label, from their optional variables
@@ -620,6 +663,10 @@ def digest(
             f"~{size(m.cycle_mb)} of the 5 GB cap\n{meter(m.cycle_mb, CAP_MB)}"
             f" · day {m.day} of {m.cycle.days}",
         ),
+        field(
+            "Staging",
+            "not read" if m.staging_mb is None else f"~{size(m.staging_mb)} this cycle",
+        ),
         field("Projected", f"~{size(m.projected_mb)}"),
         *extra,
         field(
@@ -793,6 +840,8 @@ def report(result: EgressSnapshotResult, now: datetime | None = None) -> None:
         usage, vercel_error = None, f"{name} {status}" if status else name
         log.warning("vercel usage not read: %s", vercel_error)
     vercel = usage if isinstance(usage, Vercel) else None
+    start = min(cycle(now).start, now - AVERAGE_OVER)
+    staging = staging_windows(start, now) if result.available else None
     changes: list[Change] = []
     out: dict[str, Any] | None = None
     with Session() as session:
@@ -814,8 +863,7 @@ def report(result: EgressSnapshotResult, now: datetime | None = None) -> None:
                 )
             )
         else:
-            start = min(cycle(now).start, now - AVERAGE_OVER)
-            m = meters(windows(session, start), now)
+            m = meters(windows(session, start), now, staging)
             routes = egress.busiest(session, m.covers, TOP_ROUTES)
             changes.append(
                 change(

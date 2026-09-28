@@ -40,6 +40,7 @@ The snapshot job fetches no statistics row to the function: the copy is an `INSE
 
 After each run that writes a snapshot, `app/services/egress_monitor.py` levels the billing cycle, the database size and the Vercel usage, stores each level in its [monitor_state](../data/tables/monitor_state.md) row and posts Discord embeds to `DEV_ALERTS_WEBHOOK_URL`. Unset, it posts nothing. A skipped run posts nothing and keeps the levels.
 
+- The staging project shares the cap, and Vercel runs crons on production only. So the production run calls the staging deployment's `GET /jobs/egress-snapshot`, reads its windows back with `GET /jobs/egress-snapshots`, and adds them to the cycle, the average and the projection; the digest's Staging field shows staging's share. Staging answers without posting, as `DEV_ALERTS_WEBHOOK_URL` is set on production only.
 - The cycle starts on day `CYCLE_START_DAY` of each month, UTC. A window counts toward the cycle its start falls in, so the run just after midnight on the first day bills the day before to the cycle before.
 - The 3-day average is the MB of the windows that ended in the last 72 hours over their hours, times 24; with none, the last window. The projection is the cycle so far plus that average times the days left.
 - `red` when the projection is over `RED_MB`, 90% of `CAP_MB`, the egress cap per cycle. `amber` when the last window is over `BUDGET_MB_PER_DAY`; amber only colours the digest. `unavailable` when the run could not read the statistics or raised. Otherwise `normal`.

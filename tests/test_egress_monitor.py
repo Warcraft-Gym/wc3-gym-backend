@@ -135,6 +135,31 @@ def test_the_run_after_day_25_counts_the_day_before_in_the_old_cycle() -> None:
     assert m.covers == date(2026, 9, 25)
 
 
+def test_staging_adds_its_cycle_and_rate_to_the_totals() -> None:
+    m = egress_monitor.meters(daily(200), NOW, daily(10))
+    assert (m.cycle_mb, m.staging_mb) == (630, 30)
+    assert m.average_mb_per_day == pytest.approx(210)
+    assert m.last is not None and m.last.estimated_mb == 200
+
+
+def test_staging_is_read_on_production_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[str] = []
+
+    def get(url: str, **kwargs: object) -> SimpleNamespace:
+        calls.append(url.rsplit("/", 1)[1])
+        window = w(NOW, 10).model_dump(mode="json")
+        return SimpleNamespace(raise_for_status=lambda: None, json=lambda: [window])
+
+    monkeypatch.setattr(egress_monitor.requests, "get", get)
+    monkeypatch.delenv("VERCEL_ENV", raising=False)
+    assert egress_monitor.staging_windows(NOW - timedelta(days=4), NOW) is None
+    assert calls == []
+    monkeypatch.setenv("VERCEL_ENV", "production")
+    found = egress_monitor.staging_windows(NOW - timedelta(days=4), NOW)
+    assert calls == ["egress-snapshot", "egress-snapshots"]
+    assert found is not None and [x.estimated_mb for x in found] == [10]
+
+
 def test_with_no_window_in_the_last_72_hours_the_last_window_sets_the_rate() -> None:
     m = egress_monitor.meters([w(NOW - timedelta(days=5), 30, hours=12)], NOW)
     assert m.average_mb_per_day == pytest.approx(60)
@@ -1031,7 +1056,7 @@ def test_a_digest_with_every_field_fits_discords_limits(
     m = egress_monitor.meters(daily(20_000), NOW)
     payload = egress_monitor.digest(m, [], None, 499.0, None, usage)
     names = [f["name"] for f in payload["embeds"][0]["fields"]]
-    assert names[3:5] == ["Database size", "Vercel, last 30 days"]
+    assert names[4:6] == ["Database size", "Vercel, last 30 days"]
     assert size(payload) <= 6000
 
 
