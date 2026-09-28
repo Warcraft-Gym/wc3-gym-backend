@@ -1,7 +1,9 @@
 """Names and fingerprints for preview databases."""
 
 from pathlib import Path
+from typing import cast
 
+import psycopg
 import pytest
 
 from api.preview_db import branch_db_name, copy_template, migrations_fingerprint
@@ -37,7 +39,7 @@ class _Recorder:
 
 def test_template_is_locked_for_the_copy_only() -> None:
     conn = _Recorder()
-    copy_template(conn, "wc3gym_x")  # type: ignore[arg-type]
+    copy_template(cast(psycopg.Connection, conn), "wc3gym_x")
     assert conn.sql == [
         "ALTER DATABASE",
         "SELECT pg_terminate_backend(pid)",
@@ -46,5 +48,5 @@ def test_template_is_locked_for_the_copy_only() -> None:
     ]
     failing = _Recorder(fail_on="CREATE DATABASE")
     with pytest.raises(RuntimeError):
-        copy_template(failing, "wc3gym_x")  # type: ignore[arg-type]
+        copy_template(cast(psycopg.Connection, failing), "wc3gym_x")
     assert failing.sql[-1] == "ALTER DATABASE"
