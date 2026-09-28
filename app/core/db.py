@@ -12,6 +12,8 @@ worker can start at the same time.
 """
 
 import os
+import socket
+import struct
 from collections.abc import Callable
 from concurrent.futures import Executor, Future
 from contextvars import ContextVar, copy_context
@@ -27,11 +29,12 @@ Session = sessionmaker()
 
 @dataclass
 class Cost:
-    """What one request asked of the database: statements sent, and rows
-    returned by reads plus rows changed by writes."""
+    """What one request asked of the database: statements sent, rows returned by reads
+    plus rows changed by writes, and the bytes the database connection received."""
 
     statements: int = 0
     rows: int = 0
+    db_bytes: int = 0
 
 
 # Mutable, so a worker thread that copied the request context adds to the same tally
@@ -75,6 +78,45 @@ def _count_row(cursor: Any, row: tuple[Any, ...]) -> tuple[Any, ...]:  # noqa: A
     return row
 
 
+# tcpi_bytes_received in Linux's struct tcp_info, whose fields are only ever appended
+TCPI_BYTES_RECEIVED = 128
+
+
+def received(fd: int) -> int | None:
+    """The bytes a TCP socket has received since it opened, as the kernel counts them;
+    None where the kernel does not report it."""
+    sock = socket.socket(fileno=fd)
+    try:
+        info = sock.getsockopt(socket.IPPROTO_TCP, socket.TCP_INFO, 256)
+    except (AttributeError, OSError):
+        return None
+    finally:
+        sock.detach()  # the socket belongs to the driver: never close it here
+    if len(info) < TCPI_BYTES_RECEIVED + 8:
+        return None
+    return struct.unpack_from("Q", info, TCPI_BYTES_RECEIVED)[0]
+
+
+def _start_received(dbapi_conn: Any, record: Any) -> None:  # noqa: ANN401
+    record.info["received"] = 0
+
+
+def _count_received(dbapi_conn: Any, record: Any) -> None:  # noqa: ANN401
+    """On check-in, add what the connection received since its last check-in to the
+    request's tally: the connect handshake, the ping, every result and the commit.
+    An invalidated connection comes back without a driver connection or with a closed one;
+    what it received since its last check-in is not counted."""
+    if dbapi_conn is None or dbapi_conn.closed:
+        return
+    now = received(dbapi_conn.pgconn.socket)
+    if now is None:
+        return
+    cost = _cost.get()
+    if cost is not None:
+        cost.db_bytes += now - record.info.get("received", 0)
+    record.info["received"] = now
+
+
 def rel(attr: Any) -> InstrumentedAttribute[Any]:  # noqa: ANN401
     """The relationship twin of sqlmodel.col(): the loader options want the
     instrumented attribute, and SQLModel types the class attribute as its value."""
@@ -107,6 +149,9 @@ def init_engine(db_url: str | None = None) -> Engine:
             engine, "connect", lambda conn, _: setattr(conn, "row_factory", _count_row)
         )
     event.listen(engine, "after_cursor_execute", _count_statement)
+    if engine.dialect.name == "postgresql":
+        event.listen(engine.pool, "connect", _start_received)
+        event.listen(engine.pool, "checkin", _count_received)
     Session.configure(bind=engine)
     # the listeners: the blob store follows the rows, and every fixture and
     # series names the round it is played in

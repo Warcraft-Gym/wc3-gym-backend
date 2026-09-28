@@ -22,7 +22,7 @@ api env="prod":
     (*)       echo "env must be prod, staging or local" >&2; exit 2 ;;
     esac
 
-# What each route cost the database over the last days, most estimated egress first.
+# What each route's database connections received over the last days, measured, most first.
 routes env="prod" days="1":
     #!/usr/bin/env bash
     set -euo pipefail
@@ -31,31 +31,39 @@ routes env="prod" days="1":
     export BODY
     uv run python - <<'PY'
     import json, os
-    from app.core.egress_stats import estimate_bytes
     rows = json.loads(os.environ["BODY"])
     for r in rows:
-        r["egress_mb"] = f"{estimate_bytes(r['rows'], r['statements']) / 1e6:.1f}"
+        r.setdefault("db_bytes", 0)
+        r["db_mb"] = f"{r['db_bytes'] / 1e6:.1f}" if r["db_bytes"] or not r["statements"] else "-"
         r["response_mb"] = f"{r['bytes'] / 1e6:.1f}"
-    rows.sort(key=lambda r: (r["day"], -float(r["egress_mb"])))
-    columns = ("day", "method", "calls", "statements", "rows", "egress_mb", "response_mb", "route")
+    rows.sort(key=lambda r: (r["day"], -r["db_bytes"]))
+    columns = ("day", "method", "calls", "statements", "rows", "db_mb", "response_mb", "route")
     table = [columns] + [tuple(str(r[c]) for c in columns) for r in rows]
     widths = [max(len(row[i]) for row in table) for i in range(len(columns) - 1)]
     for row in table:
         print("  ".join(cell.rjust(w) for cell, w in zip(row, widths)), row[-1])
-    print("\negress_mb: the monitor's estimate of billed egress; response_mb: the JSON sent to the browser")
+    print("\ndb_mb: bytes the database connections received (the egress); response_mb: the JSON sent")
     PY
 
-# The estimated egress between the daily snapshots of the last days, oldest first.
+# Each day's measured egress over the last days, oldest first.
 egress env="prod" days="7":
     #!/usr/bin/env bash
     set -euo pipefail
     days="{{ days }}"
-    BODY=$(just monitor _get "/jobs/egress-snapshots?days=${days#days=}" {{ env }})
+    BODY=$(just monitor _get "/jobs/egress?days=${days#days=}" {{ env }})
     export BODY
     uv run python - <<'PY'
     import json, os
-    columns = ("start", "end", "hours", "calls", "rows", "estimated_mb", "mb_per_day", "over_budget")
-    table = [columns] + [tuple(str(r[c])[:16] for c in columns) for r in json.loads(os.environ["BODY"])]
+    days: dict[str, list[int]] = {}
+    for r in json.loads(os.environ["BODY"]):
+        total = days.setdefault(r["day"], [0, 0, 0, 0, 0])
+        for i, name in enumerate(("calls", "statements", "rows", "db_bytes", "bytes")):
+            total[i] += r.get(name, 0)
+    columns = ("day", "calls", "statements", "rows", "db_mb", "response_mb")
+    table = [columns] + [
+        (d, f"{c:,}", f"{s:,}", f"{n:,}", "not measured" if s and not b else f"{b / 1e6:.1f}", f"{j / 1e6:.1f}")
+        for d, (c, s, n, b, j) in sorted(days.items())
+    ]
     widths = [max(len(row[i]) for row in table) for i in range(len(columns))]
     for row in table:
         print("  ".join(cell.rjust(w) for cell, w in zip(row, widths)))

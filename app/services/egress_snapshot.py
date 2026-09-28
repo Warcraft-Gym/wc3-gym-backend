@@ -10,7 +10,6 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session as OrmSession
 
 from app.core.db import Session
-from app.core.egress_stats import estimate_bytes
 from app.models.egress_snapshot import (
     EgressSnapshotResult,
     EgressStatementRows,
@@ -18,8 +17,6 @@ from app.models.egress_snapshot import (
 )
 from app.models.types import UTCDateTime, utcnow
 
-# The per-project budget of `just db check`: 80 MB a day fits 5 GB a month
-BUDGET_MB_PER_DAY = 80.0
 KEEP = timedelta(days=35)
 TOP = 10
 
@@ -99,17 +96,8 @@ COUNT = text("SELECT count(*) FROM egress_snapshot WHERE taken_at = :taken").bin
 
 def window(start: datetime, end: datetime, calls: int, rows: int) -> EgressWindow:
     hours = (end - start).total_seconds() / 3600
-    mb = estimate_bytes(rows, calls) / 1e6
-    per_day = mb / max(hours, 0.01) * 24
     return EgressWindow(
-        start=start,
-        end=end,
-        hours=round(hours, 2),
-        calls=calls,
-        rows=rows,
-        estimated_mb=round(mb, 1),
-        mb_per_day=round(per_day, 1),
-        over_budget=per_day > BUDGET_MB_PER_DAY,
+        start=start, end=end, hours=round(hours, 2), calls=calls, rows=rows
     )
 
 
@@ -129,16 +117,13 @@ def summary(session: OrmSession, taken: datetime) -> EgressSnapshotResult:
         available=True,
         taken_at=taken,
         statements=session.execute(COUNT, {"taken": taken}).scalar_one(),
-        budget_mb_per_day=BUDGET_MB_PER_DAY,
         window=found[0] if found else None,
         top=[EgressStatementRows(query=q, calls=c, rows=n) for q, c, n in top],
     )
 
 
 def unavailable(reason: str) -> EgressSnapshotResult:
-    return EgressSnapshotResult(
-        available=False, reason=reason, budget_mb_per_day=BUDGET_MB_PER_DAY
-    )
+    return EgressSnapshotResult(available=False, reason=reason)
 
 
 def take() -> EgressSnapshotResult:
@@ -153,7 +138,6 @@ def take() -> EgressSnapshotResult:
                 available=True,
                 skipped=f"last snapshot {minutes} min ago",
                 taken_at=last,
-                budget_mb_per_day=BUDGET_MB_PER_DAY,
             )
         if session.get_bind().dialect.name != "postgresql":
             return unavailable("pg_stat_statements needs Postgres")

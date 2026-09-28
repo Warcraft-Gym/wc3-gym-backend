@@ -10,7 +10,7 @@ import logging
 import os
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from enum import StrEnum
 from typing import Any
 
@@ -21,11 +21,12 @@ from sqlmodel import col, select
 
 from app.core.db import Session
 from app.models.egress_ledger import EgressLedger
-from app.models.egress_snapshot import EgressSnapshotResult, EgressWindow
+from app.models.egress_snapshot import EgressSnapshotResult
 from app.models.monitor_state import MonitorState
 from app.models.types import utcnow
 from app.services import egress
-from app.services.egress_snapshot import BUDGET_MB_PER_DAY, unavailable, windows
+from app.services.egress import Day, day_of
+from app.services.egress_snapshot import unavailable
 
 log = logging.getLogger(__name__)
 
@@ -33,7 +34,8 @@ KEY = "egress"
 CYCLE_START_DAY = 25  # the Supabase billing cycle starts on this day of each month, UTC
 CAP_MB = 5000.0  # the organisation's egress cap per cycle; staging shares it
 RED_MB = 0.9 * CAP_MB  # a projected cycle total above this alerts
-AVERAGE_OVER = timedelta(hours=72)  # the recent rate the projection extends
+AVERAGE_DAYS = 3  # the complete days whose mean the projection extends
+BUDGET_MB_PER_DAY = 80.0  # 5 GB over a month for prod, with room for staging
 TOP_ROUTES = 3
 DB_KEY = "db_size"
 DB_CAP_MB = 500.0  # the Supabase Free database size
@@ -53,13 +55,11 @@ VERCEL_RED = 0.8  # any meter at this share of its included usage alerts
 
 RED, AMBER, GREEN, BLUE = 0xD63232, 0xF0A04B, 0x36A64F, 0x4F95D8
 SILENT = 1 << 12  # SUPPRESS_NOTIFICATIONS: the post shows without a notification
-FOOTER = "Egress monitor · pg_stat_statements rows and statements"
-DIGEST_FOOTER = (
-    "Infrastructure monitor · egress from pg_stat_statements rows and statements"
-)
+FOOTER = "Egress monitor · bytes measured on the database connections"
+DIGEST_FOOTER = "Infrastructure monitor · egress measured on the database connections"
 MONITOR_FOOTER = "Infrastructure monitor"
 # The fields that give way first when an embed is over the total: the long route lists
-ROUTE_FIELDS = ("Busiest routes (rows)", "Top routes (rows)")
+ROUTE_FIELDS = ("Busiest routes", "Top routes")
 JOBS_DOC = (
     "https://github.com/Warcraft-Gym/wc3-gym-backend/blob/main/docs/okf/api/jobs.md"
 )
@@ -102,91 +102,99 @@ def cycle(now: datetime) -> Cycle:
 class Meters:
     now: datetime
     cycle: Cycle
-    last: EgressWindow | None
+    last: Day | None  # the last complete day of prod
     average_mb_per_day: float
     cycle_mb: float
     projected_mb: float
-    staging_mb: float | None = (
-        None  # staging's share of cycle_mb; None when it was not read
+    staging_mb: float | None = None  # staging's share of cycle_mb; None when not read
+    staging_measured: bool = (
+        True  # False while staging's ledger holds no measured bytes
     )
+    partial: bool = False  # a day of the cycle ran statements but measured no bytes
 
     @property
     def level(self) -> Level:
         if self.projected_mb > RED_MB:
             return Level.RED
-        if self.last is not None and self.last.mb_per_day > BUDGET_MB_PER_DAY:
+        if self.last is not None and (self.last.mb or 0) > BUDGET_MB_PER_DAY:
             return Level.AMBER
         return Level.NORMAL
 
     @property
+    def unmeasured(self) -> bool:
+        """The last complete day served statements but measured no bytes."""
+        return self.last is not None and self.last.mb is None
+
+    @property
     def covers(self) -> date:
-        """The UTC day the last window covers; the ledger day the posts list."""
+        """The UTC day the posts report: the last complete day."""
         if self.last is None:
             return (self.now - timedelta(days=1)).date()
-        return self.last.start.date()
+        return self.last.day
 
     @property
     def since(self) -> datetime:
-        """When the current level began: the start of the window that set it."""
-        return self.last.start if self.last is not None else self.now
+        """When the current level began: the start of the day that set it."""
+        return datetime.combine(self.covers, time(), UTC)
 
     @property
     def day(self) -> int:
         return (self.now - self.cycle.start).days + 1
 
 
-def rates(found: list[EgressWindow], c: Cycle, now: datetime) -> tuple[float, float]:
-    """One project's cycle so far and recent MB a day, from its windows oldest first."""
-    # The 00:00 run's window covers the day before, so a window counts in the cycle it starts in
-    so_far = sum(w.estimated_mb for w in found if w.start >= c.start)
-    recent = [w for w in found if w.end >= now - AVERAGE_OVER] or found[-1:]
-    hours = sum(w.hours for w in recent)
-    average = sum(w.estimated_mb for w in recent) / hours * 24 if hours else 0.0
-    return so_far, average
+def totals(found: list[Day], c: Cycle, now: datetime) -> tuple[float, float]:
+    """One project's measured MB this cycle, today so far included, and the mean of its
+    last complete measured days."""
+    so_far = sum(d.mb or 0 for d in found if d.day >= c.start.date())
+    complete = [d.mb for d in found if d.day < now.date() and d.mb is not None]
+    recent = complete[-AVERAGE_DAYS:]
+    return so_far, sum(recent) / len(recent) if recent else 0.0
 
 
-def meters(
-    found: list[EgressWindow],
-    now: datetime,
-    staging: list[EgressWindow] | None = None,
-) -> Meters:
-    """The cycle's figures from prod's windows and staging's, each oldest first."""
+def meters(found: list[Day], now: datetime, staging: list[Day] | None = None) -> Meters:
+    """The cycle's figures from prod's measured days and staging's, each oldest first."""
     c = cycle(now)
-    so_far, average = rates(found, c, now)
+    so_far, average = totals(found, c, now)
     staging_mb = None
     if staging is not None:
-        staging_mb, staging_average = rates(staging, c, now)
+        staging_mb, staging_average = totals(staging, c, now)
         so_far, average = so_far + staging_mb, average + staging_average
     left = (c.end - now).total_seconds() / 86400
+    complete = [d for d in found if d.day < now.date()]
+    in_cycle = [d for d in [*found, *(staging or [])] if d.day >= c.start.date()]
     return Meters(
         now=now,
         cycle=c,
-        last=found[-1] if found else None,
+        last=complete[-1] if complete else None,
         average_mb_per_day=average,
         cycle_mb=so_far,
         projected_mb=so_far + average * left,
         staging_mb=staging_mb,
+        staging_measured=not staging or any(d.mb is not None for d in staging),
+        partial=any(d.mb is None for d in in_cycle),
     )
 
 
-def staging_windows(since: datetime, now: datetime) -> list[EgressWindow] | None:
-    """Take staging's snapshot and read its windows since `since`; None off production or
-    when staging did not answer."""
+def staging_days(since: date, now: datetime) -> list[Day] | None:
+    """Staging's measured days from its own ledger; None off production or when staging
+    did not answer."""
     if os.getenv("VERCEL_ENV") != "production":
         return None
-    headers = {"Authorization": f"Bearer {os.getenv('CRON_SECRET', '')}"}
-    days = min((now - since).days + 1, 35)
     try:
-        requests.get(f"{STAGING_API}/jobs/egress-snapshot", headers=headers, timeout=20)
         r = requests.get(
-            f"{STAGING_API}/jobs/egress-snapshots",
-            params={"days": days},
-            headers=headers,
+            f"{STAGING_API}/jobs/egress",
+            params={"days": min((now.date() - since).days + 1, 90)},
+            headers={"Authorization": f"Bearer {os.getenv('CRON_SECRET', '')}"},
             timeout=20,
         )
         r.raise_for_status()
-        return [EgressWindow.model_validate(w) for w in r.json()]
-    except (requests.RequestException, ValueError) as error:
+        sums: dict[date, list[int]] = {}
+        for row in r.json():
+            total = sums.setdefault(date.fromisoformat(row["day"]), [0, 0])
+            total[0] += row["statements"]
+            total[1] += row.get("db_bytes", 0)
+        return [day_of(d, *sums[d]) for d in sorted(sums)]
+    except (requests.RequestException, ValueError, KeyError) as error:
         log.warning("staging egress not read: %s", type(error).__name__)
         return None
 
@@ -245,12 +253,15 @@ def route_lines(routes: list[EgressLedger], day: date) -> str:
     if not routes:
         return f"No ledger rows for {day_label(day)}."
     return "\n".join(
-        f"`{r.method} {r.route}` {r.rows:,} rows · {r.calls:,} calls" for r in routes
+        f"`{r.method} {r.route}` {r.db_bytes / 1e6:,.1f} MB · {r.calls:,} calls"
+        for r in routes
     )
 
 
-def rate(w: EgressWindow | None) -> str:
-    return "none yet" if w is None else f"~{w.mb_per_day:,.0f} MB/day"
+def rate(d: Day | None) -> str:
+    if d is None:
+        return "none yet"
+    return "not measured" if d.mb is None else f"{d.mb:,.0f} MB"
 
 
 # Payloads
@@ -354,9 +365,10 @@ def alert(
     title = f"Supabase egress: {'over' if over else 'on track to pass'} the 5 GB cap"
     budget = f"{BUDGET_MB_PER_DAY:,.0f} MB"
     lead = (
-        f"Prod returned ~{m.last.mb_per_day:,.0f} MB a day in the last window, "
-        f"{m.last.mb_per_day / BUDGET_MB_PER_DAY:,.1f}× the daily budget of {budget}. "
-        if m.last is not None
+        f"Prod's database connections received {m.last.mb:,.0f} MB on "
+        f"{day_label(m.last.day)}, {m.last.mb / BUDGET_MB_PER_DAY:,.1f}× the daily budget "
+        f"of {budget}. "
+        if m.last is not None and m.last.mb is not None
         else ""
     )
     description = (
@@ -364,8 +376,8 @@ def alert(
         f"{size(m.projected_mb)} when it ends {stamp(m.cycle.end, 'R')}."
     )
     fields = [
-        field("Last window", rate(m.last)),
-        field("3-day average", f"~{m.average_mb_per_day:,.0f} MB/day"),
+        field(day_label(m.covers), rate(m.last)),
+        field("3-day average", f"{m.average_mb_per_day:,.0f} MB/day"),
         field("Daily budget", f"{BUDGET_MB_PER_DAY:,.0f} MB/day"),
         field(
             "Cycle so far",
@@ -373,10 +385,10 @@ def alert(
         ),
         field("Projected at cycle end", f"~{size(m.projected_mb)}"),
         field("Since", stamp(since)),
-        field("Top routes (rows)", route_lines(routes, m.covers), inline=False),
+        field("Top routes", route_lines(routes, m.covers), inline=False),
         field(
             "Next step",
-            "Check who calls these routes with `just egress-routes 1`. "
+            "Check who calls these routes with `just monitor routes prod`. "
             f"Stop any agent or script reading prod. [Egress jobs]({JOBS_DOC})",
             inline=False,
         ),
@@ -385,12 +397,15 @@ def alert(
 
 
 def unavailable_alert(
-    reason: str, now: datetime, mention: str | None
+    reason: str,
+    now: datetime,
+    mention: str | None,
+    title: str = "Egress snapshot could not run",
 ) -> dict[str, Any]:
     return message(
         now,
         RED,
-        "Egress snapshot could not run",
+        title,
         f"{reason[:1].upper()}{reason[1:]}. The next run is due {stamp(now + timedelta(days=1), 'R')}.",
         [field("Since", stamp(now))],
         mention=mention,
@@ -405,12 +420,12 @@ def recovery(m: Meters, was: str, since: datetime) -> dict[str, Any]:
         else "Egress snapshot: running again"
     )
     description = (
-        f"The last 3 days averaged ~{m.average_mb_per_day:,.0f} MB/day. "
+        f"The last 3 days averaged {m.average_mb_per_day:,.0f} MB/day. "
         f"The cycle is projected at {size(m.projected_mb)} of 5 GB."
     )
     fields = [
-        field("Last window", rate(m.last)),
-        field("3-day average", f"~{m.average_mb_per_day:,.0f} MB/day"),
+        field(day_label(m.covers), rate(m.last)),
+        field("3-day average", f"{m.average_mb_per_day:,.0f} MB/day"),
         field(
             f"{'Red' if was == Level.RED else 'Unavailable'} for",
             f"{duration(m.now - since)}, since {stamp(since)}",
@@ -651,31 +666,34 @@ def digest(
     if alarms:
         lead = [] if m.level == Level.NORMAL else [status]
         colour, status = RED, " ".join([*lead, *alarms])
-    per_day = m.last.mb_per_day
+    per_day = m.last.mb
     fields = [
         field(
             "Supabase egress, prod",
-            f"~{per_day:,.0f} MB/day\n{meter(per_day, BUDGET_MB_PER_DAY)} of the "
+            "not measured"
+            if per_day is None
+            else f"{per_day:,.0f} MB\n{meter(per_day, BUDGET_MB_PER_DAY)} of the "
             f"{BUDGET_MB_PER_DAY:,.0f} MB daily budget",
         ),
         field(
             "Cycle so far",
-            f"~{size(m.cycle_mb)} of the 5 GB cap\n{meter(m.cycle_mb, CAP_MB)}"
-            f" · day {m.day} of {m.cycle.days}",
+            f"{size(m.cycle_mb)} of the 5 GB cap\n{meter(m.cycle_mb, CAP_MB)}"
+            f" · day {m.day} of {m.cycle.days}"
+            + ("\nmeasured days only" if m.partial else ""),
         ),
         field(
             "Staging",
-            "not read" if m.staging_mb is None else f"~{size(m.staging_mb)} this cycle",
+            "not read"
+            if m.staging_mb is None
+            else f"{size(m.staging_mb)} this cycle"
+            if m.staging_measured
+            else "not measured",
         ),
         field("Projected", f"~{size(m.projected_mb)}"),
         *extra,
-        field(
-            "Busiest routes (rows)",
-            route_lines(routes, m.covers),
-            inline=False,
-        ),
+        field("Busiest routes", route_lines(routes, m.covers), inline=False),
     ]
-    title = f"Daily infrastructure digest · {day_label(m.last.start.date())}"
+    title = f"Daily infrastructure digest · {day_label(m.last.day)}"
     return message(
         m.now,
         colour,
@@ -840,8 +858,10 @@ def report(result: EgressSnapshotResult, now: datetime | None = None) -> None:
         usage, vercel_error = None, f"{name} {status}" if status else name
         log.warning("vercel usage not read: %s", vercel_error)
     vercel = usage if isinstance(usage, Vercel) else None
-    start = min(cycle(now).start, now - AVERAGE_OVER)
-    staging = staging_windows(start, now) if result.available else None
+    start = min(
+        cycle(now).start.date(), (now - timedelta(days=AVERAGE_DAYS + 1)).date()
+    )
+    staging = staging_days(start, now)
     changes: list[Change] = []
     out: dict[str, Any] | None = None
     with Session() as session:
@@ -851,31 +871,42 @@ def report(result: EgressSnapshotResult, now: datetime | None = None) -> None:
         )
         states = {s.key: s for s in found}
         state = states.get(KEY)
-        if not result.available:
-            reason = result.reason or "unknown"
+        m = meters(egress.daily(session, start), now, staging)
+        routes = egress.busiest(session, m.covers, TOP_ROUTES)
+        if m.unmeasured or not result.available:
+            reason, title = (
+                (
+                    f"the ledger measured no bytes for {day_label(m.covers)}",
+                    "Egress not measured",
+                )
+                if m.unmeasured
+                else (result.reason or "unknown", "Egress snapshot could not run")
+            )
             changes.append(
                 change(
                     state,
                     KEY,
                     Level.UNAVAILABLE,
                     now,
-                    lambda: unavailable_alert(reason, now, mention),
+                    lambda: unavailable_alert(reason, now, mention, title),
                 )
             )
         else:
-            m = meters(windows(session, start), now, staging)
-            routes = egress.busiest(session, m.covers, TOP_ROUTES)
+            level, since = m.level, m.since
+            if m.partial and state is not None and state.level == Level.RED:
+                # A partly measured cycle reads low, so it never gives the all-clear
+                level, since = Level.RED, state.since
             changes.append(
                 change(
                     state,
                     KEY,
-                    m.level,
-                    m.since,
+                    level,
+                    since,
                     lambda: alert(m, routes, m.since, mention, links),
                     lambda s: recovery(m, s.level, s.since),
                 )
             )
-            out = digest(m, routes, links, db_mb, db_error, vercel, vercel_error)
+        out = digest(m, routes, links, db_mb, db_error, vercel, vercel_error)
         if db_mb is not None:
             mb = db_mb
             changes.append(

@@ -11,13 +11,11 @@ from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 
 from app.core.db import Session
-from app.core.egress_stats import BYTES_PER_ROW
 from app.models.egress_ledger import EgressLedger
-from app.models.egress_snapshot import EgressWindow
 from app.models.monitor_state import MonitorState
-from app.services import egress_monitor, egress_snapshot
+from app.services import egress, egress_monitor, egress_snapshot
+from app.services.egress import Day
 from app.services.egress_monitor import Level
-from tests.test_egress_snapshot import store
 
 SECRET = "monitor-secret"
 FAKE_ID = "123456789012345678"
@@ -25,15 +23,14 @@ FAKE_ID = "123456789012345678"
 NOW = datetime(2026, 9, 29, 0, 30, tzinfo=UTC)
 
 
-def w(end: datetime, mb: float, hours: float = 24) -> EgressWindow:
-    """A window of `mb` estimated MB ending at `end`, all of it rows."""
-    rows = round(mb * 1e6 / BYTES_PER_ROW)
-    return egress_snapshot.window(end - timedelta(hours=hours), end, 0, rows)
+def measured(ago: int, mb: float | None, now: datetime = NOW) -> Day:
+    """The measured day `ago` days before `now`'s day."""
+    return Day((now - timedelta(days=ago)).date(), mb)
 
 
-def daily(mb: float, days: int = 3, now: datetime = NOW) -> list[EgressWindow]:
-    """One window a day ending at `now` and the days before it."""
-    return [w(now - timedelta(days=d), mb) for d in reversed(range(days))]
+def daily(mb: float, days: int = 3, now: datetime = NOW) -> list[Day]:
+    """`days` complete measured days before `now`, oldest first."""
+    return [measured(ago, mb, now) for ago in range(days, 0, -1)]
 
 
 @pytest.fixture
@@ -62,17 +59,15 @@ def sent(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
     return posts
 
 
-def run(
-    monkeypatch: pytest.MonkeyPatch, found: list[EgressWindow], now: datetime = NOW
-) -> None:
-    """One successful run that reads `found` as its windows."""
-    monkeypatch.setattr(egress_monitor, "windows", lambda session, since: found)
-    result = egress_snapshot.EgressSnapshotResult(
-        available=True,
-        budget_mb_per_day=egress_snapshot.BUDGET_MB_PER_DAY,
-        window=found[-1] if found else None,
-    )
-    egress_monitor.report(result, now)
+def run(monkeypatch: pytest.MonkeyPatch, found: list[Day], now: datetime = NOW) -> None:
+    """One successful run that reads `found` as its measured days."""
+    monkeypatch.setattr(egress, "daily", lambda session, since: found)
+    egress_monitor.report(egress_snapshot.EgressSnapshotResult(available=True), now)
+
+
+def alerts(sent: list[dict[str, Any]]) -> list[str]:
+    """The titles of the posts other than the daily digest."""
+    return [t for t in titles(sent) if not t.startswith("Daily infrastructure digest")]
 
 
 def state(key: str = egress_monitor.KEY) -> MonitorState | None:
@@ -124,13 +119,13 @@ def test_the_projection_extends_the_3_day_average_over_the_days_left() -> None:
     assert m.level == Level.RED
 
 
-def test_the_run_after_day_25_counts_the_day_before_in_the_old_cycle() -> None:
-    """The 00:00 run on the 25th covers the 24th, which the cycle before pays for."""
+def test_the_24th_counts_in_the_old_cycle_and_today_is_not_yet_a_day() -> None:
     now = datetime(2026, 9, 26, 0, 10, tzinfo=UTC)
-    found = [w(datetime(2026, 9, 25, 0, 10, tzinfo=UTC), 900), w(now, 60)]
+    found = [measured(2, 900, now), measured(1, 60, now), measured(0, 5, now)]
     m = egress_monitor.meters(found, now)
-    assert m.cycle_mb == 60
-    # Both windows ended in the last 72 hours: 960 MB over 48 hours
+    # The 25th and today so far are in the cycle; the 24th is not
+    assert m.cycle_mb == 65
+    # Today is not complete, so the mean is of the 24th and the 25th
     assert m.average_mb_per_day == pytest.approx(480)
     assert m.covers == date(2026, 9, 25)
 
@@ -139,7 +134,7 @@ def test_staging_adds_its_cycle_and_rate_to_the_totals() -> None:
     m = egress_monitor.meters(daily(200), NOW, daily(10))
     assert (m.cycle_mb, m.staging_mb) == (630, 30)
     assert m.average_mb_per_day == pytest.approx(210)
-    assert m.last is not None and m.last.estimated_mb == 200
+    assert m.last is not None and m.last.mb == 200
 
 
 def test_staging_is_read_on_production_only(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -147,22 +142,31 @@ def test_staging_is_read_on_production_only(monkeypatch: pytest.MonkeyPatch) -> 
 
     def get(url: str, **kwargs: object) -> SimpleNamespace:
         calls.append(url.rsplit("/", 1)[1])
-        window = w(NOW, 10).model_dump(mode="json")
-        return SimpleNamespace(raise_for_status=lambda: None, json=lambda: [window])
+        rows = [
+            {"day": "2026-09-28", "statements": 5, "db_bytes": 6_000_000},
+            {"day": "2026-09-28", "statements": 2, "db_bytes": 4_000_000},
+            {"day": "2026-09-27", "statements": 3, "db_bytes": 0},
+        ]
+        return SimpleNamespace(raise_for_status=lambda: None, json=lambda: rows)
 
     monkeypatch.setattr(egress_monitor.requests, "get", get)
     monkeypatch.delenv("VERCEL_ENV", raising=False)
-    assert egress_monitor.staging_windows(NOW - timedelta(days=4), NOW) is None
+    since = (NOW - timedelta(days=4)).date()
+    assert egress_monitor.staging_days(since, NOW) is None
     assert calls == []
     monkeypatch.setenv("VERCEL_ENV", "production")
-    found = egress_monitor.staging_windows(NOW - timedelta(days=4), NOW)
-    assert calls == ["egress-snapshot", "egress-snapshots"]
-    assert found is not None and [x.estimated_mb for x in found] == [10]
+    found = egress_monitor.staging_days(since, NOW)
+    assert calls == ["egress"]
+    # Summed per day; a day of statements with no measured bytes is unknown, not zero
+    assert found == [Day(date(2026, 9, 27), None), Day(date(2026, 9, 28), 10.0)]
 
 
-def test_with_no_window_in_the_last_72_hours_the_last_window_sets_the_rate() -> None:
-    m = egress_monitor.meters([w(NOW - timedelta(days=5), 30, hours=12)], NOW)
+def test_the_rate_is_the_mean_of_the_last_measured_days_however_old() -> None:
+    m = egress_monitor.meters(
+        [measured(9, 90), measured(5, 30), measured(4, None)], NOW
+    )
     assert m.average_mb_per_day == pytest.approx(60)
+    assert m.unmeasured
 
 
 @pytest.mark.parametrize(
@@ -170,12 +174,12 @@ def test_with_no_window_in_the_last_72_hours_the_last_window_sets_the_rate() -> 
     [
         (daily(50), Level.NORMAL),
         # 120 MB yesterday is over the daily budget; the cycle stays far under the cap
-        (daily(50, 2) + [w(NOW, 120)], Level.AMBER),
+        (daily(50, 3)[:2] + [measured(1, 120)], Level.AMBER),
         (daily(200), Level.RED),
         ([], Level.NORMAL),
     ],
 )
-def test_the_level(found: list[EgressWindow], level: Level) -> None:
+def test_the_level(found: list[Day], level: Level) -> None:
     assert egress_monitor.meters(found, NOW).level == level
 
 
@@ -201,7 +205,7 @@ def test_normal_to_red_alerts_then_red_again_posts_only_the_digest(
     current = state()
     assert current is not None and (current.level, current.since) == (
         "red",
-        NOW - timedelta(days=1),
+        datetime(2026, 9, 28, tzinfo=UTC),
     )
     sent.clear()
 
@@ -209,7 +213,7 @@ def test_normal_to_red_alerts_then_red_again_posts_only_the_digest(
     run(monkeypatch, daily(200, now=after), after)
     assert titles(sent) == ["Daily infrastructure digest · 29 Sep"]
     current = state()
-    assert current is not None and current.since == NOW - timedelta(days=1)
+    assert current is not None and current.since == datetime(2026, 9, 28, tzinfo=UTC)
 
 
 def test_red_to_normal_posts_a_silent_recovery_then_the_digest(
@@ -233,7 +237,7 @@ def test_red_to_normal_posts_a_silent_recovery_then_the_digest(
 def test_amber_colours_the_digest_and_never_alerts(
     monkeypatch: pytest.MonkeyPatch, sent: list[dict[str, Any]]
 ) -> None:
-    run(monkeypatch, daily(50, 2) + [w(NOW, 120)])
+    run(monkeypatch, daily(50, 3)[:2] + [measured(1, 120)])
     assert titles(sent) == ["Daily infrastructure digest · 28 Sep"]
     embed = sent[0]["embeds"][0]
     assert embed["color"] == egress_monitor.AMBER
@@ -248,7 +252,8 @@ def test_an_unavailable_run_alerts_once_and_a_good_run_says_it_runs_again(
     )
     egress_monitor.report(failed, NOW - timedelta(hours=5))
     egress_monitor.report(failed, NOW - timedelta(hours=4))
-    assert titles(sent) == ["Egress snapshot could not run"]
+    # The digest still posts: the egress is measured without the statement snapshot
+    assert alerts(sent) == ["Egress snapshot could not run"]
     assert sent[0]["embeds"][0]["description"].startswith(
         "The pg_stat_statements extension is not installed."
     )
@@ -301,15 +306,15 @@ def test_nothing_is_sent_without_the_webhook(
     assert sent == []
 
 
-def test_the_routes_are_yesterdays_top_three_by_rows(
+def test_the_routes_are_yesterdays_top_three_by_measured_bytes(
     monkeypatch: pytest.MonkeyPatch, sent: list[dict[str, Any]]
 ) -> None:
     yesterday = (NOW - timedelta(days=1)).date()
     with Session() as session:
         for day, route, rows in [
-            (yesterday, "/events/{event_id}/series", 2_260_000),
-            (yesterday, "/stats/career", 1_300_000),
             (yesterday, "/users/{key}", 58_877),
+            (yesterday, "/stats/career", 1_300_000),
+            (yesterday, "/events/{event_id}/series", 2_260_000),
             (yesterday, "/maps", 12),
             (NOW.date(), "/teams", 9_000_000),
         ]:
@@ -321,17 +326,18 @@ def test_the_routes_are_yesterdays_top_three_by_rows(
                     calls=10_675,
                     statements=1,
                     rows=rows,
+                    db_bytes=rows * 7,
                     bytes=0,
                 )
             )
         session.commit()
     run(monkeypatch, daily(200))
     routes = sent[0]["embeds"][0]["fields"][6]
-    assert routes["name"] == "Top routes (rows)"
+    assert routes["name"] == "Top routes"
     assert routes["value"].splitlines() == [
-        "`GET /events/{event_id}/series` 2,260,000 rows · 10,675 calls",
-        "`GET /stats/career` 1,300,000 rows · 10,675 calls",
-        "`GET /users/{key}` 58,877 rows · 10,675 calls",
+        "`GET /events/{event_id}/series` 15.8 MB · 10,675 calls",
+        "`GET /stats/career` 9.1 MB · 10,675 calls",
+        "`GET /users/{key}` 0.4 MB · 10,675 calls",
     ]
 
 
@@ -407,7 +413,7 @@ def test_a_crashed_run_alerts_once_and_still_fails(
     monkeypatch.setattr(egress_snapshot, "take", crash)
     assert client.get("/jobs/egress-snapshot", headers=headers).status_code == 500
     assert client.get("/jobs/egress-snapshot", headers=headers).status_code == 500
-    assert titles(sent) == ["Egress snapshot could not run"]
+    assert alerts(sent) == ["Egress snapshot could not run"]
     assert sent[0]["embeds"][0]["description"].startswith("RuntimeError.")
 
 
@@ -422,19 +428,39 @@ def test_a_crash_with_the_database_down_still_alerts(
     assert titles(sent) == ["Egress snapshot could not run"]
 
 
-def test_a_run_reads_its_windows_from_the_stored_snapshots(
+def test_a_run_sums_the_measured_bytes_of_the_ledger(
     sent: list[dict[str, Any]],
 ) -> None:
-    """No stand-in windows: two snapshots a day apart, 2 M rows over 8 statements, 230 MB."""
-    store(NOW - timedelta(days=1), {(1, 10): (1, 0)})
-    store(NOW, {(1, 10): (9, 2_000_000)})
+    """No stand-in days: two routes of the 28th measured 230 MB between them."""
     with Session() as session:
-        taken = egress_snapshot.summary(session, NOW)
-    egress_monitor.report(taken, NOW)
+        for route, db_bytes in [("/a", 180_000_000), ("/b", 50_000_000)]:
+            session.add(
+                EgressLedger(
+                    day=date(2026, 9, 28),
+                    route=route,
+                    method="GET",
+                    calls=1,
+                    statements=3,
+                    rows=10,
+                    db_bytes=db_bytes,
+                    bytes=0,
+                )
+            )
+        session.commit()
+    egress_monitor.report(egress_snapshot.EgressSnapshotResult(available=True), NOW)
     assert titles(sent)[0] == "Supabase egress: on track to pass the 5 GB cap"
     fields = {f["name"]: f["value"] for f in sent[0]["embeds"][0]["fields"]}
-    assert fields["Last window"] == "~230 MB/day"
+    assert fields["28 Sep"] == "230 MB"
     assert fields["Cycle so far"].endswith("0.2 GB of 5 GB")
+
+
+def test_a_day_of_statements_without_measured_bytes_alerts_as_not_measured(
+    monkeypatch: pytest.MonkeyPatch, sent: list[dict[str, Any]]
+) -> None:
+    run(monkeypatch, [measured(2, 20), measured(1, None)])
+    assert alerts(sent) == ["Egress not measured"]
+    digest = {f["name"]: f["value"] for f in sent[-1]["embeds"][0]["fields"]}
+    assert digest["Supabase egress, prod"] == "not measured"
 
 
 def test_an_undelivered_alert_keeps_the_level_so_the_next_run_retries(
@@ -470,7 +496,8 @@ def test_the_alert_shows_when_the_window_that_turned_it_red_began(
 ) -> None:
     run(monkeypatch, daily(200))
     fields = {f["name"]: f["value"] for f in sent[0]["embeds"][0]["fields"]}
-    start = NOW - timedelta(days=1)
+    # The level starts with the day that set it
+    start = datetime(2026, 9, 28, tzinfo=UTC)
     assert fields["Since"] == f"<t:{int(start.timestamp())}:f>"
 
 
@@ -653,7 +680,7 @@ def test_an_unavailable_snapshot_still_checks_the_database_size(
 ) -> None:
     sized(monkeypatch, 470)
     egress_monitor.report(egress_snapshot.unavailable("down"), NOW)
-    assert titles(sent) == [
+    assert alerts(sent) == [
         "Egress snapshot could not run",
         "Supabase database size: near the 500 MB cap",
     ]
@@ -743,7 +770,7 @@ def test_the_route_list_gives_way_before_the_dashboards() -> None:
     for routes, last, kept in [(1024, 1000, "cut"), (100, 870, "dropped")]:
         many = [
             *[egress_monitor.field(f"f{i}", "x" * 1000) for i in range(4)],
-            egress_monitor.field("Busiest routes (rows)", "r" * routes, inline=False),
+            egress_monitor.field("Busiest routes", "r" * routes, inline=False),
             egress_monitor.field("f4", "x" * 1000),
             egress_monitor.field("f5", "x" * last),
         ]
@@ -756,10 +783,10 @@ def test_the_route_list_gives_way_before_the_dashboards() -> None:
         assert embed["fields"][-1]["name"] == "Dashboards"
         assert "f4" in found
         if kept == "cut":
-            assert found["Busiest routes (rows)"].endswith("r…")
-            assert len(found["Busiest routes (rows)"]) < routes
+            assert found["Busiest routes"].endswith("r…")
+            assert len(found["Busiest routes"]) < routes
         else:
-            assert "Busiest routes (rows)" not in found and "f5" in found
+            assert "Busiest routes" not in found and "f5" in found
 
 
 TOKEN = "vercel-test-token"
@@ -1069,3 +1096,29 @@ def test_the_unavailable_alert_starts_its_reason_with_a_capital() -> None:
     assert payload["embeds"][0]["description"].startswith(
         "The pg_stat_statements extension"
     )
+
+
+def test_a_partly_measured_cycle_holds_red_and_says_so(
+    monkeypatch: pytest.MonkeyPatch, sent: list[dict[str, Any]]
+) -> None:
+    before = NOW - timedelta(days=1)
+    run(monkeypatch, daily(200, now=before), before)
+    held = state()
+    assert held is not None and held.level == "red"
+    sent.clear()
+
+    # The 26th ran before the bytes were measured: the cycle reads low, so no all-clear
+    run(monkeypatch, [measured(3, None), measured(2, 20), measured(1, 20)])
+    assert titles(sent) == ["Daily infrastructure digest · 28 Sep"]
+    current = state()
+    assert current is not None and current.level == "red"
+    fields = {f["name"]: f["value"] for f in sent[0]["embeds"][0]["fields"]}
+    assert fields["Cycle so far"].endswith("measured days only")
+
+
+def test_staging_without_measured_bytes_reads_not_measured() -> None:
+    m = egress_monitor.meters(daily(20), NOW, [measured(1, None)])
+    assert not m.staging_measured and m.partial
+    payload = egress_monitor.digest(m, [])
+    fields = {f["name"]: f["value"] for f in payload["embeds"][0]["fields"]}
+    assert fields["Staging"] == "not measured"

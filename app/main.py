@@ -91,16 +91,17 @@ class EgressMiddleware:
             await self.app(scope, receive, send_with_cost)
         finally:
             # Read before the upsert, so the ledger write is not part of the request
-            spent = Cost(cost.statements, cost.rows)
+            spent = Cost(cost.statements, cost.rows, cost.db_bytes)
             route = scope.get("route")
             template = getattr(route, "path", None) or scope["path"]
             logger.info(
-                "egress route=%s method=%s status=%d statements=%d rows=%d bytes=%d ms=%d",
+                "egress route=%s method=%s status=%d statements=%d rows=%d db_bytes=%d bytes=%d ms=%d",
                 template,
                 scope["method"],
                 answer["status"],
                 spent.statements,
                 spent.rows,
+                spent.db_bytes,
                 answer["bytes"],
                 (perf_counter() - started) * 1000,
             )

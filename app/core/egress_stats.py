@@ -1,12 +1,10 @@
-"""Snapshot and report Supabase billed egress.
+"""Snapshot pg_stat_statements and report which databases and statements grew.
 
-The bill is "Shared Pooler Egress": bytes Supavisor sends to clients. The pooler
-publishes that counter, so we record it next to pg_stat_statements and diff two
-snapshots to see which database and which statement grew.
+The rows and calls say which statements ran most between two snapshots. They are not
+bytes: the measured egress per route is the ledger's db_bytes (`just monitor routes`).
 
 usage: uv run python -m app.core.egress_stats snapshot [prod|staging|all]
        uv run python -m app.core.egress_stats report [prod|staging] [rows]
-       uv run python -m app.core.egress_stats check [prod|staging] [budget_mb_per_day]
 
 The credentials come from the environment (`just db` loads .env): VERCEL_PROD_DB_URL,
 VERCEL_STAGING_DB_URL, SUPABASE_PROD_PROJECT_REF, SUPABASE_STAGING_PROJECT_REF,
@@ -39,18 +37,6 @@ OUT = Path(__file__).resolve().parents[2] / "data" / "egress"
 POOLER_SEND = re.compile(
     r"^supavisor_client_network_send\{[^}]*} ([0-9.e+]+)$", re.MULTILINE
 )
-# Wire bytes per row returned and per statement (RowDescription, CommandComplete, ReadyForQuery),
-# fitted to two billed windows: 21-23 Sep 2026 (24.5 M rows, ~2.9 GB) and 27 Sep (1.61 M rows,
-# 338 k statements, 309.75 MB). A relay on the local stack measured 42-348 B/row, 104-527 B/statement.
-BYTES_PER_ROW = 115
-BYTES_PER_STATEMENT = 375
-
-
-def estimate_bytes(rows: int, calls: int) -> int:
-    """Bytes the pooler bills for `rows` returned over `calls` statements."""
-    return rows * BYTES_PER_ROW + calls * BYTES_PER_STATEMENT
-
-
 NODE = ("node_network_transmit_bytes_total", "node_time_seconds")
 
 
@@ -140,7 +126,7 @@ def snapshot(envs: list[str], out: Path = OUT) -> None:
         )
 
 
-def report(env: str, limit: int = 15, out: Path = OUT) -> float:
+def report(env: str, limit: int = 15, out: Path = OUT) -> None:
     path = out / f"{env}.jsonl"
     if not path.exists():
         sys.exit(f"no snapshots yet: run `just db snapshot` at least twice ({path})")
@@ -153,8 +139,6 @@ def report(env: str, limit: int = 15, out: Path = OUT) -> float:
     ).total_seconds() / 3600
     sent = b["pooler_sent"] - a["pooler_sent"]
     print(f"{env}: {a['at']} -> {b['at']}  ({hours:.1f} h)")
-    # The bill follows rows returned, not the pooler counter: that counter resets on a
-    # pooler restart and read 474 MB for the 21-23 Sep 2026 window the bill charged ~2.9 GB.
     grew = []
     for qid, now in b["statements"].items():
         if monitoring_query(now["q"]):
@@ -167,15 +151,10 @@ def report(env: str, limit: int = 15, out: Path = OUT) -> float:
     grew.sort(reverse=True)
     rows_out = sum(row[0] for row in grew)
     calls_out = sum(row[1] for row in grew)
-    est = estimate_bytes(rows_out, calls_out)
-    rate = est / max(hours, 0.01) * 24 / 1e6
-    print(
-        f"  rows returned {rows_out:,} over {calls_out:,} statements  ->  ~{est / 1e6:.0f} MB billed  ->  ~{rate:.0f} MB/day"
-    )
+    print(f"  rows returned {rows_out:,} over {calls_out:,} statements")
     if sent >= 0:
         print(f"  pooler counter {sent / 1e6:.1f} MB (resets on restart; not the bill)")
     print(f"  new sessions {b['sessions'] - a['sessions']:,}")
-    sent = est
 
     print("\n  by database (application statement rows returned):")
     for name in sorted({row[2] for row in grew}):
@@ -184,26 +163,9 @@ def report(env: str, limit: int = 15, out: Path = OUT) -> float:
         if d_rows or d_calls:
             print(f"    {name:<28} {d_rows:>12,} rows  {d_calls:>10,} calls")
 
-    # Share of the window's billed bytes, split by rows returned. A rough split: a
-    # statement returning few wide rows is under-charged, many narrow rows over-charged.
-    total_rows = sum(row[0] for row in grew) or 1
     print(f"\n  top {limit} statements by rows returned:")
     for d_rows, d_calls, db, q in grew[:limit]:
-        share = f"~{sent * d_rows / total_rows / 1e6:7.1f} MB" if sent > 0 else " " * 11
-        print(f"   {share}  {d_rows:>10,} rows  {d_calls:>8,} calls  [{db}] {q[:90]}")
-    return rate
-
-
-def check(env: str, budget_mb_per_day: float) -> None:
-    """Snapshot, then fail when the window's rate is over budget. For an unattended run."""
-    snapshot([env])
-    rate = report(env, 10)
-    if rate > budget_mb_per_day:
-        print(
-            f"\nOVER BUDGET: {rate:.0f} MB/day against {budget_mb_per_day:.0f} MB/day"
-        )
-        sys.exit(2)
-    print(f"\nwithin budget: {rate:.0f} MB/day against {budget_mb_per_day:.0f} MB/day")
+        print(f"   {d_rows:>10,} rows  {d_calls:>8,} calls  [{db}] {q[:90]}")
 
 
 if __name__ == "__main__":
@@ -215,11 +177,6 @@ if __name__ == "__main__":
         report(
             which if which != "all" else "prod",
             int(sys.argv[3]) if len(sys.argv) > 3 else 15,
-        )
-    elif action == "check":
-        check(
-            which if which != "all" else "prod",
-            float(sys.argv[3]) if len(sys.argv) > 3 else 80.0,
         )
     else:
         sys.exit(__doc__)

@@ -20,4 +20,7 @@ class EgressLedger(SQLModel, table=True):
     calls: int = Field(sa_type=BigInteger)
     statements: int = Field(sa_type=BigInteger)
     rows: int = Field(sa_type=BigInteger)
+    # Bytes the database connection received, as the kernel counts them: what the pooler bills
+    db_bytes: int = Field(default=0, sa_type=BigInteger)
+    # Bytes of the response body sent to the client
     bytes: int = Field(sa_type=BigInteger)

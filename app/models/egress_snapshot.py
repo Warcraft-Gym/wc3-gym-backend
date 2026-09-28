@@ -45,16 +45,13 @@ class EgressStatementRows(SQLModel):
 
 
 class EgressWindow(SQLModel):
-    """The rows returned between two snapshots and the egress they bill."""
+    """The statements run and rows returned between two snapshots."""
 
     start: datetime
     end: datetime
     hours: float
     calls: int
     rows: int
-    estimated_mb: float
-    mb_per_day: float
-    over_budget: bool
 
 
 class EgressSnapshotResult(SQLModel):
@@ -66,6 +63,5 @@ class EgressSnapshotResult(SQLModel):
     skipped: str | None = None
     taken_at: datetime | None = None
     statements: int = 0
-    budget_mb_per_day: float
     window: EgressWindow | None = None
     top: list[EgressStatementRows] = Field(default_factory=list)
