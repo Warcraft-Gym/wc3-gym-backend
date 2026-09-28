@@ -98,9 +98,6 @@ def test_a_window_counts_growth_resets_and_new_statements(
     assert window is not None
     assert (window.start, window.end, window.hours) == (t0, t1, 24)
     assert (window.rows, window.calls) == (2_900_100, 20)
-    # 2.9 M rows at 115 bytes and 20 statements at 375 bytes over one day
-    assert (window.estimated_mb, window.mb_per_day) == (333.5, 333.5)
-    assert window.over_budget is True
     assert found.statements == 4
     assert [(s.query, s.rows) for s in found.top] == [
         ("q1", 2_000_100),
@@ -112,10 +109,9 @@ def test_a_window_counts_growth_resets_and_new_statements(
     assert response.status_code == 200
     assert response.headers["Cache-Control"] == "no-store"
     days = response.json()
-    assert [(d["rows"], d["calls"], d["over_budget"]) for d in days] == [
-        (2_900_100, 20, True),
-        (100, 1, False),
-    ]
+    assert [(d["rows"], d["calls"]) for d in days] == [(2_900_100, 20), (100, 1)]
+    # Rows and calls only: the bytes are measured per route in the ledger
+    assert "estimated_mb" not in days[0]
 
 
 def test_the_capture_skips_its_own_statements_and_drops_old_snapshots(

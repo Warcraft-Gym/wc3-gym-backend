@@ -1,5 +1,9 @@
 # Bundle history
 
+## 2026-09-28
+
+* **Update**: [egress_ledger](data/tables/egress_ledger.md) gains `db_bytes`, the bytes each route's database connections received, measured on the socket; the [egress monitor](api/jobs.md#the-egress-monitor) sums it per day and no longer estimates bytes from rows.
+
 ## 2026-09-27
 
 * **Add**: `GET /users/{user_id}/seasons` and `GET /users/{user_id}/series?event_id=` answer a player's seasons and GNL series from his side, computed in SQL, cached settled; [response shapes](api/response-shapes.md), [edge cache](concepts/edge-cache.md) and [consumers](api/consumers.md) state them.

@@ -4,7 +4,7 @@ title: egress_snapshot
 description: "One daily copy of pg_stat_statements: the cumulative calls and rows of each statement, role and nesting level at the time of the copy, kept 35 days."
 resource: ../../../../app/models/egress_snapshot.py
 tags: [deploy, data]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-26T10:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-28T14:00:00Z }
 sources:
   - id: model
     resource: ../../../../app/models/egress_snapshot.py
@@ -34,4 +34,4 @@ Primary key (`taken_at`, `queryid`, `dbid`, `userid`, `toplevel`), the key of a 
 
 `GET /jobs/egress-snapshot` writes one row per statement in one `INSERT ... SELECT` on the server, then deletes the rows older than 35 days. A run within an hour of the last snapshot writes nothing. Statements that name `egress_snapshot`, `egress_statement`, `egress_ledger` or `pg_stat_statements` are not copied, so the job, the ledger's per-request write and any statistics read do not count toward the estimate.
 
-A window is two consecutive runs. A row's rows in a window are its current count minus the count before under the same key, so one role's reset never re-counts another role's rows; a count that went down was reset and counts in full, and a statement new since the run before counts in full. The estimate is 115 bytes per row returned plus 375 bytes per statement, the rates `app/core/egress_stats.py` states: a statement costs its column descriptions and completion messages whatever its row count. See [scheduled jobs](../../api/jobs.md).
+A window is two consecutive runs. A row's rows in a window are its current count minus the count before under the same key, so one role's reset never re-counts another role's rows; a count that went down was reset and counts in full, and a statement new since the run before counts in full. It counts rows and statements, never bytes: the egress is measured per route in the [egress ledger](egress_ledger.md). See [scheduled jobs](../../api/jobs.md).
