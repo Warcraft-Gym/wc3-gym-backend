@@ -10,7 +10,7 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session as OrmSession
 
 from app.core.db import Session
-from app.core.egress_stats import BYTES_PER_ROW
+from app.core.egress_stats import estimate_bytes
 from app.models.egress_snapshot import (
     EgressSnapshotResult,
     EgressStatementRows,
@@ -99,7 +99,7 @@ COUNT = text("SELECT count(*) FROM egress_snapshot WHERE taken_at = :taken").bin
 
 def window(start: datetime, end: datetime, calls: int, rows: int) -> EgressWindow:
     hours = (end - start).total_seconds() / 3600
-    mb = rows * BYTES_PER_ROW / 1e6
+    mb = estimate_bytes(rows, calls) / 1e6
     per_day = mb / max(hours, 0.01) * 24
     return EgressWindow(
         start=start,

@@ -30,7 +30,7 @@ from app.services.egress_snapshot import BUDGET_MB_PER_DAY, unavailable, windows
 log = logging.getLogger(__name__)
 
 KEY = "egress"
-CYCLE_START_DAY = 26  # the Supabase billing cycle starts on this day of each month, UTC
+CYCLE_START_DAY = 25  # the Supabase billing cycle starts on this day of each month, UTC
 CAP_MB = 5000.0  # the organisation's egress cap per cycle; staging shares it
 RED_MB = 0.9 * CAP_MB  # a projected cycle total above this alerts
 AVERAGE_OVER = timedelta(hours=72)  # the recent rate the projection extends
@@ -50,9 +50,9 @@ VERCEL_RED = 0.8  # any meter at this share of its included usage alerts
 
 RED, AMBER, GREEN, BLUE = 0xD63232, 0xF0A04B, 0x36A64F, 0x4F95D8
 SILENT = 1 << 12  # SUPPRESS_NOTIFICATIONS: the post shows without a notification
-FOOTER = "Egress monitor · pg_stat_statements × 100 B per row"
+FOOTER = "Egress monitor · pg_stat_statements rows and statements"
 DIGEST_FOOTER = (
-    "Infrastructure monitor · egress from pg_stat_statements × 100 B per row"
+    "Infrastructure monitor · egress from pg_stat_statements rows and statements"
 )
 MONITOR_FOOTER = "Infrastructure monitor"
 # The fields that give way first when an embed is over the total: the long route lists
@@ -86,7 +86,7 @@ class Cycle:
 
 
 def cycle(now: datetime) -> Cycle:
-    """The billing cycle `now` falls in: from day 26 of a month to day 26 of the next."""
+    """The billing cycle `now` falls in: from day 25 of a month to day 25 of the next."""
     year, month = now.year, now.month
     if now.day < CYCLE_START_DAY:
         year, month = (year, month - 1) if month > 1 else (year - 1, 12)

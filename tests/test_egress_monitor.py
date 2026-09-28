@@ -11,6 +11,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 
 from app.core.db import Session
+from app.core.egress_stats import BYTES_PER_ROW
 from app.models.egress_ledger import EgressLedger
 from app.models.egress_snapshot import EgressWindow
 from app.models.monitor_state import MonitorState
@@ -20,13 +21,14 @@ from tests.test_egress_snapshot import store
 
 SECRET = "monitor-secret"
 FAKE_ID = "123456789012345678"
-# A run on day 4 of the cycle that started 26 Sep 2026
+# A run on day 5 of the cycle that started 25 Sep 2026
 NOW = datetime(2026, 9, 29, 0, 30, tzinfo=UTC)
 
 
 def w(end: datetime, mb: float, hours: float = 24) -> EgressWindow:
-    """A window of `mb` estimated MB ending at `end`; 100 bytes a row is 10,000 rows a MB."""
-    return egress_snapshot.window(end - timedelta(hours=hours), end, 10, int(mb * 1e4))
+    """A window of `mb` estimated MB ending at `end`, all of it rows."""
+    rows = round(mb * 1e6 / BYTES_PER_ROW)
+    return egress_snapshot.window(end - timedelta(hours=hours), end, 0, rows)
 
 
 def daily(mb: float, days: int = 3, now: datetime = NOW) -> list[EgressWindow]:
@@ -92,23 +94,23 @@ def size(payload: dict[str, Any]) -> int:
     )
 
 
-def test_the_cycle_starts_on_day_26_utc() -> None:
-    before = egress_monitor.cycle(datetime(2026, 9, 25, 23, 59, tzinfo=UTC))
+def test_the_cycle_starts_on_day_25_utc() -> None:
+    before = egress_monitor.cycle(datetime(2026, 9, 24, 23, 59, tzinfo=UTC))
     assert (before.start, before.end, before.days) == (
-        datetime(2026, 8, 26, tzinfo=UTC),
-        datetime(2026, 9, 26, tzinfo=UTC),
+        datetime(2026, 8, 25, tzinfo=UTC),
+        datetime(2026, 9, 25, tzinfo=UTC),
         31,
     )
-    on = egress_monitor.cycle(datetime(2026, 9, 26, tzinfo=UTC))
+    on = egress_monitor.cycle(datetime(2026, 9, 25, tzinfo=UTC))
     assert (on.start.date(), on.end.date(), on.days) == (
-        date(2026, 9, 26),
-        date(2026, 10, 26),
+        date(2026, 9, 25),
+        date(2026, 10, 25),
         30,
     )
     january = egress_monitor.cycle(datetime(2027, 1, 10, tzinfo=UTC))
     assert (january.start.date(), january.end.date()) == (
-        date(2026, 12, 26),
-        date(2027, 1, 26),
+        date(2026, 12, 25),
+        date(2027, 1, 25),
     )
 
 
@@ -116,21 +118,21 @@ def test_the_projection_extends_the_3_day_average_over_the_days_left() -> None:
     m = egress_monitor.meters(daily(200), NOW)
     assert m.cycle_mb == 600
     assert m.average_mb_per_day == pytest.approx(200)
-    left = (datetime(2026, 10, 26, tzinfo=UTC) - NOW).total_seconds() / 86400
+    left = (datetime(2026, 10, 25, tzinfo=UTC) - NOW).total_seconds() / 86400
     assert m.projected_mb == pytest.approx(600 + 200 * left)
-    assert m.day == 4
+    assert m.day == 5
     assert m.level == Level.RED
 
 
-def test_the_run_after_day_26_counts_the_day_before_in_the_old_cycle() -> None:
-    """The 00:00 run on the 26th covers the 25th, which the cycle before pays for."""
-    now = datetime(2026, 9, 27, 0, 10, tzinfo=UTC)
-    found = [w(datetime(2026, 9, 26, 0, 10, tzinfo=UTC), 900), w(now, 60)]
+def test_the_run_after_day_25_counts_the_day_before_in_the_old_cycle() -> None:
+    """The 00:00 run on the 25th covers the 24th, which the cycle before pays for."""
+    now = datetime(2026, 9, 26, 0, 10, tzinfo=UTC)
+    found = [w(datetime(2026, 9, 25, 0, 10, tzinfo=UTC), 900), w(now, 60)]
     m = egress_monitor.meters(found, now)
     assert m.cycle_mb == 60
     # Both windows ended in the last 72 hours: 960 MB over 48 hours
     assert m.average_mb_per_day == pytest.approx(480)
-    assert m.covers == date(2026, 9, 26)
+    assert m.covers == date(2026, 9, 25)
 
 
 def test_with_no_window_in_the_last_72_hours_the_last_window_sets_the_rate() -> None:
@@ -398,7 +400,7 @@ def test_a_crash_with_the_database_down_still_alerts(
 def test_a_run_reads_its_windows_from_the_stored_snapshots(
     sent: list[dict[str, Any]],
 ) -> None:
-    """No stand-in windows: two snapshots a day apart, 2 M rows between them, 200 MB."""
+    """No stand-in windows: two snapshots a day apart, 2 M rows over 8 statements, 230 MB."""
     store(NOW - timedelta(days=1), {(1, 10): (1, 0)})
     store(NOW, {(1, 10): (9, 2_000_000)})
     with Session() as session:
@@ -406,7 +408,7 @@ def test_a_run_reads_its_windows_from_the_stored_snapshots(
     egress_monitor.report(taken, NOW)
     assert titles(sent)[0] == "Supabase egress: on track to pass the 5 GB cap"
     fields = {f["name"]: f["value"] for f in sent[0]["embeds"][0]["fields"]}
-    assert fields["Last window"] == "~200 MB/day"
+    assert fields["Last window"] == "~230 MB/day"
     assert fields["Cycle so far"].endswith("0.2 GB of 5 GB")
 
 

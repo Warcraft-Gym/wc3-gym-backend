@@ -98,8 +98,8 @@ def test_a_window_counts_growth_resets_and_new_statements(
     assert window is not None
     assert (window.start, window.end, window.hours) == (t0, t1, 24)
     assert (window.rows, window.calls) == (2_900_100, 20)
-    # 2.9 M rows at 100 bytes a row over one day
-    assert (window.estimated_mb, window.mb_per_day) == (290, 290)
+    # 2.9 M rows at 115 bytes and 20 statements at 375 bytes over one day
+    assert (window.estimated_mb, window.mb_per_day) == (333.5, 333.5)
     assert window.over_budget is True
     assert found.statements == 4
     assert [(s.query, s.rows) for s in found.top] == [

@@ -39,8 +39,18 @@ OUT = Path(__file__).resolve().parents[2] / "data" / "egress"
 POOLER_SEND = re.compile(
     r"^supavisor_client_network_send\{[^}]*} ([0-9.e+]+)$", re.MULTILINE
 )
-# Wire bytes per row returned, calibrated on 21-23 Sep 2026: 24.5 M rows against ~2.9 GB billed.
-BYTES_PER_ROW = 100
+# Wire bytes per row returned and per statement (RowDescription, CommandComplete, ReadyForQuery),
+# fitted to two billed windows: 21-23 Sep 2026 (24.5 M rows, ~2.9 GB) and 27 Sep (1.61 M rows,
+# 338 k statements, 309.75 MB). A relay on the local stack measured 42-348 B/row, 104-527 B/statement.
+BYTES_PER_ROW = 115
+BYTES_PER_STATEMENT = 375
+
+
+def estimate_bytes(rows: int, calls: int) -> int:
+    """Bytes the pooler bills for `rows` returned over `calls` statements."""
+    return rows * BYTES_PER_ROW + calls * BYTES_PER_STATEMENT
+
+
 NODE = ("node_network_transmit_bytes_total", "node_time_seconds")
 
 
@@ -156,10 +166,11 @@ def report(env: str, limit: int = 15, out: Path = OUT) -> float:
             grew.append((d_rows, d_calls, now["db"], now["q"]))
     grew.sort(reverse=True)
     rows_out = sum(row[0] for row in grew)
-    est = rows_out * BYTES_PER_ROW
+    calls_out = sum(row[1] for row in grew)
+    est = estimate_bytes(rows_out, calls_out)
     rate = est / max(hours, 0.01) * 24 / 1e6
     print(
-        f"  rows returned {rows_out:,}  ->  ~{est / 1e6:.0f} MB billed  ->  ~{rate:.0f} MB/day"
+        f"  rows returned {rows_out:,} over {calls_out:,} statements  ->  ~{est / 1e6:.0f} MB billed  ->  ~{rate:.0f} MB/day"
     )
     if sent >= 0:
         print(f"  pooler counter {sent / 1e6:.1f} MB (resets on restart; not the bill)")
