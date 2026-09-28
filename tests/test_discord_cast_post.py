@@ -15,7 +15,7 @@ from tests.test_discord_auth import SESSION, stub_clerk
 
 CONTENT = f"{discord.API_URL}/channels/content/messages"
 JOB = "/jobs/cast-reminders"
-SECRET = {"Authorization": "Bearer cron-secret"}
+SECRET = {"Authorization": "Bearer cast-secret"}
 TWITCH = "twitch.tv/gnlcaster"
 
 
@@ -48,7 +48,7 @@ def content_channel() -> None:
 
 @pytest.fixture
 def cron(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("CRON_SECRET", "cron-secret")
+    monkeypatch.setenv("CLOUDFLARE_CRON_SECRET", "cast-secret")
 
 
 def test_a_claim_posts_the_card_and_a_second_claim_edits_it(
@@ -173,8 +173,14 @@ def test_the_reminder_skips_a_series_that_is_not_due(
 def test_the_job_answers_only_the_scheduler(
     client: Client, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    assert client.get(JOB).status_code == 503  # CRON_SECRET is not set
+    assert client.get(JOB).status_code == 503  # CLOUDFLARE_CRON_SECRET is not set
+    monkeypatch.setenv("CLOUDFLARE_CRON_SECRET", "cast-secret")
     monkeypatch.setenv("CRON_SECRET", "cron-secret")
     assert client.get(JOB).status_code == 401
+    # The Vercel cron's secret opens every job but this one
+    assert (
+        client.get(JOB, headers={"Authorization": "Bearer cron-secret"}).status_code
+        == 401
+    )
     assert client.get(JOB, headers={"Authorization": "Bearer nope"}).status_code == 401
     assert client.get(JOB, headers=SECRET).status_code == 200

@@ -27,12 +27,12 @@ router = APIRouter(tags=["jobs"])
 DRAIN_SECONDS = 50
 
 
-def only_the_scheduler(credentials: Credentials) -> None:
-    """Bearer auth against CRON_SECRET; unset answers 503, so a /jobs route is
-    never a public trigger."""
-    secret = os.getenv("CRON_SECRET")
+def only_the_scheduler(credentials: Credentials, key: str = "CRON_SECRET") -> None:
+    """Bearer auth against the secret named `key`; unset answers 503, so a /jobs
+    route is never a public trigger."""
+    secret = os.getenv(key)
     if not secret:
-        raise ApiError(503, {"error": "CRON_SECRET is not set"})
+        raise ApiError(503, {"error": f"{key} is not set"})
     if credentials is None or credentials.credentials != secret:
         raise ApiError(401, {"error": "Unauthorized"})
 
@@ -44,9 +44,10 @@ def cast_reminders(credentials: Credentials) -> dict[str, int]:
     Vercel Hobby runs a cron once a day, so a Cloudflare Worker in
     wc3-gym-discord-bot (cron/) calls this every five minutes; its failures
     show in that Worker's Cron Events. A series already carrying its card is
-    skipped, so a run that repeats posts nothing twice.
+    skipped, so a run that repeats posts nothing twice. The Worker holds its own
+    secret, so a leak there triggers nothing but this job.
     """
-    only_the_scheduler(credentials)
+    only_the_scheduler(credentials, "CLOUDFLARE_CRON_SECRET")
     due = casts.starting_soon(utcnow())
     return {"posted": sum(discord_posts.post_reminder(row) for row in due)}
 
