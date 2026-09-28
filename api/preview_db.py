@@ -1,11 +1,11 @@
 """Which database a Vercel preview uses on the staging Supabase project, and the admin steps on it.
 
 Every preview uses the shared wc3gym_staging database. A branch that adds a migration gets its own
-copy of the locked wc3gym_template instead, named after the branch, migrated in the preview build.
+copy of wc3gym_template instead, named after the branch, migrated in the preview build.
 Imported by api/index.py to point the app at the right database at cold start. DB_URL names the project.
 
 python -m api.preview_db                       the preview build: choose or create the branch copy (vercel.json)
-python -m api.preview_db migrate               bring wc3gym_template (unlocked for the duration) and wc3gym_staging to head
+python -m api.preview_db migrate               bring wc3gym_template and wc3gym_staging to head
 python -m api.preview_db seed <seed_dir>       reseed the template from a seed directory, then recreate wc3gym_staging from it
 python -m api.preview_db list                  the databases on the project
 python -m api.preview_db drop <database>       drop one branch copy by name; the template and the shared database are refused
@@ -94,22 +94,28 @@ def unlock_template(conn: psycopg.Connection) -> None:
     conn.execute(f"ALTER DATABASE {TEMPLATE} WITH ALLOW_CONNECTIONS true")
 
 
-def lock_template(conn: psycopg.Connection) -> None:
+def copy_template(conn: psycopg.Connection, name: str) -> None:
+    """CREATE DATABASE name TEMPLATE wc3gym_template, locked for the copy only.
+
+    Postgres refuses to copy a database with a session on it, and the pooler keeps one on any database
+    it has served, so the copy ends those sessions first. A pooler left facing a locked database retries
+    about 100 times a second for two minutes and logs each failure (~23 MB of staging logs per lock).
+    """
     conn.execute(f"ALTER DATABASE {TEMPLATE} WITH ALLOW_CONNECTIONS false")
-    # The pooler keeps a session on any database it has served, and a template must have none
-    conn.execute(
-        "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = %s AND pid <> pg_backend_pid()",
-        (TEMPLATE,),
-    )
+    try:
+        conn.execute(
+            "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = %s AND pid <> pg_backend_pid()",
+            (TEMPLATE,),
+        )
+        conn.execute(f'CREATE DATABASE "{name}" TEMPLATE {TEMPLATE}')
+    finally:
+        unlock_template(conn)
 
 
 def migrate() -> None:
     with admin() as conn:
         unlock_template(conn)
-        try:
-            upgrade(TEMPLATE)
-        finally:
-            lock_template(conn)
+    upgrade(TEMPLATE)
     upgrade(SHARED)
 
 
@@ -118,21 +124,18 @@ def seed(seed_dir: str) -> None:
         if not exists(conn, TEMPLATE):
             conn.execute(f"CREATE DATABASE {TEMPLATE}")
         unlock_template(conn)
-        try:
-            upgrade(TEMPLATE)
-            subprocess.run(
-                [
-                    "just",
-                    "_load-seed",
-                    seed_dir,
-                    with_database(os.environ["DB_URL"], TEMPLATE),
-                ],
-                check=True,
-            )
-        finally:
-            lock_template(conn)
+        upgrade(TEMPLATE)
+        subprocess.run(
+            [
+                "just",
+                "_load-seed",
+                seed_dir,
+                with_database(os.environ["DB_URL"], TEMPLATE),
+            ],
+            check=True,
+        )
         conn.execute(f"DROP DATABASE IF EXISTS {SHARED} WITH (FORCE)")
-        conn.execute(f"CREATE DATABASE {SHARED} TEMPLATE {TEMPLATE}")
+        copy_template(conn, SHARED)
         print(f"{SHARED} recreated from {TEMPLATE}")
 
 
@@ -141,7 +144,7 @@ def list_databases() -> None:
         for name, allow in conn.execute(
             "SELECT datname, datallowconn FROM pg_database WHERE datname LIKE 'wc3gym_%' ORDER BY 1"
         ):
-            print(name, "" if allow else "(locked template)")
+            print(name, "" if allow else "(locked)")
 
 
 def drop(name: str) -> None:
@@ -195,7 +198,7 @@ def build() -> None:
             print(f"dropped {name}, it does not match this branch's migrations")
             comment = None
         if not comment:
-            conn.execute(f'CREATE DATABASE "{name}" TEMPLATE {TEMPLATE}')
+            copy_template(conn, name)
             print(f"created {name} from {TEMPLATE}")
         upgrade(name)
         conn.execute(f"COMMENT ON DATABASE \"{name}\" IS '{fingerprint}'")
