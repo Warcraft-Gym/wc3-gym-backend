@@ -460,7 +460,7 @@ def test_a_day_of_statements_without_measured_bytes_alerts_as_not_measured(
     run(monkeypatch, [measured(2, 20), measured(1, None)])
     assert alerts(sent) == ["Egress not measured"]
     digest = {f["name"]: f["value"] for f in sent[-1]["embeds"][0]["fields"]}
-    assert "\nProd        -  20 MB\n" in digest["Supabase egress"]
+    assert "\nProd        -  20 MB\n" in digest[egress_monitor.EGRESS_FIELD]
 
 
 def test_an_undelivered_alert_keeps_the_level_so_the_next_run_retries(
@@ -599,8 +599,8 @@ def test_the_digest_shows_the_database_size_when_it_was_read(
     sized(monkeypatch, 123.4)
     run(monkeypatch, daily(20))
     fields = {f["name"]: f for f in sent[0]["embeds"][0]["fields"]}
-    assert fields["Database size"] == {
-        "name": "Database size",
+    assert fields[egress_monitor.DB_FIELD] == {
+        "name": egress_monitor.DB_FIELD,
         "value": "~123 MB of the 500 MB cap\n`▰▰▱▱▱▱▱▱▱▱` 25%",
         "inline": True,
     }
@@ -610,7 +610,9 @@ def test_the_digest_shows_the_database_size_when_it_was_read(
 
     sized(monkeypatch, None)
     run(monkeypatch, daily(20))
-    assert "Database size" not in [f["name"] for f in sent[0]["embeds"][0]["fields"]]
+    assert egress_monitor.DB_FIELD not in [
+        f["name"] for f in sent[0]["embeds"][0]["fields"]
+    ]
 
 
 def test_the_database_size_alerts_and_recovers_on_its_own_row(
@@ -697,7 +699,7 @@ def test_a_failed_size_read_shows_in_the_digest_and_the_run_goes_on(
     monkeypatch.setattr(egress_monitor, "database_mb", broken)
     run(monkeypatch, daily(20))
     fields = {f["name"]: f["value"] for f in sent[0]["embeds"][0]["fields"]}
-    assert fields["Database size"] == "not read (RuntimeError)"
+    assert fields[egress_monitor.DB_FIELD] == "not read (RuntimeError)"
     assert state(egress_monitor.DB_KEY) is None
     current = state()
     assert current is not None and current.level == "normal"
@@ -770,7 +772,9 @@ def test_the_route_list_gives_way_before_the_dashboards() -> None:
     for routes, last, kept in [(1024, 1000, "cut"), (100, 870, "dropped")]:
         many = [
             *[egress_monitor.field(f"f{i}", "x" * 1000) for i in range(4)],
-            egress_monitor.field("Busiest routes", "r" * routes, inline=False),
+            egress_monitor.field(
+                egress_monitor.ROUTES_FIELD, "r" * routes, inline=False
+            ),
             egress_monitor.field("f4", "x" * 1000),
             egress_monitor.field("f5", "x" * last),
         ]
@@ -783,10 +787,10 @@ def test_the_route_list_gives_way_before_the_dashboards() -> None:
         assert embed["fields"][-1]["name"] == "Dashboards"
         assert "f4" in found
         if kept == "cut":
-            assert found["Busiest routes"].endswith("r…")
-            assert len(found["Busiest routes"]) < routes
+            assert found[egress_monitor.ROUTES_FIELD].endswith("r…")
+            assert len(found[egress_monitor.ROUTES_FIELD]) < routes
         else:
-            assert "Busiest routes" not in found and "f5" in found
+            assert egress_monitor.ROUTES_FIELD not in found and "f5" in found
 
 
 TOKEN = "vercel-test-token"
@@ -856,7 +860,7 @@ USAGE = [
 
 def vercel_field(payload: dict[str, Any]) -> str | None:
     fields = {f["name"]: f for f in payload["embeds"][0]["fields"]}
-    found = fields.get("Vercel, last 30 days")
+    found = fields.get(egress_monitor.VERCEL_FIELD)
     if found is None:
         return None
     assert found["inline"] is False
@@ -1086,7 +1090,12 @@ def test_a_digest_with_every_field_fits_discords_limits(
     m = egress_monitor.meters(daily(20_000), NOW)
     payload = egress_monitor.digest(m, [], None, 499.0, None, usage)
     names = [f["name"] for f in payload["embeds"][0]["fields"]]
-    assert names[:3] == ["Supabase egress", "Database size", "Vercel, last 30 days"]
+    assert names[:4] == [
+        egress_monitor.EGRESS_FIELD,
+        egress_monitor.DB_FIELD,
+        egress_monitor.ROUTES_FIELD,
+        egress_monitor.VERCEL_FIELD,
+    ]
     assert size(payload) <= 6000
 
 
@@ -1116,7 +1125,9 @@ def test_a_partly_measured_cycle_holds_red_and_says_so(
     current = state()
     assert current is not None and current.level == "red"
     fields = {f["name"]: f["value"] for f in sent[0]["embeds"][0]["fields"]}
-    assert fields["Supabase egress"].endswith("Totals count measured figures only.")
+    assert fields[egress_monitor.EGRESS_FIELD].endswith(
+        "Totals count measured figures only."
+    )
 
 
 def test_staging_without_measured_bytes_reads_not_measured() -> None:
@@ -1124,14 +1135,14 @@ def test_staging_without_measured_bytes_reads_not_measured() -> None:
     assert not m.staging_measured and m.partial
     payload = egress_monitor.digest(m, [])
     fields = {f["name"]: f["value"] for f in payload["embeds"][0]["fields"]}
-    assert "\nStaging       -      -\n" in fields["Supabase egress"]
+    assert "\nStaging       -      -\n" in fields[egress_monitor.EGRESS_FIELD]
 
 
 def test_the_digest_splits_the_cycle_by_project_and_totals_it() -> None:
     m = egress_monitor.meters(daily(20), NOW, daily(5))
     payload = egress_monitor.digest(m, [])
     fields = {f["name"]: f["value"] for f in payload["embeds"][0]["fields"]}
-    table = fields["Supabase egress"].split("```")[1]
+    table = fields[egress_monitor.EGRESS_FIELD].split("```")[1]
     assert table == (
         "\n"
         "         28 Sep  Cycle\n"

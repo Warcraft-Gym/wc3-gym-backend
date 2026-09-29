@@ -59,7 +59,12 @@ FOOTER = "Egress monitor · bytes measured on the database connections"
 DIGEST_FOOTER = "Infrastructure monitor · egress measured on the database connections"
 MONITOR_FOOTER = "Infrastructure monitor"
 # The fields that give way first when an embed is over the total: the long route lists
-ROUTE_FIELDS = ("Busiest routes", "Top routes")
+# The digest's field names: a Supabase section, then a Vercel one
+EGRESS_FIELD = "Supabase · egress"
+DB_FIELD = "Supabase · database size (prod)"
+ROUTES_FIELD = "Supabase · busiest routes (prod)"
+VERCEL_FIELD = "Vercel · all projects, last 30 days"
+ROUTE_FIELDS = (ROUTES_FIELD, "Top routes")
 JOBS_DOC = (
     "https://github.com/Warcraft-Gym/wc3-gym-backend/blob/main/docs/okf/api/jobs.md"
 )
@@ -498,7 +503,7 @@ def db_alert(
         f"{DB_CAP_MB:,.0f} MB cap."
     )
     fields = [
-        field("Database size", db_line(mb)),
+        field(DB_FIELD, db_line(mb)),
         field("Since", stamp(now)),
         field(
             "Next step",
@@ -529,7 +534,7 @@ def db_recovery(mb: float, since: datetime, now: datetime) -> dict[str, Any]:
         f"Supabase database size: back under {DB_RED:.0%} of the cap",
         f"The database is at ~{mb:,.0f} MB of {DB_CAP_MB:,.0f} MB.",
         [
-            field("Database size", db_line(mb)),
+            field(DB_FIELD, db_line(mb)),
             field("Red for", f"{duration(now - since)}, since {stamp(since)}"),
         ],
         silent=True,
@@ -604,7 +609,7 @@ def vercel_alert(
         "Hobby pauses the feature for 30 days when a limit is hit."
     )
     fields = [
-        field("Vercel, last 30 days", vercel_lines(v), inline=False),
+        field(VERCEL_FIELD, vercel_lines(v), inline=False),
         field("Since", stamp(now)),
         field(
             "Next step",
@@ -657,7 +662,7 @@ def vercel_recovery(
         f"Vercel usage: {f'back under {VERCEL_RED:.0%}' if red else 'read again'}",
         f"Every meter is under {VERCEL_RED:.0%} of its included usage.",
         [
-            field("Vercel, last 30 days", vercel_lines(v), inline=False),
+            field(VERCEL_FIELD, vercel_lines(v), inline=False),
             field(
                 f"{'Red' if red else 'Unavailable'} for",
                 f"{duration(now - since)}, since {stamp(since)}",
@@ -688,28 +693,26 @@ def digest(
     The database size and the Vercel usage show when they were read or their read failed,
     and a red one turns the
     digest red."""
-    extra, alarms = [], []
+    db, usage, alarms = [], [], []
     if db_mb is not None:
-        extra.append(field("Database size", db_line(db_mb)))
+        db.append(field(DB_FIELD, db_line(db_mb)))
         if db_level(db_mb) == Level.RED:
             alarms.append("The database is near its size cap.")
     elif db_error is not None:
-        extra.append(field("Database size", f"not read ({db_error})"))
+        db.append(field(DB_FIELD, f"not read ({db_error})"))
     if vercel is not None:
-        extra.append(field("Vercel, last 30 days", vercel_lines(vercel), inline=False))
+        usage.append(field(VERCEL_FIELD, vercel_lines(vercel), inline=False))
         if vercel.level == Level.RED:
             alarms.append("Vercel usage is near the included limit.")
     elif vercel_error is not None:
-        extra.append(
-            field("Vercel, last 30 days", f"not read ({vercel_error})", inline=False)
-        )
+        usage.append(field(VERCEL_FIELD, f"not read ({vercel_error})", inline=False))
     if m.last is None:
         return message(
             m.now,
             RED if alarms else BLUE,
             f"Daily infrastructure digest · {day_label(m.now.date())}",
             " ".join([*alarms, "Baseline taken. First figures after the next run."]),
-            extra,
+            [*db, *usage],
             silent=True,
             links=links,
             footer=DIGEST_FOOTER,
@@ -719,9 +722,10 @@ def digest(
         lead = [] if m.level == Level.NORMAL else [status]
         colour, status = RED, " ".join([*lead, *alarms])
     fields = [
-        field("Supabase egress", egress_lines(m, m.last), inline=False),
-        *extra,
-        field("Busiest routes", route_lines(routes, m.covers), inline=False),
+        field(EGRESS_FIELD, egress_lines(m, m.last), inline=False),
+        *db,
+        field(ROUTES_FIELD, route_lines(routes, m.covers), inline=False),
+        *usage,
     ]
     title = f"Daily infrastructure digest · {day_label(m.last.day)}"
     return message(
