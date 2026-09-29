@@ -8,7 +8,7 @@ An alert posts once per change of level, so each check's state row is read and w
 import calendar
 import logging
 import os
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
 from enum import StrEnum
@@ -59,7 +59,12 @@ FOOTER = "Egress monitor · bytes measured on the database connections"
 DIGEST_FOOTER = "Infrastructure monitor · egress measured on the database connections"
 MONITOR_FOOTER = "Infrastructure monitor"
 # The fields that give way first when an embed is over the total: the long route lists
-ROUTE_FIELDS = ("Busiest routes", "Top routes")
+# The digest's field names: a Supabase section, then a Vercel one
+EGRESS_FIELD = "Supabase · egress"
+DB_FIELD = "Supabase · database size (prod)"
+ROUTES_FIELD = "Supabase · busiest routes (prod)"
+VERCEL_FIELD = "Vercel · all projects, last 30 days"
+ROUTE_FIELDS = (ROUTES_FIELD, "Top routes")
 JOBS_DOC = (
     "https://github.com/Warcraft-Gym/wc3-gym-backend/blob/main/docs/okf/api/jobs.md"
 )
@@ -111,6 +116,7 @@ class Meters:
         True  # False while staging's ledger holds no measured bytes
     )
     partial: bool = False  # a day of the cycle ran statements but measured no bytes
+    staging_last: Day | None = None  # staging on prod's last day; None when not read
 
     @property
     def level(self) -> Level:
@@ -162,10 +168,18 @@ def meters(found: list[Day], now: datetime, staging: list[Day] | None = None) ->
     left = (c.end - now).total_seconds() / 86400
     complete = [d for d in found if d.day < now.date()]
     in_cycle = [d for d in [*found, *(staging or [])] if d.day >= c.start.date()]
+    last = complete[-1] if complete else None
+    staging_last = None
+    if staging is not None and last is not None:
+        # A day without a ledger row ran no statements: zero, not unknown
+        staging_last = next(
+            (d for d in staging if d.day == last.day), Day(last.day, 0.0)
+        )
     return Meters(
         now=now,
         cycle=c,
-        last=complete[-1] if complete else None,
+        last=last,
+        staging_last=staging_last,
         average_mb_per_day=average,
         cycle_mb=so_far,
         projected_mb=so_far + average * left,
@@ -262,6 +276,52 @@ def rate(d: Day | None) -> str:
     if d is None:
         return "none yet"
     return "not measured" if d.mb is None else f"{d.mb:,.0f} MB"
+
+
+def table(rows: Sequence[tuple[str, ...]]) -> str:
+    """Rows in a code block, the first column left-aligned and the rest right-aligned."""
+    widths = [max(len(r[i]) for r in rows) for i in range(len(rows[0]))]
+    lines = [
+        "  ".join(
+            c.ljust(w) if i == 0 else c.rjust(w)
+            for i, (c, w) in enumerate(zip(r, widths))
+        )
+        for r in rows
+    ]
+    return "```\n" + "\n".join(line.rstrip() for line in lines) + "\n```"
+
+
+def cell(mb: float | None) -> str:
+    """A table figure; `-` is one the ledger did not measure."""
+    return "-" if mb is None else size(mb)
+
+
+def egress_lines(m: Meters, last: Day) -> str:
+    """The cycle total against the cap, then each project's last day and cycle so far.
+    The total is what the cap counts."""
+    prod, staging = last.mb, m.staging_last.mb if m.staging_last else None
+    prod_cycle = m.cycle_mb - (m.staging_mb or 0)
+    rows = [("", day_label(last.day), "Cycle"), ("Prod", cell(prod), cell(prod_cycle))]
+    if m.staging_last is not None:
+        staging_cycle = m.staging_mb if m.staging_measured else None
+        rows.append(("Staging", cell(staging), cell(staging_cycle)))
+    measured = [mb for mb in (prod, staging) if mb is not None]
+    day_total = sum(measured) if measured else None
+    rows.append(("Total", cell(day_total), size(m.cycle_mb)))
+    notes = [
+        f"{meter(m.cycle_mb, CAP_MB)} of the 5 GB cap · day {m.day} of {m.cycle.days}",
+        f"Projected ~{size(m.projected_mb)} at cycle end",
+        table(rows),
+    ]
+    if prod is not None:
+        notes.append(
+            f"Prod: {prod / BUDGET_MB_PER_DAY:.0%} of the {BUDGET_MB_PER_DAY:,.0f} MB daily budget"
+        )
+    if m.staging_last is None:
+        notes.append("Staging not read.")
+    if m.partial or any("-" in r for r in rows):
+        notes.append("Totals count measured figures only.")
+    return "\n".join(notes)
 
 
 # Payloads
@@ -443,7 +503,7 @@ def db_alert(
         f"{DB_CAP_MB:,.0f} MB cap."
     )
     fields = [
-        field("Database size", db_line(mb)),
+        field(DB_FIELD, db_line(mb)),
         field("Since", stamp(now)),
         field(
             "Next step",
@@ -474,7 +534,7 @@ def db_recovery(mb: float, since: datetime, now: datetime) -> dict[str, Any]:
         f"Supabase database size: back under {DB_RED:.0%} of the cap",
         f"The database is at ~{mb:,.0f} MB of {DB_CAP_MB:,.0f} MB.",
         [
-            field("Database size", db_line(mb)),
+            field(DB_FIELD, db_line(mb)),
             field("Red for", f"{duration(now - since)}, since {stamp(since)}"),
         ],
         silent=True,
@@ -534,13 +594,10 @@ class Vercel:
 
 
 def vercel_lines(v: Vercel) -> str:
-    lines = [
-        f"{label} {figure} · {share:.0%} of the Hobby limit"
-        for label, figure, share in v.meters
-    ]
+    rows = [(label, figure, f"{share:.0%}") for label, figure, share in v.meters]
     if v.requests:
-        lines.append(f"Cache hits {v.hits / v.requests:.0%}")
-    return "\n".join(lines)
+        rows.append(("Cache hits", "", f"{v.hits / v.requests:.0%}"))
+    return f"{table(rows)}\n% of the Hobby limit; cache hits of the requests"
 
 
 def vercel_alert(
@@ -552,7 +609,7 @@ def vercel_alert(
         "Hobby pauses the feature for 30 days when a limit is hit."
     )
     fields = [
-        field("Vercel, last 30 days", vercel_lines(v), inline=False),
+        field(VERCEL_FIELD, vercel_lines(v), inline=False),
         field("Since", stamp(now)),
         field(
             "Next step",
@@ -605,7 +662,7 @@ def vercel_recovery(
         f"Vercel usage: {f'back under {VERCEL_RED:.0%}' if red else 'read again'}",
         f"Every meter is under {VERCEL_RED:.0%} of its included usage.",
         [
-            field("Vercel, last 30 days", vercel_lines(v), inline=False),
+            field(VERCEL_FIELD, vercel_lines(v), inline=False),
             field(
                 f"{'Red' if red else 'Unavailable'} for",
                 f"{duration(now - since)}, since {stamp(since)}",
@@ -636,28 +693,26 @@ def digest(
     The database size and the Vercel usage show when they were read or their read failed,
     and a red one turns the
     digest red."""
-    extra, alarms = [], []
+    db, usage, alarms = [], [], []
     if db_mb is not None:
-        extra.append(field("Database size", db_line(db_mb)))
+        db.append(field(DB_FIELD, db_line(db_mb)))
         if db_level(db_mb) == Level.RED:
             alarms.append("The database is near its size cap.")
     elif db_error is not None:
-        extra.append(field("Database size", f"not read ({db_error})"))
+        db.append(field(DB_FIELD, f"not read ({db_error})"))
     if vercel is not None:
-        extra.append(field("Vercel, last 30 days", vercel_lines(vercel), inline=False))
+        usage.append(field(VERCEL_FIELD, vercel_lines(vercel), inline=False))
         if vercel.level == Level.RED:
             alarms.append("Vercel usage is near the included limit.")
     elif vercel_error is not None:
-        extra.append(
-            field("Vercel, last 30 days", f"not read ({vercel_error})", inline=False)
-        )
+        usage.append(field(VERCEL_FIELD, f"not read ({vercel_error})", inline=False))
     if m.last is None:
         return message(
             m.now,
             RED if alarms else BLUE,
             f"Daily infrastructure digest · {day_label(m.now.date())}",
             " ".join([*alarms, "Baseline taken. First figures after the next run."]),
-            extra,
+            [*db, *usage],
             silent=True,
             links=links,
             footer=DIGEST_FOOTER,
@@ -666,32 +721,11 @@ def digest(
     if alarms:
         lead = [] if m.level == Level.NORMAL else [status]
         colour, status = RED, " ".join([*lead, *alarms])
-    per_day = m.last.mb
     fields = [
-        field(
-            "Supabase egress, prod",
-            "not measured"
-            if per_day is None
-            else f"{per_day:,.0f} MB\n{meter(per_day, BUDGET_MB_PER_DAY)} of the "
-            f"{BUDGET_MB_PER_DAY:,.0f} MB daily budget",
-        ),
-        field(
-            "Cycle so far",
-            f"{size(m.cycle_mb)} of the 5 GB cap\n{meter(m.cycle_mb, CAP_MB)}"
-            f" · day {m.day} of {m.cycle.days}"
-            + ("\nmeasured days only" if m.partial else ""),
-        ),
-        field(
-            "Staging",
-            "not read"
-            if m.staging_mb is None
-            else f"{size(m.staging_mb)} this cycle"
-            if m.staging_measured
-            else "not measured",
-        ),
-        field("Projected", f"~{size(m.projected_mb)}"),
-        *extra,
-        field("Busiest routes", route_lines(routes, m.covers), inline=False),
+        field(EGRESS_FIELD, egress_lines(m, m.last), inline=False),
+        *db,
+        field(ROUTES_FIELD, route_lines(routes, m.covers), inline=False),
+        *usage,
     ]
     title = f"Daily infrastructure digest · {day_label(m.last.day)}"
     return message(
