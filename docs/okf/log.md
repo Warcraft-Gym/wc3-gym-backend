@@ -1,5 +1,9 @@
 # Bundle history
 
+## 2026-09-29
+
+* **Update**: the GNL payload snapshot is gone; [the events module](concepts/events-module.md) and [consumers](api/consumers.md) name `tests/test_event_season_parity.py` as the test that pins the GNL fields.
+
 ## 2026-09-28
 
 * **Update**: [egress_ledger](data/tables/egress_ledger.md) gains `db_bytes`, the bytes each route's database connections received, measured on the socket; the [egress monitor](api/jobs.md#the-egress-monitor) sums it per day and no longer estimates bytes from rows.

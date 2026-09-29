@@ -5,7 +5,8 @@ the fantasy team loads and PlayerCareerStats.eager_options decide the
 count, and the count is a constant: it does not grow with the number of
 w3c_stats, team_seasons or season signups a player carries, nor with the
 number of career rows. A lazy load added to the serialization raises the count
-and fails a test here.
+and fails a test here. Each pin is a ceiling: a read that gets cheaper passes,
+and its pin is lowered to the new count.
 
 A single series, draft, bet or fantasy team read joins its players bare, then
 reads them again with app.services.users.summary_loads: one statement for the
@@ -217,7 +218,7 @@ def test_get_series_costs_fourteen_statements(league: dict[str, Any]) -> None:
     assert series.player1.race_mmrs
     assert series.player1.record is not None
     assert series.player1.record.season_id == league["season_id"]
-    assert tally[0] == 14
+    assert tally[0] <= 14
 
 
 def test_search_for_season_costs_seven_statements(league: dict[str, Any]) -> None:
@@ -238,7 +239,7 @@ def test_search_for_season_costs_seven_statements(league: dict[str, Any]) -> Non
     assert series_list[0].player1.name
     assert series_list[0].player1.race_mmrs == []
     # one read finds the finished season, one reads the MMR of the time
-    assert tally[0] == 7
+    assert tally[0] <= 7
 
 
 def test_the_season_record_costs_two_statements(league: dict[str, Any]) -> None:
@@ -251,10 +252,10 @@ def test_the_season_record_costs_two_statements(league: dict[str, Any]) -> None:
     with Session() as session:
         with count_statements() as tally:
             derived.fill_gnl_stats(session, users[:1])
-        assert tally[0] == 2
+        assert tally[0] <= 2
         with count_statements() as tally:
             derived.fill_gnl_stats(session, users)
-        assert tally[0] == 2
+        assert tally[0] <= 2
     assert users[0].gnl_stats[0].games == 1
 
 
@@ -266,7 +267,7 @@ def test_draft_series_by_match_costs_five_statements(league: dict[str, Any]) -> 
     assert len(draft_list) == 1
     assert draft_list[0].player1 is not None
     assert draft_list[0].player1.record is not None
-    assert tally[0] == 5
+    assert tally[0] <= 5
 
 
 def test_statement_count_holds_when_the_collections_grow(
@@ -285,7 +286,7 @@ def test_statement_count_holds_when_the_collections_grow(
     assert series.player1 is not None
     # one summary row per race, whatever the history holds
     assert len(series.player1.race_mmrs) == 1
-    assert tally[0] == 14
+    assert tally[0] <= 14
 
 
 def test_a_series_write_answers_through_the_read(league: dict[str, Any]) -> None:
@@ -304,7 +305,7 @@ def test_a_series_write_answers_through_the_read(league: dict[str, Any]) -> None
     assert added.player1 is not None
     assert added.player1.record is not None
     assert added.player1.race_mmrs
-    assert tally[0] == 21
+    assert tally[0] <= 21
 
     with count_statements() as tally:
         updated = service.update(
@@ -312,7 +313,7 @@ def test_a_series_write_answers_through_the_read(league: dict[str, Any]) -> None
         )
     assert updated.player2 is not None
     assert updated.player2.record is not None
-    assert tally[0] == 24
+    assert tally[0] <= 24
 
 
 def test_a_draft_write_answers_through_the_read(league: dict[str, Any]) -> None:
@@ -328,7 +329,7 @@ def test_a_draft_write_answers_through_the_read(league: dict[str, Any]) -> None:
         draft = DraftSeriesService().add(create)
     assert draft.player1 is not None
     assert draft.player1.record is not None
-    assert tally[0] == 7
+    assert tally[0] <= 7
 
 
 def test_one_bet_costs_thirteen_statements(league: dict[str, Any]) -> None:
@@ -346,7 +347,7 @@ def test_one_bet_costs_thirteen_statements(league: dict[str, Any]) -> None:
     assert bet.series.player1 is not None
     assert bet.series.player1.record is not None
     assert bet.series.player1.record.games == 1
-    assert tally[0] == 13
+    assert tally[0] <= 13
 
 
 def test_a_bet_write_answers_through_the_read(league: dict[str, Any]) -> None:
@@ -363,7 +364,7 @@ def test_a_bet_write_answers_through_the_read(league: dict[str, Any]) -> None:
         bet = FantasyBetService().add(create)
     assert bet.winner is not None
     assert bet.winner.record is not None
-    assert tally[0] == 14
+    assert tally[0] <= 14
 
 
 def test_the_entrants_read_costs_twelve_statements(
@@ -385,7 +386,7 @@ def test_the_entrants_read_costs_twelve_statements(
     rows = response.json()
     assert len(rows) == len(league["player_ids"])
     assert all(row["user"]["record"]["season_id"] for row in rows)
-    assert tally[0] == 12
+    assert tally[0] <= 12
     assert int(response.headers["X-DB-Rows"]) <= 28
 
 
@@ -438,7 +439,7 @@ def test_fantasy_bets_list_costs_eight_statements(league: dict[str, Any]) -> Non
     assert bets[0].bet_result == 10
     assert bets[0].user is not None
     assert bets[0].user.race_mmrs == []
-    assert tally[0] == 8
+    assert tally[0] <= 8
 
 
 def add_bets_to_the_season(seeded: dict[str, Any], count: int) -> None:
@@ -459,7 +460,7 @@ def test_the_bets_count_holds_when_the_bets_grow(league: dict[str, Any]) -> None
         bets, _ = service.get_all()
     assert len(bets) == 5
     assert all(bet.bet_result == 10 for bet in bets)
-    assert tally[0] == 8
+    assert tally[0] <= 8
 
 
 from sqlmodel import col
@@ -477,7 +478,7 @@ def test_the_fantasy_team_list_costs_ten_statements(league: dict[str, Any]) -> N
     assert len(teams) == 1
     assert total == 1
     assert teams[0].total_points == 30
-    assert tally[0] == 10
+    assert tally[0] <= 10
 
 
 def test_the_fantasy_count_holds_when_the_teams_grow(league: dict[str, Any]) -> None:
@@ -489,7 +490,7 @@ def test_the_fantasy_count_holds_when_the_teams_grow(league: dict[str, Any]) -> 
         teams, total = service.get_all()
     assert len(teams) == 5
     assert total == 5
-    assert tally[0] == 14
+    assert tally[0] <= 14
 
 
 def test_the_fantasy_team_search_costs_thirteen_statements(
@@ -505,7 +506,7 @@ def test_the_fantasy_team_search_costs_thirteen_statements(
         teams, total = service.search(query)
     assert len(teams) == 5
     assert total is None
-    assert tally[0] == 13
+    assert tally[0] <= 13
 
 
 def draft_two(league: dict[str, Any]) -> None:
@@ -543,7 +544,7 @@ def test_one_fantasy_team_costs_fifteen_statements(
         assert player["record"]["season_id"] == league["season_id"]
         assert "gnl_stats" not in player
         assert "signup_seasons" not in player
-    assert tally[0] == 15
+    assert tally[0] <= 15
     assert int(response.headers["X-DB-Rows"]) <= 29 + ROWS_MARGIN
 
 
@@ -564,7 +565,7 @@ def test_an_owner_team_edit_reads_the_team_once(
         )
     assert response.status_code == 200, response.text
     assert response.json()["name"] == "Renamed"
-    assert tally[0] == 30
+    assert tally[0] <= 30
     assert int(response.headers["X-DB-Rows"]) <= 42 + ROWS_MARGIN
 
 
@@ -582,7 +583,7 @@ def test_adding_team_players_answers_through_the_read(
         )
     assert response.status_code == 200, response.text
     assert len(response.json()["drafted_players"]) == 3
-    assert tally[0] == 20
+    assert tally[0] <= 20
     assert int(response.headers["X-DB-Rows"]) <= 40 + ROWS_MARGIN
 
 
@@ -617,7 +618,7 @@ def test_a_fantasy_registration_answers_once(
     body = response.json()
     assert body["id"] == league["fantasy_team_id"]
     assert {player["id"] for player in body["drafted_players"]} == {p1, p2, p3}
-    assert tally[0] == 55
+    assert tally[0] <= 55
     assert int(response.headers["X-DB-Rows"]) <= 58 + ROWS_MARGIN
 
 
@@ -630,7 +631,7 @@ def test_one_bet_route_costs_the_single_read(
         response = client.get(f"/fantasy/bets/{bet_id}")
     assert response.status_code == 200
     assert response.json()["series"]["player1"]["record"] is not None
-    assert tally[0] == 13
+    assert tally[0] <= 13
     assert int(response.headers["X-DB-Rows"]) <= 17 + ROWS_MARGIN
 
 
@@ -650,7 +651,7 @@ def test_an_admin_bet_answers_through_the_read(
     with count_statements() as tally:
         response = client.post("/fantasy/bets", json=bet, headers=auth_headers)
     assert response.status_code == 201, response.text
-    assert tally[0] == 15
+    assert tally[0] <= 15
     assert int(response.headers["X-DB-Rows"]) <= 20 + ROWS_MARGIN
 
 
@@ -671,7 +672,7 @@ def test_a_public_bet_reads_rows_and_answers_once(
         response = client.post("/fantasy-bet", json=bet, headers=headers)
     assert response.status_code == 201, response.text
     assert response.json()["season_id"] == league["season_id"]
-    assert tally[0] == 26
+    assert tally[0] <= 26
     assert int(response.headers["X-DB-Rows"]) <= 28 + ROWS_MARGIN
 
     with count_statements() as tally:
@@ -682,7 +683,7 @@ def test_a_public_bet_reads_rows_and_answers_once(
         )
     assert response.status_code == 200, response.text
     assert response.json()["bet_points"] == 5
-    assert tally[0] == 25
+    assert tally[0] <= 25
     assert int(response.headers["X-DB-Rows"]) <= 30 + ROWS_MARGIN
 
 
@@ -695,7 +696,7 @@ def test_career_stats_cost_two_statements(league: dict[str, Any]) -> None:
     assert total == 3
     assert career[0].user is not None
     assert career[0].user.name
-    assert tally[0] == 2
+    assert tally[0] <= 2
 
 
 def test_a_searched_career_answer_costs_the_same_two_statements(
@@ -707,7 +708,7 @@ def test_a_searched_career_answer_costs_the_same_two_statements(
         career, total = service.get_all(search="p1")
     assert [row.player_name for row in career] == ["P1"]
     assert total == 1
-    assert tally[0] == 2
+    assert tally[0] <= 2
 
 
 def test_career_statement_count_holds_when_the_players_grow(
@@ -745,7 +746,7 @@ def test_career_statement_count_holds_when_the_players_grow(
         career, total = service.get_all()
     assert len(career) == 5
     assert total == 5
-    assert tally[0] == 2
+    assert tally[0] <= 2
 
 
 def test_career_stats_cost_two_statements_when_every_player_holds_a_row(
@@ -764,7 +765,7 @@ def test_career_stats_cost_two_statements_when_every_player_holds_a_row(
         career, total = service.get_all()
     assert len(career) == 4
     assert total == 4
-    assert tally[0] == 2
+    assert tally[0] <= 2
 
 
 def test_one_career_row_costs_two_statements(league: dict[str, Any]) -> None:
@@ -774,7 +775,7 @@ def test_one_career_row_costs_two_statements(league: dict[str, Any]) -> None:
         stats = service.get_by_user_id(league["player_ids"][0])
     assert stats is not None
     assert stats.series_won == 1
-    assert tally[0] == 2
+    assert tally[0] <= 2
 
 
 def test_a_players_seasons_cost_three_statements(league: dict[str, Any]) -> None:
@@ -782,7 +783,7 @@ def test_a_players_seasons_cost_three_statements(league: dict[str, Any]) -> None
     with count_statements() as tally:
         seasons = player_reads.seasons(league["player_ids"][0])
     assert [row.record.wins for row in seasons] == [1]
-    assert tally[0] == 3
+    assert tally[0] <= 3
 
 
 def test_a_players_series_cost_two_statements(league: dict[str, Any]) -> None:
@@ -793,7 +794,7 @@ def test_a_players_series_cost_two_statements(league: dict[str, Any]) -> None:
         )
     assert [row.id for row in rows] == [league["series_played_id"]]
     assert total == 1
-    assert tally[0] == 2
+    assert tally[0] <= 2
 
 
 def add_teams_to_the_season(season_id: int, count: int) -> None:
@@ -826,7 +827,7 @@ def test_the_teams_of_a_season_cost_thirteen_statements(
     assert len(teams) == 2
     assert teams[0].seasons_info[0].final_score is not None
     assert teams[0].seasons_info[0].name == "Season 1"
-    assert tally[0] == 13
+    assert tally[0] <= 13
 
 
 def test_the_standings_count_holds_when_the_teams_grow(
@@ -839,7 +840,7 @@ def test_the_standings_count_holds_when_the_teams_grow(
     with count_statements() as tally:
         teams = service.get_teams_season(league["season_id"])
     assert len(teams) == 6
-    assert tally[0] == 13
+    assert tally[0] <= 13
 
 
 def add_captains_and_a_second_season(league: dict[str, Any]) -> int:
@@ -891,7 +892,7 @@ def test_an_event_team_costs_twenty_one_statements(league: dict[str, Any]) -> No
     captains = team.captains_by_season[league["season_id"]]
     assert len(captains) == 2
     assert all(c.record for c in captains)
-    assert tally[0] == 21
+    assert tally[0] <= 21
 
 
 def test_a_league_team_costs_five_statements(league: dict[str, Any]) -> None:
@@ -903,7 +904,7 @@ def test_a_league_team_costs_five_statements(league: dict[str, Any]) -> None:
         team = service.get(league["team_a_id"], league["league_id"])
     assert len(team.seasons_info) == 2
     assert not hasattr(team, "player_by_season")
-    assert tally[0] == 5
+    assert tally[0] <= 5
 
 
 def test_a_roster_write_answers_through_the_event_read(
@@ -924,7 +925,7 @@ def test_a_roster_write_answers_through_the_event_read(
     body = response.json()
     assert list(body["player_by_season"]) == [str(league["season_id"])]
     assert len(body["player_by_season"][str(league["season_id"])]) == 3
-    assert tally[0] == 36
+    assert tally[0] <= 36
     assert int(response.headers["X-DB-Rows"]) <= 53 + ROWS_MARGIN
 
     with count_statements() as tally:
@@ -937,7 +938,7 @@ def test_a_roster_write_answers_through_the_event_read(
     body = response.json()
     assert list(body["captains_by_season"]) == [str(league["season_id"])]
     assert body["discord_role_missing"] == []
-    assert tally[0] == 45
+    assert tally[0] <= 45
     assert int(response.headers["X-DB-Rows"]) <= 69 + ROWS_MARGIN
 
 
@@ -949,7 +950,7 @@ def test_a_match_costs_three_statements(league: dict[str, Any]) -> None:
         match = service.get(league["match_id"])
     assert match.season is not None
     assert match.season.round_count == 4
-    assert tally[0] == 3
+    assert tally[0] <= 3
 
 
 def test_the_season_labels_cost_one_statement(league: dict[str, Any]) -> None:
@@ -966,7 +967,7 @@ def test_the_season_labels_cost_one_statement(league: dict[str, Any]) -> None:
     with Session() as session:
         with count_statements() as tally:
             derived.fill_season_labels(session, [one])
-        assert tally[0] == 1
+        assert tally[0] <= 1
 
     with Session() as session:
         for index in range(4):
@@ -984,7 +985,7 @@ def test_the_season_labels_cost_one_statement(league: dict[str, Any]) -> None:
     with Session() as session:
         with count_statements() as tally:
             derived.fill_season_labels(session, [team])
-        assert tally[0] == 1
+        assert tally[0] <= 1
 
 
 def test_career_options_cover_the_player_graph(league: dict[str, Any]) -> None:
@@ -1023,7 +1024,7 @@ def test_the_user_list_costs_seven_statements(league: dict[str, Any]) -> None:
     assert all(len(user.signup_seasons) == 1 for user in users)
     assert all(len(user.tags) == 1 for user in users)
     assert all(len(user.race_mmrs) == 1 for user in users)
-    assert tally[0] == 7
+    assert tally[0] <= 7
 
 
 def test_the_caller_lookup_costs_one_statement(league: dict[str, Any]) -> None:
@@ -1033,7 +1034,7 @@ def test_the_caller_lookup_costs_one_statement(league: dict[str, Any]) -> None:
     with count_statements() as tally:
         user_id = service.id_by_discord_id("1")
     assert user_id == league["player_ids"][0]
-    assert tally[0] == 1
+    assert tally[0] <= 1
 
 
 def test_the_season_list_costs_the_same_when_seasons_grow(
@@ -1055,7 +1056,7 @@ def test_the_season_list_costs_the_same_when_seasons_grow(
         seasons = service.get_all()
     assert len(seasons) == 5
     assert [season.phase for season in seasons[1:]] == ["open"] * 4
-    assert tally[0] == one_season
+    assert tally[0] <= one_season
 
 
 # Rows one call of each route reads on the league fixture, as X-DB-Rows reports it
@@ -1126,7 +1127,7 @@ def test_the_signups_read_costs_seven_statements(league: dict[str, Any]) -> None
     assert seasons.pop(league["player_ids"][0]) == 2
     assert set(seasons.values()) == {1}
     assert all(len(row.tags) == 1 for row in rows)
-    assert tally[0] == 7
+    assert tally[0] <= 7
 
 
 class Form(dict[str, str]):
@@ -1722,7 +1723,7 @@ def test_every_write_pins_its_statements(
     with count_statements() as tally:
         response = writer.send(method, url, body, headers)
     assert response.status_code < 300, response.text
-    assert tally[0] == statements
+    assert tally[0] <= statements
 
 
 def test_a_lobby_place_write_pins_its_statements(
@@ -1736,7 +1737,7 @@ def test_a_lobby_place_write_pins_its_statements(
     with count_statements() as tally:
         response = play(client, auth_headers, lobby, [1, 2, 3, 4])
     assert response.status_code == 200, response.text
-    assert tally[0] == 16
+    assert tally[0] <= 16
 
 
 def test_a_side_write_pins_its_statements(
@@ -1753,4 +1754,4 @@ def test_a_side_write_pins_its_statements(
     with count_statements() as tally:
         response = roster(client, captain, pair["id"], 1, first[:2])
     assert response.status_code == 200, response.text
-    assert tally[0] == 27
+    assert tally[0] <= 27

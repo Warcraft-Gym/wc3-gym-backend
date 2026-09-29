@@ -4,7 +4,7 @@ title: Testing
 description: The suite migrates a temporary SQLite file with Alembic, opens no socket, and holds guard tests that pin contracts, statement counts and memory.
 resource: ../../../tests/conftest.py
 tags: [testing]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-29T08:38:15Z }
 sources:
   - id: conftest
     resource: ../../../tests/conftest.py
@@ -32,7 +32,6 @@ These tests encode a lesson each. Keep them green and extend them when the lesso
 | `test_error_envelope.py` | every error answers `{"error": ...}` and a 500 exposes nothing |
 | `test_public_contract.py` | the fields the WordPress shortcodes read from eight routes |
 | `test_contract.py` | the fields the offline leaderboard reads |
-| `test_gnl_snapshot.py` | the GNL season payloads, byte for byte, against `tests/data/gnl_snapshot.json` |
 | `test_query_budget.py` | the number of SQL statements one list answer costs is a constant |
 | `test_memory_budget.py` | the peak memory of the fantasy bets list |
 | `test_blob_budget.py` | no mapped binary column exists; a picture is a URL |

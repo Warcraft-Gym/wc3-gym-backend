@@ -4,7 +4,7 @@ title: Derived scores
 description: Series points, fixture scores, standings, career ratings and fantasy scores are computed from the map scores on every read, in a constant number of statements.
 resource: ../../../app/services/derived.py
 tags: [events, series, api]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-27T18:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-29T08:38:15Z }
 sources:
   - id: derived
     resource: ../../../app/services/derived.py
@@ -37,7 +37,7 @@ Under the old 3/2/1/0 scale a 2:1 was undervalued and a 1:2 overvalued, so three
 
 # Two faces, one rule
 
-Each rule has a Python face for loaded rows and a SQL face for aggregates, both in `app/core/`. Tests pin the two to each other. The career list filters, sorts and pages the derived totals in SQL; a stored career row read by its id limits its tally to the linked user and matching name; `GET /stats/career/{user_id}` is the list's statement filtered to the user id, so it answers the list's row for that user or 404. `tests/test_career_parity.py` pins the resulting answers. `app/services/derived.py` fills other responses in a constant number of statements. `tests/test_query_budget.py` fails when a serialization adds a lazy load.
+Each rule has a Python face for loaded rows and a SQL face for aggregates, both in `app/core/`. Tests pin the two to each other. The career list filters, sorts and pages the derived totals in SQL; a stored career row read by its id limits its tally to the linked user and matching name; `GET /stats/career/{user_id}` is the list's statement filtered to the user id, so it answers the list's row for that user or 404. `tests/test_career_list.py` checks that every page walks the list's order and that a player reads his first row. `app/services/derived.py` fills other responses in a constant number of statements. `tests/test_query_budget.py` fails when a serialization adds a lazy load.
 
 # What must never come back
 

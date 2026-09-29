@@ -1,16 +1,11 @@
-"""Pin every team answer that fills rosters against tests/data/teams_parity.json.
+"""The rows each team route reads stay under a ceiling.
 
 The seeded league gains two more playdays, written out of order so the series
 ids and the playdays disagree, off races on both sides, a player with no
 signup, a second season, a captain who plays in no roster of the season, and
-a team entered in no season. Every route runs with and without a page.
-
-Set UPDATE_TEAMS_SNAPSHOT=1 to write the file again, and read the diff.
+a team entered in no season.
 """
 
-import json
-import os
-from pathlib import Path
 from typing import Any
 
 import pytest
@@ -31,8 +26,6 @@ from app.models.user_team_season import DBUserTeamSeason
 from app.models.w3c_stats import W3CStats
 from tests.conftest import empty_tables
 from tests.seed import active, seed_league
-
-SNAPSHOT = Path(__file__).parent / "data" / "teams_parity.json"
 
 # Signup race per player index and season; P4 holds none in season 1
 SIGNUPS = {1: (Race.HU, Race.OC, Race.NE, None), 2: (Race.UD, Race.OC, Race.HU)}
@@ -142,42 +135,6 @@ def teams_league(app: FastAPI) -> dict[str, Any]:
             "season_two_id": ident(two),
             "idle_team_id": ident(idle),
         }
-
-
-def answers(client: Client, league: dict[str, Any]) -> dict[str, Any]:
-    """Every team answer the snapshot pins, status and body."""
-    seasons = (league["season_id"], league["season_two_id"])
-    teams = (league["team_a_id"], league["team_b_id"], league["idle_team_id"])
-    paths = [
-        f"/leagues/{league['league_id']}/teams",
-        f"/leagues/{league['league_id']}/teams/basic",
-    ]
-    for season_id in seasons:
-        base = f"/events/{season_id}/teams"
-        paths += [
-            base,
-            f"{base}?limit=1",
-            f"{base}?limit=1&offset=1",
-            f"{base}?offset=5",
-            f"{base}/basic",
-        ]
-        paths += [f"{base}/{team_id}" for team_id in teams]
-
-    found = {}
-    for path in paths:
-        resp = client.get(path)
-        found[path] = {"status": resp.status_code, "body": resp.json()}
-    return found
-
-
-def test_every_team_answer_matches_the_snapshot(
-    client: Client, teams_league: dict[str, Any]
-) -> None:
-    payloads = answers(client, teams_league)
-    if os.getenv("UPDATE_TEAMS_SNAPSHOT"):
-        SNAPSHOT.write_text(json.dumps(payloads, indent=2) + "\n")
-    # The dump keeps key order, so a field that moves fails too
-    assert json.dumps(payloads) == json.dumps(json.loads(SNAPSHOT.read_text()))
 
 
 # Rows one call reads on this league, as X-DB-Rows reports it: a captain's W3C

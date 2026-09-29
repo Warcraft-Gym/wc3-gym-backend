@@ -3,7 +3,7 @@ type: Decision
 title: One event model, kind modules on top
 description: GNL, KOTH and community events share one data model; a kind that behaves differently gets its own module, and the shared engine never branches on kind.
 tags: [events]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T10:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-29T08:38:15Z }
 sources:
   - id: source
     resource: Maintainers' decision, 2026-09-13
@@ -24,5 +24,5 @@ One data model serves every kind; behaviour that differs by kind lives in a kind
 
 - Never `if kind == "gnl"` inside a shared service. Put the behaviour in the kind module.
 - A kind that needs its own columns gets a one-to-one side table when the columns get in the way, not before. Today the GNL-only columns still sit on the event row.
-- Every shared-table migration keeps `tests/test_gnl_snapshot.py` green.
+- Every shared-table migration keeps `tests/test_event_season_parity.py` green.
 - External Discord servers are out of scope; a merged playoff across divisions is never a rule in the app.

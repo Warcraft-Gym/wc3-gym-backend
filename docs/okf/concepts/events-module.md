@@ -4,7 +4,7 @@ title: Events module
 description: One data model for every kind of event, with GNL and KOTH behaviour in their own modules on top, a stage engine that never branches on kind, a phase derived on every read, and the admin's path from a new league to a finished event with awards.
 resource: ../../../app/services/events.py
 tags: [events]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-26T10:02:14Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-29T08:38:15Z }
 sources:
   - id: events
     resource: ../../../app/services/events.py
@@ -21,14 +21,11 @@ sources:
   - id: home
     resource: ../../../app/services/home.py
     title: The home hub read
-  - id: snapshot
-    resource: ../../../tests/test_gnl_snapshot.py
-    title: The GNL payloads pinned byte for byte
 ---
 
 # One model
 
-Every event kind shares the rows: `league`, `event`, `event_stage`, `event_round`, `event_division`, `event_entrant`, `matches` (fixtures), `series`, `series_side`, `series_game`. A GNL season is the `gnl` kind of event; it runs on the same tables and its payloads did not change when the tables were renamed. `tests/test_gnl_snapshot.py` pins those payloads, so a migration that shifts a GNL field fails before it reaches a page.
+Every event kind shares the rows: `league`, `event`, `event_stage`, `event_round`, `event_division`, `event_entrant`, `matches` (fixtures), `series`, `series_side`, `series_game`. A GNL season is the `gnl` kind of event; it runs on the same tables and its payloads did not change when the tables were renamed. `tests/test_event_season_parity.py` pins the GNL fields on `EventPublic`.
 
 The rule that keeps this workable: **the shared engine never branches on kind.** A kind that needs different behaviour gets a kind module (`app/services/koth/`, and the GNL draft and fantasy services) and, where it needs its own columns, a side table. Never write `if kind == "gnl"` inside a shared service. See [the decision](../decisions/unified-event-model.md).
 

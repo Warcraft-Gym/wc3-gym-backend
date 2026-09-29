@@ -4,7 +4,7 @@ title: How this bundle is written
 description: The rules for every file under docs/okf, and the one rule for talking about the other repositories.
 resource: https://github.com/GoogleCloudPlatform/open-knowledge-format/blob/main/SPEC.md
 tags: [tooling]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T15:15:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-29T08:38:15Z }
 sources:
   - id: okf-spec
     resource: https://github.com/GoogleCloudPlatform/open-knowledge-format/blob/main/SPEC.md
@@ -66,7 +66,7 @@ Each bundle's `index.md` has one section, "Neighbouring bundles", that names the
 
 Where a concept must be understood on both sides, the consuming repository writes a short "as consumed here" concept that names the fields it relies on, and says in prose which repository owns the definition. It does not copy the definition.
 
-Tests keep the two sides in step, not prose. The backend pins the response shapes its consumers read in `tests/test_public_contract.py`, `tests/test_contract.py`, `tests/test_gnl_snapshot.py` and `tests/test_error_envelope.py`. A change to one of those tests is a change to a contract and needs a change in a consumer.
+Tests keep the two sides in step, not prose. The backend pins the response shapes its consumers read in `tests/test_public_contract.py`, `tests/test_contract.py` and `tests/test_error_envelope.py`. A change to one of those tests is a change to a contract and needs a change in a consumer.
 
 # Writing
 
