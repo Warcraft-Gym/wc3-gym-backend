@@ -22,7 +22,8 @@ from app.models.series import (
 )
 from app.models.series_cast import CastPublic, CastWrite, ClaimWrite, VodWrite
 from app.models.series_side import LobbySidesWrite, PlacesWrite
-from app.services import casts, stage_engine
+from app.models.series_summary import SeriesSummaryPublic
+from app.services import casts, series_summary, stage_engine
 
 logger = logging.getLogger(__name__)
 
@@ -129,6 +130,34 @@ def get_series_by_event(
     return service.search_for_season(
         event_id,
         None,
+        limit=limit,
+        offset=offset,
+        player_id=player_id,
+        team_id=team_id,
+        match_id=match_id,
+        is_fantasy_match=is_fantasy_match,
+    )
+
+
+@router.get("/events/{event_id}/series/summary", tags=["events"])
+def get_series_summary_by_event(
+    event_id: int,
+    response: Response,
+    limit: Annotated[int, Query(ge=1, le=500)] = 500,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    player_id: int | None = None,
+    team_id: int | None = None,
+    match_id: int | None = None,
+    is_fantasy_match: bool | None = None,
+) -> list[SeriesSummaryPublic]:
+    """Return one page of an event's fixture series as list rows, at most 500.
+
+    The filters and the order are those of GET /events/{event_id}/series; a
+    stage or round series is not in this list.
+    """
+    event_edge_cache(response, event_id)
+    return series_summary.for_event(
+        event_id,
         limit=limit,
         offset=offset,
         player_id=player_id,
