@@ -59,7 +59,6 @@ def update_player_series(
     # the answer says so and the caller warns
     veto_complete = SeriesVetoService().is_complete(series_id) if reporting else True
 
-    # A result needs one replay per game played
     if reporting:
         try:
             p1 = int(data["player1_score"])
@@ -112,9 +111,12 @@ def update_player_series(
     if games:
         series_games.check(games, p1, p2)
 
-    # The replays first: a game with no file in the bucket leaves the score unreported
+    # A replay belongs with each game played, but a missing one never holds a result back:
+    # the answer lists the games without one and the caller warns
     stored = (
-        replays.confirm(series_id, range(1, p1 + p2 + 1), user_id) if reporting else []
+        replays.confirm(series_id, range(1, p1 + p2 + 1), user_id, required=False)
+        if reporting
+        else []
     )
 
     # Only the fields this editor changes, so a concurrent edit stands
@@ -134,6 +136,10 @@ def update_player_series(
     if reporting:
         result["replays"] = [replay.model_dump(mode="json") for replay in stored]
         result["veto_complete"] = veto_complete
+        held = {replay.game_no for replay in stored}
+        result["replays_missing"] = [
+            game for game in range(1, p1 + p2 + 1) if game not in held
+        ]
         if games:
             result["games"] = [
                 game.model_dump(mode="json")

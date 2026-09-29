@@ -5,6 +5,7 @@ from collections.abc import Callable
 from typing import Any
 
 import pytest
+import requests
 from httpx2 import Client
 
 
@@ -31,13 +32,13 @@ def test_a_report_with_its_replays_lands(
     assert [r["game_no"] for r in body["replays"]] == [1, 2]
 
 
-def test_a_report_needs_one_replay_per_game_played(
+def test_a_report_short_of_replays_lands_and_names_the_games(
     client: Client,
     seeded: dict[str, Any],
     member: Callable[..., dict[str, str]],
     replay_uploaded: Callable[..., None],
 ) -> None:
-    """A 2-1 went three games, so a report with two replays in the bucket is refused."""
+    """A 2-1 went three games; with two replays in the bucket the result still lands."""
     replay_uploaded(seeded["series_open_id"], 1, 2)
     resp = client.put(
         f"/player-series/{seeded['series_open_id']}",
@@ -49,8 +50,37 @@ def test_a_report_needs_one_replay_per_game_played(
         },
     )
 
-    assert resp.status_code == 400, resp.text
-    assert resp.json() == {"error": "Game 3 replay is missing"}
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert (body["player1_score"], body["player2_score"]) == (2, 1)
+    assert [r["game_no"] for r in body["replays"]] == [1, 2]
+    assert body["replays_missing"] == [3]
+
+
+def test_a_report_lands_when_the_bucket_is_down(
+    client: Client,
+    seeded: dict[str, Any],
+    member: Callable[..., dict[str, str]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.services import r2
+
+    def down(key: str) -> None:
+        raise requests.ConnectionError("bucket unreachable")
+
+    monkeypatch.setattr(r2, "peek", down)
+    resp = client.put(
+        f"/player-series/{seeded['series_open_id']}",
+        headers=member("2"),
+        data={
+            "action": "score_updated",
+            "player1_score": "2",
+            "player2_score": "0",
+        },
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["replays_missing"] == [1, 2]
 
 
 def test_a_series_that_is_not_yours_is_refused(

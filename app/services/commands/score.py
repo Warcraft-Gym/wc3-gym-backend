@@ -1,4 +1,4 @@
-"""/report-result: report a result from Discord, with one replay per game played.
+"""/report-result: report a result from Discord, with one replay per game played when it has them.
 
 The attachments Discord holds are moved into the bucket through the same presigned
 links the browser uses, then the result goes through the write the dashboard uses,
@@ -56,13 +56,11 @@ COMMAND: dict[str, Any] = {
             "type": ATTACHMENT,
             "name": "game1",
             "description": "The replay of game 1",
-            "required": True,
         },
         {
             "type": ATTACHMENT,
             "name": "game2",
             "description": "The replay of game 2",
-            "required": True,
         },
         {
             "type": ATTACHMENT,
@@ -75,14 +73,14 @@ COMMAND: dict[str, Any] = {
 
 def _attachments(
     payload: dict[str, Any], options: dict[str, Any]
-) -> list[dict[str, Any]]:
-    """The files given as game1, game2, game3, in that order."""
+) -> dict[int, dict[str, Any]]:
+    """The files given as game1, game2, game3, by game number."""
     resolved = payload.get("data", {}).get("resolved", {}).get("attachments", {})
-    return [
-        resolved[options[name]]
-        for name in ("game1", "game2", "game3")
-        if options.get(name) in resolved
-    ]
+    return {
+        game_no: resolved[options[f"game{game_no}"]]
+        for game_no in (1, 2, 3)
+        if options.get(f"game{game_no}") in resolved
+    }
 
 
 def _store(attachment: dict[str, Any], series_id: int, game_no: int) -> bool:
@@ -132,6 +130,15 @@ def _veto_warning(series_id: int) -> str:
     )
 
 
+def _replay_warning(games: list[int]) -> str:
+    """The result stands, and each game's replay still belongs with it."""
+    listed = ", ".join(f"game {game}" for game in games)
+    return (
+        f"No replay saved for {listed}. The result is saved, and every game needs its"
+        " replay: add it with Edit result on the website."
+    )
+
+
 def run(payload: dict[str, Any], services: Services) -> tuple[dict[str, Any], bool]:
     """/score series player1_score player2_score game1 game2 game3."""
     options = options_of(payload)
@@ -139,18 +146,11 @@ def run(payload: dict[str, Any], services: Services) -> tuple[dict[str, Any], bo
     if series_id not in {row.id for row in own_series(payload, services)}:
         return _refused("Only a player of the series can report its result.")
     p1, p2 = int(options["player1_score"]), int(options["player2_score"])
-    attached = _attachments(payload, options)
-    if len(attached) != p1 + p2:
-        games = p1 + p2
-        return _refused(
-            f"Attach one replay per game played: a {p1}-{p2} result needs {games} files,"
-            f" game1 to game{games}. The score is saved only when the replays match it."
-        )
-    for game_no, attachment in enumerate(attached, 1):
-        if attachment.get("size", 0) > MAX_BYTES:
-            return _refused(f"Replay {game_no} is over 10 MB.")
-        if not _store(attachment, series_id, game_no):
-            return _refused(f"Replay {game_no} could not be stored. Try again.")
+    # A file that is too big or fails to store leaves its game without a replay; the
+    # write lists those games and the reply warns
+    for game_no, attachment in _attachments(payload, options).items():
+        if game_no <= p1 + p2 and attachment.get("size", 0) <= MAX_BYTES:
+            _store(attachment, series_id, game_no)
 
     discord_id, discord_tag = caller(payload)
     try:
@@ -163,13 +163,15 @@ def run(payload: dict[str, Any], services: Services) -> tuple[dict[str, Any], bo
             series_service=services.series,
         )
     except (ApiError, BadRequestError, NotFoundError) as error:
-        # what the write refuses: an unknown series, someone else's, a bad replay
+        # what the write refuses: an unknown series, someone else's, a score out of range
         return _refused(str(error))
 
     # The write posts the result card; a public reply here would repeat it
     series = services.series.get(series_id)
     score = f"{_name(series.player1)} {p1}-{p2} {_name(series.player2)}"
     lines = [f"Reported: {score}. The result card is in the results channel."]
+    if result.get("replays_missing"):
+        lines.append(_replay_warning(result["replays_missing"]))
     if not result.get("veto_complete", True):
         lines.append(_veto_warning(series_id))
     return {"content": "\n".join(lines)}, PRIVATE

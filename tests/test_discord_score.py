@@ -184,27 +184,34 @@ def test_an_incomplete_veto_saves_the_result_and_warns(
         assert session.get(DBSeriesReplay, (series_id, 1)) is not None
 
 
-def test_the_attachments_must_match_the_games_played(
+def saved_without(games: str) -> str:
+    """The line the reply adds when games of the result have no replay."""
+    return (
+        f"No replay saved for {games}. The result is saved, and every game needs its"
+        " replay: add it with Edit result on the website."
+    )
+
+
+def test_a_result_short_of_replays_saves_and_warns(
     client: Client,
     public_key: None,
     discord_calls: list,
     seeded: dict[str, Any],
     veto_done: None,
     attached: dict[str, bytes],
-    blob_store: dict[str, bytes],
 ) -> None:
-    send(client, scoring(attached, seeded["series_open_id"], 2, 1, games=2))
-    assert discord_calls == [
-        (
-            "PATCH",
-            EDIT,
-            refused(
-                "Attach one replay per game played: a 2-1 result needs 3 files, game1 to"
-                " game3. The score is saved only when the replays match it."
-            ),
-        )
-    ]
-    assert blob_store == {}
+    """A 2-1 went three games; two files save the result and name the third game."""
+    from app.core.db import Session
+    from app.models.series import Series
+
+    series_id = seeded["series_open_id"]
+    send(client, scoring(attached, series_id, 2, 1, games=2))
+
+    (reply,) = discord_calls
+    assert reply[2]["content"].split("\n")[1:] == [saved_without("game 3")]
+    with Session() as session:
+        series = session.get(Series, series_id)
+        assert series and (series.player1_score, series.player2_score) == (2, 1)
 
 
 def test_a_stranger_is_refused(
@@ -223,7 +230,7 @@ def test_a_stranger_is_refused(
     assert blob_store == {}
 
 
-def test_a_file_that_is_not_a_replay_is_refused(
+def test_a_file_that_is_not_a_replay_saves_the_result_without_it(
     client: Client,
     public_key: None,
     discord_calls: list,
@@ -233,18 +240,21 @@ def test_a_file_that_is_not_a_replay_is_refused(
 ) -> None:
     from app.core.db import Session
     from app.models.series import Series
+    from app.models.series_replay import DBSeriesReplay
 
     series_id = seeded["series_open_id"]
     send(client, scoring(attached, series_id, 2, 0, games=2, data={2: b"a text file"}))
-    assert discord_calls == [
-        ("PATCH", EDIT, refused("Game 2 is not a Warcraft III replay"))
-    ]
+
+    (reply,) = discord_calls
+    assert reply[2]["content"].split("\n")[1:] == [saved_without("game 2")]
     with Session() as session:
         series = session.get(Series, series_id)
-        assert series and series.player1_score is None
+        assert series and series.player1_score == 2
+        assert session.get(DBSeriesReplay, (series_id, 1)) is not None
+        assert session.get(DBSeriesReplay, (series_id, 2)) is None
 
 
-def test_a_file_over_ten_megabytes_is_refused(
+def test_a_file_over_ten_megabytes_is_left_out(
     client: Client,
     public_key: None,
     discord_calls: list,
@@ -257,16 +267,14 @@ def test_a_file_over_ten_megabytes_is_refused(
         client,
         scoring(attached, seeded["series_open_id"], 2, 0, games=2, size=11 * 1024**2),
     )
-    assert discord_calls == [("PATCH", EDIT, refused("Replay 1 is over 10 MB."))]
+    (reply,) = discord_calls
+    assert reply[2]["content"].split("\n")[1:] == [saved_without("game 1, game 2")]
     assert blob_store == {}
 
 
-def test_the_command_asks_for_both_scores_and_the_first_two_replays() -> None:
-    """A Bo3 is over at 2-0, so game 3 is the only option Discord may omit.
-
-    Discord refuses a missing option before the interaction reaches us, so an
-    option that stops being required is a result reported with no replay.
-    """
+def test_the_command_asks_for_both_scores_and_offers_each_replay() -> None:
+    """Discord refuses a missing required option before the interaction reaches
+    us, so a replay option is never required: a result never waits on a file."""
     required = {
         option["name"]: option.get("required", False)
         for option in score.COMMAND["options"]
@@ -276,7 +284,7 @@ def test_the_command_asks_for_both_scores_and_the_first_two_replays() -> None:
         "series": True,
         "player1_score": True,
         "player2_score": True,
-        "game1": True,
-        "game2": True,
+        "game1": False,
+        "game2": False,
         "game3": False,
     }
