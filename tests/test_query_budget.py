@@ -100,7 +100,7 @@ import pytest
 from fastapi import FastAPI
 from httpx2 import Client, Response
 from sqlalchemy import event, select
-from sqlalchemy.orm import joinedload, raiseload
+from sqlalchemy.orm import joinedload, raiseload, selectinload
 
 from app.core.db import Session, rel
 from app.core.query import QueryUtil
@@ -221,9 +221,9 @@ def test_get_series_costs_fourteen_statements(league: dict[str, Any]) -> None:
     assert tally[0] <= 14
 
 
-def test_search_for_season_costs_seven_statements(league: dict[str, Any]) -> None:
-    """The season list is reduced: one statement for the casts, one for the pick
-    steps, none per player and none per series. A GNL series reads its rules
+def test_search_for_season_costs_thirteen_statements(league: dict[str, Any]) -> None:
+    """The season list is reduced: one statement each for the matches, their
+    teams, seasons and players, the casts and the pick steps, none per series. A GNL series reads its rules
     off the season its fixture loads, so the rules cost no statement.
 
     The reduced player carries no stats, so the list rates both sides of every
@@ -239,7 +239,23 @@ def test_search_for_season_costs_seven_statements(league: dict[str, Any]) -> Non
     assert series_list[0].player1.name
     assert series_list[0].player1.race_mmrs == []
     # one read finds the finished season, one reads the MMR of the time
-    assert tally[0] <= 7
+    assert tally[0] <= 13
+
+
+def test_the_season_list_count_holds_when_the_series_grow(
+    league: dict[str, Any],
+) -> None:
+    """Four more series on four more matches, the same statements: a to-one
+    relation the list options miss would lazy-load once per row."""
+    service = SeriesService()
+    with count_statements() as tally:
+        before = service.search_for_season(league["season_id"], None)
+    add_bets_to_the_season(league, 4)
+    with count_statements() as grown:
+        after = service.search_for_season(league["season_id"], None)
+    assert len(after) == len(before) + 4
+    assert all(row.match is not None and row.match.team1 for row in after)
+    assert grown[0] == tally[0]
 
 
 def test_the_season_record_costs_two_statements(league: dict[str, Any]) -> None:
@@ -332,9 +348,9 @@ def test_a_draft_write_answers_through_the_read(league: dict[str, Any]) -> None:
     assert tally[0] <= 7
 
 
-def test_one_bet_costs_thirteen_statements(league: dict[str, Any]) -> None:
-    """The bet, its season, its series as the list row with its match, the
-    casts, the veto picks, three for the four player summaries, and the
+def test_one_bet_costs_nineteen_statements(league: dict[str, Any]) -> None:
+    """The bet, its season, its series as the list row, its match, the teams,
+    season and players of that row, the casts, the veto picks, three for the four player summaries, and the
     derived points, signup races and season record of the series players. The
     season is its summary, so its maps stay unread."""
     service = FantasyBetService()
@@ -347,11 +363,11 @@ def test_one_bet_costs_thirteen_statements(league: dict[str, Any]) -> None:
     assert bet.series.player1 is not None
     assert bet.series.player1.record is not None
     assert bet.series.player1.record.games == 1
-    assert tally[0] <= 13
+    assert tally[0] <= 19
 
 
 def test_a_bet_write_answers_through_the_read(league: dict[str, Any]) -> None:
-    """The settings, the write, then the thirteen of the single read."""
+    """The settings, the write, then the nineteen of the single read."""
     players = league["player_ids"]
     create = FantasyBetCreate(
         season_id=league["season_id"],
@@ -364,7 +380,7 @@ def test_a_bet_write_answers_through_the_read(league: dict[str, Any]) -> None:
         bet = FantasyBetService().add(create)
     assert bet.winner is not None
     assert bet.winner.record is not None
-    assert tally[0] <= 14
+    assert tally[0] <= 20
 
 
 def test_the_entrants_read_costs_twelve_statements(
@@ -388,6 +404,24 @@ def test_the_entrants_read_costs_twelve_statements(
     assert all(row["user"]["record"]["season_id"] for row in rows)
     assert tally[0] <= 12
     assert int(response.headers["X-DB-Rows"]) <= 28
+
+
+def test_list_loads_cover_the_series_graph(league: dict[str, Any]) -> None:
+    """raiseload under the match and both entrants of every list row: a relation
+    the list answer reads that the list options do not name fails this test."""
+    options = (
+        *Series._list_eager_options(picks_only=True),
+        selectinload(rel(Series.match)).raiseload("*"),
+        selectinload(rel(Series.entrant1)).raiseload("*"),
+        selectinload(rel(Series.entrant2)).raiseload("*"),
+    )
+    with Session() as session:
+        rows = session.scalars(
+            select(Series).options(*options).where(Series.in_event(league["season_id"]))
+        ).all()
+        public = [SeriesPublic.from_series(row) for row in rows]
+    assert len(public) == 2
+    assert all(row.match is not None for row in public)
 
 
 def test_summary_loads_cover_the_player_graph(league: dict[str, Any]) -> None:
@@ -424,9 +458,10 @@ def test_summary_loads_cover_the_player_graph(league: dict[str, Any]) -> None:
     assert len(public.player1.tags) == 1
 
 
-def test_fantasy_bets_list_costs_eight_statements(league: dict[str, Any]) -> None:
+def test_fantasy_bets_list_costs_fourteen_statements(league: dict[str, Any]) -> None:
     """The list carries the casts and the veto picks of each series, and the
-    derived points; the match rides joined on its series.
+    derived points; the match, its teams and season and the players each
+    load once for the whole list.
 
     The bet result reads the map scores of the series the answer already
     carries, so it adds no statement of its own.
@@ -439,7 +474,7 @@ def test_fantasy_bets_list_costs_eight_statements(league: dict[str, Any]) -> Non
     assert bets[0].bet_result == 10
     assert bets[0].user is not None
     assert bets[0].user.race_mmrs == []
-    assert tally[0] <= 8
+    assert tally[0] <= 14
 
 
 def add_bets_to_the_season(seeded: dict[str, Any], count: int) -> None:
@@ -452,7 +487,7 @@ def add_bets_to_the_season(seeded: dict[str, Any], count: int) -> None:
 
 
 def test_the_bets_count_holds_when_the_bets_grow(league: dict[str, Any]) -> None:
-    """Four more bets, the same eight statements."""
+    """Four more bets, the same fourteen statements."""
     add_bets_to_the_season(league, 4)
 
     service = FantasyBetService()
@@ -460,7 +495,7 @@ def test_the_bets_count_holds_when_the_bets_grow(league: dict[str, Any]) -> None
         bets, _ = service.get_all()
     assert len(bets) == 5
     assert all(bet.bet_result == 10 for bet in bets)
-    assert tally[0] <= 8
+    assert tally[0] <= 14
 
 
 from sqlmodel import col
@@ -625,20 +660,20 @@ def test_a_fantasy_registration_answers_once(
 def test_one_bet_route_costs_the_single_read(
     client: Client, league: dict[str, Any]
 ) -> None:
-    """The thirteen of the single read, with the auth of the request."""
+    """The nineteen of the single read, with the auth of the request."""
     bet_id = client.get("/fantasy/bets").json()[0]["id"]
     with count_statements() as tally:
         response = client.get(f"/fantasy/bets/{bet_id}")
     assert response.status_code == 200
     assert response.json()["series"]["player1"]["record"] is not None
-    assert tally[0] <= 13
-    assert int(response.headers["X-DB-Rows"]) <= 17 + ROWS_MARGIN
+    assert tally[0] <= 19
+    assert int(response.headers["X-DB-Rows"]) <= 23 + ROWS_MARGIN
 
 
 def test_an_admin_bet_answers_through_the_read(
     client: Client, league: dict[str, Any], auth_headers: dict[str, str]
 ) -> None:
-    """The admin token, the settings, the write, then the thirteen of the
+    """The admin token, the settings, the write, then the nineteen of the
     single read."""
     players = league["player_ids"]
     bet = {
@@ -651,8 +686,8 @@ def test_an_admin_bet_answers_through_the_read(
     with count_statements() as tally:
         response = client.post("/fantasy/bets", json=bet, headers=auth_headers)
     assert response.status_code == 201, response.text
-    assert tally[0] <= 15
-    assert int(response.headers["X-DB-Rows"]) <= 20 + ROWS_MARGIN
+    assert tally[0] <= 21
+    assert int(response.headers["X-DB-Rows"]) <= 26 + ROWS_MARGIN
 
 
 def test_a_public_bet_reads_rows_and_answers_once(
@@ -672,8 +707,8 @@ def test_a_public_bet_reads_rows_and_answers_once(
         response = client.post("/fantasy-bet", json=bet, headers=headers)
     assert response.status_code == 201, response.text
     assert response.json()["season_id"] == league["season_id"]
-    assert tally[0] <= 26
-    assert int(response.headers["X-DB-Rows"]) <= 28 + ROWS_MARGIN
+    assert tally[0] <= 32
+    assert int(response.headers["X-DB-Rows"]) <= 34 + ROWS_MARGIN
 
     with count_statements() as tally:
         response = client.put(
@@ -683,8 +718,8 @@ def test_a_public_bet_reads_rows_and_answers_once(
         )
     assert response.status_code == 200, response.text
     assert response.json()["bet_points"] == 5
-    assert tally[0] <= 25
-    assert int(response.headers["X-DB-Rows"]) <= 30 + ROWS_MARGIN
+    assert tally[0] <= 31
+    assert int(response.headers["X-DB-Rows"]) <= 36 + ROWS_MARGIN
 
 
 def test_career_stats_cost_two_statements(league: dict[str, Any]) -> None:
@@ -1063,8 +1098,9 @@ def test_the_season_list_costs_the_same_when_seasons_grow(
 ROWS_PER_CALL = {
     # The players twice, joined and then with their summary rows; one tag row each
     "/series/{series_played_id}": 18,
-    "/events/{season_id}/series": 11,
-    "/fantasy/bets": 10,
+    # Each match, team, season and player row once, beside the series rows
+    "/events/{season_id}/series": 19,
+    "/fantasy/bets": 14,
     "/fantasy/teams": 10,
     "/stats/career": 4,
     "/stats/career/{player_id}": 2,
@@ -1569,7 +1605,7 @@ WRITES: dict[str, tuple[WriteCase, int]] = {
     ),
     "PUT /fantasy/bets/{bet_id}": (
         lambda w: ("PUT", f"/fantasy/bets/{w.bet()}", {"bet_points": 20}, w.admin),
-        16,
+        22,
     ),
     "DELETE /fantasy/bets/{bet_id}": (
         lambda w: ("DELETE", f"/fantasy/bets/{w.bet()}", None, w.admin),
@@ -1754,4 +1790,4 @@ def test_a_side_write_pins_its_statements(
     with count_statements() as tally:
         response = roster(client, captain, pair["id"], 1, first[:2])
     assert response.status_code == 200, response.text
-    assert tally[0] <= 27
+    assert tally[0] <= 33

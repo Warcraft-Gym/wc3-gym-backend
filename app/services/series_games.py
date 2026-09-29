@@ -10,11 +10,13 @@ import json
 from typing import Any
 
 from sqlalchemy.orm import Session as OrmSession
+from sqlalchemy.orm import joinedload, selectinload
 from sqlmodel import col, delete, select
 
 from app.core import map_order
-from app.core.db import Session
+from app.core.db import Session, rel
 from app.core.exceptions import BadRequestError, NotFoundError
+from app.models.match import Match
 from app.models.relationships import round_row
 from app.models.series import Series
 from app.models.series_game import DBSeriesGame, SeriesGamePublic
@@ -81,6 +83,13 @@ def record(series_id: int, games: list[dict[str, Any]]) -> list[SeriesGamePublic
     return for_series(series_id)
 
 
+# What _offers reads off one series: its season's rules and the veto
+_OFFER_LOADS = (
+    joinedload(rel(Series.match)).joinedload(rel(Match.season)),
+    selectinload(rel(Series.veto_steps)),
+)
+
+
 def _offers(session: OrmSession, series: Series) -> dict[int, int | None]:
     """The map the season's rules name for each game, given what is won so far."""
     season = series.match.season if series.match else None
@@ -108,9 +117,7 @@ def for_series(series_id: int) -> list[SeriesGamePublic]:
     """Every game recorded for this series, in game order, each with its offer."""
     with Session() as session:
         series = session.scalars(
-            select(Series)
-            .options(*Series._list_eager_options())
-            .where(col(Series.id) == series_id)
+            select(Series).options(*_OFFER_LOADS).where(col(Series.id) == series_id)
         ).first()
         if not series:
             raise NotFoundError(f"Series not found by id: {series_id}")
@@ -135,9 +142,7 @@ def offered(series_id: int) -> dict[int, int | None]:
     """The map to offer for each game, for a report that has none recorded."""
     with Session() as session:
         series = session.scalars(
-            select(Series)
-            .options(*Series._list_eager_options())
-            .where(col(Series.id) == series_id)
+            select(Series).options(*_OFFER_LOADS).where(col(Series.id) == series_id)
         ).first()
         if not series:
             raise NotFoundError(f"Series not found by id: {series_id}")
