@@ -832,6 +832,33 @@ def test_a_players_series_cost_two_statements(league: dict[str, Any]) -> None:
     assert tally[0] <= 2
 
 
+def test_the_series_summary_costs_six_statements(
+    client: Client, league: dict[str, Any]
+) -> None:
+    """Three for the event's cache phase, as the detail list pays them, then
+    the season's score system and map rules, the page of series as columns and
+    their casts."""
+    with count_statements() as tally:
+        response = client.get(f"/events/{league['season_id']}/series/summary")
+    assert response.status_code == 200
+    assert len(response.json()) == 2
+    assert tally[0] <= 6
+
+
+def test_the_series_summary_count_holds_when_the_series_grow(
+    client: Client, league: dict[str, Any]
+) -> None:
+    """Four more series on four more matches, the same statements."""
+    path = f"/events/{league['season_id']}/series/summary"
+    with count_statements() as tally:
+        before = client.get(path).json()
+    add_bets_to_the_season(league, 4)
+    with count_statements() as grown:
+        after = client.get(path).json()
+    assert len(after) == len(before) + 4
+    assert grown[0] == tally[0]
+
+
 def add_teams_to_the_season(season_id: int, count: int) -> None:
     """More teams in the season, so a per-team fill would be visible."""
     from app.models.team import Team
@@ -1100,6 +1127,8 @@ ROWS_PER_CALL = {
     "/series/{series_played_id}": 18,
     # Each match, team, season and player row once, beside the series rows
     "/events/{season_id}/series": 19,
+    # The event and its round tally, the season, the two series rows; no cast
+    "/events/{season_id}/series/summary": 5,
     "/fantasy/bets": 14,
     "/fantasy/teams": 10,
     "/stats/career": 4,

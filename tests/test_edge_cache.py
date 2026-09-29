@@ -51,6 +51,7 @@ def test_an_open_read_is_cacheable_at_the_edge(
     "path",
     [
         "/events/{season_id}/series",
+        "/events/{season_id}/series/summary",
         "/events/{season_id}/teams",
         "/events/{season_id}/teams/basic",
         "/events/{season_id}/teams/{team_a_id}",
@@ -76,7 +77,13 @@ def test_a_finished_event_is_cached_for_an_hour(
 
 
 @pytest.mark.parametrize(
-    "path", ["/events/{id}/series", "/events/{id}/teams", "/events/{id}/teams/basic"]
+    "path",
+    [
+        "/events/{id}/series",
+        "/events/{id}/series/summary",
+        "/events/{id}/teams",
+        "/events/{id}/teams/basic",
+    ],
 )
 def test_an_event_not_finished_is_cached_for_two_minutes(
     client: Client, path: str

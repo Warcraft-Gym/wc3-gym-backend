@@ -59,7 +59,7 @@ sources:
 | User | `UserSummaryPublic` | `UserListPublic`: the summary, less `record`, plus `signup_seasons`, `fantasy_tier_pinned`, `draft_position`, `draft_excluded` | `UserPublic`: the list row plus `gnl_stats` for every season and `trophies` |
 | Team | `TeamSummaryPublic` | `TeamPublic`; `TeamRosterPublic` on an event's list | `TeamPublic` from its league; `TeamRosterPublic` from its event |
 | Season | `SeasonSummaryPublic` | `SeasonPublic` | `EventPublic` |
-| Series | `SeriesPublic`, the players as summaries | `SeriesPublic`, `StageSeriesRow` | `SeriesPublic` |
+| Series | `SeriesPublic`, the players as summaries | `SeriesSummaryPublic` on an event's fixture series list, for the GNL website; `SeriesPublic`, which the web app keeps; `StageSeriesRow` | `SeriesPublic` |
 | Fantasy team | none | `FantasyTeamPublic`: the season and drafted team summaries, the captain and drafted players as player summaries | the same class |
 | Fantasy bet | none | `FantasyBetPublic`: the season summary, `user` and `winner` as player summaries, `series` as the series list row | the same class |
 
@@ -100,6 +100,10 @@ Two reads answer one player from his side, computed in SQL, and embed no entity 
 
 - `GET /users/{user_id}/seasons` answers `PlayerSeasonPublic` per season the player held a roster or a captain seat in, newest first: `season_id`, `team` as `TeamSummaryPublic` (the roster team, else the captained team), `is_captain`, `captain_only`, `signup_race`, `played_as`, and `record` (`games`, `wins`, `losses`, `matchup_history`, counted as `gnl_stats` counts them). Three statements.
 - `GET /users/{user_id}/series?event_id=...` answers `PlayerSeriesSummaryPublic` per GNL series of the named events, flat: the player's `race` and `score`, the opponent's id, name, race and score, the two team names, and one cast. Two statements: the page as columns with its count, and the casts of the page.
+
+# An event's series list row
+
+`GET /events/{event_id}/series/summary` answers `SeriesSummaryPublic` per fixture series of the event: a series of one of its matches that names no entrant on either side. A stage or round series is not in it. Each row is flat: `id`, `season_id`, `match_id`, `week` (the match's playday), `date_time`, `player1` and `player2` as `{id, name, race}` with the race resolved as `SeriesPublic` resolves it (the off race, else the signup race), both scores, both points on the season's score system and best-of, and every cast as `{id, name, channel_url, vod_url}`, named as `CastPublic` names it. No match, team, season, MMR, rules or veto. A consumer reads the match and its two teams once from `GET /events/{event_id}/matches` by `match_id`. It takes the filters, paging and id order of `GET /events/{event_id}/series`. Three statements beside the event phase: the season's scale, the page as columns, and the casts of the page. `tests/test_series_summary.py` holds every field equal to the detail list's.
 
 # Loads
 
