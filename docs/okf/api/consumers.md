@@ -4,7 +4,7 @@ title: Consumers of the API
 description: Who calls the backend, which routes each one reads, which tests pin those shapes, and the rules a consumer follows to keep reads off the database.
 resource: ../../../tests/test_public_contract.py
 tags: [api]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-27T18:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-29T08:38:15Z }
 sources:
   - id: public-contract
     resource: ../../../tests/test_public_contract.py
@@ -12,9 +12,6 @@ sources:
   - id: contract
     resource: ../../../tests/test_contract.py
     title: The fields the offline leaderboard reads
-  - id: snapshot
-    resource: ../../../tests/test_gnl_snapshot.py
-    title: The GNL payloads pinned
   - id: event-season-parity
     resource: ../../../tests/test_event_season_parity.py
     title: The event replacement for season routes
@@ -39,7 +36,6 @@ The WordPress shortcodes today call the older backend host, not this deployment,
 
 - `tests/test_public_contract.py`: presence and shape of the fields the PHP reads, route by route.
 - `tests/test_contract.py`: the fields the offline leaderboard reads.
-- `tests/test_gnl_snapshot.py`: the GNL season, dashboard and card payloads byte for byte against `tests/data/gnl_snapshot.json`. Set `UPDATE_GNL_SNAPSHOT=1` to rewrite it, and read the diff: a change to it is a change to a public contract.
 - `tests/test_event_season_parity.py`: GNL creation through `/events`, the GNL fields on `EventPublic`, the event routes for season subresources, and that no `/seasons` route exists.
 - `tests/test_error_envelope.py`: the `error` key every client reads.
 - `tests/test_paging.py`: the paged routes, their default order and sort names.

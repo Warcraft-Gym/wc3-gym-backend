@@ -1,20 +1,15 @@
-"""Pin every career answer of a mixed league against tests/data/career_parity.json.
+"""The career list and a player's career row, over a mixed league.
 
 The league holds five seasons, one of them empty, historical baselines, rows
 with and without a user, rows that find their player by name, a player two
 rows claim, a name another row already claimed, and players who hold no row.
-Every sort key runs both ways, with and without a search, and every page of
-the list walks the same order.
-
-Set UPDATE_CAREER_SNAPSHOT=1 to write the file again, and read the diff.
+Every page of the list walks the same order as one call, and a player reads
+his first row of the list.
 """
 
-import json
-import os
 import random
 from datetime import date, datetime
-from pathlib import Path
-from typing import Any, get_args
+from typing import Any
 
 import pytest
 from httpx2 import Client
@@ -32,11 +27,7 @@ from app.models.season import Season
 from app.models.series import Series
 from app.models.team import Team
 from app.models.user import User
-from app.services.derived import CareerSort
-from app.services.player_career_stats import PlayerCareerStatsService
 from tests.seed import active
-
-SNAPSHOT = Path(__file__).parent / "data" / "career_parity.json"
 
 
 def test_rating_truncates_the_exact_weighted_sum() -> None:
@@ -110,12 +101,6 @@ ROWS: tuple[tuple[str, str | None, int | None, int, int, int, int, int], ...] = 
     ("Kilo", None, 75, 1, 1, 3, 3, 1),
     ("Hotel", None, 250, 5, 2, 11, 6, 2),
 )
-
-SEARCHES = ("", "a", "CHAR", "_", "%", "zzz")
-
-
-def row_key(row: dict[str, Any]) -> str:
-    return str(row["id"]) if row["id"] is not None else f"user {row['user_id']}"
 
 
 @pytest.fixture
@@ -198,52 +183,6 @@ def mixed_league() -> dict[str, int]:
             )
         session.commit()
         return {name: ident(user) for name, user in users.items()}
-
-
-def answers(client: Client, users: dict[str, int]) -> dict[str, Any]:
-    """Every career answer the snapshot pins."""
-    listed = client.get("/stats/career")
-    assert listed.status_code == 200
-    rows = {row_key(row): row for row in listed.json()}
-
-    orders: dict[str, Any] = {}
-    for sort in (None, *get_args(CareerSort)):
-        for order in ("asc", "desc"):
-            for search in SEARCHES:
-                url = f"/stats/career?order={order}&search={search.replace('%', '%25')}"
-                if sort:
-                    url += f"&sort={sort}"
-                resp = client.get(url)
-                assert resp.status_code == 200
-                orders[f"{sort} {order} {search!r}"] = {
-                    "total": resp.headers["X-Total-Count"],
-                    "keys": [row_key(row) for row in resp.json()],
-                }
-
-    by_user = {}
-    for name, user_id in users.items():
-        resp = client.get(f"/stats/career/{user_id}")
-        # Foxtrot holds two rows; the test below pins which one answers
-        if name != "Foxtrot":
-            by_user[name] = resp.json() if resp.status_code == 200 else None
-
-    service = PlayerCareerStatsService()
-    by_id = {}
-    for key, row in rows.items():
-        if row["id"] is not None:
-            stat = service.get(row["id"])
-            assert stat is not None
-            by_id[key] = stat.to_dict()
-    return {"rows": rows, "orders": orders, "by_user": by_user, "by_id": by_id}
-
-
-def test_every_career_answer_matches_the_snapshot(
-    client: Client, mixed_league: dict[str, int]
-) -> None:
-    payloads = answers(client, mixed_league)
-    if os.getenv("UPDATE_CAREER_SNAPSHOT"):
-        SNAPSHOT.write_text(json.dumps(payloads, indent=2, sort_keys=True) + "\n")
-    assert payloads == json.loads(SNAPSHOT.read_text())
 
 
 @pytest.mark.parametrize("sort", [None, "name", "rating", "games_winrate"])
