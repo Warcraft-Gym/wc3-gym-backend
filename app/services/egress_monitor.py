@@ -8,7 +8,7 @@ An alert posts once per change of level, so each check's state row is read and w
 import calendar
 import logging
 import os
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
 from enum import StrEnum
@@ -111,6 +111,7 @@ class Meters:
         True  # False while staging's ledger holds no measured bytes
     )
     partial: bool = False  # a day of the cycle ran statements but measured no bytes
+    staging_last: Day | None = None  # staging on prod's last day; None when not read
 
     @property
     def level(self) -> Level:
@@ -162,10 +163,18 @@ def meters(found: list[Day], now: datetime, staging: list[Day] | None = None) ->
     left = (c.end - now).total_seconds() / 86400
     complete = [d for d in found if d.day < now.date()]
     in_cycle = [d for d in [*found, *(staging or [])] if d.day >= c.start.date()]
+    last = complete[-1] if complete else None
+    staging_last = None
+    if staging is not None and last is not None:
+        # A day without a ledger row ran no statements: zero, not unknown
+        staging_last = next(
+            (d for d in staging if d.day == last.day), Day(last.day, 0.0)
+        )
     return Meters(
         now=now,
         cycle=c,
-        last=complete[-1] if complete else None,
+        last=last,
+        staging_last=staging_last,
         average_mb_per_day=average,
         cycle_mb=so_far,
         projected_mb=so_far + average * left,
@@ -262,6 +271,52 @@ def rate(d: Day | None) -> str:
     if d is None:
         return "none yet"
     return "not measured" if d.mb is None else f"{d.mb:,.0f} MB"
+
+
+def table(rows: Sequence[tuple[str, ...]]) -> str:
+    """Rows in a code block, the first column left-aligned and the rest right-aligned."""
+    widths = [max(len(r[i]) for r in rows) for i in range(len(rows[0]))]
+    lines = [
+        "  ".join(
+            c.ljust(w) if i == 0 else c.rjust(w)
+            for i, (c, w) in enumerate(zip(r, widths))
+        )
+        for r in rows
+    ]
+    return "```\n" + "\n".join(line.rstrip() for line in lines) + "\n```"
+
+
+def cell(mb: float | None) -> str:
+    """A table figure; `-` is one the ledger did not measure."""
+    return "-" if mb is None else size(mb)
+
+
+def egress_lines(m: Meters, last: Day) -> str:
+    """The cycle total against the cap, then each project's last day and cycle so far.
+    The total is what the cap counts."""
+    prod, staging = last.mb, m.staging_last.mb if m.staging_last else None
+    prod_cycle = m.cycle_mb - (m.staging_mb or 0)
+    rows = [("", day_label(last.day), "Cycle"), ("Prod", cell(prod), cell(prod_cycle))]
+    if m.staging_last is not None:
+        staging_cycle = m.staging_mb if m.staging_measured else None
+        rows.append(("Staging", cell(staging), cell(staging_cycle)))
+    measured = [mb for mb in (prod, staging) if mb is not None]
+    day_total = sum(measured) if measured else None
+    rows.append(("Total", cell(day_total), size(m.cycle_mb)))
+    notes = [
+        f"{meter(m.cycle_mb, CAP_MB)} of the 5 GB cap · day {m.day} of {m.cycle.days}",
+        f"Projected ~{size(m.projected_mb)} at cycle end",
+        table(rows),
+    ]
+    if prod is not None:
+        notes.append(
+            f"Prod: {prod / BUDGET_MB_PER_DAY:.0%} of the {BUDGET_MB_PER_DAY:,.0f} MB daily budget"
+        )
+    if m.staging_last is None:
+        notes.append("Staging not read.")
+    if m.partial or any("-" in r for r in rows):
+        notes.append("Totals count measured figures only.")
+    return "\n".join(notes)
 
 
 # Payloads
@@ -534,13 +589,10 @@ class Vercel:
 
 
 def vercel_lines(v: Vercel) -> str:
-    lines = [
-        f"{label} {figure} · {share:.0%} of the Hobby limit"
-        for label, figure, share in v.meters
-    ]
+    rows = [(label, figure, f"{share:.0%}") for label, figure, share in v.meters]
     if v.requests:
-        lines.append(f"Cache hits {v.hits / v.requests:.0%}")
-    return "\n".join(lines)
+        rows.append(("Cache hits", "", f"{v.hits / v.requests:.0%}"))
+    return f"{table(rows)}\n% of the Hobby limit; cache hits of the requests"
 
 
 def vercel_alert(
@@ -666,30 +718,8 @@ def digest(
     if alarms:
         lead = [] if m.level == Level.NORMAL else [status]
         colour, status = RED, " ".join([*lead, *alarms])
-    per_day = m.last.mb
     fields = [
-        field(
-            "Supabase egress, prod",
-            "not measured"
-            if per_day is None
-            else f"{per_day:,.0f} MB\n{meter(per_day, BUDGET_MB_PER_DAY)} of the "
-            f"{BUDGET_MB_PER_DAY:,.0f} MB daily budget",
-        ),
-        field(
-            "Cycle so far",
-            f"{size(m.cycle_mb)} of the 5 GB cap\n{meter(m.cycle_mb, CAP_MB)}"
-            f" · day {m.day} of {m.cycle.days}"
-            + ("\nmeasured days only" if m.partial else ""),
-        ),
-        field(
-            "Staging",
-            "not read"
-            if m.staging_mb is None
-            else f"{size(m.staging_mb)} this cycle"
-            if m.staging_measured
-            else "not measured",
-        ),
-        field("Projected", f"~{size(m.projected_mb)}"),
+        field("Supabase egress", egress_lines(m, m.last), inline=False),
         *extra,
         field("Busiest routes", route_lines(routes, m.covers), inline=False),
     ]

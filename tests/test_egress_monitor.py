@@ -460,7 +460,7 @@ def test_a_day_of_statements_without_measured_bytes_alerts_as_not_measured(
     run(monkeypatch, [measured(2, 20), measured(1, None)])
     assert alerts(sent) == ["Egress not measured"]
     digest = {f["name"]: f["value"] for f in sent[-1]["embeds"][0]["fields"]}
-    assert digest["Supabase egress, prod"] == "not measured"
+    assert "\nProd        -  20 MB\n" in digest["Supabase egress"]
 
 
 def test_an_undelivered_alert_keeps_the_level_so_the_next_run_retries(
@@ -872,11 +872,14 @@ def test_the_digest_sums_the_vercel_meters_over_a_rolling_30_days(
     run(monkeypatch, daily(20))
     assert titles(sent) == ["Daily infrastructure digest · 28 Sep"]
     assert vercel_field(sent[0]) == (
-        "Invocations 214,531 · 21% of the Hobby limit\n"
-        "Function GB-hours 49.9 · 14% of the Hobby limit\n"
-        "Requests 364,870 · 36% of the Hobby limit\n"
-        "Bandwidth 2.35 GB · 2% of the Hobby limit\n"
-        "Cache hits 50%"
+        "```\n"
+        "Invocations        214,531  21%\n"
+        "Function GB-hours     49.9  14%\n"
+        "Requests           364,870  36%\n"
+        "Bandwidth          2.35 GB   2%\n"
+        "Cache hits                  50%\n"
+        "```\n"
+        "% of the Hobby limit; cache hits of the requests"
     )
     (call,) = vercel
     assert call["url"] == "https://api.vercel.com/v2/usage"
@@ -1083,7 +1086,7 @@ def test_a_digest_with_every_field_fits_discords_limits(
     m = egress_monitor.meters(daily(20_000), NOW)
     payload = egress_monitor.digest(m, [], None, 499.0, None, usage)
     names = [f["name"] for f in payload["embeds"][0]["fields"]]
-    assert names[4:6] == ["Database size", "Vercel, last 30 days"]
+    assert names[:3] == ["Supabase egress", "Database size", "Vercel, last 30 days"]
     assert size(payload) <= 6000
 
 
@@ -1113,7 +1116,7 @@ def test_a_partly_measured_cycle_holds_red_and_says_so(
     current = state()
     assert current is not None and current.level == "red"
     fields = {f["name"]: f["value"] for f in sent[0]["embeds"][0]["fields"]}
-    assert fields["Cycle so far"].endswith("measured days only")
+    assert fields["Supabase egress"].endswith("Totals count measured figures only.")
 
 
 def test_staging_without_measured_bytes_reads_not_measured() -> None:
@@ -1121,4 +1124,18 @@ def test_staging_without_measured_bytes_reads_not_measured() -> None:
     assert not m.staging_measured and m.partial
     payload = egress_monitor.digest(m, [])
     fields = {f["name"]: f["value"] for f in payload["embeds"][0]["fields"]}
-    assert fields["Staging"] == "not measured"
+    assert "\nStaging       -      -\n" in fields["Supabase egress"]
+
+
+def test_the_digest_splits_the_cycle_by_project_and_totals_it() -> None:
+    m = egress_monitor.meters(daily(20), NOW, daily(5))
+    payload = egress_monitor.digest(m, [])
+    fields = {f["name"]: f["value"] for f in payload["embeds"][0]["fields"]}
+    table = fields["Supabase egress"].split("```")[1]
+    assert table == (
+        "\n"
+        "         28 Sep  Cycle\n"
+        "Prod      20 MB  60 MB\n"
+        "Staging    5 MB  15 MB\n"
+        "Total     25 MB  75 MB\n"
+    )
