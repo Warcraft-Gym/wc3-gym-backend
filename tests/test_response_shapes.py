@@ -2,8 +2,8 @@
 
 The test walks every schema a route answers with, as /openapi.json names it,
 and fails where a property embeds a shape of a registered entity other than
-its summary, or where a summary holds a list of entities. docs/okf/api/
-response-shapes.md states the rule.
+its summary, where a summary holds a list of entities, or where a list route
+answers a detail as its row. docs/okf/api/response-shapes.md states the rules.
 """
 
 from typing import Any
@@ -155,3 +155,67 @@ def test_a_summary_holds_no_entity_list(client: Client) -> None:
             if listed:
                 wrong.append(f"{summary.__name__}.{prop} lists {sorted(listed)}")
     assert wrong == []
+
+
+# The detail shape of each entity, which a list route may not answer as its row
+DETAILS = {
+    "UserPublic",
+    "UserMemberPublic",
+    "TeamPublic",
+    "EventPublic",
+    "SeriesPublic",
+    "MatchPublic",
+    "FantasyTeamPublic",
+    "FantasyBetPublic",
+}
+
+# List routes that still answer a detail as their row, each with its reason
+LIST_ROWS_ALLOWED: dict[str, str] = {
+    "GET /events": "the list row is SeasonPublic in the table; the route answers the detail",
+    "GET /events/{event_id}/fantasy/teams": "a fantasy team has one class for row and detail",
+    "GET /fantasy/teams": "a fantasy team has one class for row and detail",
+    "GET /fantasy/bets": "a fantasy bet has one class for row and detail",
+    "GET /events/{event_id}/matches": "a match has no summary or list row yet",
+    "GET /events/{event_id}/series": "the app reads the detail; the site moves to a list row",
+    "GET /events/{event_id}/teams/basic": "a team has one class for row and detail",
+    "GET /leagues/{league_id}/teams": "a team has one class for row and detail",
+    "GET /leagues/{league_id}/teams/basic": "a team has one class for row and detail",
+}
+
+
+def _list_rows(spec: dict[str, Any]) -> dict[str, str]:
+    """The item schema of every GET route that answers a list, by route."""
+    rows = {}
+    for path, methods in spec["paths"].items():
+        get = methods.get("get")
+        if get is None:
+            continue
+        schema = (
+            get.get("responses", {})
+            .get("200", {})
+            .get("content", {})
+            .get("application/json", {})
+            .get("schema", {})
+        )
+        if schema.get("type") == "array" and "$ref" in schema.get("items", {}):
+            rows[f"GET {path}"] = schema["items"]["$ref"].rsplit("/", 1)[-1]
+    return rows
+
+
+def test_a_list_route_answers_a_list_row(client: Client) -> None:
+    """A list answers each entity's summary or a named list row, never its detail."""
+    spec = client.get("/openapi.json").json()
+    assert DETAILS <= set(spec["components"]["schemas"])
+    wrong = [
+        f"{route} answers {row}"
+        for route, row in sorted(_list_rows(spec).items())
+        if row in DETAILS and route not in LIST_ROWS_ALLOWED
+    ]
+    assert wrong == []
+
+
+def test_the_allowed_list_rows_exist(client: Client) -> None:
+    """An allowed route that moved to a list row leaves the list, so it only shrinks."""
+    rows = _list_rows(client.get("/openapi.json").json())
+    stale = [route for route in LIST_ROWS_ALLOWED if rows.get(route) not in DETAILS]
+    assert stale == []
