@@ -87,7 +87,9 @@ def confirm(
         except Exception as error:
             if required:
                 raise
-            logger.warning("Series %s saved without game %s replay: %s", series_id, game_no, error)
+            logger.warning(
+                "Series %s saved without game %s replay: %s", series_id, game_no, error
+            )
             del keys[game_no]
     with Session.begin() as session:
         for game_no, key in keys.items():
