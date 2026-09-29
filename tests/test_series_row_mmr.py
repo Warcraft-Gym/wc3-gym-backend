@@ -287,9 +287,10 @@ def test_the_season_list_costs_a_constant_number_of_statements(
     # every row P1 plays, the seeded one and the eighteen grown ones
     assert sum(row["player1_mmr"] == 1500 for row in rows) == 19
     assert small[0] == large[0]
-    # twelve today, three of them the event phase the cache header reads;
+    # eighteen today, three of them the event phase the cache header reads and
+    # six the to-one relations the list loads by selectin;
     # the guard is that it is a constant, not that it is low
-    assert large[0] <= 12, large[0]
+    assert large[0] <= 18, large[0]
 
 
 def test_the_player_series_read_costs_a_constant_number_of_statements(

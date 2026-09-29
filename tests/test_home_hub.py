@@ -427,8 +427,8 @@ def test_the_hub_read_is_cacheable_at_the_edge(
 def test_the_hub_costs_a_fixed_number_of_statements(
     client: Client, hub: dict[str, Any]
 ) -> None:
-    """Three list statements, their two collection loads each, and one pass
-    that names and rates every side. None of them grows with the rows."""
+    """Three list statements, their to-one and collection loads each, and one
+    pass that names and rates every side. None of them grows with the rows."""
     from app.services import home
 
     with Session() as session:
@@ -453,7 +453,7 @@ def test_the_hub_costs_a_fixed_number_of_statements(
         answer = home.series()
     assert len(answer.next) == 3
     # one of them tells the running events from the finished ones
-    assert tally[0] == 16
+    assert tally[0] == 30
 
 
 def test_the_worst_case_answer_stays_under_the_egress_ceiling(

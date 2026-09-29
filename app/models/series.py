@@ -212,19 +212,21 @@ class Series(SeriesBase, DBModel, table=True):
             # A collection loaded this way holds only the picks, never the
             # full veto, so no caller may write through it.
             steps = steps.and_(col(DBSeriesVetoStep.action) == "pick")
+        # Selectin reads each season, team, map and player once per list; joined,
+        # they repeat on every series row and were 92% of a season read's bytes
         return (
-            joinedload(rel(cls.entrant1)).joinedload(
+            selectinload(rel(cls.entrant1)).selectinload(
                 rel(EventEntrant.historical_participant)
             ),
-            joinedload(rel(cls.entrant2)).joinedload(
+            selectinload(rel(cls.entrant2)).selectinload(
                 rel(EventEntrant.historical_participant)
             ),
-            joinedload(rel(cls.match)).joinedload(rel(Match.team1)),
-            joinedload(rel(cls.match)).joinedload(rel(Match.team2)),
-            joinedload(rel(cls.match)).joinedload(rel(Match.season)),
-            joinedload(rel(cls.match)).joinedload(rel(Match.fixed_map)),
-            joinedload(rel(cls.player1)),
-            joinedload(rel(cls.player2)),
+            selectinload(rel(cls.match)).selectinload(rel(Match.team1)),
+            selectinload(rel(cls.match)).selectinload(rel(Match.team2)),
+            selectinload(rel(cls.match)).selectinload(rel(Match.season)),
+            selectinload(rel(cls.match)).selectinload(rel(Match.fixed_map)),
+            selectinload(rel(cls.player1)),
+            selectinload(rel(cls.player2)),
             selectinload(rel(cls.casts)).joinedload(rel(SeriesCast.user)),
             selectinload(steps).joinedload(rel(DBSeriesVetoStep.map)),
         )
