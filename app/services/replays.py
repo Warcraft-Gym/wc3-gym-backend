@@ -61,21 +61,36 @@ def public(row: DBSeriesReplay) -> SeriesReplayPublic:
     )
 
 
+def _check(key: str, game_no: int) -> None:
+    """Refuse a game whose file is not in the bucket, is not a replay or is too big."""
+    found = r2.peek(key)
+    if not found:
+        raise BadRequestError(f"Game {game_no} replay is missing")
+    if not found[0].startswith(REPLAY_MAGIC):
+        raise BadRequestError(f"Game {game_no} is not a Warcraft III replay")
+    if found[1] > MAX_BYTES:
+        r2.delete(key)
+        raise BadRequestError(f"Game {game_no} replay is over 10 MB")
+
+
 def confirm(
-    series_id: int, games: Iterable[int], user_id: int | None
+    series_id: int, games: Iterable[int], user_id: int | None, required: bool = True
 ) -> list[SeriesReplayPublic]:
-    """Point each game's slot at the file the browser uploaded. Every file is checked before
-    any slot is written, so a report with one file missing changes nothing."""
+    """Point each game's slot at the file the browser uploaded, and answer every stored replay
+    of the series. Every file is checked before any slot is written. When `required`, one bad
+    or missing file changes nothing; otherwise that game is left without a replay, and so is
+    every game when the bucket cannot be reached, so a result never waits on a file."""
     keys = {game_no: r2.key(series_id, game_no) for game_no in games}
-    for game_no, key in keys.items():
-        found = r2.peek(key)
-        if not found:
-            raise BadRequestError(f"Game {game_no} replay is missing")
-        if not found[0].startswith(REPLAY_MAGIC):
-            raise BadRequestError(f"Game {game_no} is not a Warcraft III replay")
-        if found[1] > MAX_BYTES:
-            r2.delete(key)
-            raise BadRequestError(f"Game {game_no} replay is over 10 MB")
+    for game_no, key in list(keys.items()):
+        try:
+            _check(key, game_no)
+        except Exception as error:
+            if required:
+                raise
+            logger.warning(
+                "Series %s saved without game %s replay: %s", series_id, game_no, error
+            )
+            del keys[game_no]
     with Session.begin() as session:
         for game_no, key in keys.items():
             row = session.get(DBSeriesReplay, (series_id, game_no))

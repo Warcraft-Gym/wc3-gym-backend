@@ -228,7 +228,7 @@ def test_a_move_is_refused(
     assert resp.json() == {"error": "not_authorized_for_this_series"}
 
 
-def test_a_file_that_is_not_a_replay_is_refused(
+def test_a_file_that_is_not_a_replay_is_left_out(
     client: Client,
     seeded: dict[str, Any],
     member: Callable[..., dict[str, str]],
@@ -238,18 +238,13 @@ def test_a_file_that_is_not_a_replay_is_refused(
     replay_uploaded(series_id, 1)
     replay_uploaded(series_id, 2, data=b"replay")
     resp = report(client, series_id, member("2"))
-    assert resp.status_code == 400, resp.text
-    assert resp.json()["error"] == "Game 2 is not a Warcraft III replay"
-    assert client.get(f"/series/{series_id}").json()["player1_score"] is None
-    listed = (
-        client.get(f"/matches/{seeded['match_id']}/replays")
-        if "match_id" in seeded
-        else None
-    )
-    assert listed is None or listed.json() == []
+    assert resp.status_code == 200, resp.text
+    assert [r["game_no"] for r in resp.json()["replays"]] == [1]
+    assert resp.json()["replays_missing"] == [2]
+    assert client.get(f"/series/{series_id}").json()["player1_score"] == 2
 
 
-def test_a_replay_over_ten_megabytes_is_refused_and_dropped(
+def test_a_replay_over_ten_megabytes_is_dropped(
     client: Client,
     seeded: dict[str, Any],
     member: Callable[..., dict[str, str]],
@@ -261,10 +256,9 @@ def test_a_replay_over_ten_megabytes_is_refused_and_dropped(
     replay_uploaded(series_id, 1)
     replay_uploaded(series_id, 2, data=REPLAY_BYTES + b"\0" * MAX_BYTES)
     resp = report(client, series_id, member("2"))
-    assert resp.status_code == 400, resp.text
-    assert resp.json()["error"] == "Game 2 replay is over 10 MB"
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["replays_missing"] == [2]
     assert len(blob_store) == 1
-    assert client.get(f"/series/{series_id}").json()["player1_score"] is None
 
 
 def test_an_upload_link_is_signed_only_for_a_game_of_a_series(

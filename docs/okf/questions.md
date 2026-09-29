@@ -29,6 +29,7 @@ sources:
 - How is a KOTH night opened, run and closed? [KOTH night](concepts/koth.md).
 - Why are standings and points computed on every read and never stored? [Derived, not stored](decisions/derived-not-stored.md), with the rule in [derived scores](concepts/derived-scores.md).
 - How does a player report a result with replays? [Series reporting](concepts/series-reporting.md).
+- Why does a missing replay warn but never block a report? [A missing replay warns, never blocks](decisions/replays-warn-never-block.md).
 - Why does the veto warn but never block a report? [The veto warns, never blocks](decisions/veto-warns-never-blocks.md).
 - How are fantasy points computed? [Fantasy league](concepts/fantasy.md).
 - Where is the current season decided? [Settings and the current season](concepts/settings-and-current-season.md).
