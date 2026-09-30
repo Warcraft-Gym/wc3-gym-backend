@@ -5,15 +5,21 @@ with their team and his signup, and the season record pair of
 app.services.derived. The series read costs two: one for the page of series as
 columns with its total, and one for their casts. Neither grows with the number
 of seasons or series.
+
+Each statement is built once per process, with bound parameters for the values
+of a call: building one costs more Python time than running it.
 """
 
 from collections.abc import Sequence
+from functools import cache
 from typing import Any
 
 from sqlalchemy import (
     ColumnElement,
     Integer,
     Row,
+    Select,
+    bindparam,
     case,
     func,
     literal,
@@ -44,9 +50,11 @@ from app.models.user_team_season import DBUserTeamSeason
 from app.services import derived
 
 
-def _seats(session: OrmSession, user_id: int) -> Sequence[Row[Any]]:
-    """Every roster and captain seat of the player with its team and his
+@cache
+def _seats_statement() -> Select[Any]:
+    """Every roster and captain seat of the player `user_id` with its team and his
     signup, newest season first, a season's roster seat before its captain seat."""
+    user_id = bindparam("user_id", type_=Integer)
     seats = union_all(
         select(
             col(DBUserTeamSeason.season_id).label("season_id"),
@@ -60,7 +68,7 @@ def _seats(session: OrmSession, user_id: int) -> Sequence[Row[Any]]:
         ).where(col(DBTeamSeasonCaptain.user_id) == user_id),
     ).subquery()
     signup = aliased(DBUserSeasonSignup)
-    return session.execute(
+    return (
         select(
             seats.c.season_id,
             seats.c.roster,
@@ -86,13 +94,13 @@ def _seats(session: OrmSession, user_id: int) -> Sequence[Row[Any]]:
             seats.c.roster.desc(),
             seats.c.team_id,
         )
-    ).all()
+    )
 
 
 def seasons(user_id: int) -> list[PlayerSeasonPublic]:
     """One row per season the player held a roster or a captain seat in."""
     with Session.begin() as session:
-        rows = _seats(session, user_id)
+        rows = session.execute(_seats_statement(), {"user_id": user_id}).all()
         if not rows:
             return []
         by_season: dict[int, list[Row[Any]]] = {}
@@ -139,8 +147,11 @@ def _team_name(team: type[Team]) -> ColumnElement[Any]:
     )
 
 
-def _sides(user_id: int, event_ids: Sequence[int]) -> Subquery:
-    """The player's GNL series in those events, one row each from his side."""
+def _sides() -> Subquery:
+    """The GNL series of the player `user_id` in the events `event_ids`, one row
+    each from his side."""
+    user_id = bindparam("user_id", type_=Integer)
+    event_ids = bindparam("event_ids", expanding=True)
     one = (
         col(Series.player1_id),
         col(Series.player1_score),
@@ -184,6 +195,23 @@ def _sides(user_id: int, event_ids: Sequence[int]) -> Subquery:
     return union_all(*parts).subquery("side")
 
 
+@cache
+def _casts_statement() -> Select[Any]:
+    """Every cast of the series `series_ids` with its caster's name, by id."""
+    return (
+        select(
+            col(SeriesCast.id),
+            col(SeriesCast.series_id),
+            col(SeriesCast.channel_url),
+            col(SeriesCast.vod_url),
+            col(User.name),
+        )
+        .join(User, col(User.id) == SeriesCast.user_id, isouter=True)
+        .where(col(SeriesCast.series_id).in_(bindparam("series_ids", expanding=True)))
+        .order_by(col(SeriesCast.id))
+    )
+
+
 def _first_casts(
     session: OrmSession, rows: list[PlayerSeriesSummaryPublic]
 ) -> dict[int, tuple[int, str, str, str | None]]:
@@ -197,16 +225,7 @@ def _first_casts(
         if row.score is not None or row.opponent_score is not None
     }
     casts = session.execute(
-        select(
-            col(SeriesCast.id),
-            col(SeriesCast.series_id),
-            col(SeriesCast.channel_url),
-            col(SeriesCast.vod_url),
-            col(User.name),
-        )
-        .join(User, col(User.id) == SeriesCast.user_id, isouter=True)
-        .where(col(SeriesCast.series_id).in_({row.id for row in rows}))
-        .order_by(col(SeriesCast.id))
+        _casts_statement(), {"series_ids": [row.id for row in rows]}
     ).all()
     chosen: dict[int, tuple[int, str, str, str | None]] = {}
     for cast_id, series_id, channel, vod, name in casts:
@@ -217,13 +236,13 @@ def _first_casts(
     return chosen
 
 
-def series(
-    user_id: int, event_ids: Sequence[int], limit: int = 500, offset: int = 0
-) -> tuple[list[PlayerSeriesSummaryPublic], int]:
-    """One page of the player's GNL series in those events, and their count."""
-    side = _sides(user_id, event_ids)
+@cache
+def _series_statements() -> tuple[Select[Any], Select[Any]]:
+    """The page `limit`, `offset` of the player's series with their total, and
+    the count alone."""
+    side = _sides()
     team1, team2 = aliased(Team), aliased(Team)
-    statement = (
+    page = (
         select(
             side,
             _team_name(team1).label("team1_name"),
@@ -232,23 +251,33 @@ def series(
         )
         .join(team1, col(team1.id) == side.c.team1_id, isouter=True)
         .join(team2, col(team2.id) == side.c.team2_id, isouter=True)
+        .order_by(
+            side.c.season_id,
+            side.c.week.nulls_last(),
+            side.c.date_time.nulls_last(),
+            side.c.id,
+        )
+        .limit(bindparam("limit", type_=Integer))
+        .offset(bindparam("offset", type_=Integer))
     )
+    return page, select(func.count()).select_from(side)
+
+
+def series(
+    user_id: int, event_ids: Sequence[int], limit: int = 500, offset: int = 0
+) -> tuple[list[PlayerSeriesSummaryPublic], int]:
+    """One page of the player's GNL series in those events, and their count."""
+    page, count = _series_statements()
+    player = {"user_id": user_id, "event_ids": list(event_ids)}
     with Session.begin() as session:
         found = session.execute(
-            statement.order_by(
-                side.c.season_id,
-                side.c.week.nulls_last(),
-                side.c.date_time.nulls_last(),
-                side.c.id,
-            )
-            .limit(limit)
-            .offset(offset)
+            page, {**player, "limit": limit, "offset": offset}
         ).all()
         if found:
             total = found[0].total
         elif offset:
             # A page past the end holds no row to carry the count
-            total = session.scalar(select(func.count()).select_from(side))
+            total = session.scalar(count, player)
         else:
             total = 0
         rows = [
