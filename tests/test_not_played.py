@@ -1,7 +1,7 @@
 """A series that was never played is recorded 0-0.
 
-An admin may store it, so a season with an abandoned fixture can still read
-complete. A player may not: voiding his own series would drop a game he was
+An admin may store it, so a season with an abandoned fixture counts no
+missing result. A player may not: voiding his own series would drop a game he was
 losing out of the standings, so the report path still needs a finished result.
 """
 
@@ -14,11 +14,11 @@ from app.core.db import Session
 from app.models.season import Season
 
 
-def phase_of(season_id: int) -> str:
+def unscored(season_id: int) -> int:
     with Session() as session:
         season = session.get(Season, season_id)
         assert season is not None
-        return season.progress(session).phase
+        return season.progress(session).unscored_series
 
 
 def test_an_admin_records_a_series_that_was_never_played(
@@ -26,7 +26,7 @@ def test_an_admin_records_a_series_that_was_never_played(
 ) -> None:
     """The seeded season is past its end date with one series unscored, the
     state GNL S17 sits in."""
-    assert phase_of(seeded["season_id"]) == "overdue"
+    assert unscored(seeded["season_id"]) == 1
 
     resp = client.put(
         f"/series/{seeded['series_open_id']}",
@@ -36,7 +36,7 @@ def test_an_admin_records_a_series_that_was_never_played(
 
     assert resp.status_code == 200, resp.text
     assert (resp.json()["player1_score"], resp.json()["player2_score"]) == (0, 0)
-    assert phase_of(seeded["season_id"]) == "complete"
+    assert unscored(seeded["season_id"]) == 0
 
 
 def test_a_never_played_series_pays_neither_team(

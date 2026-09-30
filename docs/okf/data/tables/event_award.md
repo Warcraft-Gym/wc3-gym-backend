@@ -4,7 +4,7 @@ title: event_award
 description: One place of a finished event, frozen from the table of its last stage when an admin closes it; a trophy read lists these rows.
 resource: ../../../../app/models/event_award.py
 tags: [events, data]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-26T04:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-30T14:29:12Z }
 verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
 sources:
   - id: model
@@ -34,6 +34,6 @@ Primary key `id`. Foreign keys: `event_id` to [event](event.md), cascade; `entra
 
 # Rules
 
-For live events, `POST /events/{id}/finish` deletes the event's rows and writes one per placed entrant of every division, so a second close rewrites and never doubles. See [events module](../../concepts/events-module.md).
+For live events, `POST /events/{id}/finish` deletes the event's rows and writes one per placed entrant of every division, so a second close rewrites and never doubles. `POST /events/{id}/reopen` deletes the event's rows, so a reopened event holds no place until it is closed again. See [events module](../../concepts/events-module.md).
 
 Finishing an imported historical event preserves its source awards. Crown identities remain unresolved independently of the pairings.

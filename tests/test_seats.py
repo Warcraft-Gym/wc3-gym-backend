@@ -1,10 +1,10 @@
 """A captain holds their powers in every season they captain until it completes.
 
 Two seasons run at once, so a captain of team X in one and team Y in the other
-carries both seats. A season with every series scored carries none.
+carries both seats. A season an admin closed carries none.
 """
 
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 
 import pytest
@@ -19,7 +19,7 @@ from tests.test_player_session import (  # noqa: F401
 
 
 def _add_season(name: str, *, complete: bool, seeded: dict[str, Any]) -> int:
-    """A second season over the same teams. A complete one has its series scored."""
+    """A second season over the same teams. A complete one is played and closed."""
     from app.core.db import Session
     from app.models.base import ident
     from app.models.match import Match
@@ -58,6 +58,7 @@ def _add_season(name: str, *, complete: bool, seeded: dict[str, Any]) -> int:
         session.add(match)
         session.flush()
         if complete:
+            season.closed_at = datetime(2026, 3, 5, tzinfo=UTC)
             session.add(
                 Series(
                     match_id=ident(match),
@@ -93,7 +94,7 @@ def p1(monkeypatch: pytest.MonkeyPatch) -> dict[str, str]:
 def test_a_captain_of_a_complete_season_is_only_a_member(
     client: Client, seeded: dict[str, Any], p1: dict[str, str]
 ) -> None:
-    """Every series of that season is scored, so the seat carries nothing."""
+    """That season is closed, so the seat carries nothing."""
     done = _add_season("Season done", complete=True, seeded=seeded)
     _captain(seeded["team_a_id"], done, seeded["player_ids"][0])
 

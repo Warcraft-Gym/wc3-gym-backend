@@ -15,8 +15,8 @@ from app.core.event_label import label
 from app.models.base import ident
 from app.models.league import League
 from app.models.season import Season
-from app.models.series import Series
 from app.models.team_season import DBTeamSeason
+from app.models.types import utcnow
 from app.services import series_cards
 from app.services.events import EventService
 from app.services.series import SeriesService
@@ -104,11 +104,11 @@ def test_the_history_events_and_meetings_name_the_league(
 
 
 def test_the_trophy_names_the_league(client: Client, in_gnl: dict[str, Any]) -> None:
-    """Scoring the one open series finishes the season and crowns Alpha."""
+    """Closing the season crowns Alpha, who leads it."""
     with Session.begin() as session:
-        series = session.get(Series, in_gnl["series_open_id"])
-        assert series is not None
-        series.player1_score, series.player2_score = 2, 0
+        season = session.get(Season, in_gnl["season_id"])
+        assert season is not None
+        season.closed_at = utcnow()
     trophies = client.get(f"/users/{in_gnl['player_ids'][0]}").json()["trophies"]
     assert [row["league_short_name"] for row in trophies] == ["GNL"]
 

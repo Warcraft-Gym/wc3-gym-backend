@@ -12,6 +12,7 @@ import pytest
 from httpx2 import Client
 
 from app.core.db import Session
+from app.models.season import Season
 from app.models.series import Series
 from tests.test_player_session import member_session
 
@@ -145,8 +146,17 @@ def test_a_team_is_drafted_only_while_the_season_is_open(
     assert resp.status_code == 201, resp.text
     assert resp.json()["name"] == "Late"
 
-    # A scored series is done whether or not it carries a time
+    # A scored series is done whether or not it carries a time. Every series
+    # scored leaves the next round to draft, so the season has not ended
     score(seeded["series_played_id"], 2, 1)
     score(seeded["series_open_id"], 2, 0)
+    resp = client.post("/fantasy-team", json=team, headers=headers)
+    assert (resp.status_code, resp.json()) == (403, COMMENCED), resp.text
+
+    # Only the close ends it
+    with Session.begin() as session:
+        season = session.get(Season, seeded["season_id"])
+        assert season is not None
+        season.closed_at = datetime.now(UTC)
     resp = client.post("/fantasy-team", json=team, headers=headers)
     assert (resp.status_code, resp.json()) == (403, ENDED), resp.text

@@ -168,6 +168,15 @@ def finish_event(event_id: int) -> list[EventAwardPublic]:
     return awards.finish(event_id)
 
 
+@router.post("/events/{event_id}/reopen", dependencies=[Depends(require_admin)])
+def reopen_event(
+    event_id: int, service: EventServiceDep, claims: RequireLogin
+) -> EventPublic:
+    """Take the close back: the event reads by its series again and its places go."""
+    awards.reopen(event_id)
+    return service.get(event_id, claims=claims)
+
+
 @router.post("/events/{event_id}/discord-post", dependencies=[Depends(require_admin)])
 def post_event_card(event_id: int, data: EventDiscordPost) -> dict[str, str]:
     """Post the event card with its two buttons, or edit the one in the channel.

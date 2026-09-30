@@ -4,7 +4,7 @@ title: event
 description: "One run of a league that people sign up for: a GNL season, a KOTH night, a cup or a sign-up list; the class is still named Season."
 resource: ../../../../app/models/season.py
 tags: [events, data]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-29T08:38:15Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-30T14:29:12Z }
 verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
 sources:
   - id: model
@@ -32,7 +32,7 @@ The first block is the fields introduced for GNL, on `SeasonBase`. The second bl
 | `series_per_round` | INTEGER | no | How many series one fixture holds. Read only on an event of team entrants. |
 | `pick_ban` | VARCHAR | yes | The veto order as steps joined by `\|`, each `<action>_<side>` such as `ban_A`. Null means no veto. |
 | `start_date` | DATE | yes | First day. A GNL season keeps dates; a new round is placed a week after the one before it from here. |
-| `end_date` | DATE | yes | Last day. Past it, a season with a missing result reads `overdue` and an event with no series reads `finished`. |
+| `end_date` | DATE | yes | Last day. Past it, a GNL season that is not closed reads `overdue` and keeps running; an event of another shape reads `finished`. |
 | `discordRole` | VARCHAR | yes | A Discord role id from the workbook. Written by the import and the export and exposed on event reads. Role sync uses [discord_role_binding](discord_role_binding.md). |
 | `map_rules` | VARCHAR | yes | One rule per game, comma-joined: `fixed`, `loser`, `host`, `veto`. Null means the GNL default `fixed,loser,loser`. |
 | `score_system` | VARCHAR | no | The scale series points are paid on: `standard` or `helpstone`. |
@@ -50,7 +50,7 @@ The first block is the fields introduced for GNL, on `SeasonBase`. The second bl
 | `early_checkin` | BOOLEAN | no | Whether a player may answer a round's check-in before its window opens. Not the same switch as `checkin_enabled`, which turns check-in off as a whole. On, the player may answer every round of the event that has not ended. |
 | `round_end_zone` | VARCHAR | yes | An IANA time zone name, the zone a round of this event ends at midnight in. Null names no zone: the check-in refusal and the free-time reads then stand at UTC midnights, and the check-in hint and the out-on-blocked-times flag read the round in the player's own zone. |
 | `multi_entry` | BOOLEAN | no | On, a player may enter once per race and each row seeds on its own race; every KOTH night opens it. |
-| `closed_at` | TIMESTAMP | yes | When an admin closed the event; a closed event reads finished, and a chain grows no further. |
+| `closed_at` | TIMESTAMP | yes | When an admin closed the event, stamped by `POST /events/{id}/finish` and the KOTH close, cleared by `POST /events/{id}/reopen`. A closed event reads finished, a closed GNL season reads `complete`, and a chain grows no further. Nothing else ends an event whose teams are drafted. |
 | `page_url` | VARCHAR | yes | The event's landing or rules page, shown as one "Page" link. |
 | `stream_url` | VARCHAR | yes | Where the event is streamed. Set by the admin form; answered on the event payload; no service reads it. |
 | `discord_event_id` | VARCHAR | yes | The Discord message id of the event card last posted. A repost edits that message. Written by the card post. |
