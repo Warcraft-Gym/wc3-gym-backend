@@ -13,7 +13,6 @@ from sqlmodel import col
 from app.core.db import Session
 from app.models.enums import StageFormat
 from app.models.event_award import EventAward
-from app.models.series import Series
 from tests.test_koth_night import enrol, entrants, open_night, sign_up
 from tests.test_stage_engine import bracket, cup, generate, open_chain, score
 
@@ -85,6 +84,29 @@ def test_a_second_finish_rewrites_the_places_and_doubles_nothing(
     assert [row["title"] for row in second] == [row["title"] for row in first]
 
 
+def test_a_finish_stamps_the_event_and_a_reopen_takes_it_back(
+    client: Client, auth_headers: dict[str, str]
+) -> None:
+    """The second close keeps the first stamp; the reopen clears it and the places."""
+    event, (stage,) = cup(4)
+    generate(client, auth_headers, event, stage)
+    play_out(client, auth_headers, stage)
+    finish(client, auth_headers, event)
+    stamp = client.get(f"/events/{event}").json()["closed_at"]
+    assert stamp is not None
+
+    finish(client, auth_headers, event)
+    assert client.get(f"/events/{event}").json()["closed_at"] == stamp
+
+    reopened = client.post(f"/events/{event}/reopen", headers=auth_headers)
+
+    assert reopened.status_code == 200, reopened.text
+    assert reopened.json()["closed_at"] is None
+    assert awarded(event) == []
+    # A generated cup still finishes on its last result
+    assert reopened.json()["phase"] == "finished"
+
+
 def test_closing_a_koth_night_crowns_the_king_of_every_bracket(
     client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
 ) -> None:
@@ -112,11 +134,11 @@ def test_closing_a_koth_night_crowns_the_king_of_every_bracket(
 def test_a_cup_win_stands_beside_a_season_championship(
     client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
 ) -> None:
-    """One player wins the seeded season with Alpha and a cup of his own."""
-    with Session.begin() as session:
-        series = session.get(Series, seeded["series_open_id"])
-        assert series is not None
-        series.player1_score, series.player2_score = 2, 0
+    """One player wins the seeded season with Alpha and a cup of his own.
+
+    The season is closed with a result still missing, and pays its champion.
+    """
+    finish(client, auth_headers, seeded["season_id"])
     player = seeded["player_ids"][0]
     event, (stage,) = cup(
         2, StageFormat.round_robin, ids=[player, seeded["player_ids"][2]]

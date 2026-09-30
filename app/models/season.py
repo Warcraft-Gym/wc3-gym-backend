@@ -100,8 +100,8 @@ def tier_of(mmr: int, cuts: list[int]) -> int:
     return len(cuts) + 1 - sum(mmr >= cut for cut in cuts)
 
 
-# Derived from the series, never stored: open until one is scored or past its time,
-# complete once every one has a result, overdue past the end date with results missing
+# Derived on every read, never stored: open until a series is scored or past its time,
+# overdue past the end date, complete once an admin closed the season
 SeasonPhase = Literal["open", "commenced", "overdue", "complete"]
 
 
@@ -307,12 +307,17 @@ def progress_by_seasons(
 def _phase(
     season: "Season", total: int, n_started: int, n_scored: int
 ) -> SeasonProgress:
-    """The phase those series counts make; a season with no series is open."""
+    """The phase those series counts make; a season with no series is open.
+
+    Only the close completes a season: its series are drafted round by round,
+    so every series it holds being scored says nothing about the rounds still
+    to come. A closed season keeps the count of the results it never got.
+    """
     unscored = total - n_scored
+    if season.closed_at is not None:
+        return SeasonProgress("complete", unscored)
     if not n_started:
         return SeasonProgress("open", unscored)
-    if not unscored:
-        return SeasonProgress("complete", 0)
     if season.end_date and season.end_date < utcnow().date():
         return SeasonProgress("overdue", unscored)
     return SeasonProgress("commenced", unscored)

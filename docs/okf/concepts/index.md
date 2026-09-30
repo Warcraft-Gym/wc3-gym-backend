@@ -5,7 +5,7 @@
 * [Edge cache](edge-cache.md) - Every open read the edge caches uses one of three timer classes, live, running or settled, and an event read picks running or settled from the event's phase; nothing is purged.
 * [Events module](events-module.md) - One data model for every kind of event, with GNL and KOTH behaviour in their own modules on top, a stage engine that never branches on kind, a phase derived on every read, and the admin's path from a new league to a finished event with awards.
 * [Fantasy league](fantasy.md) - A member drafts players, one team and one race for a season, places bets on series, and scores six derived parts.
-* [GNL season](gnl-season.md) - Six drafted teams, five weekly rounds, one fixture per team pairing with captain-drafted series, and a phase that is derived from the series.
+* [GNL season](gnl-season.md) - Six drafted teams, five weekly rounds, one fixture per team pairing with captain-drafted series, and a phase that is derived on every read and ends on the admin's close.
 * [KOTH night](koth.md) - A King of the Hill night is one event of the KOTH league with three MMR brackets as divisions, one signup rule at every door, and every series paired by hand while the night runs.
 * [Pictures and replays](pictures-and-replays.md) - Team logos and map thumbnails live in Vercel Blob as public URLs, replays live in a Cloudflare R2 bucket reached through presigned URLs, and both stores follow the rows.
 * [Roles and permissions](roles-and-permissions.md) - Four roles decided by the database and the guild, ownership checked per row, reads open and writes admin-only, and an admin view-as switch.

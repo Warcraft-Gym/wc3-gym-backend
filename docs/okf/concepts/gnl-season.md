@@ -1,10 +1,10 @@
 ---
 type: Domain Concept
 title: GNL season
-description: Six drafted teams, five weekly rounds, one fixture per team pairing with captain-drafted series, and a phase that is derived from the series.
+description: Six drafted teams, five weekly rounds, one fixture per team pairing with captain-drafted series, and a phase that is derived on every read and ends on the admin's close.
 resource: ../../../app/models/season.py
 tags: [events]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-23T04:29:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-30T14:29:12Z }
 sources:
   - id: season-model
     resource: ../../../app/models/season.py
@@ -56,7 +56,9 @@ The number of rounds is not stored; the round rows are the count.
 
 # Phase
 
-A season's phase is derived on every read from its series and never stored: `open` while no series has started, `commenced` once one is scored or past its time, `overdue` when the end date passed with a result missing, `complete` when every series has a result. Every gate reads `phase`; nothing adds a date rule beside it. A `complete` season takes no signup. A `commenced` season takes a signup as a request an admin may grant.
+A season's phase is derived on every read and never stored: `open` while no series has started, `commenced` once one is scored or past its time, `overdue` once the end date has passed, `complete` once an admin closed the season. Every gate reads `phase`; nothing adds a date rule beside it. A `complete` season takes no signup. A `commenced` season takes a signup as a request an admin may grant.
+
+Only the close completes a season. Its series are drafted round by round, so the series it holds being scored says nothing about the rounds still to be drafted, and a season may run past its end date. `POST /events/{id}/finish` closes it, with or without every result; `unscored_series` keeps counting the results a closed season never got. `POST /events/{id}/reopen` takes the close back. See [the decision](../decisions/season-ends-on-close.md).
 
 The event payload answers the common phase word (`draft`, `signups_open`, `checkin`, `seeded`, `running`, `finished`) from `app/services/events.py`; [the events module](events-module.md) lists the rungs. `SeasonPublic`, which the season reads and the GNL management writes answer, keeps the four GNL phase words. A match, a fantasy team and a fantasy bet nest `SeasonSummaryPublic` as `season`, with `phase` null; see [response shapes](../api/response-shapes.md).
 

@@ -137,6 +137,10 @@ def phase_of(
     is still running. An event that played nothing is finished once its end
     has passed, which is its end date, else the day it starts on.
 
+    An event whose teams are drafted is finished by the close alone: its
+    series are drafted round by round, so neither the last result it holds nor
+    its end date ends it.
+
     Pass `counts` and `last_stage` to reuse one grouped read over a page of
     events.
     """
@@ -147,14 +151,15 @@ def phase_of(
     total, started, scored = (
         counts if counts is not None else series_counts(session, event.id)
     )
-    drawn = (
-        last_stage
-        if last_stage is not None
-        else last_stage_drawn(session, [event.id]).get(event.id, True)
-    )
-    end = event.end_date or (None if total else _start(event))
-    if (total and total == scored and drawn) or (end and end < _today()):
-        return "finished"
+    if event.entrant_kind is not EntrantKind.drafted_teams:
+        drawn = (
+            last_stage
+            if last_stage is not None
+            else last_stage_drawn(session, [event.id]).get(event.id, True)
+        )
+        end = event.end_date or (None if total else _start(event))
+        if (total and total == scored and drawn) or (end and end < _today()):
+            return "finished"
     if started:
         return "running"
     if event.signups_open:

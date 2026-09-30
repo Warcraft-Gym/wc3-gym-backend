@@ -174,6 +174,8 @@ def test_archive_cannot_be_reclosed_or_run_live(
     before = counts()
     closed = client.post(f"/koth/nights/{event_id}/close", headers=auth_headers)
     assert closed.status_code == 400
+    reopened = client.post(f"/events/{event_id}/reopen", headers=auth_headers)
+    assert reopened.status_code == 400
     with Session() as session:
         series = session.scalars(select(Series)).first()
         assert series is not None
@@ -191,7 +193,9 @@ def test_archive_cannot_be_reclosed_or_run_live(
     )
     assert patched.status_code == 400
     assert counts() == before
-    assert client.get(f"/events/{event_id}").json()["archived"] is True
+    archive = client.get(f"/events/{event_id}").json()
+    assert archive["archived"] is True
+    assert archive["closed_at"] is not None
     with Session() as session:
         assert len(list(session.scalars(select(EventAward)))) == 1
 

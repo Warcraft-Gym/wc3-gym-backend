@@ -1,7 +1,7 @@
 """A player's trophies: the finished seasons his team won.
 
-The seeded league leaves one series open, so its season is still running and
-pays nobody. Scoring that series finishes the season and crowns Alpha.
+The seeded league is not closed, so its season is still running and pays
+nobody, whatever results it holds. Closing the season crowns Alpha.
 """
 
 from typing import Any
@@ -10,10 +10,12 @@ from fastapi.testclient import TestClient as Client
 from sqlmodel import col, select
 
 from app.core.db import Session
+from app.models.season import Season
 from app.models.series import Series
+from app.models.types import utcnow
 
 
-def _finish_the_season(seeded: dict[str, Any]) -> None:
+def _score_the_open_series(seeded: dict[str, Any]) -> None:
     """Score the one open series, so every series of the season has a result."""
     with Session.begin() as session:
         series = session.scalars(
@@ -21,6 +23,14 @@ def _finish_the_season(seeded: dict[str, Any]) -> None:
         ).one()
         series.player1_score = 2
         series.player2_score = 0
+
+
+def _finish_the_season(seeded: dict[str, Any]) -> None:
+    """Close the season, which is the one thing that finishes it."""
+    with Session.begin() as session:
+        season = session.get(Season, seeded["season_id"])
+        assert season is not None
+        season.closed_at = utcnow()
 
 
 def _trophies(client: Client, user_id: int) -> list[dict[str, Any]]:
@@ -32,7 +42,11 @@ def _trophies(client: Client, user_id: int) -> list[dict[str, Any]]:
 def test_a_season_still_running_pays_no_trophy(
     client: Client, seeded: dict[str, Any]
 ) -> None:
-    """Alpha leads the seeded season, but one series has no result yet."""
+    """Alpha leads the seeded season, but nobody closed it yet."""
+    assert _trophies(client, seeded["player_ids"][0]) == []
+
+    # Every series it holds being scored still leaves the next round to draft
+    _score_the_open_series(seeded)
     assert _trophies(client, seeded["player_ids"][0]) == []
 
 

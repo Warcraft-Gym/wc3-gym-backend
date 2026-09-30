@@ -1,9 +1,9 @@
-"""A season's phase derives from its series and gates the public signup.
+"""A season's phase is derived on every read and gates the public signup.
 
 Open until a series is scored or past its time, commenced from then on,
-complete once every series has a result, overdue past the end date while a
-result is missing. A signup to a season that is not open saves the profile
-and answers closed; an admin adds the player, or does not.
+overdue past the end date, complete once an admin closed it. A signup to a
+season that is not open saves the profile and answers closed; an admin adds
+the player, or does not.
 """
 
 from collections.abc import Callable
@@ -14,10 +14,11 @@ import pytest
 from httpx2 import Client
 
 from app.core.db import Session
-from app.models.relationships import DBUserSeasonSignup
+from app.models.relationships import DBTeamSeasonCaptain, DBUserSeasonSignup
 from app.models.season import Season, SeasonPublic
 from app.services.maps import MapService
 from app.services.seasons import SeasonService
+from app.services.teams import TeamService
 from app.services.users import UserService
 from tests.test_fantasy_locks import schedule, score
 from tests.test_player_session import SIGNUP_BODY
@@ -50,7 +51,9 @@ def end_on(season_id: int, days_from_now: int) -> None:
         season.end_date = (datetime.now(UTC) + timedelta(days=days_from_now)).date()
 
 
-def test_the_phase_follows_the_series(client: Client, seeded: dict[str, Any]) -> None:
+def test_the_phase_follows_the_series_and_ends_on_the_close(
+    client: Client, seeded: dict[str, Any], auth_headers: dict[str, str]
+) -> None:
     played, open_ = seeded["series_played_id"], seeded["series_open_id"]
     end_on(seeded["season_id"], 7)
     assert phase(seeded["season_id"]) == "commenced"
@@ -59,22 +62,54 @@ def test_the_phase_follows_the_series(client: Client, seeded: dict[str, Any]) ->
     schedule(played, datetime.now(UTC) + timedelta(days=1))
     assert phase(seeded["season_id"]) == "open"
 
-    # A time in the past commences it; a series without a result never completes it
+    # A time in the past commences it
     schedule(played, datetime.now(UTC) - timedelta(hours=1))
     assert phase(seeded["season_id"]) == "commenced"
-    score(open_, 2, 0)
-    assert phase(seeded["season_id"]) == "commenced"
 
-    # Past the end date the missing result makes it overdue; the result completes it
-    end_on(seeded["season_id"], -1)
-    assert phase(seeded["season_id"]) == "overdue"
-    assert unscored(seeded["season_id"]) == 1
+    # Every series it holds being scored leaves the next round to draft
+    score(open_, 2, 0)
     score(played, 2, 1)
-    assert phase(seeded["season_id"]) == "complete"
+    assert phase(seeded["season_id"]) == "commenced"
     assert unscored(seeded["season_id"]) == 0
 
+    # Past the end date it is overdue, with or without a result missing
+    end_on(seeded["season_id"], -1)
+    assert phase(seeded["season_id"]) == "overdue"
+    score(played, None, None)
+    assert phase(seeded["season_id"]) == "overdue"
+    assert unscored(seeded["season_id"]) == 1
+
+    # Only the close completes it, and it keeps the count of the missing result
+    path = f"/events/{seeded['season_id']}"
+    assert client.post(f"{path}/finish", headers=auth_headers).status_code == 200
+    assert phase(seeded["season_id"]) == "complete"
+    assert unscored(seeded["season_id"]) == 1
     listed = {season.id: season.phase for season in seasons().get_all()}
     assert listed[seeded["season_id"]] == "complete"
+
+    assert client.post(f"{path}/reopen", headers=auth_headers).status_code == 200
+    assert phase(seeded["season_id"]) == "overdue"
+
+
+def test_a_captain_keeps_the_seat_until_the_season_is_closed(
+    client: Client, seeded: dict[str, Any], auth_headers: dict[str, str]
+) -> None:
+    """Every series scored leaves the next round to draft, so the seat stands."""
+    season_id = seeded["season_id"]
+    seat = (seeded["team_a_id"], season_id)
+    with Session.begin() as session:
+        session.add(
+            DBTeamSeasonCaptain(
+                team_id=seat[0], season_id=season_id, user_id=seeded["player_ids"][0]
+            )
+        )
+    teams = TeamService(user_app_service=UserService())
+    score(seeded["series_open_id"], 2, 0)
+    assert teams.captain_seats("1") == [seat]
+
+    closed = client.post(f"/events/{season_id}/finish", headers=auth_headers)
+    assert closed.status_code == 200, closed.text
+    assert teams.captain_seats("1") == []
 
 
 def test_a_signup_to_a_commenced_season_saves_the_profile_only(

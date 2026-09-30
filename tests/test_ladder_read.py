@@ -815,8 +815,12 @@ def test_the_ladder_reads_need_no_token(client: Client, league: dict[str, Any]) 
 def test_the_season_ladder_is_cacheable_at_the_edge(
     client: Client, league: dict[str, Any]
 ) -> None:
+    with Session.begin() as session:
+        season = session.get(Season, league["season_id"])
+        assert season is not None
+        season.closed_at = datetime.now(UTC)
     ladder = client.get(f"/events/{league['season_id']}/ladder")
-    # the seeded season reads finished, so the ladder is settled
+    # the season is closed, so it reads finished and the ladder is settled
     assert ladder.headers["cache-control"] == (
         "public, s-maxage=3600, stale-while-revalidate=86400"
     )

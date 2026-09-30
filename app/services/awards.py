@@ -11,12 +11,13 @@ from sqlalchemy.orm import Session as OrmSession
 from sqlmodel import col
 
 from app.core.db import Session
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import BadRequestError, NotFoundError
 from app.models.base import ident
 from app.models.event_award import EventAward, EventAwardPublic
 from app.models.event_history import KothHistoryEvent
 from app.models.event_stage import EventStage
 from app.models.season import Season
+from app.models.types import utcnow
 from app.services import stage_engine
 
 # The places that carry a name of their own; the rest are placed by number
@@ -62,13 +63,37 @@ def close_event(session: OrmSession, event_id: int) -> list[EventAward]:
 
 
 def finish(event_id: int) -> list[EventAwardPublic]:
-    """Close the event and answer the places it paid, best place first."""
+    """Close the event and answer the places it paid, best place first.
+
+    The close stamps `closed_at`, which is what makes the event read finished
+    whatever results it still misses. A second close keeps the first stamp.
+    """
     with Session.begin() as session:
         event = session.get(Season, event_id)
         if event is None:
             raise NotFoundError(f"Event not found by id: {event_id}")
+        if event.closed_at is None:
+            event.closed_at = utcnow()
         rows = close_event(session, ident(event))
         return [EventAwardPublic.model_validate(row.model_dump()) for row in rows]
+
+
+def reopen(event_id: int) -> None:
+    """Take the close back: clear the stamp and the places it paid.
+
+    The event reads by its series again, and the next close pays the places
+    afresh. An archived night stays closed, its source results are the record.
+    """
+    with Session.begin() as session:
+        event = session.get(Season, event_id)
+        if event is None:
+            raise NotFoundError(f"Event not found by id: {event_id}")
+        if session.get(KothHistoryEvent, event_id) is not None:
+            raise BadRequestError(
+                "An archived night stays closed; its source results are preserved"
+            )
+        event.closed_at = None
+        session.execute(delete(EventAward).where(col(EventAward.event_id) == event_id))
 
 
 def _last_stage(session: OrmSession, event_id: int) -> EventStage | None:

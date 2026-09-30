@@ -15,5 +15,6 @@
 * [The Discord adapter is its own small app](discord-adapter-separate.md) - Discord interactions land on a one-route Starlette app in a separate repository that verifies and forwards; the backend does the work.
 * [The season boundary is manual](season-boundary-manual.md) - The W3Champions season the MMR columns read is a pinned setting, edited by hand a few times a year, never derived automatically.
 * [A missing replay warns, it never blocks](replays-warn-never-block.md) - Every game should carry its replay, and the report pushes hard for it, but a result is saved without one when the file is missing, bad or the bucket fails.
+* [A season ends on the admin's close](season-ends-on-close.md) - A GNL season is complete only once an admin closes it; neither its last result nor its end date ends it, and it may be closed with results missing.
 * [The veto warns, it never blocks](veto-warns-never-blocks.md) - A result may be reported without a veto record, but the form makes that hard with a strong warning; each game stores its winner and its map.
 * [Vercel and Supabase](vercel-and-supabase.md) - The backend runs as one Vercel function on a Supabase Postgres, and the self-hosted Azure line is frozen.

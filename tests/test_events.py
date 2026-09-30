@@ -142,8 +142,9 @@ def test_the_rounds_seed_the_event_and_the_series_run_it(
 def test_an_event_finishes_on_the_last_result_or_the_end_date(
     client: Client, seeded: dict[str, Any]
 ) -> None:
+    """The seeded rows read as any event does once its teams are not drafted."""
     event = seeded["season_id"]
-    set_fields(event, end_date=TODAY + timedelta(days=7))
+    set_fields(event, entrant_kind=EntrantKind.solo, end_date=TODAY + timedelta(days=7))
     score(seeded["series_open_id"], 2, 0)
     assert phase(client, event) == "finished"
 
@@ -152,6 +153,47 @@ def test_an_event_finishes_on_the_last_result_or_the_end_date(
     assert phase(client, event) == "running"
     set_fields(event, end_date=date(2026, 1, 1))
     assert phase(client, event) == "finished"
+
+
+def test_an_event_of_drafted_teams_finishes_on_the_close_alone(
+    client: Client, seeded: dict[str, Any], auth_headers: dict[str, str]
+) -> None:
+    """Its series are drafted round by round, so every series it holds being
+    scored means only that the next round is not drafted yet."""
+    event = seeded["season_id"]
+    set_fields(event, end_date=TODAY + timedelta(days=7))
+    score(seeded["series_open_id"], 2, 0)
+    assert phase(client, event) == "running"
+
+    # Past its end date it still runs, and a result may still be missing
+    set_fields(event, end_date=date(2026, 1, 1))
+    score(seeded["series_open_id"], None, None)
+    assert phase(client, event) == "running"
+
+    closed = client.post(f"/events/{event}/finish", headers=auth_headers)
+    assert closed.status_code == 200, closed.text
+    body = client.get(f"/events/{event}").json()
+    assert (body["phase"], body["signups_open"]) == ("finished", False)
+    assert body["closed_at"] is not None
+    assert body["unscored_series"] == 1
+
+    reopened = client.post(f"/events/{event}/reopen", headers=auth_headers)
+    assert reopened.status_code == 200, reopened.text
+    assert (reopened.json()["phase"], reopened.json()["closed_at"]) == ("running", None)
+
+
+def test_a_reopen_needs_an_admin_and_an_event(
+    client: Client,
+    seeded: dict[str, Any],
+    auth_headers: dict[str, str],
+    member: Callable[..., dict[str, str]],
+) -> None:
+    event = seeded["season_id"]
+    assert client.post(f"/events/{event}/reopen").status_code == 401
+    assert (
+        client.post(f"/events/{event}/reopen", headers=member("1")).status_code == 403
+    )
+    assert client.post("/events/999/reopen", headers=auth_headers).status_code == 404
 
 
 def test_an_event_that_played_nothing_finishes_on_the_day_it_starts(
