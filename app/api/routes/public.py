@@ -62,7 +62,6 @@ from app.models.user import (
 )
 from app.models.user_block import (
     FreeTimePublic,
-    PairFreeTimePublic,
     SoftBlocksPublic,
     UserBlockCreate,
     UserBlockPublic,
@@ -514,13 +513,17 @@ def get_pair_free_time(
     player2_id: int,
     claims: RequireCaptain,
     service: SoftBlockServiceDep,
-) -> PairFreeTimePublic:
-    """The hours two players share across a round, before a series pairs them.
+    response: Response,
+) -> FreeTimePublic:
+    """The time two players share across a round, before a series pairs them.
 
     Both players take part in that event; a captain reads a pair that holds one
     of the players their own team fields, and an admin any such pair. It
-    answers a count, never a range.
+    answers the shared ranges, their sum, and each player's blocked ranges.
     """
+    # the answer is this caller's, so no shared cache may store a copy
+    response.headers["Cache-Control"] = "private, max-age=30"
+    response.headers["Vary"] = "Authorization"
     admin = is_admin(claims)
     return service.pair_free_time(
         event_id,

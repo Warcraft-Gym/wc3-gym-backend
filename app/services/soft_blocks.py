@@ -25,7 +25,6 @@ from app.models.user import User
 from app.models.user_block import (
     FreeRange,
     FreeTimePublic,
-    PairFreeTimePublic,
     SoftBlocksPublic,
     UserBlock,
     UserBlockCreate,
@@ -157,13 +156,15 @@ class SoftBlockService:
         *,
         admin: bool,
         seats: set[tuple[int, int]],
-    ) -> PairFreeTimePublic:
-        """The hours two players share across a round, before a series pairs them.
+    ) -> FreeTimePublic:
+        """The time two players share across a round, before a series pairs them.
 
         Both players hold a seat in that event, and a captain reads a pair that
         holds one of the players their own team fields; an admin passes the
-        captain rule only. It answers a count only, so neither the blocks nor
-        the ranges reach the caller.
+        captain rule only. It answers what the series read answers: the shared
+        ranges, their sum, and each player's blocked ranges in the order the
+        pair names them, so a captain can check when two players can meet. A
+        block's label and id stay with their owner.
         """
         with Session.begin() as session:
             round_ = round_row(session, event_id, playday)
@@ -181,8 +182,16 @@ class SoftBlockService:
                     403, {"error": "scheduling_disabled", "message": NO_SCHEDULING}
                 )
             start, end = _window(round_, event, None, None)
-            ranges = shared_free(session, user_a, user_b, start, end)
-        return PairFreeTimePublic(hours=free_hours(ranges))
+            both = blocked_pair(session, user_a, user_b, start, end)
+            ranges = free_time.free(start, end, *both)
+        return FreeTimePublic(
+            start=start,
+            end=end,
+            hours=free_hours(ranges),
+            ranges=_public(ranges),
+            blocked1=_public(both[0]),
+            blocked2=_public(both[1]),
+        )
 
 
 def blocked_pair(
@@ -205,19 +214,6 @@ def blocked_pair(
         else blocked(session, side, start, end, zone_of(session, side))
         for side in (user_a, user_b)
     ]
-
-
-def shared_free(
-    session: OrmSession,
-    user_a: int,
-    user_b: int,
-    start: datetime,
-    end: datetime,
-    spans: Mapping[int, list[free_time.Interval]] | None = None,
-) -> list[free_time.Interval]:
-    """The UTC ranges both players have open inside [start, end)."""
-    both = blocked_pair(session, user_a, user_b, start, end, spans)
-    return free_time.free(start, end, *both)
 
 
 def _public(spans: list[free_time.Interval]) -> list[FreeRange]:

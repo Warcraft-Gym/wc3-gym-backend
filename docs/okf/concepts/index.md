@@ -9,7 +9,7 @@
 * [KOTH night](koth.md) - A King of the Hill night is one event of the KOTH league with three MMR brackets as divisions, one signup rule at every door, and every series paired by hand while the night runs.
 * [Pictures and replays](pictures-and-replays.md) - Team logos and map thumbnails live in Vercel Blob as public URLs, replays live in a Cloudflare R2 bucket reached through presigned URLs, and both stores follow the rows.
 * [Roles and permissions](roles-and-permissions.md) - Four roles decided by the database and the guild, ownership checked per row, reads open and writes admin-only, and an admin view-as switch.
-* [Scheduling and availability](scheduling-and-availability.md) - A player answers whether they can play a round, keeps soft blocks that inform but never constrain, and a pair's shared free time is read as intervals for a series and as one count before one exists.
+* [Scheduling and availability](scheduling-and-availability.md) - A player answers whether they can play a round, keeps soft blocks that inform but never constrain, and a pair's shared free time and each player's blocked time are read as intervals, for a series and before one exists.
 * [Series reporting](series-reporting.md) - A result is reported game by game with a map and a replay per game, a veto board that is derived from the season rules, an off race per side, and casts that any member may claim.
 * [Settings and the current season](settings-and-current-season.md) - A key-value table holds the few runtime values an admin edits, including the two season pointers, and a missing row falls back to the newest season.
 * [Vocabulary](vocabulary.md) - One word per thing, from league down to game, and the words this app keeps for old reasons.

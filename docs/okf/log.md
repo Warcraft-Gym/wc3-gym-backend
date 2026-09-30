@@ -7,6 +7,7 @@
 ## 2026-09-30
 
 * **Update**: either captain of a fixture publishes its drafts (`POST /draft-series/{id}/promote`), as an admin does; the captain's fantasy mark on a draft is carried onto the series. [GNL season](concepts/gnl-season.md), [draft_series](data/tables/draft_series.md) and [roles and permissions](concepts/roles-and-permissions.md) state it.
+* **Update**: the pair free-time read answers the shared intervals and each player's blocked intervals, as the series read does, sent private; the draft board says whether each player entered any availability and when he last changed it, and carries the round window. [Scheduling and availability](concepts/scheduling-and-availability.md) and [GNL season](concepts/gnl-season.md) state it.
 * **Add**: [A season ends on the admin's close](decisions/season-ends-on-close.md). An event whose teams are drafted is finished by the close alone; `POST /events/{id}/finish` stamps `closed_at` on every event and `POST /events/{id}/reopen` clears it and deletes the awards; the GNL phase reads `complete` once closed and `overdue` past the end date; [GNL season](concepts/gnl-season.md), [the events module](concepts/events-module.md), [event](data/tables/event.md) and [event_award](data/tables/event_award.md) state it.
 * **Update**: [what a read costs](api/overview.md#what-a-read-costs) states that a read a consumer's page calls builds each statement once, with bound parameters.
 

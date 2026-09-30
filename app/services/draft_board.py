@@ -12,7 +12,7 @@ absent: the browser subtracts the two ratings the player list already holds.
 """
 
 from collections.abc import Sequence
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from itertools import product
 from typing import Any
 
@@ -47,6 +47,7 @@ from app.models.user import User
 from app.models.user_block import UserBlock, UserBusy
 from app.models.user_team_season import DBUserTeamSeason
 from app.services import derived, events, ladder, soft_blocks
+from app.services.availability import today
 from app.services.w3c_stats import w3c_season
 
 # How many meetings the pair read answers, newest first
@@ -80,7 +81,14 @@ def board(match_id: int) -> DraftBoard:
         except BadRequestError:
             # a round with no dates resolves no window, so the board drops hours
             window = None
-        spans = _blocked(session, user_ids, window) if window is not None else {}
+        # a busy day before the round, or before today without one, says nothing
+        since = (window[0].date() if window else today()) - timedelta(days=1)
+        blocks, busy = _block_rows(session, user_ids, since)
+        spans = (
+            _blocked(session, user_ids, window, blocks, busy)
+            if window is not None
+            else {}
+        )
 
         team1 = [row for row in roster if row.team_id == match.team1_id]
         team2 = [row for row in roster if row.team_id == match.team2_id]
@@ -93,12 +101,23 @@ def board(match_id: int) -> DraftBoard:
             playday=match.playday,
             team1_id=match.team1_id,
             team2_id=match.team2_id,
+            window_start=window[0] if window else None,
+            window_end=window[1] if window else None,
             max_mmr_difference=_max_mmr_difference(session, event_id),
             series_per_round=event.series_per_round,
             published_series=_count(session, col(Series.match_id), match_id),
             open_drafts=_count(session, col(DraftSeries.match_id), match_id),
             players=[
-                _player(row, event, ratings, games, vs_race, form) for row in roster
+                _player(
+                    row,
+                    event,
+                    ratings,
+                    games,
+                    vs_race,
+                    form,
+                    [*blocks[row.user_id], *busy[row.user_id]],
+                )
+                for row in roster
             ],
             pairs=[
                 _pair(one.user_id, two.user_id, window, spans, met)
@@ -166,8 +185,10 @@ def _player(
     games: dict[tuple[int, str], int],
     vs_race: dict[int, dict[str, list[int]]],
     form: dict[int, str],
+    availability: Sequence[UserBlock | UserBusy],
 ) -> DraftBoardPlayer:
-    """One roster row with its rating, its games and its ladder figures."""
+    """One roster row with its rating, its games, its ladder figures, and
+    whether he entered any availability and when he last changed it."""
     race = race_value(row.race)
     key = (row.user_id, race) if race else None
     counted = games.get(key, 0) if key else 0
@@ -180,6 +201,10 @@ def _player(
         games_warning=_games_warning(event, key in games if key else False, counted),
         vs_race=vs_race.get(row.user_id, {}),
         form=form.get(row.user_id, ""),
+        availability_entered=bool(availability),
+        availability_changed_at=max(
+            (one.updated_at for one in availability), default=None
+        ),
     )
 
 
@@ -222,22 +247,15 @@ def _pair(
     )
 
 
-def _blocked(
-    session: OrmSession, user_ids: Sequence[int], window: tuple[datetime, datetime]
-) -> dict[int, list[free_time.Interval]]:
-    """What every player blocked inside the window, in three statements.
+def _block_rows(
+    session: OrmSession, user_ids: Sequence[int], since: date
+) -> tuple[dict[int, list[UserBlock]], dict[int, list[UserBusy]]]:
+    """Every roster player's repeating blocks, and his busy days that end on
+    `since` or later, in two statements for the whole roster.
 
-    The zones, the repeating blocks and the busy days are read for the whole
-    roster at once and merged in memory, so a board of sixty-four pairings
-    reads the blocks of sixteen players, not of sixty-four.
+    A local last day can sit a calendar day behind the window start, so the
+    caller passes the day before it.
     """
-    start, end = window
-    zones: dict[int, str | None] = {
-        user_id: zone
-        for user_id, zone in session.execute(
-            select(col(User.id), col(User.timezone)).where(col(User.id).in_(user_ids))
-        )
-    }
     blocks: dict[int, list[UserBlock]] = {user_id: [] for user_id in user_ids}
     for row in session.scalars(
         select(UserBlock).where(col(UserBlock.user_id).in_(user_ids))
@@ -246,12 +264,33 @@ def _blocked(
     busy: dict[int, list[UserBusy]] = {user_id: [] for user_id in user_ids}
     for row in session.scalars(
         select(UserBusy).where(
-            col(UserBusy.user_id).in_(user_ids),
-            # a local last day can sit a calendar day behind the window start
-            col(UserBusy.last_day) >= start.date() - timedelta(days=1),
+            col(UserBusy.user_id).in_(user_ids), col(UserBusy.last_day) >= since
         )
     ):
         busy[row.user_id].append(row)
+    return blocks, busy
+
+
+def _blocked(
+    session: OrmSession,
+    user_ids: Sequence[int],
+    window: tuple[datetime, datetime],
+    blocks: dict[int, list[UserBlock]],
+    busy: dict[int, list[UserBusy]],
+) -> dict[int, list[free_time.Interval]]:
+    """What every player blocked inside the window, from rows already read.
+
+    The zones are one more statement for the whole roster, and the spans are
+    merged in memory, so a board of sixty-four pairings reads the blocks of
+    sixteen players, not of sixty-four.
+    """
+    start, end = window
+    zones: dict[int, str | None] = {
+        user_id: zone
+        for user_id, zone in session.execute(
+            select(col(User.id), col(User.timezone)).where(col(User.id).in_(user_ids))
+        )
+    }
     return {
         user_id: free_time.blocked(
             zones.get(user_id), blocks[user_id], busy[user_id], start, end
