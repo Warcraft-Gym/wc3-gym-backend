@@ -4,7 +4,7 @@ title: Roles and permissions
 description: Four roles decided by the database and the guild, ownership checked per row, reads open and writes admin-only, and an admin view-as switch.
 resource: ../../../app/api/deps.py
 tags: [auth]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-27T12:24:12Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-30T20:04:47Z }
 sources:
   - id: deps
     resource: ../../../app/api/deps.py
@@ -38,7 +38,7 @@ Before writing a permission, write the user story ("As a member who owns a fanta
 
 # Reads open, writes admin
 
-Every GET serves any session, including a guest, unless it answers something personal. POST, PUT and DELETE keep `require_admin`, except a player's own self-service flows (signup, their own battle tags, scheduling, reporting, veto, availability, fantasy), which are member-accessible and ownership-checked in the service. The frontend hides the buttons of admin writes rather than letting them fail: its fetch wrapper logs the session out on a 401. See [the decision](../decisions/reads-open-writes-admin.md).
+Every GET serves any session, including a guest, unless it answers something personal. POST, PUT and DELETE keep `require_admin`, except a player's own self-service flows (signup, their own battle tags, scheduling, reporting, veto, availability, fantasy), which are member-accessible and ownership-checked in the service, and a captain's team flows, checked against the seat: the round answers of their own roster, and the draft of a fixture their team plays, which either captain of that fixture writes and publishes. The frontend hides the buttons of admin writes rather than letting them fail: its fetch wrapper logs the session out on a 401. See [the decision](../decisions/reads-open-writes-admin.md).
 
 # View as
 

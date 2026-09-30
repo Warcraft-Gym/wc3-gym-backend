@@ -243,16 +243,20 @@ def delete_all_draft_series_for_match(
 @router.post(
     "/draft-series/{draft_series_id}/promote",
     status_code=201,
-    dependencies=[Depends(require_admin)],
 )
 def promote_draft_series(
-    draft_series_id: int, service: DraftSeriesServiceDep
+    draft_series_id: int,
+    service: DraftSeriesServiceDep,
+    matches: MatchServiceDep,
+    claims: RequireCaptain,
 ) -> SeriesPublic:
     """Publish a draft series and delete the draft, in one transaction.
 
-    A draft that names a series it replaces removes that series too; a series
-    that holds a result or a replay answers 409 and nothing changes.
+    A captain of either team of the fixture publishes, and an admin publishes
+    any. A draft that names a series it replaces removes that series too; a
+    series that holds a result or a replay answers 409 and nothing changes.
     """
+    _own_match(claims, service.get(draft_series_id).match_id, matches)
     return service.promote(draft_series_id)
 
 

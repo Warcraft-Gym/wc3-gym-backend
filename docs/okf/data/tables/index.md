@@ -29,7 +29,7 @@ The 48 tables, one concept each. A concept's `# Schema` lists every column; `tes
 * [series_replay](series_replay.md) - One replay slot per game of a series, holding the object key of the file in the replay bucket and who uploaded it.
 * [series_veto_step](series_veto_step.md) - One taken step of a series' map veto, with the side, the action, the map and who entered it; the order itself comes from the event's pick_ban.
 * [series_cast](series_cast.md) - One member's claim to cast one series, with the channel it streams on and the VOD pasted after; planned, live and VOD states derive at read time.
-* [draft_series](draft_series.md) - One series a captain proposed inside a GNL fixture, held apart from the series table until an admin promotes it.
+* [draft_series](draft_series.md) - One series a captain proposed inside a GNL fixture, held apart from the series table until a captain of the fixture or an admin publishes it.
 * [match_draft_mark](match_draft_mark.md) - One team's advisory Ready mark on the draft of one fixture, plus the moment that team last read the pairings.
 * [match_draft_state](match_draft_state.md) - The working largest MMR difference the captains pair inside while they draft one fixture, which stands in front of the stage setting.
 * [round_availability](round_availability.md) - One player's answer to whether they can play one round of an event; no row is no answer, and clearing an answer deletes the row.

@@ -1,10 +1,10 @@
 ---
 type: Data Model
 title: draft_series
-description: One series a captain proposed inside a GNL fixture, held apart from the series table until an admin promotes it.
+description: One series a captain proposed inside a GNL fixture, held apart from the series table until a captain of the fixture or an admin publishes it.
 resource: ../../../../app/models/draft_series.py
 tags: [events, data]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-19T20:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-30T20:04:47Z }
 verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
 sources:
   - id: model
@@ -27,7 +27,7 @@ sources:
 | `player1_score` | INTEGER | yes | Maps side A won, 0 to 2. Usually null on a draft. |
 | `player2_score` | INTEGER | yes | Maps side B won, 0 to 2. |
 | `host_player_id` | INTEGER | no | The player who hosts. No foreign key. |
-| `is_fantasy_match` | BOOLEAN | yes | Carried onto the promoted series. Defaults to false. |
+| `is_fantasy_match` | BOOLEAN | yes | The fantasy series of the round, set by either captain of the fixture. Carried onto the promoted series. Defaults to false. |
 | `replaces_series_id` | INTEGER | yes | The published series this pairing replaces; null on a plain pairing. |
 | `created_at` | TIMESTAMP | yes | A creation stamp, answered on the payload. |
 | `updated_at` | TIMESTAMP | yes | When the pairing last changed. |
@@ -40,7 +40,7 @@ Primary key `id`. Foreign keys: `match_id` to [matches](matches.md); `player1_id
 
 # Rules
 
-Promotion writes the [series](series.md) row and deletes the draft in one transaction. Deleting a fixture's drafts is one delete by `match_id`.
+Promotion, by a captain of either team of the fixture or an admin, writes the [series](series.md) row and deletes the draft in one transaction. Deleting a fixture's drafts is one delete by `match_id`.
 
 A fixture drafts up to the event's `series_per_round` pairings: published series plus open drafts, counted on create. A series a template wrote carries a `sequence` and counts by its template instead.
 
