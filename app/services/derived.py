@@ -33,15 +33,18 @@ A team with no played series stands at zero, not at null.
 """
 
 from collections.abc import Callable, Iterable
+from functools import cache, lru_cache
 from typing import Any, Literal, NamedTuple
 
 from sqlalchemy import (
     BigInteger,
     ColumnElement,
     Integer,
+    Select,
     SQLColumnExpression,
     String,
     and_,
+    bindparam,
     case,
     cast,
     column,
@@ -694,16 +697,10 @@ class GnlTally(NamedTuple):
     losses: int
 
 
-def _gnl_tallies(
-    session: Session, user_ids: set[int], season_ids: set[int]
-) -> dict[tuple[int, int], GnlTally]:
-    """The season record of every named player, in one statement.
-
-    A series counts for both of its players, so the two sides union before the
-    grouping. It counts as a game once the player stands in it, and pays a win
-    or a loss once both map scores are in and they are not both zero. The maps
-    a win takes come off the season, so every other scored series is a loss.
-    """
+@cache
+def _gnl_tallies_statement() -> Select[Any]:
+    """The statement of _gnl_tallies, for the players `user_ids` in the seasons
+    `season_ids`."""
     wins = wins_needed_sql(col(Season.map_rules)).label("wins")
     sides = union_all(
         select(
@@ -728,7 +725,7 @@ def _gnl_tallies(
 
     own, opp, wins = sides.c.own, sides.c.opp, sides.c.wins
     scored = own.is_not(None) & opp.is_not(None) & ~((own == 0) & (opp == 0))
-    rows = session.execute(
+    return (
         select(
             sides.c.user_id,
             sides.c.season_id,
@@ -737,8 +734,27 @@ def _gnl_tallies(
             func.count(case((scored & (own == wins), 1))),
             func.count(case((scored & (own != wins), 1))),
         )
-        .where(sides.c.user_id.in_(user_ids), sides.c.season_id.in_(season_ids))
+        .where(
+            sides.c.user_id.in_(bindparam("user_ids", expanding=True)),
+            sides.c.season_id.in_(bindparam("season_ids", expanding=True)),
+        )
         .group_by(sides.c.user_id, sides.c.season_id)
+    )
+
+
+def _gnl_tallies(
+    session: Session, user_ids: set[int], season_ids: set[int]
+) -> dict[tuple[int, int], GnlTally]:
+    """The season record of every named player, in one statement.
+
+    A series counts for both of its players, so the two sides union before the
+    grouping. It counts as a game once the player stands in it, and pays a win
+    or a loss once both map scores are in and they are not both zero. The maps
+    a win takes come off the season, so every other scored series is a loss.
+    """
+    rows = session.execute(
+        _gnl_tallies_statement(),
+        {"user_ids": list(user_ids), "season_ids": list(season_ids)},
     ).all()
     return {
         (user_id, season_id): GnlTally(int(games), int(wins), int(losses))
@@ -746,18 +762,10 @@ def _gnl_tallies(
     }
 
 
-def _gnl_matchups(
-    session: Session, user_ids: set[int], season_ids: set[int]
-) -> dict[tuple[int, int], list[str | None]]:
-    """The race every opponent of every named player registered on, in one
-    statement that answers one row per player and season.
-
-    The opponent is the other player of the series, so the two sides union
-    again. Each entry carries its playday and series id, and the list sorts on
-    them, so it reads in the order the season was played. An opponent the
-    season holds no signup for reads null, and the entry stays in the list so
-    it keeps the length of the season.
-    """
+@cache
+def _gnl_matchups_statement() -> Select[Any]:
+    """The statement of _gnl_matchups, for the players `user_ids` in the seasons
+    `season_ids`."""
     signup1, signup2 = aliased(DBUserSeasonSignup), aliased(DBUserSeasonSignup)
     sides = union_all(
         select(
@@ -788,10 +796,31 @@ def _gnl_matchups(
         + ":"
         + func.coalesce(cast(sides.c.race, String), "")
     )
-    rows = session.execute(
+    return (
         select(sides.c.user_id, sides.c.season_id, func.aggregate_strings(entry, ","))
-        .where(sides.c.user_id.in_(user_ids), sides.c.season_id.in_(season_ids))
+        .where(
+            sides.c.user_id.in_(bindparam("user_ids", expanding=True)),
+            sides.c.season_id.in_(bindparam("season_ids", expanding=True)),
+        )
         .group_by(sides.c.user_id, sides.c.season_id)
+    )
+
+
+def _gnl_matchups(
+    session: Session, user_ids: set[int], season_ids: set[int]
+) -> dict[tuple[int, int], list[str | None]]:
+    """The race every opponent of every named player registered on, in one
+    statement that answers one row per player and season.
+
+    The opponent is the other player of the series, so the two sides union
+    again. Each entry carries its playday and series id, and the list sorts on
+    them, so it reads in the order the season was played. An opponent the
+    season holds no signup for reads null, and the entry stays in the list so
+    it keeps the length of the season.
+    """
+    rows = session.execute(
+        _gnl_matchups_statement(),
+        {"user_ids": list(user_ids), "season_ids": list(season_ids)},
     ).all()
 
     history: dict[tuple[int, int], list[str | None]] = {}
@@ -1128,13 +1157,19 @@ def _career_totals(
     )
 
 
-def _system_seasons(session: Session) -> list[int]:
-    """The seasons the league has played, in the order the decay applies."""
-    season_ids = session.scalars(
+@cache
+def _system_seasons_statement() -> Select[Any]:
+    """The season of every match that holds a series, each once."""
+    return (
         select(col(Match.season_id))
         .join(Series, col(Series.match_id) == Match.id)
         .distinct()
-    ).all()
+    )
+
+
+def _system_seasons(session: Session) -> list[int]:
+    """The seasons the league has played, in the order the decay applies."""
+    season_ids = session.scalars(_system_seasons_statement()).all()
     return sorted(season_id for season_id in season_ids if season_id is not None)
 
 
@@ -1224,18 +1259,28 @@ def _career_tiebreak(row: Any) -> tuple[ColumnElement[Any], ...]:  # noqa: ANN40
     return (case((row.id.is_(None), 1), else_=0), row.id, row.user_id)
 
 
+@lru_cache(
+    maxsize=4
+)  # one statement per list of played seasons, which a new season changes
+def _career_row_statement(system_seasons: tuple[int, ...]) -> Select[Any]:
+    """The career list's statement filtered to the user `user_id`, his first row in
+    rating order."""
+    totals = _career_totals(list(system_seasons))
+    row = totals.c
+    return (
+        select(totals, User)
+        .outerjoin(User, col(User.id) == row.user_id)
+        .where(row.user_id == bindparam("user_id", type_=Integer))
+        .order_by(row.rating.desc(), *_career_tiebreak(row))
+        .limit(1)
+    )
+
+
 def career_row(session: Session, user_id: int) -> PlayerCareerStatsPublic | None:
     """The row the career list holds for the user id, its first in rating order
     should two carry it, from the same statement filtered to him."""
-    totals = _career_totals(_system_seasons(session))
-    row = totals.c
-    found = session.execute(
-        select(totals, User)
-        .outerjoin(User, col(User.id) == row.user_id)
-        .where(row.user_id == user_id)
-        .order_by(row.rating.desc(), *_career_tiebreak(row))
-        .limit(1)
-    ).first()
+    statement = _career_row_statement(tuple(_system_seasons(session)))
+    found = session.execute(statement, {"user_id": user_id}).first()
     return _career_public(found, found.User) if found else None
 
 

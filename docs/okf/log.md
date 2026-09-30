@@ -1,5 +1,9 @@
 # Bundle history
 
+## 2026-09-30
+
+* **Update**: [what a read costs](api/overview.md#what-a-read-costs) states that a read a consumer's page calls builds each statement once, with bound parameters.
+
 ## 2026-09-29
 
 * **Update**: the GNL payload snapshot is gone; [the events module](concepts/events-module.md) and [consumers](api/consumers.md) name `tests/test_event_season_parity.py` as the test that pins the GNL fields.
