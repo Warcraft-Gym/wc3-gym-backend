@@ -1,5 +1,9 @@
 # Bundle history
 
+## 2026-10-01
+
+* **Update**: the [egress monitor](api/jobs.md#the-egress-monitor) reads Vercel usage from the billing period's charges against the usage credit, lists ISR Writes, and turns amber, never red, past the credit; the Supabase daily budget is the cap spread over the cycle's days, counted on both projects.
+
 ## 2026-09-30
 
 * **Add**: [A season ends on the admin's close](decisions/season-ends-on-close.md). An event whose teams are drafted is finished by the close alone; `POST /events/{id}/finish` stamps `closed_at` on every event and `POST /events/{id}/reopen` clears it and deletes the awards; the GNL phase reads `complete` once closed and `overdue` past the end date; [GNL season](concepts/gnl-season.md), [the events module](concepts/events-module.md), [event](data/tables/event.md) and [event_award](data/tables/event_award.md) state it.
