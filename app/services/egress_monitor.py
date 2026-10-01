@@ -6,6 +6,7 @@ An alert posts once per change of level, so each check's state row is read and w
 """
 
 import calendar
+import json
 import logging
 import os
 from collections.abc import Callable, Sequence
@@ -35,7 +36,6 @@ CYCLE_START_DAY = 25  # the Supabase billing cycle starts on this day of each mo
 CAP_MB = 5000.0  # the organisation's egress cap per cycle; staging shares it
 RED_MB = 0.9 * CAP_MB  # a projected cycle total above this alerts
 AVERAGE_DAYS = 3  # the complete days whose mean the projection extends
-BUDGET_MB_PER_DAY = 80.0  # 5 GB over a month for prod, with room for staging
 TOP_ROUTES = 3
 DB_KEY = "db_size"
 DB_CAP_MB = 500.0  # the Supabase Free database size
@@ -44,26 +44,36 @@ VERCEL_KEY = "vercel"
 # The staging project shares the egress cap; Vercel runs crons on production only, so prod's run
 # takes staging's snapshot through its own route and reads its windows back
 STAGING_API = "https://wc3-gym-backend-git-staging-wc-3-gym.vercel.app"
-VERCEL_USAGE_API = "https://api.vercel.com/v2/usage"
-# Hobby has no billing cycle: its limits hold over a rolling 30 days
-VERCEL_WINDOW = timedelta(days=30)
-VERCEL_INVOCATIONS = 1_000_000  # Vercel Hobby included usage, rolling 30 days
-VERCEL_GB_HOURS = 360.0  # Hobby's Provisioned Memory (vercel.com/docs/functions/usage-and-pricing); the API's gb_hours may count less
-VERCEL_REQUESTS = 1_000_000  # Vercel Hobby included usage, rolling 30 days
-VERCEL_BANDWIDTH_GB = 100.0  # Vercel Hobby included usage, rolling 30 days
-VERCEL_RED = 0.8  # any meter at this share of its included usage alerts
+VERCEL_API = "https://api.vercel.com"
+VERCEL_CREDIT_USD = 20.0  # Pro's monthly usage credit (vercel.com/docs/plans/pro-plan); past it, usage bills on demand
+VERCEL_FEES = "Subscription Licenses"  # the charge category of plan and add-on fees, which is not usage
+VERCEL_ROWS = 4  # the costliest services the digest lists; ISR Writes is always one
+# Short names for the digest's narrow table; any other service keeps Vercel's name
+VERCEL_NAMES = {
+    "Fluid Active CPU": "Active CPU",
+    "Fluid Provisioned Memory": "Memory",
+    "Build CPU Minutes": "Build CPU",
+    "Fast Data Transfer": "Data transfer",
+    "Fast Origin Transfer": "Origin transfer",
+}
+# Vercel's units as the digest writes them, with their decimals; any other unit is a count
+VERCEL_UNITS = {
+    "hour": ("h", 2),
+    "minute": ("min", 0),
+    "gigabyte": ("GB", 2),
+    "gigabyte-hour": ("GB-h", 1),
+}
 
-RED, AMBER, GREEN, BLUE = 0xD63232, 0xF0A04B, 0x36A64F, 0x4F95D8
+RED, AMBER, GREEN, BLUE = 0xD63232, 0xF1C40F, 0x36A64F, 0x4F95D8
 SILENT = 1 << 12  # SUPPRESS_NOTIFICATIONS: the post shows without a notification
 FOOTER = "Egress monitor · bytes measured on the database connections"
-DIGEST_FOOTER = "Infrastructure monitor · egress measured on the database connections"
 MONITOR_FOOTER = "Infrastructure monitor"
 # The fields that give way first when an embed is over the total: the long route lists
 # The digest's field names: a Supabase section, then a Vercel one
 EGRESS_FIELD = "Supabase · egress"
 DB_FIELD = "Supabase · database size (prod)"
 ROUTES_FIELD = "Supabase · busiest routes (prod)"
-VERCEL_FIELD = "Vercel · all projects, last 30 days"
+VERCEL_FIELD = "Vercel · usage this billing period"
 ROUTE_FIELDS = (ROUTES_FIELD, "Top routes")
 JOBS_DOC = (
     "https://github.com/Warcraft-Gym/wc3-gym-backend/blob/main/docs/okf/api/jobs.md"
@@ -75,7 +85,7 @@ MAX_FIELDS, MAX_TOTAL = 25, 6000
 
 class Level(StrEnum):
     NORMAL = "normal"
-    AMBER = "amber"  # the last window was over the daily budget; digest colour only
+    AMBER = "amber"  # over a daily budget or on pace past a credit; digest colour only
     RED = "red"  # the cycle is projected past RED_MB
     UNAVAILABLE = "unavailable"  # the snapshot could not run
 
@@ -119,10 +129,22 @@ class Meters:
     staging_last: Day | None = None  # staging on prod's last day; None when not read
 
     @property
+    def budget_mb(self) -> float:
+        """The cap spread evenly over the cycle's days."""
+        return CAP_MB / self.cycle.days
+
+    @property
+    def day_mb(self) -> float | None:
+        """Both projects' measured MB on the last complete day; None when neither measured."""
+        days = [self.last, self.staging_last]
+        measured = [d.mb for d in days if d is not None and d.mb is not None]
+        return sum(measured) if measured else None
+
+    @property
     def level(self) -> Level:
         if self.projected_mb > RED_MB:
             return Level.RED
-        if self.last is not None and (self.last.mb or 0) > BUDGET_MB_PER_DAY:
+        if (self.day_mb or 0) > self.budget_mb:
             return Level.AMBER
         return Level.NORMAL
 
@@ -297,26 +319,23 @@ def cell(mb: float | None) -> str:
 
 
 def egress_lines(m: Meters, last: Day) -> str:
-    """The cycle total against the cap, then each project's last day and cycle so far.
-    The total is what the cap counts."""
+    """The cycle against the cap, then each project's last day and cycle so far over the
+    budget: the cap, and the cap spread over the cycle's days. Both projects count."""
     prod, staging = last.mb, m.staging_last.mb if m.staging_last else None
     prod_cycle = m.cycle_mb - (m.staging_mb or 0)
     rows = [("", day_label(last.day), "Cycle"), ("Prod", cell(prod), cell(prod_cycle))]
     if m.staging_last is not None:
         staging_cycle = m.staging_mb if m.staging_measured else None
         rows.append(("Staging", cell(staging), cell(staging_cycle)))
-    measured = [mb for mb in (prod, staging) if mb is not None]
-    day_total = sum(measured) if measured else None
-    rows.append(("Total", cell(day_total), size(m.cycle_mb)))
+    rows.append(("Total", cell(m.day_mb), size(m.cycle_mb)))
+    rows.append(("Budget", size(m.budget_mb), size(CAP_MB)))
     notes = [
-        f"{meter(m.cycle_mb, CAP_MB)} of the 5 GB cap · day {m.day} of {m.cycle.days}",
-        f"Projected ~{size(m.projected_mb)} at cycle end",
+        (
+            f"{meter(m.cycle_mb, CAP_MB)} of {size(CAP_MB)} · day {m.day} of {m.cycle.days}"
+            f" · on pace for {size(m.projected_mb)}"
+        ),
         table(rows),
     ]
-    if prod is not None:
-        notes.append(
-            f"Prod: {prod / BUDGET_MB_PER_DAY:.0%} of the {BUDGET_MB_PER_DAY:,.0f} MB daily budget"
-        )
     if m.staging_last is None:
         notes.append("Staging not read.")
     if m.partial or any("-" in r for r in rows):
@@ -423,12 +442,10 @@ def alert(
     """The red alert: the cycle is on track to pass the cap, or has passed it."""
     over = m.cycle_mb > CAP_MB
     title = f"Supabase egress: {'over' if over else 'on track to pass'} the 5 GB cap"
-    budget = f"{BUDGET_MB_PER_DAY:,.0f} MB"
     lead = (
-        f"Prod's database connections received {m.last.mb:,.0f} MB on "
-        f"{day_label(m.last.day)}, {m.last.mb / BUDGET_MB_PER_DAY:,.1f}× the daily budget "
-        f"of {budget}. "
-        if m.last is not None and m.last.mb is not None
+        f"Egress was {m.day_mb:,.0f} MB on {day_label(m.covers)}, "
+        f"{m.day_mb / m.budget_mb:,.1f}× the {m.budget_mb:,.0f} MB daily budget. "
+        if m.day_mb is not None
         else ""
     )
     description = (
@@ -438,7 +455,7 @@ def alert(
     fields = [
         field(day_label(m.covers), rate(m.last)),
         field("3-day average", f"{m.average_mb_per_day:,.0f} MB/day"),
-        field("Daily budget", f"{BUDGET_MB_PER_DAY:,.0f} MB/day"),
+        field("Daily budget", f"{m.budget_mb:,.0f} MB/day"),
         field(
             "Cycle so far",
             f"{meter(m.cycle_mb, CAP_MB)}\n{m.cycle_mb / 1000:,.1f} GB of 5 GB",
@@ -543,7 +560,7 @@ def db_recovery(mb: float, since: datetime, now: datetime) -> dict[str, Any]:
 
 
 def db_line(mb: float) -> str:
-    return f"~{mb:,.0f} MB of the {DB_CAP_MB:,.0f} MB cap\n{meter(mb, DB_CAP_MB)}"
+    return f"{meter(mb, DB_CAP_MB)} of {DB_CAP_MB:,.0f} MB · {mb:,.0f} MB used"
 
 
 def db_level(mb: float) -> Level:
@@ -551,83 +568,89 @@ def db_level(mb: float) -> Level:
 
 
 @dataclass(frozen=True)
+class Service:
+    """One Vercel service's usage this billing period and what it drew from the credit."""
+
+    name: str
+    quantity: float
+    unit: str
+    usd: float
+
+    @property
+    def label(self) -> str:
+        return VERCEL_NAMES.get(self.name, self.name)
+
+    @property
+    def amount(self) -> str:
+        unit, decimals = VERCEL_UNITS.get(self.unit, ("", 0))
+        return f"{self.quantity:,.{decimals}f} {unit}".rstrip()
+
+
+@dataclass(frozen=True)
 class Vercel:
-    """The team's usage summed over the rolling window."""
+    """The team's usage this billing period, from its charges; plan fees are not usage."""
 
-    invocations: int
-    gb_hours: float
-    requests: int
-    hits: int
-    bandwidth_bytes: int
-
-    @property
-    def meters(self) -> list[tuple[str, str, float]]:
-        """Each meter's label, figure and share of its included usage."""
-        gb = self.bandwidth_bytes / 1e9
-        return [
-            (
-                "Invocations",
-                f"{self.invocations:,}",
-                self.invocations / VERCEL_INVOCATIONS,
-            ),
-            (
-                "Function GB-hours",
-                f"{self.gb_hours:,.1f}",
-                self.gb_hours / VERCEL_GB_HOURS,
-            ),
-            ("Requests", f"{self.requests:,}", self.requests / VERCEL_REQUESTS),
-            ("Bandwidth", f"{gb:,.2f} GB", gb / VERCEL_BANDWIDTH_GB),
-        ]
+    start: datetime
+    end: datetime
+    now: datetime
+    used_usd: float  # usage, drawn from the credit first
+    billed_usd: float  # usage charged past the credit
+    projected_usd: float
+    services: list[Service]  # costliest first
+    # The share of CDN requests the cache answered; None with no requests
+    hits: float | None
 
     @property
-    def high(self) -> list[str]:
-        """The meters at VERCEL_RED or over, each with its share."""
-        return [
-            f"{label} at {share:.0%}"
-            for label, _, share in self.meters
-            if share >= VERCEL_RED
-        ]
+    def day(self) -> int:
+        return (self.now - self.start).days + 1
+
+    @property
+    def days(self) -> int:
+        return round((self.end - self.start).total_seconds() / 86400)
 
     @property
     def level(self) -> Level:
-        return Level.RED if self.high else Level.NORMAL
+        """Amber past the credit or on pace for it: usage then bills on demand, nothing pauses."""
+        if self.billed_usd >= 0.01 or self.projected_usd > VERCEL_CREDIT_USD:
+            return Level.AMBER
+        return Level.NORMAL
+
+
+def usd(amount: float, cents: bool = True) -> str:
+    return f"${amount:,.{2 if cents else 0}f}"
 
 
 def vercel_lines(v: Vercel) -> str:
-    rows = [(label, figure, f"{share:.0%}") for label, figure, share in v.meters]
-    if v.requests:
-        rows.append(("Cache hits", "", f"{v.hits / v.requests:.0%}"))
-    return f"{table(rows)}\n% of the Hobby limit; cache hits of the requests"
-
-
-def vercel_alert(
-    v: Vercel, now: datetime, mention: str | None, links: dict[str, str] | None = None
-) -> dict[str, Any]:
-    """The red alert: a meter is at VERCEL_RED of its included usage."""
-    description = (
-        f"{' and '.join(v.high)} of the included usage over the last 30 days. "
-        "Hobby pauses the feature for 30 days when a limit is hit."
-    )
-    fields = [
-        field(VERCEL_FIELD, vercel_lines(v), inline=False),
-        field("Since", stamp(now)),
-        field(
-            "Next step",
-            "Check which routes and functions drive the meter in the Vercel usage page. "
-            f"[Egress jobs]({JOBS_DOC})",
-            inline=False,
+    """The credit used, then the costliest services with ISR Writes always among them."""
+    shown = v.services[:VERCEL_ROWS]
+    isr = next((s for s in v.services if s.name == "ISR Writes"), None)
+    if isr is not None and isr not in shown:
+        shown = [*shown[:-1], isr]
+    rows = [("", "Period", "Cost"), *((s.label, s.amount, usd(s.usd)) for s in shown)]
+    other = v.used_usd - sum(s.usd for s in shown)
+    if other >= 0.005:
+        rows.append(("Other", "", usd(other)))
+    rows.append(("Used", "", usd(v.used_usd)))
+    if v.billed_usd >= 0.01:
+        rows.append(("On demand", "", usd(v.billed_usd)))
+    rows.append(("Credit", "", usd(VERCEL_CREDIT_USD)))
+    lines = [
+        (
+            f"{meter(v.used_usd, VERCEL_CREDIT_USD)} of the {usd(VERCEL_CREDIT_USD, False)} credit"
+            f" · day {v.day} of {v.days} · on pace for {usd(v.projected_usd, False)}"
         ),
+        table(rows),
     ]
-    return message(
-        now,
-        RED,
-        "Vercel usage: near the included limit",
-        description,
-        fields,
-        mention=mention,
-        links=links,
-        ask="Vercel usage needs action today",
-        footer=MONITOR_FOOTER,
+    if v.hits is not None:
+        lines.append(f"CDN cache hits: {v.hits:.0%} of requests")
+    return "\n".join(lines)
+
+
+def vercel_status(v: Vercel) -> str:
+    if v.billed_usd >= 0.01:
+        return f"Vercel usage is past the {usd(VERCEL_CREDIT_USD, False)} credit and billing on demand."
+    return (
+        f"Vercel usage is on pace to pass the {usd(VERCEL_CREDIT_USD, False)} credit."
     )
 
 
@@ -655,16 +678,15 @@ def vercel_recovery(
     v: Vercel, was: str, since: datetime, now: datetime
 ) -> dict[str, Any]:
     """The silent all-clear after the usage was red or could not be read."""
-    red = was == Level.RED
     return message(
         now,
         GREEN,
-        f"Vercel usage: {f'back under {VERCEL_RED:.0%}' if red else 'read again'}",
-        f"Every meter is under {VERCEL_RED:.0%} of its included usage.",
+        f"Vercel usage: {'read again' if was == Level.UNAVAILABLE else 'all clear'}",
+        f"Usage this billing period is {usd(v.used_usd)} of the {usd(VERCEL_CREDIT_USD, False)} credit.",
         [
             field(VERCEL_FIELD, vercel_lines(v), inline=False),
             field(
-                f"{'Red' if red else 'Unavailable'} for",
+                f"{'Red' if was == Level.RED else 'Unavailable'} for",
                 f"{duration(now - since)}, since {stamp(since)}",
             ),
         ],
@@ -674,9 +696,9 @@ def vercel_recovery(
 
 
 STATUS = {
-    Level.NORMAL: (BLUE, "All meters normal."),
-    Level.AMBER: (AMBER, "Yesterday was over the daily budget."),
-    Level.RED: (RED, "The cycle is on track to pass the cap."),
+    Level.NORMAL: (BLUE, "All normal."),
+    Level.AMBER: (AMBER, "Supabase egress was over its daily budget."),
+    Level.RED: (RED, "Supabase egress is on track to pass the 5 GB cap."),
 }
 
 
@@ -689,45 +711,37 @@ def digest(
     vercel: Vercel | None = None,
     vercel_error: str | None = None,
 ) -> dict[str, Any]:
-    """The silent daily post with every meter; before the first window, the baseline note.
-    The database size and the Vercel usage show when they were read or their read failed,
-    and a red one turns the
-    digest red."""
-    db, usage, alarms = [], [], []
+    """The silent daily post with every meter; before the first complete day, the baseline
+    note. A red check turns it red, an amber one yellow, and the description names each."""
+    db, usage, red, amber, note = [], [], [], [], []
     if db_mb is not None:
-        db.append(field(DB_FIELD, db_line(db_mb)))
+        db.append(field(DB_FIELD, db_line(db_mb), inline=False))
         if db_level(db_mb) == Level.RED:
-            alarms.append("The database is near its size cap.")
+            red.append("The database is near its size cap.")
     elif db_error is not None:
-        db.append(field(DB_FIELD, f"not read ({db_error})"))
+        db.append(field(DB_FIELD, f"not read ({db_error})", inline=False))
     if vercel is not None:
         usage.append(field(VERCEL_FIELD, vercel_lines(vercel), inline=False))
-        if vercel.level == Level.RED:
-            alarms.append("Vercel usage is near the included limit.")
+        if vercel.level == Level.AMBER:
+            amber.append(vercel_status(vercel))
     elif vercel_error is not None:
         usage.append(field(VERCEL_FIELD, f"not read ({vercel_error})", inline=False))
     if m.last is None:
-        return message(
-            m.now,
-            RED if alarms else BLUE,
-            f"Daily infrastructure digest · {day_label(m.now.date())}",
-            " ".join([*alarms, "Baseline taken. First figures after the next run."]),
-            [*db, *usage],
-            silent=True,
-            links=links,
-            footer=DIGEST_FOOTER,
-        )
-    colour, status = STATUS[m.level]
-    if alarms:
-        lead = [] if m.level == Level.NORMAL else [status]
-        colour, status = RED, " ".join([*lead, *alarms])
-    fields = [
-        field(EGRESS_FIELD, egress_lines(m, m.last), inline=False),
-        *db,
-        field(ROUTES_FIELD, route_lines(routes, m.covers), inline=False),
-        *usage,
-    ]
-    title = f"Daily infrastructure digest · {day_label(m.last.day)}"
+        fields = [*db, *usage]
+        note.append("Baseline taken. First figures after the next run.")
+        title = f"Daily infrastructure digest · {day_label(m.now.date())}"
+    else:
+        if m.level != Level.NORMAL:
+            (red if m.level == Level.RED else amber).insert(0, STATUS[m.level][1])
+        fields = [
+            field(EGRESS_FIELD, egress_lines(m, m.last), inline=False),
+            *db,
+            field(ROUTES_FIELD, route_lines(routes, m.covers), inline=False),
+            *usage,
+        ]
+        title = f"Daily infrastructure digest · {day_label(m.last.day)}"
+    colour = RED if red else AMBER if amber else BLUE
+    status = " ".join([*red, *amber, *note]) or STATUS[Level.NORMAL][1]
     return message(
         m.now,
         colour,
@@ -736,7 +750,7 @@ def digest(
         fields,
         silent=True,
         links=links,
-        footer=DIGEST_FOOTER,
+        footer=MONITOR_FOOTER,
     )
 
 
@@ -795,56 +809,75 @@ def database_mb() -> float | None:
 
 
 def vercel_usage(now: datetime) -> Vercel | Level | None:
-    """The team's usage over the rolling window from the Vercel API; UNAVAILABLE when the
-    token is rejected; None when VERCEL_USAGE_TOKEN or VERCEL_TEAM_ID is unset. Any other
-    failure raises to the run, which shows it in the digest."""
+    """The team's usage this billing period from the Vercel API: its charges and its CDN
+    cache hits; UNAVAILABLE when the token is rejected; None when VERCEL_USAGE_TOKEN or
+    VERCEL_TEAM_ID is unset. Any other failure raises to the run, which shows it in the digest."""
     token = os.getenv("VERCEL_USAGE_TOKEN", "").strip()
     team = os.getenv("VERCEL_TEAM_ID", "").strip()
     if not token or not team:
         return None
-    # The API answers 400 for a `to` in the future or a range over 31 days
-    end = now - timedelta(minutes=1)
-    params = {
-        "teamId": team,
-        "type": "requests",
-        "from": iso_ms(end - VERCEL_WINDOW),
-        "to": iso_ms(end),
-    }
-    response = requests.get(
-        VERCEL_USAGE_API,
-        params=params,
-        headers={"Authorization": f"Bearer {token}"},
-        timeout=10,
-    )
-    if response.status_code in (401, 403):
-        log.warning("vercel usage not read: token rejected %s", response.status_code)
+
+    def get(path: str, **params: str) -> requests.Response | None:
+        response = requests.get(
+            f"{VERCEL_API}{path}",
+            params={"teamId": team, **params},
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=20,
+        )
+        if response.status_code in (401, 403):
+            log.warning(
+                "vercel usage not read: token rejected %s", response.status_code
+            )
+            return None
+        response.raise_for_status()
+        return response
+
+    found = get(f"/v2/teams/{team}")
+    if found is None:
         return Level.UNAVAILABLE
-    response.raise_for_status()
-    days = response.json()["data"]
-    total = {name: sum(day.get(name) or 0 for day in days) for name in VERCEL_FIELDS}
-    return Vercel(
-        invocations=int(sum(total[f"function_invocation_{k}_count"] for k in OUTCOMES)),
-        gb_hours=float(
-            sum(total[f"function_execution_{k}_gb_hours"] for k in OUTCOMES[:3])
-        ),
-        requests=int(total["request_hit_count"] + total["request_miss_count"]),
-        hits=int(total["request_hit_count"]),
-        # In and out: https://vercel.com/docs/manage-cdn-usage#calculating-fast-data-transfer
-        bandwidth_bytes=int(
-            total["bandwidth_incoming_bytes"] + total["bandwidth_outgoing_bytes"]
-        ),
+    period = found.json()["billing"]["period"]
+    start, end = (
+        datetime.fromtimestamp(period[k] / 1000, UTC) for k in ("start", "end")
     )
-
-
-OUTCOMES = ("successful", "error", "timeout", "throttle")
-VERCEL_FIELDS = (
-    *(f"function_invocation_{k}_count" for k in OUTCOMES),
-    *(f"function_execution_{k}_gb_hours" for k in OUTCOMES[:3]),
-    "request_hit_count",
-    "request_miss_count",
-    "bandwidth_incoming_bytes",
-    "bandwidth_outgoing_bytes",
-)
+    # The usage API answers 400 for a `to` in the future
+    window = {"from": iso_ms(start), "to": iso_ms(now - timedelta(minutes=1))}
+    charges = get("/v1/billing/charges", **window)
+    cdn = get("/v2/usage", type="requests", **window)
+    if charges is None or cdn is None:
+        return Level.UNAVAILABLE
+    # One JSON line per service, project, region and day
+    rows = [json.loads(line) for line in charges.text.splitlines() if line.strip()]
+    usage = [r for r in rows if r["ServiceCategory"] != VERCEL_FEES]
+    totals: dict[str, list[Any]] = {}
+    by_day: dict[datetime, float] = {}
+    for r in usage:
+        cost = r["EffectiveCost"] or 0
+        total = totals.setdefault(r["ServiceName"], [0, r["ConsumedUnit"] or "", 0])
+        total[0] += r["ConsumedQuantity"] or 0
+        total[2] += cost
+        day_end = datetime.fromisoformat(r["ChargePeriodEnd"])
+        by_day[day_end] = by_day.get(day_end, 0) + cost
+    services = sorted(
+        (Service(name, *total) for name, total in totals.items() if total[2] > 0),
+        key=lambda s: -s.usd,
+    )
+    used = sum(s.usd for s in services)
+    complete = [by_day[d] for d in sorted(by_day) if d <= now][-AVERAGE_DAYS:]
+    average = sum(complete) / len(complete) if complete else 0.0
+    left = (end - max(by_day, default=start)).total_seconds() / 86400
+    days = cdn.json()["data"]
+    hit = sum(d.get("request_hit_count") or 0 for d in days)
+    miss = sum(d.get("request_miss_count") or 0 for d in days)
+    return Vercel(
+        start=start,
+        end=end,
+        now=now,
+        used_usd=used,
+        billed_usd=sum(r["BilledCost"] or 0 for r in usage),
+        projected_usd=used + average * max(left, 0),
+        services=services,
+        hits=hit / (hit + miss) if hit + miss else None,
+    )
 
 
 def iso_ms(at: datetime) -> str:
@@ -961,7 +994,7 @@ def report(result: EgressSnapshotResult, now: datetime | None = None) -> None:
                     VERCEL_KEY,
                     v.level,
                     now,
-                    lambda: vercel_alert(v, now, mention, links),
+                    dict,  # never called: Vercel is never red, past the credit usage bills on demand
                     lambda s: vercel_recovery(v, s.level, s.since, now),
                 )
             )

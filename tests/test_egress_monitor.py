@@ -173,8 +173,8 @@ def test_the_rate_is_the_mean_of_the_last_measured_days_however_old() -> None:
     ("found", "level"),
     [
         (daily(50), Level.NORMAL),
-        # 120 MB yesterday is over the daily budget; the cycle stays far under the cap
-        (daily(50, 3)[:2] + [measured(1, 120)], Level.AMBER),
+        # 180 MB yesterday is over the 167 MB daily budget; the cycle stays far under the cap
+        (daily(50, 3)[:2] + [measured(1, 180)], Level.AMBER),
         (daily(200), Level.RED),
         ([], Level.NORMAL),
     ],
@@ -237,11 +237,11 @@ def test_red_to_normal_posts_a_silent_recovery_then_the_digest(
 def test_amber_colours_the_digest_and_never_alerts(
     monkeypatch: pytest.MonkeyPatch, sent: list[dict[str, Any]]
 ) -> None:
-    run(monkeypatch, daily(50, 3)[:2] + [measured(1, 120)])
+    run(monkeypatch, daily(50, 3)[:2] + [measured(1, 180)])
     assert titles(sent) == ["Daily infrastructure digest · 28 Sep"]
     embed = sent[0]["embeds"][0]
     assert embed["color"] == egress_monitor.AMBER
-    assert embed["description"] == "Yesterday was over the daily budget."
+    assert embed["description"] == "Supabase egress was over its daily budget."
 
 
 def test_an_unavailable_run_alerts_once_and_a_good_run_says_it_runs_again(
@@ -363,7 +363,7 @@ def test_every_payload_fits_discords_limits() -> None:
     digest = egress_monitor.digest(m, long, links, 499.0)
     for payload, footer in [
         (alert, egress_monitor.FOOTER),
-        (digest, egress_monitor.DIGEST_FOOTER),
+        (digest, egress_monitor.MONITOR_FOOTER),
         (egress_monitor.recovery(m, "red", NOW), egress_monitor.FOOTER),
         (
             egress_monitor.unavailable_alert("x" * 5000, NOW, None),
@@ -460,7 +460,7 @@ def test_a_day_of_statements_without_measured_bytes_alerts_as_not_measured(
     run(monkeypatch, [measured(2, 20), measured(1, None)])
     assert alerts(sent) == ["Egress not measured"]
     digest = {f["name"]: f["value"] for f in sent[-1]["embeds"][0]["fields"]}
-    assert "\nProd        -  20 MB\n" in digest[egress_monitor.EGRESS_FIELD]
+    assert "\nProd         -   20 MB\n" in digest[egress_monitor.EGRESS_FIELD]
 
 
 def test_an_undelivered_alert_keeps_the_level_so_the_next_run_retries(
@@ -601,10 +601,10 @@ def test_the_digest_shows_the_database_size_when_it_was_read(
     fields = {f["name"]: f for f in sent[0]["embeds"][0]["fields"]}
     assert fields[egress_monitor.DB_FIELD] == {
         "name": egress_monitor.DB_FIELD,
-        "value": "~123 MB of the 500 MB cap\n`▰▰▱▱▱▱▱▱▱▱` 25%",
-        "inline": True,
+        "value": "`▰▰▱▱▱▱▱▱▱▱` 25% of 500 MB · 123 MB used",
+        "inline": False,
     }
-    assert sent[0]["embeds"][0]["description"] == "All meters normal."
+    assert sent[0]["embeds"][0]["description"] == "All normal."
     assert state(egress_monitor.DB_KEY) is not None
     sent.clear()
 
@@ -794,18 +794,52 @@ def test_the_route_list_gives_way_before_the_dashboards() -> None:
 
 
 TOKEN = "vercel-test-token"
+# The billing period: 27 Sep 07:00 to 27 Oct 07:00 UTC, so NOW is on day 2 of 30
+PERIOD = {"start": 1790492400000, "end": 1793084400000}
+COMPLETE, PARTIAL = "2026-09-28T07:00:00.000Z", "2026-09-29T07:00:00.000Z"
 
 
-def day(**counts: object) -> dict[str, Any]:
-    """One day of the usage answer: zero for each meter not given, plus a field we ignore."""
-    return {"date": "2026-09-28", "other_count": 7, **counts}
+def charge(
+    service: str,
+    cost: float,
+    quantity: float = 0,
+    unit: str | None = None,
+    day_end: str = COMPLETE,
+    category: str = "Vercel Functions",
+    billed: float = 0,
+) -> dict[str, Any]:
+    """One line of the charges answer, with a field we ignore."""
+    return {
+        "ChargePeriodEnd": day_end,
+        "ServiceName": service,
+        "ServiceCategory": category,
+        "ConsumedQuantity": quantity,
+        "ConsumedUnit": unit,
+        "EffectiveCost": cost,
+        "BilledCost": billed,
+        "RegionId": "iad1",
+    }
+
+
+# $0.61 used, $0.57 on the complete day: $0.61 + 28 days × $0.57 = $16.57 on pace
+CHARGES = [
+    charge("Pro", 0.67, 1, category="Subscription Licenses"),
+    charge("ISR Writes", 0.12, 30_000, "Writes"),
+    charge("ISR Writes", 0.04, 10_000, "Writes", day_end=PARTIAL),
+    charge("CDN Requests", 0.20, 100_000, "Requests"),
+    charge("Fluid Active CPU", 0.10, 0.5, "hour"),
+    charge("Build CPU Minutes", 0.09, 40, "minute"),
+    charge("Fast Data Transfer", 0.06, 1.0, "gigabyte"),
+    charge("Image Optimization Cache Reads", 0, 0, "Reads"),
+]
+CDN = [{"request_hit_count": 300, "request_miss_count": 100, "other_count": 7}]
 
 
 @pytest.fixture
 def vercel(
     monkeypatch: pytest.MonkeyPatch, sent: list[dict[str, Any]]
 ) -> list[dict[str, Any]]:
-    """The GETs sent to the Vercel API; each test sets the answer with `answer`."""
+    """The GETs sent to the Vercel API; each test sets the answers with `answer`."""
     monkeypatch.setenv("VERCEL_USAGE_TOKEN", TOKEN)
     monkeypatch.setenv("VERCEL_TEAM_ID", "team_test")
     return []
@@ -815,47 +849,39 @@ def answer(
     monkeypatch: pytest.MonkeyPatch,
     calls: list[dict[str, Any]],
     status: int = 200,
-    days: list[dict[str, Any]] | None = None,
+    charges: list[Any] | None = None,
+    cdn: list[Any] | None = None,
+    team: dict[str, Any] | None = None,
+    failing: str = "",
 ) -> None:
+    """Every endpoint answers; the one whose path holds `failing` answers `status`."""
+
     class Response:
-        status_code = status
+        def __init__(self, url: str) -> None:
+            self.url = url
+            self.status_code = status if failing in url else 200
 
         def raise_for_status(self) -> None:
-            if status >= 400:
+            if self.status_code >= 400:
                 error = egress_monitor.requests.HTTPError(f"{status} for url")
                 error.response = self  # type: ignore[assignment]
                 raise error
 
         def json(self) -> dict[str, Any]:
-            return {"data": days or []}
+            if "/v2/teams/" in self.url:
+                return team if team is not None else {"billing": {"period": PERIOD}}
+            return {"data": CDN if cdn is None else cdn}
+
+        @property
+        def text(self) -> str:
+            lines = CHARGES if charges is None else charges
+            return "\n".join(x if isinstance(x, str) else json.dumps(x) for x in lines)
 
     def get(url: str, **kwargs: object) -> Response:
         calls.append({"url": url, **kwargs})
-        return Response()
+        return Response(url)
 
     monkeypatch.setattr(egress_monitor.requests, "get", get)
-
-
-# 214,531 invocations, 49.9 GB-hours, 364,870 requests half from the cache, 2.35 GB in and out
-USAGE = [
-    day(
-        function_invocation_successful_count=200_000,
-        function_invocation_error_count=14_000,
-        function_execution_successful_gb_hours=40.0,
-        function_execution_error_gb_hours=9.0,
-        request_hit_count=182_435,
-        request_miss_count=100_000,
-        bandwidth_incoming_bytes=50_000_000,
-        bandwidth_outgoing_bytes=1_950_000_000,
-    ),
-    day(
-        function_invocation_timeout_count=500,
-        function_invocation_throttle_count=31,
-        function_execution_timeout_gb_hours=0.9,
-        request_miss_count=82_435,
-        bandwidth_outgoing_bytes=350_000_000,
-    ),
-]
 
 
 def vercel_field(payload: dict[str, Any]) -> str | None:
@@ -867,37 +893,62 @@ def vercel_field(payload: dict[str, Any]) -> str | None:
     return found["value"]
 
 
-def test_the_digest_sums_the_vercel_meters_over_a_rolling_30_days(
+def test_the_digest_shows_the_credit_used_this_billing_period(
     monkeypatch: pytest.MonkeyPatch,
     sent: list[dict[str, Any]],
     vercel: list[dict[str, Any]],
 ) -> None:
-    answer(monkeypatch, vercel, days=USAGE)
+    answer(monkeypatch, vercel)
     run(monkeypatch, daily(20))
     assert titles(sent) == ["Daily infrastructure digest · 28 Sep"]
+    assert sent[0]["embeds"][0]["color"] == egress_monitor.BLUE
     assert vercel_field(sent[0]) == (
+        "`▱▱▱▱▱▱▱▱▱▱` 3% of the $20 credit · day 2 of 30 · on pace for $17\n"
         "```\n"
-        "Invocations        214,531  21%\n"
-        "Function GB-hours     49.9  14%\n"
-        "Requests           364,870  36%\n"
-        "Bandwidth          2.35 GB   2%\n"
-        "Cache hits                  50%\n"
+        "               Period    Cost\n"
+        "CDN Requests  100,000   $0.20\n"
+        "ISR Writes     40,000   $0.16\n"
+        "Active CPU     0.50 h   $0.10\n"
+        "Build CPU      40 min   $0.09\n"
+        "Other                   $0.06\n"
+        "Used                    $0.61\n"
+        "Credit                 $20.00\n"
         "```\n"
-        "% of the Hobby limit; cache hits of the requests"
+        "CDN cache hits: 75% of requests"
     )
-    (call,) = vercel
-    assert call["url"] == "https://api.vercel.com/v2/usage"
-    assert call["headers"] == {"Authorization": f"Bearer {TOKEN}"}
-    assert call["timeout"] == 10
-    # A minute before the run, back 30 days: never in the future, never over 31 days
-    assert call["params"] == {
-        "teamId": "team_test",
-        "type": "requests",
-        "from": "2026-08-30T00:29:00.000Z",
-        "to": "2026-09-29T00:29:00.000Z",
-    }
+    team, charges, cdn = vercel
+    assert team["url"] == "https://api.vercel.com/v2/teams/team_test"
+    assert charges["url"] == "https://api.vercel.com/v1/billing/charges"
+    assert cdn["url"] == "https://api.vercel.com/v2/usage"
+    for call in vercel:
+        assert call["headers"] == {"Authorization": f"Bearer {TOKEN}"}
+        assert call["timeout"] == 20
+    # From the period's start to a minute before the run: never in the future
+    window = {"from": "2026-09-27T07:00:00.000Z", "to": "2026-09-29T00:29:00.000Z"}
+    assert charges["params"] == {"teamId": "team_test", **window}
+    assert cdn["params"] == {"teamId": "team_test", "type": "requests", **window}
     current = state(egress_monitor.VERCEL_KEY)
     assert current is not None and current.level == "normal"
+
+
+def test_isr_writes_are_listed_even_when_they_cost_least() -> None:
+    services = [
+        egress_monitor.Service(f"S{i}", 1, "Requests", 1.0 - i / 10) for i in range(5)
+    ]
+    isr = egress_monitor.Service("ISR Writes", 7, "Writes", 0.01)
+    v = egress_monitor.Vercel(
+        NOW, NOW + timedelta(days=30), NOW, 4.0, 0, 4.0, [*services, isr], None
+    )
+    table = egress_monitor.vercel_lines(v).split("```")[1]
+    assert [line.split()[0] for line in table.strip().splitlines()[1:]] == [
+        "S0",
+        "S1",
+        "S2",
+        "ISR",
+        "Other",
+        "Used",
+        "Credit",
+    ]
 
 
 @pytest.mark.parametrize("unset", ["VERCEL_USAGE_TOKEN", "VERCEL_TEAM_ID"])
@@ -907,7 +958,7 @@ def test_without_both_variables_vercel_is_skipped(
     vercel: list[dict[str, Any]],
     unset: str,
 ) -> None:
-    answer(monkeypatch, vercel, days=USAGE)
+    answer(monkeypatch, vercel)
     monkeypatch.setenv(unset, " ")
     run(monkeypatch, daily(20))
     assert vercel == []
@@ -915,43 +966,56 @@ def test_without_both_variables_vercel_is_skipped(
     assert state(egress_monitor.VERCEL_KEY) is None
 
 
-def test_a_meter_at_80_percent_alerts_once_and_recovers_under_it(
+def test_usage_on_pace_past_the_credit_turns_the_digest_yellow_and_never_pings(
     monkeypatch: pytest.MonkeyPatch,
     sent: list[dict[str, Any]],
     vercel: list[dict[str, Any]],
 ) -> None:
     monkeypatch.setenv("DEV_ALERTS_MENTION_USER_ID", FAKE_ID)
-    high = [day(request_miss_count=800_000, function_execution_successful_gb_hours=300)]
-    answer(monkeypatch, vercel, days=high)
-    before = NOW - timedelta(days=1)
-    run(monkeypatch, daily(20, now=before), before)
-    assert titles(sent) == [
-        "Vercel usage: near the included limit",
-        "Daily infrastructure digest · 27 Sep",
-    ]
-    alert, digest = sent
-    assert alert["content"] == f"<@{FAKE_ID}> Vercel usage needs action today"
-    assert alert["embeds"][0]["description"] == (
-        "Function GB-hours at 83% and Requests at 80% of the included usage "
-        "over the last 30 days. "
-        "Hobby pauses the feature for 30 days when a limit is hit."
-    )
-    assert digest["embeds"][0]["color"] == egress_monitor.RED
-    assert digest["embeds"][0]["description"] == (
-        "Vercel usage is near the included limit."
-    )
-    sent.clear()
-
+    # $0.30 more on the complete day: $0.91 + 28 × $0.87 = $25.27 on pace
+    answer(monkeypatch, vercel, charges=[*CHARGES, charge("Build CPU Minutes", 0.30)])
     run(monkeypatch, daily(20))
     assert titles(sent) == ["Daily infrastructure digest · 28 Sep"]
+    embed = sent[0]["embeds"][0]
+    assert "content" not in sent[0]
+    assert embed["color"] == egress_monitor.AMBER
+    assert embed["description"] == "Vercel usage is on pace to pass the $20 credit."
+    current = state(egress_monitor.VERCEL_KEY)
+    assert current is not None and current.level == "amber"
     sent.clear()
 
-    answer(monkeypatch, vercel, days=[day(request_miss_count=799_999)])
-    after = NOW + timedelta(days=1)
-    run(monkeypatch, daily(20, now=after), after)
+    answer(
+        monkeypatch, vercel, charges=[*CHARGES, charge("CDN Requests", 0, billed=1.5)]
+    )
+    run(monkeypatch, daily(20))
+    embed = sent[0]["embeds"][0]
+    assert embed["color"] == egress_monitor.AMBER
+    assert embed["description"] == (
+        "Vercel usage is past the $20 credit and billing on demand."
+    )
+    assert "\nOn demand               $1.50\n" in (vercel_field(sent[0]) or "")
+
+
+def test_a_red_level_clears_on_the_next_read(
+    monkeypatch: pytest.MonkeyPatch,
+    sent: list[dict[str, Any]],
+    vercel: list[dict[str, Any]],
+) -> None:
+    since = NOW - timedelta(days=2)
+    with Session.begin() as session:
+        session.add(
+            MonitorState(
+                key=egress_monitor.VERCEL_KEY,
+                level="red",
+                since=since,
+                updated_at=since,
+            )
+        )
+    answer(monkeypatch, vercel)
+    run(monkeypatch, daily(20))
     assert titles(sent) == [
-        "Vercel usage: back under 80%",
-        "Daily infrastructure digest · 29 Sep",
+        "Vercel usage: all clear",
+        "Daily infrastructure digest · 28 Sep",
     ]
     assert sent[0]["flags"] == egress_monitor.SILENT
     assert sent[0]["embeds"][0]["fields"][1]["value"].startswith("2 days, since <t:")
@@ -960,14 +1024,16 @@ def test_a_meter_at_80_percent_alerts_once_and_recovers_under_it(
 
 
 @pytest.mark.parametrize("status", [401, 403])
+@pytest.mark.parametrize("failing", ["/v2/teams/", "/v1/billing/", "/v2/usage"])
 def test_a_rejected_token_alerts_once_and_a_good_read_says_so(
     monkeypatch: pytest.MonkeyPatch,
     sent: list[dict[str, Any]],
     vercel: list[dict[str, Any]],
     caplog: pytest.LogCaptureFixture,
     status: int,
+    failing: str,
 ) -> None:
-    answer(monkeypatch, vercel, status=status)
+    answer(monkeypatch, vercel, status=status, failing=failing)
     before = NOW - timedelta(days=1)
     run(monkeypatch, daily(20, now=before), before)
     run(monkeypatch, daily(20))
@@ -982,7 +1048,7 @@ def test_a_rejected_token_alerts_once_and_a_good_read_says_so(
     assert all(TOKEN not in r.getMessage() for r in caplog.records)
     sent.clear()
 
-    answer(monkeypatch, vercel, days=USAGE)
+    answer(monkeypatch, vercel)
     after = NOW + timedelta(days=1)
     run(monkeypatch, daily(20, now=after), after)
     assert titles(sent) == [
@@ -996,7 +1062,7 @@ def test_an_undelivered_vercel_alert_posts_again_on_the_next_run(
     sent: list[dict[str, Any]],
     vercel: list[dict[str, Any]],
 ) -> None:
-    answer(monkeypatch, vercel, status=401)
+    answer(monkeypatch, vercel, status=401, failing="/v2/teams/")
     monkeypatch.delenv("DEV_ALERTS_WEBHOOK_URL")
     run(monkeypatch, daily(20))
     assert state(egress_monitor.VERCEL_KEY) is None
@@ -1013,12 +1079,12 @@ def test_a_server_error_shows_not_read_and_keeps_the_level(
     caplog: pytest.LogCaptureFixture,
     status: int,
 ) -> None:
-    answer(monkeypatch, vercel, days=USAGE)
+    answer(monkeypatch, vercel)
     before = NOW - timedelta(days=1)
     run(monkeypatch, daily(20, now=before), before)
     sent.clear()
 
-    answer(monkeypatch, vercel, status=status)
+    answer(monkeypatch, vercel, status=status, failing="/v1/billing/")
     run(monkeypatch, daily(20))
     assert titles(sent) == ["Daily infrastructure digest · 28 Sep"]
     assert vercel_field(sent[0]) == f"not read (HTTPError {status})"
@@ -1047,21 +1113,25 @@ def test_a_timeout_shows_not_read_and_logs_no_token(
 
 
 @pytest.mark.parametrize(
-    ("days", "error"),
+    ("body", "error"),
     [
-        ([day(request_hit_count="many")], "TypeError"),
-        ([day(bandwidth_outgoing_bytes=float("inf"))], "OverflowError"),
-        ([None], "AttributeError"),
+        ({"team": {"billing": None}}, "TypeError"),
+        ({"charges": ["{not json"]}, "JSONDecodeError"),
+        (
+            {"charges": [{**charge("CDN Requests", 0), "EffectiveCost": "many"}]},
+            "TypeError",
+        ),
+        ({"cdn": [None]}, "AttributeError"),
     ],
 )
 def test_a_bad_body_shows_not_read(
     monkeypatch: pytest.MonkeyPatch,
     sent: list[dict[str, Any]],
     vercel: list[dict[str, Any]],
-    days: list[Any],
+    body: dict[str, Any],
     error: str,
 ) -> None:
-    answer(monkeypatch, vercel, days=days)
+    answer(monkeypatch, vercel, **body)
     run(monkeypatch, daily(20))
     assert vercel_field(sent[0]) == f"not read ({error})"
     assert state(egress_monitor.VERCEL_KEY) is None
@@ -1074,7 +1144,7 @@ def test_the_token_alert_links_the_vercel_dashboard(
 ) -> None:
     monkeypatch.setenv("DEV_ALERTS_VERCEL_USAGE_URL", "https://vercel.test/usage")
     monkeypatch.setenv("DEV_ALERTS_SUPABASE_USAGE_URL", "https://supabase.test/usage")
-    answer(monkeypatch, vercel, status=401)
+    answer(monkeypatch, vercel, status=401, failing="/v2/teams/")
     run(monkeypatch, daily(20))
     embed = sent[0]["embeds"][0]
     assert embed["title"] == "Vercel usage could not be read: token rejected"
@@ -1086,7 +1156,10 @@ def test_the_token_alert_links_the_vercel_dashboard(
 def test_a_digest_with_every_field_fits_discords_limits(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    usage = egress_monitor.Vercel(10**12, 10.0**9, 10**12, 10**11, 10**18)
+    services = [egress_monitor.Service("x" * 300, 10.0**12, "Requests", 10.0**9)] * 50
+    usage = egress_monitor.Vercel(
+        NOW, NOW + timedelta(days=30), NOW, 10.0**12, 10.0**12, 10.0**12, services, 1.0
+    )
     m = egress_monitor.meters(daily(20_000), NOW)
     payload = egress_monitor.digest(m, [], None, 499.0, None, usage)
     names = [f["name"] for f in payload["embeds"][0]["fields"]]
@@ -1135,7 +1208,7 @@ def test_staging_without_measured_bytes_reads_not_measured() -> None:
     assert not m.staging_measured and m.partial
     payload = egress_monitor.digest(m, [])
     fields = {f["name"]: f["value"] for f in payload["embeds"][0]["fields"]}
-    assert "\nStaging       -      -\n" in fields[egress_monitor.EGRESS_FIELD]
+    assert "\nStaging       -       -\n" in fields[egress_monitor.EGRESS_FIELD]
 
 
 def test_the_digest_splits_the_cycle_by_project_and_totals_it() -> None:
@@ -1145,8 +1218,9 @@ def test_the_digest_splits_the_cycle_by_project_and_totals_it() -> None:
     table = fields[egress_monitor.EGRESS_FIELD].split("```")[1]
     assert table == (
         "\n"
-        "         28 Sep  Cycle\n"
-        "Prod      20 MB  60 MB\n"
-        "Staging    5 MB  15 MB\n"
-        "Total     25 MB  75 MB\n"
+        "         28 Sep   Cycle\n"
+        "Prod      20 MB   60 MB\n"
+        "Staging    5 MB   15 MB\n"
+        "Total     25 MB   75 MB\n"
+        "Budget   167 MB  5.0 GB\n"
     )
