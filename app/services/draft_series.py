@@ -144,10 +144,14 @@ def refuse_bad_replacement(
     session: OrmSession,
     match_id: int | None,
     replaces_series_id: int | None,
-    players: Iterable[int | None],
-    skip_draft_id: int | None = None,
 ) -> None:
-    """A replacing draft names an open series of its own fixture and keeps a player."""
+    """A replacing draft names an open series of its own fixture.
+
+    It may keep one of the two players or name two new ones: a series that
+    needs a new player and one that is replaced whole both go through it.
+    Several drafts may name the same series as proposals; publishing one
+    removes the series, and its foreign key cascades the others away.
+    """
     if replaces_series_id is None:
         return
     row = session.get(Series, replaces_series_id)
@@ -155,19 +159,6 @@ def refuse_bad_replacement(
         raise BadRequestError("A replacement names a series of the same fixture")
     if row.player1_score is not None or row.player2_score is not None:
         raise BadRequestError("A series that holds a result is not replaced")
-    if not {row.player1_id, row.player2_id} & {
-        player for player in players if player is not None
-    }:
-        raise BadRequestError("A replacement keeps one of the two players")
-    open_drafts = (
-        select(func.count())
-        .select_from(DraftSeries)
-        .where(col(DraftSeries.replaces_series_id) == replaces_series_id)
-    )
-    if skip_draft_id is not None:
-        open_drafts = open_drafts.where(col(DraftSeries.id) != skip_draft_id)
-    if session.scalar(open_drafts):
-        raise ApiError(409, {"error": "A draft already replaces this series"})
 
 
 def clear_ready(session: OrmSession, match_id: int | None) -> None:

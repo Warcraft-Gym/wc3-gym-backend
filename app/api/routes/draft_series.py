@@ -84,7 +84,6 @@ def _caller_id(claims: dict[str, Any], users: UserService) -> int | None:
 def _rules(
     match_id: int | None,
     players: tuple[int | None, ...],
-    pairing: tuple[int | None, ...],
     *,
     draft_series_id: int | None = None,
     replaces_series_id: int | None = None,
@@ -94,21 +93,15 @@ def _rules(
     A drafted series of a fixture names a player its siblings do not: a mixed
     fixture, the Altar of Champions Clan War, plays several drafted series, and
     a player plays one of them. An edit skips its own row. A replacement names
-    an open series of the same fixture. The round counts only at publish, so a
-    draft takes any number of pairings. `players` is what the write names,
-    `pairing` the pair it ends up with.
+    an open series of the same fixture, and may keep a player or name two new
+    ones. The round counts only at publish, so a draft takes any number of
+    pairings. `players` is what the write names.
     """
     with Session.begin() as session:
         draft_series.refuse_repeat(
             session, match_id, players, skip_draft_id=draft_series_id
         )
-        draft_series.refuse_bad_replacement(
-            session,
-            match_id,
-            replaces_series_id,
-            pairing,
-            skip_draft_id=draft_series_id,
-        )
+        draft_series.refuse_bad_replacement(session, match_id, replaces_series_id)
 
 
 @router.post(
@@ -125,11 +118,9 @@ def add_draft_series(
 ) -> DraftSeriesPublic:
     """Create a new draft series for a match the caller's team plays."""
     _own_match(claims, data.match_id, matches)
-    pairing = (data.player1_id, data.player2_id)
     _rules(
         data.match_id,
-        pairing,
-        pairing,
+        (data.player1_id, data.player2_id),
         replaces_series_id=data.replaces_series_id,
     )
     return service.add(data, _caller_id(claims, users))
@@ -155,10 +146,6 @@ def update_draft_series(
     _rules(
         data.match_id or existing.match_id,
         (data.player1_id, data.player2_id),
-        (
-            data.player1_id or existing.player1_id,
-            data.player2_id or existing.player2_id,
-        ),
         draft_series_id=draft_series_id,
         replaces_series_id=existing.replaces_series_id,
     )

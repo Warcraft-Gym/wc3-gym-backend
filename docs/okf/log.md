@@ -2,7 +2,7 @@
 
 ## 2026-10-02
 
-* **Update**: a fixture's draft takes any number of pairings; `POST /draft-series` no longer refuses a full round. `POST /draft-series/{id}/promote` refuses a pairing once the fixture holds `series_per_round` published series, and the pairing stays in the draft; a replacement is free of that count. [GNL season](concepts/gnl-season.md) and [draft_series](data/tables/draft_series.md) state it.
+* **Update**: a fixture's draft takes any number of pairings; `POST /draft-series` no longer refuses a full round. `POST /draft-series/{id}/promote` refuses a pairing once the fixture holds `series_per_round` published series, and the pairing stays in the draft; a replacement is free of that count. A replacement may keep one of the two players or name two new ones, so a series is replaced whole as well, and several drafts may propose a replacement of one series: publishing one removes the others with the series. [GNL season](concepts/gnl-season.md) and [draft_series](data/tables/draft_series.md) state it.
 
 ## 2026-10-01
 
