@@ -27,6 +27,12 @@ class DraftBoardPlayer(SQLModel):
     vs_race: dict[str, list[int]] = {}
     # His last ten counted ladder games on that race, newest first, as W and L
     form: str = ""
+    # Whether he entered any availability: a repeating block, or a busy day
+    # that is not over before the round starts. Without it his hours count
+    # as free all week.
+    availability_entered: bool = False
+    # When he last changed one of those rows; null when he entered none
+    availability_changed_at: datetime | None = None
 
 
 class DraftBoardPair(SQLModel):
@@ -55,6 +61,9 @@ class DraftBoard(SQLModel):
     playday: int
     team1_id: int
     team2_id: int
+    # The instants the round runs between, in UTC; null when it has no dates
+    window_start: datetime | None = None
+    window_end: datetime | None = None
     # The stage default of the largest MMR difference; null off a captain draft
     max_mmr_difference: int | None = None
     series_per_round: int

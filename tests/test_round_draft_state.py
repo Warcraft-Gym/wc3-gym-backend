@@ -128,18 +128,23 @@ def test_a_pairing_names_who_wrote_it_and_who_changed_it(
     assert nothing.status_code == 404, nothing.text
 
 
-def test_a_full_fixture_refuses_another_pairing(
+def test_a_full_fixture_drafts_more_but_publishes_no_more(
     client: Client, draft: dict[str, Any]
 ) -> None:
     """The seeded event plays two series a round and the fixture holds both."""
+    made = client.post("/draft-series", json=pairing(draft), headers=draft["captain_a"])
+    assert made.status_code == 201, made.text
+
     refused = client.post(
-        "/draft-series", json=pairing(draft), headers=draft["captain_a"]
+        f"/draft-series/{made.json()['id']}/promote", headers=draft["captain_a"]
     )
 
     assert refused.status_code == 409, refused.text
     assert refused.json() == {
         "error": "This fixture already holds 2 series of the round"
     }
+    kept = client.get(f"/draft-series/{made.json()['id']}", headers=draft["captain_a"])
+    assert kept.status_code == 200, kept.text
 
 
 def test_a_replacing_pairing_does_not_count_against_the_round(
@@ -156,17 +161,45 @@ def test_a_replacing_pairing_does_not_count_against_the_round(
     assert made.status_code == 201, made.text
     assert made.json()["replaces_series_id"] == seeded["series_open_id"]
 
-    twice = client.post(
+    # A second proposal for the same series stands beside the first
+    another = client.post(
         "/draft-series",
-        json=pairing(draft, one=1, two=2)
+        json=pairing(draft, one=0, two=3)
         | {"replaces_series_id": seeded["series_open_id"]},
         headers=draft["captain_a"],
     )
-    assert twice.status_code == 409, twice.text
-    assert twice.json() == {"error": "A draft already replaces this series"}
+    assert another.status_code == 201, another.text
 
 
-def test_a_replacement_names_an_open_series_and_keeps_a_player(
+def test_publishing_one_proposal_removes_the_others(
+    client: Client,
+    draft: dict[str, Any],
+    seeded: dict[str, Any],
+    auth_headers: dict[str, str],
+) -> None:
+    """Two drafts propose a replacement of the open series; the published one wins."""
+    proposals = [
+        client.post(
+            "/draft-series",
+            json=pairing(draft, one=one, two=two)
+            | {"replaces_series_id": seeded["series_open_id"]},
+            headers=draft["captain_a"],
+        )
+        for one, two in ((1, 2), (0, 3))
+    ]
+    assert all(made.status_code == 201 for made in proposals), [
+        p.text for p in proposals
+    ]
+    chosen, other = (made.json()["id"] for made in proposals)
+
+    published = client.post(f"/draft-series/{chosen}/promote", headers=auth_headers)
+    assert published.status_code == 201, published.text
+
+    gone = client.get(f"/draft-series/{other}", headers=auth_headers)
+    assert gone.status_code == 404, gone.text
+
+
+def test_a_replacement_names_an_open_series_of_its_fixture(
     client: Client, draft: dict[str, Any], seeded: dict[str, Any]
 ) -> None:
     scored = client.post(
@@ -178,14 +211,15 @@ def test_a_replacement_names_an_open_series_and_keeps_a_player(
     assert scored.status_code == 400, scored.text
     assert scored.json() == {"error": "A series that holds a result is not replaced"}
 
-    strangers = client.post(
+    # The open series pairs P2 and P4; a replacement may name two new players
+    whole = client.post(
         "/draft-series",
         json=pairing(draft, one=0, two=2)
         | {"replaces_series_id": seeded["series_open_id"]},
         headers=draft["captain_a"],
     )
-    assert strangers.status_code == 400, strangers.text
-    assert strangers.json() == {"error": "A replacement keeps one of the two players"}
+    assert whole.status_code == 201, whole.text
+    assert whole.json()["replaces_series_id"] == seeded["series_open_id"]
 
     elsewhere = client.post(
         "/draft-series",

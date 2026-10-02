@@ -4,8 +4,9 @@ The seeded open series is P2 (Alpha) against P4 (Beta) in round 1, which runs
 from 5 to 11 January 2026. No seeded player has a timezone.
 """
 
+import json
 from collections.abc import Callable, Iterator
-from datetime import date
+from datetime import date, time
 from typing import Any
 
 import pytest
@@ -21,7 +22,7 @@ from app.models.relationships import DBEventRound
 from app.models.season import Season
 from app.models.series import Series
 from app.models.user import User
-from app.models.user_block import UserBusy
+from app.models.user_block import UserBlock, UserBusy
 from app.models.user_team_season import DBUserTeamSeason
 from app.services.availability import NO_SCHEDULING, AvailabilityService
 from tests.seed import active, add_season
@@ -626,17 +627,79 @@ def pair_free_time(
     )
 
 
-def test_a_captain_counts_the_hours_a_pair_of_his_round_shares(
+def test_a_captain_reads_the_free_time_of_a_pair_of_his_round(
     client: Client, seeded: dict[str, Any], captain: dict[str, str]
 ) -> None:
-    """P1 captains Alpha, and P2 plays for Alpha; the count carries no range."""
+    """P1 captains Alpha, and P2 plays for Alpha; the answer has the series
+    read's shape, and nobody blocked anything, so the whole round is open."""
     p2, p3 = seeded["player_ids"][1], seeded["player_ids"][2]
 
     resp = pair_free_time(client, seeded, captain, (p2, p3))
 
     assert resp.status_code == 200, resp.text
-    assert resp.json() == {"hours": 168.0}
+    assert resp.json() == {
+        "start": "2026-01-05T00:00:00Z",
+        "end": "2026-01-12T00:00:00Z",
+        "hours": 168.0,
+        "ranges": [{"start": "2026-01-05T00:00:00Z", "end": "2026-01-12T00:00:00Z"}],
+        "blocked1": [],
+        "blocked2": [],
+    }
     assert pair_free_time(client, seeded, captain, (p3, p2)).status_code == 200
+
+
+def test_the_pair_free_time_is_never_stored_in_a_shared_cache(
+    client: Client, seeded: dict[str, Any], captain: dict[str, str]
+) -> None:
+    p2, p3 = seeded["player_ids"][1], seeded["player_ids"][2]
+
+    resp = pair_free_time(client, seeded, captain, (p2, p3))
+
+    assert resp.headers["cache-control"] == "private, max-age=30"
+    assert resp.headers["vary"] == "Authorization"
+
+
+def test_the_pair_names_whose_block_is_whose(
+    client: Client, seeded: dict[str, Any], captain: dict[str, str]
+) -> None:
+    """Each list holds the blocked hours of the player named in that place of
+    the pair, and no label or id travels. P2 sleeps until eight, P3 works
+    from noon to eight in the evening, every day, both on London time."""
+    p2, p3 = seeded["player_ids"][1], seeded["player_ids"][2]
+    for player in (p2, p3):
+        set_zone(player, "Europe/London")
+    with Session.begin() as session:
+        session.add_all(
+            [
+                UserBlock(
+                    user_id=p2,
+                    label="Asleep",
+                    weekdays=127,
+                    start_local=time(0, 0),
+                    end_local=time(8, 0),
+                ),
+                UserBlock(
+                    user_id=p3,
+                    weekdays=127,
+                    start_local=time(12, 0),
+                    end_local=time(20, 0),
+                ),
+            ]
+        )
+    asleep = {"start": "2026-01-05T00:00:00Z", "end": "2026-01-05T08:00:00Z"}
+    working = {"start": "2026-01-05T12:00:00Z", "end": "2026-01-05T20:00:00Z"}
+
+    body = pair_free_time(client, seeded, captain, (p2, p3)).json()
+    turned = pair_free_time(client, seeded, captain, (p3, p2)).json()
+
+    assert "Asleep" not in json.dumps(body)
+    assert (body["blocked1"][0], body["blocked2"][0]) == (asleep, working)
+    assert (turned["blocked1"][0], turned["blocked2"][0]) == (working, asleep)
+    assert body["hours"] == turned["hours"] == 7 * 8
+    assert body["ranges"][0] == {
+        "start": "2026-01-05T08:00:00Z",
+        "end": "2026-01-05T12:00:00Z",
+    }
 
 
 def test_the_pair_hours_cover_the_round_asked_for(
@@ -650,10 +713,15 @@ def test_the_pair_hours_cover_the_round_asked_for(
             UserBusy(user_id=p2, first_day=date(2026, 1, 5), last_day=date(2026, 1, 11))
         )
 
-    assert pair_free_time(client, seeded, captain, (p2, p3)).json() == {"hours": 0.0}
-    assert pair_free_time(client, seeded, captain, (p2, p3), playday=2).json() == {
-        "hours": 168.0
-    }
+    round_one = pair_free_time(client, seeded, captain, (p2, p3)).json()
+    assert round_one["hours"] == 0.0
+    assert round_one["ranges"] == []
+    assert round_one["blocked1"] == [
+        {"start": "2026-01-05T00:00:00Z", "end": "2026-01-12T00:00:00Z"}
+    ]
+    round_two = pair_free_time(client, seeded, captain, (p2, p3), playday=2).json()
+    assert round_two["hours"] == 168.0
+    assert round_two["blocked1"] == []
 
 
 def test_a_captain_does_not_read_a_pair_of_two_other_players(
@@ -730,7 +798,7 @@ def test_a_captain_reads_a_pair_that_holds_a_player_of_another_team(
     resp = pair_free_time(client, seeded, captain, (p2, p3))
 
     assert resp.status_code == 200, resp.text
-    assert resp.json() == {"hours": 168.0}
+    assert resp.json()["hours"] == 168.0
 
 
 def test_an_admin_does_not_read_a_pair_that_holds_an_outsider(
@@ -748,7 +816,7 @@ def test_an_admin_does_not_read_a_pair_that_holds_an_outsider(
 def test_a_player_of_the_pair_does_not_read_it(
     client: Client, seeded: dict[str, Any], member: Callable[..., dict[str, str]]
 ) -> None:
-    """The count is a captain's tool; a player captains nothing here."""
+    """The pair read is a captain's tool; a player captains nothing here."""
     p2, p3 = seeded["player_ids"][1], seeded["player_ids"][2]
 
     resp = pair_free_time(client, seeded, member("2"), (p2, p3))
@@ -765,7 +833,7 @@ def test_an_admin_reads_a_pair_of_any_team_in_the_event(
     resp = pair_free_time(client, seeded, auth_headers, (p3, p4))
 
     assert resp.status_code == 200, resp.text
-    assert resp.json() == {"hours": 168.0}
+    assert resp.json()["hours"] == 168.0
 
 
 def test_an_event_without_scheduling_refuses_the_pair_hours(

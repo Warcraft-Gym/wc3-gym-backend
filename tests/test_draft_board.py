@@ -256,6 +256,54 @@ def test_a_round_with_no_dates_answers_the_board_without_hours(
     assert by_id[players[0]]["form"] == "LWLWLWLWLW"
     assert body["max_mmr_difference"] == 120
     assert body["published_series"] == 2
+    # no window, yet a repeating block still says the player entered his times
+    assert (body["window_start"], body["window_end"]) == (None, None)
+    assert by_id[players[0]]["availability_entered"] is True
+    assert by_id[players[1]]["availability_entered"] is False
+
+
+def test_the_board_says_who_entered_availability_and_when(
+    client: Client, board_league: dict[str, Any], captain: dict[str, str]
+) -> None:
+    """P1 blocks Monday mornings. P3's only busy day ended before the round,
+    so it says nothing about it; P4 is busy on a day of the round. P2 entered
+    nothing, so his hours count as free all week."""
+    players = board_league["player_ids"]
+    changed = datetime(2025, 12, 20, 9, 30, tzinfo=UTC)
+    with Session() as session:
+        session.add_all(
+            [
+                UserBusy(
+                    user_id=players[2],
+                    first_day=date(2025, 12, 1),
+                    last_day=date(2025, 12, 2),
+                ),
+                UserBusy(
+                    user_id=players[3],
+                    first_day=date(2026, 1, 7),
+                    last_day=date(2026, 1, 7),
+                    updated_at=changed,
+                ),
+            ]
+        )
+        session.commit()
+
+    body = client.get(
+        f"/matches/{board_league['match_id']}/draft-board", headers=captain
+    ).json()
+
+    by_id = {row["user_id"]: row for row in body["players"]}
+    assert by_id[players[0]]["availability_entered"] is True
+    assert by_id[players[0]]["availability_changed_at"] is not None
+    assert by_id[players[1]]["availability_entered"] is False
+    assert by_id[players[1]]["availability_changed_at"] is None
+    assert by_id[players[2]]["availability_entered"] is False
+    assert by_id[players[3]]["availability_entered"] is True
+    assert by_id[players[3]]["availability_changed_at"] == "2025-12-20T09:30:00Z"
+    assert (body["window_start"], body["window_end"]) == (
+        "2026-01-05T00:00:00Z",
+        "2026-01-12T00:00:00Z",
+    )
 
 
 def test_the_board_counts_the_hours_over_the_round_window_of_the_event_zone(

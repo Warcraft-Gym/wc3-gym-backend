@@ -84,34 +84,24 @@ def _caller_id(claims: dict[str, Any], users: UserService) -> int | None:
 def _rules(
     match_id: int | None,
     players: tuple[int | None, ...],
-    pairing: tuple[int | None, ...],
     *,
     draft_series_id: int | None = None,
     replaces_series_id: int | None = None,
-    creating: bool = False,
 ) -> None:
     """The rules of one drafted pairing, in one transaction.
 
     A drafted series of a fixture names a player its siblings do not: a mixed
     fixture, the Altar of Champions Clan War, plays several drafted series, and
-    a player plays one of them. An edit skips its own row. A new pairing also
-    counts against the round, and a replacement names an open series of the
-    same fixture. `players` is what the write names, `pairing` the pair it ends
-    up with.
+    a player plays one of them. An edit skips its own row. A replacement names
+    an open series of the same fixture, and may keep a player or name two new
+    ones. The round counts only at publish, so a draft takes any number of
+    pairings. `players` is what the write names.
     """
     with Session.begin() as session:
         draft_series.refuse_repeat(
             session, match_id, players, skip_draft_id=draft_series_id
         )
-        draft_series.refuse_bad_replacement(
-            session,
-            match_id,
-            replaces_series_id,
-            pairing,
-            skip_draft_id=draft_series_id,
-        )
-        if creating:
-            draft_series.refuse_full(session, match_id, replaces_series_id)
+        draft_series.refuse_bad_replacement(session, match_id, replaces_series_id)
 
 
 @router.post(
@@ -128,13 +118,10 @@ def add_draft_series(
 ) -> DraftSeriesPublic:
     """Create a new draft series for a match the caller's team plays."""
     _own_match(claims, data.match_id, matches)
-    pairing = (data.player1_id, data.player2_id)
     _rules(
         data.match_id,
-        pairing,
-        pairing,
+        (data.player1_id, data.player2_id),
         replaces_series_id=data.replaces_series_id,
-        creating=True,
     )
     return service.add(data, _caller_id(claims, users))
 
@@ -159,14 +146,8 @@ def update_draft_series(
     _rules(
         data.match_id or existing.match_id,
         (data.player1_id, data.player2_id),
-        (
-            data.player1_id or existing.player1_id,
-            data.player2_id or existing.player2_id,
-        ),
         draft_series_id=draft_series_id,
         replaces_series_id=existing.replaces_series_id,
-        # A pairing moved to another fixture counts against that fixture's round
-        creating=data.match_id is not None and data.match_id != existing.match_id,
     )
     return service.update(draft_series_id, data, _caller_id(claims, users))
 
@@ -243,16 +224,22 @@ def delete_all_draft_series_for_match(
 @router.post(
     "/draft-series/{draft_series_id}/promote",
     status_code=201,
-    dependencies=[Depends(require_admin)],
 )
 def promote_draft_series(
-    draft_series_id: int, service: DraftSeriesServiceDep
+    draft_series_id: int,
+    service: DraftSeriesServiceDep,
+    matches: MatchServiceDep,
+    claims: RequireCaptain,
 ) -> SeriesPublic:
     """Publish a draft series and delete the draft, in one transaction.
 
-    A draft that names a series it replaces removes that series too; a series
-    that holds a result or a replay answers 409 and nothing changes.
+    A captain of either team of the fixture publishes, and an admin publishes
+    any. A draft that names a series it replaces removes that series too; a
+    series that holds a result or a replay answers 409 and nothing changes.
+    The seat check reads only the draft's fixture, and an admin skips it.
     """
+    if not is_admin(claims):
+        _own_match(claims, service.match_of(draft_series_id), matches)
     return service.promote(draft_series_id)
 
 

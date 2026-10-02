@@ -1571,8 +1571,9 @@ WRITES: dict[str, tuple[WriteCase, int]] = {
         2,
     ),
     "POST /draft-series/{draft_series_id}/promote": (
+        # the round check is one statement: the round size and the published count
         lambda w: ("POST", f"/draft-series/{w.free_draft()}/promote", None, w.admin),
-        23,
+        24,
     ),
     "PUT /draft-series/match/{match_id}/teams/{team_id}/ready": (
         lambda w: (

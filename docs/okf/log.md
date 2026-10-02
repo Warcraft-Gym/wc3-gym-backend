@@ -1,11 +1,17 @@
 # Bundle history
 
+## 2026-10-02
+
+* **Update**: a fixture's draft takes any number of pairings; `POST /draft-series` no longer refuses a full round. `POST /draft-series/{id}/promote` refuses a pairing once the fixture holds `series_per_round` published series, and the pairing stays in the draft; a replacement is free of that count. A replacement may keep one of the two players or name two new ones, so a series is replaced whole as well, and several drafts may propose a replacement of one series: publishing one removes the others with the series. [GNL season](concepts/gnl-season.md) and [draft_series](data/tables/draft_series.md) state it.
+
 ## 2026-10-01
 
 * **Update**: the [egress monitor](api/jobs.md#the-egress-monitor) reads Vercel usage from the billing period's charges against the usage credit, lists ISR Writes, and turns amber, never red, past the credit; the Supabase daily budget is the cap spread over the cycle's days, counted on both projects.
 
 ## 2026-09-30
 
+* **Update**: either captain of a fixture publishes its drafts (`POST /draft-series/{id}/promote`), as an admin does; the captain's fantasy mark on a draft is carried onto the series. [GNL season](concepts/gnl-season.md), [draft_series](data/tables/draft_series.md) and [roles and permissions](concepts/roles-and-permissions.md) state it.
+* **Update**: the pair free-time read answers the shared intervals and each player's blocked intervals, as the series read does, sent private; the draft board says whether each player entered any availability and when he last changed it, and carries the round window. [Scheduling and availability](concepts/scheduling-and-availability.md) and [GNL season](concepts/gnl-season.md) state it.
 * **Add**: [A season ends on the admin's close](decisions/season-ends-on-close.md). An event whose teams are drafted is finished by the close alone; `POST /events/{id}/finish` stamps `closed_at` on every event and `POST /events/{id}/reopen` clears it and deletes the awards; the GNL phase reads `complete` once closed and `overdue` past the end date; [GNL season](concepts/gnl-season.md), [the events module](concepts/events-module.md), [event](data/tables/event.md) and [event_award](data/tables/event_award.md) state it.
 * **Update**: [what a read costs](api/overview.md#what-a-read-costs) states that a read a consumer's page calls builds each statement once, with bound parameters.
 

@@ -1,10 +1,10 @@
 ---
 type: Domain Concept
 title: Scheduling and availability
-description: A player answers whether they can play a round, keeps soft blocks that inform but never constrain, and a pair's shared free time is read as intervals for a series and as one count before one exists.
+description: A player answers whether they can play a round, keeps soft blocks that inform but never constrain, and a pair's shared free time and each player's blocked time are read as intervals, for a series and before one exists.
 resource: ../../../app/services/availability.py
 tags: [events, scheduling]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-26T20:17:19Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-09-30T20:11:46Z }
 sources:
   - id: availability
     resource: ../../../app/services/availability.py
@@ -47,7 +47,7 @@ What follows, each learned the hard way:
 
 # Free time of a pair, before a series exists
 
-A captain pairing a round needs to know whether two players can meet at all, before any series names them. `GET /events/{event_id}/rounds/{playday}/free-time?player1_id=&player2_id=` answers one number, `hours`: the length of the time both have open across the round window. It carries no interval and no block, so a captain reads how much the pair shares and never when either is busy. Both players of the pair take part in that event, on the roster of one of its teams; a captain reads such a pair when one of the two plays for the team they captain there, an admin reads any such pair, and every other pair is refused under one code that names neither side.
+A captain pairing a round needs to know whether two players can meet at all, and when, before any series names them. `GET /events/{event_id}/rounds/{playday}/free-time?player1_id=&player2_id=` answers the shape the series read answers, over the round window: the intervals both have open, their length as `hours`, and each player's own blocked intervals as `blocked1` and `blocked2`, in the order the query names the two. A block's label and id stay with their owner, as on the series read. Both players of the pair take part in that event, on the roster of one of its teams; a captain reads such a pair when one of the two plays for the team they captain there, an admin reads any such pair, and every other pair is refused under one code that names neither side. The answer is the caller's own, so it is sent `Cache-Control: private` and no shared cache stores it.
 
 Both reads share one helper, which takes two player ids and a window and answers each player's blocked intervals; the shared open time is what neither of the two covers. A caller that answers many pairs at once loads the blocks once per player and passes them in, so a player found there costs no statement.
 
