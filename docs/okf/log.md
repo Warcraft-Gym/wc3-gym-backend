@@ -1,5 +1,9 @@
 # Bundle history
 
+## 2026-10-02
+
+* **Update**: a fixture's draft takes any number of pairings; `POST /draft-series` no longer refuses a full round. `POST /draft-series/{id}/promote` refuses a pairing once the fixture holds `series_per_round` published series, and the pairing stays in the draft; a replacement is free of that count. [GNL season](concepts/gnl-season.md) and [draft_series](data/tables/draft_series.md) state it.
+
 ## 2026-10-01
 
 * **Update**: the [egress monitor](api/jobs.md#the-egress-monitor) reads Vercel usage from the billing period's charges against the usage credit, lists ISR Writes, and turns amber, never red, past the credit; the Supabase daily budget is the cap spread over the cycle's days, counted on both projects.

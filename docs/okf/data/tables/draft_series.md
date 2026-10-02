@@ -4,7 +4,7 @@ title: draft_series
 description: One series a captain proposed inside a GNL fixture, held apart from the series table until a captain of the fixture or an admin publishes it.
 resource: ../../../../app/models/draft_series.py
 tags: [events, data]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-30T20:04:47Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-02T13:50:00Z }
 verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
 sources:
   - id: model
@@ -42,6 +42,6 @@ Primary key `id`. Foreign keys: `match_id` to [matches](matches.md); `player1_id
 
 Promotion, by a captain of either team of the fixture or an admin, writes the [series](series.md) row and deletes the draft in one transaction. Deleting a fixture's drafts is one delete by `match_id`.
 
-A fixture drafts up to the event's `series_per_round` pairings: published series plus open drafts, counted on create. A series a template wrote carries a `sequence` and counts by its template instead.
+A fixture drafts any number of pairings. It publishes up to the event's `series_per_round` series, counted on promote over the published series alone; a draft that replaces a series is free of that count. A series a template wrote carries a `sequence` and counts by its template instead.
 
 A pairing that names `replaces_series_id` replaces that published series: the series belongs to the same fixture, holds no result, and keeps one of its two players, and at most one draft replaces it. It is free of the round count. Publishing it removes the replaced series in the same transaction, with the booked time, the veto steps, the casts and the fantasy rows that hang on it; a series that holds a result or a replay is refused and nothing changes. See [GNL season](../../concepts/gnl-season.md).

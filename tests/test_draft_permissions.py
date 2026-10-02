@@ -35,7 +35,7 @@ def captain(
 @pytest.fixture
 def room(client: Client, seeded: dict[str, Any], auth_headers: dict[str, str]) -> None:
     """The seeded fixture already holds the two series of its round, and a
-    fixture that is full refuses another pairing, so these tests widen it."""
+    fixture that is full publishes no more, so these tests widen it."""
     resp = client.put(
         f"/events/{seeded['season_id']}",
         json={"series_per_round": 6},

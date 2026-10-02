@@ -109,35 +109,31 @@ def refuse_repeat(
 def refuse_full(
     session: OrmSession, match_id: int | None, replaces_series_id: int | None = None
 ) -> None:
-    """A fixture drafts up to the event's series_per_round pairings.
+    """A fixture publishes up to the event's series_per_round series.
 
-    Published series plus open drafts count. A draft that replaces a published
-    series takes its place, so it is free. A templated series carries a
-    sequence and is counted by its template, not by the round setting.
+    Only published series count: the draft holds as many pairings as the
+    captains want, and publishing one past the round is refused. A draft that
+    replaces a published series takes its place, so it is free. A templated
+    series carries a sequence and is counted by its template, not by the round
+    setting.
     """
     if match_id is None or replaces_series_id is not None:
         return
-    per_round = session.scalar(
-        select(col(Season.series_per_round))
-        .join(Match, col(Match.season_id) == col(Season.id))
-        .where(col(Match.id) == match_id)
-    )
-    if not per_round:
-        return
-    published = session.scalar(
+    published = (
         select(func.count())
         .select_from(Series)
         .where(col(Series.match_id) == match_id, col(Series.sequence).is_(None))
+        .scalar_subquery()
     )
-    drafted = session.scalar(
-        select(func.count())
-        .select_from(DraftSeries)
-        .where(
-            col(DraftSeries.match_id) == match_id,
-            col(DraftSeries.replaces_series_id).is_(None),
-        )
-    )
-    if (published or 0) + (drafted or 0) >= per_round:
+    row = session.execute(
+        select(col(Season.series_per_round), published)
+        .join(Match, col(Match.season_id) == col(Season.id))
+        .where(col(Match.id) == match_id)
+    ).first()
+    if row is None or not row[0]:
+        return
+    per_round, held = row
+    if (held or 0) >= per_round:
         raise ApiError(
             409,
             {"error": f"This fixture already holds {per_round} series of the round"},
@@ -338,7 +334,8 @@ class DraftSeriesService:
         """Publish a draft: write the series and drop the draft, in one transaction.
 
         A draft that names a series it replaces removes that series in the same
-        transaction, so the admin swaps the pairing in one action.
+        transaction, so the admin swaps the pairing in one action. Any other
+        draft is refused once the fixture holds the round's series.
         """
         with Session.begin() as session:
             draft = session.get(DraftSeries, draft_series_id)
@@ -347,6 +344,8 @@ class DraftSeriesService:
             replaced_id = draft.replaces_series_id
             if replaced_id is not None:
                 _refuse_replace(session, replaced_id)
+            else:
+                refuse_full(session, draft.match_id)
             create = SeriesCreate(
                 match_id=draft.match_id,
                 date_time=draft.date_time,

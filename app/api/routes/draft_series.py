@@ -88,16 +88,15 @@ def _rules(
     *,
     draft_series_id: int | None = None,
     replaces_series_id: int | None = None,
-    creating: bool = False,
 ) -> None:
     """The rules of one drafted pairing, in one transaction.
 
     A drafted series of a fixture names a player its siblings do not: a mixed
     fixture, the Altar of Champions Clan War, plays several drafted series, and
-    a player plays one of them. An edit skips its own row. A new pairing also
-    counts against the round, and a replacement names an open series of the
-    same fixture. `players` is what the write names, `pairing` the pair it ends
-    up with.
+    a player plays one of them. An edit skips its own row. A replacement names
+    an open series of the same fixture. The round counts only at publish, so a
+    draft takes any number of pairings. `players` is what the write names,
+    `pairing` the pair it ends up with.
     """
     with Session.begin() as session:
         draft_series.refuse_repeat(
@@ -110,8 +109,6 @@ def _rules(
             pairing,
             skip_draft_id=draft_series_id,
         )
-        if creating:
-            draft_series.refuse_full(session, match_id, replaces_series_id)
 
 
 @router.post(
@@ -134,7 +131,6 @@ def add_draft_series(
         pairing,
         pairing,
         replaces_series_id=data.replaces_series_id,
-        creating=True,
     )
     return service.add(data, _caller_id(claims, users))
 
@@ -165,8 +161,6 @@ def update_draft_series(
         ),
         draft_series_id=draft_series_id,
         replaces_series_id=existing.replaces_series_id,
-        # A pairing moved to another fixture counts against that fixture's round
-        creating=data.match_id is not None and data.match_id != existing.match_id,
     )
     return service.update(draft_series_id, data, _caller_id(claims, users))
 

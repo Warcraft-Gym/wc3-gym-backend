@@ -128,18 +128,23 @@ def test_a_pairing_names_who_wrote_it_and_who_changed_it(
     assert nothing.status_code == 404, nothing.text
 
 
-def test_a_full_fixture_refuses_another_pairing(
+def test_a_full_fixture_drafts_more_but_publishes_no_more(
     client: Client, draft: dict[str, Any]
 ) -> None:
     """The seeded event plays two series a round and the fixture holds both."""
+    made = client.post("/draft-series", json=pairing(draft), headers=draft["captain_a"])
+    assert made.status_code == 201, made.text
+
     refused = client.post(
-        "/draft-series", json=pairing(draft), headers=draft["captain_a"]
+        f"/draft-series/{made.json()['id']}/promote", headers=draft["captain_a"]
     )
 
     assert refused.status_code == 409, refused.text
     assert refused.json() == {
         "error": "This fixture already holds 2 series of the round"
     }
+    kept = client.get(f"/draft-series/{made.json()['id']}", headers=draft["captain_a"])
+    assert kept.status_code == 200, kept.text
 
 
 def test_a_replacing_pairing_does_not_count_against_the_round(
