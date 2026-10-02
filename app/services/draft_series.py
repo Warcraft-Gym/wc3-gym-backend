@@ -287,6 +287,18 @@ class DraftSeriesService:
             if row:
                 clear_ready(session, row.match_id)
 
+    def match_of(self, draft_series_id: int) -> int | None:
+        """The fixture of one draft, in one statement, for the seat check."""
+        with Session.begin() as session:
+            row = session.execute(
+                select(col(DraftSeries.match_id)).where(
+                    col(DraftSeries.id) == draft_series_id
+                )
+            ).first()
+            if row is None:
+                raise NotFoundError("Draft series not found")
+            return row[0]
+
     def get(self, draft_series_id: int) -> DraftSeriesPublic:
         with Session.begin() as session:
             draft_series = session.scalars(

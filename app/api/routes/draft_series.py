@@ -236,8 +236,10 @@ def promote_draft_series(
     A captain of either team of the fixture publishes, and an admin publishes
     any. A draft that names a series it replaces removes that series too; a
     series that holds a result or a replay answers 409 and nothing changes.
+    The seat check reads only the draft's fixture, and an admin skips it.
     """
-    _own_match(claims, service.get(draft_series_id).match_id, matches)
+    if not is_admin(claims):
+        _own_match(claims, service.match_of(draft_series_id), matches)
     return service.promote(draft_series_id)
 
 
