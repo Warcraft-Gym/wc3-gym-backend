@@ -50,14 +50,17 @@ def follow(
     repeated signup costs a player nothing.
 
     The answer is the row as the door reads it back, or nothing when the event
-    is no KOTH night: that is what lets the shared doors call this blind. A
-    door that already asked W3Champions for this player passes `synced`, so
-    the tag is asked about once per signup.
+    is no KOTH night or a closed one: that is what lets the shared doors call
+    this blind. A door that already asked W3Champions for this player passes
+    `synced`, so the tag is asked about once per signup.
     """
     with Session.begin() as session:
         night = session.get(Season, event_id)
         row = session.get(EventEntrant, entrant_id)
         if night is None or night.kind is not EventKind.koth or row is None:
+            return None
+        if night.closed_at is not None:
+            # A closed night keeps its rows and crowns as the close left them
             return None
         if not divisions_of(session, event_id):
             # A night with no bracket cuts nothing; the row waits unplaced
@@ -88,9 +91,12 @@ def recut(event_id: int, only: Collection[int | None] | None = None) -> None:
     cut moves takes the end of its new line and leaves the throne it wore,
     because a crown never travels between brackets. A row in a series on the
     table keeps its bracket until that series ends, and `only` limits the cut
-    to the rows it names.
+    to the rows it names. A closed night is never cut.
     """
     with Session.begin() as session:
+        night = session.get(Season, event_id)
+        if night is not None and night.closed_at is not None:
+            return
         before = {
             ident(one): one.division_id for one in _live_entrants(session, event_id)
         }
