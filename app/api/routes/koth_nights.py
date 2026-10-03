@@ -59,18 +59,22 @@ def start_series(night_id: int, data: SeriesStart) -> KothBoard:
     "/koth/nights/{night_id}/series/{series_id}",
     dependencies=[Depends(require_admin)],
 )
-def cancel_series(night_id: int, series_id: int) -> KothBoard:
-    """Take an unplayed series off the table."""
-    return live.cancel_series(night_id, series_id)
+def cancel_series(night_id: int, series_id: int, preview: bool = False) -> KothBoard:
+    """Take a series off the table, or remove a played one; `preview` answers
+    the board the removal would give and saves nothing."""
+    return live.cancel_series(night_id, series_id, preview)
 
 
 @router.put(
     "/koth/nights/{night_id}/series/{series_id}/result",
     dependencies=[Depends(require_admin)],
 )
-def set_result(night_id: int, series_id: int, data: SeriesResult) -> KothBoard:
-    """Enter who won the one map, or turn a result of tonight around."""
-    return live.set_result(night_id, series_id, data)
+def set_result(
+    night_id: int, series_id: int, data: SeriesResult, preview: bool = False
+) -> KothBoard:
+    """Enter who won the one map, or turn a result of tonight around; `preview`
+    answers the board the result would give and saves nothing."""
+    return live.set_result(night_id, series_id, data, preview)
 
 
 @router.put(
