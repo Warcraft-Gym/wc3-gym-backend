@@ -1411,3 +1411,19 @@ def test_a_preview_answers_the_fix_and_saves_nothing(
     assert played_ids(stored, top) == [series_id]
     assert crowned(stored, top) == taker
     assert only(stored, top)["played"][0]["winner"]["entrant_id"] == taker
+
+
+def test_a_koth_series_plays_one_fixed_game(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """A night's stage names no map rules, so its best of one plays one game, not three."""
+    night = open_night(client, auth_headers)
+    top = bracket_ids(night)[0]
+    first = place(client, auth_headers, night, "One#1", 1700, top)
+    second = place(client, auth_headers, night, "Two#2", 1700, top)
+    played = only(play(client, auth_headers, night["id"], first, second), top)
+    series_id = played["played"][0]["series_id"]
+
+    resp = client.get(f"/series/{series_id}")
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["rules"] == {"map_rules": "fixed", "best_of": 1}
