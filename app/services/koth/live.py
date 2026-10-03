@@ -114,9 +114,7 @@ def cancel_series(night_id: int, series_id: int) -> KothBoard:
         row = _series(session, night_id, series_id)
         if stage_engine.scored(row):
             raise BadRequestError("This series carries a result")
-        players = [row.entrant1_id, row.entrant2_id]
         session.delete(row)
-    recut(night_id, only=players)
     return board.read(night_id)
 
 
@@ -129,19 +127,12 @@ def set_result(night_id: int, series_id: int, data: SeriesResult) -> KothBoard:
     with Session.begin() as session:
         _open_night(session, night_id)
         row = _series(session, night_id, series_id)
-        was_scored = _score(session, row, data.winner)
-        players = [row.entrant1_id, row.entrant2_id]
-    # A series that just ended frees its two rows for the bounds as they stand
-    if not was_scored:
-        recut(night_id, only=players)
+        _score(session, row, data.winner)
     return board.read(night_id)
 
 
-def _score(session: OrmSession, row: Series, winner: int, kind: str = "played") -> bool:
-    """Write who won the one map and follow it into the crown and the line.
-
-    Answers whether the series carried a result before.
-    """
+def _score(session: OrmSession, row: Series, winner: int, kind: str = "played") -> None:
+    """Write who won the one map and follow it into the crown and the line."""
     was_scored = stage_engine.scored(row)
     was_slot = stage_engine.won_slot(row)
     row.player1_score = 1 if winner == 1 else 0
@@ -156,23 +147,18 @@ def _score(session: OrmSession, row: Series, winner: int, kind: str = "played") 
         loser = session.get(EventEntrant, beaten) if beaten else None
         if loser is not None:
             _to_the_end(session, loser)
-    return was_scored
 
 
-def leave(
-    session: OrmSession, event_id: int, rows: Sequence[EventEntrant]
-) -> list[int | None]:
+def leave(session: OrmSession, event_id: int, rows: Sequence[EventEntrant]) -> None:
     """Withdraw race rows from a night, forfeiting what they owe first.
 
     A row in a series on the table loses it by forfeit. A king who keeps
     another live row in his bracket passes the crown to it, with no forfeit. A
     king whose bracket has no series on the table and a player free to play in
     its line loses a forfeit series to the first of them, who takes the crown.
-    Any other throne the rows wear is left empty. Answers the rows of every
-    series scored here, for the recut.
+    Any other throne the rows wear is left empty.
     """
     ids = {ident(row) for row in rows}
-    players: list[int | None] = []
     chain = series_of(session, event_id)
     for series in chain:
         if not stage_engine.scored(series) and ids & {
@@ -180,7 +166,6 @@ def leave(
             series.entrant2_id,
         }:
             _score(session, series, 2 if series.entrant1_id in ids else 1, "forfeit")
-            players += [series.entrant1_id, series.entrant2_id]
     for division in divisions_of(session, event_id):
         king = (
             session.get(EventEntrant, division.king_entrant_id)
@@ -210,13 +195,11 @@ def leave(
             continue
         series = _add_series(session, event_id, king, challenger, bracket)
         _score(session, series, 2, "forfeit")
-        players += [series.entrant1_id, series.entrant2_id]
     left = utcnow()
     for row in rows:
         row.withdrawn_at = left
     stage_engine.uncrown(session, list(ids))
     session.flush()
-    return players
 
 
 def _first_free(
@@ -291,8 +274,8 @@ def set_bounds(night_id: int, data: BoundsWrite) -> KothBoard:
 
     The bracket rows stay where they are, so their ids, their names, their
     order, the crowns and every series keep their place; only the bound moves.
-    The night is then cut again by the new bounds, exactly as a signup cuts it,
-    and a row in a series on the table is cut when that series ends.
+    The rows are then cut again by the rating stored when each was cut; both
+    sides of a series on the table keep their bracket, also after it ends.
     """
     with Session.begin() as session:
         night = _open_night(session, night_id)
@@ -312,7 +295,7 @@ def set_bounds(night_id: int, data: BoundsWrite) -> KothBoard:
         for bracket in brackets:
             bracket.lower_bound = named[ident(bracket)]
         session.flush()
-    recut(event_id)
+    recut(event_id, bounds=True)
     return board.read(night_id)
 
 
@@ -320,11 +303,7 @@ def remove_entrant(night_id: int, entrant_id: int) -> KothBoard:
     """Take a row out of tonight; it forfeits what it owes, as a withdraw does."""
     with Session.begin() as session:
         night = _open_night(session, night_id)
-        players = leave(
-            session, ident(night), [_entrant(session, ident(night), entrant_id)]
-        )
-    if players:
-        recut(night_id, only=players)
+        leave(session, ident(night), [_entrant(session, ident(night), entrant_id)])
     return board.read(night_id)
 
 
