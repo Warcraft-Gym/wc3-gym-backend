@@ -4,7 +4,7 @@ title: Consumers of the API
 description: Who calls the backend, which routes each one reads, which tests pin those shapes, and the rules a consumer follows to keep reads off the database.
 resource: ../../../tests/test_public_contract.py
 tags: [api]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-29T14:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-03T04:51:24Z }
 sources:
   - id: public-contract
     resource: ../../../tests/test_public_contract.py
@@ -27,7 +27,7 @@ sources:
 | the Discord adapter | `wc3-gym-discord-bot` | `POST /discord/interactions` | Discord's signature |
 | the cast-reminder worker | `wc3-gym-discord-bot`, `cron/` | `GET /jobs/cast-reminders` every five minutes | `CLOUDFLARE_CRON_SECRET` bearer |
 | Vercel cron | this repository's `vercel.json` | `GET /jobs/w3c-sync` and `GET /jobs/egress-snapshot`, each once a day | `CRON_SECRET` bearer |
-| Nightbot | no repository | `GET /koth/signup`, and the deprecated `/koth/*` reads | the Nightbot token |
+| Nightbot | no repository | `GET /koth/signup`: the chat form with `q` answers one plain-text line, the parameter form with `battletag` answers JSON; and the deprecated `/koth/*` reads | the Nightbot token |
 | the stream overlay and bookmarks | none | the deprecated `/koth/*` reads | none |
 
 The WordPress shortcodes today call the older backend host, not this deployment, and that host answers 502, so the shortcodes show no data. Three of their paths do not exist here: `GET /teams/season/{id}`, `GET /seasons/{id}` and `POST /series/season/{id}/playday/{n}/search`. Before the shortcodes point at this deployment, those calls move to `GET /events/{id}/teams`, `GET /events/{id}`, and `GET /events/{id}/matches` with `GET /events/{id}/series?match_id={id}`. `GET /events/{id}` is not the old season payload: it has no `user_signup` or `signup_race`, and its `phase` and `signups_open` follow the event model, so the PHP that reads those fields changes with the move.
@@ -44,7 +44,7 @@ A change that fails one of these is a cross-repository change. Ship the consumer
 
 # Rules a consumer can rely on
 
-- Every error is `{"error": ...}`.
+- Every error is `{"error": ...}`. The chat form of `GET /koth/signup` answers a refusal as its 200 plain-text line instead, because Nightbot prints the body in chat.
 - A field is added, never renamed in place. `week_map_id` on the veto board and `playday` on fixtures are examples of names kept for consumers.
 - The GNL season payloads keep `season_id`, `phase` and `playday` although the table is `event`.
 - A player's ladder rating is the summary `race_mmrs` and `main_race` on every user payload; no payload carries the raw `w3cstats` rows.

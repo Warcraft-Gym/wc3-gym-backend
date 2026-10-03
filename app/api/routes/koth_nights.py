@@ -8,6 +8,7 @@ the run page and the night page both draw.
 from typing import Any
 
 from fastapi import APIRouter, Depends, Response
+from fastapi.responses import PlainTextResponse
 
 from app.api.deps import SettingsServiceDep, edge_cache, require_admin
 from app.models.koth_night import (
@@ -127,16 +128,26 @@ def _board(response: Response, night_id: int | None) -> KothBoard:
     return answer
 
 
-@router.get("/koth/signup")
+@router.get(
+    "/koth/signup",
+    response_model=None,
+    responses={200: {"content": {"text/plain": {"schema": {"type": "string"}}}}},
+)
 def create_signup_nightbot(
     settings: SettingsServiceDep,
     token: str | None = None,
     twitch: str | None = None,
     battletag: str | None = None,
     race: str | None = None,
-) -> dict[str, Any]:
+    q: str | None = None,
+) -> dict[str, Any] | PlainTextResponse:
     """Create a signup via URL parameters (Nightbot compatible).
 
-    Usage: GET /koth/signup?token=KOTH_TOKEN&twitch=username&battletag=Name%231234
+    Chat form, answers one plain-text line for Nightbot to print:
+    GET /koth/signup?token=KOTH_TOKEN&twitch=username&q=Name%231234+orc
+    Parameter form, answers JSON:
+    GET /koth/signup?token=KOTH_TOKEN&twitch=username&battletag=Name%231234
     """
+    if q is not None:
+        return PlainTextResponse(nightbot.chat_signup(settings, token, twitch, q))
     return nightbot.signup(settings, token, twitch, battletag, race)
