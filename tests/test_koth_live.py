@@ -531,7 +531,14 @@ def test_the_board_of_thirty_rows_is_small_and_costs_a_fixed_read(
     night = open_night(client, auth_headers)
     brackets = bracket_ids(night)
     rows = [
-        place(client, auth_headers, night, f"Full#{number}", 1700, brackets[number % 3])
+        place(
+            client,
+            auth_headers,
+            night,
+            f"Full{number}#{number}",
+            1700,
+            brackets[number % 3],
+        )
         for number in range(30)
     ]
     play(client, auth_headers, night["id"], rows[0], rows[3])
@@ -539,12 +546,19 @@ def test_the_board_of_thirty_rows_is_small_and_costs_a_fixed_read(
     with count_statements() as ten:
         small = client.get(f"/koth/nights/{night['id']}/board")
     for number in range(30, 60):
-        place(client, auth_headers, night, f"More#{number}", 1700, brackets[number % 3])
+        place(
+            client,
+            auth_headers,
+            night,
+            f"More{number}#{number}",
+            1700,
+            brackets[number % 3],
+        )
     with count_statements() as sixty:
         client.get(f"/koth/nights/{night['id']}/board")
 
     assert small.status_code == 200, small.text
-    # 30 rows and one played series read 4339 bytes over 10 statements
+    # 30 rows of distinct names and one played series read 4391 bytes over 10 statements
     assert len(small.content) < 5000
     assert ten[0] == sixty[0] == 10
 
@@ -1269,6 +1283,25 @@ def test_a_running_night_still_offers_the_member_a_signup(
     closed = client.post(f"/koth/nights/{night['id']}/close", headers=auth_headers)
     assert closed.status_code == 200, closed.text
     assert my_events(client, member())[night["id"]]["action"] == "view"
+
+
+def test_the_board_names_the_battle_tag_only_where_two_players_share_a_name(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """Two players of one name read apart by the full tag; a name of its own
+    sends no tag, because the stream polls the board."""
+    night = open_night(client, auth_headers)
+    top = bracket_ids(night)[0]
+    first = place(client, auth_headers, night, "Twin#1", 1700, top)
+    second = place(client, auth_headers, night, "Twin#2", 1700, top)
+    place(client, auth_headers, night, "Solo#3", 1700, top)
+    payload = play(client, auth_headers, night["id"], first, second)
+
+    bracket = only(payload, top)
+    assert bracket["king"]["battle_tag"] == "Twin#1"
+    assert bracket["played"][0]["loser"]["battle_tag"] == "Twin#2"
+    tags = {seat["name"]: seat.get("battle_tag") for seat in bracket["queue"]}
+    assert tags == {"Twin": "Twin#2", "Solo": None}
 
 
 def played_ids(payload: dict[str, Any], division_id: int) -> list[int]:

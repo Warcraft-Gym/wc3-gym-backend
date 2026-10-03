@@ -7,6 +7,7 @@ costs a fixed number of statements, none of them per entrant or per series,
 because the stream view polls it while the night runs.
 """
 
+from collections import Counter
 from collections.abc import Iterator, Sequence
 from typing import Literal
 
@@ -43,8 +44,9 @@ from app.services.koth.night import divisions_of, series_of, tonight
 LAST = 1_000_000
 
 # The name and the country of one player, which is all a player line shows
-Line = tuple[str, str | None]
-NOBODY: Line = ("", None)
+# The name, the country and the battle tag of one player
+Line = tuple[str, str | None, str | None]
+NOBODY: Line = ("", None, None)
 # What one result did to the crown
 Throne = Literal["moved", "held", "none"]
 
@@ -170,13 +172,14 @@ def _seats(
     for row in sorted(rows, key=place):
         if row.user_id is None:
             continue
-        name, country = users.get(row.user_id, NOBODY)
+        name, country, tag = users.get(row.user_id, NOBODY)
         seat = seats.get(row.user_id)
         if seat is None:
             seat = KothSeat(
                 user_id=row.user_id,
                 name=name,
                 country=country,
+                battle_tag=tag,
                 rows=[],
                 busy=busy.get(row.user_id) not in (None, row.division_id),
             )
@@ -284,12 +287,13 @@ def _player(
     row: EventEntrant, users: dict[int, Line], mmrs: dict[int, int | None]
 ) -> KothPlayer:
     """One race row as a player line: no rating where none was read."""
-    name, country = users.get(row.user_id or 0, NOBODY)
+    name, country, tag = users.get(row.user_id or 0, NOBODY)
     return KothPlayer(
         entrant_id=ident(row),
         user_id=row.user_id,
         name=name,
         country=country,
+        battle_tag=tag,
         race=_race(row),
         mmr=mmrs.get(ident(row)),
     )
@@ -352,17 +356,24 @@ def _mmrs(session: OrmSession, rows: Sequence[EventEntrant]) -> dict[int, int | 
 
 
 def _users(session: OrmSession, rows: Sequence[EventEntrant]) -> dict[int, Line]:
-    """The name and the country of each player behind those rows, in four columns."""
+    """The name and the country of each player behind those rows, in four columns,
+    and the battle tag where two players of the night share a name: the stream
+    polls the board, so it pays for a tag only where the tag reads them apart."""
     ids = {row.user_id for row in rows if row.user_id is not None}
     if not ids:
         return {}
-    return {
-        user_id: (name or tag or "", country)
+    found = [
+        (user_id, name or tag or "", country, tag)
         for user_id, name, tag, country in session.execute(
             select(
                 col(User.id), col(User.name), col(User.battleTag), col(User.country)
             ).where(col(User.id).in_(ids))
         )
+    ]
+    shared = Counter(name.casefold() for _, name, _, _ in found)
+    return {
+        user_id: (name, country, tag if shared[name.casefold()] > 1 else None)
+        for user_id, name, country, tag in found
     }
 
 
