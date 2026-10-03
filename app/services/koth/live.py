@@ -56,7 +56,7 @@ def start_series(night_id: int, data: SeriesStart) -> KothBoard:
         if first.user_id is not None and first.user_id == second.user_id:
             raise BadRequestError("A player cannot play himself")
         if first.division_id is None or first.division_id != second.division_id:
-            raise BadRequestError("Both rows play in the same bracket")
+            raise BadRequestError("Both players must stand in the same bracket")
         if first.withdrawn_at is not None or second.withdrawn_at is not None:
             raise BadRequestError("A row that left tonight plays no series")
         chain = [
