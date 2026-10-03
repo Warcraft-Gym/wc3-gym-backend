@@ -1,8 +1,10 @@
 """The KOTH line and crown rules an admin meets while fixing a running night.
 
 Each test pins one rule: a queue write reorders only the rows it names, a
-result sent again keeps its kind, and a crowned race that leaves the table
-passes the crown to another race of the player with no forfeit.
+result sent again keeps its kind, a crowned race that leaves the table passes
+the crown to another race of the player with no forfeit, and a crown changed
+by hand or by a leave or a move is an event at its place in the order of
+play, so every fix crowns by the walk from it.
 """
 
 from typing import Any
@@ -10,6 +12,7 @@ from typing import Any
 from httpx2 import Client
 
 from tests.test_koth_live import (
+    add_result,
     board,
     bracket_ids,
     crowned,
@@ -18,9 +21,11 @@ from tests.test_koth_live import (
     place,
     place_user,
     play,
+    played_ids,
+    remove,
     start,
 )
-from tests.test_koth_moves import line, two_races
+from tests.test_koth_moves import line, move, two_races
 from tests.test_koth_night import open_night
 
 
@@ -64,6 +69,11 @@ def leave(
     )
     assert resp.status_code == 200, resp.text
     return resp.json()
+
+
+def labels(payload: dict[str, Any], division_id: int) -> list[str]:
+    """What each played series did to the crown, oldest first."""
+    return [row["throne"] for row in reversed(only(payload, division_id)["played"])]
 
 
 def rows_of(payload: dict[str, Any], division_id: int) -> list[int]:
@@ -214,3 +224,247 @@ def test_the_challenger_who_leaves_the_table_forfeits_to_a_king_with_two_races(
     assert (newest["forfeit"], newest["winner"]["entrant_id"]) == (True, a_hu)
     assert newest["throne"] == "held"
     assert crowned(gone, top) == a_hu
+
+
+def four(
+    client: Client, headers: dict[str, str], night: dict[str, Any], top: int
+) -> tuple[int, int, int, int]:
+    """Four players A, B, C and D in one bracket, A first in line."""
+    return (
+        place(client, headers, night, "A#1", 1700, top),
+        place(client, headers, night, "B#2", 1700, top),
+        place(client, headers, night, "C#3", 1700, top),
+        place(client, headers, night, "D#4", 1700, top),
+    )
+
+
+def test_a_step_down_then_a_turned_result_crowns_the_new_winner(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """A beat B, the throne is emptied, C beat D takes it; turned, D is king."""
+    night = open_night(client, auth_headers)
+    top = bracket_ids(night)[0]
+    a, b, c, d = four(client, auth_headers, night, top)
+    play(client, auth_headers, night["id"], a, b)
+    set_crown(client, auth_headers, night["id"], top, None)
+    taken = play(client, auth_headers, night["id"], c, d)
+    assert crowned(taken, top) == c
+    assert labels(taken, top) == ["moved", "moved"]
+
+    payload = flip(client, auth_headers, night["id"], played_ids(taken, top)[-1], 2)
+
+    assert crowned(payload, top) == d
+    assert labels(payload, top) == ["moved", "moved"]
+
+
+def test_a_hand_pass_then_a_turned_later_result_crowns_by_the_walk_from_the_pass(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """A beat B, the crown goes to C, C beat D, E beat C; turned, C is king."""
+    night = open_night(client, auth_headers)
+    top = bracket_ids(night)[0]
+    a, b, c, d = four(client, auth_headers, night, top)
+    e = place(client, auth_headers, night, "E#5", 1700, top)
+    play(client, auth_headers, night["id"], a, b)
+    set_crown(client, auth_headers, night["id"], top, c)
+    play(client, auth_headers, night["id"], c, d)
+    taken = play(client, auth_headers, night["id"], c, e, winner=2)
+    assert crowned(taken, top) == e
+    assert labels(taken, top) == ["moved", "held", "moved"]
+
+    payload = flip(client, auth_headers, night["id"], played_ids(taken, top)[-1], 1)
+
+    assert crowned(payload, top) == c
+    assert labels(payload, top) == ["moved", "held", "held"]
+
+
+def test_a_step_down_then_a_removed_result_leaves_the_throne_empty(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """Without the series that took the emptied throne, nobody wears the crown."""
+    night = open_night(client, auth_headers)
+    top = bracket_ids(night)[0]
+    a, b, c, d = four(client, auth_headers, night, top)
+    play(client, auth_headers, night["id"], a, b)
+    set_crown(client, auth_headers, night["id"], top, None)
+    taken = play(client, auth_headers, night["id"], c, d)
+
+    payload = remove(client, auth_headers, night["id"], played_ids(taken, top)[-1])
+
+    assert crowned(payload, top) is None
+
+
+def test_a_king_who_left_with_nobody_free_then_a_turned_result_crowns_the_new_winner(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """A leave that empties the throne is an event, so the next result takes it."""
+    night = open_night(client, auth_headers)
+    top = bracket_ids(night)[0]
+    a = place(client, auth_headers, night, "A#1", 1700, top)
+    b = place(client, auth_headers, night, "B#2", 1700, top)
+    play(client, auth_headers, night["id"], a, b)
+    leave(client, auth_headers, night["id"], b)
+    gone = leave(client, auth_headers, night["id"], a)
+    assert crowned(gone, top) is None
+    c = place(client, auth_headers, night, "C#3", 1700, top)
+    d = place(client, auth_headers, night, "D#4", 1700, top)
+    taken = play(client, auth_headers, night["id"], c, d)
+    assert crowned(taken, top) == c
+
+    payload = flip(client, auth_headers, night["id"], played_ids(taken, top)[-1], 2)
+
+    assert crowned(payload, top) == d
+
+
+def test_a_step_down_then_an_added_result_takes_the_empty_throne(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """An added result lands after the step down, as a played series would."""
+    night = open_night(client, auth_headers)
+    top = bracket_ids(night)[0]
+    a, b, c, d = four(client, auth_headers, night, top)
+    play(client, auth_headers, night["id"], a, b)
+    set_crown(client, auth_headers, night["id"], top, None)
+
+    added = add_result(client, auth_headers, night["id"], c, d)
+
+    assert added.status_code == 201, added.text
+    assert crowned(added.json(), top) == c
+    assert labels(added.json(), top) == ["moved", "moved"]
+
+
+def test_a_hand_pass_then_an_added_result_that_beats_the_king_crowns_its_winner(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """The crown went to C by hand, so D beat C moves it to D."""
+    night = open_night(client, auth_headers)
+    top = bracket_ids(night)[0]
+    a, b, c, d = four(client, auth_headers, night, top)
+    play(client, auth_headers, night["id"], a, b)
+    set_crown(client, auth_headers, night["id"], top, c)
+
+    added = add_result(client, auth_headers, night["id"], d, c)
+
+    assert added.status_code == 201, added.text
+    assert crowned(added.json(), top) == d
+
+
+def test_a_moved_king_then_a_turned_result_crowns_the_new_winner(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """A king moved to another bracket leaves an empty throne at that place."""
+    night = open_night(client, auth_headers)
+    top, middle = bracket_ids(night)[0], bracket_ids(night)[1]
+    a, b, c, d = four(client, auth_headers, night, top)
+    play(client, auth_headers, night["id"], a, b)
+    moved = move(client, auth_headers, night["id"], a, middle)
+    assert moved.status_code == 200, moved.text
+    assert crowned(moved.json(), top) is None
+    taken = play(client, auth_headers, night["id"], c, d)
+    assert crowned(taken, top) == c
+
+    payload = flip(client, auth_headers, night["id"], played_ids(taken, top)[-1], 2)
+
+    assert crowned(payload, top) == d
+
+
+def test_a_race_swap_by_hand_is_no_crown_event(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """The crown stays with the same player, so a turned result still moves it."""
+    night = open_night(client, auth_headers)
+    top = bracket_ids(night)[0]
+    user_a = two_races("A#1", 1700)
+    a_hu = place_user(client, auth_headers, night, user_a, top)
+    a_ne = place_user(client, auth_headers, night, user_a, top, race="NE")
+    b = place(client, auth_headers, night, "B#2", 1700, top)
+    played = play(client, auth_headers, night["id"], a_hu, b)
+    swapped = set_crown(client, auth_headers, night["id"], top, a_ne)
+    assert only(swapped, top)["king_entrant_id"] == a_ne
+
+    payload = flip(client, auth_headers, night["id"], played_ids(played, top)[-1], 2)
+
+    assert crowned(payload, top) == b
+
+
+def test_a_series_after_a_removed_result_still_plays_after_the_crown_event(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """A step down stays before the next series when the result before it goes."""
+    night = open_night(client, auth_headers)
+    top = bracket_ids(night)[0]
+    a, b, c, d = four(client, auth_headers, night, top)
+    play(client, auth_headers, night["id"], a, b)
+    taken = play(client, auth_headers, night["id"], a, c, winner=2)
+    set_crown(client, auth_headers, night["id"], top, None)
+    emptied = remove(client, auth_headers, night["id"], played_ids(taken, top)[-1])
+    assert crowned(emptied, top) is None
+
+    after = play(client, auth_headers, night["id"], d, b)
+    assert crowned(after, top) == d
+    assert labels(after, top) == ["moved", "moved"]
+    payload = flip(client, auth_headers, night["id"], played_ids(after, top)[-1], 2)
+
+    assert crowned(payload, top) == b
+
+
+def test_clearing_a_night_drops_its_crown_events(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """After a clear, a hand pass of the test run no longer touches the crown."""
+    night = open_night(client, auth_headers)
+    top = bracket_ids(night)[0]
+    a, b, c, d = four(client, auth_headers, night, top)
+    play(client, auth_headers, night["id"], a, b)
+    set_crown(client, auth_headers, night["id"], top, c)
+    cleared = client.delete(f"/koth/nights/{night['id']}/series", headers=auth_headers)
+    assert cleared.status_code == 200, cleared.text
+
+    added = add_result(client, auth_headers, night["id"], d, b)
+
+    assert added.status_code == 201, added.text
+    assert crowned(added.json(), top) == d
+    assert labels(added.json(), top) == ["moved"]
+
+
+def test_a_fix_passes_the_crown_to_the_other_race_of_a_king_whose_race_left(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """The crown is the player's, so a walk that ends on a race that left crowns
+    his other race."""
+    night = open_night(client, auth_headers)
+    top = bracket_ids(night)[0]
+    user_a = two_races("A#1", 1700)
+    a_hu = place_user(client, auth_headers, night, user_a, top)
+    a_ne = place_user(client, auth_headers, night, user_a, top, race="NE")
+    b = place(client, auth_headers, night, "B#2", 1700, top)
+    c = place(client, auth_headers, night, "C#3", 1700, top)
+    play(client, auth_headers, night["id"], a_hu, b)
+    passed = leave(client, auth_headers, night["id"], a_hu)
+    assert crowned(passed, top) == a_ne
+    taken = play(client, auth_headers, night["id"], a_ne, c, winner=2)
+    assert crowned(taken, top) == c
+
+    payload = remove(client, auth_headers, night["id"], played_ids(taken, top)[-1])
+
+    assert crowned(payload, top) == a_ne
+
+
+def test_a_throne_a_fix_empties_for_a_player_who_left_is_taken_by_the_next_result(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """A fix that crowns a player who left empties the throne from that place on."""
+    night = open_night(client, auth_headers)
+    top = bracket_ids(night)[0]
+    a, b, c, d = four(client, auth_headers, night, top)
+    play(client, auth_headers, night["id"], a, b)
+    taken = play(client, auth_headers, night["id"], a, c, winner=2)
+    leave(client, auth_headers, night["id"], a)
+    emptied = remove(client, auth_headers, night["id"], played_ids(taken, top)[-1])
+    assert crowned(emptied, top) is None
+
+    after = play(client, auth_headers, night["id"], d, b)
+    assert labels(after, top) == ["moved", "moved"]
+    payload = flip(client, auth_headers, night["id"], played_ids(after, top)[-1], 2)
+
+    assert crowned(payload, top) == b

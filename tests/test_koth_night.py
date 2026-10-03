@@ -288,7 +288,7 @@ def test_a_signup_with_no_night_open_is_refused(
 ) -> None:
     resp = sign_up(client, "Any#1001", "streamer", "human")
     assert resp.status_code == 400
-    assert resp.json()["error"] == "No KOTH night is open"
+    assert resp.json()["error"] == "No KOTH event is open"
 
 
 def test_a_night_with_signups_closed_stays_tonight_and_refuses_signups(
@@ -380,7 +380,7 @@ def test_a_chat_line_with_no_night_open_answers_the_refusal_as_text(
 
     assert resp.status_code == 200, resp.text
     assert resp.headers["content-type"] == "text/plain; charset=utf-8"
-    assert resp.text == "No KOTH night is open"
+    assert resp.text == "No KOTH event is open"
 
 
 def test_a_chat_line_with_an_unknown_race_names_the_valid_races(
@@ -415,10 +415,10 @@ def test_a_second_night_opens_only_after_the_open_one_closes(
     first = open_night(client, auth_headers)
     resp = client.post("/koth/nights", json={"starts_at": LATER}, headers=auth_headers)
     assert resp.status_code == 409
-    assert resp.json()["error"] == "Close the open night first."
+    assert resp.json()["error"] == "Close the open KOTH event first."
 
     client.post(f"/koth/nights/{first['id']}/close", headers=auth_headers)
-    assert client.get("/koth/board").json()["error"] == "No KOTH night is open"
+    assert client.get("/koth/board").json()["error"] == "No KOTH event is open"
     second = open_night(client, auth_headers, starts_at=LATER)
     assert client.get("/koth/board").json()["night_id"] == second["id"]
 
@@ -886,7 +886,7 @@ def test_a_closed_night_reads_finished_and_grows_no_chain(
         headers=auth_headers,
     )
     assert resp.status_code == 400, resp.text
-    assert resp.json()["error"] == "The night is closed"
+    assert resp.json()["error"] == "The event is closed"
 
 
 def test_the_chain_refuses_a_player_it_already_names(

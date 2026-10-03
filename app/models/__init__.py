@@ -36,6 +36,7 @@ from app.models import (
     event_stage,
     fantasy_bet,
     fantasy_team,
+    koth_crown_event,
     ladder_achievement,
     ladder_sync,
     league,

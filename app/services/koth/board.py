@@ -8,8 +8,8 @@ because the stream view polls it while the night runs.
 """
 
 from collections import Counter
-from collections.abc import Iterator, Sequence
-from typing import Literal
+from collections.abc import Collection, Iterator, Sequence
+from typing import Literal, NamedTuple
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session as OrmSession
@@ -22,6 +22,7 @@ from app.models.enums import EventKind
 from app.models.event_division import EventDivision
 from app.models.event_entrant import EventEntrant
 from app.models.event_history import KothHistoryEvent
+from app.models.koth_crown_event import KothCrownEvent
 from app.models.koth_night import (
     KothBoard,
     KothBracket,
@@ -51,6 +52,15 @@ NOBODY: Line = ("", None, None)
 Throne = Literal["moved", "held", "none"]
 
 
+class Step(NamedTuple):
+    """A crown change no result shows: the series it follows, the row it
+    crowned and that row's player; no row is an empty throne."""
+
+    after: int
+    entrant_id: int | None
+    user_id: int | None
+
+
 def read(night_id: int | None = None, public: bool = False) -> KothBoard:
     """The whole night, or tonight's night when no id is named."""
     with Session() as session:
@@ -63,7 +73,7 @@ def read_in(
     """The board as this session sees it, so a preview reads its own unsaved writes."""
     night, date_label = _night(session, night_id)
     if public and not night.published:
-        raise NotFoundError(f"KOTH night not found by id: {night_id}")
+        raise NotFoundError(f"KOTH event not found by id: {night_id}")
     event_id = ident(night)
     if date_label is not None:
         from app.services.koth.history_board import read_archive
@@ -75,6 +85,8 @@ def read_in(
     users = _users(session, entrants)
     replays = _replays(session, series)
     defenders = _defenders(session, night)
+    divisions = divisions_of(session, event_id)
+    steps = crown_steps(session, [ident(row) for row in divisions]) if series else {}
     chains: dict[int | None, list[Series]] = {}
     for row in series:
         chains.setdefault(row.division_id, []).append(row)
@@ -98,6 +110,7 @@ def read_in(
                 division,
                 [row for row in entrants if row.division_id == ident(division)],
                 chains.get(ident(division), []),
+                steps.get(ident(division), []),
                 every_row,
                 users,
                 mmrs,
@@ -105,7 +118,7 @@ def read_in(
                 busy,
                 defenders.get(division.position),
             )
-            for division in divisions_of(session, event_id)
+            for division in divisions
         ],
     )
 
@@ -114,6 +127,7 @@ def _bracket(
     division: EventDivision,
     field: Sequence[EventEntrant],
     chain: Sequence[Series],
+    steps: Sequence[Step],
     every_row: dict[int, EventEntrant],
     users: dict[int, Line],
     mmrs: dict[int, int | None],
@@ -156,7 +170,7 @@ def _bracket(
         left=[
             _player(row, users, mmrs) for row in field if row.withdrawn_at is not None
         ],
-        played=_played(chain, every_row, users, mmrs, replays),
+        played=_played(chain, steps, every_row, users, mmrs, replays),
     )
 
 
@@ -193,16 +207,17 @@ def _seats(
 
 def _played(
     chain: Sequence[Series],
+    steps: Sequence[Step],
     by_id: dict[int, EventEntrant],
     users: dict[int, Line],
     mmrs: dict[int, int | None],
     replays: set[int],
 ) -> list[KothPlayed]:
     """Every scored series of the bracket, newest first, with what it did to
-    the crown. The label walks the results in play order, so a crown an admin
-    passed or emptied by hand shows on the bracket, not on a played row."""
+    the crown. The label walks the results and the crown events in play order,
+    so it follows the crown the board shows."""
     rows: list[KothPlayed] = []
-    for row, throne in walk(chain):
+    for row, throne in walk(chain, steps):
         winner = stage_engine.entrant_of(row)
         loser = stage_engine.entrant_of(row, takes_loser=True)
         if winner is None or loser is None:
@@ -223,12 +238,41 @@ def _played(
     return list(reversed(rows))
 
 
-def walk(chain: Sequence[Series]) -> Iterator[tuple[Series, Throne]]:
+def walk(
+    chain: Sequence[Series], steps: Sequence[Step] = ()
+) -> Iterator[tuple[Series, Throne]]:
     """Every scored series in play order with what it did to the crown: an empty
     throne or a beaten king moves it, a king who wins holds it, and a game
-    between two others leaves it."""
+    between two others leaves it. A crown event between two series sets the
+    king the next series meets."""
+    for row, throne, _ in _reign(chain, steps):
+        if row is not None:
+            yield row, throne
+
+
+def results_king(chain: Sequence[Series], steps: Sequence[Step] = ()) -> int | None:
+    """The race row the walk crowns: the winner of the last series that moved or
+    held the crown, the row of a crown event after it, or nobody."""
+    king = None
+    for _, throne, entrant_id in _reign(chain, steps):
+        if throne != "none":
+            king = entrant_id
+    return king
+
+
+def _reign(
+    chain: Sequence[Series], steps: Sequence[Step]
+) -> Iterator[tuple[Series | None, Throne, int | None]]:
+    """The results and the crown events of a bracket in play order, each with
+    what it did to the crown and the row it crowned. An event follows the
+    series whose sequence it names, so it stays in place when that one goes."""
     king: int | None = None
+    waiting = sorted(steps, key=lambda step: step.after)
     for row in chain:
+        while waiting and waiting[0].after < (row.sequence or 0):
+            step = waiting.pop(0)
+            king = step.user_id
+            yield None, "moved", step.entrant_id
         winner = stage_engine.entrant_of(row)
         loser = stage_engine.entrant_of(row, takes_loser=True)
         if not stage_engine.scored(row) or winner is None or loser is None:
@@ -241,17 +285,31 @@ def walk(chain: Sequence[Series]) -> Iterator[tuple[Series, Throne]]:
             throne = "held"
         if throne != "none":
             king = won
-        yield row, throne
+        yield row, throne, winner
+    for step in waiting:
+        yield None, "moved", step.entrant_id
 
 
-def results_king(chain: Sequence[Series]) -> int | None:
-    """The race row the results alone crown: the winner of the last series that
-    moved or held the crown, or nobody before a result."""
-    king = None
-    for row, throne in walk(chain):
-        if throne != "none":
-            king = stage_engine.entrant_of(row)
-    return king
+def crown_steps(
+    session: OrmSession, division_ids: Collection[int]
+) -> dict[int, list[Step]]:
+    """The crown events of those brackets in one read, each in the order written."""
+    if not division_ids:
+        return {}
+    steps: dict[int, list[Step]] = {}
+    for division_id, after, entrant_id, user_id in session.execute(
+        select(
+            col(KothCrownEvent.division_id),
+            col(KothCrownEvent.after_sequence),
+            col(KothCrownEvent.entrant_id),
+            col(EventEntrant.user_id),
+        )
+        .outerjoin(EventEntrant, col(EventEntrant.id) == KothCrownEvent.entrant_id)
+        .where(col(KothCrownEvent.division_id).in_(division_ids))
+        .order_by(col(KothCrownEvent.after_sequence), col(KothCrownEvent.id))
+    ):
+        steps.setdefault(division_id, []).append(Step(after, entrant_id, user_id))
+    return steps
 
 
 def _open(
@@ -398,7 +456,7 @@ def _night(session: OrmSession, night_id: int | None) -> tuple[Season, str | Non
         .where(col(Season.id) == night_id, col(Season.kind) == EventKind.koth)
     ).first()
     if row is None:
-        raise NotFoundError(f"KOTH night not found by id: {night_id}")
+        raise NotFoundError(f"KOTH event not found by id: {night_id}")
     return row[0], row[1]
 
 

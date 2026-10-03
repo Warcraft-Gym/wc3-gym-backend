@@ -558,9 +558,10 @@ def test_the_board_of_thirty_rows_is_small_and_costs_a_fixed_read(
         client.get(f"/koth/nights/{night['id']}/board")
 
     assert small.status_code == 200, small.text
-    # 30 rows of distinct names and one played series read 4391 bytes over 10 statements
+    # 30 rows of distinct names and one played series read 4391 bytes over 11
+    # statements, the crown events of the brackets among them
     assert len(small.content) < 5000
-    assert ten[0] == sixty[0] == 10
+    assert ten[0] == sixty[0] == 11
 
 
 def test_a_save_that_turns_no_result_around_leaves_the_crown(
@@ -1152,7 +1153,7 @@ def test_a_night_a_day_old_is_not_tonight_and_the_next_open_closes_it(
     rival = place(client, auth_headers, old, "Rival#2", 1700, top)
     play(client, auth_headers, old["id"], king, rival)
 
-    assert client.get("/koth/board").json()["error"] == "No KOTH night is open"
+    assert client.get("/koth/board").json()["error"] == "No KOTH event is open"
     assert awarded(old["id"]) == []
 
     new = open_night(client, auth_headers)
@@ -1172,7 +1173,7 @@ def test_a_night_that_has_not_expired_refuses_the_next_open(
     open_night(client, auth_headers, starts_at=started.isoformat())
     resp = client.post("/koth/nights", json={"starts_at": LATER}, headers=auth_headers)
     assert resp.status_code == 409
-    assert resp.json()["error"] == "Close the open night first."
+    assert resp.json()["error"] == "Close the open KOTH event first."
 
 
 def test_a_withdraw_with_signups_off_goes_through(
@@ -1387,7 +1388,7 @@ def test_removing_an_older_result_crowns_whoever_the_rest_crown(
 def test_a_crown_passed_by_hand_stays_through_a_fix(
     client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
 ) -> None:
-    """The results no longer name the king, so a fix leaves the hand's choice."""
+    """The pass sits after the removed series, so the walk still ends on it."""
     night = open_night(client, auth_headers)
     top = bracket_ids(night)[0]
     king = place(client, auth_headers, night, "Hand#1", 1700, top)

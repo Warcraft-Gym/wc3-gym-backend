@@ -858,7 +858,7 @@ def _leave_night(
     from app.services.koth import live, night
 
     if not night.is_tonight(event):
-        raise BadRequestError("The night is closed")
+        raise BadRequestError("The event is closed")
     live.leave(session, ident(event), rows)
 
 
