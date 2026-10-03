@@ -67,6 +67,8 @@ def read(night_id: int | None = None, public: bool = False) -> KothBoard:
         for row in series:
             chains.setdefault(row.division_id, []).append(row)
         busy = _busy(series)
+        # A series reads its sides among every row of the night, wherever they stand
+        every_row = {ident(row): row for row in entrants}
         return KothBoard(
             night_id=event_id,
             name=night.name,
@@ -84,6 +86,7 @@ def read(night_id: int | None = None, public: bool = False) -> KothBoard:
                     division,
                     [row for row in entrants if row.division_id == ident(division)],
                     chains.get(ident(division), []),
+                    every_row,
                     users,
                     mmrs,
                     replays,
@@ -99,6 +102,7 @@ def _bracket(
     division: EventDivision,
     field: Sequence[EventEntrant],
     chain: Sequence[Series],
+    every_row: dict[int, EventEntrant],
     users: dict[int, Line],
     mmrs: dict[int, int | None],
     replays: set[int],
@@ -132,14 +136,14 @@ def _bracket(
         lower_bound=division.lower_bound,
         king=_seats(crowned, users, mmrs, busy)[0] if crowned else None,
         defender=_defender(defender, live, users, mmrs) if king is None else None,
-        open_series=_open(open_row, by_id, users, mmrs)
+        open_series=_open(open_row, every_row, users, mmrs)
         if open_row is not None
         else None,
         queue=_seats(seated, users, mmrs, busy),
         left=[
             _player(row, users, mmrs) for row in field if row.withdrawn_at is not None
         ],
-        played=_played(chain, by_id, users, mmrs, replays),
+        played=_played(chain, every_row, users, mmrs, replays),
     )
 
 

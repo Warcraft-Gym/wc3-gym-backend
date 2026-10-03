@@ -358,7 +358,9 @@ def test_a_start_refuses_two_brackets_and_a_row_that_left(
     other = place(client, auth_headers, night, "There#2", 1500, middle)
     second = place(client, auth_headers, night, "Here#3", 1700, top)
 
-    assert start(client, auth_headers, night["id"], first, other).status_code == 400
+    refused = start(client, auth_headers, night["id"], first, other)
+    assert refused.status_code == 400, refused.text
+    assert refused.json()["error"] == "Both players must stand in the same bracket"
     client.delete(f"/koth/nights/{night['id']}/entrants/{second}", headers=auth_headers)
 
     assert start(client, auth_headers, night["id"], first, second).status_code == 400
@@ -715,6 +717,66 @@ def test_a_king_moved_to_another_bracket_frees_the_throne_he_left(
     assert only(payload, top)["king"]["rows"][0]["entrant_id"] == first
 
 
+def test_a_played_series_stays_in_its_bracket_after_a_row_moves(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """A series lists under the bracket it was played in, wherever its rows stand."""
+    night = open_night(client, auth_headers)
+    top, middle = bracket_ids(night)[0], bracket_ids(night)[1]
+    winner = place(client, auth_headers, night, "Won#1", 1700, top)
+    loser = place(client, auth_headers, night, "Lost#2", 1700, top)
+    play(client, auth_headers, night["id"], winner, loser)
+
+    moved = client.put(
+        f"/events/{night['id']}/entrants/{winner}",
+        json={"division_id": middle, "manual_placement": True},
+        headers=auth_headers,
+    )
+
+    assert moved.status_code == 200, moved.text
+    payload = board(client, night["id"])
+    assert [
+        (row["winner"]["entrant_id"], row["loser"]["entrant_id"])
+        for row in only(payload, top)["played"]
+    ] == [(winner, loser)]
+    assert [row["division_id"] for row in payload["brackets"] if row["played"]] == [top]
+
+
+def test_a_running_series_stays_on_its_table_after_a_row_moves(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """The bracket keeps its open series and both sides, and the result goes in."""
+    night = open_night(client, auth_headers)
+    top, middle = bracket_ids(night)[0], bracket_ids(night)[1]
+    first = place(client, auth_headers, night, "Table#1", 1700, top)
+    second = place(client, auth_headers, night, "Table#2", 1700, top)
+    opened = start(client, auth_headers, night["id"], first, second)
+    assert opened.status_code == 201, opened.text
+    series_id = only(opened.json(), top)["open_series"]["series_id"]
+
+    moved = client.put(
+        f"/events/{night['id']}/entrants/{second}",
+        json={"division_id": middle, "manual_placement": True},
+        headers=auth_headers,
+    )
+
+    assert moved.status_code == 200, moved.text
+    table = only(board(client, night["id"]), top)["open_series"]
+    assert table["series_id"] == series_id
+    assert (table["side1"]["entrant_id"], table["side2"]["entrant_id"]) == (
+        first,
+        second,
+    )
+    done = client.put(
+        f"/koth/nights/{night['id']}/series/{series_id}/result",
+        json={"winner": 1},
+        headers=auth_headers,
+    )
+    assert done.status_code == 200, done.text
+    assert only(done.json(), top)["open_series"] is None
+    assert [row["series_id"] for row in only(done.json(), top)["played"]] == [series_id]
+
+
 def test_a_signup_after_a_result_takes_a_seed_nobody_holds(
     client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
 ) -> None:
@@ -904,6 +966,31 @@ def test_a_new_bound_holds_the_series_on_the_table_until_it_ends(
         king,
         rival,
     ]
+
+
+def test_a_played_series_stays_in_its_bracket_after_a_new_bound(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """The cut moves both rows; the series they played stays where it was played."""
+    night = open_night(client, auth_headers)
+    _, middle, low = bracket_ids(night)
+    winner = chat(client, night, "Fall#1111", 1500)
+    loser = chat(client, night, "Fall#2222", 1500)
+    play(client, auth_headers, night["id"], winner, loser)
+
+    resp = set_bounds(client, auth_headers, night, [1600, 1550, 0])
+
+    assert resp.status_code == 200, resp.text
+    payload = resp.json()
+    assert [row["rows"][0]["entrant_id"] for row in only(payload, low)["queue"]] == [
+        winner,
+        loser,
+    ]
+    assert [
+        (row["winner"]["entrant_id"], row["loser"]["entrant_id"])
+        for row in only(payload, middle)["played"]
+    ] == [(winner, loser)]
+    assert only(payload, low)["played"] == []
 
 
 def test_a_cancelled_series_frees_its_rows_for_the_new_bound(

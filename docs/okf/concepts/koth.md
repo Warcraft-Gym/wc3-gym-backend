@@ -4,7 +4,7 @@ title: KOTH night
 description: A King of the Hill night is one event of the KOTH league with three MMR brackets as divisions, one signup rule at every door, and every series paired by hand while the night runs.
 resource: ../../../app/services/koth/night.py
 tags: [events, koth]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-03T04:51:24Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-03T06:03:33Z }
 sources:
   - id: night
     resource: ../../../app/services/koth/night.py
@@ -69,7 +69,7 @@ The line is `event_entrant.seed` inside the bracket, first in line first, one pl
 
 # The board
 
-`GET /koth/nights/{id}/board`, and `GET /koth/board` for tonight, is the one read the run page and the public night page both draw. `GET /koth/board` answers 400 "No KOTH night is open" when no night is open. It takes no token and carries the live [edge-cache class](edge-cache.md) while the night is open, because the stream view polls it, and the settled class once the night is closed. A night that is not published is an admin's own, so the public read answers not found. It answers the night and its counts, the rows no bracket holds yet, and per bracket its name and bound, the king with the race rows he holds there, the king of the last closed night while the throne is still empty, the series on the table, the line in order with one item per player and a mark on a player who plays in another bracket, the rows that left, and the series played, newest first, each saying whether the throne moved, was held, or never applied. A player on the table holds no seat in the line, whatever other race rows he has there. Every player line carries one rating integer and no W3Champions stats: the read asks for the rating of each (player, race) pair and four columns of each player, never a stored stats row. Thirty rows and one played series read 3989 bytes over ten statements, none of them per row.
+`GET /koth/nights/{id}/board`, and `GET /koth/board` for tonight, is the one read the run page and the public night page both draw. `GET /koth/board` answers 400 "No KOTH night is open" when no night is open. It takes no token and carries the live [edge-cache class](edge-cache.md) while the night is open, because the stream view polls it, and the settled class once the night is closed. A night that is not published is an admin's own, so the public read answers not found. It answers the night and its counts, the rows no bracket holds yet, and per bracket its name and bound, the king with the race rows he holds there, the king of the last closed night while the throne is still empty, the series on the table, the line in order with one item per player and a mark on a player who plays in another bracket, the rows that left, and the series played, newest first, each saying whether the throne moved, was held, or never applied. A played or running series is listed under the bracket it was started in, whatever bracket its players stand in now. A player on the table holds no seat in the line, whatever other race rows he has there. Every player line carries one rating integer and no W3Champions stats: the read asks for the rating of each (player, race) pair and four columns of each player, never a stored stats row. Thirty rows and one played series read 3989 bytes over ten statements, none of them per row.
 
 The shape it answers, as `app/models/koth_night.py` states it:
 
