@@ -205,6 +205,11 @@ def keeps_its_line(event_id: int) -> None:
     _refuse(event_id, "A KOTH night orders its line on its run page")
 
 
+def removes_on_its_run_page(event_id: int) -> None:
+    """Route guard: a night removes a row through its own route, which runs the forfeit rule."""
+    _refuse(event_id, "A KOTH night removes a player on its run page")
+
+
 def still_open(event_id: int) -> None:
     """Route guard: a closed night keeps its rows as the close left them."""
     _refuse(event_id, "The night is closed", closed_only=True)

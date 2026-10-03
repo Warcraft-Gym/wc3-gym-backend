@@ -4,7 +4,7 @@ title: KOTH night
 description: A King of the Hill night is one event of the KOTH league with three MMR brackets as divisions, one signup rule at every door, and every series paired by hand while the night runs.
 resource: ../../../app/services/koth/night.py
 tags: [events, koth]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-03T09:15:42Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-03T09:23:43Z }
 sources:
   - id: night
     resource: ../../../app/services/koth/night.py
@@ -37,7 +37,7 @@ A bracket holds one king, and the crown is stored on the bracket row as `event_d
 
 Nothing draws a night: `POST /events/{id}/stages/{stage_id}/generate` refuses a `koth` stage, and a signup writes its entrant row and nothing else. The admin pairs two players of one bracket during the night. `event_entrant.seed` is the line of the bracket, rising in signup order: a new signup, and a withdrawn row that signs up again, take the seed after the last one of their bracket, so a late signup stands at the end and moves nobody. A bracket a row left keeps the gap its seed leaves, so the line is read in seed order and not by its numbers.
 
-The shared event writes leave a night to its own routes. `POST /events/{id}/divisions/assign` answers 400 "A KOTH night cuts its own brackets", `PUT /events/{id}/stages/{stage_id}/seeds` answers 400 "A KOTH night orders its line on its run page", and `PUT /events/{id}/divisions` answers 400 "A KOTH night moves its brackets through their bounds". On a closed night, `PUT /events/{id}/entrants/{entrant_id}` and `DELETE /events/{id}/entrants/{entrant_id}` answer 400 "The night is closed"; on an open night both still work. The refusals sit on the routes, so the night's own services still write its brackets when it opens and place rows from the old routes.
+The shared event writes leave a night to its own routes. `POST /events/{id}/divisions/assign` answers 400 "A KOTH night cuts its own brackets", `PUT /events/{id}/stages/{stage_id}/seeds` answers 400 "A KOTH night orders its line on its run page", `PUT /events/{id}/divisions` answers 400 "A KOTH night moves its brackets through their bounds", and `DELETE /events/{id}/entrants/{entrant_id}` answers 400 "A KOTH night removes a player on its run page", because that delete skips the forfeit rule of a leave. On a closed night `PUT /events/{id}/entrants/{entrant_id}` answers 400 "The night is closed"; on an open night it still places a row. The refusals sit on the routes, so the night's own services still write its brackets when it opens and place and remove rows for the old routes.
 
 # Signups
 

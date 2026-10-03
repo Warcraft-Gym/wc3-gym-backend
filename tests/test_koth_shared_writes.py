@@ -1,8 +1,8 @@
 """The board names the crowned row, and the shared event writes leave a KOTH night alone.
 
-A night cuts its own brackets and orders its own line, so the shared cut, seed
-and division writes refuse it, and a closed night refuses a placement and a
-removal. The same writes still run on an event of any other kind.
+A night cuts its own brackets, orders its own line and removes its own rows, so
+the shared cut, seed, division and delete writes refuse it, and a closed night
+refuses a placement. The same writes still run on an event of any other kind.
 """
 
 from typing import Any
@@ -127,9 +127,35 @@ def test_the_shared_division_write_refuses_a_koth_night(
     ] == bracket_ids(night)
 
 
-@pytest.mark.parametrize("write", ["place", "remove"])
+def test_the_shared_delete_refuses_an_open_koth_night(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """The shared delete skips the forfeit rule, so a night removes a row on its run page."""
+    night = open_night(client, auth_headers)
+    _, middle, _ = bracket_ids(night)
+    row = chat(client, night, "Seat#7401", 1500)
+
+    resp = client.delete(f"/events/{night['id']}/entrants/{row}", headers=auth_headers)
+
+    assert resp.status_code == 400, resp.text
+    assert resp.json()["error"] == "A KOTH night removes a player on its run page"
+    rows = {one["id"]: one for one in entrants(client, night["id"])}
+    assert (rows[row]["division_id"], rows[row]["withdrawn_at"]) == (middle, None)
+
+
+@pytest.mark.parametrize(
+    ("write", "refusal"),
+    [
+        ("place", "The night is closed"),
+        ("remove", "A KOTH night removes a player on its run page"),
+    ],
+)
 def test_a_closed_night_refuses_a_shared_placement_and_removal(
-    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any], write: str
+    client: Client,
+    auth_headers: dict[str, str],
+    seeded: dict[str, Any],
+    write: str,
+    refusal: str,
 ) -> None:
     """A closed night keeps its rows where the close left them."""
     night = open_night(client, auth_headers)
@@ -149,7 +175,7 @@ def test_a_closed_night_refuses_a_shared_placement_and_removal(
         )
 
     assert resp.status_code == 400, resp.text
-    assert resp.json()["error"] == "The night is closed"
+    assert resp.json()["error"] == refusal
     rows = {one["id"]: one for one in entrants(client, night["id"])}
     assert rows[row]["division_id"] == middle
 

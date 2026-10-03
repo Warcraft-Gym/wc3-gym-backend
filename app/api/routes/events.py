@@ -244,10 +244,10 @@ def check_in(
 @router.delete(
     "/events/{event_id}/entrants/{entrant_id}",
     status_code=204,
-    dependencies=[Depends(require_admin), Depends(night.still_open)],
+    dependencies=[Depends(require_admin), Depends(night.removes_on_its_run_page)],
 )
 def remove_entrant(event_id: int, entrant_id: int, service: EventServiceDep) -> None:
-    """Remove one entrant row; a closed KOTH night keeps every row."""
+    """Remove one entrant row; a KOTH night removes its rows on its run page."""
     service.remove_entrant(event_id, entrant_id)
 
 
