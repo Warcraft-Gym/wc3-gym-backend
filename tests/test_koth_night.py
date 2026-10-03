@@ -10,7 +10,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
-from httpx2 import Client
+from httpx2 import Client, Response
 from sqlmodel import col, select
 
 from app.core.db import Session
@@ -107,6 +107,11 @@ def sign_up(client: Client, tag: str, twitch: str, race: str | None = None) -> A
     if race:
         params["race"] = race
     return client.get("/koth/signup", params=params)
+
+
+def chat(client: Client, text: str, twitch: str = "streamer") -> Response:
+    """The chat form; `text` is the URL-encoded line `$(querystring)` sends."""
+    return client.get(f"/koth/signup?token={TOKEN}&twitch={twitch}&q={text}")
 
 
 def entrants(client: Client, event: int) -> list[dict[str, Any]]:
@@ -312,6 +317,96 @@ def test_a_night_with_signups_closed_stays_tonight_and_refuses_signups(
     )
     assert site.status_code == 400
     assert site.json()["error"] == "Signups are closed"
+
+
+def test_a_chat_line_with_a_tag_answers_one_plain_text_line(
+    client: Client,
+    auth_headers: dict[str, str],
+    seeded: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The `#` of the tag arrives encoded and the row keeps the whole tag."""
+    silent_w3c(monkeypatch)
+    night = open_night(client, auth_headers)
+
+    resp = chat(client, "Ghost%239999")
+
+    assert resp.status_code == 200, resp.text
+    assert resp.headers["content-type"] == "text/plain; charset=utf-8"
+    assert resp.text == (
+        "streamer is signed up; W3Champions gave no rating for Ghost#9999 yet,"
+        " the admin places you"
+    )
+    assert unplaced(client, night["id"]) == ["Ghost#9999"]
+
+
+def test_a_chat_line_with_a_race_enters_that_race(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """Word two picks the race over a higher rated one; later words are ignored."""
+    night = open_night(client, auth_headers)
+    user_id = enrol("Two#2000", 1400)
+    with Session.begin() as session:
+        session.add(
+            W3CStats(user_id=user_id, race=Race.NE, wc3_season=20, games=50, mmr=1700)
+        )
+
+    resp = chat(client, "Two%232000%20human%20please")
+
+    assert resp.status_code == 200, resp.text
+    assert resp.text == "streamer signed up for Bracket 1 (1400 MMR)"
+    rows = entrants(client, night["id"])
+    assert [(row["race"], row["mmr"]) for row in rows] == [("HU", 1400)]
+
+
+def test_a_chat_line_with_no_tag_or_no_twitch_name_answers_the_usage(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    night = open_night(client, auth_headers)
+
+    empty = chat(client, "")
+    nameless = client.get(f"/koth/signup?token={TOKEN}&q=Any%231001")
+
+    for resp in (empty, nameless):
+        assert resp.status_code == 200, resp.text
+        assert resp.text == "Usage: !kothsignup BattleTag#1234 [race]"
+    assert entrants(client, night["id"]) == []
+
+
+def test_a_chat_line_with_no_night_open_answers_the_refusal_as_text(
+    client: Client, seeded: dict[str, Any]
+) -> None:
+    resp = chat(client, "Any%231001")
+
+    assert resp.status_code == 200, resp.text
+    assert resp.headers["content-type"] == "text/plain; charset=utf-8"
+    assert resp.text == "No KOTH night is open"
+
+
+def test_a_chat_line_with_an_unknown_race_names_the_valid_races(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """A refusal stays one line under the 400 characters Nightbot prints."""
+    open_night(client, auth_headers)
+
+    resp = chat(client, "Any%231001%20gnome")
+    long = chat(client, "Any%231001%20" + "x" * 500)
+
+    assert resp.status_code == 200, resp.text
+    assert resp.text == (
+        "Invalid race 'gnome'. Valid options: orc, human, undead, nightelf, random"
+    )
+    assert long.status_code == 200, long.text
+    assert len(long.text) == 399
+
+
+def test_a_chat_line_with_a_wrong_token_answers_401_json(
+    client: Client, seeded: dict[str, Any]
+) -> None:
+    resp = client.get("/koth/signup?token=wrong&twitch=s&q=S%231")
+
+    assert resp.status_code == 401
+    assert resp.json() == {"error": "Unauthorized - invalid client token"}
 
 
 def test_a_second_night_opens_only_after_the_open_one_closes(

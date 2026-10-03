@@ -4,7 +4,7 @@ title: KOTH night
 description: A King of the Hill night is one event of the KOTH league with three MMR brackets as divisions, one signup rule at every door, and every series paired by hand while the night runs.
 resource: ../../../app/services/koth/night.py
 tags: [events, koth]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-26T18:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-03T04:51:24Z }
 sources:
   - id: night
     resource: ../../../app/services/koth/night.py
@@ -45,7 +45,9 @@ Three ways in, all through the shared entrant write under the `anyone` policy:
 - an admin, `POST /events/{id}/entrants/admin`;
 - Twitch chat through Nightbot, `GET /koth/signup`, authenticated with a shared token held in settings, because Nightbot cannot send a body.
 
-The doors that name no night, `GET /koth/signup` and the old `/koth/signups` routes, enter tonight and answer 400 "Signups are closed" while its signups stand closed. A withdraw, `DELETE /events/{id}/entrants/me` or the old `DELETE /koth/signups/me`, goes through whatever the signup switch says while the night is tonight; a closed or expired night answers "The night is closed".
+`GET /koth/signup` has two forms. The chat form carries `q`, the URL-encoded text the chatter typed after the command: the battle tag, then an optional race; later words are ignored. It answers `text/plain` with status 200 and one line under 400 characters, because Nightbot prints the body in chat: the signup sentence, a usage line when `q` holds no tag or `twitch` is missing, or the text of the refusal. The parameter form carries `battletag` and `race` and answers JSON, `{"success": true, "message": ...}` or the error envelope. Both forms answer a wrong token with the JSON 401.
+
+The doors that name no night, `GET /koth/signup` and the old `/koth/signups` routes, enter tonight and refuse with "Signups are closed" while its signups stand closed: a 400 in JSON, and the line itself in the chat form. A withdraw, `DELETE /events/{id}/entrants/me` or the old `DELETE /koth/signups/me`, goes through whatever the signup switch says while the night is tonight; a closed or expired night answers "The night is closed".
 
 A row that leaves forfeits what it owes, and the admin's `DELETE /koth/nights/{id}/entrants/{entrant_id}` runs the same rule (`live.leave`). A row in a series on the table loses it: the series is scored for the other side with `result_kind` `forfeit` and follows the normal result path, so the crown and the line move as for any result. Otherwise a king whose bracket has no series on the table and a player free to play in its line loses a new forfeit series to the first of them, who takes the crown. Otherwise the throne the row wore is left empty. Then the row is stamped withdrawn.
 

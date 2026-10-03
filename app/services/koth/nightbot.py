@@ -1,9 +1,10 @@
 """The Twitch signup: one chat command enters one battle tag in tonight's night.
 
 Nightbot cannot send a body, so the command is a GET carrying the shared
-token. The signup itself is the shared entrant write under the `anyone`
-policy; only the reply sentence is KOTH's own. A night takes one entry per
-race, so a command naming a second race enters it beside the first.
+token. Nightbot prints the answer in chat, so the chat form answers one plain
+line, a refusal included. The signup itself is the shared entrant write under
+the `anyone` policy; only the reply sentence is KOTH's own. A night takes one
+entry per race, so a command naming a second race enters it beside the first.
 """
 
 from typing import TYPE_CHECKING, Any
@@ -33,6 +34,8 @@ if TYPE_CHECKING:
     from app.services.settings import SettingsService
 
 RACES = "orc, human, undead, nightelf, random"
+USAGE = "Usage: !kothsignup BattleTag#1234 [race]"
+CHAT_LINE = 399  # Nightbot prints a body under 400 characters
 
 
 def signup(
@@ -46,6 +49,31 @@ def signup(
     _check_token(settings, token)
     if not twitch or not battletag:
         raise BadRequestError("Missing required parameters: token, twitch, battletag")
+    return {"success": True, "message": _sign_up(twitch, battletag, race)}
+
+
+def chat_signup(
+    settings: "SettingsService", token: str | None, twitch: str | None, text: str
+) -> str:
+    """Enter the battle tag the chat text names; answer one line, a refusal too.
+
+    The text is what the chatter typed after the command: the battle tag, then
+    an optional race. Words after the race are ignored.
+    """
+    _check_token(settings, token)
+    words = text.split()
+    if not twitch or not words:
+        return USAGE
+    race = words[1] if len(words) > 1 else None
+    try:
+        line = _sign_up(twitch, words[0], race)
+    except (ApiError, BadRequestError, NotFoundError) as error:
+        line = str(error)
+    return line[:CHAT_LINE]
+
+
+def _sign_up(twitch: str, battletag: str, race: str | None) -> str:
+    """Enter the battle tag in tonight's night; answer the sentence chat reads."""
     with Session.begin() as session:
         event_id = ident(taking_signups(session))
     chosen = enter(event_id, battletag, race)
@@ -62,18 +90,12 @@ def signup(
         mmr = _stats_for(user, chosen, w3c_season(session))[0]
         tag = user.battleTag or battletag
     if bracket is None:
-        return {
-            "success": True,
-            "message": (
-                f"{twitch} is signed up; W3Champions gave no rating for {tag}"
-                " yet, the admin places you"
-            ),
-        }
+        return (
+            f"{twitch} is signed up; W3Champions gave no rating for {tag}"
+            " yet, the admin places you"
+        )
     rating = f" ({mmr} MMR)" if mmr is not None else ""
-    return {
-        "success": True,
-        "message": f"{twitch} signed up for {bracket}{rating}",
-    }
+    return f"{twitch} signed up for {bracket}{rating}"
 
 
 def enter(
