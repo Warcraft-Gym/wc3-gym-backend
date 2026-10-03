@@ -45,6 +45,7 @@ from app.models.series import (
     TemplateSeries,
 )
 from app.services import awards, discord_posts, stage_engine
+from app.services.koth import night
 
 router = APIRouter(tags=["events"])
 
@@ -243,16 +244,16 @@ def check_in(
 @router.delete(
     "/events/{event_id}/entrants/{entrant_id}",
     status_code=204,
-    dependencies=[Depends(require_admin)],
+    dependencies=[Depends(require_admin), Depends(night.removes_on_its_run_page)],
 )
 def remove_entrant(event_id: int, entrant_id: int, service: EventServiceDep) -> None:
-    """Remove one entrant row."""
+    """Remove one entrant row; a KOTH night removes its rows on its run page."""
     service.remove_entrant(event_id, entrant_id)
 
 
 @router.put(
     "/events/{event_id}/entrants/{entrant_id}",
-    dependencies=[Depends(require_admin)],
+    dependencies=[Depends(require_admin), Depends(night.still_open)],
 )
 def place_entrant(
     event_id: int,
@@ -264,7 +265,10 @@ def place_entrant(
     return service.place_entrant(event_id, entrant_id, data)
 
 
-@router.put("/events/{event_id}/divisions", dependencies=[Depends(require_admin)])
+@router.put(
+    "/events/{event_id}/divisions",
+    dependencies=[Depends(require_admin), Depends(night.keeps_its_brackets)],
+)
 def set_divisions(
     event_id: int, divisions: list[EventDivisionWrite], service: EventServiceDep
 ) -> EventPublic:
@@ -273,7 +277,8 @@ def set_divisions(
 
 
 @router.post(
-    "/events/{event_id}/divisions/assign", dependencies=[Depends(require_admin)]
+    "/events/{event_id}/divisions/assign",
+    dependencies=[Depends(require_admin), Depends(night.cuts_itself)],
 )
 def assign_divisions(event_id: int, service: EventServiceDep) -> EventPublic:
     """Cut the entrants into divisions and answer the count each one holds."""
@@ -282,7 +287,7 @@ def assign_divisions(event_id: int, service: EventServiceDep) -> EventPublic:
 
 @router.put(
     "/events/{event_id}/stages/{stage_id}/seeds",
-    dependencies=[Depends(require_admin)],
+    dependencies=[Depends(require_admin), Depends(night.keeps_its_line)],
 )
 def set_seeds(
     event_id: int, stage_id: int, data: SeedWrite, service: EventServiceDep
