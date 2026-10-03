@@ -107,7 +107,7 @@ def generate(
             )
         if stage.format is StageFormat.koth:
             raise BadRequestError(
-                "A KOTH stage is paired by its admin during the night, not generated"
+                "A KOTH stage is paired by its admin during the event, not generated"
             )
         drawn = _series_of(session, stage_id)
         if division_id is None and drawn:
@@ -309,7 +309,7 @@ def append_to_chain(
         raise BadRequestError("This stage plays no chain, so it takes no challenger")
     event = session.get(Season, stage.event_id)
     if event is not None and event.closed_at is not None:
-        raise BadRequestError("The night is closed")
+        raise BadRequestError("The event is closed")
     division_id = ident(division) if division else None
     if entrant.event_id != stage.event_id or entrant.division_id != division_id:
         raise BadRequestError("This entrant does not play in that division")

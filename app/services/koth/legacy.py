@@ -52,7 +52,7 @@ TEAMS = 2
 # The thresholds a night reads when it carries no divisions
 DEFAULT_THRESHOLDS = (1450, 1600)
 NO_MANUAL_KING = (
-    "The night decides the king by results. Score the throne series instead."
+    "The event decides the king by results. Score the throne series instead."
 )
 
 
@@ -216,7 +216,7 @@ def set_bracket(signup_id: int, bracket: int) -> KothSignupPublic:
             for division_id, number in _brackets(session, event_id).items()
         }
         if bracket not in wanted:
-            raise BadRequestError(f"This night runs no bracket {bracket}")
+            raise BadRequestError(f"This event runs no bracket {bracket}")
         division_id = wanted[bracket]
     EventService().place_entrant(
         event_id, signup_id, EntrantPlacement(division_id=division_id)
@@ -227,7 +227,7 @@ def set_bracket(signup_id: int, bracket: int) -> KothSignupPublic:
 def crown(signup_id: int) -> KothSignupPublic:
     """Put this player on the throne seat of his chain, before any result.
 
-    The night decides the king by results, so the crown only moves while the
+    The event decides the king by results, so the crown only moves while the
     chain is unplayed: the move swaps the two sides of the opening series.
     """
     with Session.begin() as session:
@@ -327,7 +327,7 @@ def update_match(match_id: int, data: KothMatchUpdate) -> KothMatchPublic:
                 for division_id, number in _brackets(session, event_id).items()
             }
             if data.bracket not in wanted:
-                raise BadRequestError(f"This night runs no bracket {data.bracket}")
+                raise BadRequestError(f"This event runs no bracket {data.bracket}")
             row.division_id = wanted[data.bracket or 0]
     return _one_match(event_id, match_id)
 
@@ -417,7 +417,7 @@ def _stage(session: OrmSession, event_id: int) -> EventStage:
         .order_by(col(EventStage.position))
     ).first()
     if stage is None:
-        raise BadRequestError("This night runs no stage to play a match in")
+        raise BadRequestError("This event runs no stage to play a match in")
     return stage
 
 

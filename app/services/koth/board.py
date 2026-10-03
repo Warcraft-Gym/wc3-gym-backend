@@ -63,7 +63,7 @@ def read_in(
     """The board as this session sees it, so a preview reads its own unsaved writes."""
     night, date_label = _night(session, night_id)
     if public and not night.published:
-        raise NotFoundError(f"KOTH night not found by id: {night_id}")
+        raise NotFoundError(f"KOTH event not found by id: {night_id}")
     event_id = ident(night)
     if date_label is not None:
         from app.services.koth.history_board import read_archive
@@ -398,7 +398,7 @@ def _night(session: OrmSession, night_id: int | None) -> tuple[Season, str | Non
         .where(col(Season.id) == night_id, col(Season.kind) == EventKind.koth)
     ).first()
     if row is None:
-        raise NotFoundError(f"KOTH night not found by id: {night_id}")
+        raise NotFoundError(f"KOTH event not found by id: {night_id}")
     return row[0], row[1]
 
 
