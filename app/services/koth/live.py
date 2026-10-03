@@ -10,7 +10,7 @@ what is actually being played.
 from collections.abc import Callable, Sequence
 from itertools import pairwise
 
-from sqlalchemy import select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session as OrmSession
 from sqlmodel import col
 
@@ -22,6 +22,7 @@ from app.models.event_division import EventDivision
 from app.models.event_entrant import EventEntrant
 from app.models.event_history import KothHistoryEvent
 from app.models.event_stage import EventStage
+from app.models.koth_crown_event import KothCrownEvent
 from app.models.koth_night import (
     BoundsWrite,
     BracketMove,
@@ -93,7 +94,12 @@ def _add_series(
     second: EventEntrant,
     chain: Sequence[Series],
 ) -> Series:
-    """Write one best of one between two rows of a bracket, after its chain."""
+    """Write one best of one between two rows of a bracket, after its chain and
+    after every crown event of the bracket, so it plays after them."""
+    last = max(
+        [one.sequence or 0 for one in chain]
+        + [_last_step(session, first.division_id or 0)]
+    )
     row = Series(
         round_id=ident(_round(session, _stage(session, event_id))),
         division_id=first.division_id,
@@ -102,19 +108,31 @@ def _add_series(
         player1_id=first.user_id,
         player2_id=second.user_id,
         host_player_id=first.user_id or 0,
-        sequence=max((one.sequence or 0) for one in chain) + 1 if chain else 1,
+        sequence=last + 1,
     )
     session.add(row)
     session.flush()
     return row
 
 
+def _last_step(session: OrmSession, division_id: int) -> int:
+    """The series the newest crown event of a bracket follows; 0 with none."""
+    return (
+        session.scalar(
+            select(func.max(KothCrownEvent.after_sequence)).where(
+                col(KothCrownEvent.division_id) == division_id
+            )
+        )
+        or 0
+    )
+
+
 def add_result(night_id: int, data: ResultAdd, preview: bool = False) -> KothBoard:
     """Record a series already played as the newest result of its bracket, with
     nobody moved in the line: the quick way to put a night's history back. A row
     that left may be a side, since it played before it left. The result lands
-    before a series still on the table, which is played after it, and the crown
-    follows the results unless it was passed by hand (_fix)."""
+    before a series still on the table, which is played after it, and after
+    every crown event, and the crown follows the walk from them (_fix)."""
 
     def act(session: OrmSession, event_id: int) -> None:
         winner = _entrant(session, event_id, data.winner_id)
@@ -143,13 +161,19 @@ def add_result(night_id: int, data: ResultAdd, preview: bool = False) -> KothBoa
 def clear_series(night_id: int) -> KothBoard:
     """Take every series off the night, played or on the table, and empty every
     throne, so a test run leaves no record. The signups and the line stay where
-    they stand; a replay goes with its series."""
+    they stand; a replay goes with its series, and every crown event goes."""
 
     def act(session: OrmSession, event_id: int) -> None:
         for row in series_of(session, event_id):
             session.delete(row)
-        for division in divisions_of(session, event_id):
+        divisions = divisions_of(session, event_id)
+        for division in divisions:
             division.king_entrant_id = None
+        session.execute(
+            delete(KothCrownEvent).where(
+                col(KothCrownEvent.division_id).in_([ident(row) for row in divisions])
+            )
+        )
 
     return _write(night_id, False, act)
 
@@ -211,8 +235,10 @@ def _write(
 def _fix(
     session: OrmSession, event_id: int, row: Series, change: Callable[[], object]
 ) -> None:
-    """Change or remove a played series and crown whoever the results then
-    crown. A crown passed or emptied by hand since stays where the hand put it."""
+    """Change or remove a played series and crown whoever the bracket's results
+    and crown events, walked in play order, then crown. A crown passed or
+    emptied by hand is an event at its place, and the results after it walk
+    from it."""
     division = (
         session.get(EventDivision, row.division_id)
         if row.division_id is not None
@@ -222,22 +248,35 @@ def _fix(
         change()
         return
     worn = division.king_entrant_id
-    by_hand = _player(session, worn) != _player(
-        session, board.results_king(_chain(session, event_id, ident(division)))
-    )
     change()
     session.flush()
-    crowned = board.results_king(_chain(session, event_id, ident(division)))
-    if by_hand or _player(session, crowned) == _player(session, worn):
+    division_id = ident(division)
+    crowned = board.results_king(
+        _chain(session, event_id, division_id),
+        board.crown_steps(session, [division_id]).get(division_id, []),
+    )
+    if _player(session, crowned) == _player(session, worn):
         division.king_entrant_id = worn
         return
     heir = session.get(EventEntrant, crowned) if crowned is not None else None
-    standing = (
-        heir is not None
-        and heir.withdrawn_at is None
-        and heir.division_id == ident(division)
-    )
-    division.king_entrant_id = crowned if standing else None
+    if heir is not None and (
+        heir.withdrawn_at is not None or heir.division_id != division_id
+    ):
+        # The crown is the player's, so it passes to his first live row here
+        player = heir.user_id
+        heir = min(
+            (
+                one
+                for one in _live_field(session, event_id, division_id)
+                if player is not None and one.user_id == player
+            ),
+            key=board.place,
+            default=None,
+        )
+        # A throne the walk cannot fill is empty from here on, which no result shows
+        if heir is None:
+            stage_engine.crown_event(session, division, None)
+    division.king_entrant_id = ident(heir) if heir is not None else None
 
 
 def _chain(session: OrmSession, event_id: int, division_id: int) -> list[Series]:
@@ -417,13 +456,16 @@ def set_crown(night_id: int, division_id: int, data: CrownWrite) -> KothBoard:
         division = session.get(EventDivision, division_id)
         if division is None or division.event_id != ident(night):
             raise NotFoundError(f"Bracket not found by id: {division_id}")
-        if data.entrant_id is None:
-            division.king_entrant_id = None
-        else:
+        if data.entrant_id is not None:
             wearer = _entrant(session, ident(night), data.entrant_id)
             if wearer.division_id != division_id or wearer.withdrawn_at is not None:
                 raise BadRequestError("The crown stays inside its own bracket")
-            division.king_entrant_id = data.entrant_id
+        # A crown that changes player is an event, so a later fix walks from it
+        if _player(session, division.king_entrant_id) != _player(
+            session, data.entrant_id
+        ):
+            stage_engine.crown_event(session, division, data.entrant_id)
+        division.king_entrant_id = data.entrant_id
         session.flush()
     return board.read(night_id)
 

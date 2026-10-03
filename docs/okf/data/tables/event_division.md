@@ -4,7 +4,7 @@ title: event_division
 description: One MMR band of an event that runs the whole stage list on its own and never merges; a KOTH bracket is a division.
 resource: ../../../../app/models/event_division.py
 tags: [events, data]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-03T06:54:58Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-03T17:06:39Z }
 verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
 sources:
   - id: model
@@ -42,4 +42,4 @@ Pointed at by [event_entrant](event_entrant.md), [matches](matches.md) and [seri
 
 Replacing the division list clears every entrant's division and manual placement. See [events module](../../concepts/events-module.md).
 
-The crown moves with the results of a `koth` stage and with the two admin writes that pass it on or empty the throne. See [KOTH night](../../concepts/koth.md).
+The crown moves with the results of a `koth` stage and with the two admin writes that pass it on or empty the throne. Each change no result shows is a row of [koth_crown_event](koth_crown_event.md). See [KOTH night](../../concepts/koth.md).

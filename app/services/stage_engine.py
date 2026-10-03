@@ -11,7 +11,7 @@ of that pair hang under, so a team league is read exactly as GNL is read.
 
 from collections.abc import Mapping, Sequence
 
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session as OrmSession
 from sqlmodel import col
 
@@ -30,6 +30,7 @@ from app.models.event_stage import (
     EventStage,
     StandingRow,
 )
+from app.models.koth_crown_event import KothCrownEvent
 from app.models.match import Match
 from app.models.relationships import DBEventRound, EventRoundPublic, round_row
 from app.models.season import Season
@@ -479,16 +480,43 @@ def crown(session: OrmSession, row: Series) -> None:
 
 
 def uncrown(session: OrmSession, entrant_ids: Sequence[int]) -> None:
-    """Empty every throne these rows wear: a row that leaves loses the crown."""
+    """Empty every throne these rows wear: a row that leaves loses the crown.
+
+    Only a koth division wears a crown, and each emptied throne is a crown
+    event, since no result shows it.
+    """
     ids = [entrant_id for entrant_id in entrant_ids if entrant_id is not None]
     if not ids:
         return
-    session.execute(
-        update(EventDivision)
-        .where(col(EventDivision.king_entrant_id).in_(ids))
-        .values(king_entrant_id=None)
+    worn = session.scalars(
+        select(EventDivision).where(col(EventDivision.king_entrant_id).in_(ids))
     )
+    for division in list(worn):
+        division.king_entrant_id = None
+        crown_event(session, division, None)
     session.flush()
+
+
+def crown_event(
+    session: OrmSession, division: EventDivision, entrant_id: int | None
+) -> None:
+    """Record a crown change no result shows, after the bracket's newest result."""
+    after = session.scalar(
+        select(func.max(Series.sequence)).where(
+            col(Series.division_id) == ident(division),
+            or_(
+                col(Series.player1_score).is_not(None),
+                col(Series.player2_score).is_not(None),
+            ),
+        )
+    )
+    session.add(
+        KothCrownEvent(
+            division_id=ident(division),
+            after_sequence=after or 0,
+            entrant_id=entrant_id,
+        )
+    )
 
 
 def _follow_score(

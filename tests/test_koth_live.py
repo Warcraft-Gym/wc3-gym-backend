@@ -558,9 +558,10 @@ def test_the_board_of_thirty_rows_is_small_and_costs_a_fixed_read(
         client.get(f"/koth/nights/{night['id']}/board")
 
     assert small.status_code == 200, small.text
-    # 30 rows of distinct names and one played series read 4391 bytes over 10 statements
+    # 30 rows of distinct names and one played series read 4391 bytes over 11
+    # statements, the crown events of the brackets among them
     assert len(small.content) < 5000
-    assert ten[0] == sixty[0] == 10
+    assert ten[0] == sixty[0] == 11
 
 
 def test_a_save_that_turns_no_result_around_leaves_the_crown(
@@ -1387,7 +1388,7 @@ def test_removing_an_older_result_crowns_whoever_the_rest_crown(
 def test_a_crown_passed_by_hand_stays_through_a_fix(
     client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
 ) -> None:
-    """The results no longer name the king, so a fix leaves the hand's choice."""
+    """The pass sits after the removed series, so the walk still ends on it."""
     night = open_night(client, auth_headers)
     top = bracket_ids(night)[0]
     king = place(client, auth_headers, night, "Hand#1", 1700, top)

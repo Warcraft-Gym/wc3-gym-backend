@@ -22,6 +22,7 @@ The 48 tables, one concept each. A concept's `# Schema` lists every column; `tes
 * [event_division](event_division.md) - One MMR band of an event that runs the whole stage list on its own and never merges; a KOTH bracket is a division.
 * [event_entrant](event_entrant.md) - One player or one pre-made team in one event, with its race, seed, division, check-in and withdrawal stamps; a withdrawn entrant keeps its row.
 * [event_award](event_award.md) - One place of a finished event, frozen from the table of its last stage when an admin closes it; a trophy read lists these rows.
+* [koth_crown_event](koth_crown_event.md) - One crown change of a KOTH bracket that no result shows, a hand pass, a step down or a throne a rule emptied, placed after the series it followed in the order of play.
 * [matches](matches.md) - One fixture: two teams meeting in one round of an event, which the series between their players hang under.
 * [series](series.md) - One series between two sides, a best-of with its scores, time, host, off races, result kind and the feeder graph a bracket runs on.
 * [series_side](series_side.md) - One seat of a series that is not a plain 1v1: a player in an FFA lobby or on a team side, with the place that side finished.
