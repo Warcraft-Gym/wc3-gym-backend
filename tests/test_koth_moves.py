@@ -194,7 +194,7 @@ def test_a_seat_keeps_its_place_when_one_of_its_races_moves(
 def test_the_shared_move_of_a_king_clears_the_crown_he_wore(
     client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
 ) -> None:
-    """A row that comes back to his bracket is no king, and the close pays the table."""
+    """A row that comes back to his bracket is no king, so the close pays no Champion."""
     night = open_night(client, auth_headers)
     top, middle, _ = bracket_ids(night)
     king = place(client, auth_headers, night, "Crown#1", 1700, top)
@@ -226,8 +226,8 @@ def test_the_shared_move_of_a_king_clears_the_crown_he_wore(
     closed = client.post(f"/koth/nights/{night['id']}/close", headers=auth_headers)
     assert closed.status_code == 200, closed.text
     assert awarded(night["id"]) == [
-        (user_of(client, night["id"], rival), 1, "Champion"),
-        (user_of(client, night["id"], king), 2, "Runner-up"),
+        (user_of(client, night["id"], rival), 2, "Runner-up"),
+        (user_of(client, night["id"], king), 3, "Third"),
     ]
 
 

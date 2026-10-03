@@ -4,7 +4,7 @@ title: KOTH night
 description: A King of the Hill night is one event of the KOTH league with three MMR brackets as divisions, one signup rule at every door, and every series paired by hand while the night runs.
 resource: ../../../app/services/koth/night.py
 tags: [events, koth]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-03T07:27:40Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-03T07:43:40Z }
 sources:
   - id: night
     resource: ../../../app/services/koth/night.py
@@ -87,7 +87,7 @@ The shape it answers, as `app/models/koth_night.py` states it:
 
 `mmr` null on a race row of a bracket says W3Champions found no rating for that player on that race; no second field carries that. Every row of `unplaced` reads `mmr` null, because a row no bracket holds is not asked for a rating.
 
-The night routes are `POST /koth/nights` (open, with the start time and the three bounds; 409 while another night is open), `POST /koth/nights/{id}/close`, and the event routes for everything else. The close deletes the series on every bracket's table and leaves the crowns readable, so the next night can name each bracket's defender.
+The night routes are `POST /koth/nights` (open, with the start time and the three bounds; 409 while another night is open), `POST /koth/nights/{id}/close`, and the event routes for everything else. The close deletes the series on every bracket's table and leaves the crowns readable, so the next night can name each bracket's defender. It then pays each bracket from its table, which the standings read of the stage also answers: place 1, Champion, is the king's alone, even a king crowned by hand who played nothing, and the rows that played a scored series in that bracket follow in points order. A bracket with no king has no place 1, so its first placed row is place 2, and a row that never played takes no place and no award.
 
 # Historical imports
 
