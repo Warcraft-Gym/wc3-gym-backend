@@ -100,6 +100,18 @@ class HomeSeriesRow(PublicModel):
         )
 
 
+class UpcomingSeriesRow(HomeSeriesRow):
+    """One booked series of the upcoming list: the hub row with every claim on
+    it in place of the one cast, so a caster claims, edits or leaves a cast
+    straight from the list."""
+
+    casts: list[CastPublic] = []
+
+    @classmethod
+    def from_row(cls, row: HomeSeriesRow, casts: list[CastPublic]) -> Self:
+        return cls(**row.model_dump(exclude={"cast"}), casts=casts)
+
+
 class HomeSeries(PublicModel):
     """The three series lists the home hub draws, in one answer."""
 

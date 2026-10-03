@@ -1,13 +1,14 @@
-"""The home hub read: the next booked series and the casted series of the
-whole site, across every event kind.
+"""The home hub reads: the next booked series and the casted series of the
+whole site, across every event kind, and the full list of booked series.
 
-Three short lists answer one request. Each list costs one statement plus the
-two collection loads of a reduced series; the round and the stage of every row
-come in one more, and one pass names the race of both sides and rates it. None
-of them grows with the number of rows.
+Three short lists answer the hub in one request. Each list costs one statement
+plus the two collection loads of a reduced series; the round and the stage of
+every row come in one more, and one pass names the race of both sides and rates
+it. None of them grows with the number of rows. The upcoming list is the first
+of those lists without its cap, at the same cost as one list.
 """
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any, NamedTuple
 
 from sqlalchemy import Select, and_, func, or_, select
@@ -19,7 +20,7 @@ from sqlmodel import col
 from app.core.db import Session
 from app.models.base import ident
 from app.models.event_stage import EventStage
-from app.models.home import HomeSeries, HomeSeriesRow
+from app.models.home import HomeSeries, HomeSeriesRow, UpcomingSeriesRow
 from app.models.league import League
 from app.models.match import Match
 from app.models.relationships import DBEventRound
@@ -33,6 +34,9 @@ from app.services import derived
 NEXT = 5
 CASTS_UPCOMING = 3
 CASTS_RECENT = 4
+
+# The upcoming list stops here; a season books far fewer series at once
+UPCOMING = 100
 
 # How long a started series with no result stays in the booked lists
 GRACE = timedelta(hours=2)
@@ -137,22 +141,52 @@ def _round_label(row: _Labelled, found: _Round | None) -> str | None:
     return f"Round {number}" if number is not None else None
 
 
+def _booked(now: datetime) -> Select[Any]:
+    """The booked series still to play, in time order. A series that has started
+    but carries no result is still what is on now."""
+    return (
+        _published()
+        .where(col(Series.date_time) >= now - GRACE, _unplayed())
+        .order_by(col(Series.date_time), col(Series.id))
+    )
+
+
+def _named(
+    session: OrmSession, lists: list[list[_Labelled]]
+) -> tuple[dict[int, SeriesPublic], dict[int, HomeSeriesRow]]:
+    """Every series of those lists as its public row and its hub row.
+
+    A series may sit in two lists, so the pass names and rates it once.
+    """
+    seen = {ident(row.series): row for rows in lists for row in rows}
+    public = {key: SeriesPublic.from_series(row.series) for key, row in seen.items()}
+    events = {key: row.event_id for key, row in seen.items()}
+    derived.fill_signup_races(session, list(public.values()), events)
+    derived.fill_mmrs(session, list(public.values()), events)
+    rounds = _rounds(session, set(seen))
+    made = {
+        key: HomeSeriesRow.from_series(
+            public[key],
+            league=row.league,
+            event=row.event,
+            stage=rounds[key].stage if key in rounds else None,
+            round_name=_round_label(row, rounds.get(key)),
+        )
+        for key, row in seen.items()
+    }
+    return public, made
+
+
 def series() -> HomeSeries:
     """The three lists the hub draws: what is booked next, and what is cast."""
     now = utcnow()
     with Session() as session:
-        # A series that has started but carries no result is still what is on now
-        booked = _published().where(col(Series.date_time) >= now - GRACE, _unplayed())
+        booked = _booked(now)
         lists = [
+            _rows(session, booked.limit(NEXT)),
             _rows(
                 session,
-                booked.order_by(col(Series.date_time), col(Series.id)).limit(NEXT),
-            ),
-            _rows(
-                session,
-                booked.where(col(Series.id).in_(_claimed()))
-                .order_by(col(Series.date_time), col(Series.id))
-                .limit(CASTS_UPCOMING),
+                booked.where(col(Series.id).in_(_claimed())).limit(CASTS_UPCOMING),
             ),
             _rows(
                 session,
@@ -168,27 +202,23 @@ def series() -> HomeSeries:
                 .limit(CASTS_RECENT),
             ),
         ]
-        # A series may sit in two lists, so the pass below names and rates it once
-        seen = {ident(row.series): row for rows in lists for row in rows}
-        public = {
-            key: SeriesPublic.from_series(row.series) for key, row in seen.items()
-        }
-        events = {key: row.event_id for key, row in seen.items()}
-        derived.fill_signup_races(session, list(public.values()), events)
-        derived.fill_mmrs(session, list(public.values()), events)
-        rounds = _rounds(session, set(seen))
-        made = {
-            key: HomeSeriesRow.from_series(
-                public[key],
-                league=row.league,
-                event=row.event,
-                stage=rounds[key].stage if key in rounds else None,
-                round_name=_round_label(row, rounds.get(key)),
-            )
-            for key, row in seen.items()
-        }
+        _, made = _named(session, lists)
         return HomeSeries(
             next=[made[ident(row.series)] for row in lists[0]],
             casts_upcoming=[made[ident(row.series)] for row in lists[1]],
             casts_recent=[made[ident(row.series)] for row in lists[2]],
         )
+
+
+def upcoming() -> list[UpcomingSeriesRow]:
+    """Every booked series still to play, of every published event, in time
+    order, each with every claim on it."""
+    with Session() as session:
+        rows = _rows(session, _booked(utcnow()).limit(UPCOMING))
+        public, made = _named(session, [rows])
+        return [
+            UpcomingSeriesRow.from_row(
+                made[ident(row.series)], public[ident(row.series)].casts
+            )
+            for row in rows
+        ]

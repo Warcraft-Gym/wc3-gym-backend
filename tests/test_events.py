@@ -1433,9 +1433,55 @@ def test_the_captain_fixture_asks_for_a_seat_and_not_for_a_role(
     captain_seat(season, seeded["team_a_id"], seeded["player_ids"][0])
 
     assert my_events(client, member("2"))[season]["captain_fixture"] is None
+    assert my_events(client, member("2"))[season]["captain_matches"] == []
 
     monkeypatch.setenv("ADMIN_DISCORD_IDS", "3")
     assert my_events(client, member("3"))[season]["captain_fixture"] is None
+    assert my_events(client, member("3"))[season]["captain_matches"] == []
+
+
+def test_the_member_home_lists_every_fixture_of_the_captains_team(
+    client: Client, seeded: dict[str, Any], member: Callable[..., dict[str, str]]
+) -> None:
+    """Every round's fixture comes back in round order, the one that is over
+    and the one still to draft, so the home leads to the team's match of any
+    round."""
+    headers = member()
+    season = seeded["season_id"]
+    team_a, team_b = seeded["team_a_id"], seeded["team_b_id"]
+    captain_seat(season, team_a, seeded["player_ids"][0])
+    later = add_fixture(season, team_b, team_a, 3)
+    add_draft(later, seeded["player_ids"][2], seeded["player_ids"][0])
+
+    rows = my_events(client, headers)[season]["captain_matches"]
+    assert [(row["match_id"], row["playday"]) for row in rows] == [
+        (seeded["match_id"], 1),
+        (later, 3),
+    ]
+    first, third = rows
+    # the seeded fixture published both series of the round and one is played
+    assert (first["published"], first["played"], first["drafted"]) == (2, 1, 0)
+    assert (third["published"], third["played"], third["drafted"]) == (0, 0, 1)
+    assert (first["round_start"], first["round_end"]) == ("2026-01-05", "2026-01-11")
+    assert (third["team1"]["id"], third["team2"]["id"]) == (team_b, team_a)
+    assert third["series_per_round"] == 2
+
+
+def test_the_captain_matches_leave_a_closed_season_out(
+    client: Client, seeded: dict[str, Any], member: Callable[..., dict[str, str]]
+) -> None:
+    """A closed season leaves the My Team nav, and its fixtures leave the
+    home with it."""
+    headers = member()
+    season = seeded["season_id"]
+    captain_seat(season, seeded["team_a_id"], seeded["player_ids"][0])
+    assert len(my_events(client, headers)[season]["captain_matches"]) == 1
+
+    with Session.begin() as session:
+        row = session.get(Season, season)
+        assert row is not None
+        row.closed_at = NOW
+    assert my_events(client, headers)[season]["captain_matches"] == []
 
 
 def test_the_captain_fixture_needs_a_round_that_carries_dates(

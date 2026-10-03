@@ -517,3 +517,85 @@ def test_the_worst_case_answer_stays_under_the_egress_ceiling(
     packed = gzip.compress(body)
     assert len(packed) < EGRESS_CEILING, (len(body), len(packed))
     assert len(body) < RAW_CEILING, len(body)
+
+
+def read_upcoming(client: Client) -> list[dict[str, Any]]:
+    resp = client.get("/home/series/upcoming")
+    assert resp.status_code == 200, resp.text
+    return resp.json()
+
+
+def test_the_upcoming_list_holds_every_booked_series_with_its_claims(
+    client: Client, hub: dict[str, Any]
+) -> None:
+    """The hub's booked list without its cap: every event kind in time order,
+    each row with every claim on it, so a caster claims from the list."""
+    first, second, third, _ = hub["player_ids"]
+    with Session() as session:
+        session.add(
+            SeriesCast(
+                series_id=hub["cup_series_id"], user_id=first, channel_url=CHANNEL
+            )
+        )
+        # a draft pairing and an unpublished event never show
+        session.add(
+            DraftSeries(
+                match_id=hub["match_id"],
+                date_time=hub["now"] + timedelta(minutes=5),
+                player1_id=first,
+                player2_id=third,
+                host_player_id=first,
+            )
+        )
+        event_with_series(
+            session,
+            name="Hidden Cup",
+            short_name="HC",
+            kind=EventKind.cup,
+            stage_name=None,
+            round_name=None,
+            players=(first, second),
+            when=hub["now"] + timedelta(minutes=10),
+            published=False,
+        )
+        session.commit()
+
+    rows = read_upcoming(client)
+
+    # the played series of the seed is over, so it is no longer upcoming
+    assert [row["id"] for row in rows] == [
+        hub["series_open_id"],
+        hub["cup_series_id"],
+        hub["koth_series_id"],
+    ]
+    gnl, cup, _ = rows
+    assert (gnl["event"], gnl["round"], gnl["team1"]["name"]) == (
+        "Season 1",
+        "Round 1",
+        "Alpha",
+    )
+    assert gnl["casts"] == []
+    (claim,) = cup["casts"]
+    assert (claim["user_id"], claim["name"], claim["channel_url"]) == (
+        first,
+        "P1",
+        CHANNEL,
+    )
+    # the one hub cast is replaced by the claims
+    assert "cast" not in cup
+
+
+def test_the_upcoming_list_is_cached_at_the_edge_and_costs_one_list(
+    client: Client, hub: dict[str, Any]
+) -> None:
+    """One list statement, its loads, the round names and the rating pass."""
+    from app.services import home
+
+    resp = client.get("/home/series/upcoming")
+    assert resp.headers["cache-control"] == (
+        "public, s-maxage=120, stale-while-revalidate=600"
+    )
+    with count_statements() as tally:
+        assert len(home.upcoming()) == 3
+    # one of them tells the running events from the finished ones
+    assert tally[0] == 16

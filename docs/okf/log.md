@@ -1,5 +1,10 @@
 # Bundle history
 
+## 2026-10-03
+
+* **Add**: `GET /home/series/upcoming` answers every booked series of a published event, at most 100, each with every claim on it, edge cached as running. [The events module](concepts/events-module.md#the-home-hub-read), [edge cache](concepts/edge-cache.md) and the [API overview](api/overview.md) state it.
+* **Update**: a `GET /me/events` row carries `captain_matches`, every fixture of the caller's own team in an event the caller captains in that is not closed, in round order, so the home page leads to the team's match of any round; a captain fixture also counts its played series. [The events module](concepts/events-module.md#the-member-read) states it.
+
 ## 2026-10-02
 
 * **Update**: a fixture's draft takes any number of pairings; `POST /draft-series` no longer refuses a full round. `POST /draft-series/{id}/promote` refuses a pairing once the fixture holds `series_per_round` published series, and the pairing stays in the draft; a replacement is free of that count. A replacement may keep one of the two players or name two new ones, so a series is replaced whole as well, and several drafts may propose a replacement of one series: publishing one removes the others with the series. [GNL season](concepts/gnl-season.md) and [draft_series](data/tables/draft_series.md) state it.
