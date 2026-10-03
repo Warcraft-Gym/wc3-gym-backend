@@ -24,7 +24,7 @@ from sqlalchemy.orm import Session as OrmSession
 from sqlalchemy.orm.attributes import instance_state, set_committed_value
 from sqlmodel import col
 
-from app.core.map_order import DEFAULT_RULES, rules_of
+from app.core.map_order import DEFAULT_RULES, default_rules, rules_of
 from app.core.scoring import DEFAULT_SYSTEM, wins_of
 from app.models.base import ident
 from app.models.event_entrant import EventEntrant
@@ -191,10 +191,8 @@ def series_rules(session: OrmSession, series: Series) -> SeriesRules:
     if stage is None:
         rules = event.map_rules if event else None
         return SeriesRules(rules or DEFAULT_RULES, len(rules_of(rules)), pool)
-    best_of = (round_.best_of if round_ else None) or stage.best_of
-    return SeriesRules(
-        stage.map_rules or DEFAULT_RULES, best_of or DEFAULT_BEST_OF, pool
-    )
+    best_of = (round_.best_of if round_ else None) or stage.best_of or DEFAULT_BEST_OF
+    return SeriesRules(stage.map_rules or default_rules(best_of), best_of, pool)
 
 
 class Resolved(NamedTuple):
@@ -309,10 +307,11 @@ def _resolve(session: OrmSession, series_ids: set[int]) -> dict[int, Rules]:
                 system,
             )
         else:
+            best_of = round_best or stage_best or DEFAULT_BEST_OF
             found[row_id] = (
                 event,
-                stage_rules or DEFAULT_RULES,
-                round_best or stage_best or DEFAULT_BEST_OF,
+                stage_rules or default_rules(best_of),
+                best_of,
                 system,
             )
     return found
