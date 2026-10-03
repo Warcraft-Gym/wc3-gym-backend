@@ -18,6 +18,7 @@ from app.models.koth_night import (
     KothBoard,
     NightOpen,
     QueueWrite,
+    ResultAdd,
     SeriesResult,
     SeriesStart,
 )
@@ -53,6 +54,24 @@ def set_bounds(night_id: int, data: BoundsWrite) -> KothBoard:
 def start_series(night_id: int, data: SeriesStart) -> KothBoard:
     """Put two race rows of one bracket on the table as a best of one."""
     return live.start_series(night_id, data)
+
+
+@router.post(
+    "/koth/nights/{night_id}/results",
+    status_code=201,
+    dependencies=[Depends(require_admin)],
+)
+def add_result(night_id: int, data: ResultAdd, preview: bool = False) -> KothBoard:
+    """Record a series already played, winner beat loser, as the newest result of
+    its bracket; nobody moves in the line. `preview` saves nothing."""
+    return live.add_result(night_id, data, preview)
+
+
+@router.delete("/koth/nights/{night_id}/series", dependencies=[Depends(require_admin)])
+def clear_series(night_id: int) -> KothBoard:
+    """Take every series off an open night and empty every throne; the signups
+    and the line stay."""
+    return live.clear_series(night_id)
 
 
 @router.delete(

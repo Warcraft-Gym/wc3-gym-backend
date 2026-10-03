@@ -27,6 +27,13 @@ class NightOpen(SQLModel):
     lower_bounds: list[int] | None = None
 
 
+class ResultAdd(SQLModel):
+    """A series already played, entered as "the winner beat the loser"."""
+
+    winner_id: int
+    loser_id: int
+
+
 class SeriesStart(SQLModel):
     """The two race rows of one bracket an admin puts on the table."""
 
