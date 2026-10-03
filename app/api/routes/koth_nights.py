@@ -109,6 +109,15 @@ def restore_entrant(night_id: int, entrant_id: int) -> KothBoard:
     return live.restore_entrant(night_id, entrant_id)
 
 
+@router.post(
+    "/koth/nights/{night_id}/entrants/{entrant_id}/erase",
+    dependencies=[Depends(require_admin)],
+)
+def erase_entrant(night_id: int, entrant_id: int) -> KothBoard:
+    """Delete a signup no series names; it leaves no row on the record."""
+    return live.erase_entrant(night_id, entrant_id)
+
+
 @router.put(
     "/koth/nights/{night_id}/entrants/{entrant_id}/bracket",
     dependencies=[Depends(require_admin)],
