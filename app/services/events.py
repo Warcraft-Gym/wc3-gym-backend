@@ -716,6 +716,8 @@ class EventService:
                     if data.division_id is None
                     else _end_seed(session, event_id, data.division_id, ident(row))
                 )
+                # A division's king is a row of that division
+                stage_engine.uncrown(session, [ident(row)])
             session.flush()
             return _entrant_publics(session, event, [row])[0]
 

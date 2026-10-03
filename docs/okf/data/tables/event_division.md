@@ -4,7 +4,7 @@ title: event_division
 description: One MMR band of an event that runs the whole stage list on its own and never merges; a KOTH bracket is a division.
 resource: ../../../../app/models/event_division.py
 tags: [events, data]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-20T12:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-03T06:54:58Z }
 verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
 sources:
   - id: model
@@ -36,7 +36,7 @@ Primary key `id`. Foreign key `event_id` to [event](event.md), cascade on delete
 
 Pointed at by [event_entrant](event_entrant.md), [matches](matches.md) and [series](series.md) through `division_id`, all set null on delete.
 
-`king_entrant_id` names a row of [event_entrant](event_entrant.md) and carries no foreign key, because the entrant already points back at its division and the pair of keys would make the two tables a cycle. A crown whose row is gone reads as an empty throne.
+`king_entrant_id` names a row of [event_entrant](event_entrant.md) and carries no foreign key, because the entrant already points back at its division and the pair of keys would make the two tables a cycle. A move by hand of that row to another division clears the crown, and a crown whose row is gone or stands in another division reads as an empty throne.
 
 # Rules
 
