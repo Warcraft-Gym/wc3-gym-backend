@@ -28,6 +28,7 @@ from app.models.koth_night import (
     CrownWrite,
     KothBoard,
     QueueWrite,
+    ResultAdd,
     SeriesResult,
     SeriesStart,
 )
@@ -106,6 +107,51 @@ def _add_series(
     session.add(row)
     session.flush()
     return row
+
+
+def add_result(night_id: int, data: ResultAdd, preview: bool = False) -> KothBoard:
+    """Record a series already played as the newest result of its bracket, with
+    nobody moved in the line: the quick way to put a night's history back. A row
+    that left may be a side, since it played before it left. The result lands
+    before a series still on the table, which is played after it, and the crown
+    follows the results unless it was passed by hand (_fix)."""
+
+    def act(session: OrmSession, event_id: int) -> None:
+        winner = _entrant(session, event_id, data.winner_id)
+        loser = _entrant(session, event_id, data.loser_id)
+        if winner.user_id is not None and winner.user_id == loser.user_id:
+            raise BadRequestError("A player cannot play himself")
+        if winner.division_id is None or winner.division_id != loser.division_id:
+            raise BadRequestError("Both players must stand in the same bracket")
+        chain = _chain(session, event_id, winner.division_id)
+        played = [one for one in chain if stage_engine.scored(one)]
+        row = _add_series(session, event_id, winner, loser, played)
+        for waiting in chain:
+            if not stage_engine.scored(waiting):
+                waiting.sequence = (row.sequence or 0) + 1
+
+        def score() -> None:
+            row.player1_score, row.player2_score = 1, 0
+            row.result_kind = "played"
+            stage_engine.after_score(session, row, False, None)
+
+        _fix(session, event_id, row, score)
+
+    return _write(night_id, preview, act)
+
+
+def clear_series(night_id: int) -> KothBoard:
+    """Take every series off the night, played or on the table, and empty every
+    throne, so a test run leaves no record. The signups and the line stay where
+    they stand; a replay goes with its series."""
+
+    def act(session: OrmSession, event_id: int) -> None:
+        for row in series_of(session, event_id):
+            session.delete(row)
+        for division in divisions_of(session, event_id):
+            division.king_entrant_id = None
+
+    return _write(night_id, False, act)
 
 
 def cancel_series(night_id: int, series_id: int, preview: bool = False) -> KothBoard:
