@@ -3,21 +3,27 @@
 Each test pins one rule: a move by hand is a move, never a copy, and empties a
 throne without a forfeit; a king pointer never names a row of another bracket;
 put back returns only the row that left; a king who withdraws one race keeps
-the crown on his other race in that bracket.
+the crown on his other race in that bracket; an erase deletes only a row no
+series names and moves no other row.
 """
 
 from typing import Any
 
 import pytest
 from httpx2 import Client
+from sqlmodel import col, select
 
 from app.core.db import Session
+from app.models.base import ident
 from app.models.enums import Race
 from app.models.event_division import EventDivision
 from app.models.event_entrant import EventEntrant
+from app.models.series import Series
+from app.models.series_side import SeriesSide
 from app.models.user import User
 from app.models.w3c_stats import W3CStats
 from tests.test_awards import awarded
+from tests.test_koth import silent_w3c
 from tests.test_koth_live import (
     board,
     bracket_ids,
@@ -80,6 +86,31 @@ def user_of(client: Client, night_id: int, entrant_id: int) -> int:
         for row in entrants(client, night_id)
         if row["id"] == entrant_id
     )
+
+
+def erase(
+    client: Client, headers: dict[str, str], night_id: int, entrant_id: int
+) -> Any:  # noqa: ANN401
+    return client.post(
+        f"/koth/nights/{night_id}/entrants/{entrant_id}/erase", headers=headers
+    )
+
+
+def held(night_id: int) -> dict[int, tuple[Any, ...]]:
+    """Every row of the night: bracket, seed, placement mark, rating, leave stamp."""
+    with Session.begin() as session:
+        return {
+            ident(row): (
+                row.division_id,
+                row.seed,
+                row.manual_placement,
+                row.mmr_at_seed,
+                row.withdrawn_at,
+            )
+            for row in session.scalars(
+                select(EventEntrant).where(col(EventEntrant.event_id) == night_id)
+            )
+        }
 
 
 def test_a_moved_row_stands_last_and_no_new_bound_moves_it_back(
@@ -388,3 +419,170 @@ def test_a_king_whose_other_race_is_in_another_bracket_forfeits_as_before(
     assert crowned(payload, top) == waiting
     assert only(payload, top)["played"][0]["forfeit"] is True
     assert line(payload, middle) == [[elf]]
+
+
+def test_an_erase_deletes_a_row_no_series_names_and_moves_no_other(
+    client: Client,
+    auth_headers: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+    seeded: dict[str, Any],
+) -> None:
+    """A live, a left and an unplaced row go; the line, the seeds and the crowns stay."""
+    silent_w3c(monkeypatch)
+    night = open_night(client, auth_headers)
+    top, middle, _ = bracket_ids(night)
+    king = place(client, auth_headers, night, "King#1", 1700, top)
+    beaten = place(client, auth_headers, night, "Beat#2", 1700, top)
+    mistake = place(client, auth_headers, night, "Test#3", 1700, top)
+    waiting = place(client, auth_headers, night, "Wait#4", 1700, top)
+    climber = chat(client, night, "Climb#5555", 1500)
+    gone = place(client, auth_headers, night, "Gone#6", 1500, middle)
+    stray = client.post(
+        f"/events/{night['id']}/entrants/admin",
+        json={"user_id": enrol("Stray#7", 1200), "race": "OC"},
+        headers=auth_headers,
+    )
+    assert stray.status_code == 201, stray.text
+    play(client, auth_headers, night["id"], king, beaten)
+    left = client.delete(
+        f"/koth/nights/{night['id']}/entrants/{gone}", headers=auth_headers
+    )
+    assert left.status_code == 200, left.text
+    assert [row["entrant_id"] for row in only(left.json(), middle)["left"]] == [gone]
+    erased = [mistake, gone, stray.json()["id"]]
+    before = held(night["id"])
+    crowns = [stored_king(division) for division in bracket_ids(night)]
+
+    for row in erased:
+        resp = erase(client, auth_headers, night["id"], row)
+        assert resp.status_code == 200, resp.text
+
+    payload = resp.json()
+    assert payload["entrant_count"] == 4
+    assert payload["unplaced"] == []
+    assert only(payload, middle)["left"] == []
+    assert line(payload, top) == [[waiting], [beaten]]
+    assert line(payload, middle) == [[climber]]
+    assert crowned(payload, top) == king
+    assert held(night["id"]) == {
+        key: value for key, value in before.items() if key not in erased
+    }
+    assert [stored_king(division) for division in bracket_ids(night)] == crowns
+
+
+def test_an_erase_refuses_a_side_of_any_series_of_the_night(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """A series on the table, played or forfeit keeps both its sides on the record."""
+    night = open_night(client, auth_headers)
+    top = bracket_ids(night)[0]
+    winner = place(client, auth_headers, night, "Won#1", 1700, top)
+    loser = place(client, auth_headers, night, "Lost#2", 1700, top)
+    quitter = place(client, auth_headers, night, "Quit#3", 1700, top)
+    rival = place(client, auth_headers, night, "Rival#4", 1700, top)
+    first = place(client, auth_headers, night, "Table#5", 1700, top)
+    second = place(client, auth_headers, night, "Side#6", 1700, top)
+    play(client, auth_headers, night["id"], winner, loser)
+    assert start(client, auth_headers, night["id"], quitter, rival).status_code == 201
+    forfeit = client.delete(
+        f"/koth/nights/{night['id']}/entrants/{quitter}", headers=auth_headers
+    )
+    assert forfeit.status_code == 200, forfeit.text
+    assert only(forfeit.json(), top)["played"][0]["forfeit"] is True
+    assert start(client, auth_headers, night["id"], first, second).status_code == 201
+    before = held(night["id"])
+
+    for row, name in (
+        (winner, "Won"),
+        (loser, "Lost"),
+        (quitter, "Quit"),
+        (rival, "Rival"),
+        (second, "Side"),
+    ):
+        resp = erase(client, auth_headers, night["id"], row)
+        assert resp.status_code == 400, resp.text
+        assert resp.json()["error"] == (
+            f"{name} has a series tonight, so the signup stays on the record"
+        )
+
+    assert held(night["id"]) == before
+
+
+def test_an_erase_of_a_king_crowned_by_hand_empties_the_throne(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    night = open_night(client, auth_headers)
+    top = bracket_ids(night)[0]
+    king = place(client, auth_headers, night, "Hand#1", 1700, top)
+    other = place(client, auth_headers, night, "Other#2", 1700, top)
+    passed = client.put(
+        f"/koth/nights/{night['id']}/brackets/{top}/crown",
+        json={"entrant_id": king},
+        headers=auth_headers,
+    )
+    assert passed.status_code == 200, passed.text
+    assert stored_king(top) == king
+
+    resp = erase(client, auth_headers, night["id"], king)
+
+    assert resp.status_code == 200, resp.text
+    bracket = only(resp.json(), top)
+    assert bracket["king_entrant_id"] is None
+    assert bracket["king"] is None
+    assert stored_king(top) is None
+    assert line(resp.json(), top) == [[other]]
+
+
+def test_an_erase_refuses_a_closed_night_another_night_and_a_non_admin(
+    client: Client,
+    auth_headers: dict[str, str],
+    member: Any,  # noqa: ANN401
+    seeded: dict[str, Any],
+) -> None:
+    night = open_night(client, auth_headers)
+    row = place(client, auth_headers, night, "Stay#1", 1700, bracket_ids(night)[0])
+    path = f"/koth/nights/{night['id']}/entrants/{row}/erase"
+    assert client.post(path).status_code == 401
+    assert client.post(path, headers=member("7")).status_code == 403
+
+    client.post(f"/koth/nights/{night['id']}/close", headers=auth_headers)
+    closed = erase(client, auth_headers, night["id"], row)
+    assert closed.status_code == 400, closed.text
+    assert closed.json()["error"] == "The night is closed"
+
+    later = open_night(client, auth_headers, starts_at=LATER)
+    assert erase(client, auth_headers, later["id"], row).status_code == 404
+    assert row in {one["id"] for one in entrants(client, night["id"])}
+
+
+def test_an_erase_refuses_a_row_a_seat_of_another_series_names(
+    client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
+) -> None:
+    """A lobby with no stage seats a row of any event, so the seat keeps it."""
+    night = open_night(client, auth_headers)
+    top = bracket_ids(night)[0]
+    seated = place(client, auth_headers, night, "Lobby#1", 1700, top)
+    other = place(client, auth_headers, night, "Lobby#2", 1700, top)
+    # A series of no round with two empty seats, as the season import writes a 2v2
+    with Session.begin() as session:
+        lobby = Series(host_player_id=user_of(client, night["id"], seated))
+        session.add(lobby)
+        session.flush()
+        session.add_all(
+            [SeriesSide(series_id=ident(lobby), side_no=side) for side in (1, 2)]
+        )
+        lobby_id = ident(lobby)
+    seats = client.put(
+        f"/series/{lobby_id}/sides",
+        json={"entrant_ids": [seated, other]},
+        headers=auth_headers,
+    )
+    assert seats.status_code == 200, seats.text
+
+    resp = erase(client, auth_headers, night["id"], seated)
+
+    assert resp.status_code == 400, resp.text
+    assert resp.json()["error"] == (
+        "Lobby holds a seat in another series, so the signup stays on the record"
+    )
+    assert seated in {one["id"] for one in entrants(client, night["id"])}

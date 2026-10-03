@@ -34,6 +34,7 @@ from app.models.koth_night import (
 from app.models.relationships import DBEventRound
 from app.models.season import Season
 from app.models.series import Series
+from app.models.series_side import SeriesSide
 from app.models.types import utcnow
 from app.models.user import User
 from app.services import stage_engine
@@ -322,6 +323,40 @@ def restore_entrant(night_id: int, entrant_id: int) -> KothBoard:
         row.withdrawn_at = None
         if row.division_id is not None:
             row.seed = _end_seed(session, row.event_id, row.division_id, entrant_id)
+    return board.read(night_id)
+
+
+def erase_entrant(night_id: int, entrant_id: int) -> KothBoard:
+    """Delete a signup that no series names, live or left, so it leaves no record.
+
+    A side of any series of the night, on the table, played or forfeit, stays
+    on the record, and so does a row a seat of another series names. A crown
+    the row wore leaves an empty throne; no other row moves.
+    """
+    with Session.begin() as session:
+        night = _open_night(session, night_id)
+        row = _entrant(session, ident(night), entrant_id)
+        refusal = None
+        if any(
+            entrant_id in (one.entrant1_id, one.entrant2_id)
+            for one in series_of(session, ident(night))
+        ):
+            refusal = "has a series tonight"
+        elif (
+            session.scalars(
+                select(SeriesSide).where(col(SeriesSide.entrant_id) == entrant_id)
+            ).first()
+            is not None
+        ):
+            refusal = "holds a seat in another series"
+        if refusal is not None:
+            user = session.get(User, row.user_id) if row.user_id else None
+            raise BadRequestError(
+                f"{user.name if user else 'This row'} {refusal},"
+                " so the signup stays on the record"
+            )
+        stage_engine.uncrown(session, [entrant_id])
+        session.delete(row)
     return board.read(night_id)
 
 
