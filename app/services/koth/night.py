@@ -190,6 +190,36 @@ def series_of(session: OrmSession, event_id: int) -> list[Series]:
     )
 
 
+def cuts_itself(event_id: int) -> None:
+    """Route guard: a night cuts its own brackets, at a signup or a bounds save."""
+    _refuse(event_id, "A KOTH night cuts its own brackets")
+
+
+def keeps_its_brackets(event_id: int) -> None:
+    """Route guard: a night writes its brackets when it opens and moves only their bounds."""
+    _refuse(event_id, "A KOTH night moves its brackets through their bounds")
+
+
+def keeps_its_line(event_id: int) -> None:
+    """Route guard: a night orders its line on its run page, never by a seed write."""
+    _refuse(event_id, "A KOTH night orders its line on its run page")
+
+
+def still_open(event_id: int) -> None:
+    """Route guard: a closed night keeps its rows as the close left them."""
+    _refuse(event_id, "The night is closed", closed_only=True)
+
+
+def _refuse(event_id: int, refusal: str, closed_only: bool = False) -> None:
+    """400 for a shared write on a KOTH night, or on a closed one with `closed_only`."""
+    with Session.begin() as session:
+        event = session.get(Season, event_id)
+        if event is None or event.kind is not EventKind.koth:
+            return
+        if not closed_only or event.closed_at is not None:
+            raise BadRequestError(refusal)
+
+
 def _league(session: OrmSession) -> int:
     """The KOTH league, written the first time a night opens."""
     league = session.scalars(

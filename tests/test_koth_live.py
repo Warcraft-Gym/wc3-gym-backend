@@ -542,7 +542,7 @@ def test_the_board_of_thirty_rows_is_small_and_costs_a_fixed_read(
         client.get(f"/koth/nights/{night['id']}/board")
 
     assert small.status_code == 200, small.text
-    # 30 rows and one played series read 3989 bytes over 10 statements
+    # 30 rows and one played series read 4339 bytes over 10 statements
     assert len(small.content) < 5000
     assert ten[0] == sixty[0] == 10
 

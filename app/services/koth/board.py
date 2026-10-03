@@ -135,6 +135,7 @@ def _bracket(
         name=division.name,
         lower_bound=division.lower_bound,
         king=_seats(crowned, users, mmrs, busy)[0] if crowned else None,
+        king_entrant_id=ident(king) if king is not None else None,
         defender=_defender(defender, live, users, mmrs) if king is None else None,
         open_series=_open(open_row, every_row, users, mmrs)
         if open_row is not None

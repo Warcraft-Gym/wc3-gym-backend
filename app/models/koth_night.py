@@ -152,6 +152,8 @@ class KothBracket(SQLModel):
     historical_king: KothPlayer | None = None
     history: list[KothHistoricalSeries] = []
     king: KothSeat | None = None
+    # The race row that wears the crown; null for an empty throne or an archived bracket
+    king_entrant_id: int | None = None
     # The king of this bracket when the last closed night ended, a hint only
     defender: KothPlayer | None = None
     open_series: KothOpenSeries | None = None
