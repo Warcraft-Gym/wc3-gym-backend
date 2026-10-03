@@ -7,6 +7,7 @@ the night page both draw, so nothing here is stored.
 from datetime import datetime
 from typing import Annotated, Literal
 
+import pydantic
 from sqlmodel import SQLModel
 
 from app.models.event_history import EventVideoPublic
@@ -85,6 +86,10 @@ class KothSeat(SQLModel):
     user_id: int
     name: str
     country: str | None = None
+    # The full tag, named only where two players of the night share a name
+    battle_tag: str | None = pydantic.Field(
+        default=None, exclude_if=lambda value: value is None
+    )
     rows: list[KothRow] = []
     busy: bool = False
 
@@ -96,6 +101,9 @@ class KothPlayer(SQLModel):
     user_id: int | None = None
     name: str
     country: str | None = None
+    battle_tag: str | None = pydantic.Field(
+        default=None, exclude_if=lambda value: value is None
+    )
     race: str | None = None
     mmr: int | None = None
 
