@@ -39,6 +39,9 @@ from tests.test_koth_live import (
 )
 from tests.test_koth_night import LATER, enrol, entrants, open_night
 
+# Every signup asks W3Champions, so each test here answers for it
+pytestmark = pytest.mark.usefixtures("quiet_w3c")
+
 
 def move(
     client: Client,

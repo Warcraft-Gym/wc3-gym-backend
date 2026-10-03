@@ -23,6 +23,9 @@ from tests.test_koth import silent_w3c
 from tests.test_koth_night import LATER, enrol, entrants, open_night, sign_up
 from tests.test_query_budget import count_statements
 
+# Every signup asks W3Champions, so each test here answers for it
+pytestmark = pytest.mark.usefixtures("quiet_w3c")
+
 
 def bracket_ids(night: dict[str, Any]) -> list[int]:
     """The brackets of the night, the strongest first."""

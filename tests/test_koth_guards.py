@@ -7,6 +7,7 @@ and the players who played, and nobody else.
 
 from typing import Any
 
+import pytest
 from httpx2 import Client
 from sqlmodel import col, select
 
@@ -24,6 +25,9 @@ from tests.test_koth_live import (
 )
 from tests.test_koth_moves import move, stored_king, two_races, user_of
 from tests.test_koth_night import enrol, entrants, open_night
+
+# Every signup asks W3Champions, so each test here answers for it
+pytestmark = pytest.mark.usefixtures("quiet_w3c")
 
 
 def test_a_player_in_a_running_series_starts_none_in_another_bracket(

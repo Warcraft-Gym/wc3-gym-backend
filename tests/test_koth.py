@@ -22,6 +22,9 @@ from app.models.w3c_stats import W3CStats
 from app.services.w3c import W3CService
 from tests.seed import active
 
+# Every signup asks W3Champions, so each test here answers for it
+pytestmark = pytest.mark.usefixtures("quiet_w3c")
+
 # Tonight is a night that started less than a day ago, so the event is today
 TODAY = datetime.now(tz=UTC).date()
 EVENT = {"name": "KOTH 1", "event_date": f"{TODAY:%Y-%m-%d}T20:00:00Z"}

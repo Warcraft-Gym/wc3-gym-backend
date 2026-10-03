@@ -40,6 +40,7 @@ os.environ.pop("DISCORD_BOT_TOKEN", None)
 
 from app.main import create_app
 from app.services import blob, r2, replays
+from app.services.w3c import W3CService
 from tests.discord import PUBLIC_KEY, Clock, record
 
 type SheetSpec = tuple[list[str], list[list[Any]]]
@@ -171,6 +172,16 @@ def no_third_party_calls(monkeypatch: pytest.MonkeyPatch) -> None:
         raise AssertionError(f"the test called out to {method} {url}")
 
     monkeypatch.setattr(requests.Session, "request", refuse)
+
+
+@pytest.fixture
+def quiet_w3c(monkeypatch: pytest.MonkeyPatch) -> None:
+    """W3Champions knows nobody: every KOTH signup asks it, and the rating the
+    test stored stands. A test that answers for it patches again."""
+    monkeypatch.setattr(W3CService, "current_season", lambda self: 20)
+    monkeypatch.setattr(
+        W3CService, "get_player_stats", lambda self, bnet_name, season_override=None: []
+    )
 
 
 @pytest.fixture(autouse=True)

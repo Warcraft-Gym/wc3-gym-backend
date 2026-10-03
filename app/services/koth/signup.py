@@ -1,7 +1,7 @@
 """One signup rule for every door of a KOTH night.
 
-The battle tag is the identity and the rating comes from W3Champions alone: a
-tag the app holds no fresh rating for is asked for once, under a timeout short
+The battle tag is the identity and the rating comes from W3Champions alone:
+every signup asks for it, at most once an hour per tag, under a timeout short
 enough for a chat answer. A rating cuts the row into its bracket and puts it at
 the end of that bracket's line, and the row stays there until a bounds save;
 nothing found leaves the row unplaced, and the signup stands either way for an
@@ -19,7 +19,7 @@ from app.core.db import Session
 from app.core.divisions import cut
 from app.core.exceptions import ExternalServiceError
 from app.models.base import ident
-from app.models.enums import EventKind, Race
+from app.models.enums import EventKind
 from app.models.event_entrant import EventEntrant, EventEntrantPublic
 from app.models.season import Season
 from app.models.types import utcnow
@@ -31,12 +31,10 @@ from app.services.events import (
     _event,
     _live_entrants,
     _mmrs,
-    _stats_for,
 )
 from app.services.koth.night import divisions_of, series_of
 from app.services.settings import SettingsService
 from app.services.users import UserService
-from app.services.w3c_stats import w3c_season, window_rows
 
 logger = logging.getLogger(__name__)
 
@@ -71,13 +69,8 @@ def follow(
         if not divisions_of(session, event_id):
             # A night with no bracket cuts nothing; the row waits unplaced
             return None
-        season = w3c_season(session)
-        user = (
-            session.get(User, row.user_id, options=[window_rows(season)])
-            if row.user_id
-            else None
-        )
-        ask = not synced and user is not None and unrated(user, row.race, season)
+        user = session.get(User, row.user_id) if row.user_id else None
+        ask = not synced and user is not None
         tag = (user.battleTag or "") if user is not None else ""
         user_id = ident(user) if user is not None else 0
     if ask and tag:
@@ -175,25 +168,12 @@ def _store_ratings(session: OrmSession, rows: Sequence[EventEntrant]) -> None:
         row.mmr_at_seed = ratings[ident(row)]
 
 
-def unrated(user: User, race: Race | None, season: int) -> bool:
-    """Whether W3Champions gave this player no rating the cut can read.
-
-    A signup that names no race asks for any rating inside the window, so a
-    player rated on one race alone still signs up on that race.
-    """
-    races = (
-        [race]
-        if race is not None
-        else [stat.race for stat in (user.w3c_stats or []) if stat.race is not None]
-    )
-    return all(_stats_for(user, one, season)[0] is None for one in races)
-
-
 def sync_rating(user_id: int, battle_tag: str) -> None:
     """Ask W3Champions once for this tag; a refused ask leaves the row unplaced.
 
-    A tag the app asked about in the last hour is not asked about again, so a
-    repeated signup of a player w3champions does not know sends no traffic.
+    Every signup asks, so the cut reads the rating of today and not of the last
+    sync. A tag the app asked about in the last hour is not asked about again,
+    so a repeated signup sends no traffic.
     """
     with Session.begin() as session:
         user = session.get(User, user_id)

@@ -30,6 +30,9 @@ from tests.test_koth_live import (
 from tests.test_koth_moves import stored_king, two_races
 from tests.test_koth_night import entrants, open_night
 
+# Every signup asks W3Champions, so each test here answers for it
+pytestmark = pytest.mark.usefixtures("quiet_w3c")
+
 
 def test_the_board_names_the_crowned_race_row_and_follows_the_crown(
     client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]

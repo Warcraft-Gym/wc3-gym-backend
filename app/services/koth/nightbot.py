@@ -27,7 +27,7 @@ from app.services.events import (
     _stats_for,
 )
 from app.services.koth.night import taking_signups
-from app.services.koth.signup import follow, sync_rating, unrated
+from app.services.koth.signup import follow, sync_rating
 from app.services.w3c_stats import w3c_season, window_rows
 
 if TYPE_CHECKING:
@@ -116,9 +116,7 @@ def enter(
         user = _by_battle_tag(session, battle_tag, named or Race.RANDOM)
         user_id = ident(user)
         tag = user.battleTag or battle_tag
-        ask = unrated(user, named, w3c_season(session))
-    if ask:
-        sync_rating(user_id, tag)
+    sync_rating(user_id, tag)
 
     with Session.begin() as session:
         season = w3c_season(session)

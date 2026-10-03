@@ -29,6 +29,9 @@ from tests.test_events import add_event
 from tests.test_koth import silent_w3c, unplaced
 from tests.test_stage_engine import open_chain, score, stage_series
 
+# Every signup asks W3Champions, so each test here answers for it
+pytestmark = pytest.mark.usefixtures("quiet_w3c")
+
 TOKEN = "test-nightbot-token"
 # Tonight is a night that started less than a day ago, so the tests open it today
 TONIGHT = f"{datetime.now(tz=UTC).date():%Y-%m-%d}T19:00:00Z"
@@ -738,17 +741,19 @@ def test_a_repeated_chat_command_keeps_the_place_in_the_line(
     assert [row["seed"] for row in rows] == [1, 2, 3]
 
 
-def test_a_tag_the_app_already_rates_asks_w3champions_at_no_door(
+def test_every_door_asks_w3champions_and_cuts_on_the_answer(
     client: Client,
     auth_headers: dict[str, str],
     seeded: dict[str, Any],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A rating inside the window is the answer, so no door sends traffic."""
-    calls = count_w3c(monkeypatch)
+    """A stored rating can be weeks old, so each door asks once and the cut
+    reads the answer; a repeat signup inside the hour asks nothing."""
+    monkeypatch.setattr(W3CService, "current_season", lambda self: 20)
+    calls = count_w3c(monkeypatch, mmr=1700)
     night = open_night(client, auth_headers, starts_at=TONIGHT)
     for tag in ("Chat#1001", "Site#1002", "Hand#1003"):
-        enrol(tag, 1500)
+        enrol(tag, 1300)
 
     sign_up(client, "Chat#1001", "chat", "human")
     sign_up_to_event(client, night["id"], battle_tag="Site#1002", race="HU")
@@ -757,9 +762,13 @@ def test_a_tag_the_app_already_rates_asks_w3champions_at_no_door(
         json={"battle_tag": "Hand#1003", "race": "HU"},
         headers=auth_headers,
     )
+    sign_up(client, "Chat#1001", "chat", "human")
 
-    assert calls == [0]
-    assert len(entrants(client, night["id"])) == 3
+    # One ask per tag, and an ask reads two seasons
+    assert calls == [6]
+    rows = entrants(client, night["id"])
+    assert [row["mmr_at_seed"] for row in rows] == [1700, 1700, 1700]
+    assert len(brackets_of(client, night["id"])) == 1
 
 
 def test_a_new_tag_is_asked_about_once_and_lands_at_the_end(
@@ -768,7 +777,7 @@ def test_a_new_tag_is_asked_about_once_and_lands_at_the_end(
     seeded: dict[str, Any],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The one ask of a new tag is what places it, and the door asks no twice."""
+    """The ask of a new tag is what places it, and the door asks no twice."""
     monkeypatch.setattr(W3CService, "current_season", lambda self: 20)
     count_w3c(monkeypatch, mmr=1500)
     syncs = [0]
@@ -786,7 +795,8 @@ def test_a_new_tag_is_asked_about_once_and_lands_at_the_end(
     resp = sign_up(client, "New#1002", "new", "human")
 
     assert resp.status_code == 200, resp.text
-    assert syncs == [1]
+    # One ask per tag, the rated one among them
+    assert syncs == [2]
     rows = {row["user"]["battleTag"]: row for row in entrants(client, night["id"])}
     assert rows["New#1002"]["division_id"] == rows["Rated#1001"]["division_id"]
     assert rows["New#1002"]["seed"] == 2
