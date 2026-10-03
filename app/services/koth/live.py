@@ -7,7 +7,7 @@ bracket holds one open series at a time, so the night never runs ahead of
 what is actually being played.
 """
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from itertools import pairwise
 
 from sqlalchemy import select
@@ -108,28 +108,105 @@ def _add_series(
     return row
 
 
-def cancel_series(night_id: int, series_id: int) -> KothBoard:
-    """Take an unplayed series off the table; a result is changed, never deleted."""
-    with Session.begin() as session:
-        _open_night(session, night_id)
+def cancel_series(night_id: int, series_id: int, preview: bool = False) -> KothBoard:
+    """Take a series off the table, or remove a played one from the night.
+
+    A removed result erases its record and nothing else: no series is made or
+    forfeited and the line stays. The crown follows the results left (_fix).
+    """
+
+    def act(session: OrmSession, event_id: int) -> None:
         row = _series(session, night_id, series_id)
         if stage_engine.scored(row):
-            raise BadRequestError("This series carries a result")
-        session.delete(row)
-    return board.read(night_id)
+            _fix(session, event_id, row, lambda: session.delete(row))
+        else:
+            session.delete(row)
+
+    return _write(night_id, preview, act)
 
 
-def set_result(night_id: int, series_id: int, data: SeriesResult) -> KothBoard:
+def set_result(
+    night_id: int, series_id: int, data: SeriesResult, preview: bool = False
+) -> KothBoard:
     """Enter who won the one map, or turn a result of tonight around.
 
     The map score is the 1-0 every other reader of a series expects, so the
     player history, the head to head, the awards and the cards keep working.
     """
-    with Session.begin() as session:
-        _open_night(session, night_id)
+
+    def act(session: OrmSession, event_id: int) -> None:
         row = _series(session, night_id, series_id)
-        _score(session, row, data.winner)
-    return board.read(night_id)
+        if stage_engine.scored(row):
+            _fix(session, event_id, row, lambda: _score(session, row, data.winner))
+        else:
+            _score(session, row, data.winner)
+
+    return _write(night_id, preview, act)
+
+
+def _write(
+    night_id: int, preview: bool, act: Callable[[OrmSession, int], None]
+) -> KothBoard:
+    """Run one write on an open night. A preview answers the board the write
+    would give and rolls it back, so the run page shows what a fix changes."""
+    if not preview:
+        with Session.begin() as session:
+            act(session, ident(_open_night(session, night_id)))
+        return board.read(night_id)
+    with Session() as session:
+        act(session, ident(_open_night(session, night_id)))
+        session.flush()
+        answer = board.read_in(session, night_id)
+        session.rollback()
+    return answer
+
+
+def _fix(
+    session: OrmSession, event_id: int, row: Series, change: Callable[[], object]
+) -> None:
+    """Change or remove a played series and crown whoever the results then
+    crown. A crown passed or emptied by hand since stays where the hand put it."""
+    division = (
+        session.get(EventDivision, row.division_id)
+        if row.division_id is not None
+        else None
+    )
+    if division is None:
+        change()
+        return
+    worn = division.king_entrant_id
+    by_hand = _player(session, worn) != _player(
+        session, board.results_king(_chain(session, event_id, ident(division)))
+    )
+    change()
+    session.flush()
+    crowned = board.results_king(_chain(session, event_id, ident(division)))
+    if by_hand or _player(session, crowned) == _player(session, worn):
+        division.king_entrant_id = worn
+        return
+    heir = session.get(EventEntrant, crowned) if crowned is not None else None
+    standing = (
+        heir is not None
+        and heir.withdrawn_at is None
+        and heir.division_id == ident(division)
+    )
+    division.king_entrant_id = crowned if standing else None
+
+
+def _chain(session: OrmSession, event_id: int, division_id: int) -> list[Series]:
+    """The series of one bracket, in the order they were played."""
+    return [
+        row for row in series_of(session, event_id) if row.division_id == division_id
+    ]
+
+
+def _player(session: OrmSession, entrant_id: int | None) -> int | None:
+    """The player behind a race row, the crown being a player's; a row with no
+    account stands for itself."""
+    row = session.get(EventEntrant, entrant_id) if entrant_id is not None else None
+    if row is None:
+        return None
+    return row.user_id if row.user_id is not None else -ident(row)
 
 
 def _score(session: OrmSession, row: Series, winner: int, kind: str = "played") -> None:
