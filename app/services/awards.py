@@ -82,7 +82,7 @@ def reopen(event_id: int) -> None:
     """Take the close back: clear the stamp and the places it paid.
 
     The event reads by its series again, and the next close pays the places
-    afresh. An archived night stays closed, its source results are the record.
+    afresh. An archived event stays closed, its source results are the record.
     """
     with Session.begin() as session:
         event = session.get(Season, event_id)
@@ -90,7 +90,7 @@ def reopen(event_id: int) -> None:
             raise NotFoundError(f"Event not found by id: {event_id}")
         if session.get(KothHistoryEvent, event_id) is not None:
             raise BadRequestError(
-                "An archived night stays closed; its source results are preserved"
+                "An archived event stays closed; its source results are preserved"
             )
         event.closed_at = None
         session.execute(delete(EventAward).where(col(EventAward.event_id) == event_id))

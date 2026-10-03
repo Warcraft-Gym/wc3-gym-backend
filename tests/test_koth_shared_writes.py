@@ -83,7 +83,7 @@ def test_the_shared_assign_refuses_a_koth_night(
     resp = client.post(f"/events/{night['id']}/divisions/assign", headers=auth_headers)
 
     assert resp.status_code == 400, resp.text
-    assert resp.json()["error"] == "A KOTH night cuts its own brackets"
+    assert resp.json()["error"] == "A KOTH event cuts its own brackets"
 
 
 def test_the_shared_seed_write_refuses_a_koth_night(
@@ -101,7 +101,7 @@ def test_the_shared_seed_write_refuses_a_koth_night(
     )
 
     assert resp.status_code == 400, resp.text
-    assert resp.json()["error"] == "A KOTH night orders its line on its run page"
+    assert resp.json()["error"] == "A KOTH event orders its line on its run page"
     after = next(one for one in entrants(client, night["id"]) if one["id"] == row)
     assert (after["seed"], after["mmr_at_seed"]) == (before["seed"], 1500)
 
@@ -120,7 +120,7 @@ def test_the_shared_division_write_refuses_a_koth_night(
 
     assert resp.status_code == 400, resp.text
     assert (
-        resp.json()["error"] == "A KOTH night moves its brackets through their bounds"
+        resp.json()["error"] == "A KOTH event moves its brackets through their bounds"
     )
     assert [
         row["division_id"] for row in board(client, night["id"])["brackets"]
@@ -138,7 +138,7 @@ def test_the_shared_delete_refuses_an_open_koth_night(
     resp = client.delete(f"/events/{night['id']}/entrants/{row}", headers=auth_headers)
 
     assert resp.status_code == 400, resp.text
-    assert resp.json()["error"] == "A KOTH night removes a player on its run page"
+    assert resp.json()["error"] == "A KOTH event removes a player on its run page"
     rows = {one["id"]: one for one in entrants(client, night["id"])}
     assert (rows[row]["division_id"], rows[row]["withdrawn_at"]) == (middle, None)
 
@@ -146,8 +146,8 @@ def test_the_shared_delete_refuses_an_open_koth_night(
 @pytest.mark.parametrize(
     ("write", "refusal"),
     [
-        ("place", "The night is closed"),
-        ("remove", "A KOTH night removes a player on its run page"),
+        ("place", "The event is closed"),
+        ("remove", "A KOTH event removes a player on its run page"),
     ],
 )
 def test_a_closed_night_refuses_a_shared_placement_and_removal(

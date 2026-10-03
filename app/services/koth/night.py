@@ -45,7 +45,7 @@ def open_night(data: NightOpen) -> EventPublic:
     with Session.begin() as session:
         unclosed = _unclosed(session)
         if unclosed is not None and is_tonight(unclosed):
-            raise ApiError(409, {"error": "Close the open night first."})
+            raise ApiError(409, {"error": "Close the open KOTH event first."})
         expired = ident(unclosed) if unclosed is not None else None
     # A night that expired unclosed is closed now, so its series and awards settle
     if expired is not None:
@@ -55,7 +55,7 @@ def open_night(data: NightOpen) -> EventPublic:
         bounds = list(data.lower_bounds or _last_bounds(session) or DEFAULT_BOUNDS)
         if len(bounds) != BRACKETS:
             raise BadRequestError(
-                f"A night takes {BRACKETS} lower bounds, weakest first"
+                f"A KOTH event takes {BRACKETS} lower bounds, weakest first"
             )
         if _named(session, name) is not None:
             raise BadRequestError(f"An event is already named {name}")
@@ -95,10 +95,10 @@ def close_night(event_id: int) -> EventPublic:
     with Session.begin() as session:
         night = session.get(Season, event_id)
         if night is None or night.kind is not EventKind.koth:
-            raise NotFoundError(f"KOTH night not found by id: {event_id}")
+            raise NotFoundError(f"KOTH event not found by id: {event_id}")
         if session.get(KothHistoryEvent, event_id) is not None:
             raise BadRequestError(
-                "An archived night is already closed; its source results are preserved"
+                "An archived event is already closed; its source results are preserved"
             )
         chains: dict[int | None, list[Series]] = {}
         for row in series_of(session, event_id):
@@ -117,7 +117,7 @@ def tonight(session: OrmSession) -> Season:
     """The night that runs: the newest published one nobody closed yet."""
     night = last_night(session, open_only=True)
     if night is None:
-        raise BadRequestError("No KOTH night is open")
+        raise BadRequestError("No KOTH event is open")
     return night
 
 
@@ -192,27 +192,27 @@ def series_of(session: OrmSession, event_id: int) -> list[Series]:
 
 def cuts_itself(event_id: int) -> None:
     """Route guard: a night cuts its own brackets, at a signup or a bounds save."""
-    _refuse(event_id, "A KOTH night cuts its own brackets")
+    _refuse(event_id, "A KOTH event cuts its own brackets")
 
 
 def keeps_its_brackets(event_id: int) -> None:
     """Route guard: a night writes its brackets when it opens and moves only their bounds."""
-    _refuse(event_id, "A KOTH night moves its brackets through their bounds")
+    _refuse(event_id, "A KOTH event moves its brackets through their bounds")
 
 
 def keeps_its_line(event_id: int) -> None:
     """Route guard: a night orders its line on its run page, never by a seed write."""
-    _refuse(event_id, "A KOTH night orders its line on its run page")
+    _refuse(event_id, "A KOTH event orders its line on its run page")
 
 
 def removes_on_its_run_page(event_id: int) -> None:
     """Route guard: a night removes a row through its own route, which runs the forfeit rule."""
-    _refuse(event_id, "A KOTH night removes a player on its run page")
+    _refuse(event_id, "A KOTH event removes a player on its run page")
 
 
 def still_open(event_id: int) -> None:
     """Route guard: a closed night keeps its rows as the close left them."""
-    _refuse(event_id, "The night is closed", closed_only=True)
+    _refuse(event_id, "The event is closed", closed_only=True)
 
 
 def _refuse(event_id: int, refusal: str, closed_only: bool = False) -> None:

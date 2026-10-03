@@ -61,7 +61,7 @@ def start_series(night_id: int, data: SeriesStart) -> KothBoard:
         if first.division_id is None or first.division_id != second.division_id:
             raise BadRequestError("Both players must stand in the same bracket")
         if first.withdrawn_at is not None or second.withdrawn_at is not None:
-            raise BadRequestError("A row that left tonight plays no series")
+            raise BadRequestError("A player who left the event plays no series")
         every = series_of(session, event_id)
         chain = [row for row in every if row.division_id == first.division_id]
         if any(not stage_engine.scored(row) for row in chain):
@@ -486,7 +486,7 @@ def set_bounds(night_id: int, data: BoundsWrite) -> KothBoard:
         if len(named) != len(data.bounds) or named.keys() != {
             ident(row) for row in brackets
         }:
-            raise BadRequestError("Name every bracket of the night exactly once")
+            raise BadRequestError("Name every bracket of the event exactly once")
         # The brackets read strongest first, so the bounds fall to 0 down the list
         wanted = [named[ident(row)] for row in brackets]
         if any(bound <= lower for bound, lower in pairwise(wanted)):
@@ -541,7 +541,7 @@ def erase_entrant(night_id: int, entrant_id: int) -> KothBoard:
             entrant_id in (one.entrant1_id, one.entrant2_id)
             for one in series_of(session, ident(night))
         ):
-            refusal = "has a series tonight"
+            refusal = "has a series in this event"
         elif (
             session.scalars(
                 select(SeriesSide).where(col(SeriesSide.entrant_id) == entrant_id)
@@ -573,7 +573,7 @@ def move_entrant(night_id: int, entrant_id: int, data: BracketMove) -> KothBoard
         row = _entrant(session, event_id, entrant_id)
         target = session.get(EventDivision, data.division_id)
         if target is None or target.event_id != event_id:
-            raise BadRequestError("That bracket is not part of this night")
+            raise BadRequestError("That bracket is not part of this event")
         if row.withdrawn_at is not None:
             raise BadRequestError("Put the player back before moving him")
         if any(
@@ -654,12 +654,12 @@ def _open_night(session: OrmSession, night_id: int) -> Season:
     """The night, while it is still running; a closed night takes no write."""
     night = session.get(Season, night_id)
     if night is None or night.kind is not EventKind.koth:
-        raise NotFoundError(f"KOTH night not found by id: {night_id}")
+        raise NotFoundError(f"KOTH event not found by id: {night_id}")
     if (
         night.closed_at is not None
         or session.get(KothHistoryEvent, night_id) is not None
     ):
-        raise BadRequestError("The night is closed")
+        raise BadRequestError("The event is closed")
     return night
 
 
@@ -672,7 +672,7 @@ def _stage(session: OrmSession, event_id: int) -> EventStage:
         )
     ).first()
     if stage is None:
-        raise BadRequestError("This night has no king of the hill stage")
+        raise BadRequestError("This event has no king of the hill stage")
     return stage
 
 
