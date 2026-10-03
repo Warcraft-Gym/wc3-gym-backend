@@ -1613,7 +1613,12 @@ def _table(
     user behind a solo side rides along.
     """
     entrants = {ident(entrant): entrant for entrant in field}
+    king = _king(session, field, series) if stage.format is StageFormat.koth else None
+    # A king crowned by hand who played nothing still holds place one
+    if king is not None:
+        entrants.setdefault(ident(king), king)
     order = list(entrants)
+    first = 1
     if stage.format is StageFormat.ffa:
         return _place_table(session, stage, entrants, series, seats or {})
     results = [
@@ -1640,10 +1645,26 @@ def _table(
         reached = _reached(session, stage, order, series)
         table = sorted(table, key=lambda line: reached[line.entrant], reverse=True)
     elif stage.format is StageFormat.koth:
-        king = _king(session, field, series)
-        table = sorted(table, key=lambda line: line.entrant == king, reverse=True)
+        crowned = ident(king) if king is not None else None
+        played = {
+            side
+            for row in series
+            if scored(row)
+            for side in (row.entrant1_id, row.entrant2_id)
+        }
+        # Place one is the king's; besides him only a row that played is placed
+        table = sorted(
+            (
+                line
+                for line in table
+                if line.entrant == crowned or line.entrant in played
+            ),
+            key=lambda line: line.entrant == crowned,
+            reverse=True,
+        )
+        first = 1 if king is not None else 2
     counted = _counted(order, results)
-    names = _names(session, field)
+    names = _names(session, list(entrants.values()))
     return [
         StandingRow(
             position=place,
@@ -1655,7 +1676,7 @@ def _table(
             game_diff=line.game_diff,
             **counted[line.entrant],
         )
-        for place, line in enumerate(table, start=1)
+        for place, line in enumerate(table, start=first)
     ]
 
 
@@ -1759,20 +1780,41 @@ def _third_place(
 
 def _king(
     session: OrmSession, field: Sequence[EventEntrant], series: Sequence[Series]
-) -> int | None:
+) -> EventEntrant | None:
     """The entrant who wears the crown of the division this field plays in.
 
-    A stage that runs no divisions has no row to store a crown on, so its
-    throne is the winner of the last series it scored.
+    The crown counts only on a live row of that division, and the player's
+    seat in the field stands for the race row he wears it on. A stage that
+    runs no divisions has no row to store a crown on, so its throne is the
+    winner of the last series it scored.
     """
     division_id = next(
         (row.division_id for row in field if row.division_id is not None), None
     )
     if division_id is None:
         done = [row for row in series if scored(row)]
-        return entrant_of(done[-1]) if done else None
+        winner = entrant_of(done[-1]) if done else None
+        return next((row for row in field if ident(row) == winner), None)
     division = session.get(EventDivision, division_id)
-    return division.king_entrant_id if division else None
+    wearer = (
+        session.get(EventEntrant, division.king_entrant_id)
+        if division is not None and division.king_entrant_id is not None
+        else None
+    )
+    if (
+        wearer is None
+        or wearer.division_id != division_id
+        or wearer.withdrawn_at is not None
+    ):
+        return None
+    return next(
+        (
+            row
+            for row in field
+            if row.user_id is not None and row.user_id == wearer.user_id
+        ),
+        wearer,
+    )
 
 
 def _counted(

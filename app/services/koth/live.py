@@ -59,15 +59,27 @@ def start_series(night_id: int, data: SeriesStart) -> KothBoard:
             raise BadRequestError("Both players must stand in the same bracket")
         if first.withdrawn_at is not None or second.withdrawn_at is not None:
             raise BadRequestError("A row that left tonight plays no series")
-        chain = [
-            row
-            for row in series_of(session, event_id)
-            if row.division_id == first.division_id
-        ]
+        every = series_of(session, event_id)
+        chain = [row for row in every if row.division_id == first.division_id]
         if any(not stage_engine.scored(row) for row in chain):
             raise ApiError(
                 409, {"error": "This bracket already has a series on the table"}
             )
+        # A player plays one series at a time, in any bracket of the night
+        busy = {
+            player
+            for row in every
+            if not stage_engine.scored(row)
+            for player in (row.player1_id, row.player2_id)
+            if player is not None
+        }
+        playing = next(
+            (row.user_id for row in (first, second) if row.user_id in busy), None
+        )
+        if playing is not None:
+            user = session.get(User, playing)
+            name = user.name if user else "This player"
+            raise ApiError(409, {"error": f"{name} is playing in another bracket"})
         _add_series(session, event_id, first, second, chain)
     return board.read(night_id)
 
