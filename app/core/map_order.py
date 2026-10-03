@@ -18,6 +18,11 @@ def other_side(side: str) -> str:
     return SIDES[1] if side == SIDES[0] else SIDES[0]
 
 
+def default_rules(best_of: int) -> str:
+    """The rules of a best-of whose stage names none: a fixed game, then loser picks."""
+    return ",".join(["fixed", *["loser"] * (best_of - 1)])
+
+
 def rules_of(map_rules: str | None) -> list[str]:
     """One rule per game, in game order."""
     return [rule for rule in (map_rules or DEFAULT_RULES).split(",") if rule]
