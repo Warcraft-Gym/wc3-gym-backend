@@ -16,6 +16,7 @@ from app.core.db import Session, rel
 from app.core.exceptions import (
     ApiError,
     BadRequestError,
+    ExternalServiceError,
     NotFoundError,
     W3CThrottledError,
 )
@@ -550,17 +551,44 @@ class UserService:
         if len(refusals) == len(seasons):
             raise refusals[0]
 
+        flag = self._w3c_flag(w3c_service, user)
+
         # One transaction reads and writes the rows of this player, so no
         # other sync can insert between the read and the write.
         with Session.begin() as session:
             for s in all_stats:
                 self._write_w3c_stats(session, user.id, s)
+            if flag:
+                # A country the player or an admin named is never replaced
+                session.execute(
+                    update(User)
+                    .where(
+                        col(User.id) == user.id,
+                        or_(col(User.country).is_(None), col(User.country) == ""),
+                    )
+                    .values(country=flag)
+                )
             # The stamp says when the app last asked, not that stats were found
             session.execute(
                 update(User)
                 .where(col(User.id) == user.id)
                 .values(w3c_synced_at=utcnow())
             )
+
+    @staticmethod
+    def _w3c_flag(w3c_service: W3CService, user: UserReduced) -> str | None:
+        """The w3champions flag of a player who has no country, else nothing."""
+        with Session() as session:
+            named = session.scalar(
+                select(col(User.country)).where(col(User.id) == user.id)
+            )
+        if named or not user.battleTag:
+            return None
+        try:
+            return w3c_service.country(user.battleTag)
+        except ExternalServiceError as e:
+            logger.info(f"No W3C flag for {user.battleTag}: {e}")
+            return None
 
     def _write_w3c_stats(
         self, session: OrmSession, user_id: int, w3c_stats: W3CStatsCreate

@@ -23,6 +23,8 @@ from app.services.users import UserService
 from app.services.w3c import W3CService
 
 SEASON = 21
+# The conftest answers no flag; the flag tests put the real lookup back
+REAL_COUNTRY = W3CService.country
 
 
 def stats(mmr: int, race: Race = Race.HU, season: int = SEASON) -> W3CStatsCreate:
@@ -146,3 +148,68 @@ def test_a_lost_race_updates_the_row_the_winner_wrote(
     survivors = rows_of(user_id)
     assert [r.id for r in survivors] == [r.id for r in written]
     assert survivors[0].mmr == 1700
+
+
+def answer_flag(monkeypatch: pytest.MonkeyPatch, body: dict[str, Any]) -> list[str]:
+    """W3Champions answers this personal settings body; the list holds each ask."""
+    asked: list[str] = []
+
+    def send_request(
+        self: W3CService, url: str, params: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        asked.append(url)
+        return body
+
+    monkeypatch.setattr(W3CService, "country", REAL_COUNTRY)
+    monkeypatch.setattr(W3CService, "send_request", send_request)
+    return asked
+
+
+def country_of(user_id: int) -> str | None:
+    with Session() as session:
+        return session.get_one(User, user_id).country
+
+
+def set_country(user_id: int, country: str | None) -> None:
+    with Session.begin() as session:
+        session.get_one(User, user_id).country = country
+
+
+@pytest.mark.parametrize(
+    ("body", "flag"),
+    [
+        ({"countryCode": "TR", "location": "DE"}, "TR"),
+        ({"countryCode": None, "location": "US"}, "US"),
+        ({"countryCode": None, "location": None}, None),
+    ],
+)
+def test_a_sync_gives_a_player_with_no_country_the_w3c_flag(
+    app: FastAPI,
+    seeded: dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+    body: dict[str, Any],
+    flag: str | None,
+) -> None:
+    """The flag the player picked on w3champions, else where it places them."""
+    user_id = seeded["player_ids"][0]
+    set_country(user_id, None)
+    answer_w3c(monkeypatch, [stats(mmr=1500)])
+    answer_flag(monkeypatch, body)
+
+    UserService().update_w3c_stats_by_id(user_id)
+
+    assert country_of(user_id) == flag
+
+
+def test_a_sync_never_replaces_a_country_the_player_named(
+    app: FastAPI, seeded: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    user_id = seeded["player_ids"][0]
+    set_country(user_id, "GB")
+    answer_w3c(monkeypatch, [stats(mmr=1500)])
+    asked = answer_flag(monkeypatch, {"countryCode": "TR"})
+
+    UserService().update_w3c_stats_by_id(user_id)
+
+    assert country_of(user_id) == "GB"
+    assert asked == []

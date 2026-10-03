@@ -167,6 +167,8 @@ def replay_uploaded(blob_store: dict[str, bytes]) -> Callable[..., None]:
 def no_third_party_calls(monkeypatch: pytest.MonkeyPatch) -> None:
     """No test reaches w3champions. A test that answers for it patches this
     method again, and one that forgets fails here instead of on the network."""
+    # Every sync asks for the flag of a player with no country; it shows none
+    monkeypatch.setattr(W3CService, "country", lambda self, bnet_name: None)
 
     def refuse(self: requests.Session, method: str, url: str, **kwargs: object) -> None:
         raise AssertionError(f"the test called out to {method} {url}")

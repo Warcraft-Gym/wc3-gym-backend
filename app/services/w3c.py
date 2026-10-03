@@ -108,6 +108,16 @@ class W3CService:
             logger.debug(f"Player validation failed for {bnet_name}: {e!s}")
             return False
 
+    def country(self, bnet_name: str) -> str | None:
+        """The flag w3champions shows for this player: the one the player picked,
+        else the country w3champions places them in."""
+        found = self.send_request(
+            url=f"{self.base_url()}/personal-settings/{urllib.parse.quote(bnet_name)}"
+        )
+        if not isinstance(found, dict):
+            return None
+        return found.get("countryCode") or found.get("location") or None
+
     def get_player_stats(
         self, bnet_name: str, season_override: int | None = None
     ) -> list[W3CStatsCreate]:
