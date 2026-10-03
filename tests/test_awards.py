@@ -6,6 +6,7 @@ the event page and a player's shelf read it.
 
 from typing import Any
 
+import pytest
 from httpx2 import Client
 from sqlalchemy import select
 from sqlmodel import col
@@ -107,6 +108,7 @@ def test_a_finish_stamps_the_event_and_a_reopen_takes_it_back(
     assert reopened.json()["phase"] == "finished"
 
 
+@pytest.mark.usefixtures("quiet_w3c")
 def test_closing_a_koth_night_crowns_the_king_of_every_bracket(
     client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
 ) -> None:

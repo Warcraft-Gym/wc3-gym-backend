@@ -176,6 +176,16 @@ def no_third_party_calls(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(requests.Session, "request", refuse)
 
 
+@pytest.fixture
+def quiet_w3c(monkeypatch: pytest.MonkeyPatch) -> None:
+    """W3Champions knows nobody: every KOTH signup asks it, and the rating the
+    test stored stands. A test that answers for it patches again."""
+    monkeypatch.setattr(W3CService, "current_season", lambda self: 20)
+    monkeypatch.setattr(
+        W3CService, "get_player_stats", lambda self, bnet_name, season_override=None: []
+    )
+
+
 @pytest.fixture(autouse=True)
 def discord_caches() -> None:
     """Every test starts with no remembered guild role and no remembered emojis."""

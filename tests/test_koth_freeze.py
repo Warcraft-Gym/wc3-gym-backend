@@ -33,6 +33,9 @@ from tests.test_koth_live import (
 from tests.test_koth_moves import line, user_of
 from tests.test_koth_night import entrants, open_night, rate, sign_up
 
+# Every signup asks W3Champions, so each test here answers for it
+pytestmark = pytest.mark.usefixtures("quiet_w3c")
+
 
 def rerate(tag: str, mmr: int, race: Race = Race.HU) -> None:
     """Change the W3Champions rating the app holds for one race of a player."""

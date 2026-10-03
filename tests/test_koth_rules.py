@@ -9,6 +9,7 @@ play, so every fix crowns by the walk from it.
 
 from typing import Any
 
+import pytest
 from httpx2 import Client
 
 from tests.test_koth_live import (
@@ -27,6 +28,9 @@ from tests.test_koth_live import (
 )
 from tests.test_koth_moves import line, move, two_races
 from tests.test_koth_night import open_night
+
+# Every signup asks W3Champions, so each test here answers for it
+pytestmark = pytest.mark.usefixtures("quiet_w3c")
 
 
 def set_queue(
