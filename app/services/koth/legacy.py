@@ -43,7 +43,6 @@ from app.services import stage_engine
 from app.services.battle_tags import person_by_tag
 from app.services.events import EventService, _stats_for, _users_for
 from app.services.koth import carry, live, night, nightbot
-from app.services.koth.signup import recut
 from app.services.series import SeriesService, update_in
 from app.services.w3c_stats import w3c_season
 
@@ -202,9 +201,7 @@ def withdraw(battle_tag: str, race: str | None = None) -> None:
         rows = session.scalars(statement).all()
         if not rows:
             raise NotFoundError("No active signup to withdraw")
-        players = live.leave(session, event_id, rows)
-    if players:
-        recut(event_id, only=players)
+        live.leave(session, event_id, rows)
 
 
 def set_bracket(signup_id: int, bracket: int) -> KothSignupPublic:

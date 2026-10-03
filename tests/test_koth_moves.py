@@ -10,11 +10,11 @@ from typing import Any
 
 import pytest
 from httpx2 import Client
-from sqlmodel import col, select
 
 from app.core.db import Session
 from app.models.enums import Race
 from app.models.event_division import EventDivision
+from app.models.event_entrant import EventEntrant
 from app.models.user import User
 from app.models.w3c_stats import W3CStats
 from tests.test_awards import awarded
@@ -194,7 +194,7 @@ def test_a_seat_keeps_its_place_when_one_of_its_races_moves(
 def test_the_shared_move_of_a_king_clears_the_crown_he_wore(
     client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
 ) -> None:
-    """A row that comes back to his bracket is no king, and the close pays the table."""
+    """A row that comes back to his bracket is no king, so the close pays no Champion."""
     night = open_night(client, auth_headers)
     top, middle, _ = bracket_ids(night)
     king = place(client, auth_headers, night, "Crown#1", 1700, top)
@@ -226,8 +226,8 @@ def test_the_shared_move_of_a_king_clears_the_crown_he_wore(
     closed = client.post(f"/koth/nights/{night['id']}/close", headers=auth_headers)
     assert closed.status_code == 200, closed.text
     assert awarded(night["id"]) == [
-        (user_of(client, night["id"], rival), 1, "Champion"),
-        (user_of(client, night["id"], king), 2, "Runner-up"),
+        (user_of(client, night["id"], rival), 2, "Runner-up"),
+        (user_of(client, night["id"], king), 3, "Third"),
     ]
 
 
@@ -297,22 +297,18 @@ def test_put_back_refuses_a_row_that_has_not_left(
 def test_a_leave_reads_a_crown_on_a_row_of_another_bracket_as_empty(
     client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
 ) -> None:
-    """The shared cut route moves a row and keeps the crown; a leave forfeits nothing."""
+    """A crown left on a row that stands in another bracket is empty; a leave forfeits nothing."""
     night = open_night(client, auth_headers)
     top, middle, _ = bracket_ids(night)
     king = chat(client, night, "Rise#1111", 1500)
     rival = chat(client, night, "Stay#2222", 1500)
     play(client, auth_headers, night["id"], king, rival)
     place(client, auth_headers, night, "Top#3", 1700, top)
+    # No route leaves a crown behind, so the row is moved under it directly
     with Session.begin() as session:
-        stats = session.scalars(
-            select(W3CStats).where(
-                col(W3CStats.user_id) == user_of(client, night["id"], king)
-            )
-        ).one()
-        stats.mmr = 1700
-    cut = client.post(f"/events/{night['id']}/divisions/assign", headers=auth_headers)
-    assert cut.status_code == 200, cut.text
+        row = session.get(EventEntrant, king)
+        assert row is not None
+        row.division_id = top
     assert stored_king(middle) == king
 
     left = client.delete(

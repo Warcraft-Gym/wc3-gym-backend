@@ -542,7 +542,7 @@ def test_the_board_of_thirty_rows_is_small_and_costs_a_fixed_read(
         client.get(f"/koth/nights/{night['id']}/board")
 
     assert small.status_code == 200, small.text
-    # 30 rows and one played series read 3989 bytes over 10 statements
+    # 30 rows and one played series read 4339 bytes over 10 statements
     assert len(small.content) < 5000
     assert ten[0] == sixty[0] == 10
 
@@ -928,10 +928,10 @@ def test_a_king_whose_row_falls_leaves_an_empty_throne(
     ]
 
 
-def test_a_new_bound_holds_the_series_on_the_table_until_it_ends(
+def test_a_new_bound_leaves_the_series_on_the_table_where_it_stands(
     client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
 ) -> None:
-    """A row in a running series keeps its bracket; the result then cuts it."""
+    """A row in a running series keeps its bracket, also after the result."""
     night = open_night(client, auth_headers)
     _, middle, low = bracket_ids(night)
     king = chat(client, night, "Busy#1111", 1500)
@@ -958,13 +958,12 @@ def test_a_new_bound_holds_the_series_on_the_table_until_it_ends(
 
     assert done.status_code == 200, done.text
     payload = done.json()
-    assert only(payload, middle)["queue"] == []
-    assert king_of(payload, middle) is None
-    assert king_of(payload, low) is None
+    assert crowned(payload, middle) == king
+    assert [row["rows"][0]["entrant_id"] for row in only(payload, middle)["queue"]] == [
+        rival
+    ]
     assert [row["rows"][0]["entrant_id"] for row in only(payload, low)["queue"]] == [
-        free,
-        king,
-        rival,
+        free
     ]
 
 
@@ -993,10 +992,10 @@ def test_a_played_series_stays_in_its_bracket_after_a_new_bound(
     assert only(payload, low)["played"] == []
 
 
-def test_a_cancelled_series_frees_its_rows_for_the_new_bound(
+def test_a_cancelled_series_leaves_its_rows_where_the_bound_found_them(
     client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
 ) -> None:
-    """Taking the series off the table cuts its two rows as the bounds stand."""
+    """Taking the series off the table moves neither row; only a bounds save does."""
     night = open_night(client, auth_headers)
     _, middle, low = bracket_ids(night)
     first = chat(client, night, "Off#1111", 1500)
@@ -1012,11 +1011,11 @@ def test_a_cancelled_series_frees_its_rows_for_the_new_bound(
 
     assert resp.status_code == 200, resp.text
     payload = resp.json()
-    assert only(payload, middle)["queue"] == []
-    assert [row["rows"][0]["entrant_id"] for row in only(payload, low)["queue"]] == [
+    assert [row["rows"][0]["entrant_id"] for row in only(payload, middle)["queue"]] == [
         first,
         second,
     ]
+    assert only(payload, low)["queue"] == []
 
 
 def test_the_bounds_a_night_refuses(
