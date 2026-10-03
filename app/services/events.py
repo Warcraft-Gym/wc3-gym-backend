@@ -1277,7 +1277,9 @@ def _member_action(
     checkin_open_now: bool,
 ) -> MemberAction:
     """The one action the member home offers, so every page agrees on it."""
-    if phase in ("running", "finished"):
+    # A KOTH night runs while it takes signups, so its first series closes no door
+    koth_door = event.kind is EventKind.koth and event.signups_open and not joined
+    if phase == "finished" or (phase == "running" and not koth_door):
         return "view"
     if joined:
         if checked_in_at is not None:

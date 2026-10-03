@@ -1244,3 +1244,26 @@ def test_a_king_who_leaves_an_empty_line_leaves_the_throne_empty(
     bracket = only(board(client, night["id"]), top)
     assert bracket["king"] is None
     assert len(bracket["played"]) == 1
+
+
+def test_a_running_night_still_offers_the_member_a_signup(
+    client: Client,
+    auth_headers: dict[str, str],
+    seeded: dict[str, Any],
+    member: Any,  # noqa: ANN401
+) -> None:
+    """A played series keeps the member home's Sign up while signups stand open."""
+    from tests.test_events import my_events
+
+    night = open_night(client, auth_headers)
+    top = bracket_ids(night)[0]
+    first = place(client, auth_headers, night, "One#1", 1700, top)
+    second = place(client, auth_headers, night, "Two#2", 1700, top)
+    play(client, auth_headers, night["id"], first, second)
+
+    row = my_events(client, member())[night["id"]]
+    assert (row["phase"], row["action"]) == ("running", "sign_up")
+
+    closed = client.post(f"/koth/nights/{night['id']}/close", headers=auth_headers)
+    assert closed.status_code == 200, closed.text
+    assert my_events(client, member())[night["id"]]["action"] == "view"
