@@ -178,6 +178,7 @@ def set_result(
 
     The map score is the 1-0 every other reader of a series expects, so the
     player history, the head to head, the awards and the cards keep working.
+    A turned result reads played; the same winner sent again keeps its kind.
     """
 
     def act(session: OrmSession, event_id: int) -> None:
@@ -259,13 +260,16 @@ def _score(session: OrmSession, row: Series, winner: int, kind: str = "played") 
     """Write who won the one map and follow it into the crown and the line."""
     was_scored = stage_engine.scored(row)
     was_slot = stage_engine.won_slot(row)
+    turned = not was_scored or was_slot != winner
     row.player1_score = 1 if winner == 1 else 0
     row.player2_score = 0 if winner == 1 else 1
-    row.result_kind = kind
+    # The same result sent again keeps its kind, so a forfeit stays a forfeit
+    if turned:
+        row.result_kind = kind
     stage_engine.game_one(session, row)
     session.flush()
     # The same result sent again moves neither the crown nor the line
-    if not was_scored or was_slot != winner:
+    if turned:
         stage_engine.after_score(session, row, was_scored, was_slot)
         beaten = stage_engine.entrant_of(row, takes_loser=True)
         loser = session.get(EventEntrant, beaten) if beaten else None
@@ -276,38 +280,39 @@ def _score(session: OrmSession, row: Series, winner: int, kind: str = "played") 
 def leave(session: OrmSession, event_id: int, rows: Sequence[EventEntrant]) -> None:
     """Withdraw race rows from a night, forfeiting what they owe first.
 
-    A row in a series on the table loses it by forfeit. A king who keeps
-    another live row in his bracket passes the crown to it, with no forfeit. A
+    A king who keeps another live row in his bracket passes the crown to it,
+    with no forfeit; a series his crowned row plays on the table comes off with
+    no result. Any other row in a series on the table loses it by forfeit. A
     king whose bracket has no series on the table and a player free to play in
     its line loses a forfeit series to the first of them, who takes the crown.
     Any other throne the rows wear is left empty.
     """
     ids = {ident(row) for row in rows}
     chain = series_of(session, event_id)
-    for series in chain:
-        if not stage_engine.scored(series) and ids & {
-            series.entrant1_id,
-            series.entrant2_id,
-        }:
-            _score(session, series, 2 if series.entrant1_id in ids else 1, "forfeit")
-    for division in divisions_of(session, event_id):
-        king = (
-            session.get(EventEntrant, division.king_entrant_id)
-            if division.king_entrant_id in ids
-            else None
-        )
-        # A pointer to a row of another bracket is an empty throne, not a king
-        if king is None or king.division_id != division.id:
+    divisions = divisions_of(session, event_id)
+    kings = {ident(division): _king(session, division, ids) for division in divisions}
+    heirs = {
+        division_id: _heir(session, event_id, king, ids)
+        for division_id, king in kings.items()
+        if king is not None
+    }
+    for series in list(chain):
+        sides = {series.entrant1_id, series.entrant2_id}
+        if stage_engine.scored(series) or not ids & sides:
             continue
-        heir = min(
-            (
-                row
-                for row in _live_field(session, event_id, ident(division))
-                if row.user_id == king.user_id and ident(row) not in ids
-            ),
-            key=board.place,
-            default=None,
-        )
+        king = kings.get(series.division_id or 0)
+        heir = heirs.get(series.division_id or 0)
+        if king is not None and heir is not None and ident(king) in sides:
+            session.delete(series)
+            chain.remove(series)
+            continue
+        _score(session, series, 2 if series.entrant1_id in ids else 1, "forfeit")
+    for division in divisions:
+        king = kings[ident(division)]
+        # A forfeit above crowned the other side of the king's series
+        if king is None or division.king_entrant_id != ident(king):
+            continue
+        heir = heirs[ident(division)]
         if heir is not None:
             division.king_entrant_id = ident(heir)
             continue
@@ -324,6 +329,34 @@ def leave(session: OrmSession, event_id: int, rows: Sequence[EventEntrant]) -> N
         row.withdrawn_at = left
     stage_engine.uncrown(session, list(ids))
     session.flush()
+
+
+def _king(
+    session: OrmSession, division: EventDivision, ids: set[int]
+) -> EventEntrant | None:
+    """The crowned row of a bracket when it is one of the rows that leave."""
+    king = (
+        session.get(EventEntrant, division.king_entrant_id)
+        if division.king_entrant_id in ids
+        else None
+    )
+    # A pointer to a row of another bracket is an empty throne, not a king
+    return king if king is not None and king.division_id == division.id else None
+
+
+def _heir(
+    session: OrmSession, event_id: int, king: EventEntrant, ids: set[int]
+) -> EventEntrant | None:
+    """The first other live row of a leaving king's player in his bracket."""
+    return min(
+        (
+            row
+            for row in _live_field(session, event_id, king.division_id or 0)
+            if row.user_id == king.user_id and ident(row) not in ids
+        ),
+        key=board.place,
+        default=None,
+    )
 
 
 def _first_free(
@@ -350,22 +383,24 @@ def _first_free(
 
 
 def set_queue(night_id: int, division_id: int, data: QueueWrite) -> KothBoard:
-    """Order one bracket's line, first in line first; no other bracket moves."""
+    """Order the named rows of one bracket's line, first in line first.
+
+    The named rows swap among the places they already hold, so a row the write
+    leaves out, such as the king or a player at the table, keeps its place.
+    """
     with Session.begin() as session:
         night = _open_night(session, night_id)
-        rows = {
-            ident(row): row for row in _live_field(session, ident(night), division_id)
-        }
+        field = sorted(_live_field(session, ident(night), division_id), key=board.place)
+        rows = {ident(row): row for row in field}
         named = []
         for entrant_id in data.entrant_ids:
             row = rows.pop(entrant_id, None)
             if row is None:
                 raise BadRequestError(f"Row {entrant_id} does not stand in line here")
             named.append(row)
-        # A row the drag left out keeps its place behind the ones it names
-        for place, row in enumerate(
-            named + sorted(rows.values(), key=board.place), start=1
-        ):
+        order = iter(named)
+        line = [row if ident(row) in rows else next(order) for row in field]
+        for place, row in enumerate(line, start=1):
             row.seed = place
         session.flush()
     return board.read(night_id)
