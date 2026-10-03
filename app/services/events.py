@@ -14,6 +14,7 @@ from typing import Any
 
 from sqlalchemy import (
     ColumnElement,
+    case,
     delete,
     distinct,
     func,
@@ -84,6 +85,7 @@ from app.models.season import (
     Season,
     series_counts,
     series_counts_by_event,
+    series_scored,
     tier_count,
 )
 from app.models.series import Series
@@ -551,7 +553,7 @@ class EventService:
                 },
             )
             answered = _round_answers(session, user_id, rounds)
-            fixtures = _captain_fixtures(session, user_id, events)
+            fixtures, every = _captain_fixtures(session, user_id, events)
             return [
                 _member_row(
                     session,
@@ -565,6 +567,7 @@ class EventService:
                     hints.get(event.id),
                     _answer_time(event, rounds.get(event.id), answered),
                     fixtures.get(event.id) if event.id is not None else None,
+                    every.get(event.id, []) if event.id is not None else [],
                 )
                 for event in events
             ]
@@ -1085,19 +1088,24 @@ def _answer_time(
 
 def _captain_fixtures(
     session: OrmSession, user_id: int | None, events: Sequence[Season]
-) -> dict[int, CaptainFixture]:
-    """The next fixture with places left of every event the caller captains in.
+) -> tuple[dict[int, CaptainFixture], dict[int, list[CaptainFixture]]]:
+    """The fixtures of the caller's own team in every event he captains in.
+
+    The first map holds the next fixture with places left of each event that
+    still has a round to play. The second holds every fixture of each event
+    that is not closed, in round order, so the home leads to the team's match
+    of any round, drafted or not, running or over.
 
     Four statements answer the whole list whatever it holds: the caller's
-    seats, the fixtures of the events that still have a round to play, and the
-    published series and the open drafts of those fixtures. The rounds
-    themselves are already loaded on the events.
+    seats, the fixtures of those events, the published and played series of
+    those fixtures, and their open drafts. The rounds themselves are already
+    loaded on the events.
     """
     if user_id is None:
-        return {}
+        return {}, {}
     by_id = {event.id: event for event in events if event.id is not None}
     if not by_id:
-        return {}
+        return {}, {}
     seats = {
         event_id: team_id
         for event_id, team_id in session.execute(
@@ -1114,67 +1122,99 @@ def _captain_fixtures(
         for event_id in seats
         if (rounds := open_rounds(by_id[event_id].rounds))
     }
-    if not wanted:
-        return {}
+    # the same seats the /me nav lists: every event that is not closed
+    listed = {event_id for event_id in seats if by_id[event_id].closed_at is None}
+    if not wanted and not listed:
+        return {}, {}
     matches = session.scalars(
         select(Match)
         .where(
-            col(Match.season_id).in_(wanted),
+            col(Match.season_id).in_(wanted.keys() | listed),
             or_(
                 col(Match.team1_id).in_(seats.values()),
                 col(Match.team2_id).in_(seats.values()),
             ),
         )
         .options(joinedload(rel(Match.team1)), joinedload(rel(Match.team2)))
+        .order_by(col(Match.playday), col(Match.id))
     ).all()
     ids = [ident(match) for match in matches]
-    published = _match_counts(session, col(Series.match_id), ids)
-    drafted = _match_counts(session, col(DraftSeries.match_id), ids)
+    series = _fixture_series(session, ids)
+    drafted = _draft_counts(session, ids)
+
+    def row(
+        event: Season, fixture: Match, round_: DBEventRound | None
+    ) -> CaptainFixture:
+        published, played = series.get(ident(fixture), (0, 0))
+        return CaptainFixture(
+            match_id=ident(fixture),
+            playday=fixture.playday,
+            round_start=round_.start_date if round_ else None,
+            round_end=round_.end_date if round_ else None,
+            team1=TeamSummaryPublic.from_team(fixture.team1),
+            team2=TeamSummaryPublic.from_team(fixture.team2),
+            series_per_round=event.series_per_round,
+            published=published,
+            drafted=drafted.get(ident(fixture), 0),
+            played=played,
+        )
+
     found: dict[int, CaptainFixture] = {}
-    for event_id, rounds in wanted.items():
+    every: dict[int, list[CaptainFixture]] = {}
+    for event_id in wanted.keys() | listed:
         event = by_id[event_id]
-        own = {
-            match.playday: match
+        own = [
+            match
             for match in matches
             if match.season_id == event_id
             and seats[event_id] in (match.team1_id, match.team2_id)
-        }
-        for round_ in rounds:
-            fixture = own.get(round_.number)
+        ]
+        if event_id in listed:
+            numbered = {round_.number: round_ for round_ in event.rounds}
+            every[event_id] = [
+                row(event, match, numbered.get(match.playday)) for match in own
+            ]
+        by_round = {match.playday: match for match in own}
+        for round_ in wanted.get(event_id, []):
+            fixture = by_round.get(round_.number)
             if fixture is None:
                 continue
-            held = published.get(ident(fixture), 0)
-            if held >= event.series_per_round:
+            if series.get(ident(fixture), (0, 0))[0] >= event.series_per_round:
                 continue
-            found[event_id] = CaptainFixture(
-                match_id=ident(fixture),
-                playday=fixture.playday,
-                round_start=round_.start_date,
-                round_end=round_.end_date,
-                team1=TeamSummaryPublic.from_team(fixture.team1),
-                team2=TeamSummaryPublic.from_team(fixture.team2),
-                series_per_round=event.series_per_round,
-                published=held,
-                drafted=drafted.get(ident(fixture), 0),
-            )
+            found[event_id] = row(event, fixture, round_)
             break
-    return found
+    return found, every
 
 
-def _match_counts(
-    session: OrmSession,
-    match_column: Any,  # noqa: ANN401  # the match id column of either table
-    match_ids: Sequence[int],
-) -> dict[int, int]:
-    """How many rows of that table each match holds, in one grouped read."""
+def _fixture_series(
+    session: OrmSession, match_ids: Sequence[int]
+) -> dict[int, tuple[int, int]]:
+    """How many series each fixture published and how many of them carry a
+    result, in one grouped read."""
     if not match_ids:
         return {}
+    match_id = col(Series.match_id)
     rows = session.execute(
-        select(match_column, func.count())
-        .where(match_column.in_(match_ids))
-        .group_by(match_column)
+        select(
+            match_id,
+            func.count(),
+            func.coalesce(func.sum(case((series_scored(), 1), else_=0)), 0),
+        )
+        .where(match_id.in_(match_ids))
+        .group_by(match_id)
     ).all()
-    return {match_id: count for match_id, count in rows}
+    return {fixture: (published, played) for fixture, published, played in rows}
+
+
+def _draft_counts(session: OrmSession, match_ids: Sequence[int]) -> dict[int, int]:
+    """How many open drafts each fixture holds, in one grouped read."""
+    if not match_ids:
+        return {}
+    match_id = col(DraftSeries.match_id)
+    rows = session.execute(
+        select(match_id, func.count()).where(match_id.in_(match_ids)).group_by(match_id)
+    ).all()
+    return {fixture: count for fixture, count in rows}
 
 
 def _member_row(
@@ -1189,6 +1229,7 @@ def _member_row(
     hint: AvailabilityHint | None,
     answered_at: datetime | None,
     fixture: CaptainFixture | None,
+    fixtures: list[CaptainFixture],
 ) -> MemberEventRow:
     """One member home row: the event, and what the caller may do with it."""
     phase = phase_of(session, event, counts, last_stage)
@@ -1230,6 +1271,7 @@ def _member_row(
         availability_hint=hint,
         action=_member_action(phase, event, joined, checked_in_at, is_open),
         captain_fixture=fixture,
+        captain_matches=fixtures,
     )
 
 

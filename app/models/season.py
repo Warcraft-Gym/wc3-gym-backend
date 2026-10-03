@@ -243,6 +243,19 @@ class Season(SeasonBase, DBModel, table=True):
 NO_SERIES = (0, 0, 0)
 
 
+def series_scored() -> ColumnElement[bool]:
+    """A series carries a result: both scores, or a result marked unavailable."""
+    from app.models.series import Series
+
+    return or_(
+        and_(
+            col(Series.player1_score).is_not(None),
+            col(Series.player2_score).is_not(None),
+        ),
+        col(Series.result_unavailable).is_(True),
+    )
+
+
 def series_counts_by_event(
     session: Session, event_ids: Iterable[int | None]
 ) -> dict[int | None, tuple[int, int, int]]:
@@ -261,11 +274,7 @@ def series_counts_by_event(
     ids = [event_id for event_id in event_ids if event_id is not None]
     if not ids:
         return {}
-    scored = and_(
-        col(Series.player1_score).is_not(None),
-        col(Series.player2_score).is_not(None),
-    )
-    scored = or_(scored, col(Series.result_unavailable).is_(True))
+    scored = series_scored()
     started = or_(scored, col(Series.date_time) <= utcnow())
     rows = session.execute(
         select(
@@ -723,10 +732,12 @@ class EventDiscordPost(SQLModel):
 
 
 class CaptainFixture(SQLModel):
-    """The caller's own team's next fixture of an event he holds a seat in.
+    """One fixture of the caller's own team in an event he holds a seat in.
 
-    It rides the member row so the home offers the round draft before the
-    fixture holds any series at all.
+    It rides the member row twice: as the next fixture with places left, so the
+    home offers the round draft before the fixture holds any series at all, and
+    in the list of every fixture, so the home leads to the team's match of any
+    round.
     """
 
     match_id: int
@@ -740,6 +751,8 @@ class CaptainFixture(SQLModel):
     # Series the fixture already published, and drafts still open on it
     published: int = 0
     drafted: int = 0
+    # Published series that carry a result
+    played: int = 0
 
 
 class MemberEventRow(SQLModel):
@@ -792,3 +805,7 @@ class MemberEventRow(SQLModel):
     # The caller's own team's next fixture with places left, on an event he
     # holds a captain seat in; null for every other caller and every other event
     captain_fixture: CaptainFixture | None = None
+    # Every fixture of the caller's own team, in round order, on an event he
+    # holds a captain seat in that is not closed; empty for every other caller
+    # and every other event
+    captain_matches: list[CaptainFixture] = []
