@@ -1152,7 +1152,7 @@ def test_a_night_a_day_old_is_not_tonight_and_the_next_open_closes_it(
     rival = place(client, auth_headers, old, "Rival#2", 1700, top)
     play(client, auth_headers, old["id"], king, rival)
 
-    assert client.get("/koth/board").json()["error"] == "No KOTH night is open"
+    assert client.get("/koth/board").json()["error"] == "No KOTH event is open"
     assert awarded(old["id"]) == []
 
     new = open_night(client, auth_headers)
@@ -1172,7 +1172,7 @@ def test_a_night_that_has_not_expired_refuses_the_next_open(
     open_night(client, auth_headers, starts_at=started.isoformat())
     resp = client.post("/koth/nights", json={"starts_at": LATER}, headers=auth_headers)
     assert resp.status_code == 409
-    assert resp.json()["error"] == "Close the open night first."
+    assert resp.json()["error"] == "Close the open KOTH event first."
 
 
 def test_a_withdraw_with_signups_off_goes_through(

@@ -169,7 +169,7 @@ def test_a_move_refuses_a_series_a_row_that_left_and_a_closed_night(
     client.post(f"/koth/nights/{night['id']}/close", headers=auth_headers)
     closed = move(client, auth_headers, night["id"], rival, middle)
     assert closed.status_code == 400, closed.text
-    assert closed.json()["error"] == "The night is closed"
+    assert closed.json()["error"] == "The event is closed"
 
     later = open_night(client, auth_headers, starts_at=LATER)
     other = place(client, auth_headers, later, "Next#4", 1700, bracket_ids(later)[0])
@@ -502,7 +502,7 @@ def test_an_erase_refuses_a_side_of_any_series_of_the_night(
         resp = erase(client, auth_headers, night["id"], row)
         assert resp.status_code == 400, resp.text
         assert resp.json()["error"] == (
-            f"{name} has a series tonight, so the signup stays on the record"
+            f"{name} has a series in this event, so the signup stays on the record"
         )
 
     assert held(night["id"]) == before
@@ -548,7 +548,7 @@ def test_an_erase_refuses_a_closed_night_another_night_and_a_non_admin(
     client.post(f"/koth/nights/{night['id']}/close", headers=auth_headers)
     closed = erase(client, auth_headers, night["id"], row)
     assert closed.status_code == 400, closed.text
-    assert closed.json()["error"] == "The night is closed"
+    assert closed.json()["error"] == "The event is closed"
 
     later = open_night(client, auth_headers, starts_at=LATER)
     assert erase(client, auth_headers, later["id"], row).status_code == 404
