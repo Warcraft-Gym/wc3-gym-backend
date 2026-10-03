@@ -13,6 +13,7 @@ from fastapi.responses import PlainTextResponse
 from app.api.deps import SettingsServiceDep, edge_cache, require_admin
 from app.models.koth_night import (
     BoundsWrite,
+    BracketMove,
     CrownWrite,
     KothBoard,
     NightOpen,
@@ -106,6 +107,15 @@ def remove_entrant(night_id: int, entrant_id: int) -> KothBoard:
 def restore_entrant(night_id: int, entrant_id: int) -> KothBoard:
     """Put a row that left back in; it stands at the end of the line."""
     return live.restore_entrant(night_id, entrant_id)
+
+
+@router.put(
+    "/koth/nights/{night_id}/entrants/{entrant_id}/bracket",
+    dependencies=[Depends(require_admin)],
+)
+def move_entrant(night_id: int, entrant_id: int, data: BracketMove) -> KothBoard:
+    """Move a race row to another bracket by hand; it stands last there."""
+    return live.move_entrant(night_id, entrant_id, data)
 
 
 @router.get("/koth/board")

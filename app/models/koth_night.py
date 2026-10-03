@@ -51,6 +51,12 @@ class CrownWrite(SQLModel):
     entrant_id: int | None = None
 
 
+class BracketMove(SQLModel):
+    """The bracket an admin moves one race row to."""
+
+    division_id: int
+
+
 class BracketBound(SQLModel):
     """The MMR one bracket of the night opens at."""
 

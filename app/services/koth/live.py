@@ -24,6 +24,7 @@ from app.models.event_history import KothHistoryEvent
 from app.models.event_stage import EventStage
 from app.models.koth_night import (
     BoundsWrite,
+    BracketMove,
     CrownWrite,
     KothBoard,
     QueueWrite,
@@ -34,7 +35,9 @@ from app.models.relationships import DBEventRound
 from app.models.season import Season
 from app.models.series import Series
 from app.models.types import utcnow
+from app.models.user import User
 from app.services import stage_engine
+from app.services.events import _end_seed
 from app.services.koth import board
 from app.services.koth.night import divisions_of, series_of
 from app.services.koth.signup import recut
@@ -149,11 +152,12 @@ def leave(
 ) -> list[int | None]:
     """Withdraw race rows from a night, forfeiting what they owe first.
 
-    A row in a series on the table loses it by forfeit. A king whose bracket
-    has no series on the table and a player free to play in its line loses a
-    forfeit series to the first of them, who takes the crown. Any other throne
-    the rows wear is left empty. Answers the rows of every series scored here,
-    for the recut.
+    A row in a series on the table loses it by forfeit. A king who keeps
+    another live row in his bracket passes the crown to it, with no forfeit. A
+    king whose bracket has no series on the table and a player free to play in
+    its line loses a forfeit series to the first of them, who takes the crown.
+    Any other throne the rows wear is left empty. Answers the rows of every
+    series scored here, for the recut.
     """
     ids = {ident(row) for row in rows}
     players: list[int | None] = []
@@ -171,8 +175,23 @@ def leave(
             if division.king_entrant_id in ids
             else None
         )
+        # A pointer to a row of another bracket is an empty throne, not a king
+        if king is None or king.division_id != division.id:
+            continue
+        heir = min(
+            (
+                row
+                for row in _live_field(session, event_id, ident(division))
+                if row.user_id == king.user_id and ident(row) not in ids
+            ),
+            key=board.place,
+            default=None,
+        )
+        if heir is not None:
+            division.king_entrant_id = ident(heir)
+            continue
         bracket = [one for one in chain if one.division_id == division.id]
-        if king is None or any(not stage_engine.scored(one) for one in bracket):
+        if any(not stage_engine.scored(one) for one in bracket):
             continue
         challenger = _first_free(session, event_id, king, chain)
         if challenger is None:
@@ -298,12 +317,62 @@ def remove_entrant(night_id: int, entrant_id: int) -> KothBoard:
 
 
 def restore_entrant(night_id: int, entrant_id: int) -> KothBoard:
-    """Put a row that left back in; it stands at the end of the line."""
+    """Put a row that left back in; it takes the end seed of its bracket.
+
+    The player's other rows keep their place, so a seat he still holds keeps
+    its place in line, and a player with no other live row there joins the end.
+    """
     with Session.begin() as session:
         night = _open_night(session, night_id)
         row = _entrant(session, ident(night), entrant_id)
+        if row.withdrawn_at is None:
+            user = session.get(User, row.user_id) if row.user_id else None
+            raise BadRequestError(f"{user.name if user else 'This row'} has not left")
         row.withdrawn_at = None
-        _to_the_end(session, row)
+        if row.division_id is not None:
+            row.seed = _end_seed(session, row.event_id, row.division_id, entrant_id)
+    return board.read(night_id)
+
+
+def move_entrant(night_id: int, entrant_id: int, data: BracketMove) -> KothBoard:
+    """Move one race row to another bracket by hand; it stands last there.
+
+    The move is a placement by hand, so no cut moves the row back. A king who
+    moves leaves his throne empty with no forfeit, and his other rows in that
+    bracket go to the end of its line. His rows elsewhere stay where they are.
+    """
+    with Session.begin() as session:
+        night = _open_night(session, night_id)
+        event_id = ident(night)
+        row = _entrant(session, event_id, entrant_id)
+        target = session.get(EventDivision, data.division_id)
+        if target is None or target.event_id != event_id:
+            raise BadRequestError("That bracket is not part of this night")
+        if row.withdrawn_at is not None:
+            raise BadRequestError("Put the player back before moving him")
+        if any(
+            not stage_engine.scored(one)
+            and entrant_id in (one.entrant1_id, one.entrant2_id)
+            for one in series_of(session, event_id)
+        ):
+            raise ApiError(409, {"error": "Finish or cancel his series first"})
+        old = row.division_id
+        if old != data.division_id:
+            throne = session.get(EventDivision, old) if old is not None else None
+            was_king = throne is not None and throne.king_entrant_id == entrant_id
+            row.division_id = data.division_id
+            row.manual_placement = True
+            row.seed = _end_seed(session, event_id, data.division_id, entrant_id)
+            stage_engine.uncrown(session, [entrant_id])
+            # A king's other rows in the old bracket join the end of its line
+            if was_king and old is not None:
+                rest = [
+                    one
+                    for one in _live_field(session, event_id, old)
+                    if one.user_id == row.user_id
+                ]
+                if rest:
+                    _to_the_end(session, rest[0])
     return board.read(night_id)
 
 
