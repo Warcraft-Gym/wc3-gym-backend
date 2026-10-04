@@ -4,7 +4,7 @@ title: Discord integration
 description: Slash commands arrive through a separate adapter and are checked and answered here, cards are posted and edited under a rate limit, and season roles are mirrored to the guild on a button press.
 resource: ../../../app/services/interactions.py
 tags: [discord]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-04T06:56:31Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-04T13:05:43Z }
 sources:
   - id: interactions
     resource: ../../../app/services/interactions.py
@@ -48,11 +48,13 @@ Each command is one module under `app/services/commands/`. A module imports `bas
 
 # Cards and posts
 
-The app posts a result card, a cast claim card and a start reminder, plus one card per event with sign-up and withdraw buttons. Each post is a `discord_post` row so the app can edit it later. The channels come from the `settings` rows `results_channel_id` and `content_channel_id`; a missing row means no card. Every series write keeps the cards in step through `discord_posts.follow_series`: a new time edits the series cards, a first score posts the result card, a changed score edits it, and a cleared result deletes it with its row, so the next report posts a fresh one.
+The app posts a result card, a cast claim card and a start reminder, plus one card per event with Sign up and Check in buttons. Each post is a `discord_post` row so the app can edit it later. The channels come from the `settings` rows `results_channel_id` and `content_channel_id`; a missing row means no card. Every series write keeps the cards in step through `discord_posts.follow_series`: a new time edits the series cards, a first score posts the result card, a changed score edits it, and a cleared result deletes it with its row, so the next report posts a fresh one.
+
+A reported result that a player or a captain changes through the report (`PUT /player-series/{id}` or `/report-result`), or takes back (`DELETE /series/{id}/result`), also gets a note beside the card in the results channel, through `discord_posts.post_result_change`. The note names who made the change, a player of the series or a captain, and shows the score before and after behind spoilers, as the card does. When the score stands, it says the games or the races played changed. A note is a `discord_post` row of kind `result_change`, so the channel's pacing counts it, and it is never edited: it records one change. An admin's write, a captain's edit through `PUT /series/{id}` and a first report post no note.
 
 Discord allows five edits per five seconds per channel. `discord_posts.refresh_series` claims an edit with one UPDATE, waits when the channel had an edit in the last second, and skips a post already edited after its latest change, so a burst collapses to the last state. `discord._channel_call` waits out one 429. Never loop edits per write, and never use an in-memory queue or lock: no process survives a request on Vercel. See [the decision](../decisions/discord-rate-limit.md).
 
-Card rules: a mention is a call to action, so `/upcoming` tags nobody and the reminder tags the casters and the players; no database ids on a card; the round number, not the week; a player reads `{flag} {name} ({race} {mmr})` with the race played, else the signup race; every time is a Discord timestamp; the veto shows what the season's `map_rules` say.
+Card rules: a mention is a call to action, so `/upcoming` tags nobody and the reminder tags the casters and the players; the change note names its author inside the embed and allows no mention, so it notifies nobody; no database ids on a card; the round number, not the week; a player reads `{flag} {name} ({race} {mmr})` with the race played, else the signup race; every time is a Discord timestamp; the veto shows what the season's `map_rules` say.
 
 # The guild read and the roles
 

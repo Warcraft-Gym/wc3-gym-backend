@@ -81,7 +81,8 @@ def clear_result(
 ) -> SeriesPublic:
     """Take back the result: the scores, the races played and the games go,
     the result card comes down, and the replays stay for the next report. A
-    walkover or a forfeit was an admin's call, so an admin clears it."""
+    walkover or a forfeit was an admin's call, so an admin clears it. A player
+    or a captain who takes a result back is named in Discord."""
     with Session() as session:
         row = session.get(Series, series_id)
         if row is None:
@@ -90,13 +91,17 @@ def clear_result(
             raise ApiError(403, NOT_AUTHORIZED)
         if not admin and row.result_kind != "played":
             raise ApiError(403, {"error": "An admin clears a walkover or a forfeit"})
+        before = None if admin else discord_posts.ResultFacts.read(session, row)
     cleared = SeriesUpdate(
         player1_score=None,
         player2_score=None,
         player1_off_race=None,
         player2_off_race=None,
     )
-    return _write(series_id, cleared, force)
+    after = _write(series_id, cleared, force)
+    if before is not None:
+        discord_posts.post_result_change(series_id, before, user_id)
+    return after
 
 
 def _write(series_id: int, data: SeriesUpdate, force: bool) -> SeriesPublic:

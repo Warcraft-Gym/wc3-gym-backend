@@ -307,6 +307,56 @@ def result_card(series: SeriesPublic) -> dict[str, Any]:
     return {"content": "", "embeds": [_embed(result_lines(series, marks), marks)]}
 
 
+# The note of a changed result stands out from the cards around it
+CHANGE_COLOR = 0xF1C40F
+
+
+def mention(user: User | None) -> str:
+    """A user by mention, which Discord shows as their name; the site name
+    when the account has no Discord id."""
+    if user is None:
+        return "someone"
+    return f"<@{user.discordId}>" if user.discordId else md(user.name or "?")
+
+
+def change_card(
+    series: SeriesPublic,
+    actor: User | None,
+    before: tuple[int, int],
+    after: tuple[int, int] | None,
+    also: Sequence[str] = (),
+) -> dict[str, Any]:
+    """The note a changed result posts beside its card: who changed it, a
+    player of the series or a captain, and the score before and after, behind
+    spoilers as on the card. A null `after` is a result taken back. A mention
+    inside an embed notifies nobody, and the message allows none."""
+
+    def result(score: tuple[int, int]) -> str:
+        one, two = _name(series.player1), _name(series.player2)
+        return f"||{one} {score[0]}-{score[1]} {two}||"
+
+    plays = actor is not None and actor.id in (series.player1_id, series.player2_id)
+    who = f"{mention(actor)} ({'player' if plays else 'captain'})"
+    lines = [*header(series), "", teams(series), ""]
+    if after is None:
+        lines += [f"**Result cleared** by {who}", f"Before {result(before)}"]
+    else:
+        lines += [
+            f"**Result changed** by {who}",
+            f"Before {result(before)}",
+            f"Now {result(after)}",
+            *also,
+        ]
+    site = frontend_url()
+    if site and series.match:
+        lines += ["", f"[Match page](<{site}/match/{series.match.id}>)"]
+    return {
+        "content": "",
+        "embeds": [{"description": "\n".join(lines).strip(), "color": CHANGE_COLOR}],
+        "allowed_mentions": {"parse": []},
+    }
+
+
 def _series_block(
     series: SeriesPublic, marks: Ratings, live: Callable[[SeriesPublic], bool]
 ) -> list[str]:

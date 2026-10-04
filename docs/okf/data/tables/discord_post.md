@@ -4,7 +4,7 @@ title: discord_post
 description: One card the app posted in Discord and may edit later, with the two stamps that pace edits to the channel's rate limit.
 resource: ../../../../app/models/discord_post.py
 tags: [discord, data]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T15:15:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-04T13:05:43Z }
 verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
 sources:
   - id: model
@@ -20,8 +20,8 @@ sources:
 | Column | Type | Null | Meaning |
 |---|---|---|---|
 | `id` | INTEGER | no | Primary key. |
-| `kind` | VARCHAR | no | Which card built the post: `veto`, `announce`, the result card, the cast claim card or the reminder. |
-| `subject_id` | INTEGER | no | The id of the row the card is about, a series for every kind. |
+| `kind` | VARCHAR | no | Which card built the post: `veto`, `announce`, `result`, `result_change` (the note that a reported result changed), `cast`, `reminder` or `event`. |
+| `subject_id` | INTEGER | no | The id of the row the card is about: the event for `event`, a series for every other kind. |
 | `channel_id` | VARCHAR | no | The Discord channel the card is in. |
 | `message_id` | VARCHAR | no | The Discord message id. Unique. |
 | `changed_at` | TIMESTAMP | yes | When the subject last changed. An edit is due while it is after `edited_at`. |
@@ -33,4 +33,4 @@ Primary key `id`. No foreign keys. Unique constraint on `message_id`. Index on (
 
 # Rules
 
-An edit is claimed with one UPDATE, so a burst of writes collapses to the last state and no process holds a lock. The event card is not here: [event](event.md) `discord_event_id` holds its message id. See [Discord integration](../../concepts/discord-integration.md) and [the decision](../../decisions/discord-rate-limit.md).
+An edit is claimed with one UPDATE, so a burst of writes collapses to the last state and no process holds a lock. A `result_change` row is never edited or deleted: it records one change, and the row keeps the channel's pacing. The event card's message id is also in [event](event.md) `discord_event_id`. See [Discord integration](../../concepts/discord-integration.md) and [the decision](../../decisions/discord-rate-limit.md).
