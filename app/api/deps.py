@@ -48,12 +48,13 @@ Credentials = Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)]
 logger = logging.getLogger(__name__)
 
 
-# The three edge-cache classes: timers only, nothing is purged.
-CacheClass = Literal["live", "running", "settled"]
+# The four edge-cache classes: timers only, nothing is purged.
+CacheClass = Literal["live", "running", "settled", "finished"]
 CACHE_CONTROL: dict[CacheClass, str] = {
     "live": "public, s-maxage=15",  # a board a page polls
     "running": "public, s-maxage=120, stale-while-revalidate=600",
     "settled": "public, s-maxage=3600, stale-while-revalidate=86400",
+    "finished": "public, s-maxage=86400, stale-while-revalidate=86400",  # one finished event
 }
 
 
@@ -69,8 +70,8 @@ def edge_cache(response: Response, cls: CacheClass) -> None:
 
 
 def phase_edge_cache(response: Response, phase: EventPhase | None) -> None:
-    """`edge_cache` sized to an event phase: settled once finished, else running."""
-    edge_cache(response, "settled" if phase == "finished" else "running")
+    """`edge_cache` sized to an event phase: finished once finished, else running."""
+    edge_cache(response, "finished" if phase == "finished" else "running")
 
 
 def event_edge_cache(response: Response, event_id: int) -> None:

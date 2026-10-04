@@ -1,5 +1,9 @@
 # Bundle history
 
+## 2026-10-04
+
+* **Update**: a finished event's reads carry a fourth timer class, finished (`s-maxage=86400`), so the edge refills each of them once a day; settled keeps its hour for a closed KOTH night, career stats and the reference lists. [Edge cache](concepts/edge-cache.md) and the [API overview](api/overview.md) state it.
+
 ## 2026-10-03
 
 * **Add**: [koth_crown_event](data/tables/koth_crown_event.md) holds each KOTH crown change no result shows, placed after the series it followed; a fix and the played rows' crown labels walk the results and these rows in play order. [KOTH](concepts/koth.md) and [event_division](data/tables/event_division.md) state it.

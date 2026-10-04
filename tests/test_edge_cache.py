@@ -8,6 +8,7 @@ from app.services.w3c import W3CService
 from tests.conftest import Client
 
 SETTLED = "public, s-maxage=3600, stale-while-revalidate=86400"
+FINISHED = "public, s-maxage=86400, stale-while-revalidate=86400"
 RUNNING = "public, s-maxage=120, stale-while-revalidate=600"
 
 ROUTES = [
@@ -59,7 +60,7 @@ def test_an_open_read_is_cacheable_at_the_edge(
         "/events/{season_id}/fantasy/teams/{fantasy_team_id}/breakdown",
     ],
 )
-def test_a_finished_event_is_cached_for_an_hour(
+def test_a_finished_event_is_cached_for_a_day(
     client: Client, seeded: dict[str, Any], path: str
 ) -> None:
     from app.core.db import Session
@@ -72,7 +73,7 @@ def test_a_finished_event_is_cached_for_an_hour(
         event.closed_at = utcnow()
     resp = client.get(path.format(**seeded))
     assert resp.status_code == 200, resp.text
-    assert resp.headers["cache-control"] == SETTLED
+    assert resp.headers["cache-control"] == FINISHED
     assert resp.headers["access-control-allow-origin"] == "*"
 
 
@@ -139,7 +140,7 @@ def test_an_event_read_is_running_until_the_event_finishes(
 
 
 @pytest.mark.parametrize("path", EVENT_READS)
-def test_an_event_read_is_settled_once_the_event_finishes(
+def test_an_event_read_is_finished_once_the_event_finishes(
     client: Client, path: str
 ) -> None:
     from app.models.types import utcnow
@@ -147,7 +148,24 @@ def test_an_event_read_is_settled_once_the_event_finishes(
     event_id, stage_id = staged_event(closed_at=utcnow())
     resp = client.get(path.format(id=event_id, stage=stage_id))
     assert resp.status_code == 200, resp.text
-    assert resp.headers["cache-control"] == SETTLED
+    assert resp.headers["cache-control"] == FINISHED
+
+
+def test_one_event_moves_from_running_to_finished_when_it_closes(
+    client: Client,
+) -> None:
+    from app.core.db import Session
+    from app.models.season import Season
+    from app.models.types import utcnow
+
+    event_id, _ = staged_event()
+    path = f"/events/{event_id}/series/summary"
+    assert client.get(path).headers["cache-control"] == RUNNING
+    with Session.begin() as session:
+        event = Season.get_by_id(session, event_id)
+        assert event is not None
+        event.closed_at = utcnow()
+    assert client.get(path).headers["cache-control"] == FINISHED
 
 
 def test_an_event_is_not_cached_for_a_signed_in_caller(
