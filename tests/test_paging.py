@@ -35,6 +35,7 @@ PAGED_ROUTES = [
     ("POST", "/leagues/{league_id}/teams/search?query=id > 0"),
     ("GET", "/events/{season_id}/teams"),
     ("GET", "/events/{season_id}/teams/basic"),
+    ("GET", "/events/{season_id}/teams/summary"),
     ("GET", "/users"),
     ("POST", "/users/search?query=id > 0"),
     ("GET", "/maps"),
@@ -217,6 +218,14 @@ DEFAULT_ORDER = {
         summary(4),
     ],
     "GET /events/{season_id}/teams/basic": ["teams.id", "anon_1.id"],
+    # The players with the MMR each entered the season with, the captains, the tags
+    "GET /events/{season_id}/teams/summary": [
+        "teams.id",
+        "user_team_season.team_id, user_team_season.user_id",
+        *MMR_AT,
+        "team_season_captain.team_id, team_season_captain.user_id",
+        "user_battle_tag.user_id, user_battle_tag.is_active DESC, user_battle_tag.id",
+    ],
     "GET /users": [
         "users.id",
         "user_battle_tag.is_active DESC, user_battle_tag.id",
