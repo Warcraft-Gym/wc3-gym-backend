@@ -221,7 +221,7 @@ def _signups_open(event: Season, phase: EventPhase) -> bool:
     return event.signups_open and phase != "finished"
 
 
-# The stage columns the chain test reads; a stage read later in the session loads the rest
+# The stage columns the chain test reads; a later select loads the rest, a session.get each missing column
 _STAGE_PLAN = load_only(
     rel(EventStage.event_id),
     rel(EventStage.position),

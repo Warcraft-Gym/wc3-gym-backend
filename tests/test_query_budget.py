@@ -1161,8 +1161,7 @@ ROWS_PER_CALL = {
 # Room for a row or two of drift before the ceiling fails
 ROWS_MARGIN = 2
 
-# Statements and rows one call of each member read costs on the league fixture,
-# for player 1 on his roster and for player 1 as the captain of that team too
+# Statements and rows of one member read on the league fixture: player 1 on a roster, then as its captain
 MEMBER_READS = {
     ("/me/events", False): (11, 5),
     # The seat's event costs its rounds, its fixtures, their teams, two counts
