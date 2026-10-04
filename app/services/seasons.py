@@ -5,7 +5,7 @@ from datetime import timedelta
 from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session as OrmSession
-from sqlalchemy.orm import joinedload, noload, selectinload
+from sqlalchemy.orm import joinedload, load_only, noload, selectinload
 from sqlmodel import col
 
 from app.core.db import Session, rel
@@ -33,6 +33,7 @@ from app.models.relationships import (
 )
 from app.models.round_availability import DBRoundAvailability
 from app.models.season import (
+    OpenSeason,
     Season,
     SeasonCreate,
     SeasonProgress,
@@ -347,6 +348,49 @@ class SeasonService:
             )
             seasons = session.scalars(statement).unique().all()
             return _publics(session, seasons)
+
+    def open_seasons(self) -> list[OpenSeason]:
+        """Every GNL season no admin closed, newest first, with its phase.
+
+        Only the close completes a season, so SQL drops the complete ones, and
+        one grouped count gives the phase of the rest.
+        """
+        with Session.begin() as session:
+            seasons = session.scalars(
+                select(Season)
+                .options(
+                    load_only(
+                        rel(Season.name),
+                        rel(Season.league_short_name),
+                        rel(Season.signups_open),
+                        rel(Season.scheduling_enabled),
+                        rel(Season.checkin_days),
+                        rel(Season.start_date),
+                        rel(Season.end_date),
+                        rel(Season.closed_at),
+                        raiseload=True,
+                    )
+                )
+                .where(
+                    col(Season.kind) == EventKind.gnl, col(Season.closed_at).is_(None)
+                )
+                .order_by(col(Season.id).desc())
+            ).all()
+            progress = progress_by_seasons(session, seasons)
+            return [
+                OpenSeason(
+                    id=ident(season),
+                    name=season.name,
+                    league_short_name=season.league_short_name,
+                    phase=progress[season.id].phase,
+                    signups_open=season.signups_open,
+                    scheduling_enabled=season.scheduling_enabled,
+                    checkin_days=season.checkin_days,
+                    start_date=season.start_date,
+                    end_date=season.end_date,
+                )
+                for season in seasons
+            ]
 
     def add_teams(self, season_id: int, team_ids: list[int]) -> SeasonPublic:
         with Session.begin() as session:

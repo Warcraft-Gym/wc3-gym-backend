@@ -52,6 +52,11 @@ more. A roster of
 an event that is over carries the MMR every roster player entered it with on
 the signup race statement, at no statement more.
 
+The member home reads, GET /me/events and GET /me, keep the bearer and miss
+the edge on every visit. Each reads the columns its answer names, the rounds
+not over and the signup seasons as summaries, so its count is pinned for a
+player and for a captain.
+
 A career list derives its totals, search, order and page in SQL. A single
 career row is the list's statement filtered to the user id. Neither statement
 count grows with the number of players or career rows.
@@ -118,6 +123,7 @@ from app.models.player_career_stats import (
 from app.models.relationships import (
     DBFantasyTeamPlayer,
     DBMapSeason,
+    DBTeamSeasonCaptain,
     DBUserSeasonSignup,
 )
 from app.models.season import Season
@@ -1213,6 +1219,16 @@ ROWS_PER_CALL = {
 # Room for a row or two of drift before the ceiling fails
 ROWS_MARGIN = 2
 
+# Statements and rows of one member read on the league fixture: player 1 on a roster, then as its captain
+MEMBER_READS = {
+    ("/me/events", False): (11, 5),
+    # The seat's event costs its rounds, its fixtures, their teams, two counts
+    ("/me/events", True): (18, 17),
+    ("/me", False): (14, 10),
+    # The seat's season, and the team's name
+    ("/me", True): (17, 13),
+}
+
 
 @pytest.mark.parametrize("route", sorted(ROWS_PER_CALL))
 def test_rows_per_call_stay_under_the_ceiling(
@@ -1223,6 +1239,35 @@ def test_rows_per_call_stay_under_the_ceiling(
     response = client.get(path)
     assert response.status_code == 200
     assert int(response.headers["X-DB-Rows"]) <= ROWS_PER_CALL[route] + ROWS_MARGIN
+
+
+@pytest.mark.parametrize(("path", "captain"), sorted(MEMBER_READS))
+def test_a_member_read_costs_its_pinned_statements(
+    client: Client,
+    league: dict[str, Any],
+    member: Callable[..., dict[str, str]],
+    path: str,
+    captain: bool,
+) -> None:
+    """The member home reads keep the bearer, so every visit reads the database."""
+    if captain:
+        with Session.begin() as session:
+            session.add(
+                DBTeamSeasonCaptain(
+                    team_id=league["team_a_id"],
+                    season_id=league["season_id"],
+                    user_id=league["player_ids"][0],
+                )
+            )
+    headers = member("1")
+    # the first login writes its clerk_account row and its avatar
+    assert client.get(path, headers=headers).status_code == 200
+    with count_statements() as tally:
+        response = client.get(path, headers=headers)
+    assert response.status_code == 200, response.text
+    statements, rows = MEMBER_READS[(path, captain)]
+    assert tally[0] <= statements
+    assert int(response.headers["X-DB-Rows"]) <= rows
 
 
 def test_the_signups_read_costs_seven_statements(league: dict[str, Any]) -> None:
