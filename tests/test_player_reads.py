@@ -327,27 +327,28 @@ SUMMARY_FIELDS = (
     "name",
     "battleTag",
     "country",
-    "tags",
     "race_mmrs",
     "main_race",
 )
 
 
 def profile_fields(client: Client, user_id: int) -> dict[str, Any]:
-    """The summary fields as /users/{id} answers them, tags as their text."""
+    """The summary fields as /users/{id} answers them, tag_names as the text of
+    its tags."""
     user = client.get(f"/users/{user_id}").json()
     fields = {field: user[field] for field in SUMMARY_FIELDS}
-    return fields | {"tags": [tag["tag"] for tag in user["tags"]]}
+    return fields | {"tag_names": [tag["tag"] for tag in user["tags"]]}
 
 
-@pytest.mark.parametrize("season", [None, "24"])
+@pytest.mark.parametrize("season", [None, "24", ""])
 def test_the_summary_answers_what_the_profile_answers(
     client: Client,
     ladder: list[int],  # noqa: F811  # fixture
     season: str | None,
 ) -> None:
     """Window, stale and unrated races, a race with no name, a second tag, no
-    tag, and a season setting that leaves the newest rows outside the window."""
+    tag, a season setting that leaves the newest rows outside the window, and a
+    blank setting, which reads the newest stored season."""
     alt, no_tag = ladder[1], ladder[3]
     with Session.begin() as session:
         if season is not None:
@@ -378,17 +379,42 @@ def test_the_summary_answers_what_the_profile_answers(
         assert resp.json() == profile_fields(client, user_id)
     second = client.get(f"/users/{alt}/summary").json()
     assert second["battleTag"] == "Alt#2222"
-    assert second["tags"] == ["Alt#2222", old_tag]
+    assert second["tag_names"] == ["Alt#2222", old_tag]
     bare = client.get(f"/users/{no_tag}/summary").json()
-    assert (bare["battleTag"], bare["tags"]) == (None, [])
+    assert (bare["battleTag"], bare["tag_names"]) == (None, [])
     # the season 25 row is outside a window that ends at 24
-    newest = (None, 25, False) if season is None else (None, 22, True)
+    newest = (None, 22, True) if season == "24" else (None, 25, False)
     assert [
         (row["race"], row["wc3_season"], row["stale"]) for row in bare["race_mmrs"]
     ] == [
         newest,
         ("OC", 21, True),
     ]
+
+
+def test_a_newer_unrated_row_gives_way_to_an_older_rated_one(
+    client: Client,
+    ladder: list[int],  # noqa: F811  # fixture
+) -> None:
+    """In a window that ends at 25, the race reads its newest rated row with the
+    games of every window row; the HU row of season 20 is outside it."""
+    user_id = ladder[2]
+    with Session.begin() as session:
+        session.add_all(
+            [
+                W3CStats(user_id=user_id, race=Race.HU, wc3_season=25, games=3),
+                W3CStats(
+                    user_id=user_id, race=Race.HU, wc3_season=24, mmr=1750, games=15
+                ),
+            ]
+        )
+    resp = client.get(f"/users/{user_id}/summary")
+    assert resp.json() == profile_fields(client, user_id)
+    assert [
+        (row["race"], row["mmr"], row["wc3_season"], row["games"], row["stale"])
+        for row in resp.json()["race_mmrs"]
+    ] == [("HU", 1750, 24, 18, False)]
+    assert resp.json()["main_race"] == "HU"
 
 
 def test_a_player_with_no_rows_has_a_bare_summary(client: Client) -> None:
@@ -404,7 +430,7 @@ def test_a_player_with_no_rows_has_a_bare_summary(client: Client) -> None:
         "name": "Bare",
         "battleTag": None,
         "country": None,
-        "tags": [],
+        "tag_names": [],
         "race_mmrs": [],
         "main_race": None,
     }

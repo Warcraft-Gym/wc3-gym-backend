@@ -13,7 +13,7 @@ from pydantic import BaseModel
 
 from app.models.fantasy_bet import FantasyBetPublic
 from app.models.fantasy_team import FantasyTeamPublic
-from app.models.player_reads import PlayerSummaryPublic
+from app.models.player_reads import UserProfileSummaryPublic
 from app.models.season import Season, SeasonBase, SeasonSummaryPublic
 from app.models.team import Team
 from app.models.team_summary import TeamSummaryPublic
@@ -33,7 +33,7 @@ ALLOWED: dict[tuple[str, str], str] = {}
 
 # Entities with no summary, and a player's own summary read: they answer at
 # the top level only, never embedded
-TOP_LEVEL_ONLY = (FantasyTeamPublic, FantasyBetPublic, PlayerSummaryPublic)
+TOP_LEVEL_ONLY = (FantasyTeamPublic, FantasyBetPublic, UserProfileSummaryPublic)
 
 # Schema names of entities, which a summary may not hold a list of
 ENTITY_PREFIXES = (

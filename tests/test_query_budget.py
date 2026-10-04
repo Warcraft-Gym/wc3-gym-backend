@@ -819,7 +819,7 @@ def test_a_players_summary_costs_one_statement(league: dict[str, Any]) -> None:
     with count_statements() as tally:
         summary = player_reads.summary(league["player_ids"][0])
     assert [row.race for row in summary.race_mmrs] == ["HU"]
-    assert len(summary.tags) == 1
+    assert len(summary.tag_names) == 1
     assert tally[0] <= 1
 
 

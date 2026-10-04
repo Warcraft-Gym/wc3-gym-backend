@@ -21,7 +21,7 @@ from app.models.player_history import PlayerHistory
 from app.models.player_reads import (
     PlayerSeasonPublic,
     PlayerSeriesSummaryPublic,
-    PlayerSummaryPublic,
+    UserProfileSummaryPublic,
 )
 from app.models.user import (
     UserCreate,
@@ -249,7 +249,7 @@ def get_user_history(user_id: int, response: Response) -> PlayerHistory:
 
 
 @router.get("/users/{user_id}/summary")
-def get_user_summary(user_id: int, response: Response) -> PlayerSummaryPublic:
+def get_user_summary(user_id: int, response: Response) -> UserProfileSummaryPublic:
     """One player's name, tags and ladder summary with the stale races, the
     fields of `/users/{key}` a player page reads, the same for every caller."""
     summary = player_reads.summary(user_id)

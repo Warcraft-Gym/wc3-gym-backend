@@ -43,7 +43,7 @@ from app.models.player_reads import (
     PlayerSeasonPublic,
     PlayerSeasonRecordPublic,
     PlayerSeriesSummaryPublic,
-    PlayerSummaryPublic,
+    UserProfileSummaryPublic,
 )
 from app.models.relationships import DBTeamSeasonCaptain, DBUserSeasonSignup
 from app.models.season import Season
@@ -150,7 +150,7 @@ def _summary_statement() -> Select[Any]:
     )
 
 
-def summary(user_id: int) -> PlayerSummaryPublic:
+def summary(user_id: int) -> UserProfileSummaryPublic:
     """The player's name, tags and ladder summary with the stale races, as
     GET /users/{key} answers them."""
     with Session.begin() as session:
@@ -173,12 +173,12 @@ def summary(user_id: int) -> PlayerSummaryPublic:
         if row.wc3_season is not None
     ]
     race_mmrs, main_race = summarize(stats, rows[0].current, stale=True)
-    return PlayerSummaryPublic(
+    return UserProfileSummaryPublic(
         id=user_id,
         name=rows[0].name,
         battleTag=next((row.tag for row in tags if row.active), None),
         country=rows[0].country,
-        tags=[row.tag for row in tags],
+        tag_names=[row.tag for row in tags],
         race_mmrs=race_mmrs,
         main_race=main_race,
     )
