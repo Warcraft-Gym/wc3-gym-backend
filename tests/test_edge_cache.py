@@ -56,6 +56,7 @@ def test_an_open_read_is_cacheable_at_the_edge(
         "/events/{season_id}/series/summary",
         "/events/{season_id}/teams",
         "/events/{season_id}/teams/basic",
+        "/events/{season_id}/teams/summary",
         "/events/{season_id}/teams/{team_a_id}",
         "/events/{season_id}/fantasy/teams",
         "/events/{season_id}/fantasy/teams/{fantasy_team_id}/breakdown",
@@ -85,6 +86,7 @@ def test_a_finished_event_is_cached_for_a_day(
         "/events/{id}/series/summary",
         "/events/{id}/teams",
         "/events/{id}/teams/basic",
+        "/events/{id}/teams/summary",
     ],
 )
 def test_an_event_not_finished_is_cached_for_two_minutes(

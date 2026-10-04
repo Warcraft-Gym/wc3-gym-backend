@@ -915,6 +915,50 @@ def test_the_standings_count_holds_when_the_teams_grow(
     assert tally[0] <= 13
 
 
+def test_the_event_team_summary_costs_five_statements(
+    client: Client, league: dict[str, Any]
+) -> None:
+    """The event and its round tally, which give the scale and the cache
+    phase, the page of teams with their points, the players with their signup,
+    record and the MMR each entered the finished season with, and the
+    captains."""
+    with count_statements() as tally:
+        response = client.get(f"/events/{league['season_id']}/teams/summary")
+    assert response.status_code == 200
+    assert [len(team["players"]) for team in response.json()] == [2, 2]
+    assert tally[0] <= 5
+
+
+def test_a_running_event_team_summary_adds_the_w3c_season(
+    client: Client, league: dict[str, Any]
+) -> None:
+    """The players' current rating needs the W3C season: one statement more,
+    two where no `current_w3c_season` setting is stored."""
+    with Session.begin() as session:
+        session.get_one(Season, league["season_id"]).end_date = None
+    with count_statements() as tally:
+        response = client.get(f"/events/{league['season_id']}/teams/summary")
+    assert response.status_code == 200
+    assert all(p["mmr"] for team in response.json() for p in team["players"])
+    assert tally[0] <= 7
+
+
+def test_the_event_team_summary_count_holds_when_the_teams_grow(
+    client: Client, league: dict[str, Any]
+) -> None:
+    """Four more teams and two captains, the same statements."""
+    path = f"/events/{league['season_id']}/teams/summary"
+    with count_statements() as tally:
+        before = client.get(path).json()
+    add_teams_to_the_season(league["season_id"], 4)
+    add_captains_and_a_second_season(league)
+    with count_statements() as grown:
+        after = client.get(path).json()
+    assert len(after) == len(before) + 4
+    assert len(after[0]["captains"]) == 2
+    assert grown[0] == tally[0]
+
+
 def add_captains_and_a_second_season(league: dict[str, Any]) -> int:
     """Two captains of team A in the season, and a second season of the league
     in which team A fields two players and a captain. Returns that season's id."""
@@ -1151,6 +1195,8 @@ ROWS_PER_CALL = {
     "/users/{player_id}/series?event_id={season_id}": 1,
     # One tag row per player
     "/events/{season_id}/teams": 34,
+    # The event and its round tally, the two teams, the four players; no captain
+    "/events/{season_id}/teams/summary": 8,
     "/events/{season_id}/teams/{team_a_id}": 30,
     "/leagues/{league_id}/teams/{team_a_id}": 8,
     "/matches/{match_id}": 3,
