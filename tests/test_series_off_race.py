@@ -253,6 +253,7 @@ def test_only_the_named_modules_read_the_off_race_column(
         "services/player_reads.py",
         "services/player_series.py",
         "services/season_import.py",
+        "services/series_edit.py",
         "services/series_summary.py",
     }
     root = Path(app_package.__file__ or "").parent

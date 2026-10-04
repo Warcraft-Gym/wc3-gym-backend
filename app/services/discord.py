@@ -243,7 +243,7 @@ def edit_reply(application_id: str, token: str, message: dict[str, Any]) -> None
 
 
 def _channel_call(
-    method: str, path: str, message: dict[str, Any]
+    method: str, path: str, message: dict[str, Any] | None
 ) -> requests.Response | None:
     """A call on a channel as the bot. None with no bot token, or when Discord
     is unreachable or refuses it."""
@@ -292,6 +292,11 @@ def edit_channel_message(
 ) -> None:
     """Replace a message the bot posted in a channel."""
     _channel_call("PATCH", f"{channel_id}/messages/{message_id}", message)
+
+
+def delete_channel_message(channel_id: str, message_id: str) -> None:
+    """Take down a message the bot posted in a channel."""
+    _channel_call("DELETE", f"{channel_id}/messages/{message_id}", None)
 
 
 def post_reply(

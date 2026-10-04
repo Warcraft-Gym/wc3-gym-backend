@@ -4,7 +4,7 @@ title: Response shapes
 description: An entity inside another answer is its summary shape, bounded by the read's event; the detail comes only from the entity's own read, a write answers through that read, and every relationship refuses an on-the-spot load.
 resource: ../../../app/models/user.py
 tags: [api, data]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-04T05:39:18Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-04T06:56:31Z }
 sources:
   - id: user
     resource: ../../../app/models/user.py
@@ -73,7 +73,7 @@ The member variants `UserMemberListPublic` and `UserMemberPublic` add `discordTa
 
 | Embedded at | Event of the record | Record counts filled |
 |---|---|---|
-| `GET /series/{id}`, `POST /series`, `PUT /series/{id}`, `PUT /series/{id}/result-kind` and the draft promote: `player1` and `player2` | the series' event | yes |
+| `GET /series/{id}`, `POST /series`, `PUT /series/{id}`, `DELETE /series/{id}/result`, `PUT /series/{id}/result-kind` and the draft promote: `player1` and `player2` | the series' event | yes |
 | `GET /fantasy/bets/{id}`, every bet write and `POST`, `PUT /fantasy-bet`: the series players | the bet's season | yes |
 | the same bets: `user` and `winner` | the bet's season | no |
 | `GET /fantasy/teams/{id}`, every team write and `POST /fantasy-team`: the captain and the drafted players | the team's season | yes |

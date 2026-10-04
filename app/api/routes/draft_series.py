@@ -8,6 +8,7 @@ from app.api.deps import (
     MatchServiceDep,
     UserServiceDep,
     claim_seats,
+    own_match,
     require_admin,
     require_captain,
 )
@@ -29,7 +30,6 @@ from app.models.match_draft import (
 )
 from app.models.series import SeriesPublic
 from app.services import draft_board, draft_series
-from app.services.matches import MatchService
 from app.services.users import UserService
 
 # The board answers one caller's match, so no shared cache may hold it
@@ -40,21 +40,6 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["draft-series"])
 
 RequireCaptain = Annotated[dict[str, Any], Depends(require_captain)]
-
-
-def _own_match(
-    claims: dict[str, Any], match_id: int | None, matches: MatchService
-) -> None:
-    """A captain drafts the matches their team plays; an admin drafts any."""
-    if is_admin(claims):
-        return
-    match = matches.get(match_id) if match_id is not None else None
-    seats = claim_seats(claims)
-    if match is None or not seats & {
-        (match.team1_id, match.season_id),
-        (match.team2_id, match.season_id),
-    }:
-        raise ApiError(403, {"error": "Your team does not play this match"})
 
 
 def _own_side(claims: dict[str, Any], match: MatchPublic, team_id: int) -> None:
@@ -117,7 +102,7 @@ def add_draft_series(
     claims: RequireCaptain,
 ) -> DraftSeriesPublic:
     """Create a new draft series for a match the caller's team plays."""
-    _own_match(claims, data.match_id, matches)
+    own_match(claims, data.match_id, matches)
     _rules(
         data.match_id,
         (data.player1_id, data.player2_id),
@@ -140,9 +125,9 @@ def update_draft_series(
 ) -> DraftSeriesPublic:
     """Update a draft series of a match the caller's team plays."""
     existing = service.get(draft_series_id)
-    _own_match(claims, existing.match_id, matches)
+    own_match(claims, existing.match_id, matches)
     if data.match_id is not None and data.match_id != existing.match_id:
-        _own_match(claims, data.match_id, matches)
+        own_match(claims, data.match_id, matches)
     _rules(
         data.match_id or existing.match_id,
         (data.player1_id, data.player2_id),
@@ -163,7 +148,7 @@ def delete_draft_series(
     claims: RequireCaptain,
 ) -> None:
     """Delete a draft series of a match the caller's team plays."""
-    _own_match(claims, service.get(draft_series_id).match_id, matches)
+    own_match(claims, service.get(draft_series_id).match_id, matches)
     service.delete(draft_series_id)
 
 
@@ -201,7 +186,7 @@ def get_draft_board(
     pairing the shared hours of the round and the head-to-head score of the
     two. The MMR difference is not sent; the browser subtracts.
     """
-    _own_match(claims, match_id, matches)
+    own_match(claims, match_id, matches)
     # the answer is this caller's, so no shared cache may store a copy, and the
     # browser's own copy is keyed on the bearer that names the caller
     response.headers["Cache-Control"] = PRIVATE_CACHE
@@ -239,7 +224,7 @@ def promote_draft_series(
     The seat check reads only the draft's fixture, and an admin skips it.
     """
     if not is_admin(claims):
-        _own_match(claims, service.match_of(draft_series_id), matches)
+        own_match(claims, service.match_of(draft_series_id), matches)
     return service.promote(draft_series_id)
 
 
@@ -307,7 +292,7 @@ def set_match_draft_max_mmr_difference(
 ) -> MatchDraftStatePublic:
     """The working largest MMR difference of the fixture; null reads the stage."""
     match = matches.get(match_id)
-    _own_match(claims, match_id, matches)
+    own_match(claims, match_id, matches)
     return service.set_max_mmr_difference(
         match_id, data.max_mmr_difference, _seated_team(claims, match)
     )

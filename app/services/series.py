@@ -1,6 +1,6 @@
 from datetime import timedelta
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.orm import Session as OrmSession
 from sqlmodel import col
 
@@ -22,6 +22,7 @@ from app.models.series import (
     SeriesSort,
     SeriesUpdate,
 )
+from app.models.series_game import DBSeriesGame
 from app.services import derived, series_rules, stage_engine
 from app.services.users import load_players
 from app.services.w3c_stats import fill, w3c_season
@@ -83,7 +84,8 @@ def update_in(
 ) -> None:
     """Write the named fields inside a transaction the caller owns. A score
     written, cleared or turned around here also moves the bracket, and `force`
-    allows a change that loses a later result."""
+    allows a change that loses a later result. A cleared result takes its games
+    and its kind with it, so the series reads as never reported."""
     row = Series.get_by_id(session, series_id)
     if not row:
         raise NotFoundError("Series not found")
@@ -96,6 +98,11 @@ def update_in(
     was_slot = stage_engine.won_slot(row)
     Series.update_object(session, row, **series.model_dump(exclude_unset=True))
     both_scores(session, row, stage_engine.series_wins(session, row))
+    if was_scored and not stage_engine.scored(row):
+        session.execute(
+            delete(DBSeriesGame).where(col(DBSeriesGame.series_id) == series_id)
+        )
+        row.result_kind = "played"
     in_season(session, row)
     derived.clear_kept_off_race(session, row)
     stage_engine.after_score(session, row, was_scored, was_slot, force)
