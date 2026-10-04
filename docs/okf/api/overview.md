@@ -4,7 +4,7 @@ title: API overview
 description: Twenty-one route modules under one FastAPI app, one error envelope, paging with a total header, a search language, and OpenAPI at /docs.
 resource: ../../../app/api/main.py
 tags: [api]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-03T09:22:40Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-04T04:04:02Z }
 sources:
   - id: router
     resource: ../../../app/api/main.py
@@ -67,7 +67,7 @@ List routes take `limit` (1 to 500) and `offset`. The default page is 500, excep
 
 CORS allows every origin, because clients send bearer tokens and never cookies. A route that sets `Cache-Control: public` must write `Access-Control-Allow-Origin: *` itself, next to it. See [the pitfall](../pitfalls/edge-cache-cors.md). A route whose answer belongs to one caller sets `Cache-Control: private` and `Vary: Authorization` instead, so no shared cache stores a copy and the browser's own copy is keyed on the bearer that names the caller.
 
-`edge_cache(response, cls)` in `app/api/deps.py` writes both headers for one of three timer classes: live, running or settled. An event read picks running or settled from the event's phase. Only a route with no guard whose answer is the same for every caller uses it. [Edge cache](../concepts/edge-cache.md) states the classes, the phase rule and every cached route.
+`edge_cache(response, cls)` in `app/api/deps.py` writes both headers for one of four timer classes: live, running, settled or finished. An event read picks running or finished from the event's phase. Only a route with no guard whose answer is the same for every caller uses it. [Edge cache](../concepts/edge-cache.md) states the classes, the phase rule and every cached route.
 
 The edge serves a cached copy only to a request with no Authorization header. The frontend sends a route without its bearer only when its `EDGE_CACHED` pattern lists the route, and an admin's requests always carry the bearer, so an admin reads past the cache. A route added here is cached once the frontend pattern lists it too.
 
@@ -79,7 +79,7 @@ The cost is in bytes, which `egress_ledger.db_bytes` measures per route, not in 
 
 A miss also costs the function's CPU time, and building a SQLAlchemy statement costs more of it than running one. A read that a consumer's page calls builds each statement once: a function under `functools.cache` returns the statement with `bindparam` placeholders, and each call passes its values to `execute`. A statement whose shape depends on data is cached on that data with `lru_cache`. `app/services/player_reads.py` shows the pattern.
 
-A write does not clear the edge. A reader sees a change up to `s-maxage` plus `stale-while-revalidate` seconds late, unless the reader sends a bearer, which skips the edge. Pick the [class](../concepts/edge-cache.md#the-three-classes) by how often the answer changes and how late a reader may see it.
+A write does not clear the edge. A reader sees a change up to `s-maxage` plus `stale-while-revalidate` seconds late, unless the reader sends a bearer, which skips the edge. Pick the [class](../concepts/edge-cache.md#the-four-classes) by how often the answer changes and how late a reader may see it.
 
 ## Rules for a route a consumer reads
 
