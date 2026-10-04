@@ -1113,7 +1113,8 @@ def _by_tag(tag: str) -> Any:  # noqa: ANN401
 def test_game_one_follows_every_score_change(
     client: Client, auth_headers: dict[str, str], seeded: dict[str, Any]
 ) -> None:
-    """The board, the series route and a clear all keep game 1 on the series score."""
+    """The board, the series route and a clear all keep game 1 on the series
+    score; a clear takes the game away, as on a series never scored."""
     night = open_night(client, auth_headers)
     top = bracket_ids(night)[0]
     first = place(client, auth_headers, night, "Game#1", 1700, top)
@@ -1124,8 +1125,7 @@ def test_game_one_follows_every_score_change(
     def game_one() -> str | None:
         with Session() as session:
             game = session.get(DBSeriesGame, (series_id, 1))
-            assert game is not None
-            return game.winner_side
+            return game.winner_side if game else None
 
     assert game_one() == "A"
     turned = client.put(

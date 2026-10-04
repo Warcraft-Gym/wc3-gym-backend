@@ -4,7 +4,7 @@ title: Series reporting
 description: A result is reported game by game with a map and a replay per game, a veto board that is derived from the season rules, an off race per side, and casts that any member may claim.
 resource: ../../../app/services/series_games.py
 tags: [series, storage]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-29T12:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-04T07:18:37Z }
 sources:
   - id: games
     resource: ../../../app/services/series_games.py
@@ -24,6 +24,9 @@ sources:
   - id: player-series
     resource: ../../../app/services/player_series.py
     title: A player's own series
+  - id: series-edit
+    resource: ../../../app/services/series_edit.py
+    title: Who edits a published series, and who takes a result back
 ---
 
 # Who reports
@@ -31,6 +34,10 @@ sources:
 The player a side names, a captain of the team that fields that side, or an admin, who acts for either side, writes the result through `PUT /player-series/{id}`; the Discord `/report-result` command goes through the same write. A side that names no player is the team itself, so any member of the roster that team fields for the event acts for it. One rule answers every write on a series, the time, the veto, the result and the side rosters alike. The two series scores stay the total; `series_game` rows say how the total was reached, one per game with the side that won and the map. A third of GNL series go to a deciding game, so the per-game winner cannot be derived from the score and is stored.
 
 A series that was not played takes `result_kind` `walkover` or `forfeit` with a winner, through `PUT /series/{id}/result-kind`, admin only.
+
+`PUT /series/{id}` edits a published series. A captain of either team of its fixture sends the time, the two scores, the race each side played, the host, who is one of the two players, and the fantasy mark; who plays, the fixture and `force` are an admin's, and a captain changes a player through a replacement draft. An admin sends any field. The same captain adds a series to the fixture with `POST /series` and deletes one with `DELETE /series/{id}`; a series of a stage or a KOTH night, which plays no fixture, is an admin's.
+
+`DELETE /series/{id}/result` takes a result back, for whoever may report it. The scores, the races played and the `series_game` rows go, `result_kind` reads `played` again, the result card comes down in Discord, and the replays stay for the next report. A walkover or a forfeit is cleared by an admin alone. The same holds when an admin empties the scores through `PUT /series/{id}`: a cleared result takes its games and its kind with it, so the series reads as never reported.
 
 # Maps
 

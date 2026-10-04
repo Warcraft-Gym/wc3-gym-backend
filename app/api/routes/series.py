@@ -4,11 +4,13 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query, Response
 
 from app.api.deps import (
+    MatchServiceDep,
     RequireLogin,
     RequireMember,
     SeriesServiceDep,
     UserServiceDep,
     event_edge_cache,
+    own_match,
     require_admin,
 )
 from app.core.exceptions import ApiError, NotFoundError
@@ -23,41 +25,59 @@ from app.models.series import (
 from app.models.series_cast import CastPublic, CastWrite, ClaimWrite, VodWrite
 from app.models.series_side import LobbySidesWrite, PlacesWrite
 from app.models.series_summary import SeriesSummaryPublic
-from app.services import casts, series_summary, stage_engine
+from app.services import casts, series_edit, series_summary, stage_engine
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["series"])
 
 
-@router.post(
-    "/series",
-    status_code=201,
-    response_model=SeriesPublic,
-    dependencies=[Depends(require_admin)],
-)
-def add_series(data: SeriesCreate, service: SeriesServiceDep) -> SeriesPublic:
-    """Create a new series with the provided data"""
-    return service.add(data)
+@router.post("/series", status_code=201, response_model=SeriesPublic)
+def add_series(
+    data: SeriesCreate, claims: RequireLogin, matches: MatchServiceDep
+) -> SeriesPublic:
+    """Publish a series in a fixture. A captain of either team adds to his
+    team's fixture up to the round's series; an admin adds any."""
+    own_match(claims, data.match_id, matches)
+    return series_edit.add(data, admin=is_admin(claims))
 
 
-@router.put(
-    "/series/{series_id}",
-    response_model=SeriesPublic,
-    dependencies=[Depends(require_admin)],
-)
+@router.put("/series/{series_id}", response_model=SeriesPublic)
 def update_series(
     series_id: int,
     data: SeriesUpdate,
-    service: SeriesServiceDep,
+    claims: RequireLogin,
+    matches: MatchServiceDep,
     force: bool = False,
 ) -> SeriesPublic:
     """Update the series data of an existing series.
 
-    Clearing the score reopens the bracket below it; `force` allows the reopen
-    when a later series already carries a result.
+    A captain of either team of its fixture sends the time, the scores, the
+    races played, the host and the fantasy mark; an admin sends any field.
+    Clearing the score reopens the bracket below it; `force`, an admin's,
+    allows the reopen when a later series already carries a result.
     """
-    return service.update(series_id, data, force)
+    admin = is_admin(claims)
+    if not admin:
+        own_match(claims, series_edit.fixture_of(series_id), matches)
+    return series_edit.edit(series_id, data, admin=admin, force=force)
+
+
+@router.delete("/series/{series_id}/result", response_model=SeriesPublic)
+def clear_series_result(
+    series_id: int,
+    claims: RequireLogin,
+    users: UserServiceDep,
+    force: bool = False,
+) -> SeriesPublic:
+    """Take back a reported result, for whoever may report it.
+
+    The scores, the races played and the games go, and the replays stay. A
+    walkover or a forfeit, and `force`, are an admin's.
+    """
+    admin = is_admin(claims)
+    caller = None if admin else users.id_by_discord_id(str(claims["sub"]))
+    return series_edit.clear_result(series_id, admin=admin, user_id=caller, force=force)
 
 
 @router.put("/series/{series_id}/result-kind", dependencies=[Depends(require_admin)])
@@ -99,11 +119,17 @@ def set_sides(
     return stage_engine.set_sides(series_id, data, admin=admin, user_id=caller)
 
 
-@router.delete(
-    "/series/{series_id}", status_code=204, dependencies=[Depends(require_admin)]
-)
-def delete_series(series_id: int, service: SeriesServiceDep) -> None:
-    """Delete a series by its ID."""
+@router.delete("/series/{series_id}", status_code=204)
+def delete_series(
+    series_id: int,
+    service: SeriesServiceDep,
+    claims: RequireLogin,
+    matches: MatchServiceDep,
+) -> None:
+    """Delete a series by its ID. A captain of either team of its fixture
+    deletes it; a series of a stage or a KOTH night is an admin's."""
+    if not is_admin(claims):
+        own_match(claims, series_edit.fixture_of(series_id), matches)
     service.delete(series_id)
 
 

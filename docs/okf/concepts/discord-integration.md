@@ -4,7 +4,7 @@ title: Discord integration
 description: Slash commands arrive through a separate adapter and are checked and answered here, cards are posted and edited under a rate limit, and season roles are mirrored to the guild on a button press.
 resource: ../../../app/services/interactions.py
 tags: [discord]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-29T12:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-04T06:56:31Z }
 sources:
   - id: interactions
     resource: ../../../app/services/interactions.py
@@ -48,7 +48,7 @@ Each command is one module under `app/services/commands/`. A module imports `bas
 
 # Cards and posts
 
-The app posts a result card, a cast claim card and a start reminder, plus one card per event with sign-up and withdraw buttons. Each post is a `discord_post` row so the app can edit it later. The channels come from the `settings` rows `results_channel_id` and `content_channel_id`; a missing row means no card.
+The app posts a result card, a cast claim card and a start reminder, plus one card per event with sign-up and withdraw buttons. Each post is a `discord_post` row so the app can edit it later. The channels come from the `settings` rows `results_channel_id` and `content_channel_id`; a missing row means no card. Every series write keeps the cards in step through `discord_posts.follow_series`: a new time edits the series cards, a first score posts the result card, a changed score edits it, and a cleared result deletes it with its row, so the next report posts a fresh one.
 
 Discord allows five edits per five seconds per channel. `discord_posts.refresh_series` claims an edit with one UPDATE, waits when the channel had an edit in the last second, and skips a post already edited after its latest change, so a burst collapses to the last state. `discord._channel_call` waits out one 429. Never loop edits per write, and never use an in-memory queue or lock: no process survives a request on Vercel. See [the decision](../decisions/discord-rate-limit.md).
 

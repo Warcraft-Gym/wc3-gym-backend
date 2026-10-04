@@ -1,16 +1,17 @@
 """The bot's posts the app keeps true, one discord_post row each."""
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 from time import sleep
-from typing import Any
+from typing import Any, NamedTuple
 
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
 from sqlmodel import col
 
 from app.core.db import Session
 from app.core.exceptions import ExternalServiceError
 from app.models.discord_post import DiscordPost
 from app.models.season import Season
+from app.models.series import Series, SeriesPublic
 from app.models.settings import Settings
 from app.models.types import utcnow
 from app.services import discord, event_cards, series_cards
@@ -202,6 +203,46 @@ def post_result(series_id: int) -> None:
         refresh_series(series_id, (RESULT,))
         return
     _post_card(RESULT, series_id)
+
+
+def withdraw_result(series_id: int) -> None:
+    """Take down the result card of a series whose result was cleared, so the
+    next report posts a fresh one."""
+    for post in _posts(series_id, (RESULT,)):
+        discord.delete_channel_message(post.channel_id, post.message_id)
+    with Session.begin() as session:
+        session.execute(
+            delete(DiscordPost).where(
+                col(DiscordPost.kind) == RESULT,
+                col(DiscordPost.subject_id) == series_id,
+            )
+        )
+
+
+class CardFacts(NamedTuple):
+    """What the bot's cards show of a series: its time and its score."""
+
+    date_time: datetime | None
+    player1_score: int | None
+    player2_score: int | None
+
+    @classmethod
+    def of(cls, series: Series | SeriesPublic) -> "CardFacts":
+        return cls(series.date_time, series.player1_score, series.player2_score)
+
+
+def follow_series(series_id: int, before: CardFacts, after: SeriesPublic) -> None:
+    """The bot's cards follow a series write: the time on the announce card,
+    the score on the result card, which a cleared result takes down."""
+    now = CardFacts.of(after)
+    if before.date_time != now.date_time:
+        refresh_series(series_id)
+    if before[1:] == now[1:]:
+        return
+    if now.player1_score is None:
+        withdraw_result(series_id)
+    else:
+        post_result(series_id)
 
 
 def post_cast(series_id: int) -> None:

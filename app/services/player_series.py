@@ -43,11 +43,6 @@ def update_player_series(
         if row is None or not (admin or acts_for_side(session, row, user_id)):
             raise ApiError(403, {"error": "not_authorized_for_this_series"})
 
-    # Track what's being updated for Discord notification
-    original_datetime = series.date_time
-    original_p1_score = series.player1_score
-    original_p2_score = series.player2_score
-
     # One replay slot per game of the best-of the series plays, game1..gameN
     wins = wins_of(series.rules.best_of) if series.rules else wins_needed(None)
     action = data.get("action")
@@ -121,16 +116,9 @@ def update_player_series(
 
     # Only the fields this editor changes, so a concurrent edit stands
     updated_series = series_service.update(series_id, SeriesUpdate(**changes))
-
-    # The bot's cards follow the write: the time on the announce card, the
-    # score on the result card
-    if original_datetime != updated_series.date_time:
-        discord_posts.refresh_series(series_id)
-    if (original_p1_score, original_p2_score) != (
-        updated_series.player1_score,
-        updated_series.player2_score,
-    ):
-        discord_posts.post_result(series_id)
+    discord_posts.follow_series(
+        series_id, discord_posts.CardFacts.of(series), updated_series
+    )
 
     result = updated_series.to_dict()
     if reporting:

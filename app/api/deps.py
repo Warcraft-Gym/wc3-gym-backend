@@ -211,6 +211,22 @@ def claim_seats(claims: dict[str, Any]) -> set[tuple[int, int]]:
     return {(seat["team_id"], seat["season_id"]) for seat in claims.get("seats", [])}
 
 
+def own_match(
+    claims: dict[str, Any], match_id: int | None, matches: MatchService
+) -> None:
+    """A captain writes for the fixtures their team plays; an admin for any.
+    The seats are the claims', so a viewed captain meets the same answer."""
+    if is_admin(claims):
+        return
+    match = matches.get(match_id) if match_id is not None else None
+    seats = claim_seats(claims)
+    if match is None or not seats & {
+        (match.team1_id, match.season_id),
+        (match.team2_id, match.season_id),
+    }:
+        raise ApiError(403, {"error": "Your team does not play this match"})
+
+
 def _view_seats(value: str) -> list[tuple[int, int]]:
     """The pairs of an X-View-Seats header, `team:season,team:season`.
 

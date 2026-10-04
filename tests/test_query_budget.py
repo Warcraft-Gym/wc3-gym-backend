@@ -1407,6 +1407,16 @@ class Writer:
         }
         return self.made("POST", "/draft-series", body, self.admin)["id"]
 
+    def free_place(self) -> dict[str, Any]:
+        """A pairing the fixture has room for: the open series makes way."""
+        self.made("DELETE", f"/series/{self.open}", None, self.admin)
+        return {
+            "match_id": self.match,
+            "player1_id": self.p2,
+            "player2_id": self.p4,
+            "host_player_id": self.p2,
+        }
+
     def captain(self) -> dict[str, str]:
         url = f"/events/{self.season}/teams/{self.team_a}/captains"
         self.made("PUT", url, {"captain_ids": [self.p1]}, self.admin)
@@ -1624,6 +1634,27 @@ WRITES: dict[str, tuple[WriteCase, int]] = {
     "DELETE /series/{series_id}": (
         lambda w: ("DELETE", f"/series/{w.open}", None, w.admin),
         5,
+    ),
+    "POST /series": (
+        lambda w: ("POST", "/series", w.free_place(), w.captain()),
+        34,
+    ),
+    "DELETE /series/{series_id} by a captain": (
+        lambda w: ("DELETE", f"/series/{w.open}", None, w.captain()),
+        17,
+    ),
+    "PUT /series/{series_id}": (
+        lambda w: (
+            "PUT",
+            f"/series/{w.open}",
+            {"host_player_id": w.p4, "is_fantasy_match": True},
+            w.captain(),
+        ),
+        38,
+    ),
+    "DELETE /series/{series_id}/result": (
+        lambda w: ("DELETE", f"/series/{w.played}/result", None, w.member()),
+        38,
     ),
     "POST /series/{series_id}/casts": (
         lambda w: (
