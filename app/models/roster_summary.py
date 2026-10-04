@@ -24,8 +24,6 @@ class RosterCaptainPublic(SQLModel):
 class RosterPlayerPublic(RosterCaptainPublic):
     """A player on the team's roster of the event."""
 
-    # Every tag the person holds, the active one first
-    tags: list[str] = []
     # Series won and lost in the event, counted as his event record counts them
     wins: int = 0
     losses: int = 0

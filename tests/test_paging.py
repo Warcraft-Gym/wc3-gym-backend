@@ -218,13 +218,12 @@ DEFAULT_ORDER = {
         summary(4),
     ],
     "GET /events/{season_id}/teams/basic": ["teams.id", "anon_1.id"],
-    # The players with the MMR each entered the season with, the captains, the tags
+    # The players with the MMR each entered the season with, then the captains
     "GET /events/{season_id}/teams/summary": [
         "teams.id",
         "user_team_season.team_id, user_team_season.user_id",
         *MMR_AT,
         "team_season_captain.team_id, team_season_captain.user_id",
-        "user_battle_tag.user_id, user_battle_tag.is_active DESC, user_battle_tag.id",
     ],
     "GET /users": [
         "users.id",

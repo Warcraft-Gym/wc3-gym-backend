@@ -1,13 +1,11 @@
 """An event's teams with their rosters as list rows, computed in SQL.
 
-The read costs five statements beside the event phase the route reads for its
-cache: the event's scale and phase, the page of teams with their points, the
-roster players with their signup, record and MMR, the captains with their
-signup, and the players' tags. A running event pays one or two more for the
+The read costs the event, the statements of its phase, the page of teams with
+their points, the roster players with their signup, record and MMR, and the
+captains with their signup. A running event pays one or two more for the
 current W3C season. None grows with the number of teams or players.
 """
 
-from collections.abc import Sequence
 from typing import Any
 
 from sqlalchemy import ColumnElement, Row, Select, case, func, select, union_all
@@ -19,6 +17,7 @@ from sqlmodel import col
 from app.core.db import Session
 from app.core.fantasy import race_value
 from app.core.scoring import DEFAULT_SYSTEM, points_case, wins_needed
+from app.models.enums import Race
 from app.models.match import Match
 from app.models.relationships import DBTeamSeasonCaptain, DBUserSeasonSignup
 from app.models.roster_summary import (
@@ -26,16 +25,16 @@ from app.models.roster_summary import (
     RosterPlayerPublic,
     TeamRosterSummaryPublic,
 )
-from app.models.season import Season
+from app.models.season import EventPhase, Season
 from app.models.series import Series
 from app.models.team import Team
 from app.models.team_season import DBTeamSeason
 from app.models.user import User
-from app.models.user_battle_tag import UserBattleTag
 from app.models.user_team_season import DBUserTeamSeason
 from app.models.w3c_stats import W3CStats
 from app.services import ladder
-from app.services.w3c_stats import in_window, w3c_season
+from app.services.events import phase_of
+from app.services.w3c_stats import in_window, w3c_season, window
 
 
 def _points(event_id: int, system: str, wins: int) -> Subquery:
@@ -102,7 +101,9 @@ def _mmr(
 ) -> ColumnElement[int | None]:
     """The MMR each player shows: on a finished event the one he entered it
     with, as derived.fill_user_signup_races reads it; on a running event the
-    newest rated row of his signup race in the live W3C window."""
+    top rating among the races that read as his signup race, each race at its
+    newest rated row in the live W3C window. A row with no race reads as
+    Random, as the website reads it."""
     if not running:
         bound = ladder.w3c_seasons(session, [event_id])
         return ladder.mmr_at(
@@ -111,15 +112,30 @@ def _mmr(
             ladder.midnight_utc(session, col(Season.start_date)),
             select(bound.c.wc3_season).where(bound.c.event_id == event_id),
         )
+    current = w3c_season(session)
+    race = col(W3CStats.race)
+    newer = aliased(W3CStats)
+    newest = (
+        select(func.max(col(newer.wc3_season)))
+        .where(
+            col(newer.user_id) == W3CStats.user_id,
+            col(newer.race).is_not_distinct_from(race),
+            col(newer.wc3_season).in_(window(current)),
+            col(newer.mmr).is_not(None),
+        )
+        .scalar_subquery()
+    )
     return (
         select(col(W3CStats.mmr))
         .where(
             col(W3CStats.user_id) == User.id,
-            col(W3CStats.race) == col(signup.race),
-            in_window(w3c_season(session)),
+            (race == col(signup.race))
+            | (race.is_(None) & (col(signup.race) == Race.RANDOM)),
+            in_window(current),
             col(W3CStats.mmr).is_not(None),
+            col(W3CStats.wc3_season) == newest,
         )
-        .order_by(col(W3CStats.wc3_season).desc())
+        .order_by(col(W3CStats.mmr).desc())
         .limit(1)
         .correlate_except(W3CStats)
         .scalar_subquery()
@@ -163,39 +179,16 @@ def _person(row: Row[Any]) -> dict[str, Any]:
     }
 
 
-def _tags(session: OrmSession, user_ids: Sequence[int]) -> dict[int, list[str]]:
-    """Every tag of those players, the active one first, as User.battle_tags orders them."""
-    found: dict[int, list[str]] = {}
-    if not user_ids:
-        return found
-    for user_id, tag in session.execute(
-        select(col(UserBattleTag.user_id), col(UserBattleTag.tag))
-        .where(col(UserBattleTag.user_id).in_(user_ids))
-        .order_by(
-            col(UserBattleTag.user_id),
-            col(UserBattleTag.is_active).desc(),
-            col(UserBattleTag.id),
-        )
-    ):
-        found.setdefault(user_id, []).append(tag)
-    return found
-
-
 def for_event(
     event_id: int, limit: int = 50, offset: int = 0
-) -> list[TeamRosterSummaryPublic]:
-    """One page of the event's teams in id order, each with its roster and
-    captains of the event."""
+) -> tuple[EventPhase | None, list[TeamRosterSummaryPublic]]:
+    """The event's phase, None when there is no such event, and one page of
+    its teams in id order, each with its roster and captains of the event."""
     with Session.begin() as session:
-        season = session.execute(
-            select(
-                col(Season.score_system),
-                col(Season.map_rules),
-                Season.running.label("running"),
-            ).where(col(Season.id) == event_id)
-        ).first()
+        season = Season.get_by_id(session, event_id)
         if season is None:
-            return []
+            return None, []
+        phase = phase_of(session, season)
         system = season.score_system or DEFAULT_SYSTEM
         wins = wins_needed(season.map_rules)
         points = _points(event_id, system, wins)
@@ -215,7 +208,7 @@ def for_event(
             .limit(limit)
         ).all()
         if not teams:
-            return []
+            return phase, []
         team_ids = [team.id for team in teams]
 
         signup = aliased(DBUserSeasonSignup)
@@ -236,14 +229,12 @@ def for_event(
                 col(DBTeamSeasonCaptain.team_id).in_(team_ids)
             )
         ).all()
-        tags = _tags(session, sorted({row.id for row in players}))
 
     roster: dict[int, list[RosterPlayerPublic]] = {}
     for row in players:
         roster.setdefault(row.team_id, []).append(
             RosterPlayerPublic(
                 **_person(row),
-                tags=tags.get(row.id, []),
                 wins=row.wins,
                 losses=row.losses,
                 mmr=row.mmr,
@@ -252,7 +243,7 @@ def for_event(
     seats: dict[int, list[RosterCaptainPublic]] = {}
     for row in captains:
         seats.setdefault(row.team_id, []).append(RosterCaptainPublic(**_person(row)))
-    return [
+    return phase, [
         TeamRosterSummaryPublic(
             id=team.id,
             league_id=team.league_id,

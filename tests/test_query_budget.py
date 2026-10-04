@@ -905,18 +905,18 @@ def test_the_standings_count_holds_when_the_teams_grow(
     assert tally[0] <= 13
 
 
-def test_the_event_team_summary_costs_seven_statements(
+def test_the_event_team_summary_costs_five_statements(
     client: Client, league: dict[str, Any]
 ) -> None:
-    """Two for the event's cache phase, as the detail list pays them, then
-    the event's scale and phase, the page of teams with their points, the
-    players with their signup, record and the MMR each entered the finished
-    season with, the captains and the players' tags."""
+    """The event and its round tally, which give the scale and the cache
+    phase, the page of teams with their points, the players with their signup,
+    record and the MMR each entered the finished season with, and the
+    captains."""
     with count_statements() as tally:
         response = client.get(f"/events/{league['season_id']}/teams/summary")
     assert response.status_code == 200
     assert [len(team["players"]) for team in response.json()] == [2, 2]
-    assert tally[0] <= 7
+    assert tally[0] <= 5
 
 
 def test_a_running_event_team_summary_adds_the_w3c_season(
@@ -930,7 +930,7 @@ def test_a_running_event_team_summary_adds_the_w3c_season(
         response = client.get(f"/events/{league['season_id']}/teams/summary")
     assert response.status_code == 200
     assert all(p["mmr"] for team in response.json() for p in team["players"])
-    assert tally[0] <= 9
+    assert tally[0] <= 7
 
 
 def test_the_event_team_summary_count_holds_when_the_teams_grow(
@@ -1183,9 +1183,8 @@ ROWS_PER_CALL = {
     "/users/{player_id}/series?event_id={season_id}": 1,
     # One tag row per player
     "/events/{season_id}/teams": 34,
-    # The event and its round tally, the season, the two teams, the four
-    # players and their four tags; no captain
-    "/events/{season_id}/teams/summary": 13,
+    # The event and its round tally, the two teams, the four players; no captain
+    "/events/{season_id}/teams/summary": 8,
     "/events/{season_id}/teams/{team_a_id}": 30,
     "/leagues/{league_id}/teams/{team_a_id}": 8,
     "/matches/{match_id}": 3,

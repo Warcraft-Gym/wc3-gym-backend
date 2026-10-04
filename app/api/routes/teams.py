@@ -13,6 +13,7 @@ from app.api.deps import (
     claim_seats,
     edge_cache,
     event_edge_cache,
+    phase_edge_cache,
     require_admin,
 )
 from app.api.search import SearchQuery
@@ -137,8 +138,9 @@ def get_event_teams_summary(
 
     The teams, paging and order are those of GET /events/{event_id}/teams.
     """
-    event_edge_cache(response, event_id)
-    return roster_summary.for_event(event_id, limit=limit, offset=offset)
+    phase, teams = roster_summary.for_event(event_id, limit=limit, offset=offset)
+    phase_edge_cache(response, phase)
+    return teams
 
 
 @router.get("/events/{event_id}/teams/{team_id}", tags=["events"])
