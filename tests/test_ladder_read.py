@@ -820,9 +820,9 @@ def test_the_season_ladder_is_cacheable_at_the_edge(
         assert season is not None
         season.closed_at = datetime.now(UTC)
     ladder = client.get(f"/events/{league['season_id']}/ladder")
-    # the season is closed, so it reads finished and the ladder is settled
+    # the season is closed, so it reads finished and the ladder is finished
     assert ladder.headers["cache-control"] == (
-        "public, s-maxage=3600, stale-while-revalidate=86400"
+        "public, s-maxage=86400, stale-while-revalidate=86400"
     )
     # this client sends no Origin, the shape of a fill by curl or a bot. The copy the
     # edge stores must still let a browser read it.
