@@ -2,6 +2,9 @@
 
 ## 2026-10-04
 
+* **Add**: `GET /events/{event_id}/teams/summary` answers `TeamRosterSummaryPublic`, a flat roster row for the GNL website, in five statements on a finished event. [Response shapes](api/response-shapes.md#an-events-teams-list-row), [teams](data/tables/teams.md), the [edge cache](concepts/edge-cache.md) and the [consumers](api/consumers.md) state it.
+* **Add**: `GET /users/{user_id}/summary` answers `UserProfileSummaryPublic`, the player page's header with the ladder summary and the tag texts, in one statement. [Response shapes](api/response-shapes.md#a-players-own-reads), [w3cstats](data/tables/w3cstats.md), the [edge cache](concepts/edge-cache.md) and the [consumers](api/consumers.md) state it.
+* **Update**: `GET /me/events` and `GET /me` load only the columns their answers use, and reading any other column raises; the captain fixtures cost six statements. [The events module](concepts/events-module.md#the-member-read), [response shapes](api/response-shapes.md#loads) and [testing](conventions/testing.md) state it.
 * **Update**: a finished event's reads carry a fourth timer class, finished (`s-maxage=86400`), so the edge refills each of them once a day; settled keeps its hour for a closed KOTH night, career stats and the reference lists. [Edge cache](concepts/edge-cache.md) and the [API overview](api/overview.md) state it.
 
 ## 2026-10-03

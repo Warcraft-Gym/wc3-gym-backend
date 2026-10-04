@@ -4,7 +4,7 @@ title: Edge cache
 description: Every open read the edge caches uses one of four timer classes, live, running, settled or finished, and an event read picks running or finished from the event's phase; nothing is purged.
 resource: ../../../app/api/deps.py
 tags: [api, deploy]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-04T04:04:02Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-04T05:39:18Z }
 sources:
   - id: deps
     resource: ../../../app/api/deps.py
@@ -46,12 +46,13 @@ Each route's deprecated aliases carry the same header.
 | `GET /koth/board`, `GET /koth/nights/{night_id}/board` | live while the night is open, settled once it is closed |
 | `GET /home/series`, `GET /home/series/upcoming` | running |
 | `GET /users/{key}`, for an anonymous caller only | running |
+| `GET /users/{user_id}/summary` | running |
 | `GET /users/{user_id}/ladder`, `GET /users/{user_id}/history` | running |
 | `GET /leagues/{league_id}/teams`, its `basic` twin, `GET /leagues/{league_id}/teams/{team_id}` | running |
 | `GET /events/{event_id}`, for an anonymous caller only | by the event's phase |
 | `GET /events/{event_id}/entrants`, `GET /events/{event_id}/achievements` | by the event's phase |
 | `GET /events/{event_id}/matches`, `GET /events/{event_id}/series`, `GET /events/{event_id}/series/summary`, `GET /events/{event_id}/stages/{stage_id}/series`, `GET /events/{event_id}/stages/{stage_id}/standings` | by the event's phase |
-| `GET /events/{event_id}/teams`, its `basic` twin, `GET /events/{event_id}/teams/{team_id}` | by the event's phase |
+| `GET /events/{event_id}/teams`, its `basic` and `summary` twins, `GET /events/{event_id}/teams/{team_id}` | by the event's phase |
 | `GET /events/{event_id}/ladder`, `GET /events/{event_id}/ladder/players` | by the event's phase |
 | `GET /events/{event_id}/fantasy/teams`, `GET /events/{event_id}/fantasy/teams/{team_id}/breakdown` | by the event's phase |
 | `GET /stats/career`, `GET /stats/career/{user_id}` | settled |
