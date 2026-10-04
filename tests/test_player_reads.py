@@ -1,9 +1,10 @@
-"""A player's seasons, series and career row answer what the wider reads answer.
+"""A player's summary, seasons, series and career row answer what the wider
+reads answer.
 
 Each read is checked against the route it replaces on the same rows:
-/users/{id} gnl_stats and signup_seasons with /users/{id}/history captain_of
-for the seasons, /events/{id}/series?player_id= for the series, and the
-/stats/career list for the career row.
+/users/{id} for the summary, /users/{id} gnl_stats and signup_seasons with
+/users/{id}/history captain_of for the seasons, /events/{id}/series?player_id=
+for the series, and the /stats/career list for the career row.
 """
 
 from datetime import UTC, date, datetime
@@ -11,7 +12,7 @@ from typing import Any
 
 import pytest
 from httpx2 import Client
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlmodel import col
 
 from app.core.db import Session
@@ -25,9 +26,15 @@ from app.models.relationships import (
 )
 from app.models.series import Series
 from app.models.series_cast import SeriesCast
+from app.models.settings import Settings
 from app.models.team_season import DBTeamSeason
+from app.models.user import User
+from app.models.user_battle_tag import UserBattleTag
 from app.models.user_team_season import DBUserTeamSeason
-from tests.seed import add_season
+from app.models.w3c_stats import W3CStats
+from app.services.w3c_stats import W3C_SEASON_KEY
+from tests.seed import active, add_season
+from tests.test_mmr_summary import stats as ladder  # noqa: F401  # fixture
 
 
 @pytest.fixture
@@ -312,3 +319,101 @@ def test_one_career_row_is_the_list_row(client: Client, league: dict[str, Any]) 
             assert resp.json() == listed[user_id]
         else:
             assert resp.status_code == 404
+
+
+# The fields of /users/{id} a player page reads, which the summary answers
+SUMMARY_FIELDS = (
+    "id",
+    "name",
+    "battleTag",
+    "country",
+    "tags",
+    "race_mmrs",
+    "main_race",
+)
+
+
+def profile_fields(client: Client, user_id: int) -> dict[str, Any]:
+    """The summary fields as /users/{id} answers them, tags as their text."""
+    user = client.get(f"/users/{user_id}").json()
+    fields = {field: user[field] for field in SUMMARY_FIELDS}
+    return fields | {"tags": [tag["tag"] for tag in user["tags"]]}
+
+
+@pytest.mark.parametrize("season", [None, "24"])
+def test_the_summary_answers_what_the_profile_answers(
+    client: Client,
+    ladder: list[int],  # noqa: F811  # fixture
+    season: str | None,
+) -> None:
+    """Window, stale and unrated races, a race with no name, a second tag, no
+    tag, and a season setting that leaves the newest rows outside the window."""
+    alt, no_tag = ladder[1], ladder[3]
+    with Session.begin() as session:
+        if season is not None:
+            session.add(Settings(key=W3C_SEASON_KEY, value=season))
+        session.add_all(
+            [
+                W3CStats(user_id=no_tag, race=None, wc3_season=25, mmr=1400, games=12),
+                W3CStats(user_id=no_tag, race=None, wc3_season=22, mmr=1300, games=3),
+                W3CStats(user_id=no_tag, race=Race.OC, wc3_season=21, games=2),
+                W3CStats(user_id=alt, race=Race.HU, wc3_season=25, games=3),
+            ]
+        )
+        session.execute(
+            delete(UserBattleTag).where(col(UserBattleTag.user_id) == no_tag)
+        )
+        old = session.scalars(
+            select(UserBattleTag).where(col(UserBattleTag.user_id) == alt)
+        ).one()
+        old.is_active = False
+        old_tag = old.tag
+    with Session.begin() as session:
+        (tag,) = active("Alt#2222")
+        tag.user_id = alt
+        session.add(tag)
+    for user_id in ladder:
+        resp = client.get(f"/users/{user_id}/summary")
+        assert resp.status_code == 200
+        assert resp.json() == profile_fields(client, user_id)
+    second = client.get(f"/users/{alt}/summary").json()
+    assert second["battleTag"] == "Alt#2222"
+    assert second["tags"] == ["Alt#2222", old_tag]
+    bare = client.get(f"/users/{no_tag}/summary").json()
+    assert (bare["battleTag"], bare["tags"]) == (None, [])
+    # the season 25 row is outside a window that ends at 24
+    newest = (None, 25, False) if season is None else (None, 22, True)
+    assert [
+        (row["race"], row["wc3_season"], row["stale"]) for row in bare["race_mmrs"]
+    ] == [
+        newest,
+        ("OC", 21, True),
+    ]
+
+
+def test_a_player_with_no_rows_has_a_bare_summary(client: Client) -> None:
+    with Session.begin() as session:
+        person = User(name="Bare", discordTag=None, discordId=None, race=Race.HU)
+        session.add(person)
+        session.flush()
+        user_id = ident(person)
+    resp = client.get(f"/users/{user_id}/summary")
+    assert resp.status_code == 200
+    assert resp.json() == {
+        "id": user_id,
+        "name": "Bare",
+        "battleTag": None,
+        "country": None,
+        "tags": [],
+        "race_mmrs": [],
+        "main_race": None,
+    }
+    assert resp.json() == profile_fields(client, user_id)
+
+
+def test_an_unknown_player_has_no_summary(client: Client) -> None:
+    """The same 404 as /users/{key}."""
+    resp = client.get("/users/999999/summary")
+    assert resp.status_code == 404
+    assert resp.json() == client.get("/users/999999").json()
+    assert resp.json() == {"error": "User not found: 999999"}

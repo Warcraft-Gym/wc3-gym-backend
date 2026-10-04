@@ -1,4 +1,4 @@
-"""The shapes of a player's own reads: his seasons and his series.
+"""The shapes of a player's own reads: his summary, his seasons and his series.
 
 Nothing here is a table. app.services.player_reads computes every field in SQL,
 from the player's side of each row.
@@ -9,6 +9,23 @@ from datetime import datetime
 from sqlmodel import SQLModel
 
 from app.models.team_summary import TeamSummaryPublic
+from app.models.w3c_stats import RaceMmr
+
+
+class PlayerSummaryPublic(SQLModel):
+    """The person a player page names: his tags and his ladder summary."""
+
+    id: int
+    name: str
+    # The active tag's text, null with no tag
+    battleTag: str | None = None
+    country: str | None = None
+    # The text of every tag the person holds, the active one first
+    tags: list[str] = []
+    # The ladder summary with the stale races, as GET /users/{key} serves it
+    race_mmrs: list[RaceMmr] = []
+    # The window race with the top mmr and 10 or more window games, else null
+    main_race: str | None = None
 
 
 class PlayerSeasonRecordPublic(SQLModel):
