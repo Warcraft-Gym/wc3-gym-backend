@@ -13,6 +13,7 @@ from pydantic import BaseModel
 
 from app.models.fantasy_bet import FantasyBetPublic
 from app.models.fantasy_team import FantasyTeamPublic
+from app.models.player_reads import UserProfileSummaryPublic
 from app.models.season import Season, SeasonBase, SeasonSummaryPublic
 from app.models.team import Team
 from app.models.team_summary import TeamSummaryPublic
@@ -30,8 +31,9 @@ EMBEDS: dict[type, tuple[type[BaseModel], type[BaseModel]]] = {
 # Sites that still embed a detail shape, each with its reason
 ALLOWED: dict[tuple[str, str], str] = {}
 
-# Entities with no summary: they answer at the top level only, never embedded
-TOP_LEVEL_ONLY = (FantasyTeamPublic, FantasyBetPublic)
+# Entities with no summary, and a player's own summary read: they answer at
+# the top level only, never embedded
+TOP_LEVEL_ONLY = (FantasyTeamPublic, FantasyBetPublic, UserProfileSummaryPublic)
 
 # Schema names of entities, which a summary may not hold a list of
 ENTITY_PREFIXES = (
@@ -162,6 +164,7 @@ DETAILS = {
     "UserPublic",
     "UserMemberPublic",
     "TeamPublic",
+    "TeamRosterPublic",
     "EventPublic",
     "SeriesPublic",
     "MatchPublic",
@@ -177,6 +180,7 @@ LIST_ROWS_ALLOWED: dict[str, str] = {
     "GET /fantasy/bets": "a fantasy bet has one class for row and detail",
     "GET /events/{event_id}/matches": "a match has no summary or list row yet",
     "GET /events/{event_id}/series": "the app reads the detail; the site moves to a list row",
+    "GET /events/{event_id}/teams": "the app reads the detail; the site moves to a list row",
     "GET /events/{event_id}/teams/basic": "a team has one class for row and detail",
     "GET /leagues/{league_id}/teams": "a team has one class for row and detail",
     "GET /leagues/{league_id}/teams/basic": "a team has one class for row and detail",

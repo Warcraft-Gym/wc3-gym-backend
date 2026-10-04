@@ -13,11 +13,13 @@ from app.api.deps import (
     claim_seats,
     edge_cache,
     event_edge_cache,
+    phase_edge_cache,
     require_admin,
 )
 from app.api.search import SearchQuery
 from app.core.exceptions import ApiError, BadRequestError, NotFoundError
 from app.core.security import is_admin
+from app.models.roster_summary import TeamRosterSummaryPublic
 from app.models.round_availability import (
     RoundAvailabilityPublic,
     TeamAvailabilityAllWrite,
@@ -32,6 +34,7 @@ from app.models.team import (
     TeamUpdate,
 )
 from app.models.w3c_stats import W3CSyncResult
+from app.services import roster_summary
 from app.services.users import SYNC_MAX_AGE
 
 logger = logging.getLogger(__name__)
@@ -122,6 +125,22 @@ def get_all_event_teams(
     """One page of event teams with that event's roster and captains, 50 a page."""
     event_edge_cache(response, event_id)
     return service.get_teams_season(event_id, limit=limit, offset=offset)
+
+
+@router.get("/events/{event_id}/teams/summary", tags=["events"])
+def get_event_teams_summary(
+    event_id: int,
+    response: Response,
+    limit: Annotated[int, Query(ge=1, le=500)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> list[TeamRosterSummaryPublic]:
+    """One page of event teams as list rows with that event's roster and captains.
+
+    The teams, paging and order are those of GET /events/{event_id}/teams.
+    """
+    phase, teams = roster_summary.for_event(event_id, limit=limit, offset=offset)
+    phase_edge_cache(response, phase)
+    return teams
 
 
 @router.get("/events/{event_id}/teams/{team_id}", tags=["events"])

@@ -4,7 +4,7 @@ title: w3cstats
 description: One player's 1v1 record on W3Champions for one race in one W3Champions season, as the stats sync last read it.
 resource: ../../../../app/models/w3c_stats.py
 tags: [w3champions, data]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-26T12:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-04T05:39:18Z }
 verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
 sources:
   - id: model
@@ -46,4 +46,4 @@ Only the 1v1 game mode is stored. The season the reads take is the `current_w3c_
 
 The live window is that season and the one before it (`app/services/w3c_stats.py`). Eligibility, the entrant and draft board ratings, the series rows of a running event, the fantasy seeding and the Discord series cards read the window alone: the rating is the newest window row with an MMR on the race, the games are the sum of the window rows (`min_games_seasons` of 1 counts the current season alone). No read loads the rows for the summary.
 
-A user payload carries the summary, never the rows. `summaries` reads it in one statement for every player of an answer: a window function keeps one row per user and race, the newest window row with a rating, else the newest window row, and sums the window's games. `race_mmrs` holds one entry per race: the `mmr`, `wins`, `losses` and `wc3_season` of that row and the window's `games`, window races by MMR, highest first, ties by race name. `main_race` is the window race with the top MMR among those with 10 or more window games, else null. `GET /users/{key}` also lists a race with no window row from its newest older row, `stale` true, after the window races, newest season first; one more statement reads those rows. See [W3Champions](../../concepts/w3champions.md) and [the season pin decision](../../decisions/season-boundary-manual.md).
+A user payload carries the summary, never the rows. `summaries` reads it in one statement for every player of an answer: a window function keeps one row per user and race, the newest window row with a rating, else the newest window row, and sums the window's games. `race_mmrs` holds one entry per race: the `mmr`, `wins`, `losses` and `wc3_season` of that row and the window's `games`, window races by MMR, highest first, ties by race name. `main_race` is the window race with the top MMR among those with 10 or more window games, else null. `GET /users/{key}` also lists a race with no window row from its newest older row, `stale` true, after the window races, newest season first; one more statement reads those rows. `GET /users/{user_id}/summary` lists them the same way inside its one statement. See [W3Champions](../../concepts/w3champions.md) and [the season pin decision](../../decisions/season-boundary-manual.md).

@@ -1,10 +1,11 @@
-"""A player's seasons and series, computed in SQL from his side.
+"""A player's summary, seasons and series, computed in SQL from his side.
 
-The seasons read costs three statements: one for his roster and captain seats
-with their team and his signup, and the season record pair of
-app.services.derived. The series read costs two: one for the page of series as
-columns with its total, and one for their casts. Neither grows with the number
-of seasons or series.
+The summary read costs one statement: his name with one row per tag and one
+per race of his ladder summary. The seasons read costs three statements: one
+for his roster and captain seats with their team and his signup, and the
+season record pair of app.services.derived. The series read costs two: one for
+the page of series as columns with its total, and one for their casts. None
+grows with the number of tags, races, seasons or series.
 
 Each statement is built once per process, with bound parameters for the values
 of a call: building one costs more Python time than running it.
@@ -21,9 +22,12 @@ from sqlalchemy import (
     Select,
     bindparam,
     case,
+    cast,
     func,
     literal,
+    null,
     select,
+    true,
     union_all,
 )
 from sqlalchemy.orm import Session as OrmSession
@@ -32,22 +36,152 @@ from sqlalchemy.sql.selectable import Subquery
 from sqlmodel import col
 
 from app.core.db import Session
+from app.core.exceptions import NotFoundError
 from app.core.fantasy import race_value
 from app.models.match import Match
 from app.models.player_reads import (
     PlayerSeasonPublic,
     PlayerSeasonRecordPublic,
     PlayerSeriesSummaryPublic,
+    UserProfileSummaryPublic,
 )
 from app.models.relationships import DBTeamSeasonCaptain, DBUserSeasonSignup
 from app.models.season import Season
 from app.models.series import Series
 from app.models.series_cast import SeriesCast, channel_name, is_video_url
+from app.models.settings import Settings
 from app.models.team import Team
 from app.models.team_summary import TeamSummaryPublic
 from app.models.user import User
+from app.models.user_battle_tag import UserBattleTag
 from app.models.user_team_season import DBUserTeamSeason
+from app.models.w3c_stats import W3CStats, W3CStatsPublic
 from app.services import derived
+from app.services.w3c_stats import W3C_SEASON_KEY, summarize
+
+
+@cache
+def _summary_statement() -> Select[Any]:
+    """The player `user_id` with the current W3C season, one row per tag, active
+    first, and one per race of his ladder summary; none when he does not exist.
+
+    Each race row is the one `w3c_stats.summaries` keeps, with the stale races:
+    the newest window row with a rating, else the newest window row, carrying the
+    window's games; for a race with no window row, the newest older row."""
+    user_id = bindparam("user_id", type_=Integer)
+    named = (
+        select(cast(func.nullif(col(Settings.value), ""), Integer))
+        .where(col(Settings.key) == W3C_SEASON_KEY)
+        .scalar_subquery()
+    )
+    newest = select(func.max(col(W3CStats.wc3_season))).scalar_subquery()
+    current = select(func.coalesce(named, newest, 0).label("season")).cte("current")
+    season, race = col(W3CStats.wc3_season), col(W3CStats.race)
+    inside = season >= current.c.season - 1
+    ranked = (
+        select(
+            col(W3CStats.id),
+            race,
+            season,
+            col(W3CStats.mmr),
+            col(W3CStats.wins),
+            col(W3CStats.losses),
+            func.coalesce(
+                func.sum(case((inside, func.coalesce(col(W3CStats.games), 0)))).over(
+                    partition_by=race
+                ),
+                col(W3CStats.games),
+            ).label("games"),
+            func.row_number()
+            .over(
+                partition_by=race,
+                order_by=(
+                    case(
+                        (inside & col(W3CStats.mmr).is_not(None), 2),
+                        (inside, 1),
+                        else_=0,
+                    ).desc(),
+                    season.desc(),
+                ),
+            )
+            .label("rank"),
+        )
+        .select_from(W3CStats)
+        .join(current, true())
+        .where(col(W3CStats.user_id) == user_id, season <= current.c.season)
+        .subquery()
+    )
+    part = union_all(
+        select(
+            col(UserBattleTag.id),
+            col(UserBattleTag.tag),
+            col(UserBattleTag.is_active).label("active"),
+            null().label("race"),
+            null().label("wc3_season"),
+            null().label("mmr"),
+            null().label("wins"),
+            null().label("losses"),
+            null().label("games"),
+        ).where(col(UserBattleTag.user_id) == user_id),
+        select(
+            ranked.c.id,
+            null(),
+            null(),
+            ranked.c.race,
+            ranked.c.wc3_season,
+            ranked.c.mmr,
+            ranked.c.wins,
+            ranked.c.losses,
+            ranked.c.games,
+        ).where(ranked.c.rank == 1),
+    ).subquery("part")
+    return (
+        select(
+            col(User.name),
+            col(User.country),
+            current.c.season.label("current"),
+            part,
+        )
+        .select_from(User)
+        .join(current, true())
+        .outerjoin(part, true())
+        .where(col(User.id) == user_id)
+        .order_by(part.c.active.desc().nulls_last(), part.c.id)
+    )
+
+
+def summary(user_id: int) -> UserProfileSummaryPublic:
+    """The player's name, tags and ladder summary with the stale races, as
+    GET /users/{key} answers them."""
+    with Session.begin() as session:
+        rows = session.execute(_summary_statement(), {"user_id": user_id}).all()
+    if not rows:
+        raise NotFoundError(f"User not found: {user_id}")
+    tags = [row for row in rows if row.tag is not None]
+    stats = [
+        W3CStatsPublic(
+            id=row.id,
+            user_id=user_id,
+            race=race_value(row.race),
+            wc3_season=row.wc3_season,
+            mmr=row.mmr,
+            wins=row.wins,
+            losses=row.losses,
+            games=row.games,
+        )
+        for row in rows
+        if row.wc3_season is not None
+    ]
+    race_mmrs, main_race = summarize(stats, rows[0].current, stale=True)
+    return UserProfileSummaryPublic(
+        id=user_id,
+        name=rows[0].name,
+        battleTag=next((row.tag for row in tags if row.active), None),
+        country=rows[0].country,
+        tag_names=[row.tag for row in tags],
+        race_mmrs=race_mmrs,
+        main_race=main_race,
+    )
 
 
 @cache

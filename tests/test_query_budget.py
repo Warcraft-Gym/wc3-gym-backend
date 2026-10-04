@@ -52,14 +52,20 @@ more. A roster of
 an event that is over carries the MMR every roster player entered it with on
 the signup race statement, at no statement more.
 
+The member home reads, GET /me/events and GET /me, keep the bearer and miss
+the edge on every visit. Each reads the columns its answer names, the rounds
+not over and the signup seasons as summaries, so its count is pinned for a
+player and for a captain.
+
 A career list derives its totals, search, order and page in SQL. A single
 career row is the list's statement filtered to the user id. Neither statement
 count grows with the number of players or career rows.
 
-A player's seasons read costs three statements: his seats with their team and
-signup, and the season record pair. His series read costs two: the page as
-columns with its count, and the casts of the page. Neither grows with the
-number of seasons or series.
+A player's summary read costs one statement: his name with a row per tag and
+a row per race of his ladder summary. His seasons read costs three statements:
+his seats with their team and signup, and the season record pair. His series
+read costs two: the page as columns with its count, and the casts of the page.
+None grows with the number of tags, races, seasons or series.
 
 The season list reads the phase of every season it answers in one grouped
 aggregate, so it does not grow with the number of seasons. Identifying the
@@ -117,6 +123,7 @@ from app.models.player_career_stats import (
 from app.models.relationships import (
     DBFantasyTeamPlayer,
     DBMapSeason,
+    DBTeamSeasonCaptain,
     DBUserSeasonSignup,
 )
 from app.models.season import Season
@@ -813,6 +820,15 @@ def test_one_career_row_costs_two_statements(league: dict[str, Any]) -> None:
     assert tally[0] <= 2
 
 
+def test_a_players_summary_costs_one_statement(league: dict[str, Any]) -> None:
+    """The name, the current W3C season, the tags and the ladder races together."""
+    with count_statements() as tally:
+        summary = player_reads.summary(league["player_ids"][0])
+    assert [row.race for row in summary.race_mmrs] == ["HU"]
+    assert len(summary.tag_names) == 1
+    assert tally[0] <= 1
+
+
 def test_a_players_seasons_cost_three_statements(league: dict[str, Any]) -> None:
     """The seats with their team and signup, and the season record pair."""
     with count_statements() as tally:
@@ -903,6 +919,50 @@ def test_the_standings_count_holds_when_the_teams_grow(
         teams = service.get_teams_season(league["season_id"])
     assert len(teams) == 6
     assert tally[0] <= 13
+
+
+def test_the_event_team_summary_costs_five_statements(
+    client: Client, league: dict[str, Any]
+) -> None:
+    """The event and its round tally, which give the scale and the cache
+    phase, the page of teams with their points, the players with their signup,
+    record and the MMR each entered the finished season with, and the
+    captains."""
+    with count_statements() as tally:
+        response = client.get(f"/events/{league['season_id']}/teams/summary")
+    assert response.status_code == 200
+    assert [len(team["players"]) for team in response.json()] == [2, 2]
+    assert tally[0] <= 5
+
+
+def test_a_running_event_team_summary_adds_the_w3c_season(
+    client: Client, league: dict[str, Any]
+) -> None:
+    """The players' current rating needs the W3C season: one statement more,
+    two where no `current_w3c_season` setting is stored."""
+    with Session.begin() as session:
+        session.get_one(Season, league["season_id"]).end_date = None
+    with count_statements() as tally:
+        response = client.get(f"/events/{league['season_id']}/teams/summary")
+    assert response.status_code == 200
+    assert all(p["mmr"] for team in response.json() for p in team["players"])
+    assert tally[0] <= 7
+
+
+def test_the_event_team_summary_count_holds_when_the_teams_grow(
+    client: Client, league: dict[str, Any]
+) -> None:
+    """Four more teams and two captains, the same statements."""
+    path = f"/events/{league['season_id']}/teams/summary"
+    with count_statements() as tally:
+        before = client.get(path).json()
+    add_teams_to_the_season(league["season_id"], 4)
+    add_captains_and_a_second_season(league)
+    with count_statements() as grown:
+        after = client.get(path).json()
+    assert len(after) == len(before) + 4
+    assert len(after[0]["captains"]) == 2
+    assert grown[0] == tally[0]
 
 
 def add_captains_and_a_second_season(league: dict[str, Any]) -> int:
@@ -1133,12 +1193,16 @@ ROWS_PER_CALL = {
     "/fantasy/teams": 10,
     "/stats/career": 4,
     "/stats/career/{player_id}": 2,
+    # One tag row and one race row
+    "/users/{player_id}/summary": 2,
     # One seat row, one tally row, one matchup row
     "/users/{player_id}/seasons": 3,
     # One series row; the seeded series has no cast
     "/users/{player_id}/series?event_id={season_id}": 1,
     # One tag row per player
     "/events/{season_id}/teams": 34,
+    # The event and its round tally, the two teams, the four players; no captain
+    "/events/{season_id}/teams/summary": 8,
     "/events/{season_id}/teams/{team_a_id}": 30,
     "/leagues/{league_id}/teams/{team_a_id}": 8,
     "/matches/{match_id}": 3,
@@ -1155,6 +1219,16 @@ ROWS_PER_CALL = {
 # Room for a row or two of drift before the ceiling fails
 ROWS_MARGIN = 2
 
+# Statements and rows of one member read on the league fixture: player 1 on a roster, then as its captain
+MEMBER_READS = {
+    ("/me/events", False): (11, 5),
+    # The seat's event costs its rounds, its fixtures, their teams, two counts
+    ("/me/events", True): (18, 17),
+    ("/me", False): (14, 10),
+    # The seat's season, and the team's name
+    ("/me", True): (17, 13),
+}
+
 
 @pytest.mark.parametrize("route", sorted(ROWS_PER_CALL))
 def test_rows_per_call_stay_under_the_ceiling(
@@ -1165,6 +1239,35 @@ def test_rows_per_call_stay_under_the_ceiling(
     response = client.get(path)
     assert response.status_code == 200
     assert int(response.headers["X-DB-Rows"]) <= ROWS_PER_CALL[route] + ROWS_MARGIN
+
+
+@pytest.mark.parametrize(("path", "captain"), sorted(MEMBER_READS))
+def test_a_member_read_costs_its_pinned_statements(
+    client: Client,
+    league: dict[str, Any],
+    member: Callable[..., dict[str, str]],
+    path: str,
+    captain: bool,
+) -> None:
+    """The member home reads keep the bearer, so every visit reads the database."""
+    if captain:
+        with Session.begin() as session:
+            session.add(
+                DBTeamSeasonCaptain(
+                    team_id=league["team_a_id"],
+                    season_id=league["season_id"],
+                    user_id=league["player_ids"][0],
+                )
+            )
+    headers = member("1")
+    # the first login writes its clerk_account row and its avatar
+    assert client.get(path, headers=headers).status_code == 200
+    with count_statements() as tally:
+        response = client.get(path, headers=headers)
+    assert response.status_code == 200, response.text
+    statements, rows = MEMBER_READS[(path, captain)]
+    assert tally[0] <= statements
+    assert int(response.headers["X-DB-Rows"]) <= rows
 
 
 def test_the_signups_read_costs_seven_statements(league: dict[str, Any]) -> None:

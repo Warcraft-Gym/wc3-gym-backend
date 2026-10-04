@@ -55,7 +55,7 @@ def me(
     superadmin = claims.get("sub") == "admin"
     account: dict[str, Any] = {}
     if "clerk_user_id" in claims:
-        token = discord_token(claims["clerk_user_id"])
+        token = discord_token(claims["clerk_user_id"], stored=claims["sub"])
         if token.provider_user_id != claims["sub"]:
             # the frontend keeps this answer all session, so a Discord account
             # relinked in Clerk must show now, not one request later
@@ -72,11 +72,7 @@ def me(
     seats = claims.get("seats", [])
     captained = {seat["season_id"] for seat in seats}
     # Every season the account can still act in, newest first; a complete one is done
-    seasons = sorted(
-        (season for season in season_service.get_all() if season.phase != "complete"),
-        key=lambda season: season.id,
-        reverse=True,
-    )
+    seasons = season_service.open_seasons()
     signed_up = {season.id for season in (user.signup_seasons if user else [])}
     rosters = team_service.player_teams(user.id) if user else {}
     # The nav links one team: the seat this account captains in the season this
@@ -84,7 +80,7 @@ def me(
     seat_team = next(
         (seat["team_id"] for seat in seats if seat["season_id"] == season_id), None
     )
-    captained_team = team_service.get(seat_team) if seat_team else None
+    captained_team = (seat_team, team_service.name(seat_team)) if seat_team else None
     roster = rosters.get(season_id) if season_id else None
     return {
         "discord_id": claims["sub"],
@@ -102,7 +98,7 @@ def me(
         "superadmin": superadmin,
         "signed_up": season_id in signed_up,
         "season_id": season_id,
-        "team": {"id": captained_team.id, "name": captained_team.name}
+        "team": {"id": captained_team[0], "name": captained_team[1]}
         if captained_team
         else {"id": roster[0], "name": roster[1]}
         if roster

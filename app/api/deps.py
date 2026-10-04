@@ -48,12 +48,13 @@ Credentials = Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)]
 logger = logging.getLogger(__name__)
 
 
-# The three edge-cache classes: timers only, nothing is purged.
-CacheClass = Literal["live", "running", "settled"]
+# The four edge-cache classes: timers only, nothing is purged.
+CacheClass = Literal["live", "running", "settled", "finished"]
 CACHE_CONTROL: dict[CacheClass, str] = {
     "live": "public, s-maxage=15",  # a board a page polls
     "running": "public, s-maxage=120, stale-while-revalidate=600",
     "settled": "public, s-maxage=3600, stale-while-revalidate=86400",
+    "finished": "public, s-maxage=86400, stale-while-revalidate=86400",  # one finished event
 }
 
 
@@ -69,8 +70,8 @@ def edge_cache(response: Response, cls: CacheClass) -> None:
 
 
 def phase_edge_cache(response: Response, phase: EventPhase | None) -> None:
-    """`edge_cache` sized to an event phase: settled once finished, else running."""
-    edge_cache(response, "settled" if phase == "finished" else "running")
+    """`edge_cache` sized to an event phase: finished once finished, else running."""
+    edge_cache(response, "finished" if phase == "finished" else "running")
 
 
 def event_edge_cache(response: Response, event_id: int) -> None:
@@ -262,18 +263,21 @@ def _discord_id(clerk_user_id: str) -> str:
     return discord_token(clerk_user_id).provider_user_id
 
 
-def discord_token(clerk_user_id: str) -> OAuthAccessToken:
+def discord_token(clerk_user_id: str, stored: str | None = None) -> OAuthAccessToken:
     """The Discord OAuth token Clerk holds for that user, for reads as the account.
 
     The clerk_account row is rewritten only when Clerk names another Discord
     account, so a relink is picked up by the next login (/me reads the token
-    every time) and an unchanged login writes nothing.
+    every time) and an unchanged login writes nothing. `stored` is the Discord
+    id the caller already read off the row; a token that names it reads no row.
     """
     tokens = _clerk().users.get_o_auth_access_token(
         user_id=clerk_user_id, provider="oauth_discord"
     )
     if not tokens:
         raise ApiError(401, {"error": "No Discord account on this login"})
+    if tokens[0].provider_user_id == stored:
+        return tokens[0]
     with Session.begin() as session:
         account = session.get(ClerkAccount, clerk_user_id)
         # the row only changes when Clerk relinks the account, so a read costs

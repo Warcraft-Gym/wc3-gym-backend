@@ -111,6 +111,20 @@ class SeasonProgress(NamedTuple):
     unscored_series: int
 
 
+class OpenSeason(NamedTuple):
+    """A season the /me answer lists: one no admin closed, with its phase."""
+
+    id: int
+    name: str
+    league_short_name: str | None
+    phase: SeasonPhase
+    signups_open: bool
+    scheduling_enabled: bool
+    checkin_days: int | None
+    start_date: date | None
+    end_date: date | None
+
+
 class Season(SeasonBase, DBModel, table=True):
     # A GNL season is one event of the GNL league; "season" stays its name in the payloads
     __tablename__ = "event"

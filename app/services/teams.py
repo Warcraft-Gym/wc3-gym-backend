@@ -14,7 +14,7 @@ from app.core.query import QueryElement, QueryUtil
 from app.models.base import ident
 from app.models.league import League
 from app.models.relationships import DBTeamSeasonCaptain
-from app.models.season import Season, progress_by_seasons
+from app.models.season import Season
 from app.models.team import Team, TeamCreate, TeamPublic, TeamRosterPublic, TeamUpdate
 from app.models.team_season import DBTeamSeason
 from app.models.user import User, UserSummaryPublic
@@ -251,7 +251,7 @@ class TeamService:
         """Every (team, season) this Discord account captains, newest season first.
 
         A season that has run to its end carries no powers, so a complete
-        season is left out; every other phase counts.
+        season, the one an admin closed, is left out; every other phase counts.
         """
         with Session.begin() as session:
             seats = session.execute(
@@ -259,22 +259,13 @@ class TeamService:
                     col(DBTeamSeasonCaptain.team_id), col(DBTeamSeasonCaptain.season_id)
                 )
                 .join(User, col(DBTeamSeasonCaptain.user_id) == col(User.id))
-                .where(col(User.discordId) == discord_id)
-            ).all()
-            if not seats:
-                return []
-            seasons = session.scalars(
-                select(Season).where(
-                    col(Season.id).in_({seat.season_id for seat in seats})
+                .join(Season, col(Season.id) == col(DBTeamSeasonCaptain.season_id))
+                .where(
+                    col(User.discordId) == discord_id, col(Season.closed_at).is_(None)
                 )
             ).all()
-            phases = progress_by_seasons(session, seasons)
             return sorted(
-                (
-                    (seat.team_id, seat.season_id)
-                    for seat in seats
-                    if phases[seat.season_id].phase != "complete"
-                ),
+                ((seat.team_id, seat.season_id) for seat in seats),
                 key=lambda seat: seat[1],
                 reverse=True,
             )
@@ -292,6 +283,14 @@ class TeamService:
     def delete(self, team_id: int, league_id: int | None = None) -> None:
         with Session.begin() as session:
             session.delete(_team(session, team_id, league_id))
+
+    def name(self, team_id: int) -> str:
+        """The name of one team, in one narrow statement."""
+        with Session.begin() as session:
+            name = session.scalar(select(col(Team.name)).where(col(Team.id) == team_id))
+            if name is None:
+                raise NotFoundError("Team not found")
+            return name
 
     def get(self, team_id: int, league_id: int | None = None) -> TeamPublic:
         with Session.begin() as session:

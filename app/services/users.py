@@ -65,6 +65,19 @@ W3C_SYNC_WORKERS = 4
 SYNC_MAX_AGE = timedelta(minutes=10)
 
 
+# The season columns SeasonSummaryPublic reads; a read of any other raises
+_SIGNUP_SEASON = (
+    rel(Season.name),
+    rel(Season.league_short_name),
+    rel(Season.league_name),
+    rel(Season.round_count),
+    rel(Season.start_date),
+    rel(Season.end_date),
+    rel(Season.round_end_zone),
+    rel(Season.map_rules),
+)
+
+
 def summary_loads(
     event_id: int | None, *, signups: bool = False, window: int | None = None
 ) -> tuple[_AbstractLoad, ...]:
@@ -79,7 +92,9 @@ def summary_loads(
         if event_id is not None
         else noload(team_seasons),
         selectinload(rel(User.battle_tags)),
-        selectinload(signup_seasons).joinedload(rel(DBUserSeasonSignup.season))
+        selectinload(signup_seasons)
+        .joinedload(rel(DBUserSeasonSignup.season))
+        .load_only(*_SIGNUP_SEASON, raiseload=True)
         if signups
         else noload(signup_seasons),
         window_rows(window) if window is not None else noload(w3c_stats),
