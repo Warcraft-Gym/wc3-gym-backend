@@ -56,10 +56,11 @@ A career list derives its totals, search, order and page in SQL. A single
 career row is the list's statement filtered to the user id. Neither statement
 count grows with the number of players or career rows.
 
-A player's seasons read costs three statements: his seats with their team and
-signup, and the season record pair. His series read costs two: the page as
-columns with its count, and the casts of the page. Neither grows with the
-number of seasons or series.
+A player's summary read costs one statement: his name with a row per tag and
+a row per race of his ladder summary. His seasons read costs three statements:
+his seats with their team and signup, and the season record pair. His series
+read costs two: the page as columns with its count, and the casts of the page.
+None grows with the number of tags, races, seasons or series.
 
 The season list reads the phase of every season it answers in one grouped
 aggregate, so it does not grow with the number of seasons. Identifying the
@@ -813,6 +814,15 @@ def test_one_career_row_costs_two_statements(league: dict[str, Any]) -> None:
     assert tally[0] <= 2
 
 
+def test_a_players_summary_costs_one_statement(league: dict[str, Any]) -> None:
+    """The name, the current W3C season, the tags and the ladder races together."""
+    with count_statements() as tally:
+        summary = player_reads.summary(league["player_ids"][0])
+    assert [row.race for row in summary.race_mmrs] == ["HU"]
+    assert len(summary.tag_names) == 1
+    assert tally[0] <= 1
+
+
 def test_a_players_seasons_cost_three_statements(league: dict[str, Any]) -> None:
     """The seats with their team and signup, and the season record pair."""
     with count_statements() as tally:
@@ -1133,6 +1143,8 @@ ROWS_PER_CALL = {
     "/fantasy/teams": 10,
     "/stats/career": 4,
     "/stats/career/{player_id}": 2,
+    # One tag row and one race row
+    "/users/{player_id}/summary": 2,
     # One seat row, one tally row, one matchup row
     "/users/{player_id}/seasons": 3,
     # One series row; the seeded series has no cast

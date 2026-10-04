@@ -18,7 +18,11 @@ from app.core.security import is_admin
 from app.models.draft_board import PairMeeting
 from app.models.link_prompt import LinkPromptPublic, PromptAnswer
 from app.models.player_history import PlayerHistory
-from app.models.player_reads import PlayerSeasonPublic, PlayerSeriesSummaryPublic
+from app.models.player_reads import (
+    PlayerSeasonPublic,
+    PlayerSeriesSummaryPublic,
+    UserProfileSummaryPublic,
+)
 from app.models.user import (
     UserCreate,
     UserListPublic,
@@ -242,6 +246,15 @@ def get_user_history(user_id: int, response: Response) -> PlayerHistory:
     """Every GNL season this player took part in, and every opponent they met."""
     edge_cache(response, "running")
     return player_history.history(user_id)
+
+
+@router.get("/users/{user_id}/summary")
+def get_user_summary(user_id: int, response: Response) -> UserProfileSummaryPublic:
+    """One player's name, tags and ladder summary with the stale races, the
+    fields of `/users/{key}` a player page reads, the same for every caller."""
+    summary = player_reads.summary(user_id)
+    edge_cache(response, "running")
+    return summary
 
 
 @router.get("/users/{user_id}/seasons")
