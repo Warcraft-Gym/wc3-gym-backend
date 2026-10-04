@@ -36,20 +36,31 @@ def update_player_series(
     if not series:
         raise NotFoundError("series_not_found")
 
+    action = data.get("action")
+    reporting = action == "score_updated" or any(
+        key in data for key in ("player1_score", "player2_score")
+    )
+    # The races played belong to the result as well
+    result_write = reporting or any(
+        key in data for key in ("player1_off_race", "player2_off_race")
+    )
+
     # The caller acts for a side, or is an admin, who acts for either. The
     # check writes nothing, so it reads in a session and opens no transaction.
     with Session() as session:
         row = session.get(Series, series_id)
         if row is None or not (admin or acts_for_side(session, row, user_id)):
             raise ApiError(403, {"error": "not_authorized_for_this_series"})
+        # A player or a captain who changes a reported result is named in
+        # Discord; an admin's correction is not
+        before = (
+            discord_posts.ResultFacts.read(session, row)
+            if result_write and not admin and row.player1_score is not None
+            else None
+        )
 
     # One replay slot per game of the best-of the series plays, game1..gameN
     wins = wins_of(series.rules.best_of) if series.rules else wins_needed(None)
-    action = data.get("action")
-
-    reporting = action == "score_updated" or any(
-        key in data for key in ("player1_score", "player2_score")
-    )
     # A result carries its veto, but a missing veto never holds a result back:
     # the answer says so and the caller warns
     veto_complete = SeriesVetoService().is_complete(series_id) if reporting else True
@@ -133,4 +144,7 @@ def update_player_series(
                 game.model_dump(mode="json")
                 for game in series_games.record(series_id, games)
             ]
+    # After the games are written, so the note compares the whole result
+    if before is not None:
+        discord_posts.post_result_change(series_id, before, user_id)
     return result

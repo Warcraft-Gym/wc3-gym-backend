@@ -5,15 +5,19 @@ from time import sleep
 from typing import Any, NamedTuple
 
 from sqlalchemy import delete, func, select, update
+from sqlalchemy.orm import Session as OrmSession
 from sqlmodel import col
 
 from app.core.db import Session
 from app.core.exceptions import ExternalServiceError
 from app.models.discord_post import DiscordPost
+from app.models.enums import Race
 from app.models.season import Season
 from app.models.series import Series, SeriesPublic
+from app.models.series_game import DBSeriesGame
 from app.models.settings import Settings
 from app.models.types import utcnow
+from app.models.user import User
 from app.services import discord, event_cards, series_cards
 from app.services.commands import announce, veto
 from app.services.events import EventService
@@ -21,6 +25,9 @@ from app.services.series import SeriesService
 
 # The result card the app posts itself, in the channel the old bot's setting names
 RESULT = "result"
+# The note beside the result card that a player or a captain changed a reported
+# result or took it back. It is never edited: it records the change.
+RESULT_CHANGE = "result_change"
 # The card that says a member claimed the series, posted when the claim lands
 CAST = "cast"
 # The card that calls the audience to the stream, posted shortly before the start
@@ -34,6 +41,7 @@ SERIES_KINDS = ("veto", "announce", CAST)
 # and its reminder both belong where the league shares content.
 CHANNEL_OF = {
     RESULT: "results_channel_id",
+    RESULT_CHANGE: "results_channel_id",
     CAST: "content_channel_id",
     REMINDER: "content_channel_id",
 }
@@ -178,12 +186,17 @@ def _flush(post: DiscordPost) -> None:
     # ponytail: a channel busy for five seconds keeps this change until the next write
 
 
+def _channel(kind: str) -> str | None:
+    """The channel the kind's setting names, or None without the setting."""
+    with Session() as session:
+        setting = Settings.get_by_key(session, CHANNEL_OF[kind])
+    return setting.value if setting else None
+
+
 def _post_card(kind: str, series_id: int) -> bool:
     """Post the kind's card about the series in the channel its setting names.
     Nothing happens without the setting, and False says nothing was posted."""
-    with Session() as session:
-        setting = Settings.get_by_key(session, CHANNEL_OF[kind])
-    channel_id = setting.value if setting else None
+    channel_id = _channel(kind)
     if not channel_id:
         return False
     wait_for_channel(channel_id)
@@ -243,6 +256,80 @@ def follow_series(series_id: int, before: CardFacts, after: SeriesPublic) -> Non
         withdraw_result(series_id)
     else:
         post_result(series_id)
+
+
+def _race(race: Race | str | None) -> str | None:
+    return race.value if isinstance(race, Race) else race
+
+
+class ResultFacts(NamedTuple):
+    """What a reported result holds: the score, the races played off the
+    signup race, and each game's winner and map."""
+
+    player1_score: int | None
+    player2_score: int | None
+    player1_off_race: str | None
+    player2_off_race: str | None
+    games: tuple[tuple[int, str | None, int | None], ...]
+
+    @classmethod
+    def read(cls, session: OrmSession, series: Series) -> "ResultFacts":
+        games = session.scalars(
+            select(DBSeriesGame)
+            .where(col(DBSeriesGame.series_id) == series.id)
+            .order_by(col(DBSeriesGame.game_no))
+        )
+        return cls(
+            series.player1_score,
+            series.player2_score,
+            _race(series.player1_off_race),
+            _race(series.player2_off_race),
+            tuple((game.game_no, game.winner_side, game.map_id) for game in games),
+        )
+
+    @property
+    def score(self) -> tuple[int, int] | None:
+        """Both map scores, or None while the series holds no result."""
+        if self.player1_score is None or self.player2_score is None:
+            return None
+        return self.player1_score, self.player2_score
+
+
+def post_result_change(
+    series_id: int, before: ResultFacts, actor_id: int | None
+) -> None:
+    """Post a note beside the result card when a player or a captain changes a
+    reported result or takes it back, naming who did it, so a past result
+    never changes unseen. A first report posts the card alone, and nothing is
+    posted without the setting or when the write changed nothing the result
+    holds."""
+    if before.score is None:
+        return
+    channel_id = _channel(RESULT_CHANGE)
+    if not channel_id:
+        return
+    with Session() as session:
+        series = session.get(Series, series_id)
+        if series is None:
+            return
+        after = ResultFacts.read(session, series)
+        actor = session.get(User, actor_id) if actor_id else None
+    if after == before:
+        return
+    # The score says most; a note names what else changed while a result stands
+    also = []
+    if after.score is not None:
+        if after.score == before.score and after.games != before.games:
+            also.append("The games changed")
+        if after[2:4] != before[2:4]:
+            also.append("The races played changed")
+    card = series_cards.change_card(
+        SeriesService().get(series_id), actor, before.score, after.score, also
+    )
+    wait_for_channel(channel_id)
+    message_id = discord.post_to_channel(channel_id, card)
+    if message_id:
+        remember(RESULT_CHANGE, series_id, channel_id, message_id)
 
 
 def post_cast(series_id: int) -> None:

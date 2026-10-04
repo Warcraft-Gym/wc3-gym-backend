@@ -86,11 +86,16 @@ def test_a_result_posts_once_and_a_correction_edits_it(
     assert lines[14] == f"[Match page](<https://gnl.test/match/{seeded['match_id']}>)"
     assert card["embeds"][0]["footer"]["text"] == "MMR not synced yet"
 
-    discord_calls.clear()
+    # The calls stay, because the fake numbers each post by the posts before it
+    first = len(discord_calls)
     replay_uploaded(series_id, 3)
     report(client, series_id, headers, 2, 1)
-    assert [call[:2] for call in discord_calls] == [("PATCH", f"{RESULTS}/msg-1")]
-    lines = discord_calls[0][2]["embeds"][0]["description"].splitlines()
+    # The card is edited, and the note beside it names the player who changed it
+    assert [call[:2] for call in discord_calls[first:]] == [
+        ("PATCH", f"{RESULTS}/msg-1"),
+        ("POST", RESULTS),
+    ]
+    lines = discord_calls[first][2]["embeds"][0]["description"].splitlines()
     assert lines[6] == "**Result** ||P2 2-1 P4||"
     assert lines[9] == f"Game 3 · ||[Download replay](<{replay}/game3.w3g>)||"
 

@@ -4,7 +4,7 @@ title: Series reporting
 description: A result is reported game by game with a map and a replay per game, a veto board that is derived from the season rules, an off race per side, and casts that any member may claim.
 resource: ../../../app/services/series_games.py
 tags: [series, storage]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-04T07:18:37Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-04T13:05:43Z }
 sources:
   - id: games
     resource: ../../../app/services/series_games.py
@@ -38,6 +38,8 @@ A series that was not played takes `result_kind` `walkover` or `forfeit` with a 
 `PUT /series/{id}` edits a published series. A captain of either team of its fixture sends the time, the two scores, the race each side played, the host, who is one of the two players, and the fantasy mark; who plays, the fixture and `force` are an admin's, and a captain changes a player through a replacement draft. An admin sends any field. The same captain adds a series to the fixture with `POST /series` and deletes one with `DELETE /series/{id}`; a series of a stage or a KOTH night, which plays no fixture, is an admin's.
 
 `DELETE /series/{id}/result` takes a result back, for whoever may report it. The scores, the races played and the `series_game` rows go, `result_kind` reads `played` again, the result card comes down in Discord, and the replays stay for the next report. A walkover or a forfeit is cleared by an admin alone. The same holds when an admin empties the scores through `PUT /series/{id}`: a cleared result takes its games and its kind with it, so the series reads as never reported.
+
+A past result never changes unseen. When a player or a captain changes a reported result through `PUT /player-series/{id}` or `/report-result`, or takes it back through `DELETE /series/{id}/result`, the bot posts a note beside the result card that names them and shows the score before and after. A change to the score, the games or the races played counts. An admin's write and a captain's edit through `PUT /series/{id}` post no note. See [Discord integration](discord-integration.md#cards-and-posts).
 
 # Maps
 

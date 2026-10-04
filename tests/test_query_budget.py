@@ -1654,7 +1654,7 @@ WRITES: dict[str, tuple[WriteCase, int]] = {
     ),
     "DELETE /series/{series_id}/result": (
         lambda w: ("DELETE", f"/series/{w.played}/result", None, w.member()),
-        38,
+        40,
     ),
     "POST /series/{series_id}/casts": (
         lambda w: (
@@ -1858,7 +1858,7 @@ WRITES: dict[str, tuple[WriteCase, int]] = {
             Form(action="score_updated", player1_score="2", player2_score="0"),
             w.replay(1, 2),
         ),
-        65,
+        67,
     ),
     "POST /player-series/{series_id}/replays/{game_no}/upload-url": (
         lambda w: (

@@ -243,16 +243,21 @@ def test_a_cleared_result_takes_its_card_down_and_the_next_report_posts_anew(
     assert resp.status_code == 200, resp.text
     report()
 
+    # The card, its removal, the note that the player took the result back, the new card
     assert [call[:2] for call in discord_calls] == [
         ("POST", RESULTS),
         ("DELETE", f"{RESULTS}/msg-1"),
         ("POST", RESULTS),
+        ("POST", RESULTS),
     ]
     with Session() as session:
         posts = session.scalars(
-            select(DiscordPost).where(col(DiscordPost.subject_id) == series_id)
+            select(DiscordPost).where(
+                col(DiscordPost.subject_id) == series_id,
+                col(DiscordPost.kind) == "result",
+            )
         ).all()
-    assert [post.message_id for post in posts] == ["msg-2"]
+    assert [post.message_id for post in posts] == ["msg-3"]
 
 
 def test_a_captain_adds_a_series_while_the_round_has_room(
