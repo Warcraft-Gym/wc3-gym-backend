@@ -22,7 +22,10 @@ def is_admin(discord_id: str) -> bool:
     if discord_id in env_ids():
         return True
     with Session.begin() as session:
-        return session.get(AdminGrant, discord_id) is not None
+        granted = select(col(AdminGrant.discord_id)).where(
+            col(AdminGrant.discord_id) == discord_id
+        )
+        return session.scalar(granted) is not None
 
 
 def admins() -> list[AdminPublic]:

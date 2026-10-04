@@ -262,18 +262,21 @@ def _discord_id(clerk_user_id: str) -> str:
     return discord_token(clerk_user_id).provider_user_id
 
 
-def discord_token(clerk_user_id: str) -> OAuthAccessToken:
+def discord_token(clerk_user_id: str, stored: str | None = None) -> OAuthAccessToken:
     """The Discord OAuth token Clerk holds for that user, for reads as the account.
 
     The clerk_account row is rewritten only when Clerk names another Discord
     account, so a relink is picked up by the next login (/me reads the token
-    every time) and an unchanged login writes nothing.
+    every time) and an unchanged login writes nothing. `stored` is the Discord
+    id the caller already read off the row; a token that names it reads no row.
     """
     tokens = _clerk().users.get_o_auth_access_token(
         user_id=clerk_user_id, provider="oauth_discord"
     )
     if not tokens:
         raise ApiError(401, {"error": "No Discord account on this login"})
+    if tokens[0].provider_user_id == stored:
+        return tokens[0]
     with Session.begin() as session:
         account = session.get(ClerkAccount, clerk_user_id)
         # the row only changes when Clerk relinks the account, so a read costs

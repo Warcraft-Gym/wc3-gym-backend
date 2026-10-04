@@ -24,7 +24,7 @@ from sqlalchemy import (
     update,
 )
 from sqlalchemy.orm import Session as OrmSession
-from sqlalchemy.orm import joinedload, noload, selectinload
+from sqlalchemy.orm import load_only, noload, selectinload
 from sqlalchemy.orm.attributes import instance_state
 from sqlmodel import col
 
@@ -120,6 +120,27 @@ _EVENT_OPTIONS = (
     noload(rel(Season.signup_users)),
 )
 
+# The event columns the member home reads; a read of any other raises
+_MEMBER_COLUMNS = load_only(
+    rel(Season.kind),
+    rel(Season.name),
+    rel(Season.league_short_name),
+    rel(Season.league_name),
+    rel(Season.start_date),
+    rel(Season.starts_at),
+    rel(Season.end_date),
+    rel(Season.published),
+    rel(Season.closed_at),
+    rel(Season.entrant_kind),
+    rel(Season.signups_open),
+    rel(Season.checkin_enabled),
+    rel(Season.checkin_days),
+    rel(Season.series_per_round),
+    rel(Season.page_url),
+    rel(Season.round_end_zone),
+    raiseload=True,
+)
+
 
 def phase_of(
     session: OrmSession,
@@ -200,6 +221,20 @@ def _signups_open(event: Season, phase: EventPhase) -> bool:
     return event.signups_open and phase != "finished"
 
 
+# The stage columns the chain test reads; a stage read later in the session loads the rest
+_STAGE_PLAN = load_only(
+    rel(EventStage.event_id),
+    rel(EventStage.position),
+    rel(EventStage.format),
+    rel(EventStage.third_place),
+    rel(EventStage.grand_final_modifier),
+    rel(EventStage.series_per_entrant_per_round),
+    rel(EventStage.swiss_rounds),
+    rel(EventStage.lobby_size),
+    rel(EventStage.group_advance),
+)
+
+
 def last_stage_drawn(
     session: OrmSession, event_ids: Sequence[int | None]
 ) -> dict[int | None, bool]:
@@ -216,6 +251,7 @@ def last_stage_drawn(
         return {}
     rows = session.execute(
         select(EventStage, func.count(col(Series.id)))
+        .options(_STAGE_PLAN)
         .select_from(EventStage)
         .outerjoin(DBEventRound, col(DBEventRound.stage_id) == col(EventStage.id))
         .outerjoin(Series, col(Series.round_id) == col(DBEventRound.id))
@@ -528,11 +564,27 @@ class EventService:
         shape and window, the next round and the one action the page offers.
         A caller with no id has joined nothing and reads a signup or a view.
         """
+        # next_round and checkin_open read only the rounds not over and the undated ones
+        today = _today()
         with Session.begin() as session:
             events = session.scalars(
                 select(Season)
                 .where(col(Season.published).is_(True))
-                .options(selectinload(rel(Season.rounds)))
+                .options(
+                    _MEMBER_COLUMNS,
+                    selectinload(
+                        rel(Season.rounds).and_(
+                            or_(
+                                col(DBEventRound.start_date).is_(None),
+                                func.coalesce(
+                                    col(DBEventRound.end_date),
+                                    col(DBEventRound.start_date),
+                                )
+                                >= today,
+                            )
+                        )
+                    ),
+                )
                 .order_by(col(Season.id).desc())
             ).all()
             joined, races = _joined_events(session, user_id)
@@ -986,6 +1038,14 @@ def _joined_events(
         return {}, {}
     entered = session.scalars(
         select(EventEntrant)
+        .options(
+            load_only(
+                rel(EventEntrant.event_id),
+                rel(EventEntrant.race),
+                rel(EventEntrant.checked_in_at),
+                raiseload=True,
+            )
+        )
         .where(
             col(EventEntrant.user_id) == user_id,
             col(EventEntrant.withdrawn_at).is_(None),
@@ -1020,8 +1080,12 @@ def _round_hints(
     passes only the events that show a hint, and one read of the caller's
     blocks answers them all.
     """
-    user = session.get(User, user_id) if user_id is not None else None
-    if user is None or not rounds:
+    if user_id is None or not rounds:
+        return {}
+    user = session.get(
+        User, user_id, options=[load_only(rel(User.timezone), raiseload=True)]
+    )
+    if user is None:
         return {}
     return availability_hints(session, user, rounds)
 
@@ -1090,10 +1154,10 @@ def _captain_fixtures(
     that is not closed, in round order, so the home leads to the team's match
     of any round, drafted or not, running or over.
 
-    Four statements answer the whole list whatever it holds: the caller's
-    seats, the fixtures of those events, the published and played series of
-    those fixtures, and their open drafts. The rounds themselves are already
-    loaded on the events.
+    Six statements answer the whole list whatever it holds: the caller's
+    seats, the rounds of the listed events, the fixtures of those events, their
+    teams, the published and played series of those fixtures, and their open
+    drafts. The rounds not over are already loaded on the events.
     """
     if user_id is None:
         return {}, {}
@@ -1120,8 +1184,23 @@ def _captain_fixtures(
     listed = {event_id for event_id in seats if by_id[event_id].closed_at is None}
     if not wanted and not listed:
         return {}, {}
+    numbered: dict[int, dict[int, DBEventRound]] = {event_id: {} for event_id in listed}
+    if listed:
+        for round_ in session.scalars(
+            select(DBEventRound).where(col(DBEventRound.season_id).in_(listed))
+        ):
+            numbered[round_.season_id][round_.number] = round_
     matches = session.scalars(
         select(Match)
+        .options(
+            load_only(
+                rel(Match.season_id),
+                rel(Match.playday),
+                rel(Match.team1_id),
+                rel(Match.team2_id),
+                raiseload=True,
+            )
+        )
         .where(
             col(Match.season_id).in_(wanted.keys() | listed),
             or_(
@@ -1129,9 +1208,9 @@ def _captain_fixtures(
                 col(Match.team2_id).in_(seats.values()),
             ),
         )
-        .options(joinedload(rel(Match.team1)), joinedload(rel(Match.team2)))
         .order_by(col(Match.playday), col(Match.id))
     ).all()
+    teams = _fixture_teams(session, matches)
     ids = [ident(match) for match in matches]
     series = _fixture_series(session, ids)
     drafted = _draft_counts(session, ids)
@@ -1145,8 +1224,8 @@ def _captain_fixtures(
             playday=fixture.playday,
             round_start=round_.start_date if round_ else None,
             round_end=round_.end_date if round_ else None,
-            team1=TeamSummaryPublic.from_team(fixture.team1),
-            team2=TeamSummaryPublic.from_team(fixture.team2),
+            team1=teams[fixture.team1_id],
+            team2=teams[fixture.team2_id],
             series_per_round=event.series_per_round,
             published=published,
             drafted=drafted.get(ident(fixture), 0),
@@ -1164,9 +1243,9 @@ def _captain_fixtures(
             and seats[event_id] in (match.team1_id, match.team2_id)
         ]
         if event_id in listed:
-            numbered = {round_.number: round_ for round_ in event.rounds}
             every[event_id] = [
-                row(event, match, numbered.get(match.playday)) for match in own
+                row(event, match, numbered[event_id].get(match.playday))
+                for match in own
             ]
         by_round = {match.playday: match for match in own}
         for round_ in wanted.get(event_id, []):
@@ -1178,6 +1257,18 @@ def _captain_fixtures(
             found[event_id] = row(event, fixture, round_)
             break
     return found, every
+
+
+def _fixture_teams(
+    session: OrmSession, matches: Sequence[Match]
+) -> dict[int, TeamSummaryPublic]:
+    """The teams of those fixtures, each once, in one read; a join would repeat
+    the caller's own team on every fixture."""
+    ids = {match.team1_id for match in matches} | {match.team2_id for match in matches}
+    if not ids:
+        return {}
+    teams = session.scalars(select(Team).where(col(Team.id).in_(ids)))
+    return {ident(team): TeamSummaryPublic.from_team(team) for team in teams}
 
 
 def _fixture_series(

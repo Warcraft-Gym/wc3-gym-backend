@@ -50,8 +50,9 @@ logger = logging.getLogger(__name__)
 
 def _current_season(session: OrmSession) -> int | None:
     """The season the roles follow, as the admin pages resolve it."""
-    setting = Settings.get_by_key(session, "current_gnl_season")
-    value = setting.value if setting else None
+    value = session.scalar(
+        select(col(Settings.value)).where(col(Settings.key) == "current_gnl_season")
+    )
     if value and value.isdigit():
         return int(value)
     return session.scalar(select(func.max(col(Season.id))))
