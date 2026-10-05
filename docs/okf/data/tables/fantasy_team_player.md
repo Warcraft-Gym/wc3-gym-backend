@@ -4,7 +4,7 @@ title: fantasy_team_player
 description: One player drafted onto one fantasy team.
 resource: ../../../../app/models/relationships.py
 tags: [fantasy, data]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T15:15:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-05T12:00:00Z }
 verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
 sources:
   - id: model
@@ -24,7 +24,7 @@ sources:
 
 # Keys and joins
 
-Primary key (`fantasy_team_id`, `user_id`). Foreign keys: `fantasy_team_id` to [fantasy_teams](fantasy_teams.md); `user_id` to [users](users.md).
+Primary key (`fantasy_team_id`, `user_id`). Foreign keys: `fantasy_team_id` to [fantasy_teams](fantasy_teams.md), cascade; `user_id` to [users](users.md).
 
 # Rules
 

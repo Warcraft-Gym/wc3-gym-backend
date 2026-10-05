@@ -25,7 +25,9 @@ if TYPE_CHECKING:
 class DBUserSeasonSignup(DBModel, table=True):
     __tablename__ = "user_season_signup"
     user_id: int = Field(foreign_key="users.id", primary_key=True)
-    season_id: int = Field(index=True, foreign_key="event.id", primary_key=True)
+    season_id: int = Field(
+        index=True, foreign_key="event.id", ondelete="CASCADE", primary_key=True
+    )
     # The race the player registered on for this season
     race: Race
     # The battle tag the player played this season under; null means the active tag
@@ -49,7 +51,9 @@ class DBUserSeasonSignup(DBModel, table=True):
 class DBTeamSeasonCaptain(DBModel, table=True):
     __tablename__ = "team_season_captain"
     team_id: int = Field(foreign_key="teams.id", primary_key=True)
-    season_id: int = Field(index=True, foreign_key="event.id", primary_key=True)
+    season_id: int = Field(
+        index=True, foreign_key="event.id", ondelete="CASCADE", primary_key=True
+    )
     user_id: int = Field(index=True, foreign_key="users.id", primary_key=True)
     team: "Team" = Relationship(
         back_populates="captain_seasons",
@@ -61,7 +65,9 @@ class DBTeamSeasonCaptain(DBModel, table=True):
 class DBMapSeason(DBModel, table=True):
     __tablename__ = "map_season"
     map_id: int = Field(foreign_key="maps.id", primary_key=True)
-    season_id: int = Field(index=True, foreign_key="event.id", primary_key=True)
+    season_id: int = Field(
+        index=True, foreign_key="event.id", ondelete="CASCADE", primary_key=True
+    )
     # The place of the map in the pool; the season service appends at the end
     position: int = Field(default=0, sa_column_kwargs={"server_default": "0"})
     season: "Season" = Relationship(
@@ -91,7 +97,7 @@ class DBEventRound(DBModel, table=True):
     stage_id: int | None = Field(
         default=None, index=True, foreign_key="event_stage.id", ondelete="CASCADE"
     )
-    season_id: int = Field(foreign_key="event.id")
+    season_id: int = Field(foreign_key="event.id", ondelete="CASCADE")
     # The place of the round in its stage; the GNL playday
     number: int
     name: str | None = Field(default=None, max_length=50)
@@ -186,7 +192,9 @@ class SeasonRoundWrite(SQLModel):
 
 class DBFantasyTeamPlayer(DBModel, table=True):
     __tablename__ = "fantasy_team_player"
-    fantasy_team_id: int = Field(foreign_key="fantasy_teams.id", primary_key=True)
+    fantasy_team_id: int = Field(
+        foreign_key="fantasy_teams.id", ondelete="CASCADE", primary_key=True
+    )
     user_id: int = Field(index=True, foreign_key="users.id", primary_key=True)
     # Additional columns can be added here if needed
     fantasy_team: "FantasyTeam" = Relationship(

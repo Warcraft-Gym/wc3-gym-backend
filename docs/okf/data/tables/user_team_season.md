@@ -4,7 +4,7 @@ title: user_team_season
 description: "One roster row: a player on one team in one season, written by the draft."
 resource: ../../../../app/models/user_team_season.py
 tags: [teams, data]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-16T19:30:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-05T12:00:00Z }
 verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
 sources:
   - id: model
@@ -25,7 +25,7 @@ sources:
 
 # Keys and joins
 
-Primary key (`user_id`, `team_id`, `season_id`). Foreign keys: `user_id` to [users](users.md); `team_id` to [teams](teams.md); `season_id` to [event](event.md).
+Primary key (`user_id`, `team_id`, `season_id`). Foreign keys: `user_id` to [users](users.md); `team_id` to [teams](teams.md); `season_id` to [event](event.md), cascade.
 
 # Rules
 

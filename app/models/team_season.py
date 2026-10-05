@@ -18,7 +18,9 @@ if TYPE_CHECKING:
 class DBTeamSeason(DBModel, table=True):
     __tablename__ = "team_season"
     team_id: int = Field(foreign_key="teams.id", primary_key=True)
-    season_id: int = Field(index=True, foreign_key="event.id", primary_key=True)
+    season_id: int = Field(
+        index=True, foreign_key="event.id", ondelete="CASCADE", primary_key=True
+    )
     # Relationships
     team: "Team" = Relationship(back_populates="season_info")
     season: "Season" = Relationship(back_populates="teams")

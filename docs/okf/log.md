@@ -1,5 +1,9 @@
 # Bundle history
 
+## 2026-10-05
+
+* **Update**: every key that points at an event cascades, except the two that set null, and so do `draft_series.match_id` and `fantasy_team_player.fantasy_team_id`, so `DELETE /events/{id}` deletes the event with every row under it and leaves the users, teams and maps it named. [event](data/tables/event.md#keys-and-joins) and the key lines of [team_season_captain](data/tables/team_season_captain.md), [round_availability](data/tables/round_availability.md), [user_season_signup](data/tables/user_season_signup.md), [map_season](data/tables/map_season.md), [event_round](data/tables/event_round.md), [team_season](data/tables/team_season.md), [user_team_season](data/tables/user_team_season.md), [draft_series](data/tables/draft_series.md) and [fantasy_team_player](data/tables/fantasy_team_player.md) state it.
+
 ## 2026-10-04
 
 * **Update**: a player or a captain who changes a reported result through `PUT /player-series/{id}` or `/report-result`, or takes it back through `DELETE /series/{id}/result`, gets a note in the results channel beside the result card. The note names who changed it and shows the score before and after, behind spoilers, as a `discord_post` row of kind `result_change`. An admin's write, a captain's edit through `PUT /series/{id}` and a first report post none. [Series reporting](concepts/series-reporting.md#who-reports), [Discord integration](concepts/discord-integration.md#cards-and-posts) and [discord_post](data/tables/discord_post.md) state it.

@@ -4,7 +4,7 @@ title: event_round
 description: "One round of a stage: its number, its date window and the fixed map of game 1; a GNL playday is a round."
 resource: ../../../../app/models/relationships.py
 tags: [events, data]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-14T15:15:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-05T12:00:00Z }
 verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
 sources:
   - id: model
@@ -34,7 +34,7 @@ sources:
 
 # Keys and joins
 
-Primary key `id`. Foreign keys: `stage_id` to [event_stage](event_stage.md), cascade on delete; `season_id` to [event](event.md); `map_id` to [maps](maps.md), set null on delete. Unique constraint on (`season_id`, `number`).
+Primary key `id`. Foreign keys: `stage_id` to [event_stage](event_stage.md), cascade on delete; `season_id` to [event](event.md), cascade on delete; `map_id` to [maps](maps.md), set null on delete. Unique constraint on (`season_id`, `number`).
 
 Pointed at by [matches](matches.md), [series](series.md) and [round_availability](round_availability.md) through `round_id`.
 
