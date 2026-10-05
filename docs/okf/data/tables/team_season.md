@@ -4,7 +4,7 @@ title: team_season
 description: One team fielded in one GNL season; the row exists before the team has a captain or a roster.
 resource: ../../../../app/models/team_season.py
 tags: [teams, data]
-generated: { by: openai/gpt-6, at: 2026-09-15T21:52:57Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-05T12:00:00Z }
 verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
 sources:
   - id: model
@@ -24,7 +24,7 @@ sources:
 
 # Keys and joins
 
-Primary key (`team_id`, `season_id`). Foreign keys: `team_id` to [teams](teams.md); `season_id` to [event](event.md).
+Primary key (`team_id`, `season_id`). Foreign keys: `team_id` to [teams](teams.md); `season_id` to [event](event.md), cascade.
 
 # Rules
 

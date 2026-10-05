@@ -78,6 +78,8 @@ BEFORE_MULTI_ENTRY = "e7d4b1c6a539"
 BEFORE_TAG_TABLE = "1e8e59906cec"
 # The revision before users.battleTag is dropped
 BEFORE_TAG_DROP = "e07324d2b4f9"
+# The revision before every row under an event goes with it
+BEFORE_EVENT_CASCADE = "55ae9f9d1db6"
 
 
 def comparable(
@@ -1462,3 +1464,102 @@ def test_the_tag_table_and_its_columns_are_dropped_on_downgrade(
         assert connection.execute(
             text('SELECT "discordTag", "discordId" FROM users WHERE id = 1')
         ).one() == ("", "")
+
+
+# Each table holds a row of the event or of a row the event cascades to
+UNDER_AN_EVENT = (
+    "user_season_signup",
+    "team_season_captain",
+    "map_season",
+    "event_round",
+    "round_availability",
+    "team_season",
+    "user_team_season",
+    "matches",
+    "draft_series",
+    "fantasy_teams",
+    "fantasy_team_player",
+)
+
+
+def test_deleting_an_event_deletes_every_row_under_it(tmp_path: Path) -> None:
+    """The database deletes them, so a delete that skips the models still
+    leaves nothing behind; the people, the teams and the map stay. The
+    downgrade puts back the keys that refused."""
+    url = fresh_database(tmp_path, "event-cascade")
+    upgrade_to_head(url)
+
+    engine = create_engine(url)
+    users = table("users", *(column(c) for c in ("id", "name", "race")))
+    with engine.begin() as connection:
+        if connection.dialect.name == "sqlite":
+            connection.execute(text("PRAGMA foreign_keys = ON"))
+        connection.execute(
+            users.insert(),
+            [{"id": i, "name": f"P{i}", "race": "HU"} for i in (1, 2)],
+        )
+        # The GNL league is the one the event rename writes
+        connection.execute(
+            text(
+                "INSERT INTO teams (id, name, league_id) "
+                "VALUES (1, 'Alpha', 1), (2, 'Beta', 1)"
+            )
+        )
+        connection.execute(text("INSERT INTO maps (id, name) VALUES (1, 'Echo')"))
+        connection.execute(
+            text(
+                "INSERT INTO event (id, name, series_per_round) "
+                "VALUES (1, 'Season 1', 2)"
+            )
+        )
+        for statement in (
+            (
+                "INSERT INTO user_season_signup (user_id, season_id, race) "
+                "VALUES (1, 1, 'HU'), (2, 1, 'HU')"
+            ),
+            "INSERT INTO team_season (team_id, season_id) VALUES (1, 1), (2, 1)",
+            (
+                "INSERT INTO user_team_season (user_id, team_id, season_id) "
+                "VALUES (1, 1, 1), (2, 2, 1)"
+            ),
+            (
+                "INSERT INTO team_season_captain (team_id, season_id, user_id) "
+                "VALUES (1, 1, 1)"
+            ),
+            "INSERT INTO map_season (map_id, season_id) VALUES (1, 1)",
+            "INSERT INTO event_round (id, season_id, number) VALUES (1, 1, 1)",
+            # An answer older than its round_id
+            (
+                "INSERT INTO round_availability (user_id, season_id, playday, "
+                "available, set_by_user_id) VALUES (1, 1, 1, false, 1)"
+            ),
+            (
+                "INSERT INTO matches (id, team1_id, team2_id, season_id, playday) "
+                "VALUES (1, 1, 2, 1, 1)"
+            ),
+            (
+                "INSERT INTO draft_series (match_id, player1_id, player2_id, "
+                "host_player_id) VALUES (1, 1, 2, 1)"
+            ),
+            (
+                "INSERT INTO fantasy_teams (id, name, season_id, captain_id) "
+                "VALUES (1, 'Bets', 1, 2)"
+            ),
+            "INSERT INTO fantasy_team_player (fantasy_team_id, user_id) VALUES (1, 1)",
+        ):
+            connection.execute(text(statement))
+
+        connection.execute(text("DELETE FROM event WHERE id = 1"))
+
+        for table_name in UNDER_AN_EVENT:
+            count = connection.scalar(text(f"SELECT count(*) FROM {table_name}"))
+            assert count == 0, table_name
+        for table_name, kept in (("users", 2), ("teams", 2), ("maps", 1)):
+            assert connection.scalar(text(f"SELECT count(*) FROM {table_name}")) == kept
+
+    downgrade_to(url, BEFORE_EVENT_CASCADE)
+    assert [
+        key["options"].get("ondelete")
+        for key in inspect(engine).get_foreign_keys("team_season_captain")
+        if key["constrained_columns"] == ["season_id"]
+    ] == [None]

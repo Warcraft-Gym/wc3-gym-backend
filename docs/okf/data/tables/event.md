@@ -4,7 +4,7 @@ title: event
 description: "One run of a league that people sign up for: a GNL season, a KOTH night, a cup or a sign-up list; the class is still named Season."
 resource: ../../../../app/models/season.py
 tags: [events, data]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-30T14:29:12Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-05T12:00:00Z }
 verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
 sources:
   - id: model
@@ -69,6 +69,8 @@ The first block is the fields introduced for GNL, on `SeasonBase`. The second bl
 Primary key `id`. Unique expression index on `lower(trim(name))`. Foreign keys: `league_id` to [league](league.md); `parent_id` to [event](event.md), set null on delete.
 
 Pointed at by [event_stage](event_stage.md), [event_round](event_round.md), [event_division](event_division.md), [event_entrant](event_entrant.md) (`event_id` and `qualified_from_event_id`), [event_award](event_award.md), [matches](matches.md), [team_season](team_season.md), [team_season_captain](team_season_captain.md), [user_team_season](user_team_season.md), [user_season_signup](user_season_signup.md), [map_season](map_season.md), [round_availability](round_availability.md), [fantasy_teams](fantasy_teams.md), [fantasy_bets](fantasy_bets.md), [ladder_achievements](ladder_achievements.md), [discord_role_binding](discord_role_binding.md).
+
+Every key that points at an event cascades, except `parent_id` and `event_entrant.qualified_from_event_id`, which set null. The keys that tie a [draft_series](draft_series.md) row to its fixture and a [fantasy_team_player](fantasy_team_player.md) row to its fantasy team cascade too. `DELETE /events/{id}` therefore deletes the event with every row under it: its stages, rounds, fixtures, series, drafts, entrants, signups, captains, availability answers, fantasy teams and their players, bets and achievement prices. The users, teams and maps it named stay.
 
 # Rules
 

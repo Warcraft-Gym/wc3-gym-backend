@@ -4,7 +4,7 @@ title: round_availability
 description: One player's answer to whether they can play one round of an event; no row is no answer, and clearing an answer deletes the row.
 resource: ../../../../app/models/round_availability.py
 tags: [events, data]
-generated: { by: claude-code/claude-fable-5-1, at: 2026-09-19T18:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-05T12:00:00Z }
 verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
 sources:
   - id: model
@@ -29,7 +29,7 @@ sources:
 
 # Keys and joins
 
-Primary key (`user_id`, `season_id`, `playday`). Foreign keys: `user_id` and `set_by_user_id` to [users](users.md); `season_id` to [event](event.md); `round_id` to [event_round](event_round.md), cascade.
+Primary key (`user_id`, `season_id`, `playday`). Foreign keys: `user_id` and `set_by_user_id` to [users](users.md); `season_id` to [event](event.md), cascade; `round_id` to [event_round](event_round.md), cascade.
 
 # Rules
 

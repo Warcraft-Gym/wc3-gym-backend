@@ -20,7 +20,9 @@ from app.models.types import AwareUTC, UTCDateTime
 class DBRoundAvailability(DBModel, table=True):
     __tablename__ = "round_availability"
     user_id: int = Field(foreign_key="users.id", primary_key=True)
-    season_id: int = Field(index=True, foreign_key="event.id", primary_key=True)
+    season_id: int = Field(
+        index=True, foreign_key="event.id", ondelete="CASCADE", primary_key=True
+    )
     playday: int = Field(primary_key=True)
     # The round the answer is about; C2 makes it the key and refuses a null
     round_id: int | None = Field(

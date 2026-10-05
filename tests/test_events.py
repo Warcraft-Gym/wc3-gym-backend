@@ -1493,3 +1493,89 @@ def test_the_captain_fixture_needs_a_round_that_carries_dates(
     add_fixture(event, seeded["team_a_id"], seeded["team_b_id"], 1)
     captain_seat(event, seeded["team_a_id"], seeded["player_ids"][0])
     assert my_events(client, headers)[event]["captain_fixture"] is None
+
+
+def test_deleting_a_season_deletes_every_row_under_it(
+    client: Client, seeded: dict[str, Any], auth_headers: dict[str, str]
+) -> None:
+    """A played season holds captains, drafts, answers and fantasy picks
+    beside its fixtures; the delete takes all of them, and the people, the
+    teams and the maps stay."""
+    from sqlalchemy import func
+
+    from app.models.draft_series import DraftSeries
+    from app.models.fantasy_bet import FantasyBet
+    from app.models.fantasy_team import FantasyTeam
+    from app.models.ladder_achievement import LadderAchievement
+    from app.models.map import Map
+    from app.models.match import Match
+    from app.models.match_draft import DBMatchDraftState
+    from app.models.relationships import (
+        DBFantasyTeamPlayer,
+        DBMapSeason,
+        DBTeamSeasonCaptain,
+        DBUserSeasonSignup,
+    )
+    from app.models.series import Series
+    from app.models.series_game import DBSeriesGame
+    from app.models.team import Team
+    from app.models.team_season import DBTeamSeason
+    from app.models.user_team_season import DBUserTeamSeason
+
+    season = seeded["season_id"]
+    players = seeded["player_ids"]
+    captain_seat(season, seeded["team_a_id"], players[0])
+    add_draft(seeded["match_id"], players[1], players[3])
+    with Session.begin() as session:
+        session.add_all(
+            [
+                DBUserSeasonSignup(user_id=players[0], season_id=season, race=Race.HU),
+                # An answer older than its round_id
+                DBRoundAvailability(
+                    user_id=players[0],
+                    season_id=season,
+                    playday=1,
+                    available=False,
+                    set_by_user_id=players[0],
+                ),
+                DBMatchDraftState(match_id=seeded["match_id"]),
+                DBFantasyTeamPlayer(
+                    fantasy_team_id=seeded["fantasy_team_id"], user_id=players[2]
+                ),
+                DBSeriesGame(
+                    series_id=seeded["series_played_id"], game_no=1, winner_side="A"
+                ),
+            ]
+        )
+
+    gone = client.delete(f"/events/{season}", headers=auth_headers)
+    assert gone.status_code == 204
+
+    def count(model: type) -> int:
+        with Session() as session:
+            return session.scalar(select(func.count()).select_from(model)) or 0
+
+    under_the_season = (
+        DBUserSeasonSignup,
+        DBTeamSeasonCaptain,
+        DBTeamSeason,
+        DBUserTeamSeason,
+        DBMapSeason,
+        DBEventRound,
+        DBRoundAvailability,
+        EventStage,
+        Match,
+        DraftSeries,
+        DBMatchDraftState,
+        Series,
+        DBSeriesGame,
+        FantasyTeam,
+        DBFantasyTeamPlayer,
+        FantasyBet,
+        LadderAchievement,
+    )
+    assert {m.__name__: count(m) for m in under_the_season if count(m)} == {}
+    assert count(Season) == 0
+    assert count(User) == len(players)
+    assert count(Team) == 2
+    assert count(Map) == 1

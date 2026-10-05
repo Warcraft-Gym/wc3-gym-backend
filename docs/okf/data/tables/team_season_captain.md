@@ -4,7 +4,7 @@ title: team_season_captain
 description: "One captain seat: a player who captains one team in one season; the seat is what makes an account a captain."
 resource: ../../../../app/models/relationships.py
 tags: [teams, data]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-27T18:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-05T12:00:00Z }
 verified: { by: process:test_okf, at: 2026-09-24T09:51:01Z }
 sources:
   - id: model
@@ -25,7 +25,7 @@ sources:
 
 # Keys and joins
 
-Primary key (`team_id`, `season_id`, `user_id`). Foreign keys: `team_id` to [teams](teams.md); `season_id` to [event](event.md); `user_id` to [users](users.md).
+Primary key (`team_id`, `season_id`, `user_id`). Foreign keys: `team_id` to [teams](teams.md); `season_id` to [event](event.md), cascade; `user_id` to [users](users.md).
 
 # Rules
 

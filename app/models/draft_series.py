@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 
 
 class DraftSeriesBase(SQLModel):
-    match_id: int = Field(index=True, foreign_key="matches.id")
+    match_id: int = Field(index=True, foreign_key="matches.id", ondelete="CASCADE")
     date_time: Annotated[datetime | None, AwareUTC] = Field(
         default=None, sa_type=UTCDateTime
     )

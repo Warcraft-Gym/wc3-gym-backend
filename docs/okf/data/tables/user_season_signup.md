@@ -4,7 +4,7 @@ title: user_season_signup
 description: "One GNL signup: a player registered for one season on one race, with the draft order and fantasy tier an admin sets."
 resource: ../../../../app/models/relationships.py
 tags: [teams, data]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-09-24T09:42:05Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-05T12:00:00Z }
 verified: { by: process:test_okf, at: 2026-09-24T09:51:01Z }
 sources:
   - id: model
@@ -32,7 +32,7 @@ sources:
 
 # Keys and joins
 
-Primary key (`user_id`, `season_id`). Foreign keys: `user_id` to [users](users.md); `season_id` to [event](event.md).
+Primary key (`user_id`, `season_id`). Foreign keys: `user_id` to [users](users.md); `season_id` to [event](event.md), cascade.
 
 # Rules
 

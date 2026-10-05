@@ -4,7 +4,7 @@ title: draft_series
 description: One series a captain proposed inside a GNL fixture, held apart from the series table until a captain of the fixture or an admin publishes it.
 resource: ../../../../app/models/draft_series.py
 tags: [events, data]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-02T18:45:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-05T12:00:00Z }
 verified: { by: process:test_okf, at: 2026-09-14T17:40:50Z }
 sources:
   - id: model
@@ -36,7 +36,7 @@ sources:
 
 # Keys and joins
 
-Primary key `id`. Foreign keys: `match_id` to [matches](matches.md); `player1_id`, `player2_id`, `created_by_user_id` and `updated_by_user_id` to [users](users.md); `replaces_series_id` to [series](series.md), cascade. The payload answers the two names beside the two ids, read over the same statement.
+Primary key `id`. Foreign keys: `match_id` to [matches](matches.md), cascade; `player1_id`, `player2_id`, `created_by_user_id` and `updated_by_user_id` to [users](users.md); `replaces_series_id` to [series](series.md), cascade. The payload answers the two names beside the two ids, read over the same statement.
 
 # Rules
 
