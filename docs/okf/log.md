@@ -2,6 +2,7 @@
 
 ## 2026-10-06
 
+* **Add**: `GET /koth/winners` lists every published, closed KOTH night, archived or run in the app, newest start first and paged by night, with the stored king of each bracket, in one statement and on the settled edge timer. [KOTH night](concepts/koth.md#the-winners-list) states it.
 * **Update**: `GET /events` and `GET /leagues/{league_id}` list events newest start first (the start time, else the start date, undated last) and take `archived` to keep or drop the archived KOTH nights; `GET /me/events` and `GET /koth/events` leave archived nights out; the KOTH history import dates a night labelled with a month and a day but no year from its place on the source page. [Events module](concepts/events-module.md#the-list-reads) and [KOTH night](concepts/koth.md#historical-imports) state it.
 
 ## 2026-10-05
