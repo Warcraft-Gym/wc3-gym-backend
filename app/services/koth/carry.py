@@ -8,7 +8,7 @@ night's winners.
 from functools import cache
 from typing import Any
 
-from sqlalchemy import Integer, Select, bindparam, func, select
+from sqlalchemy import Integer, Select, and_, bindparam, func, select
 from sqlalchemy.orm import Session as OrmSession
 from sqlmodel import col
 
@@ -82,7 +82,15 @@ def _winners_statements() -> tuple[Select[Any], Select[Any]]:
         .join(page, page.c.id == Season.id)
         .outerjoin(KothHistoryEvent, col(KothHistoryEvent.event_id) == Season.id)
         .outerjoin(EventDivision, col(EventDivision.event_id) == Season.id)
-        .outerjoin(EventEntrant, col(EventEntrant.id) == EventDivision.king_entrant_id)
+        # The crown counts while its row stands in the bracket, not withdrawn, as on the board
+        .outerjoin(
+            EventEntrant,
+            and_(
+                col(EventEntrant.id) == EventDivision.king_entrant_id,
+                col(EventEntrant.division_id) == EventDivision.id,
+                col(EventEntrant.withdrawn_at).is_(None),
+            ),
+        )
         .outerjoin(
             HistoricalParticipant,
             col(HistoricalParticipant.id) == EventEntrant.historical_participant_id,

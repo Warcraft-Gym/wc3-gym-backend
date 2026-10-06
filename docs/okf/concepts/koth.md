@@ -4,7 +4,7 @@ title: KOTH night
 description: A King of the Hill night is one event of the KOTH league with three MMR brackets as divisions, one signup rule at every door, and every series paired by hand while the night runs.
 resource: ../../../app/services/koth/night.py
 tags: [events, koth]
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-06T10:57:03Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-06T10:59:26Z }
 sources:
   - id: night
     resource: ../../../app/services/koth/night.py
@@ -103,7 +103,7 @@ The night routes are `POST /koth/nights` (open, with the start time and the thre
 - `KothNightWinners`: `event_id`, `date` (the UTC day of the start time, else the start date, else null), `date_label` (the label an archived night's source wrote, null on a night run in the app), `winners` (`KothBracketWinner` list, one per bracket in bracket order, empty for a night with no bracket).
 - `KothBracketWinner`: `bracket` (the division name), `lower_bound`, `name`, `user_id`, `race`. `name` is the source spelling on an archived night and the account's name on a night run in the app; all three are null for an empty throne, and `user_id` and `race` are null on an archived night.
 
-The winner is the stored crown, `event_division.king_entrant_id`; no series is walked. The read is one statement whatever the page holds: the page of nights with their total, joined to their brackets and crowns as columns. A page past the end adds a count. The statement is built once with the page bound as parameters. A night's series stay on its board.
+The winner is the stored crown, `event_division.king_entrant_id`, while its row stands in that bracket and is not withdrawn, as on the board; a crown that fails either reads as an empty throne. No series is walked. The read is one statement whatever the page holds: the page of nights with their total, joined to their brackets and crowns as columns. A page past the end adds a count. The statement is built once with the page bound as parameters. A night's series stay on its board.
 
 # Historical imports
 
