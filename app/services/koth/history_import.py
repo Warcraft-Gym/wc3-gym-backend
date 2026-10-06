@@ -92,7 +92,7 @@ def read_corrections(
     """The reviewed dates by source key and kept names by folded spelling, checked whole.
 
     A date only dates a record the page leaves undated; a key that names no
-    record of the batch is ignored. A kept name is never itself corrected.
+    record of the batch is ignored. A kept name is corrected to nothing but itself.
     """
     if not isinstance(corrections, dict):
         raise ValueError("The corrections file is not a JSON object")  # noqa: TRY004
@@ -122,21 +122,22 @@ def read_corrections(
             raise ValueError(f"The corrections name {key!r} is not a folded spelling")
         if not isinstance(kept, str) or not kept.strip():
             raise ValueError(f"The corrections name {key!r} keeps an empty name")
-        if fold(kept) in names:
+        if names.get(fold(kept), kept) != kept:
             raise ValueError(
                 f"The corrections name {key!r} keeps {kept!r}, which is itself corrected"
             )
     return days, names
 
 
-def _note(raw: str) -> bool:
-    """Whether the source text carries a note, such as a player who left."""
-    return any(_name(tag) not in RACE_TAGS for tag in re.findall(r"\(([^)]*)\)", raw))
+def _note(raw: str) -> list[str]:
+    """The notes the source text carries, such as a player who left, as written."""
+    return [
+        tag for tag in re.findall(r"\(([^)]*)\)", raw) if _name(tag) not in RACE_TAGS
+    ]
 
 
-# Every break note starts with BREAK, including one stored under older wording
-BREAK = "Neither side plays on"
-WITHDREW = f"{BREAK}; the winner is read as withdrawn"
+# The note of a series whose winner, known or not, does not play the next series
+LEFT = "The winner does not play the next series"
 
 
 def _near(pair: tuple[str, ...], following: tuple[str, ...]) -> bool:
@@ -154,55 +155,44 @@ def infer_winners(
 ) -> list[tuple[int | None, str | None]]:
     """(inferred winner side, note) per BO1 of one bracket, in source order.
 
-    Winner stays on: the side that plays the next series won this one, and the
-    last series was won by the reported king. When neither side plays on, the
-    winner withdrew after it: the winner of the series before, if he plays in
-    it, won it, else its winner stays unknown, and the order restarts with the
-    next pair. Any other doubt (a source note, a rematch, a name that only
-    nearly matches, a missing king, a disagreeing source result) leaves every
-    winner of the bracket to a human.
+    Each series is read on its own, winner stays on: a written winner stands,
+    else the side that plays the next series won it, and the reported king won
+    the last. A hand note, a rematch next, a name close to one in the next
+    series, or a last series without its king leaves only that series without
+    a winner, with a note saying why. A series whose winner, written or not
+    known, does not play the next series is noted LEFT.
     """
     if not rows:
         return []
     pairs = [(_name(row["player_1"]), _name(row["player_2"])) for row in rows]
     after = [*pairs[1:], ((_name(king),) if king else ())]
-    winners: list[int | None] = []
-    notes: list[str | None] = []
-    doubt = False
-    holder: str | None = None
+    read: list[tuple[int | None, str | None]] = []
     for index, (row, pair, following) in enumerate(
         zip(rows, pairs, after, strict=True)
     ):
         stays = [side for side, name in enumerate(pair, 1) if name in following]
         last = index == len(rows) - 1
-        winner = stays[0] if len(stays) == 1 else None
-        if not stays and not last and holder in pair:
-            winner = pair.index(holder) + 1
-        explicit = row["winner"]
-        if _note(row["raw_text"]):
-            note = "The source adds a note to this series"
+        notes = _note(row["raw_text"])
+        if row["winner"]:
+            left = not last and _name(row["winner"]) not in following
+            read.append((None, LEFT if left else None))
+        elif notes:
+            read.append((None, f"The old page notes: {'; '.join(notes)}"))
         elif last and not king:
-            note = "No king is recorded"
+            read.append((None, "The old page names no king for this bracket"))
         elif last and not stays:
-            note = "The reported king is not in the last series"
-        elif not stays and _near(pair, following):
-            note = "A name only nearly matches the next series"
-        elif explicit and winner and _name(explicit) != pair[winner - 1]:
-            note = "The source result differs from the order"
-        elif not stays:
-            note = WITHDREW
-        elif winner is None:
-            note = "Both sides play the next series"
+            read.append((None, "The crowned player is not in the last series"))
+        elif last or len(stays) == 1:
+            read.append((stays[0], None))
+        elif stays:
+            note = "These two played again next, so the order does not show who won"
+            read.append((None, note))
+        elif _near(pair, following):
+            note = "A name here is close to one in the next series; it may be the same player"
+            read.append((None, note))
         else:
-            note = None
-        doubt = doubt or note not in (None, WITHDREW)
-        winners.append(None if explicit else winner)
-        notes.append(note)
-        # A break empties the throne, so nobody holds it going into the next pair
-        holder = pair[winner - 1] if winner and stays else None
-    if doubt:
-        return [(None, note) for note in notes]
-    return list(zip(winners, notes, strict=True))
+            read.append((None, LEFT))
+    return read
 
 
 def _month_day(label: str) -> tuple[int, int] | None:

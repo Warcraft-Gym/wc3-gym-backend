@@ -23,7 +23,7 @@ from app.models.koth_night import (
 from app.models.season import Season
 from app.models.series import Series
 from app.services.koth.board import Throne
-from app.services.koth.history_import import BREAK, bounds
+from app.services.koth.history_import import LEFT, bounds
 from app.services.koth.night import divisions_of, series_of
 
 
@@ -56,7 +56,7 @@ def _history(
         throne: Throne = (
             "none" if winner is None else "held" if winner == holder else "moved"
         )
-        left = note is not None and note.startswith(BREAK)
+        left = note == LEFT
         holder = None if left else winner or holder
         rows.append(
             KothHistoricalSeries(
