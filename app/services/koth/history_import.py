@@ -1,11 +1,12 @@
 """Import a checked offline capture into an empty or previously imported local archive."""
 
 import argparse
+import calendar
 import hashlib
 import json
 import os
 import re
-from collections import Counter
+from collections import Counter, defaultdict
 from datetime import date
 from difflib import SequenceMatcher
 from pathlib import Path
@@ -149,6 +150,53 @@ def infer_winners(
     return list(zip(winners, notes, strict=True))
 
 
+def _month_day(label: str) -> tuple[int, int] | None:
+    """The month and day of a label written as a month name and a day, no year."""
+    found = re.fullmatch(r"([A-Za-z]+) (\d{1,2})", label.strip())
+    if found is None or found[1] not in calendar.month_name[1:]:
+        return None
+    return list(calendar.month_name).index(found[1]), int(found[2])
+
+
+def _between(month_day: tuple[int, int], after: date, before: date) -> date | None:
+    """The one date with that month and day strictly between the two, if exactly one."""
+    fits = []
+    for year in range(after.year, before.year + 1):
+        try:
+            day = date(year, *month_day)
+        except ValueError:
+            continue
+        if after < day < before:
+            fits.append(day)
+    return fits[0] if len(fits) == 1 else None
+
+
+def record_days(records: list[dict[str, Any]]) -> dict[str, date | None]:
+    """The day of every record by source key: its own date, or one read from page order.
+
+    A page lists its nights newest first. A label with a month and a day but no
+    year takes the one date between the nearest dated records above and below
+    it on the same page. Anything else without a date stays None.
+    """
+    days: dict[str, date | None] = {}
+    pages: defaultdict[str, list[dict[str, Any]]] = defaultdict(list)
+    for record in records:
+        pages[record["source_url"]].append(record)
+    for page in pages.values():
+        page.sort(key=lambda record: record["source_order"])
+        dated = [date.fromisoformat(r["date"]) if r["date"] else None for r in page]
+        for index, record in enumerate(page):
+            days[record["event_id"]] = dated[index]
+            month_day = _month_day(record["date_text"])
+            if dated[index] is not None or month_day is None:
+                continue
+            newer = next((d for d in reversed(dated[:index]) if d), None)
+            older = next((d for d in dated[index + 1 :] if d), None)
+            if newer is not None and older is not None:
+                days[record["event_id"]] = _between(month_day, older, newer)
+    return days
+
+
 def load_capture(directory: Path) -> list[dict[str, Any]]:
     """Verify every file in the capture manifest before reading its event records."""
     directory = directory.resolve()
@@ -258,13 +306,14 @@ def import_capture(
     mapping = {key: row.event_id for key, row in existing.items()}
     inserted = 0
     if apply:
+        days = record_days(records)
         for record in sorted(
             records, key=lambda row: (row["date"] or "", row["event_id"])
         ):
             if record["event_id"] in mapping:
                 continue
             with Session.begin() as session:
-                event_id = _insert_event(session, record)
+                event_id = _insert_event(session, record, days[record["event_id"]])
             mapping[record["event_id"]] = event_id
             inserted += 1
     return {
@@ -276,16 +325,21 @@ def import_capture(
     }
 
 
-def _insert_event(session: OrmSession, record: dict[str, Any]) -> int:
-    day = date.fromisoformat(record["date"]) if record["date"] else None
-    name = f"KOTH {record['date_text']}"
+def _insert_event(session: OrmSession, record: dict[str, Any], day: date | None) -> int:
+    # A day read from page order puts its year in the name, as the dated labels do
+    label = (
+        f"{record['date_text']}, {day.year}"
+        if day is not None and not record["date"]
+        else record["date_text"]
+    )
+    name = f"KOTH {label}"
     duplicate = 1
     while (
         session.scalar(select(col(Season.id)).where(col(Season.name) == name))
         is not None
     ):
         duplicate += 1
-        name = f"KOTH {record['date_text']} ({duplicate})"
+        name = f"KOTH {label} ({duplicate})"
     event = Season(
         name=name,
         series_per_round=1,

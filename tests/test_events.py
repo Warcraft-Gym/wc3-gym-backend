@@ -409,6 +409,42 @@ def test_a_league_lists_its_events_newest_first(client: Client) -> None:
     assert [event["id"] for event in body["events"]] == [second, first]
 
 
+def test_the_lists_order_events_by_when_they_start_not_by_id(client: Client) -> None:
+    """A start date and a start time compare on one line; an undated event is last."""
+    with Session.begin() as session:
+        league = League(name="Gym Mixed", short_name="MIX")
+        session.add(league)
+        session.flush()
+        league_id = league.id
+    assert league_id is not None
+    spring = add_event(name="Spring", league_id=league_id, start_date=date(2026, 3, 1))
+    undated = add_event(name="Undated", league_id=league_id)
+    night = add_event(
+        name="Night",
+        league_id=league_id,
+        kind=EventKind.koth,
+        starts_at=datetime(2026, 5, 2, 19, tzinfo=UTC),
+    )
+    same_day = add_event(name="May", league_id=league_id, start_date=date(2026, 5, 2))
+    old_night = add_event(
+        name="Old night",
+        league_id=league_id,
+        kind=EventKind.koth,
+        starts_at=datetime(2025, 1, 1, 19, tzinfo=UTC),
+    )
+    order = [night, same_day, spring, old_night, undated]
+
+    assert [row["id"] for row in client.get("/events").json()] == order
+    walked = []
+    for offset in (0, 2, 4):
+        resp = client.get(f"/events?limit=2&offset={offset}")
+        assert resp.headers["X-Total-Count"] == "5"
+        walked.append([row["id"] for row in resp.json()])
+    assert walked == [order[:2], order[2:4], order[4:]]
+    body = client.get(f"/leagues/{league_id}").json()
+    assert [event["id"] for event in body["events"]] == order
+
+
 def test_an_unknown_league_answers_the_error_envelope(client: Client) -> None:
     response = client.get("/leagues/404")
     assert response.status_code == 404
