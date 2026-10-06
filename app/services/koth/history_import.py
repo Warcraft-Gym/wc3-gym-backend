@@ -87,13 +87,15 @@ def fold(name: str) -> str:
 
 
 def read_corrections(
-    corrections: dict[str, Any], records: list[dict[str, Any]]
+    corrections: object, records: list[dict[str, Any]]
 ) -> tuple[dict[str, date], dict[str, str]]:
     """The reviewed dates by source key and kept names by folded spelling, checked whole.
 
     A date only dates a record the page leaves undated; a key that names no
     record of the batch is ignored. A kept name is never itself corrected.
     """
+    if not isinstance(corrections, dict):
+        raise ValueError("The corrections file is not a JSON object")  # noqa: TRY004
     dates = corrections.get("dates", {})
     names = corrections.get("names", {})
     if (
@@ -350,7 +352,7 @@ def import_capture(
     Corrections change what is written to the archive, never the stored source record.
     """
     counts = validate(records)
-    dates, names = read_corrections(corrections or {}, records)
+    dates, names = read_corrections({} if corrections is None else corrections, records)
     written = [
         name
         for record in records
@@ -484,13 +486,18 @@ def _insert_event(
         session.add(division)
         session.flush()
         played = [row for row in section["matches"] if row["record_type"] == "match"]
-        # One participant per folded kept name, under the kept name or its first spelling
+        # One participant per folded name: kept, else last crown's, else first spelling
         spellings: dict[str, str] = {}
         for name in _written(section):
-            if fold(name) in names:
-                spellings[fold(kept(name))] = kept(name)
-            else:
-                spellings.setdefault(fold(name), name)
+            spellings.setdefault(fold(name), name)
+        spellings |= {
+            fold(crown["player"]): crown["player"] for crown in section["crowns"]
+        }
+        spellings |= {
+            fold(kept(name)): kept(name)
+            for name in _written(section)
+            if fold(name) in names
+        }
         entrants: dict[str, EventEntrant] = {}
 
         def participant(

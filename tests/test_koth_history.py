@@ -1,5 +1,6 @@
 """Archive conservation, ambiguity and lifecycle checks on both supported databases."""
 
+import json
 from copy import deepcopy
 from datetime import date
 from typing import Any
@@ -127,7 +128,7 @@ def test_import_keeps_unknowns_and_every_competitive_bo1(client: Client) -> None
         1700,
     )
     assert second["name"] == "Gold and below" and second["lower_bound"] is None
-    assert first["historical_king"]["name"] == "other"
+    assert first["historical_king"]["name"] == "OTHER"
     assert [r["winner_side"] for r in first["history"]] == [None, 2]
     assert [r["inferred_winner_side"] for r in first["history"]] == [None, None]
     assert first["history"][0]["review_note"] == "Both sides play the next series"
@@ -428,10 +429,10 @@ def test_full_offline_capture(client: Client) -> None:
                     assert game.winner_side == {1: "A", 2: "B"}.get(winner)
             crown = section["crowns"][-1]["player"] if section["crowns"] else None
             assert (
-                fold(bracket["historical_king"]["name"])
+                bracket["historical_king"]["name"]
                 if bracket["historical_king"]
                 else None
-            ) == (crown and fold(crown))
+            ) == crown
         assert board["series_count"] == len(series_ids)
         assert [video["url"] for video in board["videos"]] == [
             video["url"] for video in event["videos"]
@@ -620,7 +621,7 @@ def test_winners_list_the_king_of_every_bracket_of_a_closed_night(
             {
                 "bracket": "1500 to ~1700 MMR",
                 "lower_bound": 1500,
-                "name": "other",
+                "name": "OTHER",
                 "user_id": None,
                 "race": None,
             },
@@ -784,7 +785,36 @@ def test_two_casings_of_one_name_are_one_participant(client: Client) -> None:
     record = archived("cased", 1, "2024-11-30", "November 30, 2024")
     record["sections"] = bracket(bo1("Elu", "Bo"), bo1("elu ", "Cy"), king="CY")
     event_id = import_capture([record], apply=True)["event_ids"]["cased"]
-    assert people(event_id) == ["Elu", "Bo", "Cy"]
+    assert people(event_id) == ["Elu", "Bo", "CY"]
+
+
+def test_a_king_keeps_the_spelling_of_the_crown_line(client: Client) -> None:
+    """A kept name first, then the crown line, then the first spelling in the series."""
+    crowned = archived("crowned", 1, "2024-11-30", "November 30, 2024")
+    crowned["sections"] = bracket(
+        bo1("glaive", "bo"), bo1("BO", "glaive"), king="Glaive"
+    )
+    corrected = archived("corrected", 2, "2024-11-23", "November 23, 2024")
+    corrected["sections"] = bracket(
+        bo1("glaiev", "bo"), bo1("BO", "glaive"), king="Glaive"
+    )
+    fixes = {"names": {"glaiev": "glaive"}}
+    ids = import_capture([crowned, corrected], apply=True, corrections=fixes)[
+        "event_ids"
+    ]
+
+    assert people(ids["crowned"]) == ["Glaive", "bo"]
+    assert people(ids["corrected"]) == ["glaive", "bo"]
+    for key, king in (("crowned", "Glaive"), ("corrected", "glaive")):
+        board = client.get(f"/koth/nights/{ids[key]}/board").json()
+        assert board["brackets"][0]["historical_king"]["name"] == king
+        assert {row["side2"]["name"] for row in board["brackets"][0]["history"]} == {
+            "bo",
+            king,
+        }
+    rows, _ = winners(client)
+    assert [row["event_id"] for row in rows] == [ids["crowned"], ids["corrected"]]
+    assert [row["winners"][0]["name"] for row in rows] == ["Glaive", "glaive"]
 
 
 def test_a_reviewed_date_dates_an_undated_night_before_page_order(
@@ -851,4 +881,12 @@ def test_a_bad_corrections_file_fails_before_any_write(
 ) -> None:
     with pytest.raises(ValueError, match=error):
         import_capture(capture(), apply=True, corrections={"names": names})
+    assert counts() == (0, 0, 0, 0)
+
+
+def test_a_corrections_file_that_is_not_an_object_fails_before_any_write(
+    client: Client,
+) -> None:
+    with pytest.raises(ValueError, match="not a JSON object"):
+        import_capture(capture(), apply=True, corrections=json.loads('[{"names": {}}]'))
     assert counts() == (0, 0, 0, 0)
